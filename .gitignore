@@ -1,0 +1,116 @@
+# Models (large binary files)
+models/
+# ...but contracts/models/ holds the tracked source-of-truth model manifest (no GGUFs).
+!contracts/models/
+!contracts/models/*.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv*/
+venv*/
+env/
+
+# Environments
+.env
+.env.*
+
+# uv
+.uv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# Artifacts & outputs
+notebooks/artifacts/
+**/notebooks/artifacts/
+*.lock
+
+# Backend benchmark output (machine-specific; curated results live in the plan)
+bench_results.csv
+
+# Eval suite — all generated media (fixtures, baselines, model outputs)
+sandbox/
+src/skills/*/eval/fixtures_cache/
+
+# evals — commit durable summaries; ignore generated media and per-run scratch
+evals/**
+!evals/
+!evals/**/
+!evals/INDEX.md
+!evals/**/score.json
+!evals/**/report.md
+!evals/**/review_log.json
+# Retrieval baselines are a committed acceptance bar, not scratch — the CI gate
+# (test_retrieval_no_regression_vs_baseline, run by `just check`) reads one by path and
+# errors outright if it is missing. Same role as skills/*/data/eval_snapshot.json; ~1 KB.
+!evals/retrieval/*.json
+evals/**/.baselines/
+evals/**/out.*
+evals/**/report.html
+
+# Web / MkDocs build artifacts
+site/site/
+site/knaif-site.zip
+
+# Private / non-public working documents
+docs/programs/
+
+# Training subsystem (optional, not shipped) — derived/throwaway artifacts.
+# training/.venv is covered by the .venv/ rule above; models/ (GGUFs) by line 2.
+training/.venv/
+training/output/
+training/cache/
+# Derived/throwaway training artifacts (regenerable from train.jsonl + scripts).
+training/union_chat.jsonl
+training/*_chat.jsonl
+training/adapters/
+training/merged/
+# Unsloth writes its compiled-trainer cache to ./unsloth_compiled_cache (default
+# leaf name) in the cwd whenever a run imports unsloth without UNSLOTH_COMPILE_LOCATION
+# set — so it can land in the repo root. Ignore it wherever it appears.
+unsloth_compiled_cache/
+# ...but DO keep the committed provenance lock (otherwise eaten by *.lock above).
+# Path is `python/training/` since the repo restructure — the old `training/` form silently
+# stopped matching, which only shows up on a fresh clone (an already-tracked file ignores
+# .gitignore entirely).
+!python/training/requirements-train.lock
+# The Rust workspace ships a binary (knaif-cli), so commit its lockfile for reproducible
+# release builds (unlike the Python library's uv.lock, which stays ignored above).
+!Cargo.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# generated per-run outputs of the agent-vs-knaif experiment harness
+scripts/agent_vs_knaif/RESULTS.md
+scripts/agent_vs_knaif/RESULTS.json
+
+# Rust build artifacts
+/target
+
+# Claude Code worktree isolation scratch dir
+.claude/worktrees/

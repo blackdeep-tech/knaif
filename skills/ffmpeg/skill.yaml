@@ -1,0 +1,52 @@
+name: ffmpeg
+description: "FFmpeg-powered media workflow assistant — convert, compress, resize, extract, and prepare video/audio for platforms."
+version: 0.1.0
+
+tools: tools.yaml
+skill_class: handlers.FFmpegSkill
+prompt: prompt.yaml
+
+recommended_model: knaif-qwen3-4b-v1  # promoted 2026-07-02 (sft-v3 union LoRA; see models.yaml)
+
+# Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
+runtimes:
+  python:
+    handlers: handlers.FFmpegSkill   # resolved inside skills/ffmpeg/python/ (loaded by path)
+  native:
+    status: supported
+    crate: knaif-skill-ffmpeg
+
+# External binaries the skill shells out to. The installer detects these and offers to
+# install them via the platform package manager; PATH is never modified without consent.
+dependencies:
+  external_tools:
+    - name: ffmpeg
+      required: true
+      all_required: true          # ffmpeg AND ffprobe are both needed (distinct binaries)
+      commands: [ffmpeg, ffprobe]
+      install: { windows: winget, macos: brew, linux: package_manager }
+
+safety:
+  unsafe_phrases:
+    - "wipe all videos"
+    - "delete all media"
+    - "rm -rf"
+    - "nuke"
+    - "format drive"
+    # Data exfiltration / network egress — out of scope for a local media tool.
+    - "exfiltrate"
+    - "remote server"
+
+data:
+  train: data/train.jsonl
+  safety_test: data/safety_test.jsonl
+
+arg_value_sets:
+  platform:
+    [whatsapp, email, web, youtube, instagram_reels, tiktok, archive]
+  quality:
+    [small_file, balanced, visually_good, high_quality, lossless, best_possible]
+  audio_format:
+    [mp3, aac, wav, flac, ogg, opus, m4a]
+  container:
+    [mp4, mkv, mov, webm, avi]

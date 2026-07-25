@@ -1,0 +1,87 @@
+name: Wrong plan for an utterance
+description: knaif ran, but produced the wrong plan (bad routing, wrong args, unwanted clarify/reject)
+labels: ["quality", "corpus"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when knaif works but **misunderstands**. These reports are the most
+        useful input to the eval corpus, so they get their own template.
+
+        Run `knaif plan "<utterance>"` to see the plan without executing it.
+
+  - type: input
+    id: utterance
+    attributes:
+      label: The exact utterance
+      description: Verbatim — phrasing is the whole subject of this report.
+    validations:
+      required: true
+
+  - type: textarea
+    id: got
+    attributes:
+      label: Plan you got
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What it should have done
+      description: The plan you expected, or a description of the right behaviour.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: failure
+    attributes:
+      label: Failure kind
+      options:
+        - Wrong tool chosen (routing)
+        - Right tool, wrong arguments
+        - Asked to clarify when it shouldn't have
+        - Rejected something it should have done
+        - Did something it should have rejected
+        - Multi-step plan came out wrong
+    validations:
+      required: true
+
+  - type: input
+    id: skill
+    attributes:
+      label: Skill
+      placeholder: ffmpeg / documents / io
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: knaif-qwen3-4b-v1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      description: >
+        If you can, try the same utterance on the other runtime. A difference between them
+        is a parity bug and is more serious than a routing miss.
+      options:
+        - Native CLI
+        - Python
+        - Both — they disagree
+        - Both — they agree, and both are wrong
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language of the utterance
+      description: Non-English routing has known gaps; say which language.
+      placeholder: English

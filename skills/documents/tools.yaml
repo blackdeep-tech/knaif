@@ -1,0 +1,348 @@
+inspect_document:
+  description: "Inspect a document's format, page count, size, encryption, and text-layer status."
+  keywords: [inspect, layer, metadata, about, details, properties, review, разгледай, прегледай, съдържание]
+  required_args: [input]
+  safety_category: safe
+  readonly: true
+  mock_args:
+    input: "{utterance_after:inspect}"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+
+extract_text:
+  description: "Read out the text content of a document as per-page records plus joined text. Creates no new file. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf."
+  keywords: [extract, extrae, extraer, texto, extrahieren, extraire, texte, извлечь, извлечи, 提取]
+  required_args: [input]
+  optional_args: [pages, ocr]
+  safety_category: safe
+  readonly: true
+  mock_args:
+    input: "{utterance_after:extract}"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    pages:
+      type: string
+    ocr:
+      type: boolean
+
+find_in_document:
+  description: "Find a keyword or regex within one document and return page snippets."
+  keywords: [within, find, search, busca, buscar, encuentra, finde, suche, trouve, cherche, найди, найти, намери, 查找]
+  required_args: [input, query]
+  optional_args: [regex, ignore_case]
+  defaults:
+    ignore_case: true
+  safety_category: safe
+  readonly: true
+  mock_args:
+    input: "{utterance_after:within}"
+    query: "{utterance_after:find}"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    query:
+      type: string
+    regex:
+      type: boolean
+    ignore_case:
+      type: boolean
+
+merge_pdfs:
+  description: "Merge multiple PDFs into one output PDF."
+  keywords: [merge, join, combine, together, stitch, append, combina, combinar, une, unir, fusiona, zusammenführen, verbinde, kombiniere, fusionne, fusionner, combiner, объедини, объединить, обедини, слей, 合并]
+  required_args: [inputs, output]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{sandbox}/a.pdf", "{sandbox}/b.pdf"]
+    output: "{sandbox}/merged.pdf"
+  arg_schemas:
+    inputs:
+      type: array
+      items: string
+      path_role: input
+    output:
+      type: string
+      path_role: output
+
+split_pdf:
+  description: "Copy a subset of pages into a new PDF, leaving the original intact. Use whenever the user wants to keep, extract, pull out, split off, or save specific pages — name the pages they WANT. Do not convert this into a removal of the other pages."
+  keywords: [split, divide, dividir, teile, aufteilen, divise, diviser, раздели, разделить, 拆分]
+  required_args: [input, ranges]
+  optional_args: [output, output_dir]
+  # Small models often put the page spec under `pages` (the remove/rotate arg
+  # name) instead of `ranges`; treat it as `ranges`.
+  arg_aliases: {pages: ranges}
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    ranges: "1-2"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    ranges:
+      type: string
+    output:
+      type: string
+      path_role: output
+    output_dir:
+      type: string
+      path_role: output
+
+rotate_pages:
+  description: "Rotate selected PDF pages."
+  keywords: [rotate, orientation, sideways, drehe, drehen, rota, gira, girar, pivote, pivoter, tourne, tourner, поверни, разверни, завърти, 旋转]
+  required_args: [input, degrees]
+  optional_args: [pages, output]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    degrees: 90
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    degrees:
+      type: integer
+    pages:
+      type: string
+    output:
+      type: string
+      path_role: output
+
+remove_pages:
+  description: "Delete specific pages and save a copy without them. Use only when the user wants to remove, delete, drop, or get rid of pages — name the pages they do NOT want. If they instead name the pages to keep, use split_pdf."
+  keywords: [remove]
+  required_args: [input, pages]
+  optional_args: [output]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    pages: "2"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    pages:
+      type: string
+    output:
+      type: string
+      path_role: output
+
+reorder_pages:
+  description: "Reorder PDF pages into a new order within one PDF (not into separate files)."
+  keywords: [reorder, rearrange, move, front, swap, shuffle, reverse, backwards]
+  required_args: [input, order]
+  optional_args: [output]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    order: "2,1"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    order:
+      type: string
+    output:
+      type: string
+      path_role: output
+
+watermark:
+  description: "Apply a text or image watermark to a PDF."
+  keywords: [watermark, stamp, overlay]
+  required_args: [input]
+  optional_args: [text, image, opacity, position, output]
+  any_of_args: [text, image]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    text: DRAFT
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    text:
+      type: string
+    image:
+      type: string
+      path_role: input
+    opacity:
+      type: number
+      min: 0
+      max: 1
+    position:
+      type: enum
+      enum: [top-left, top-center, top-right, center, bottom-left, bottom-center, bottom-right]
+      aliases: {bottom: bottom-center, top: top-center, middle: center, centre: center, right: bottom-right, left: bottom-left}
+    output:
+      type: string
+      path_role: output
+
+add_page_numbers:
+  description: "Add page numbers to a PDF."
+  keywords: [number, numera, numerar, nummeriere, seitenzahlen, numérote, numéroter, пронумеруй, нумерация, номерирай, 页码, 编号]
+  required_args: [input]
+  optional_args: [position, start_at, output]
+  defaults:
+    position: bottom-center
+    start_at: 1
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    position:
+      type: enum
+      enum: [top-left, top-center, top-right, center, bottom-left, bottom-center, bottom-right]
+      aliases: {bottom: bottom-center, top: top-center, middle: center, centre: center, right: bottom-right, left: bottom-left}
+    start_at:
+      type: integer
+      min: 1
+    output:
+      type: string
+      path_role: output
+
+protect_pdf:
+  description: "Password-protect a PDF."
+  keywords: [protect, lock, encrypt, secure, protege, proteger, schütze, schützen, protège, protéger, защити, защитить, 加密]
+  required_args: [input, password]
+  optional_args: [output]
+  # The user must supply the password; the model must not invent one (else the
+  # file is encrypted with a placeholder the user can't open). Clarify if absent.
+  grounded_args: [password]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    password: secret
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    password:
+      type: string
+    output:
+      type: string
+      path_role: output
+
+unlock_pdf:
+  description: "Remove PDF password protection when the password is supplied."
+  keywords: [unlock]
+  required_args: [input, password]
+  optional_args: [output]
+  # The real password can only come from the user; an invented one cannot open
+  # the file. Clarify rather than guess.
+  grounded_args: [password]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    password: secret
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    password:
+      type: string
+    output:
+      type: string
+      path_role: output
+
+convert_document:
+  description: "Convert or save a document as a different format (e.g. txt→md, docx→pdf)."
+  keywords: [convert, export, markdown, transform, pdf, docx, "as a pdf", "save as", office]
+  required_args: [input, to_format]
+  optional_args: [output]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.txt"
+    to_format: md
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    to_format:
+      type: enum
+      enum: [pdf, txt, md, png, jpg]
+      aliases: {markdown: md, text: txt, plaintext: txt, jpeg: jpg, image: png}
+    output:
+      type: string
+      path_role: output
+
+compress_pdf:
+  description: "Compress a PDF using a deterministic inspect-compress-verify workflow."
+  keywords: [compress, comprimir, comprime, komprimiere, komprimieren, verkleinern, compresser, reducir, tamaño, size, сожми, сжать, компресирай, 压缩]
+  required_args: [input]
+  optional_args: [compress_quality, output]
+  defaults:
+    compress_quality: balanced
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    compress_quality: balanced
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    compress_quality:
+      type: enum
+      enum: [small, balanced, high]
+    output:
+      type: string
+      path_role: output
+
+ocr_document:
+  description: "Make a scanned PDF or image searchable with local Tesseract OCR."
+  keywords: [ocr]
+  required_args: [input]
+  optional_args: [output, language]
+  defaults:
+    language: eng
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample-scanned.pdf"
+    language: eng
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    output:
+      type: string
+      path_role: output
+    language:
+      type: string
+
+resolve_inputs:
+  description: "Resolve document input paths inside the sandbox."
+  required_args: [paths]
+  optional_args: [extensions]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+run_compress:
+  description: "Internal step that performs PDF compression."
+  required_args: [input, compress_quality, inspection]
+  optional_args: [output]
+  safety_category: destructive
+  internal: true
+
+run_ocr:
+  description: "Internal step that renders pages and applies Tesseract OCR."
+  required_args: [input, inspection]
+  optional_args: [output, language]
+  safety_category: destructive
+  internal: true
+
+verify_output:
+  description: "Internal step that verifies compressed PDF output."
+  required_args: [compression, inspection]
+  safety_category: safe
+  readonly: true
+  internal: true

@@ -1,0 +1,5 @@
+quality: balanced
+video_crf: 25
+encoder_preset: medium
+audio_bitrate: 128k
+notes: "Reasonable size with good quality."

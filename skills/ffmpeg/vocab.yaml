@@ -1,0 +1,90 @@
+# ffmpeg skill — declarative vocabulary / lookup tables.
+#
+# Language-agnostic data, the single source of truth for both the Python runtime
+# (loaded by _engine.py) and the future native/Rust runtime (see the dual-runtime
+# plan, Risk #1 mitigation b: push shared handler data into declarative YAML).
+# Pure data only — no logic. Algorithms (recipe assembly, geometry math, command
+# rendering) stay in code in each runtime.
+
+# Audio container/extension → ffprobe-style codec name (used by the dry-run probe).
+audio_ext_codec:
+  mp3: mp3
+  wav: pcm_s16le
+  flac: flac
+  aac: aac
+  m4a: aac
+  ogg: vorbis
+  opus: opus
+  wma: wmav2
+  aiff: pcm_s16be
+
+# Requested audio format → ffmpeg encoder (default "copy" when absent).
+audio_format_encoder:
+  mp3: libmp3lame
+  aac: aac
+  wav: pcm_s16le
+  flac: flac
+  ogg: libvorbis
+  opus: libopus
+  m4a: aac
+
+# Model-emitted platform synonyms → canonical profile name.
+platform_aliases:
+  instagram: instagram_reels
+  insta: instagram_reels
+  ig: instagram_reels
+  reels: instagram_reels
+  messaging: whatsapp
+  messenger: whatsapp
+
+# Named resolution presets → ffmpeg scale "W:H".
+scale_presets:
+  "4k": "3840:2160"
+  "1080p": "1920:1080"
+  "720p": "1280:720"
+  "480p": "854:480"
+
+# Output filename suffix per workflow mode ({platform} is substituted).
+output_suffix_by_mode:
+  platform: "_{platform}"
+  compress: _compressed
+  convert: _converted
+  resize: _resized
+  trim: _trimmed
+  extract_audio: _audio
+  thumbnail: _thumb
+  batch: _batch
+  reverse: _reversed
+  strip_audio: _silent
+  adjust_speed: _speed
+  rotate: _rotated
+  adjust_volume: _vol
+
+# Video codec token → ffmpeg encoder. Single source of truth for the convert
+# expander's codec mapping and for detecting a codec token mis-slotted as a
+# container (av1/hevc/etc. are codecs, not containers).
+video_encoder_map:
+  h264: libx264
+  avc: libx264
+  hevc: libx265
+  h265: libx265
+  vp9: libvpx-vp9
+  av1: libsvtav1
+
+# ffmpeg encoder → short codec token (inverse-ish; includes libaom-av1).
+encoder_codec_map:
+  libx264: h264
+  libx265: hevc
+  libvpx-vp9: vp9
+  libsvtav1: av1
+  libaom-av1: av1
+
+# Recognised video container extensions.
+video_containers: [mp4, mkv, webm, mov, avi, gif, ogg, flv, m4v, wmv]
+
+# Recognised image extensions (thumbnail / single-frame outputs).
+image_extensions: [jpg, jpeg, png, webp, bmp, tiff, tif]
+
+# Direction words the model leaks into the volume `level` slot.
+volume_louder: [louder, boost, increase, higher, raise, amplify, up, lauter]
+volume_quieter: [quieter, lower, reduce, decrease, softer, down, quiet, leiser]

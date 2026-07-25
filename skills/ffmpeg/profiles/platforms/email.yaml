@@ -1,0 +1,12 @@
+platform: email
+container: mp4
+video_codec: h264
+video_encoder: libx264
+audio_codec: aac
+pixel_format: yuv420p
+max_width: 854
+max_height: 480
+max_audio_bitrate: 96k
+faststart: true
+default_target_size_mb: 20
+notes: "Email attachments are usually capped near 20 MB; bias toward small size."

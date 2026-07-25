@@ -1,0 +1,136 @@
+# Repo-root pyproject: this is the uv *workspace root*, not an installable package.
+#
+# The installable Python package (`knaif`) lives in python/core/. This virtual root
+# exists so `uv run`, `ruff`, `black`, `mypy`, and `pytest` all work from the repo root
+# with cwd = repo root — which the evalsuite and several tests require (they resolve data
+# via cwd-relative paths like `skills/...` and `evals/...`). The single uv.lock
+# for the workspace also lives here.
+#
+# See docs/plans/2026-06-17-monorepo-dual-runtime.md (Phase 2) and
+# docs/plans/2026-07-19-repo-restructure.md (four-pillar layout).
+
+[tool.uv.workspace]
+members = ["python/core"]
+
+# Dependencies for the repo's reference skill bundles. These are deliberately NOT
+# `[project.optional-dependencies]` in python/core/pyproject.toml: skill bundles are not
+# packaged into the wheel, so publishing a `knaif[documents]` extra would offer PyPI users
+# 9 PDF libraries for code they do not have. Dependency groups (PEP 735) are never
+# published, so they stay a repo-development concern.
+#
+#   just install-skills                     # everything below
+#   uv pip install --group documents        # one group
+[dependency-groups]
+documents = [
+    "pikepdf>=9.0.0",
+    "pypdf>=5.0.0",
+    "pdfminer.six>=20240706",
+    "pypdfium2>=4.30.0",
+    "python-docx>=1.1.0",
+    "python-pptx>=1.0.0",
+    "openpyxl>=3.1.0",
+    "Pillow>=10.0.0",
+    "reportlab>=4.0.0",
+]
+documents-ocr = [
+    # Needs the `tesseract` binary on PATH as well; see skills/documents/SPEC.md.
+    "pytesseract>=0.3.13",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "C",      # flake8-comprehensions
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by black)
+    "C901",   # complexity
+]
+
+[tool.ruff.lint.isort]
+# The package moved out of a src/ layout into python/core/, so ruff can no longer
+# auto-detect knaif as first-party. Declare it so `from knaif ...` keeps its own import
+# group (matching the pre-migration ordering).
+known-first-party = ["knaif"]
+
+# python_version tracks the mypy *analysis* target, not the minimum supported runtime
+# (that stays >=3.10 via requires-python). Bumped 3.10 -> 3.12 because numpy's shipped
+# stubs use PEP 695 `type` statements (3.12+), which mypy refuses to parse under an older
+# target — halting the whole check. The codebase uses no 3.11/3.12-only syntax.
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "llama_cpp.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true
+
+[tool.pyright]
+extraPaths = ["notebooks/shared", "skills/documents/notebooks", "skills/documents/notebooks/helpers"]
+
+[tool.pytest.ini_options]
+# Paths are resolved from the repo root (cwd). Framework tests live under
+# python/core/tests; skill tests live inside each bundle at skills/<name>/python/tests/
+# (discovered recursively under skills/).
+testpaths = ["python/core/tests", "skills"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["knaif"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if 0:",
+    "if False:",
+]

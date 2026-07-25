@@ -1,0 +1,18 @@
+# Git stores text as LF and normalizes on checkout. Without this, a Windows
+# checkout with core.autocrlf=true rewrites shell scripts to CRLF, and a CRLF
+# `#!/usr/bin/env bash` line fails under bash on every platform. Pin the ones
+# that must stay LF regardless of the checkout's autocrlf setting.
+* text=auto
+
+*.sh   text eol=lf
+*.bash text eol=lf
+
+# Windows-native scripts stay CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets — never normalize.
+*.png  binary
+*.ico  binary
+*.gguf binary

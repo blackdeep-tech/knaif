@@ -1,0 +1,33 @@
+name: io
+description: "File I/O agent — list, find, move, and delete files within a sandbox."
+version: 0.1.0
+
+# Partially implemented and slated for rebuild. `stale` skills are hidden from
+# list_skills() by default and excluded from the all-skills eval sweep/regression
+# gate. See docs/TOOL_SCHEMA.md ("Skill status"). Still loadable explicitly via
+# create_agent("io").
+status: stale
+
+tools: tools.yaml
+skill_class: handlers.IoSkill
+prompt: prompt.yaml
+
+recommended_model: qwen3-4b
+
+safety:
+  unsafe_phrases:
+    - "format"
+    - "wipe"
+    - "rm -rf"
+    - "erase everything"
+    - "nuke"
+    - "delete all"
+
+data:
+  train: data/train.jsonl
+  validation: data/validation.jsonl
+  test: data/test.jsonl
+  safety_test: data/safety_test.jsonl
+
+arg_value_sets:
+  file_type: [executable, text, image, document, script, archive, log, config]

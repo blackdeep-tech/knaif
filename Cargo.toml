@@ -1,0 +1,71 @@
+# Rust workspace for the native runtime (see docs/plans/2026-06-17-monorepo-dual-runtime.md).
+# CLI, and later desktop/mobile, all consume these reusable engine crates.
+
+[workspace]
+resolver = "2"
+members = [
+    "native/crates/knaif-core",
+    "native/crates/knaif-models",
+    "native/crates/knaif-llm",
+    "native/crates/knaif-skill-api",
+    "skills/ffmpeg/native",
+    "skills/documents/native",
+    "apps/cli",
+]
+
+[workspace.package]
+version = "1.0.1"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.96"
+
+[workspace.dependencies]
+# Internal crates (path deps; the whole graph builds from the workspace).
+knaif-core = { path = "native/crates/knaif-core" }
+knaif-models = { path = "native/crates/knaif-models" }
+knaif-llm = { path = "native/crates/knaif-llm" }
+knaif-skill-api = { path = "native/crates/knaif-skill-api" }
+knaif-skill-ffmpeg = { path = "skills/ffmpeg/native" }
+knaif-skill-documents = { path = "skills/documents/native" }
+
+# Third-party.
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+# Physical (non-SMT) core count, which std only approximates via available_parallelism (logical).
+# llama.cpp wants them separately: generation is memory-bound and peaks at PHYSICAL cores, while
+# prompt decode is compute-bound and scales to ALL logical threads. See docs/PERFORMANCE.md §3.
+num_cpus = "1.17"
+# preserve_order: keep object keys in source (YAML/JSON) order — the fine-tuned model was trained
+# on prompts whose example JSON is in insertion order (tool-first), so the prompt builder must
+# reproduce that, not serde_json's default alphabetical sort.
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+unicode-normalization = "0.1"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+# Blocking HTTP client for model downloads (no tokio; rustls TLS + redirect following by default).
+ureq = "2"
+# Progress bars for model downloads (bytes/rate/ETA). MIT, permissive.
+indicatif = "0.17"
+# Terminal input-buffer flush (tcflush) so keystrokes typed during a long silent inference wait
+# don't leak into a later confirm prompt or the shell. Unix only; permissive (MIT/Apache).
+libc = "0.2"
+# Pure-Rust PDF document model (MIT) for the documents skill's structural ops
+# (merge/split/rotate/remove/reorder/inspect) + encryption (encrypt/decrypt, added post-0.34).
+# Permissive per the dependency-license policy.
+lopdf = "0.43"
+# Regex engine (MIT/Apache) for documents find_in_document. Permissive.
+regex = "1"
+# Office text extraction (docx/pptx via zip + quick-xml; xlsx via calamine). All MIT, permissive.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+quick-xml = "0.37"
+calamine = "0.26"
+# Rendering backend (feature `pdfium`): PDFium (BSD) via pdfium-render for PDF→image (convert/OCR/
+# compress rasterize). Dynamic-loads the runtime lib, so it compiles without the binary present.
+# `image` (MIT/Apache) backs rasters + image→pdf + downsampling. See project rendering-strategy memory.
+pdfium-render = "0.8"
+image = "0.25"
+# Win32 bindings (MIT/Apache) — only for SetConsoleOutputCP, so the CLI's non-ASCII output
+# survives the cp1252 code page a default Windows console starts in. Already in the graph
+# transitively; the Console feature adds nothing measurable to build time.
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

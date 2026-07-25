@@ -1,0 +1,82 @@
+# models.yaml — runtime model registry for the knaif CLI and library.
+#
+# Resolution precedence (highest first):
+#   1. --model-path PATH                    (raw GGUF, escape hatch)
+#   2. --model NAME                         (resolves against this file)
+#   3. skill.yaml's `recommended_model:`    (per-skill override)
+#   4. `default:` below                     (project-wide fallback)
+#   5. mock inference                       (no model loaded)
+#
+# Schema mirrors eval_backends.yaml entries, but the role is different:
+#   eval_backends.yaml — every backend the eval suite benchmarks
+#   models.yaml        — the one model used at runtime for a CLI/library call
+#
+# Options under `llama_cpp` backend:
+#   path              GGUF model file (relative to repo root or absolute)
+#   n_ctx             context window in tokens (default 4096)
+#   n_gpu_layers      layers offloaded to GPU; 99 = all (default 10)
+#   n_threads         CPU threads (default 8)
+#   max_tokens        generation budget per call
+#   json_mode         GBNF-constrain output to JSON; disable for thinking models
+#   thinking_enabled  When false, appends "/no_think" to the system prompt
+#   verbose           When true, llama.cpp prints device/backend init logs
+
+# NAMING: keys are backend-configuration aliases, but knaif's OWN fine-tunes carry the
+# `knaif-` prefix and match their manifest key + filename exactly (contracts/models/
+# model-manifest.yaml) — one name on disk, in the manifest, on HF, and in both CLIs.
+# Unprefixed keys are stock third-party checkpoints. Renamed 2026-07-20: the fine-tune
+# was `qwen3-4b-v3`, which read as a version of the stock `qwen3-4b` sitting next to it.
+# Internal FT-cycle names (sft-v3-flat) stay in the manifest's `training_run:` and in
+# eval_backends.yaml keys (baked into saved run filenames in evals/ — do not rename those).
+
+# default stays qwen3-4b (untuned instruct) — the safe fallback for skills the
+# fine-tune was NOT trained on (e.g. io). The ffmpeg + documents skills pin
+# knaif-qwen3-4b-v1 via their skill.yaml `recommended_model:` (promoted 2026-07-02).
+default: qwen3-4b
+
+models:
+  qwen3-4b:
+    backend: llama_cpp
+    options:
+      path: models/Qwen3-4B-Q4_K_M.gguf
+      description: Qwen3 4B Q4_K_M
+      n_ctx: 4096
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 4096
+      json_mode: false
+      thinking_enabled: false
+
+  # Promoted 2026-07-02 (docs/plans/2026-07-02-qwen3-finetuning-pass3.md, Task 4/7).
+  # 4B union LoRA on ffmpeg-v3 + documents (same recipe as the retracted qwen3-4b-ft,
+  # only v1->v3 data). vs untuned 4B on ffmpeg (845, success): full 0.905->0.898
+  # (within tolerance), hard 0.909->0.945, chain3 0.938->0.969; documents held
+  # 0.976/0.914; 0 cross-skill contamination in the regression flips. Serves ffmpeg +
+  # documents only (the skills it was trained on); io stays on untuned qwen3-4b.
+  knaif-qwen3-4b-v1:
+    backend: llama_cpp
+    options:
+      path: models/knaif-qwen3-4b-v1-q4_k_m.gguf
+      description: Qwen3 4B SFT v3 flat union (ffmpeg+documents), Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 512
+      json_mode: false
+      thinking_enabled: false
+
+  # Mirrors the eval suite's active backend set (eval_backends.yaml): qwen3-4b +
+  # gemma3-4b. Smaller/weaker models (qwen3-1.7b, phi4-mini) are intentionally
+  # excluded — qwen3-1.7b hallucinated tool names in routing tests, and phi4-mini
+  # was dropped from the eval set (over-refusal). GGUFs remain on disk; re-add a
+  # stanza here to use one again.
+  gemma3-4b:
+    backend: llama_cpp
+    options:
+      path: models/gemma-3-4b-it-Q4_K_M.gguf
+      description: Gemma 3 4B IT Q4_K_M
+      n_ctx: 4096
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: true

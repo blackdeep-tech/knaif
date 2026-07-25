@@ -1,0 +1,14 @@
+[package]
+name = "knaif-models"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ModelStore: manifest, download, checksum, atomic install, delete, store resolver. No inference deps."
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+anyhow = { workspace = true }
+ureq = { workspace = true }

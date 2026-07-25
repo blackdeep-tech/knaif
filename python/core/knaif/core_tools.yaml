@@ -1,0 +1,32 @@
+# Core control tools — framework tools merged into every skill registry.
+#
+# Behavior lives in the Step classes in core_tools.py; this file holds their
+# model-facing metadata, loaded through the same registry loader as a skill's
+# tools.yaml so both render identically in the prompt. These four tools ship
+# with core in every language implementation, so they live here (not in a
+# skill dir). Keep the entries in sync with CORE_STEP_MAP by `name`.
+
+clarify:
+  description: "Ask the user for clarification."
+  keywords: [clarify, question, ask, unclear, ambiguous]
+  required_args: [question]
+  safety_category: safe
+
+reject:
+  description: "Reject the user request (unsafe or out-of-scope)."
+  keywords: [reject, refuse, deny, unsafe, forbidden, dangerous]
+  required_args: [reason]
+  safety_category: safe
+
+done:
+  description: "Signal that the task is complete."
+  keywords: [done, complete, finished, end, stop]
+  required_args: []
+  safety_category: safe
+
+wait_for_confirmation:
+  description: "Pause workflow execution and ask the user to confirm proceeding past a preview."
+  required_args: []
+  optional_args: [prompt, preview]
+  safety_category: safe
+  internal: true

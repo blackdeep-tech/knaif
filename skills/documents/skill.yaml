@@ -1,0 +1,65 @@
+name: documents
+description: "Local document toolkit for inspecting, extracting, finding, converting, combining, and compressing files."
+version: 0.1.0
+
+tools: tools.yaml
+skill_class: handlers.DocumentsSkill
+prompt: prompt.yaml
+
+recommended_model: knaif-qwen3-4b-v1  # promoted 2026-07-02 (sft-v3 union LoRA; see models.yaml)
+
+# Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
+runtimes:
+  python:
+    handlers: handlers.DocumentsSkill   # resolved inside skills/documents/python/ (loaded by path)
+  native:
+    status: supported
+    crate: knaif-skill-documents
+
+# Optional external tools. documents degrades gracefully without them (the affected
+# operations report a missing-dependency error); the installer offers them per-feature.
+# PATH is never modified without consent. Detection: see python/_deps.py.
+dependencies:
+  external_tools:
+    - name: ghostscript
+      required: false
+      commands: [gs, gswin64c, gswin32c]
+      install: { windows: winget, macos: brew, linux: package_manager }
+    - name: libreoffice
+      required: false
+      commands: [soffice, libreoffice]
+      install: { windows: winget, macos: brew, linux: package_manager }
+    - name: tesseract
+      required: false
+      commands: [tesseract]
+      install: { windows: winget, macos: brew, linux: package_manager }
+
+data:
+  train: data/train.jsonl
+  safety_test: data/safety_test.jsonl
+
+arg_value_sets:
+  compress_quality: [small, balanced, high]
+  to_format: [pdf, txt, md, png, jpg]
+  position: [top-left, top-center, top-right, center, bottom-left, bottom-center, bottom-right]
+
+safety:
+  # Deterministic substring match (lowercased) → immediate reject, pre-model.
+  # Verified to catch adversarial destructive phrasings with zero false
+  # positives across the eval corpus; keep additions specific (e.g. "format the
+  # system", not bare "format") so benign document requests never trip them.
+  unsafe_phrases:
+    - "delete all documents"
+    - "delete everything"
+    - "remove everything"
+    - "wipe all files"
+    - "all files"
+    - "erase all"
+    - "wipe"
+    - "shred"
+    - "hard drive"
+    - "rm -rf"
+    - "nuke"
+    - "format drive"
+    - "format disk"
+    - "format the system"

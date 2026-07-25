@@ -1,0 +1,114 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security issue?** Don't file it here — see [SECURITY.md](../blob/main/SECURITY.md)
+        for private reporting.
+
+        The four fields below (OS, runtime, backend, model) plus the exact utterance are
+        what make a report reproducible. A report without them usually can't be acted on.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: input
+    id: utterance
+    attributes:
+      label: The exact utterance
+      description: >
+        Verbatim, including quoting and filenames. Phrasing changes routing, so a
+        paraphrase often reproduces something different.
+      placeholder: convert clip.mp4 to webm and strip the audio
+    validations:
+      required: true
+
+  - type: input
+    id: skill
+    attributes:
+      label: Skill
+      placeholder: ffmpeg / documents / io
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Native CLI (knaif binary)
+        - Python library
+        - Python SDK (knaif.cli)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows x64
+        - Linux x64
+        - Other (say which in "What happened")
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Inference backend
+      options:
+        - CPU
+        - Vulkan
+        - CUDA (manual opt-in build)
+        - Ollama
+        - Mock (no model)
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: Manifest name, or the GGUF filename if you passed --model-path.
+      placeholder: knaif-qwen3-4b-v1
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: knaif version
+      description: Output of `knaif --version`, or the package version / commit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: The plan that was produced
+      description: >
+        If it got as far as producing one, paste it. `knaif plan "<utterance>"` prints the
+        plan without executing. This separates a bad plan from a bad execution.
+      render: json
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or error
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: External tools this skill needs (e.g. FFmpeg) are installed and on PATH
+        - label: I can reproduce this more than once

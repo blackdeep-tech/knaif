@@ -1,0 +1,5 @@
+quality: visually_good
+video_crf: 23
+encoder_preset: medium
+audio_bitrate: 128k
+notes: "Default visually-pleasing quality; matches the WhatsApp example in the spec."

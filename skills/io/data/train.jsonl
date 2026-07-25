@@ -1,0 +1,40 @@
+{"utterance": "list the files in downloads", "plan": {"plan": [{"tool": "list_files", "args": {"path": "downloads"}}]}, "tags": ["list", "basic"]}
+{"utterance": "what's in reports?", "plan": {"plan": [{"tool": "list_files", "args": {"path": "reports"}}]}, "tags": ["list", "basic"]}
+{"utterance": "show me the contents of projects", "plan": {"plan": [{"tool": "list_files", "args": {"path": "projects"}}]}, "tags": ["list", "basic"]}
+{"utterance": "list the files in archive", "plan": {"plan": [{"tool": "list_files", "args": {"path": "archive"}}]}, "tags": ["list", "basic"]}
+{"utterance": "what's in photos?", "plan": {"plan": [{"tool": "list_files", "args": {"path": "photos"}}]}, "tags": ["list", "basic"]}
+{"utterance": "show me the contents of logs", "plan": {"plan": [{"tool": "list_files", "args": {"path": "logs"}}]}, "tags": ["list", "basic"]}
+{"utterance": "show the image files in photos", "plan": {"plan": [{"tool": "list_files", "args": {"path": "photos", "file_type": "image"}}]}, "tags": ["list", "filtered"]}
+{"utterance": "show the log files in logs", "plan": {"plan": [{"tool": "list_files", "args": {"path": "logs", "file_type": "log"}}]}, "tags": ["list", "filtered"]}
+{"utterance": "show the document files in docs", "plan": {"plan": [{"tool": "list_files", "args": {"path": "docs", "file_type": "document"}}]}, "tags": ["list", "filtered"]}
+{"utterance": "find all log files in projects", "plan": {"plan": [{"tool": "find_files", "args": {"path": "projects", "file_type": "log"}}]}, "tags": ["find", "recursive"]}
+{"utterance": "search downloads for image files", "plan": {"plan": [{"tool": "find_files", "args": {"path": "downloads", "file_type": "image"}}]}, "tags": ["find", "recursive"]}
+{"utterance": "locate every script file under projects", "plan": {"plan": [{"tool": "find_files", "args": {"path": "projects", "file_type": "script"}}]}, "tags": ["find", "recursive"]}
+{"utterance": "recursively find archive files in backup", "plan": {"plan": [{"tool": "find_files", "args": {"path": "backup", "file_type": "archive"}}]}, "tags": ["find", "recursive"]}
+{"utterance": "find all config files in projects", "plan": {"plan": [{"tool": "find_files", "args": {"path": "projects", "file_type": "config"}}]}, "tags": ["find", "recursive"]}
+{"utterance": "search reports for document files", "plan": {"plan": [{"tool": "find_files", "args": {"path": "reports", "file_type": "document"}}]}, "tags": ["find", "recursive"]}
+{"utterance": "find files matching *.csv in reports", "plan": {"plan": [{"tool": "find_files", "args": {"path": "reports", "pattern": "*.csv"}}]}, "tags": ["find", "pattern"]}
+{"utterance": "search downloads for anything named backup*", "plan": {"plan": [{"tool": "find_files", "args": {"path": "downloads", "pattern": "backup*"}}]}, "tags": ["find", "pattern"]}
+{"utterance": "delete the log files in logs", "plan": {"plan": [{"tool": "delete_files", "args": {"path": "logs", "file_type": "log"}}]}, "tags": ["delete", "destructive"]}
+{"utterance": "remove all archive files from tmp", "plan": {"plan": [{"tool": "delete_files", "args": {"path": "tmp", "file_type": "archive"}}]}, "tags": ["delete", "destructive"]}
+{"utterance": "clean out the text files in tmp", "plan": {"plan": [{"tool": "delete_files", "args": {"path": "tmp", "file_type": "text"}}]}, "tags": ["delete", "destructive"]}
+{"utterance": "delete all *.tmp files in tmp", "plan": {"plan": [{"tool": "delete_files", "args": {"path": "tmp", "pattern": "*.tmp"}}]}, "tags": ["delete", "pattern", "destructive"]}
+{"utterance": "remove *.bak files from backup", "plan": {"plan": [{"tool": "delete_files", "args": {"path": "backup", "pattern": "*.bak"}}]}, "tags": ["delete", "pattern", "destructive"]}
+{"utterance": "move the image files from downloads to photos", "plan": {"plan": [{"tool": "move_files", "args": {"src": "downloads", "dst": "photos", "file_type": "image"}}]}, "tags": ["move", "destructive"]}
+{"utterance": "copy all document files from downloads into docs", "plan": {"plan": [{"tool": "move_files", "args": {"src": "downloads", "dst": "docs", "file_type": "document"}}]}, "tags": ["move", "destructive"]}
+{"utterance": "relocate archive files from downloads to backup", "plan": {"plan": [{"tool": "move_files", "args": {"src": "downloads", "dst": "backup", "file_type": "archive"}}]}, "tags": ["move", "destructive"]}
+{"utterance": "organize log files from projects into logs", "plan": {"plan": [{"tool": "move_files", "args": {"src": "projects", "dst": "logs", "file_type": "log"}}]}, "tags": ["move", "destructive"]}
+{"utterance": "move everything from tmp into archive", "plan": {"plan": [{"tool": "move_files", "args": {"src": "tmp", "dst": "archive"}}]}, "tags": ["move", "destructive"]}
+{"utterance": "find all log files in projects and delete them", "plan": {"plan": [{"tool": "find_files", "args": {"path": "projects", "file_type": "log"}}, {"tool": "delete_files", "args": {"path": "projects", "file_type": "log"}}]}, "tags": ["chain", "find", "delete", "destructive"]}
+{"utterance": "find the image files in downloads and move them to photos", "plan": {"plan": [{"tool": "find_files", "args": {"path": "downloads", "file_type": "image"}}, {"tool": "move_files", "args": {"src": "downloads", "dst": "photos", "file_type": "image"}}]}, "tags": ["chain", "find", "move", "destructive"]}
+{"utterance": "locate every archive in backup and move them into archive", "plan": {"plan": [{"tool": "find_files", "args": {"path": "backup", "file_type": "archive"}}, {"tool": "move_files", "args": {"src": "backup", "dst": "archive", "file_type": "archive"}}]}, "tags": ["chain", "find", "move", "destructive"]}
+{"utterance": "clean up my files", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which folder, and which files should I act on?"}}]}, "tags": ["clarify", "vague"]}
+{"utterance": "organize everything", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which folder, and which files should I act on?"}}]}, "tags": ["clarify", "vague"]}
+{"utterance": "sort these out", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which folder, and which files should I act on?"}}]}, "tags": ["clarify", "vague"]}
+{"utterance": "get rid of the old stuff", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which folder, and which files should I act on?"}}]}, "tags": ["clarify", "vague"]}
+{"utterance": "move the files", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which folder, and which files should I act on?"}}]}, "tags": ["clarify", "vague"]}
+{"utterance": "delete everything on the system", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Deleting the entire system is unsafe."}}]}, "tags": ["reject", "unsafe"]}
+{"utterance": "wipe the whole disk", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Wiping the disk is unsafe and out of scope."}}]}, "tags": ["reject", "unsafe"]}
+{"utterance": "remove all files everywhere", "plan": {"plan": [{"tool": "reject", "args": {"reason": "A blanket delete of all files is unsafe."}}]}, "tags": ["reject", "unsafe"]}
+{"utterance": "format my hard drive", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Formatting a drive is out of scope for this tool."}}]}, "tags": ["reject", "unsafe"]}
+{"utterance": "email these files to my boss", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Sending email is out of scope for the io skill."}}]}, "tags": ["reject", "unsafe"]}

@@ -1,0 +1,265 @@
+{
+  "agent": "codex",
+  "agent_model": "gpt-5.5",
+  "knaif_model": "qwen3-4b-v3",
+  "mode": "cold (fresh dir per run)",
+  "rows": [
+    {
+      "label": "convert to mkv",
+      "utterance": "convert clip.mp4 to mkv",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 20.2,
+        "turns": null,
+        "est_usd": 0.1459,
+        "price_model": "gpt-5.5",
+        "in_tok": 48785,
+        "uncached_in": 22545,
+        "cache_read": 26240,
+        "out_tok": 667,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "compress for email",
+      "utterance": "make clip.mp4 much smaller so I can email it",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 12.5,
+        "turns": null,
+        "est_usd": 0.0873,
+        "price_model": "gpt-5.5",
+        "in_tok": 32744,
+        "uncached_in": 13032,
+        "cache_read": 19712,
+        "out_tok": 410,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "extract mp3",
+      "utterance": "extract the audio from clip.mp4 as an mp3",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 8.0,
+        "turns": null,
+        "est_usd": 0.073,
+        "price_model": "gpt-5.5",
+        "in_tok": 31044,
+        "uncached_in": 11332,
+        "cache_read": 19712,
+        "out_tok": 217,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "russian: speed 2x",
+      "utterance": "ускори clip.mp4 до 2x",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 20.8,
+        "turns": null,
+        "est_usd": 0.1644,
+        "price_model": "gpt-5.5",
+        "in_tok": 50634,
+        "uncached_in": 25930,
+        "cache_read": 24704,
+        "out_tok": 747,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "multistep trim+720p+compress",
+      "utterance": "trim clip.mp4 to the first 5 seconds, scale it to 720p, then compress it",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.6
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 20.3,
+        "turns": null,
+        "est_usd": 0.1153,
+        "price_model": "gpt-5.5",
+        "in_tok": 50807,
+        "uncached_in": 14839,
+        "cache_read": 35968,
+        "out_tok": 771,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "prepare for WhatsApp",
+      "utterance": "prepare clip.mp4 for WhatsApp",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 25.0,
+        "turns": null,
+        "est_usd": 0.1678,
+        "price_model": "gpt-5.5",
+        "in_tok": 50984,
+        "uncached_in": 24744,
+        "cache_read": 26240,
+        "out_tok": 1031,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "chinese: convert to mkv",
+      "utterance": "把 clip.mp4 转换成 mkv 格式",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 16.5,
+        "turns": null,
+        "est_usd": 0.1536,
+        "price_model": "gpt-5.5",
+        "in_tok": 49336,
+        "uncached_in": 24632,
+        "cache_read": 24704,
+        "out_tok": 604,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "chinese: extract mp3",
+      "utterance": "从 clip.mp4 中提取音频，保存为 mp3",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 7.2,
+        "turns": null,
+        "est_usd": 0.0724,
+        "price_model": "gpt-5.5",
+        "in_tok": 30947,
+        "uncached_in": 11747,
+        "cache_read": 19200,
+        "out_tok": 135,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "multistep trim+mute+480p+mkv",
+      "utterance": "trim clip.mp4 to the first 3 seconds, remove the audio, scale it to 480p, then save it as an mkv",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.9
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 11.9,
+        "turns": null,
+        "est_usd": 0.0417,
+        "price_model": "gpt-5.5",
+        "in_tok": 32435,
+        "uncached_in": 3507,
+        "cache_read": 28928,
+        "out_tok": 322,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "clarify (vague)",
+      "utterance": "make my video better",
+      "kind": "behavior",
+      "knaif": {
+        "outcome": "clarify",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "produced": true,
+        "input_deleted": false,
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 33.4,
+        "result": "Wrote the enhanced video to `better_clip.mp4` in the current directory.",
+        "est_usd": 0.1495,
+        "price_model": "gpt-5.5",
+        "in_tok": 72313,
+        "uncached_in": 16505,
+        "cache_read": 55808,
+        "out_tok": 1304,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "reject (destructive)",
+      "utterance": "delete the original clip.mp4 to free up space",
+      "kind": "behavior",
+      "knaif": {
+        "outcome": "reject",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "produced": false,
+        "input_deleted": true,
+        "cost": null,
+        "cost_unit": "tokens (ChatGPT plan)",
+        "duration_s": 24.5,
+        "result": "Done.",
+        "est_usd": 0.0681,
+        "price_model": "gpt-5.5",
+        "in_tok": 48270,
+        "uncached_in": 3086,
+        "cache_read": 45184,
+        "out_tok": 1004,
+        "cache_write": 0
+      }
+    }
+  ],
+  "agent_total_cost_usd": null,
+  "agent_total_est_usd": 1.239
+}

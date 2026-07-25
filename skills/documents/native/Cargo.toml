@@ -1,0 +1,25 @@
+[package]
+name = "knaif-skill-documents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Native documents skill: workflow expansion + deterministic handlers (consumes the bundle's shared YAML)."
+
+[dependencies]
+knaif-skill-api = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+lopdf = { workspace = true }
+regex = { workspace = true }
+image = { workspace = true }
+zip = { workspace = true }
+quick-xml = { workspace = true }
+calamine = { workspace = true }
+pdfium-render = { workspace = true, optional = true }
+
+[features]
+# Bundle-PDFium desktop rasterizer (needs the PDFium runtime lib at run time, not build time).
+pdfium = ["dep:pdfium-render"]

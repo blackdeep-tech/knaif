@@ -1,0 +1,19 @@
+# cargo-about config for the third-party Rust license report (`just licenses`).
+# Permissive licenses only — no GPL/AGPL (matches the bundled-dependency license policy).
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "BSL-1.0",
+    "0BSD",
+    "CDLA-Permissive-2.0",
+    "OpenSSL",
+    "NCSA",
+]

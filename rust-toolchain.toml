@@ -1,0 +1,5 @@
+# Authoritative Rust pin for the workspace (mise also provisions this version).
+# Bump deliberately; keep in sync with mise.toml's rust entry.
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy"]

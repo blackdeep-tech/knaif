@@ -1,0 +1,11 @@
+platform: youtube
+container: mp4
+video_codec: h264
+video_encoder: libx264
+audio_codec: aac
+pixel_format: yuv420p
+max_width: 3840
+max_height: 2160
+max_audio_bitrate: 192k
+faststart: true
+notes: "YouTube ingest target; honors source resolution up to 4K with H.264/AAC."

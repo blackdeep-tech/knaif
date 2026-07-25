@@ -1,0 +1,6 @@
+ghostscript_pdfsettings: /ebook
+lossless:
+  object_stream_mode: generate
+rasterize_fallback:
+  dpi: 150
+  jpeg_quality: 75

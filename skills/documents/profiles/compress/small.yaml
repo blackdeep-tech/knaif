@@ -1,0 +1,6 @@
+ghostscript_pdfsettings: /screen
+lossless:
+  object_stream_mode: generate
+rasterize_fallback:
+  dpi: 120
+  jpeg_quality: 60

@@ -1,0 +1,11 @@
+platform: whatsapp
+container: mp4
+video_codec: h264
+video_encoder: libx264
+audio_codec: aac
+pixel_format: yuv420p
+max_width: 1280
+max_height: 720
+max_audio_bitrate: 128k
+faststart: true
+notes: "WhatsApp supports MP4 with H.264/AAC; cap resolution at 720p for share-friendly size."

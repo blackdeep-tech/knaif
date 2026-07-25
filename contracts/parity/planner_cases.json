@@ -1,0 +1,22 @@
+{
+  "_comment": "Golden parity fixtures for the deterministic planner pipeline (parse -> normalize -> apply_defaults -> validate). Consumed by BOTH the Python (python/core/tests/test_planner_parity.py) and Rust (knaif-core planner parity test) validators; both must produce the same valid/invalid outcome + error substring. Registries are inline tools.yaml text so parity is on an identical registry, independent of skill content.",
+  "registries": {
+    "demo": "find:\n  description: Find files\n  required_args: [path]\n  optional_args: [file_type]\ncompress:\n  description: Compress\n  required_args: [input]\n  optional_args: [quality, output, tries]\n  defaults: {output: out.mp4}\n  arg_schemas:\n    quality: {type: enum, enum: [low, high], aliases: {maximum: high}}\n    tries: {type: integer, min: 1, max: 5}\ncombine:\n  description: Combine\n  optional_args: [inputs]\nreport:\n  description: Report\n  any_of_args: [a, b]\n  optional_args: [a, b]\n"
+  },
+  "cases": [
+    { "name": "unknown_tool", "registry": "demo", "plan": {"plan": [{"tool": "nope", "args": {}}]}, "valid": false, "error_contains": "Unknown tool" },
+    { "name": "missing_required", "registry": "demo", "plan": {"plan": [{"tool": "find", "args": {}}]}, "valid": false, "error_contains": "missing required args" },
+    { "name": "unsupported_arg", "registry": "demo", "plan": {"plan": [{"tool": "find", "args": {"path": ".", "zzz": 1}}]}, "valid": false, "error_contains": "unsupported args" },
+    { "name": "any_of_none", "registry": "demo", "plan": {"plan": [{"tool": "report", "args": {}}]}, "valid": false, "error_contains": "at least one of" },
+    { "name": "any_of_ok", "registry": "demo", "plan": {"plan": [{"tool": "report", "args": {"a": 1}}]}, "valid": true },
+    { "name": "enum_reject", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "x", "quality": "mid"}}]}, "valid": false, "error_contains": "must be one of" },
+    { "name": "enum_alias_coerced_then_valid", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "x", "quality": "maximum"}}]}, "valid": true },
+    { "name": "file_type_invalid", "registry": "demo", "plan": {"plan": [{"tool": "find", "args": {"path": ".", "file_type": "bogus"}}]}, "valid": false, "error_contains": "Unknown file_type" },
+    { "name": "bad_output_syntax", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "x"}, "output": "$a.b"}]}, "valid": false, "error_contains": "identifier" },
+    { "name": "var_before_assignment", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "a"}}, {"tool": "compress", "args": {"input": "$out"}}]}, "valid": false, "error_contains": "before it is assigned" },
+    { "name": "valid_chain_with_output", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "a"}, "output": "$out"}, {"tool": "compress", "args": {"input": "$out"}}]}, "valid": true },
+    { "name": "input_to_inputs_coercion_valid", "registry": "demo", "plan": {"plan": [{"tool": "combine", "args": {"input": "a.mp4"}}]}, "valid": true },
+    { "name": "integer_string_coerced_then_bounds_ok", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "x", "tries": "3"}}]}, "valid": true },
+    { "name": "integer_out_of_bounds", "registry": "demo", "plan": {"plan": [{"tool": "compress", "args": {"input": "x", "tries": 9}}]}, "valid": false, "error_contains": "must be <=" }
+  ]
+}

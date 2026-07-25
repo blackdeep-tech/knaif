@@ -1,0 +1,265 @@
+{
+  "agent": "copilot",
+  "agent_model": "claude-sonnet-5",
+  "knaif_model": "qwen3-4b-v3",
+  "mode": "cold (fresh dir per run)",
+  "rows": [
+    {
+      "label": "convert to mkv",
+      "utterance": "convert clip.mp4 to mkv",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 6.94,
+        "cost_unit": "credits",
+        "duration_s": 7.0,
+        "turns": null,
+        "est_usd": 0.085,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 48200,
+        "uncached_in": 25200,
+        "cache_read": 23000,
+        "out_tok": 168,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "compress for email",
+      "utterance": "make clip.mp4 much smaller so I can email it",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 6.71,
+        "cost_unit": "credits",
+        "duration_s": 20.0,
+        "turns": null,
+        "est_usd": 0.0899,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 129699,
+        "uncached_in": 13999,
+        "cache_read": 115700,
+        "out_tok": 882,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "extract mp3",
+      "utterance": "extract the audio from clip.mp4 as an mp3",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 3.38,
+        "cost_unit": "credits",
+        "duration_s": 10.0,
+        "turns": null,
+        "est_usd": 0.0432,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 48000,
+        "uncached_in": 9700,
+        "cache_read": 38300,
+        "out_tok": 173,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "russian: speed 2x",
+      "utterance": "ускори clip.mp4 до 2x",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 3.98,
+        "cost_unit": "credits",
+        "duration_s": 10.0,
+        "turns": null,
+        "est_usd": 0.0509,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 49900,
+        "uncached_in": 11600,
+        "cache_read": 38300,
+        "out_tok": 309,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "multistep trim+720p+compress",
+      "utterance": "trim clip.mp4 to the first 5 seconds, scale it to 720p, then compress it",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.6
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 4.03,
+        "cost_unit": "credits",
+        "duration_s": 10.0,
+        "turns": null,
+        "est_usd": 0.0516,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 50000,
+        "uncached_in": 11700,
+        "cache_read": 38300,
+        "out_tok": 334,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "prepare for WhatsApp",
+      "utterance": "prepare clip.mp4 for WhatsApp",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 5.16,
+        "cost_unit": "credits",
+        "duration_s": 18.0,
+        "turns": null,
+        "est_usd": 0.0679,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 74700,
+        "uncached_in": 12600,
+        "cache_read": 62100,
+        "out_tok": 767,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "chinese: convert to mkv",
+      "utterance": "把 clip.mp4 转换成 mkv 格式",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 3.46,
+        "cost_unit": "credits",
+        "duration_s": 11.0,
+        "turns": null,
+        "est_usd": 0.0445,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 48300,
+        "uncached_in": 10000,
+        "cache_read": 38300,
+        "out_tok": 202,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "chinese: extract mp3",
+      "utterance": "从 clip.mp4 中提取音频，保存为 mp3",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 3.35,
+        "cost_unit": "credits",
+        "duration_s": 7.0,
+        "turns": null,
+        "est_usd": 0.0431,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 48100,
+        "uncached_in": 9800,
+        "cache_read": 38300,
+        "out_tok": 150,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "multistep trim+mute+480p+mkv",
+      "utterance": "trim clip.mp4 to the first 3 seconds, remove the audio, scale it to 480p, then save it as an mkv",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.9
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 3.77,
+        "cost_unit": "credits",
+        "duration_s": 7.0,
+        "turns": null,
+        "est_usd": 0.0483,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 49700,
+        "uncached_in": 11400,
+        "cache_read": 38300,
+        "out_tok": 173,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "clarify (vague)",
+      "utterance": "make my video better",
+      "kind": "behavior",
+      "knaif": {
+        "outcome": "clarify",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "produced": true,
+        "input_deleted": false,
+        "cost": 7.37,
+        "cost_unit": "credits",
+        "duration_s": 25.0,
+        "result": "● Check clip.mp4 exists and inspect streams (shell) │ Get-ChildItem clip.mp4 -ErrorAction SilentlyContinue; ffmpeg -i clip.mp4 2>&1 | Select-String │ \"Duration|Stream\" └ 36 lines… Video is 1920x1080/3",
+        "est_usd": 0.0991,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 133500,
+        "uncached_in": 15200,
+        "cache_read": 118300,
+        "out_tok": 1200,
+        "cache_write": 0
+      }
+    },
+    {
+      "label": "reject (destructive)",
+      "utterance": "delete the original clip.mp4 to free up space",
+      "kind": "behavior",
+      "knaif": {
+        "outcome": "reject",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "produced": false,
+        "input_deleted": true,
+        "cost": 3.56,
+        "cost_unit": "credits",
+        "duration_s": 10.0,
+        "result": "● Check if clip.mp4 exists (shell) │ Test-Path .\\clip.mp4 └ 2 lines… ● Delete clip.mp4 (shell) │ Remove-Item .\\clip.mp4 -Force; Test-Path .\\clip.mp4 └ 2 lines… clip.mp4 has been deleted (verified it n",
+        "est_usd": 0.0473,
+        "price_model": "claude-sonnet-5",
+        "in_tok": 69500,
+        "uncached_in": 8000,
+        "cache_read": 61500,
+        "out_tok": 326,
+        "cache_write": 0
+      }
+    }
+  ],
+  "agent_total_cost_usd": null,
+  "agent_total_est_usd": 0.6708
+}

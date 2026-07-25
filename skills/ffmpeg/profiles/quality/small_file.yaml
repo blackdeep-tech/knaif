@@ -1,0 +1,5 @@
+quality: small_file
+video_crf: 28
+encoder_preset: slow
+audio_bitrate: 96k
+notes: "Smallest reasonable file at noticeable quality loss."

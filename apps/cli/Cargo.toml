@@ -1,0 +1,43 @@
+[package]
+name = "knaif-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "knaif native CLI — a thin wrapper over the reusable engine crates."
+
+[[bin]]
+name = "knaif"
+path = "src/main.rs"
+
+[dependencies]
+knaif-core = { workspace = true }
+knaif-models = { workspace = true }
+knaif-llm = { workspace = true }
+knaif-skill-ffmpeg = { workspace = true }
+knaif-skill-documents = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+indicatif = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# SetConsoleOutputCP at startup — see `enable_utf8_console` in main.rs.
+windows-sys = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# Flush leaked terminal input (see the workspace dep note); only the Unix tcflush path is wired up.
+libc = { workspace = true }
+
+[features]
+# Real local inference (llama.cpp): heavy build (cmake + C++ + GPU SDKs). Off by default so the
+# dev/CI build stays light and runs on the mock; release builds enable it.
+llama = ["knaif-llm/llama"]
+# GPU backends for llama.cpp (compile-time; both pull in `llama` transitively via knaif-llm).
+cuda = ["knaif-llm/cuda"]
+vulkan = ["knaif-llm/vulkan"]
+# Loadable ggml backends: the exe `dlopen`s `ggml-*` libs found at runtime rather than
+# static-linking them, so CUDA can ship as an opt-in payload. See knaif-llm's note.
+dynamic-backends = ["knaif-llm/dynamic-backends"]
+# Bundle-PDFium desktop rasterizer for documents (compress rasterize fallback / OCR PDF rendering).
+pdfium = ["knaif-skill-documents/pdfium"]

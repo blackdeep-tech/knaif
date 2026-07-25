@@ -1,0 +1,57 @@
+{
+  "top_k": 5,
+  "skills": {
+    "documents": {
+      "skill": "documents",
+      "top_k": 5,
+      "overall": {
+        "n": 151,
+        "recall_at_k": 0.947,
+        "mrr": 0.8221
+      },
+      "by_slice": {
+        "ascii": {
+          "n": 136,
+          "recall_at_k": 0.9412,
+          "mrr": 0.8074
+        },
+        "latin": {
+          "n": 13,
+          "recall_at_k": 1.0,
+          "mrr": 0.9487
+        },
+        "cjk": {
+          "n": 2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0
+        }
+      }
+    },
+    "ffmpeg": {
+      "skill": "ffmpeg",
+      "top_k": 5,
+      "overall": {
+        "n": 613,
+        "recall_at_k": 0.9543,
+        "mrr": 0.8437
+      },
+      "by_slice": {
+        "ascii": {
+          "n": 408,
+          "recall_at_k": 0.9387,
+          "mrr": 0.8426
+        },
+        "latin": {
+          "n": 128,
+          "recall_at_k": 0.9922,
+          "mrr": 0.8397
+        },
+        "cjk": {
+          "n": 77,
+          "recall_at_k": 0.974,
+          "mrr": 0.8567
+        }
+      }
+    }
+  }
+}

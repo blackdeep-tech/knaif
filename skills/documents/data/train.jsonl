@@ -1,0 +1,334 @@
+{"utterance": "Inspect report.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "report.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Take a look at contract.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "contract.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "What's in notes.txt?", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "notes.txt"}}]}, "tags": ["inspect"]}
+{"utterance": "Show me the details of brief.md.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "brief.md"}}]}, "tags": ["inspect"]}
+{"utterance": "Check manual.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "manual.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Give me an overview of invoice.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "invoice.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Inspect slides.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "slides.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Take a look at thesis.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "thesis.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "What's in memo.docx?", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "memo.docx"}}]}, "tags": ["inspect"]}
+{"utterance": "Show me the details of scan.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "scan.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Check agreement.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "agreement.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Give me an overview of handbook.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "handbook.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Inspect paper.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "paper.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Take a look at form.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "form.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "What's in deck.pdf?", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "deck.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Show me the details of letter.docx.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "letter.docx"}}]}, "tags": ["inspect"]}
+{"utterance": "Check spec.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "spec.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Give me an overview of draft.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "draft.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Inspect ledger.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "ledger.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Take a look at minutes.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "minutes.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "What's in resume.pdf?", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "resume.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Show me the details of whitepaper.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "whitepaper.pdf"}}]}, "tags": ["inspect"]}
+{"utterance": "Get the text out of report.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "report.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Extract the text from contract.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "contract.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Pull the words out of notes.txt.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "notes.txt"}}]}, "tags": ["extract"]}
+{"utterance": "Read out the text of brief.md.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "brief.md"}}]}, "tags": ["extract"]}
+{"utterance": "Give me the text content of manual.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "manual.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Get the text out of invoice.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "invoice.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Extract the text from slides.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "slides.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Pull the words out of thesis.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "thesis.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Read out the text of memo.docx.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "memo.docx"}}]}, "tags": ["extract"]}
+{"utterance": "Give me the text content of scan.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "scan.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Get the text out of agreement.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "agreement.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Extract the text from handbook.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "handbook.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Pull the words out of paper.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "paper.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Read out the text of form.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "form.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Give me the text content of deck.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "deck.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Get the text out of letter.docx.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "letter.docx"}}]}, "tags": ["extract"]}
+{"utterance": "Extract the text from spec.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "spec.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Pull the words out of draft.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "draft.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Read out the text of ledger.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "ledger.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Give me the text content of minutes.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "minutes.pdf"}}]}, "tags": ["extract"]}
+{"utterance": "Extract the text from pages 1-3 of report.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "report.pdf", "pages": "1-3"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from page 2 of contract.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "contract.pdf", "pages": "2"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from page 1 of manual.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "manual.pdf", "pages": "1"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from pages 4-6 of invoice.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "invoice.pdf", "pages": "4-6"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from page 5 of slides.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "slides.pdf", "pages": "5"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from pages 1-3 of thesis.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "thesis.pdf", "pages": "1-3"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from page 2 of scan.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "scan.pdf", "pages": "2"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Extract the text from page 1 of agreement.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "agreement.pdf", "pages": "1"}}]}, "tags": ["extract", "pages"]}
+{"utterance": "Find invoice in report.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "report.pdf", "query": "invoice"}}]}, "tags": ["find"]}
+{"utterance": "Search contract.pdf for indemnity.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "contract.pdf", "query": "indemnity"}}]}, "tags": ["find"]}
+{"utterance": "Where does revenue appear in manual.pdf?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "manual.pdf", "query": "revenue"}}]}, "tags": ["find"]}
+{"utterance": "Look for deadline in invoice.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "invoice.pdf", "query": "deadline"}}]}, "tags": ["find"]}
+{"utterance": "Does slides.pdf mention warranty?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "slides.pdf", "query": "warranty"}}]}, "tags": ["find"]}
+{"utterance": "Find budget in thesis.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "thesis.pdf", "query": "budget"}}]}, "tags": ["find"]}
+{"utterance": "Search scan.pdf for summary.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "scan.pdf", "query": "summary"}}]}, "tags": ["find"]}
+{"utterance": "Where does termination appear in agreement.pdf?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "agreement.pdf", "query": "termination"}}]}, "tags": ["find"]}
+{"utterance": "Look for latency in handbook.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "handbook.pdf", "query": "latency"}}]}, "tags": ["find"]}
+{"utterance": "Does paper.pdf mention appendix?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "paper.pdf", "query": "appendix"}}]}, "tags": ["find"]}
+{"utterance": "Find signature in form.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "form.pdf", "query": "signature"}}]}, "tags": ["find"]}
+{"utterance": "Search deck.pdf for total.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "deck.pdf", "query": "total"}}]}, "tags": ["find"]}
+{"utterance": "Where does invoice appear in spec.pdf?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "spec.pdf", "query": "invoice"}}]}, "tags": ["find"]}
+{"utterance": "Look for indemnity in draft.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "draft.pdf", "query": "indemnity"}}]}, "tags": ["find"]}
+{"utterance": "Does ledger.pdf mention revenue?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "ledger.pdf", "query": "revenue"}}]}, "tags": ["find"]}
+{"utterance": "Find deadline in minutes.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "minutes.pdf", "query": "deadline"}}]}, "tags": ["find"]}
+{"utterance": "Search resume.pdf for warranty.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "resume.pdf", "query": "warranty"}}]}, "tags": ["find"]}
+{"utterance": "Where does budget appear in whitepaper.pdf?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "whitepaper.pdf", "query": "budget"}}]}, "tags": ["find"]}
+{"utterance": "Look for summary in statement.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "statement.pdf", "query": "summary"}}]}, "tags": ["find"]}
+{"utterance": "Does newsletter.pdf mention termination?", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "newsletter.pdf", "query": "termination"}}]}, "tags": ["find"]}
+{"utterance": "Find latency in ebook.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "ebook.pdf", "query": "latency"}}]}, "tags": ["find"]}
+{"utterance": "Search catalog.pdf for appendix.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "catalog.pdf", "query": "appendix"}}]}, "tags": ["find"]}
+{"utterance": "Merge report.pdf and contract.pdf into combined.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["report.pdf", "contract.pdf"], "output": "combined.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Combine manual.pdf and invoice.pdf into merged.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["manual.pdf", "invoice.pdf"], "output": "merged.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Join slides.pdf and thesis.pdf as book.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["slides.pdf", "thesis.pdf"], "output": "book.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Merge scan.pdf and agreement.pdf into all.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["scan.pdf", "agreement.pdf"], "output": "all.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Combine handbook.pdf and paper.pdf into combined.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["handbook.pdf", "paper.pdf"], "output": "combined.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Join form.pdf and deck.pdf as merged.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["form.pdf", "deck.pdf"], "output": "merged.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Merge spec.pdf and draft.pdf into book.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["spec.pdf", "draft.pdf"], "output": "book.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Combine ledger.pdf and minutes.pdf into all.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["ledger.pdf", "minutes.pdf"], "output": "all.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Join resume.pdf and whitepaper.pdf as combined.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["resume.pdf", "whitepaper.pdf"], "output": "combined.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Merge statement.pdf and newsletter.pdf into merged.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["statement.pdf", "newsletter.pdf"], "output": "merged.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Combine ebook.pdf and catalog.pdf into book.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["ebook.pdf", "catalog.pdf"], "output": "book.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Join syllabus.pdf and transcript.pdf as all.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["syllabus.pdf", "transcript.pdf"], "output": "all.pdf"}}]}, "tags": ["merge"]}
+{"utterance": "Save pages 1-2 of report.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "report.pdf", "ranges": "1-2"}}]}, "tags": ["split"]}
+{"utterance": "Pull pages 3 out of contract.pdf as a separate file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "contract.pdf", "ranges": "3"}}]}, "tags": ["split"]}
+{"utterance": "Extract pages 1-3 of manual.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "manual.pdf", "ranges": "1-3"}}]}, "tags": ["split"]}
+{"utterance": "Split off pages 5 of invoice.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "invoice.pdf", "ranges": "5"}}]}, "tags": ["split"]}
+{"utterance": "Keep only pages 2-4 of slides.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "slides.pdf", "ranges": "2-4"}}]}, "tags": ["split"]}
+{"utterance": "Save pages 1 of thesis.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "thesis.pdf", "ranges": "1"}}]}, "tags": ["split"]}
+{"utterance": "Pull pages 4-8 out of scan.pdf as a separate file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "scan.pdf", "ranges": "4-8"}}]}, "tags": ["split"]}
+{"utterance": "Extract pages 10 of agreement.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "agreement.pdf", "ranges": "10"}}]}, "tags": ["split"]}
+{"utterance": "Split off pages 6-7 of handbook.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "handbook.pdf", "ranges": "6-7"}}]}, "tags": ["split"]}
+{"utterance": "Keep only pages 2 of paper.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "paper.pdf", "ranges": "2"}}]}, "tags": ["split"]}
+{"utterance": "Save pages 1-2 of form.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "form.pdf", "ranges": "1-2"}}]}, "tags": ["split"]}
+{"utterance": "Pull pages 3 out of deck.pdf as a separate file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "deck.pdf", "ranges": "3"}}]}, "tags": ["split"]}
+{"utterance": "Extract pages 1-3 of spec.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "spec.pdf", "ranges": "1-3"}}]}, "tags": ["split"]}
+{"utterance": "Split off pages 5 of draft.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "draft.pdf", "ranges": "5"}}]}, "tags": ["split"]}
+{"utterance": "Keep only pages 2-4 of ledger.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "ledger.pdf", "ranges": "2-4"}}]}, "tags": ["split"]}
+{"utterance": "Save pages 1 of minutes.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "minutes.pdf", "ranges": "1"}}]}, "tags": ["split"]}
+{"utterance": "Pull pages 4-8 out of resume.pdf as a separate file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "resume.pdf", "ranges": "4-8"}}]}, "tags": ["split"]}
+{"utterance": "Extract pages 10 of whitepaper.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "whitepaper.pdf", "ranges": "10"}}]}, "tags": ["split"]}
+{"utterance": "Split off pages 6-7 of statement.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "statement.pdf", "ranges": "6-7"}}]}, "tags": ["split"]}
+{"utterance": "Keep only pages 2 of newsletter.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "newsletter.pdf", "ranges": "2"}}]}, "tags": ["split"]}
+{"utterance": "Save pages 1-2 of ebook.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "ebook.pdf", "ranges": "1-2"}}]}, "tags": ["split"]}
+{"utterance": "Pull pages 3 out of catalog.pdf as a separate file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "catalog.pdf", "ranges": "3"}}]}, "tags": ["split"]}
+{"utterance": "Extract pages 1-3 of syllabus.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "syllabus.pdf", "ranges": "1-3"}}]}, "tags": ["split"]}
+{"utterance": "Split off pages 5 of transcript.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "transcript.pdf", "ranges": "5"}}]}, "tags": ["split"]}
+{"utterance": "Keep only pages 2-4 of dossier.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "dossier.pdf", "ranges": "2-4"}}]}, "tags": ["split"]}
+{"utterance": "Save pages 1 of report.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "report.pdf", "ranges": "1"}}]}, "tags": ["split"]}
+{"utterance": "Pull pages 4-8 out of contract.pdf as a separate file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "contract.pdf", "ranges": "4-8"}}]}, "tags": ["split"]}
+{"utterance": "Extract pages 10 of manual.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "manual.pdf", "ranges": "10"}}]}, "tags": ["split"]}
+{"utterance": "Split off pages 6-7 of invoice.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "invoice.pdf", "ranges": "6-7"}}]}, "tags": ["split"]}
+{"utterance": "Keep only pages 2 of slides.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "slides.pdf", "ranges": "2"}}]}, "tags": ["split"]}
+{"utterance": "Rotate contract.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "contract.pdf", "degrees": 90, "pages": "1"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn manual.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "manual.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate invoice.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "invoice.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate slides.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "slides.pdf", "degrees": 90, "pages": "all"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn thesis.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "thesis.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate scan.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "scan.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate agreement.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "agreement.pdf", "degrees": 90, "pages": "1-2"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn handbook.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "handbook.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate paper.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "paper.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate form.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "form.pdf", "degrees": 90, "pages": "2"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn deck.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "deck.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate spec.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "spec.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate draft.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "draft.pdf", "degrees": 90, "pages": "1"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn ledger.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "ledger.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate minutes.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "minutes.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate resume.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "resume.pdf", "degrees": 90, "pages": "all"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn whitepaper.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "whitepaper.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate statement.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "statement.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate newsletter.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "newsletter.pdf", "degrees": 90, "pages": "1-2"}}]}, "tags": ["rotate"]}
+{"utterance": "Turn ebook.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "ebook.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
+{"utterance": "Delete page 3 from manual.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "manual.pdf", "pages": "3"}}]}, "tags": ["remove"]}
+{"utterance": "Remove page 1 of invoice.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "invoice.pdf", "pages": "1"}}]}, "tags": ["remove"]}
+{"utterance": "Drop pages 4-6 from slides.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "slides.pdf", "pages": "4-6"}}]}, "tags": ["remove"]}
+{"utterance": "Delete pages 5-6 from thesis.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "thesis.pdf", "pages": "5-6"}}]}, "tags": ["remove"]}
+{"utterance": "Remove page 2 of scan.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "scan.pdf", "pages": "2"}}]}, "tags": ["remove"]}
+{"utterance": "Drop page 10 from agreement.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "agreement.pdf", "pages": "10"}}]}, "tags": ["remove"]}
+{"utterance": "Delete pages 1-2 from handbook.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "handbook.pdf", "pages": "1-2"}}]}, "tags": ["remove"]}
+{"utterance": "Remove page 3 of paper.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "paper.pdf", "pages": "3"}}]}, "tags": ["remove"]}
+{"utterance": "Drop page 1 from form.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "form.pdf", "pages": "1"}}]}, "tags": ["remove"]}
+{"utterance": "Delete pages 4-6 from deck.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "deck.pdf", "pages": "4-6"}}]}, "tags": ["remove"]}
+{"utterance": "Remove pages 5-6 of spec.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "spec.pdf", "pages": "5-6"}}]}, "tags": ["remove"]}
+{"utterance": "Drop page 2 from draft.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "draft.pdf", "pages": "2"}}]}, "tags": ["remove"]}
+{"utterance": "Delete page 10 from ledger.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "ledger.pdf", "pages": "10"}}]}, "tags": ["remove"]}
+{"utterance": "Remove pages 1-2 of minutes.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "minutes.pdf", "pages": "1-2"}}]}, "tags": ["remove"]}
+{"utterance": "Drop page 3 from resume.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "resume.pdf", "pages": "3"}}]}, "tags": ["remove"]}
+{"utterance": "Delete page 1 from whitepaper.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "whitepaper.pdf", "pages": "1"}}]}, "tags": ["remove"]}
+{"utterance": "Remove pages 4-6 of statement.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "statement.pdf", "pages": "4-6"}}]}, "tags": ["remove"]}
+{"utterance": "Drop pages 5-6 from newsletter.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "newsletter.pdf", "pages": "5-6"}}]}, "tags": ["remove"]}
+{"utterance": "Reorder invoice.pdf to 3,1,2.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "invoice.pdf", "order": "3,1,2"}}]}, "tags": ["reorder"]}
+{"utterance": "Rearrange the pages of slides.pdf as 2,1.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "slides.pdf", "order": "2,1"}}]}, "tags": ["reorder"]}
+{"utterance": "Put the pages of thesis.pdf in order 1,3,2.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "thesis.pdf", "order": "1,3,2"}}]}, "tags": ["reorder"]}
+{"utterance": "Reorder scan.pdf to 4,3,2,1.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "scan.pdf", "order": "4,3,2,1"}}]}, "tags": ["reorder"]}
+{"utterance": "Rearrange the pages of agreement.pdf as 2,3,1.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "agreement.pdf", "order": "2,3,1"}}]}, "tags": ["reorder"]}
+{"utterance": "Put the pages of handbook.pdf in order 3,1,2.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "handbook.pdf", "order": "3,1,2"}}]}, "tags": ["reorder"]}
+{"utterance": "Reorder paper.pdf to 2,1.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "paper.pdf", "order": "2,1"}}]}, "tags": ["reorder"]}
+{"utterance": "Rearrange the pages of form.pdf as 1,3,2.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "form.pdf", "order": "1,3,2"}}]}, "tags": ["reorder"]}
+{"utterance": "Put the pages of deck.pdf in order 4,3,2,1.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "deck.pdf", "order": "4,3,2,1"}}]}, "tags": ["reorder"]}
+{"utterance": "Reorder spec.pdf to 2,3,1.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "spec.pdf", "order": "2,3,1"}}]}, "tags": ["reorder"]}
+{"utterance": "Watermark slides.pdf with the text DRAFT.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "slides.pdf", "text": "DRAFT", "position": "center"}}]}, "tags": ["watermark"]}
+{"utterance": "Stamp thesis.pdf with a CONFIDENTIAL watermark.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "thesis.pdf", "text": "CONFIDENTIAL"}}]}, "tags": ["watermark"]}
+{"utterance": "Add a COPY watermark to scan.pdf.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "scan.pdf", "text": "COPY"}}]}, "tags": ["watermark"]}
+{"utterance": "Watermark agreement.pdf with the text SAMPLE.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "agreement.pdf", "text": "SAMPLE", "position": "center"}}]}, "tags": ["watermark"]}
+{"utterance": "Stamp handbook.pdf with a INTERNAL watermark.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "handbook.pdf", "text": "INTERNAL"}}]}, "tags": ["watermark"]}
+{"utterance": "Add a DRAFT watermark to paper.pdf.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "paper.pdf", "text": "DRAFT"}}]}, "tags": ["watermark"]}
+{"utterance": "Watermark form.pdf with the text CONFIDENTIAL.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "form.pdf", "text": "CONFIDENTIAL", "position": "center"}}]}, "tags": ["watermark"]}
+{"utterance": "Stamp deck.pdf with a COPY watermark.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "deck.pdf", "text": "COPY"}}]}, "tags": ["watermark"]}
+{"utterance": "Add a SAMPLE watermark to spec.pdf.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "spec.pdf", "text": "SAMPLE"}}]}, "tags": ["watermark"]}
+{"utterance": "Watermark draft.pdf with the text INTERNAL.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "draft.pdf", "text": "INTERNAL", "position": "center"}}]}, "tags": ["watermark"]}
+{"utterance": "Stamp ledger.pdf with a DRAFT watermark.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "ledger.pdf", "text": "DRAFT"}}]}, "tags": ["watermark"]}
+{"utterance": "Add a CONFIDENTIAL watermark to minutes.pdf.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "minutes.pdf", "text": "CONFIDENTIAL"}}]}, "tags": ["watermark"]}
+{"utterance": "Watermark resume.pdf with the text COPY.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "resume.pdf", "text": "COPY", "position": "center"}}]}, "tags": ["watermark"]}
+{"utterance": "Stamp whitepaper.pdf with a SAMPLE watermark.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "whitepaper.pdf", "text": "SAMPLE"}}]}, "tags": ["watermark"]}
+{"utterance": "Add a INTERNAL watermark to statement.pdf.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "statement.pdf", "text": "INTERNAL"}}]}, "tags": ["watermark"]}
+{"utterance": "Watermark newsletter.pdf with the text DRAFT.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "newsletter.pdf", "text": "DRAFT", "position": "center"}}]}, "tags": ["watermark"]}
+{"utterance": "Stamp ebook.pdf with a CONFIDENTIAL watermark.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "ebook.pdf", "text": "CONFIDENTIAL"}}]}, "tags": ["watermark"]}
+{"utterance": "Add a COPY watermark to catalog.pdf.", "plan": {"plan": [{"tool": "watermark", "args": {"input": "catalog.pdf", "text": "COPY"}}]}, "tags": ["watermark"]}
+{"utterance": "Add page numbers to thesis.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "thesis.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Number the pages of scan.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "scan.pdf", "position": "bottom-center"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Put page numbers on agreement.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "agreement.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Add page numbers to handbook.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "handbook.pdf", "position": "bottom-right"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Number the pages of paper.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "paper.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Put page numbers on form.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "form.pdf", "position": "top-right"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Add page numbers to deck.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "deck.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Number the pages of spec.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "spec.pdf", "position": "bottom-center"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Put page numbers on draft.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "draft.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Add page numbers to ledger.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "ledger.pdf", "position": "bottom-right"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Number the pages of minutes.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "minutes.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Put page numbers on resume.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "resume.pdf", "position": "top-right"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Add page numbers to whitepaper.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "whitepaper.pdf"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Number the pages of statement.pdf.", "plan": {"plan": [{"tool": "add_page_numbers", "args": {"input": "statement.pdf", "position": "bottom-center"}}]}, "tags": ["page_numbers"]}
+{"utterance": "Protect scan.pdf with the password hunter2.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "scan.pdf", "password": "hunter2"}}]}, "tags": ["protect"]}
+{"utterance": "Password-protect agreement.pdf using s3cret.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "agreement.pdf", "password": "s3cret"}}]}, "tags": ["protect"]}
+{"utterance": "Encrypt handbook.pdf with password p@ssw0rd.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "handbook.pdf", "password": "p@ssw0rd"}}]}, "tags": ["protect"]}
+{"utterance": "Protect paper.pdf with the password letmein.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "paper.pdf", "password": "letmein"}}]}, "tags": ["protect"]}
+{"utterance": "Password-protect form.pdf using Tr0ub4dor.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "form.pdf", "password": "Tr0ub4dor"}}]}, "tags": ["protect"]}
+{"utterance": "Encrypt deck.pdf with password hunter2.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "deck.pdf", "password": "hunter2"}}]}, "tags": ["protect"]}
+{"utterance": "Protect spec.pdf with the password s3cret.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "spec.pdf", "password": "s3cret"}}]}, "tags": ["protect"]}
+{"utterance": "Password-protect draft.pdf using p@ssw0rd.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "draft.pdf", "password": "p@ssw0rd"}}]}, "tags": ["protect"]}
+{"utterance": "Encrypt ledger.pdf with password letmein.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "ledger.pdf", "password": "letmein"}}]}, "tags": ["protect"]}
+{"utterance": "Protect minutes.pdf with the password Tr0ub4dor.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "minutes.pdf", "password": "Tr0ub4dor"}}]}, "tags": ["protect"]}
+{"utterance": "Password-protect resume.pdf using hunter2.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "resume.pdf", "password": "hunter2"}}]}, "tags": ["protect"]}
+{"utterance": "Encrypt whitepaper.pdf with password s3cret.", "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "whitepaper.pdf", "password": "s3cret"}}]}, "tags": ["protect"]}
+{"utterance": "Unlock agreement.pdf with the password hunter2.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "agreement.pdf", "password": "hunter2"}}]}, "tags": ["unlock"]}
+{"utterance": "Remove the password s3cret from handbook.pdf.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "handbook.pdf", "password": "s3cret"}}]}, "tags": ["unlock"]}
+{"utterance": "Decrypt paper.pdf using p@ssw0rd.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "paper.pdf", "password": "p@ssw0rd"}}]}, "tags": ["unlock"]}
+{"utterance": "Unlock form.pdf with the password letmein.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "form.pdf", "password": "letmein"}}]}, "tags": ["unlock"]}
+{"utterance": "Remove the password Tr0ub4dor from deck.pdf.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "deck.pdf", "password": "Tr0ub4dor"}}]}, "tags": ["unlock"]}
+{"utterance": "Decrypt spec.pdf using hunter2.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "spec.pdf", "password": "hunter2"}}]}, "tags": ["unlock"]}
+{"utterance": "Unlock draft.pdf with the password s3cret.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "draft.pdf", "password": "s3cret"}}]}, "tags": ["unlock"]}
+{"utterance": "Remove the password p@ssw0rd from ledger.pdf.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "ledger.pdf", "password": "p@ssw0rd"}}]}, "tags": ["unlock"]}
+{"utterance": "Decrypt minutes.pdf using letmein.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "minutes.pdf", "password": "letmein"}}]}, "tags": ["unlock"]}
+{"utterance": "Unlock resume.pdf with the password Tr0ub4dor.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "resume.pdf", "password": "Tr0ub4dor"}}]}, "tags": ["unlock"]}
+{"utterance": "Convert memo.docx to pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "memo.docx", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Save notes.txt as md.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "notes.txt", "to_format": "md"}}]}, "tags": ["convert"]}
+{"utterance": "Export brief.md as pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "brief.md", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Turn report.pdf into txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "report.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Convert letter.docx to pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "letter.docx", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Save spec.pdf as txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "spec.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Export draft.pdf as md.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "draft.pdf", "to_format": "md"}}]}, "tags": ["convert"]}
+{"utterance": "Turn proposal.docx into pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "proposal.docx", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Convert syllabus.pdf to txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "syllabus.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Save transcript.pdf as md.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "transcript.pdf", "to_format": "md"}}]}, "tags": ["convert"]}
+{"utterance": "Export minutes.pdf as txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "minutes.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Turn ebook.pdf into txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "ebook.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Save memo.docx as pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "memo.docx", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Export notes.txt as md.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "notes.txt", "to_format": "md"}}]}, "tags": ["convert"]}
+{"utterance": "Turn brief.md into pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "brief.md", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Convert report.pdf to txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "report.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Save letter.docx as pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "letter.docx", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Export spec.pdf as txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "spec.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Turn draft.pdf into md.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "draft.pdf", "to_format": "md"}}]}, "tags": ["convert"]}
+{"utterance": "Convert proposal.docx to pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "proposal.docx", "to_format": "pdf"}}]}, "tags": ["convert"]}
+{"utterance": "Save syllabus.pdf as txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "syllabus.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Export transcript.pdf as md.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "transcript.pdf", "to_format": "md"}}]}, "tags": ["convert"]}
+{"utterance": "Turn minutes.pdf into txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "minutes.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Convert ebook.pdf to txt.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "ebook.pdf", "to_format": "txt"}}]}, "tags": ["convert"]}
+{"utterance": "Compress report.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "report.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Make contract.pdf smaller.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "contract.pdf", "compress_quality": "small"}}]}, "tags": ["compress"]}
+{"utterance": "Shrink manual.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "manual.pdf", "compress_quality": "high"}}]}, "tags": ["compress"]}
+{"utterance": "Reduce the size of invoice.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "invoice.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Compress slides.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "slides.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Make thesis.pdf smaller.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "thesis.pdf", "compress_quality": "small"}}]}, "tags": ["compress"]}
+{"utterance": "Shrink scan.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "scan.pdf", "compress_quality": "high"}}]}, "tags": ["compress"]}
+{"utterance": "Reduce the size of agreement.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "agreement.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Compress handbook.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "handbook.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Make paper.pdf smaller.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "paper.pdf", "compress_quality": "small"}}]}, "tags": ["compress"]}
+{"utterance": "Shrink form.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "form.pdf", "compress_quality": "high"}}]}, "tags": ["compress"]}
+{"utterance": "Reduce the size of deck.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "deck.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Compress spec.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "spec.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Make draft.pdf smaller.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "draft.pdf", "compress_quality": "small"}}]}, "tags": ["compress"]}
+{"utterance": "Shrink ledger.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "ledger.pdf", "compress_quality": "high"}}]}, "tags": ["compress"]}
+{"utterance": "Reduce the size of minutes.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "minutes.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Compress resume.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "resume.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Make whitepaper.pdf smaller.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "whitepaper.pdf", "compress_quality": "small"}}]}, "tags": ["compress"]}
+{"utterance": "Shrink statement.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "statement.pdf", "compress_quality": "high"}}]}, "tags": ["compress"]}
+{"utterance": "Reduce the size of newsletter.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "newsletter.pdf", "compress_quality": "balanced"}}]}, "tags": ["compress"]}
+{"utterance": "Make scan.pdf searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "scan.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "OCR receipt.png.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "receipt.png", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Run OCR on the scanned invoice.pdf.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "invoice.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make the scanned form.pdf searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "form.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make statement.pdf searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "statement.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "OCR dossier.pdf.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "dossier.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make the scanned scan.pdf searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "scan.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make receipt.png searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "receipt.png", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "OCR invoice.pdf.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "invoice.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Run OCR on the scanned form.pdf.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "form.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make the scanned statement.pdf searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "statement.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make dossier.pdf searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "dossier.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Run OCR on the scanned scan.pdf.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "scan.pdf", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Make the scanned receipt.png searchable.", "plan": {"plan": [{"tool": "ocr_document", "args": {"input": "receipt.png", "language": "eng"}}]}, "tags": ["ocr"]}
+{"utterance": "Save pages 1-2 of report.pdf into a new pdf and then compress it.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "report.pdf", "ranges": "1-2", "output": "report_p1-2.pdf"}}, {"tool": "compress_pdf", "args": {"input": "report_p1-2.pdf", "compress_quality": "balanced"}}]}, "tags": ["chain", "split", "compress"]}
+{"utterance": "Rotate contract.pdf 90 degrees and then add a DRAFT watermark.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "contract.pdf", "degrees": 90, "output": "contract_rotated.pdf"}}, {"tool": "watermark", "args": {"input": "contract_rotated.pdf", "text": "DRAFT"}}]}, "tags": ["chain", "rotate", "watermark"]}
+{"utterance": "Convert memo.docx to pdf and then protect it with the password hunter2.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "memo.docx", "to_format": "pdf", "output": "memo.pdf"}}, {"tool": "protect_pdf", "args": {"input": "memo.pdf", "password": "hunter2"}}]}, "tags": ["chain", "convert", "protect"]}
+{"utterance": "Remove page 1 from handbook.pdf and then add page numbers.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "handbook.pdf", "pages": "1", "output": "handbook_trimmed.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "handbook_trimmed.pdf"}}]}, "tags": ["chain", "remove", "page_numbers"]}
+{"utterance": "Convert letter.docx to pdf and then compress it.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "letter.docx", "to_format": "pdf", "output": "letter.pdf"}}, {"tool": "compress_pdf", "args": {"input": "letter.pdf", "compress_quality": "balanced"}}]}, "tags": ["chain", "convert", "compress"]}
+{"utterance": "Save pages 1-4 of deck.pdf into a new pdf and watermark it CONFIDENTIAL.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "deck.pdf", "ranges": "1-4", "output": "deck_p1-4.pdf"}}, {"tool": "watermark", "args": {"input": "deck_p1-4.pdf", "text": "CONFIDENTIAL"}}]}, "tags": ["chain", "split", "watermark"]}
+{"utterance": "Merge a.pdf and b.pdf into one file and then add page numbers.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["a.pdf", "b.pdf"], "output": "merged.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "merged.pdf"}}]}, "tags": ["chain", "merge", "page_numbers"]}
+{"utterance": "Rotate slides.pdf 90 degrees and then compress it.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "slides.pdf", "degrees": 90, "output": "slides_rot.pdf"}}, {"tool": "compress_pdf", "args": {"input": "slides_rot.pdf", "compress_quality": "balanced"}}]}, "tags": ["chain", "rotate", "compress"]}
+{"utterance": "Unlock invoice.pdf with the password hunter2 and then compress it.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "invoice.pdf", "password": "hunter2", "output": "invoice_open.pdf"}}, {"tool": "compress_pdf", "args": {"input": "invoice_open.pdf", "compress_quality": "small"}}]}, "tags": ["chain", "unlock", "compress"]}
+{"utterance": "Remove pages 4-6 from manual.pdf and then protect it with password s3cret.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "manual.pdf", "pages": "4-6", "output": "manual_trimmed.pdf"}}, {"tool": "protect_pdf", "args": {"input": "manual_trimmed.pdf", "password": "s3cret"}}]}, "tags": ["chain", "remove", "protect"]}
+{"utterance": "Extract the last page of thesis.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "thesis.pdf", "ranges": "-1"}}]}, "tags": ["contrastive", "split"]}
+{"utterance": "Extract the text from the last page of thesis.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "thesis.pdf", "pages": "-1"}}]}, "tags": ["contrastive", "extract"]}
+{"utterance": "Keep only pages 2-4 of manual.pdf as a new file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "manual.pdf", "ranges": "2-4"}}]}, "tags": ["contrastive", "split"]}
+{"utterance": "Read out the words on pages 2-4 of manual.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "manual.pdf", "pages": "2-4"}}]}, "tags": ["contrastive", "extract"]}
+{"utterance": "Pull page 5 of paper.pdf out into its own pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "paper.pdf", "ranges": "5"}}]}, "tags": ["contrastive", "split"]}
+{"utterance": "Get the text of page 5 of paper.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "paper.pdf", "pages": "5"}}]}, "tags": ["contrastive", "extract"]}
+{"utterance": "Save the first 3 pages of handbook.pdf as a separate pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "handbook.pdf", "ranges": "1-3"}}]}, "tags": ["contrastive", "split"]}
+{"utterance": "Copy the text from the first 3 pages of handbook.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "handbook.pdf", "pages": "1-3"}}]}, "tags": ["contrastive", "extract"]}
+{"utterance": "Komprimiere report.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "report.pdf", "compress_quality": "balanced"}}]}, "tags": ["multilingual", "de"]}
+{"utterance": "Drehe contract.pdf um 90 Grad.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "contract.pdf", "degrees": 90}}]}, "tags": ["multilingual", "de"]}
+{"utterance": "Extrahiere den Text aus brief.md.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "brief.md"}}]}, "tags": ["multilingual", "de"]}
+{"utterance": "Teile die Seiten 1-2 von manual.pdf in ein neues pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "manual.pdf", "ranges": "1-2"}}]}, "tags": ["multilingual", "de"]}
+{"utterance": "Comprime manual.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "manual.pdf", "compress_quality": "balanced"}}]}, "tags": ["multilingual", "es"]}
+{"utterance": "Extrae el texto de brief.md.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "brief.md"}}]}, "tags": ["multilingual", "es"]}
+{"utterance": "Convierte letter.docx a pdf.", "plan": {"plan": [{"tool": "convert_document", "args": {"input": "letter.docx", "to_format": "pdf"}}]}, "tags": ["multilingual", "es"]}
+{"utterance": "Gira form.pdf 90 grados.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "form.pdf", "degrees": 90}}]}, "tags": ["multilingual", "es"]}
+{"utterance": "Fusionne a.pdf et b.pdf dans combined.pdf.", "plan": {"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["a.pdf", "b.pdf"], "output": "combined.pdf"}}]}, "tags": ["multilingual", "fr"]}
+{"utterance": "Trouve latency dans spec.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "spec.pdf", "query": "latency"}}]}, "tags": ["multilingual", "fr"]}
+{"utterance": "Compresse paper.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "paper.pdf", "compress_quality": "balanced"}}]}, "tags": ["multilingual", "fr"]}
+{"utterance": "Извлеки текст из notes.txt.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "notes.txt"}}]}, "tags": ["multilingual", "ru"]}
+{"utterance": "Сожми ledger.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "ledger.pdf", "compress_quality": "balanced"}}]}, "tags": ["multilingual", "ru"]}
+{"utterance": "Поверни form.pdf на 90 градуса.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "form.pdf", "degrees": 90}}]}, "tags": ["multilingual", "ru"]}
+{"utterance": "Раздели страницы 1-2 из deck.pdf в новый pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "deck.pdf", "ranges": "1-2"}}]}, "tags": ["multilingual", "ru"]}
+{"utterance": "Разгледай report.pdf.", "plan": {"plan": [{"tool": "inspect_document", "args": {"input": "report.pdf"}}]}, "tags": ["multilingual", "bg"]}
+{"utterance": "Компресирай handbook.pdf.", "plan": {"plan": [{"tool": "compress_pdf", "args": {"input": "handbook.pdf", "compress_quality": "balanced"}}]}, "tags": ["multilingual", "bg"]}
+{"utterance": "Завърти minutes.pdf на 180 градуса.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "minutes.pdf", "degrees": 180}}]}, "tags": ["multilingual", "bg"]}
+{"utterance": "Премахни страница 3 от paper.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "paper.pdf", "pages": "3"}}]}, "tags": ["multilingual", "bg"]}
+{"utterance": "Намери total в ledger.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "ledger.pdf", "query": "total"}}]}, "tags": ["multilingual", "bg"]}
+{"utterance": "Do something with a file.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which file, and what would you like done with it?"}}]}, "tags": ["clarify"]}
+{"utterance": "Fix report.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What would you like done to report.pdf — compress, convert, OCR, or something else?"}}]}, "tags": ["clarify"]}
+{"utterance": "Protect contract.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What password should I use to protect contract.pdf?"}}]}, "tags": ["clarify"]}
+{"utterance": "Convert manual.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What format should I convert manual.pdf to (pdf, txt, md, png, jpg)?"}}]}, "tags": ["clarify"]}
+{"utterance": "Extract the first 2 pages of slides.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Should I pull those pages into a new PDF, or extract their text?"}}]}, "tags": ["clarify"]}
+{"utterance": "Rotate paper.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "By how many degrees should I rotate it (90, 180, or 270)?"}}]}, "tags": ["clarify"]}
+{"utterance": "Clean this up.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which file, and what should I do to it?"}}]}, "tags": ["clarify"]}
+{"utterance": "Watermark deck.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What text or image should the watermark use?"}}]}, "tags": ["clarify"]}
+{"utterance": "Compress it.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which file should I compress?"}}]}, "tags": ["clarify"]}
+{"utterance": "Reorder thesis.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What page order should I use?"}}]}, "tags": ["clarify"]}
+{"utterance": "Unlock ledger.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What is the password for ledger.pdf?"}}]}, "tags": ["clarify"]}
+{"utterance": "Translate contract.pdf to French.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Translation isn't supported. Is there a document operation I can help with instead?"}}]}, "tags": ["clarify"]}
+{"utterance": "Delete every pdf in this folder.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Bulk-deleting files is outside the document-processing scope."}}]}, "tags": ["reject"]}
+{"utterance": "Email contract.pdf to legal.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Sending or emailing files is outside the local document-processing scope."}}]}, "tags": ["reject"]}
+{"utterance": "Upload report.pdf to the cloud drive.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Uploading to external services is out of scope."}}]}, "tags": ["reject"]}
+{"utterance": "Download the pdf from https://example.com/doc.pdf.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Downloading from URLs is outside the local sandbox scope."}}]}, "tags": ["reject"]}
+{"utterance": "Overwrite the original contract.pdf in place.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Overwriting the original source file is not allowed."}}]}, "tags": ["reject"]}
+{"utterance": "Shred ledger.pdf permanently.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Permanently destroying files is out of scope."}}]}, "tags": ["reject"]}
+{"utterance": "Forge a signature on agreement.pdf.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Forging content is not a permitted request."}}]}, "tags": ["reject"]}
+{"utterance": "Print invoice.pdf on the office printer.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Sending files to a printer is outside the local scope."}}]}, "tags": ["reject"]}
+{"utterance": "Fax statement.pdf to the bank.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Faxing or transmitting files is outside the local scope."}}]}, "tags": ["reject"]}
+{"utterance": "Wipe the documents folder after merging.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Wiping storage is out of scope."}}]}, "tags": ["reject"]}

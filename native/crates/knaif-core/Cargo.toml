@@ -1,0 +1,14 @@
+[package]
+name = "knaif-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Deterministic knaif runtime: planner, registry, prompt, validate, safety, optimize, steps."
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+unicode-normalization = { workspace = true }

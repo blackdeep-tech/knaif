@@ -1,0 +1,232 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Intent-level tools (model-visible). Each is "destructive" because it
+# writes new output files; the workflow gates batch writes behind a
+# wait_for_confirmation step when preview is requested.
+# ─────────────────────────────────────────────────────────────────────────────
+
+prepare_for_platform:
+  description: "Convert one or more videos so they are suitable for a target platform (WhatsApp, YouTube, etc.)."
+  keywords: [whatsapp, youtube, instagram, reels, tiktok, platform, prepare, suitable, post, optimize, preparar, vorbereiten, preparer, подготовить, подготви, 准备, 优化]
+  required_args: [inputs, platform]
+  optional_args: [quality, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:prepare}"]
+    platform: "{utterance_after:for}"
+
+compress_video:
+  description: "Compress one or more videos to a smaller file size, optionally targeting a delivery channel (email)."
+  keywords: [compress, smaller, shrink, under, tiny, size, filesize, bitrate, kbps, kilobits, comprimir, komprimieren, verkleinern, compresser, réduire, сжать, squeeze, компресирай, намали, размер, 压缩, 减小, 大小, 文件]
+  required_args: [inputs]
+  optional_args: [target, target_size_mb, quality, crf, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:compress}"]
+
+convert_video:
+  description: "Convert one or more videos to a different container and/or codec."
+  keywords: [convert, container, codec, mp4, mkv, webm, mov, transcode, gif, animate, encode, re-encode, recode, crf, lossless, format, batch, all, every, bulk, convertir, konvertieren, umwandeln, verlustfrei, безгубно, копие, конвертировать, конвертирай, lote, stapel, lot, пакет, партиден, 转换, 批量, 无损, 格式]
+  required_args: [inputs]
+  optional_args: [container, video_codec, audio_codec, quality, crf, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:convert}"]
+
+resize_video:
+  description: "Resize or crop one or more videos to a target width/height or aspect ratio."
+  keywords: [resize, scale, 1080p, 720p, 480p, resolution, redimensionar, escalar, skalieren, redimensionner, масштабировать, upscale, downscale, преоразмери, 缩放, crop, square, portrait, landscape, aspect, "1:1", "9:16", "16:9", "4:5", reframe, letterbox, pad, stretch, force, zuschneiden, rogner, 裁剪, strecken, einpassen]
+  required_args: [inputs]
+  optional_args: [width, height, keep_aspect_ratio, fit, aspect, quality, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:resize}"]
+
+trim_video:
+  description: "Trim a single video to a time range."
+  keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切]
+  required_args: [input]
+  optional_args: [start, end, duration, output, preview]
+  safety_category: destructive
+  mock_args:
+    input: "{utterance_after:trim}"
+
+extract_audio:
+  description: "Extract the audio track from one or more videos into a chosen audio format."
+  keywords: [extract, audio, mp3, aac, flac, opus, wav, soundtrack, extraer, extrahieren, extraire, извлечь, rip, извлечи, 提取, 音频]
+  required_args: [inputs]
+  optional_args: [audio_format, format, container, bitrate, quality, start, end, output]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:from}"]
+
+create_thumbnail:
+  description: "Create a still-image thumbnail or frame grab from a single video at a given timestamp."
+  keywords: [thumbnail, screenshot, still, poster, frame, miniatura, vorschaubild, vignette, миниатюра, cover, 缩略图, grab, snapshot, capture, framegrab, standbild, einzelbild, bild, fotograma, кадър, снимок, плакат, 截图, 海报, 图片]
+  required_args: [input]
+  optional_args: [at_time, image_format, scale, output]
+  safety_category: destructive
+  mock_args:
+    input: "{utterance_after:from}"
+
+reverse_video:
+  description: "Reverse a video (and optionally its audio) so it plays backwards. Re-encodes the full file and buffers it in RAM — keep clips short."
+  keywords: [reverse, backwards, backward, rewind, playback, invertir, umkehren, inverser, обратный, обърни, 倒放]
+  required_args: [inputs]
+  optional_args: [include_audio, quality, output]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:reverse}"]
+
+strip_audio:
+  description: "Remove the audio track from one or more videos, producing a silent video file."
+  keywords: [strip, mute, silence, nosound, voiceless, silenciar, stummschalten, muet, заглушить, заглуши, 静音]
+  required_args: [inputs]
+  optional_args: [quality, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:strip}"]
+
+
+adjust_speed:
+  description: "Change the playback speed of one or more videos by a given multiplier (e.g. 2.0 for double speed, 0.5 for half speed)."
+  keywords: [speed, fast, faster, slow, slower, accelerate, decelerate, tempo, timelapse, slowmotion, velocidad, geschwindigkeit, vitesse, скорость, slowdown, скорост, ускори, ускорь, забави, двойно, 速度, 加速, 减速, 倍]
+  required_args: [inputs, speed]
+  optional_args: [quality, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:speed}"]
+    speed: "2.0"
+
+adjust_volume:
+  description: "Increase or decrease the audio volume of one or more videos or audio files."
+  keywords: [volume, loud, louder, quieter, audio level, boost, reduce, normalize, loudnorm, gain, db,
+             volumen, lautstärke, lauter, leiser, normalisieren, громкость, сила на звука,
+             звук, усили, увеличи, намали, нормализирай, удвои, 音量]
+  required_args: [inputs]
+  optional_args: [level, normalize, quality, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:adjust}"]
+
+rotate_video:
+  description: "Rotate or flip one or more videos by a fixed angle or axis."
+  keywords: [rotate, flip, turn, upside, mirror, horizontal, vertical, "90", "180", "270",
+             girar, drehen, pivoter, повернуть, завърти, 旋转]
+  required_args: [inputs]
+  optional_args: [angle, flip, quality, output, preview]
+  safety_category: destructive
+  mock_args:
+    inputs: ["{utterance_after:rotate}"]
+
+concat_video:
+  description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided."
+  keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并]
+  required_args: []
+  optional_args: [inputs, base, append, output, target_resolution, target_fps]
+  any_of_args: [inputs, base, append]
+  safety_category: destructive
+  defaults:
+    output: "combined.mp4"
+  mock_args:
+    output: "output.mp4"
+    inputs: ["clip1.mp4", "clip2.mp4"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Internal workflow steps (hidden from the model). The expanders emit these
+# in the order required by the spec's Workflow Language v1.
+# ─────────────────────────────────────────────────────────────────────────────
+
+resolve_inputs:
+  description: "Resolve a list of input media paths (files, globs, folders)."
+  required_args: [paths]
+  optional_args: [extensions]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+inspect_media:
+  description: "Probe each input file with ffprobe and return parsed metadata."
+  required_args: [files]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+load_platform_profile:
+  description: "Load the platform profile (codec/container/resolution caps) for a given platform."
+  required_args: [platform]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+load_quality_profile:
+  description: "Load the quality profile (CRF/preset/bitrate) for a given quality level."
+  required_args: [quality]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+build_recipes:
+  description: "Combine probes, platform profile, and quality profile into per-input conversion recipes."
+  required_args: [probes]
+  optional_args: [platform_profile, quality_profile, options]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+render_preview_command:
+  description: "Render the FFmpeg command for a short preview sample of the first recipe."
+  required_args: [recipes]
+  optional_args: [sample_seconds, sample_position]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+run_preview:
+  description: "Execute the rendered preview FFmpeg command."
+  required_args: [command]
+  safety_category: safe
+  internal: true
+
+verify_preview:
+  description: "ffprobe the preview output and confirm it matches the expected profile."
+  required_args: [preview_output]
+  optional_args: [expected]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+render_batch_commands:
+  description: "Render the FFmpeg commands for every recipe in the batch."
+  required_args: [recipes]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+run_batch:
+  description: "Execute the rendered batch FFmpeg commands one by one."
+  required_args: [commands]
+  safety_category: safe
+  internal: true
+
+run_concat:
+  description: "Execute the ffmpeg filter_complex concat to merge multiple inputs into one output file."
+  required_args: [output]
+  optional_args: [inputs, base, append, probes, target_resolution, target_fps]
+  safety_category: safe
+  internal: true
+
+verify_outputs:
+  description: "ffprobe every batch output and confirm it matches the expected profile."
+  required_args: [outputs]
+  optional_args: [expected]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+generate_report:
+  description: "Render a human-readable summary of the completed batch."
+  required_args: [outputs]
+  optional_args: [probes, preview_output]
+  safety_category: safe
+  readonly: true
+  internal: true

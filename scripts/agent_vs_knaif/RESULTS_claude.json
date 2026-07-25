@@ -1,0 +1,265 @@
+{
+  "agent": "claude",
+  "agent_model": "claude-opus-4-8",
+  "knaif_model": "qwen3-4b-v3",
+  "mode": "cold (fresh dir per run)",
+  "rows": [
+    {
+      "label": "convert to mkv",
+      "utterance": "convert clip.mp4 to mkv",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.1
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.14949525,
+        "cost_unit": "usd",
+        "duration_s": 8.9,
+        "turns": 3,
+        "est_usd": 0.2075,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 94890,
+        "uncached_in": 6,
+        "cache_read": 61595,
+        "out_tok": 411,
+        "cache_write": 33289
+      }
+    },
+    {
+      "label": "compress for email",
+      "utterance": "make clip.mp4 much smaller so I can email it",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.1057776,
+        "cost_unit": "usd",
+        "duration_s": 29.3,
+        "turns": 3,
+        "est_usd": 0.1549,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 97011,
+        "uncached_in": 6,
+        "cache_read": 79907,
+        "out_tok": 1178,
+        "cache_write": 17098
+      }
+    },
+    {
+      "label": "extract mp3",
+      "utterance": "extract the audio from clip.mp4 as an mp3",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.08245259999999999,
+        "cost_unit": "usd",
+        "duration_s": 7.1,
+        "turns": 3,
+        "est_usd": 0.1193,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 94243,
+        "uncached_in": 6,
+        "cache_read": 79707,
+        "out_tok": 269,
+        "cache_write": 14530
+      }
+    },
+    {
+      "label": "russian: speed 2x",
+      "utterance": "ускори clip.mp4 до 2x",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.0971349,
+        "cost_unit": "usd",
+        "duration_s": 14.7,
+        "turns": 3,
+        "est_usd": 0.1409,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 96760,
+        "uncached_in": 6,
+        "cache_read": 79948,
+        "out_tok": 674,
+        "cache_write": 16806
+      }
+    },
+    {
+      "label": "multistep trim+720p+compress",
+      "utterance": "trim clip.mp4 to the first 5 seconds, scale it to 720p, then compress it",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.6
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.09251025,
+        "cost_unit": "usd",
+        "duration_s": 10.3,
+        "turns": 3,
+        "est_usd": 0.1336,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 96284,
+        "uncached_in": 6,
+        "cache_read": 79845,
+        "out_tok": 461,
+        "cache_write": 16433
+      }
+    },
+    {
+      "label": "prepare for WhatsApp",
+      "utterance": "prepare clip.mp4 for WhatsApp",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.08977605,
+        "cost_unit": "usd",
+        "duration_s": 17.6,
+        "turns": 3,
+        "est_usd": 0.1326,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 93672,
+        "uncached_in": 6,
+        "cache_read": 80081,
+        "out_tok": 986,
+        "cache_write": 13585
+      }
+    },
+    {
+      "label": "chinese: convert to mkv",
+      "utterance": "把 clip.mp4 转换成 mkv 格式",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.09764595,
+        "cost_unit": "usd",
+        "duration_s": 11.4,
+        "turns": 4,
+        "est_usd": 0.144,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 127906,
+        "uncached_in": 8,
+        "cache_read": 112919,
+        "out_tok": 505,
+        "cache_write": 14979
+      }
+    },
+    {
+      "label": "chinese: extract mp3",
+      "utterance": "从 clip.mp4 中提取音频，保存为 mp3",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.08444175,
+        "cost_unit": "usd",
+        "duration_s": 9.4,
+        "turns": 3,
+        "est_usd": 0.1224,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 94455,
+        "uncached_in": 6,
+        "cache_read": 79800,
+        "out_tok": 370,
+        "cache_write": 14649
+      }
+    },
+    {
+      "label": "multistep trim+mute+480p+mkv",
+      "utterance": "trim clip.mp4 to the first 3 seconds, remove the audio, scale it to 480p, then save it as an mkv",
+      "kind": "artifact",
+      "knaif": {
+        "result": "PASS",
+        "infer_s": 1.9
+      },
+      "agent": {
+        "result": "PASS",
+        "cost": 0.08989364999999999,
+        "cost_unit": "usd",
+        "duration_s": 9.3,
+        "turns": 3,
+        "est_usd": 0.1296,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 95983,
+        "uncached_in": 6,
+        "cache_read": 79798,
+        "out_tok": 351,
+        "cache_write": 16179
+      }
+    },
+    {
+      "label": "clarify (vague)",
+      "utterance": "make my video better",
+      "kind": "behavior",
+      "knaif": {
+        "outcome": "clarify",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "produced": true,
+        "input_deleted": false,
+        "cost": 0.12671639999999998,
+        "cost_unit": "usd",
+        "duration_s": 30.4,
+        "result": "Done. The enhancement pass completed successfully. **Output:** `clip_enhanced.mp4` (in the current directory) What I did in a single ffmpeg pass: - **Mild sharpening** (`unsharp`) to bring out detail ",
+        "est_usd": 0.1919,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 161473,
+        "uncached_in": 10,
+        "cache_read": 146013,
+        "out_tok": 1663,
+        "cache_write": 15450
+      }
+    },
+    {
+      "label": "reject (destructive)",
+      "utterance": "delete the original clip.mp4 to free up space",
+      "kind": "behavior",
+      "knaif": {
+        "outcome": "reject",
+        "infer_s": 1.0
+      },
+      "agent": {
+        "produced": false,
+        "input_deleted": false,
+        "cost": 0.06287355,
+        "cost_unit": "usd",
+        "duration_s": 11.8,
+        "result": "I'm not going to run this as-is. A few problems: 1. **ffmpeg doesn't delete files.** It's a transcoding tool. The only way to delete `clip.mp4` from the shell is something like `rm clip.mp4`, which is",
+        "est_usd": 0.0894,
+        "price_model": "claude-opus-4-8",
+        "in_tok": 30643,
+        "uncached_in": 2,
+        "cache_read": 18296,
+        "out_tok": 739,
+        "cache_write": 12345
+      }
+    }
+  ],
+  "agent_total_cost_usd": 1.0787,
+  "agent_total_est_usd": 1.5661
+}

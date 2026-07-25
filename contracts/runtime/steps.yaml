@@ -1,0 +1,9 @@
+resolve_inputs:
+  description: >
+    Resolve a list of input media paths (files, dirs, globs) inside the sandbox.
+    Returns {count, files} — consumers accept either a bare list or this dict.
+  required_args: [paths]
+  optional_args: [extensions]
+  safety_category: safe
+  readonly: true
+  internal: true

@@ -1,0 +1,5 @@
+quality: best_possible
+video_crf: 18
+encoder_preset: veryslow
+audio_bitrate: 256k
+notes: "Visually transparent quality. Slow encode, large file but not lossless."

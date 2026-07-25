@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 1900" role="img" aria-labelledby="title desc">
+  <title id="title">knaif execution pipeline</title>
+  <desc id="desc">A flowchart showing a user request, prompt construction, the local model step, and the deterministic parse, validation, expansion, optimization, preflight, approval, argument resolution, handler execution, and results pipeline.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#394150" />
+    </marker>
+    <style>
+      .edge { fill: none; stroke: #394150; stroke-width: 2.5; marker-end: url(#arrow); }
+      .node { fill: #eef2ff; stroke: #4f6cff; stroke-width: 2; }
+      .model { fill: #dbeafe; stroke: #3b82f6; stroke-width: 2; }
+      .group { fill: #f3f4f6; stroke: #a1a1aa; stroke-width: 2; }
+      .title { fill: #334155; font: 500 24px Arial, sans-serif; }
+      .text { fill: #334155; font: 22px Arial, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .small { fill: #334155; font: 20px Arial, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+  </defs>
+
+  <rect class="node" x="220" y="24" width="320" height="70" rx="35" />
+  <text class="text" x="380" y="50">User request — plain</text>
+  <text class="text" x="380" y="78">English</text>
+
+  <path class="edge" d="M 380 94 L 380 142" />
+
+  <rect class="node" x="280" y="150" width="200" height="68" />
+  <text class="text" x="380" y="184">build_prompt</text>
+
+  <path class="edge" d="M 380 218 L 380 272" />
+
+  <path class="model" d="M 380 276 L 530 426 L 380 576 L 230 426 Z" />
+  <text class="text" x="380" y="410">local model — the only AI</text>
+  <text class="text" x="380" y="438">step</text>
+
+  <path class="edge" d="M 380 576 L 380 634" />
+
+  <rect class="group" x="130" y="640" width="500" height="1230" />
+  <text class="title" x="380" y="670">— deterministic from here down —</text>
+
+  <rect class="node" x="270" y="690" width="220" height="64" />
+  <text class="text" x="380" y="722">parse_plan</text>
+
+  <path class="edge" d="M 380 754 L 380 798" />
+
+  <rect class="node" x="235" y="806" width="290" height="82" />
+  <text class="text" x="380" y="836">validate_plan</text>
+  <text class="small" x="380" y="866">tools · args · safety</text>
+
+  <path class="edge" d="M 380 888 L 380 928" />
+
+  <rect class="node" x="210" y="936" width="340" height="82" />
+  <text class="text" x="380" y="966">EXPANDERS</text>
+  <text class="small" x="380" y="996">intent → workflow steps</text>
+
+  <path class="edge" d="M 380 1018 L 380 1058" />
+
+  <rect class="node" x="230" y="1066" width="300" height="82" />
+  <text class="text" x="380" y="1096">optimize_plan</text>
+  <text class="small" x="380" y="1126">prune unused steps</text>
+
+  <path class="edge" d="M 380 1148 L 380 1188" />
+
+  <rect class="node" x="250" y="1196" width="260" height="82" />
+  <text class="text" x="380" y="1226">PREFLIGHTS</text>
+  <text class="small" x="380" y="1256">e.g. inputs exist</text>
+
+  <path class="edge" d="M 380 1278 L 380 1318" />
+
+  <rect class="node" x="230" y="1326" width="300" height="64" />
+  <text class="text" x="380" y="1358">summarize_plan</text>
+
+  <path class="edge" d="M 380 1390 L 380 1426" />
+
+  <rect class="node" x="245" y="1434" width="270" height="70" />
+  <text class="text" x="380" y="1456">approval gate</text>
+  <text class="small" x="380" y="1484">optional</text>
+
+  <path class="edge" d="M 380 1504 L 380 1540" />
+
+  <rect class="node" x="245" y="1548" width="270" height="82" />
+  <text class="text" x="380" y="1578">resolve_args</text>
+  <text class="small" x="380" y="1608">$var binding</text>
+
+  <path class="edge" d="M 380 1630 L 380 1666" />
+
+  <rect class="node" x="220" y="1674" width="320" height="82" />
+  <text class="text" x="380" y="1704">HANDLERS</text>
+  <text class="small" x="380" y="1734">deterministic execution</text>
+
+  <path class="edge" d="M 380 1756 L 380 1800" />
+
+  <rect class="node" x="320" y="1808" width="120" height="46" rx="23" />
+  <text class="text" x="380" y="1831">results</text>
+</svg>

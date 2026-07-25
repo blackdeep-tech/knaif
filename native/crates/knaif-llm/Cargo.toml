@@ -1,0 +1,38 @@
+[package]
+name = "knaif-llm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Inference backends (llama.cpp + mock) behind an LlmBackend trait. Depends on knaif-models to locate model files. No Ollama."
+
+[dependencies]
+knaif-models = { workspace = true }
+anyhow = { workspace = true }
+num_cpus = { workspace = true }
+llama-cpp-2 = { version = "0.1.150", optional = true }
+# Direct handle on the -sys crate purely to flip its `vulkan` (GGML_VULKAN) feature, which
+# the llama-cpp-2 wrapper does not forward at 0.1.150. Cargo unifies it with the copy
+# llama-cpp-2 already depends on, so `vulkan` compiles the Vulkan backend into that build.
+llama-cpp-sys-2 = { version = "0.1.150", optional = true }
+
+# Gate the heavy llama.cpp backend behind a feature so the default build stays fast and
+# GPU-/C++-free. `cuda`/`vulkan` additionally compile that GPU backend (need the CUDA toolkit
+# / Vulkan SDK respectively). All backends are runtime-selectable via n_gpu_layers.
+[features]
+llama = ["dep:llama-cpp-2"]
+cuda = ["llama", "llama-cpp-2/cuda"]
+vulkan = ["llama", "llama-cpp-sys-2/vulkan"]
+# Loadable ggml backends (C5/Option 3): builds llama.cpp with GGML_BACKEND_DL=ON +
+# GGML_CPU_ALL_VARIANTS=ON, so each backend (cpu/vulkan/cuda) emits its own `ggml-*` shared lib
+# that the exe `dlopen`s at runtime instead of static-linking. Lets the CUDA backend ship as an
+# opt-in download rather than in everyone's artifact.
+#
+# Deliberately routed through the llama-cpp-2 WRAPPER, not the -sys crate (unlike `vulkan` above):
+# the wrapper gates `load_backends_from_path` on its OWN `dynamic-backends` feature, so enabling it
+# only on -sys would build the loadable backends but leave the loader API cfg'd out.
+#
+# NOTE: this transitively enables `dynamic-link`, so llama/ggml themselves are linked dynamically —
+# the exe is no longer self-contained and needs its core libs staged beside it (a packaging
+# consequence for D0/D2, and an input to the C5b go/no-go).
+dynamic-backends = ["llama", "llama-cpp-2/dynamic-backends"]

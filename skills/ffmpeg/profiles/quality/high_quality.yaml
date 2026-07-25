@@ -1,0 +1,5 @@
+quality: high_quality
+video_crf: 20
+encoder_preset: slow
+audio_bitrate: 192k
+notes: "Higher fidelity, larger files. Suitable when downstream re-encoding may occur."

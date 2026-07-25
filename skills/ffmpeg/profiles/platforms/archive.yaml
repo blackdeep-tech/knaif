@@ -1,0 +1,9 @@
+platform: archive
+container: mkv
+video_codec: h264
+video_encoder: libx264
+audio_codec: flac
+pixel_format: yuv420p
+max_audio_bitrate: 0
+faststart: false
+notes: "Long-term storage — H.264 video, FLAC lossless audio in MKV. No resolution cap."

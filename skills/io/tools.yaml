@@ -1,0 +1,68 @@
+list_files:
+  description: "List files in a folder, optionally filtered by type or pattern."
+  keywords: [list, ls, show, contents, what, directory, folder]
+  required_args: [path]
+  optional_args: [file_type, pattern]
+  safety_category: safe
+  readonly: true
+  mock_args:
+    path: "{sandbox}"
+    pattern: "*"
+
+find_files:
+  description: "Recursively find files in a folder, optionally filtered by type or pattern."
+  keywords: [find, search, locate, recursive, deep, everywhere, within, scan]
+  required_args: [path]
+  optional_args: [file_type, pattern]
+  safety_category: safe
+  readonly: true
+  mock_args:
+    path: "{sandbox}"
+    pattern: "*.txt"
+
+delete_files:
+  description: "Delete files in a folder, optionally filtered by type or pattern."
+  keywords: [delete, remove, erase, clean, purge, wipe, trash]
+  required_args: [path]
+  optional_args: [file_type, pattern, recursive]
+  safety_category: destructive
+  mock_args:
+    path: "{sandbox}"
+    pattern: "*.tmp"
+
+move_files:
+  description: "Move or copy files from a source folder into a destination folder, optionally filtered by type or pattern."
+  keywords: [move, copy, transfer, relocate, migrate, rename, into]
+  required_args: [src, dst]
+  optional_args: [file_type, pattern]
+  safety_category: destructive
+  mock_args:
+    src: "{sandbox}"
+    dst: "{sandbox}/{utterance_after:to}"
+    pattern: "*"
+
+clarify:
+  description: "Ask the user for clarification."
+  keywords: [clarify, question, ask, unclear, ambiguous]
+  required_args: [question]
+  optional_args: []
+  safety_category: safe
+  mock_args:
+    question: "Which folder?"
+
+reject:
+  description: "Reject the user request (unsafe or out-of-scope)."
+  keywords: [reject, refuse, deny, unsafe, forbidden, dangerous]
+  required_args: [reason]
+  optional_args: []
+  safety_category: safe
+  mock_args:
+    reason: "This request is unsafe or out of scope."
+
+done:
+  description: "Signal that the task is complete."
+  keywords: [done, complete, finished, end, stop]
+  required_args: []
+  optional_args: []
+  safety_category: safe
+  mock_args: {}

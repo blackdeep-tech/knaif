@@ -1,0 +1,326 @@
+# eval_backends.yaml — backend configurations for the knaif eval suite.
+#
+# Add backends here. Run a subset with: --backends qwen3-4b,gemma3-4b
+# Omit --backends to run all backends sequentially.
+# An unknown name in --backends is a hard error, not a silent fallback.
+#
+# ⚠️ MODEL AVAILABILITY (2026-07-14). Most stanzas below are FINE-TUNING STUDY ARTIFACTS whose
+# GGUFs lived on the old RTX 5080 box and are NOT on the current machine. Their saved scoreboards
+# in evals/ remain the record; the stanzas are kept so a run is reproducible if the GGUF is
+# rebuilt or re-downloaded. A stanza whose GGUF is missing fails LOUDLY (the orchestrator prints
+# "Model file not found", then every row raises "llama.cpp backend not initialized" and scores as
+# `error` → outcome ~0.0). It will not silently mock. A run of ~0.0 across the board means the
+# model file is absent, not that the model is bad.
+#
+# NAMING: GGUF files on disk use the PUBLIC `knaif-*` names — identical to the artifacts in the
+# HuggingFace repo (blackdeep/knaif) and to `file:` in contracts/models/model-manifest.yaml. One name
+# for a model, everywhere. The eval backend KEYS below keep their FT-cycle names (`qwen3-4b-sft-v3-
+# flat-q4`, …) because they are baked into every saved scoreboard filename in evals/ —
+# renaming a key would break the join with its own history. Key = experiment identity, file =
+# artifact identity; the `path:` is what maps one to the other.
+#
+# Present on this machine:
+#   models/knaif-qwen3-4b-v1-q4_k_m.gguf   (public knaif-qwen3-4b-v1  — FT cycle sft-v3-flat, Q4_K_M)
+#   models/knaif-qwen3-1.7b-v1-q6_k.gguf   (public knaif-qwen3-1.7b-v1 — FT cycle sft-v3-flat, Q6_K)
+#
+# Backend types:
+#   backend: llama_cpp — requires GGUF file at options.path (relative to repo root)
+#   backend: ollama    — requires ollama running locally (ollama serve)
+#
+# Options (llama_cpp):
+#   path              GGUF model file (relative to repo root or absolute)
+#   n_ctx             context window in tokens (default 4096)
+#   n_gpu_layers      layers offloaded to GPU; 99 = all (default 10)
+#   n_threads         CPU threads (default 8)
+#   max_tokens        generation budget per call
+#   json_mode         GBNF-constrain output to JSON. Disable for thinking models
+#                     whose template emits <think> before the JSON object.
+#   thinking_enabled  When false, appends "/no_think" to the system prompt
+#                     (Qwen3 convention). No-op for non-Qwen3 models.
+#   verbose           When true, llama.cpp prints device/backend init logs
+#                     (e.g. "using device CUDA0"). Default false. Set true
+#                     once when diagnosing why CUDA isn't being used.
+
+backends:
+  # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".
+  # Substitutes ONLY token generation: the mock planner picks the top retrieval hit
+  # and fills args from each tool's `mock_args`, so retrieval, validation, expansion,
+  # execution, verifiers and reporting all run for real. Use it to smoke-test the
+  # harness itself, or as a retrieval probe (its tool accuracy measures the keyword
+  # index). Its OUTCOME ACCURACY IS NOT A MODEL-QUALITY SIGNAL — never quote it as one.
+  # Always addressable as `--backends mock`, even against a config that omits it.
+  mock:
+
+  qwen3-4b:
+    backend: llama_cpp
+    options:
+      path: models/Qwen3-4B-Q4_K_M.gguf
+      description: Qwen3 4B Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false           # GBNF + thinking_enabled:false = empty {} output: model
+                                 # has no reasoning budget and immediately closes the
+                                 # object. json_mode:true only works when thinking is on
+                                 # (verified 2026-06-08). Keep false; thinking is off.
+      thinking_enabled: false    # /no_think suppresses the <think> block
+
+  # phi4-mini removed 2026-06-08: weakest of the three (66.8% outcome, 87.6%
+  # knaif) and an over-refusal artifact — it rejected 47 legitimate plan rows
+  # to win the safety tags. Not a viable utility backend. GGUF kept on disk;
+  # re-add this stanza to benchmark it again.
+
+  gemma3-4b:
+    backend: llama_cpp
+    options:
+      path: models/gemma-3-4b-it-Q4_K_M.gguf
+      description: Gemma 3 4B IT Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: true
+
+  # --- Fine-tuning controlled bases (docs/plans/2026-06-27-fine-tuning.md) ---
+  # The untuned half of the 8-cell size x precision x tuned matrix. Built 2026-06-29
+  # from freshly-downloaded Qwen3 HF weights through one llama.cpp pipeline (Task 1) —
+  # do NOT swap in the pre-existing models/*.gguf above; their provenance differs and
+  # would contaminate the quant-tax / gain numbers. Same validated Qwen3 config as
+  # qwen3-4b (json_mode:false, thinking_enabled:false). The 4 *-ft-* stanzas land in Task 7.
+  qwen3-1.7b-base-f16:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-base-f16.gguf
+      description: Qwen3 1.7B base, f16 (controlled)
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-1.7b-base-q4:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-base-q4.gguf
+      description: Qwen3 1.7B base, Q4_K_M (controlled)
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-4b-base-f16:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-4b-base-f16.gguf
+      description: Qwen3 4B base, f16 (controlled)
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-4b-base-q4:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-4b-base-q4.gguf
+      description: Qwen3 4B base, Q4_K_M (controlled)
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  # --- Fine-tuned half of the matrix (Tasks 6-7, built 2026-06-30) ---
+  # One multi-skill LoRA (bf16, r=16, 3 epochs) on the union train.jsonl (ffmpeg 364 +
+  # documents 334), trained per base then merged->f16->Q4_K_M through the same llama.cpp
+  # pipeline as the base GGUFs. Same options as the *-base-* stanzas so the tuned/untuned
+  # comparison is clean. The post-fine-tune success sweep (Task 8) benches these.
+  qwen3-1.7b-ft-f16:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-ft-f16.gguf
+      description: Qwen3 1.7B fine-tuned, f16
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-1.7b-ft-q4:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-ft-q4.gguf
+      description: Qwen3 1.7B fine-tuned, Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-4b-ft-f16:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-4b-ft-f16.gguf
+      description: Qwen3 4B fine-tuned, f16
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-4b-ft-q4:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-4b-ft-q4.gguf
+      description: Qwen3 4B fine-tuned, Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  # --- 4B-v3 retrain (pass-3 Task 4): same recipe as qwen3-4b-ft, only v1->v3 data changes ---
+  qwen3-4b-sft-v3-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v3-flat-f16.gguf, description: "Qwen3 4B SFT v3 flat union, f16", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-4b-sft-v3-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
+    backend: llama_cpp
+    options: {path: models/knaif-qwen3-4b-v1-q4_k_m.gguf, description: "Qwen3 4B SFT v3 flat union, Q4_K_M (public: knaif-qwen3-4b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # matched-config re-eval of the untuned 4B default + old v1 4B-ft, for a clean 4B-v3 comparison on the 845 corpus
+  qwen3-4b-base-q4-mt512:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-base-q4.gguf, description: "Qwen3 4B untuned base, Q4_K_M, max_tokens=512", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-4b-ft-q4-mt512:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-ft-q4.gguf, description: "Qwen3 4B ft v1 union, Q4_K_M, max_tokens=512", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+
+  # --- data-v2 1.7B config comparison (best-skill-model Task 2, 2026-06-30) ---
+  # The real data-v2 Q4 GGUF lived on the 5080 box and is not here (the file that once carried this
+  # name locally turned out to be a mislabeled Q6_K duplicate of knaif-qwen3-1.7b-v1, and was
+  # deleted). Rebuild the GGUF before using this stanza; as-is it fails loudly (model not found).
+  qwen3-1.7b-ftv2-q4:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-ftv2-q4.gguf
+      description: Qwen3 1.7B ft data-v2 (r16/3ep), Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-1.7b-ftv2l-q4:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-ftv2l-q4.gguf
+      description: Qwen3 1.7B ft data-v2 light (r8/2ep/lr1e-4), Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-1.7b-ftv2-f16:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-ftv2-f16.gguf
+      description: Qwen3 1.7B ft data-v2 (r16/3ep), f16
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  qwen3-1.7b-ftv2l-f16:
+    backend: llama_cpp
+    options:
+      path: models/qwen3-1.7b-ftv2l-f16.gguf
+      description: Qwen3 1.7B ft data-v2 light (r8/2ep/lr1e-4), f16
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 2048
+      json_mode: false
+      thinking_enabled: false
+
+  # --- 1.7B v1-adapter quant sweep (best-skill-model Task 3, 2026-06-30) ---
+  # v1 data beat data-v2 on the f16 hard slice (0.855 vs 0.800), so the quant sweep
+  # uses the existing qwen3-1.7b-ft (r16/3ep) adapter. f16 + q4 already stanza'd above.
+  qwen3-1.7b-ft-q5:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ft-q5.gguf, description: "Qwen3 1.7B ft v1, Q5_K_M", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 2048, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-ft-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ft-q6.gguf, description: "Qwen3 1.7B ft v1, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 2048, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-ft-q8:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ft-q8.gguf, description: "Qwen3 1.7B ft v1, Q8_0", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 2048, json_mode: false, thinking_enabled: false}
+
+  # --- ffmpeg-only single-skill fine-tune (standalone-app experiment, 2026-06-30) ---
+  qwen3-1.7b-ffmpeg-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ffmpeg-q6.gguf, description: "Qwen3 1.7B ffmpeg-only ft, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 2048, json_mode: false, thinking_enabled: false}
+
+  # --- ffmpeg-only, v1 data (clean apples-to-apples vs union which used v1) 2026-07-01 ---
+  qwen3-1.7b-ffmpegv1-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ffmpegv1-q6.gguf, description: "Qwen3 1.7B ffmpeg-only ft (v1 data), Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 2048, json_mode: false, thinking_enabled: false}
+
+  # --- ffmpeg-v3 hard-targeted SFT grid (2026-07-01) ---
+  qwen3-1.7b-sft-v3-flat-q6:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
+    backend: llama_cpp
+    options: {path: models/knaif-qwen3-1.7b-v1-q6_k.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q6_K (public: knaif-qwen3-1.7b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # pass-3 Task 5 planner-diversity: control (ffmpeg+documents) vs +io, new keywords, same recipe
+  qwen3-1.7b-v3b-control-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-v3b-control-q6.gguf, description: "Qwen3 1.7B ffmpeg+documents (new-kw control), Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-v3b-io-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-v3b-io-q6.gguf, description: "Qwen3 1.7B ffmpeg+documents+io (planner-diversity), Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-flat-f16.gguf, description: "Qwen3 1.7B SFT v3 flat union, f16 (quant-noise-free read)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-flat-q5:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-flat-q5.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q5_K_M", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-flat-q8:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-flat-q8.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q8_0 (diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # v1-union baseline at matched max_tokens=512 for a clean v3-flat vs v1 data-effect read (pass-3 Task 1/2)
+  qwen3-1.7b-ft-f16-mt512:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ft-f16.gguf, description: "Qwen3 1.7B ft v1 union, f16, max_tokens=512", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-ft-q6-mt512:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-ft-q6.gguf, description: "Qwen3 1.7B ft v1 union, Q6_K, max_tokens=512", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-gentle2-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-gentle2-q6.gguf, description: "Qwen3 1.7B SFT v3 gentle hard-weighted union, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-hard3-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-hard3-q6.gguf, description: "Qwen3 1.7B SFT v3 hard-weighted union, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-low-lr-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-low-lr-q6.gguf, description: "Qwen3 1.7B SFT v3 hard-weighted union, lower LR, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-ffmpeg-flat-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-ffmpeg-flat-q6.gguf, description: "Qwen3 1.7B SFT v3 flat ffmpeg-only, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-dpo-v1-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-dpo-v1-q6.gguf, description: "Qwen3 1.7B DPO v1 over SFT v3 flat, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v3-distill-v1-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v3-distill-v1-q6.gguf, description: "Qwen3 1.7B SFT v3 verifier-filtered distill v1, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}

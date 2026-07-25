@@ -1,0 +1,19 @@
+# mise provisions and pins the toolchain for the monorepo (see `just bootstrap`).
+# Docs: https://mise.jdx.dev/
+#
+# Migration state (Phase 1): only the Python toolchain is exercised today. The Rust,
+# cmake, just, and node pins are declared now so `just bootstrap` can provision them as
+# native work lands (Phase 4+). The authoritative Rust pin will be `rust-toolchain.toml`
+# added alongside the Cargo workspace in Phase 4; keep this in sync when that lands.
+
+[tools]
+python = "3.14"      # matches requires-python ">=3.10,<3.15"; dev env is 3.14.x
+uv = "0.11.2"        # Python env + dependency manager (pinned for reproducibility)
+just = "latest"      # human-facing task runner
+rust = "1.96.0"      # provides cargo; keep in sync with rust-toolchain.toml (authoritative)
+cmake = "latest"     # needed if/when llama.cpp is vendored + built from source
+node = "latest"      # only needed later for Tauri desktop UI work (Phase: future)
+
+[env]
+# Nothing pinned here yet. The shared model store resolves from $KNAIF_MODELS_DIR at
+# runtime (Phase 5); it is intentionally not hard-coded here.

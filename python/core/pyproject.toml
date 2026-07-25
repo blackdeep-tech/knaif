@@ -1,0 +1,115 @@
+[build-system]
+# 77.0.3 is the PEP 639 floor: the SPDX `license = "Apache-2.0"` string and `license-files`
+# below are both rejected by older setuptools (68 fails with "project.license must be
+# valid exactly by one definition"). Builds happen to work when the resolver picks a
+# recent setuptools, but a pinned or offline environment at the declared floor would not.
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knaif"
+version = "1.0.1"
+description = "Local LLM command agent with deterministic execution layer"
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+license = "Apache-2.0"
+# Apache-2.0 §4(a) requires shipping the License with every copy, and §4(d) requires
+# passing along NOTICE attribution — linking to them from the README satisfies neither.
+# setuptools resolves these relative to this directory and PEP 639 forbids `..`, so the
+# repo-root originals are mirrored here by `just sync-license`, with a drift guard in
+# tests keeping them byte-identical (same pattern as core_tools.yaml).
+license-files = ["LICENSE", "NOTICE"]
+authors = [
+    {name = "Blackdeep Technologies", email = "knaif@blackdeep.tech"}
+]
+keywords = ["llm", "cli", "natural-language", "agent", "local-llm", "ffmpeg"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    # No "License ::" classifier — PEP 639 `license = "Apache-2.0"` above is the
+    # declaration, and setuptools rejects the pair as conflicting.
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Utilities",
+]
+dependencies = [
+    # 2.33.0 is the first release clearing the advisories that affect 2.31.x. knaif does
+    # not exercise the affected APIs, but a declared floor that fails a security audit is
+    # still a floor worth raising.
+    "requests>=2.33.0",
+    "pyyaml>=6.0",
+    "click>=8.0",
+]
+
+# `/blob/HEAD/` resolves to whatever the published repo's default branch turns out to be.
+# Pinning `main` would be a guess — this repo's default is `dev`, and X5 of the OSS-prep
+# plan still has "default branch" as an open setting. These URLs are frozen into the
+# published artifact, so a wrong branch here could not be corrected without a version bump.
+[project.urls]
+Homepage = "https://github.com/blackdeep-tech/knaif"
+Repository = "https://github.com/blackdeep-tech/knaif"
+Documentation = "https://github.com/blackdeep-tech/knaif/blob/HEAD/docs/SDK.md"
+Changelog = "https://github.com/blackdeep-tech/knaif/blob/HEAD/CHANGELOG.md"
+Issues = "https://github.com/blackdeep-tech/knaif/issues"
+
+[project.scripts]
+knaif-cli = "knaif.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+# Only the framework package ships. Skills are reference content + eval fodder, loaded by
+# path (from_skill / skills_root), never imported by 3rd-party callers — they live at the
+# repo-root skills/ bundles (or src/skills during the migration) and are excluded from the
+# wheel. Tests are dev-only. See knaif/__init__.py._discover_skills_root().
+include = ["knaif*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.jsonl"]
+
+
+# Published extras only. Dependencies for the repo's reference skill bundles and for
+# examples/ are NOT declared here: those bundles are not in the wheel, so publishing an
+# extra that installs (say) 9 PDF libraries for code the user does not have is misleading.
+# They live in the repo-root pyproject's [dependency-groups] (PEP 735), which is never
+# published — install with `just install-skills` / `uv pip install --group documents`.
+[project.optional-dependencies]
+llama = [
+    "llama-cpp-python>=0.2.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.7.0",
+    "black[jupyter]>=26.5.1",
+    "ruff>=0.0.280",
+    "mypy>=1.5.0",
+    "types-requests>=2.31.0",
+    # tomllib is stdlib from 3.11; the backport keeps the test suite collectable on the
+    # 3.10 floor that requires-python advertises.
+    "tomli>=2.0.1; python_version < '3.11'",
+]
+notebook = [
+    "jupyterlab>=4.0.0",
+    "ipykernel>=6.25.0",
+    "notebook>=7.0.0",
+    "ipywidgets>=8.0.0",
+]
+evalsuite = [
+    "rich>=13.0.0",
+]
+clock = [
+    # knaif/examples/clock/ uses zoneinfo; tzdata supplies the IANA database on Windows
+    # and minimal containers that lack a system-level timezone database.
+    # Harmless on Linux/macOS (system db still wins). Example-only dependency —
+    # the SDK and core add no new runtime requirements.
+    "tzdata>=2024.1",
+]
+
+
+# Shared dev-tool config (ruff / black / mypy / pytest / coverage / pyright) lives in the
+# repo-root pyproject.toml (the uv workspace root), so `ruff check .`, `black .`, `mypy`,
+# and `pytest` run uniformly from the repo root across every workspace member. This file
+# holds only the installable-package metadata.

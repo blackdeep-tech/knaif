@@ -1,0 +1,76 @@
+# Language-neutral model manifest — read by the shared ModelStore (knaif-models) and any
+# model-management UI. Records the models the runtime knows about and per-surface
+# recommendations. GGUF models are NOT bundled in installers; first run downloads from here.
+#
+# THIS IS A BILL OF MATERIALS, NOT A LIVE CATALOG (decided 2026-07-16). It ships *inside* the
+# artifact, so each knaif release carries its own copy and answers "what does THIS build require?",
+# never "what is the newest model?". A model is only ever shipped against a CLI it was tested with,
+# so a release binds to exactly the models named here. The binding is ASYMMETRIC: publishing a new
+# model requires a new knaif release, but a knaif release does NOT require a new model — many knaif
+# versions may recommend the same one. Consequences:
+#   - Editing this file does NOT reach installed CLIs; they read their own bundled copy. Shipping a
+#     new model to users means cutting a release.
+#   - `recommendations` is the binding. Whatever it names is the DEFAULT path since default-model
+#     auto-select (NATIVE.md §5.6) — not merely the answer to an explicit `models pull`. A
+#     recommended model with `url: TODO` therefore breaks first run for every user without
+#     `--model`; `python/core/tests/test_model_manifest_release_ready.py` fails the build on that.
+#   - Model versions keep their OWN line (`-v1`, `-v2`) and never inherit knaif's. That is what
+#     makes upgrades free: the store keys on the model's own filename, so a knaif upgrade with an
+#     unchanged recommendation re-downloads nothing. Binding is not renaming.
+#
+# HOST (decided 2026-07-04): fine-tuned knaif GGUFs live in the single HF model repo
+#   blackdeep/knaif  →  https://huggingface.co/blackdeep/knaif
+# When a model is published, set `url` to a COMMIT-SHA-pinned resolve URL (not `main`, which
+# can move under a fixed sha256 and break `verify`):
+#   url: https://huggingface.co/blackdeep/knaif/resolve/<commit-sha>/<file>
+# and fill `sha256` + `size_bytes` from the uploaded file (the publish script does both).
+# Both v1 models are PUBLISHED and live (verified 2026-07-16: anonymous 200, Content-Length ==
+# size_bytes). `url`/`sha256` read "TODO" only for a model that has not been uploaded yet; `pull`
+# refuses such a model and `verify` reports NoChecksum.
+#
+# NAMING & VERSIONS: the manifest key + `file` carry the PUBLIC RELEASE version (v1, v2, … — +1
+# per publication, contiguous). Internal fine-tune cycles (sft-v3, sft-v8, …) live in `training_run`
+# (provenance only) — never in the public name, so the public version can't leak gappy R&D numbers.
+#
+# ONE NAME PER MODEL (2026-07-14): local GGUFs in models/ now use the SAME `knaif-*` filenames as
+# the published HF artifacts and as `file:` below — so a model has one name on disk, in the
+# manifest, and on HuggingFace. The manifest KEY (the name a user types after `--model` / `models
+# pull`) also carries the `knaif-` prefix (2026-07-18), so `knaif-qwen3-4b-v1` reads as a knaif
+# fine-tune rather than a stock Qwen checkpoint — the key is the `file:` name minus the quant/`.gguf`
+# suffix. `source:` (a local FT-cycle filename that differed from the public one) is therefore no
+# longer needed; publish_model.py falls back to `file:` when it is absent. Set `source:` again only
+# if a local GGUF must differ in name from its published artifact.
+#
+# Eval backend KEYS in eval_backends.yaml deliberately keep their FT-cycle names — they are baked
+# into saved scoreboard filenames in evals/, so renaming them would break each run's join
+# with its own history. Runtime never reads `training_run`.
+
+models:
+  knaif-qwen3-4b-v1:                                   # public release v1 (from FT cycle sft-v3)
+    file: knaif-qwen3-4b-v1-q4_k_m.gguf                 # name on disk, in HF, everywhere
+    training_run: sft-v3-flat                           # provenance (FT cycle), not a filename
+    url: "https://huggingface.co/blackdeep/knaif/resolve/8ec60c21359bcf6a2604aa372a01ba0254a49e42/knaif-qwen3-4b-v1-q4_k_m.gguf"
+    sha256: "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
+    size_bytes: 2497280960
+    license: Apache-2.0                                 # license of THIS fine-tune
+    base_model: Qwen/Qwen3-4B                           # upstream checkpoint this was tuned from
+    base_model_license: Apache-2.0                      # upstream license (see NOTICE)
+    skills: [ffmpeg, documents]
+
+  knaif-qwen3-1.7b-v1:
+    file: knaif-qwen3-1.7b-v1-q6_k.gguf
+    training_run: sft-v3-flat
+    url: "https://huggingface.co/blackdeep/knaif/resolve/758297b00a41f9341bc330afcadce49fb608c236/knaif-qwen3-1.7b-v1-q6_k.gguf"
+    sha256: "72ec1b83fa5cd28cb1fa9c31bababe9209824a0cc20d17e33a287d62ea4e0a57"
+    size_bytes: 1417754976
+    license: Apache-2.0
+    base_model: Qwen/Qwen3-1.7B
+    base_model_license: Apache-2.0
+    skills: [ffmpeg, documents]
+
+# Recommended defaults, not hard requirements (users may override by name or path).
+recommendations:
+  desktop: knaif-qwen3-4b-v1
+  cli: knaif-qwen3-4b-v1
+  mobile: knaif-qwen3-1.7b-v1
+  default: knaif-qwen3-4b-v1

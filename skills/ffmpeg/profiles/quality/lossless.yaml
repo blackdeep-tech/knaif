@@ -1,0 +1,5 @@
+quality: lossless
+video_crf: 0
+encoder_preset: veryslow
+audio_bitrate: 320k
+notes: "Mathematically lossless H.264 (crf 0). Very large files."
