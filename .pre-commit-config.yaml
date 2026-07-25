@@ -1,0 +1,147 @@
+# Pre-commit hooks for knaif. Opt-in, and never the only gate — `just check` stays
+# the authoritative gate (see CONTRIBUTING.md). These hooks exist to catch the cheap,
+# mechanical mistakes in seconds instead of at the end of a full test run.
+#
+#   just hooks-install     # install into .git/hooks (do this once)
+#   just hooks             # run every hook over the whole repo
+#   git commit --no-verify # escape hatch when a hook is wrong
+#
+# Three tiers, by how much time they cost:
+#   pre-commit  file hygiene, formatters, generated-copy drift  (seconds)
+#   commit-msg  the commit convention                           (instant)
+#   pre-push    type-check, tests, clippy                       (minutes)
+#
+# Formatters and linters run through `uv run` on purpose, so a hook uses the exact
+# version pinned in the venv by `just install`. A pre-commit-managed copy would
+# drift from what `just check` runs, and the two disagreeing is worse than either.
+
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+# Generated reports and saved run history are written by tools, not people — a
+# whitespace fixer editing them only creates drift against their generator, and a
+# reformatted score.json is a silently altered result. `evals/` is excluded whole
+# (including the hand-maintained INDEX.md) because everything else under it is
+# generated; the cost is one un-linted markdown file.
+exclude: |
+  (?x)^(
+    installers/licenses/.*|
+    evals/.*|
+    scripts/agent_vs_knaif/RESULTS_.*\.json|
+    target/.*|
+    dist/.*
+  )$
+
+repos:
+  # ── File hygiene ───────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Markdown uses two trailing spaces as a hard line break.
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: forbid-submodules
+      - id: check-added-large-files
+        # The largest file legitimately tracked today is ~1 MB. Models are
+        # gitignored; this is the backstop for a .gguf staged by accident.
+        args: [--maxkb=2048]
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        # mkdocs.yml uses `!!python/name:` tags that the safe loader rejects.
+        exclude: ^site/mkdocs\.yml$
+      - id: check-toml
+      - id: check-json
+      - id: check-executables-have-shebangs
+
+  # ── Notebooks ──────────────────────────────────────────────────────────────
+  # CONTRIBUTING requires outputs cleared before committing — they carry absolute
+  # paths and execution metadata otherwise. Automate it rather than reviewing it.
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+
+  # ── Python: lint and format ────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint, autofix)
+        entry: uv run ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: black
+        name: black (format)
+        entry: uv run black
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+
+  # ── Generated copies and contracts ─────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: check-mirrors
+        name: generated copies are in sync (core_tools.yaml, LICENSE, NOTICE)
+        entry: uv run python scripts/check_mirrors.py
+        language: system
+        pass_filenames: false
+        files: ^(LICENSE|NOTICE|contracts/runtime/core_tools\.yaml|python/core/(LICENSE|NOTICE|knaif/core_tools\.yaml))$
+
+      - id: gen-skills-check
+        name: README skill inventory is up to date
+        entry: uv run python scripts/gen_skills.py --check
+        language: system
+        pass_filenames: false
+        files: ^(skills/[^/]+/skill\.yaml|README\.md|scripts/gen_skills\.py)$
+
+  # ── Rust ───────────────────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt --check
+        entry: cargo fmt --all --check
+        language: system
+        pass_filenames: false
+        files: \.rs$
+
+  # ── Commit message ─────────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: commit-msg-convention
+        name: "commit message follows type(scope): subject"
+        entry: uv run python scripts/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
+
+  # ── Pre-push: the slow tier ────────────────────────────────────────────────
+  # Everything below runs on `git push`, not on every commit. It is still a
+  # subset of `just check` — run that before opening a PR.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy python/core/knaif/
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pytest
+        name: pytest (core + skills)
+        entry: uv run pytest --tb=short -q
+        language: system
+        types_or: [python, pyi, yaml]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: cargo-clippy
+        name: cargo clippy (warnings are errors)
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        stages: [pre-push]
