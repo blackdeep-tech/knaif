@@ -44,9 +44,26 @@
 #ifndef DefaultModelFile
   #define DefaultModelFile "knaif-qwen3-4b-v1-q4_k_m.gguf"
 #endif
+; AppId is how Windows identifies the application: Inno derives the uninstall registry key
+; ({AppId}_is1) from it, and two builds that share an AppId ARE the same application. Overridable
+; so a scratch verification install cannot collide with a real one — tearing a test install down by
+; deleting the production key is precisely how F1 (no Add/Remove row, no upgrade detection) is
+; created. Always pass a throwaway GUID when compiling to a scratch dir:
+;   ISCC /DAppIdGuid=00000000-0000-0000-0000-00000000TEST /O<scratch> installers\windows\knaif.iss
+#ifndef AppIdGuid
+  #define AppIdGuid "7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B"
+#endif
+; Mark an overridden build in Add/Remove Programs so a test install is never mistaken for the real
+; one — the two now coexist there rather than overwriting each other.
+#if AppIdGuid == "7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B"
+  #define TestSuffix ""
+#else
+  #define TestSuffix " (TEST BUILD)"
+#endif
 
 [Setup]
-AppId={{7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B}
+; `{{` escapes a literal brace; ISPP expands {#AppIdGuid} first, leaving Inno `{{<guid>}`.
+AppId={{{#AppIdGuid}}
 AppName=knaif
 AppVersion={#AppVersion}
 AppPublisher=knaif
@@ -62,7 +79,7 @@ OutputBaseFilename=knaif-{#AppVersion}-windows-{#Arch}-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayName=knaif {#AppVersion}
+UninstallDisplayName=knaif {#AppVersion}{#TestSuffix}
 LicenseFile={#Stage}\LICENSE
 
 [Types]
@@ -79,13 +96,25 @@ Name: "skills\documents"; Description: "documents — PDF & Office toolkit"; Typ
 Name: "addtopath"; Description: "Add knaif to my PATH (so ""knaif"" works in any terminal)"; GroupDescription: "Integration:"
 ; Supporting external tools, installed for you via winget (skipped if already present, or if winget
 ; is unavailable). Shown per selected skill. ffmpeg is required by the ffmpeg skill, so it defaults on.
-Name: "deps\ffmpeg";    Description: "FFmpeg — required for the ffmpeg skill";                     GroupDescription: "Install supporting tools (via winget):"; Components: skills\ffmpeg
-Name: "deps\gs";        Description: "Ghostscript — aggressive PDF compression (optional, AGPL)";   GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
-Name: "deps\soffice";   Description: "LibreOffice — Office <-> PDF conversion (optional)";           GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
-Name: "deps\tesseract"; Description: "Tesseract OCR — scanned-PDF / image text (optional)";          GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
+;
+; Task names are FLAT and must stay that way. A dotted `deps\<x>` name declares `deps` as a parent
+; task; when the parent is not defined in [Tasks] the children render under the preceding task and
+; silently lose both their GroupDescription and their `unchecked` flag — which is how AGPL
+; Ghostscript and a ~350 MB LibreOffice shipped pre-checked against this script's stated intent.
+; Declaring a real `deps` parent does NOT fix it: Inno force-checks children of a checked parent,
+; so the defaults would break again the moment anyone ticks it. Flat names are the only shape in
+; which per-task defaults survive.
+Name: "depsffmpeg";    Description: "FFmpeg — required for the ffmpeg skill";                      GroupDescription: "Install supporting tools (via winget):"; Components: skills\ffmpeg
+Name: "depsgs";        Description: "Ghostscript — aggressive PDF compression (optional, AGPL)";    GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
+Name: "depssoffice";   Description: "LibreOffice — Office <-> PDF conversion (optional)";           GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
+Name: "depstesseract"; Description: "Tesseract OCR — scanned-PDF / image text (optional)";          GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
 ; The AI model powers `run` (turning a request into a command). ~2.5 GB, one-time — default on so
-; knaif works out of the box; skipped automatically if the model is already downloaded.
-Name: "getmodel"; Description: "Download the knaif AI model now — {#DefaultModel}, a Qwen3-4B fine-tune (~2.5 GB, needed for ""run"")"; GroupDescription: "AI model:"
+; knaif works out of the box. `Check: NeedsModel` hides the task (and with it the whole "AI model:"
+; group) when the GGUF is already in the store, instead of offering a download that then no-ops.
+; The same Check stays on the [Run] entry: it guards the gap between the wizard page and the install
+; step. The description states that setup waits, because the [Run] entry has no `nowait` and Inno
+; disables Cancel during that stage — the wait is disclosed where the user opts in, not when it starts.
+Name: "getmodel"; Description: "Download the knaif AI model now — {#DefaultModel}, a Qwen3-4B fine-tune (~2.5 GB, needed for ""run""; setup will wait for this)"; GroupDescription: "AI model:"; Check: NeedsModel
 
 [Files]
 ; Core: binary + language-neutral contracts + docs.
@@ -104,21 +133,27 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
     Tasks: addtopath; Check: NeedsAddPath(ExpandConstant('{app}\bin'))
 
 [Run]
-; Install the selected supporting tools via winget — but only when winget exists AND the tool
-; isn't already on PATH (ShouldInstall). Third-party tools are never bundled; winget fetches each
-; from its own vendor. Non-fatal: knaif is already installed regardless of the outcome.
+; Install the selected supporting tools via winget — but only when winget exists AND the runtime
+; would not already consider the tool satisfied. Third-party tools are never bundled; winget fetches
+; each from its own vendor. Non-fatal: knaif is already installed regardless of the outcome.
+;
+; The command lists below MIRROR `dependencies.external_tools` in skills/<skill>/skill.yaml, which is
+; the source of truth. `ShouldInstallAll` is `all_required: true` (distinct binaries, every one
+; needed); `ShouldInstallAny` is the default (alternative names for one binary, any one satisfies).
+; These lists are duplicated here because ISPP cannot read YAML — W6 adds the test that asserts the
+; two agree.
 Filename: "winget"; Parameters: "install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing FFmpeg via winget (this can take a minute)..."; Flags: shellexec waituntilterminated; \
-    Tasks: "deps\ffmpeg"; Check: ShouldInstall('ffmpeg')
+    Tasks: depsffmpeg; Check: ShouldInstallAll('ffmpeg,ffprobe')
 Filename: "winget"; Parameters: "install -e --id ArtifexSoftware.GhostScript --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing Ghostscript via winget..."; Flags: shellexec waituntilterminated; \
-    Tasks: "deps\gs"; Check: ShouldInstall('gswin64c')
+    Tasks: depsgs; Check: ShouldInstallAny('gs,gswin64c,gswin32c')
 Filename: "winget"; Parameters: "install -e --id TheDocumentFoundation.LibreOffice --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing LibreOffice via winget (large download, please wait)..."; Flags: shellexec waituntilterminated; \
-    Tasks: "deps\soffice"; Check: ShouldInstall('soffice')
+    Tasks: depssoffice; Check: ShouldInstallAny('soffice,libreoffice')
 Filename: "winget"; Parameters: "install -e --id UB-Mannheim.TesseractOCR --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing Tesseract OCR via winget..."; Flags: shellexec waituntilterminated; \
-    Tasks: "deps\tesseract"; Check: ShouldInstall('tesseract')
+    Tasks: depstesseract; Check: ShouldInstallAny('tesseract')
 ; Download the recommended model via the just-installed knaif (its own progress bar shows in a
 ; console). Skipped when the GGUF is already in the shared store. Non-fatal if the download fails.
 Filename: "{app}\bin\knaif.exe"; Parameters: "models pull {#DefaultModel}"; \
@@ -129,8 +164,39 @@ Filename: "{app}\bin\knaif.exe"; Parameters: "models pull {#DefaultModel}"; \
 const
   EnvKey = 'Environment';
 
-{ True if <Exe>.exe is found in any PATH directory (mirrors the runtime `knaif skills deps` probe). }
-function CmdOnPath(Exe: string): Boolean;
+{ Dependency detection below mirrors the runtime probe in
+  native/crates/knaif-core/src/deps.rs (resolve_command / which / executable_extensions). Any
+  divergence means the installer offers a winget install the runtime considers unnecessary, or
+  skips one it needs. The three behaviours that must match: PATHEXT suffixes (not just `.exe`),
+  the $KNAIF_<CMD>_BIN override, and `all_required` vs alias satisfaction. }
+
+{ Is Cmd in Dir under any PATHEXT suffix? The bare name is tried first, as the runtime does. }
+function FoundInDir(Dir, Cmd: string): Boolean;
+var
+  Exts, Ext: string;
+  P: Integer;
+begin
+  Result := False;
+  Exts := GetEnv('PATHEXT');
+  if Exts = '' then
+    Exts := '.COM;.EXE;.BAT;.CMD';
+  { Leading ';' yields an empty first token = the bare, extensionless name. }
+  Exts := ';' + Exts + ';';
+  while Pos(';', Exts) > 0 do
+  begin
+    P := Pos(';', Exts);
+    Ext := Copy(Exts, 1, P - 1);
+    Delete(Exts, 1, P);
+    if FileExists(AddBackslash(Dir) + Cmd + Ext) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+{ PATH scan only — no env override. Used for winget itself, which is not a knaif dependency. }
+function OnPath(Cmd: string): Boolean;
 var
   Paths, Dir: string;
   P: Integer;
@@ -142,7 +208,7 @@ begin
     P := Pos(';', Paths);
     Dir := Copy(Paths, 1, P - 1);
     Delete(Paths, 1, P);
-    if (Dir <> '') and FileExists(AddBackslash(Dir) + Exe + '.exe') then
+    if (Dir <> '') and FoundInDir(Dir, Cmd) then
     begin
       Result := True;
       Exit;
@@ -150,10 +216,69 @@ begin
   end;
 end;
 
-{ Install <Exe>'s package only when winget is available AND the tool isn't already present. }
-function ShouldInstall(Exe: string): Boolean;
+{ One command, resolved the runtime's way: $KNAIF_<CMD>_BIN wins outright — resolve_command()
+  returns it without probing, so a user who set it is considered satisfied — else scan PATH. }
+function CommandPresent(Cmd: string): Boolean;
 begin
-  Result := CmdOnPath('winget') and not CmdOnPath(Exe);
+  if GetEnv('KNAIF_' + Uppercase(Cmd) + '_BIN') <> '' then
+    Result := True
+  else
+    Result := OnPath(Cmd);
+end;
+
+{ `all_required: false` (the default): the commands are alternative names for one binary, so any
+  one satisfies — e.g. gs / gswin64c / gswin32c. }
+function AnyPresent(List: string): Boolean;
+var
+  Cmd: string;
+  P: Integer;
+begin
+  Result := False;
+  List := List + ',';
+  while Pos(',', List) > 0 do
+  begin
+    P := Pos(',', List);
+    Cmd := Copy(List, 1, P - 1);
+    Delete(List, 1, P);
+    if (Cmd <> '') and CommandPresent(Cmd) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+{ `all_required: true`: the commands are distinct binaries and EVERY one must resolve — e.g. the
+  ffmpeg skill needs ffmpeg AND ffprobe, so ffmpeg alone does not satisfy it. }
+function AllPresent(List: string): Boolean;
+var
+  Cmd: string;
+  P: Integer;
+begin
+  Result := True;
+  List := List + ',';
+  while Pos(',', List) > 0 do
+  begin
+    P := Pos(',', List);
+    Cmd := Copy(List, 1, P - 1);
+    Delete(List, 1, P);
+    if (Cmd <> '') and not CommandPresent(Cmd) then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+{ Install only when winget is available AND the dependency is not already satisfied. }
+function ShouldInstallAny(List: string): Boolean;
+begin
+  Result := OnPath('winget') and not AnyPresent(List);
+end;
+
+function ShouldInstallAll(List: string): Boolean;
+begin
+  Result := OnPath('winget') and not AllPresent(List);
 end;
 
 // True when the recommended model GGUF isn't already in the shared store (~/.knaif/models).

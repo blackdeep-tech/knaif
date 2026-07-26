@@ -3,7 +3,8 @@
 **Status:** Planning · **Created:** 2026-07-25 · **Completed:** —
 **Owner:** packaging · **Ref:** [`installers/windows/knaif.iss`](../../installers/windows/knaif.iss) · [native-branch-finalization](2026-07-15-native-branch-finalization.md) (C5b / packaging)
 
-> **Status note:** Not started, except W0 (license-accept default), which shipped 2026-07-25.
+> **Status note:** W0 (license-accept default) shipped 2026-07-25; W1 (task page + dependency
+> probe) shipped 2026-07-26, task page verified in the GUI. W2–W6 not started.
 > **F1–F6** came out of a **live install session on the packaged v1.0.1 artifact** on the Windows dev
 > box (2026-07-25) — not from reading the script. **F7–F11** came out of a follow-up cross-read of
 > `knaif.iss` against `installers/package.sh` and the native runtime (2026-07-25) and are *script
@@ -49,20 +50,20 @@ downloads non-compliant for as long as they are the current release. Three optio
 | # | Symptom | Root cause | Verified | Severity |
 |---|---|---|---|---|
 | **F1** | No "knaif" row in Add/Remove Programs; installing 1.0.1 over 1.0.0 warns *"folder already exists"* and does not upgrade | Inno detects a prior install **only** via its `…\Uninstall\{AppId}_is1` key. On the dev box that key is absent, so setup sees a bare directory | Registry read (key missing under HKCU **and** HKLM); `unins000.dat` string dump shows the key path *was* recorded at install; Windows CloudStore app-metadata cache still holds a stale `{7e9f3c2a-…}_is1` entry ⇒ it existed once and was later removed. **Fresh 1.0.1 install into a scratch dir writes the key correctly** — the script is not the cause, but nothing detects or repairs the broken state | P0 (user-visible) |
-| **F2** | Ghostscript, LibreOffice and Tesseract are **pre-checked** on the Tasks page, and the *"Install supporting tools (via winget):"* heading never renders — the four winget tasks appear indented under *"Add knaif to my PATH"* in the **Integration:** group | The `deps\*` tasks declare a parent task named `deps` that **is never defined** in `[Tasks]`. They render as children of the preceding (checked) task, which defeats their `Flags: unchecked` and discards their `GroupDescription` | Owner screenshot of the real 1.0.1 wizard: all four checked, one heading. Cross-read against [`knaif.iss:78-88`](../../installers/windows/knaif.iss#L78-L88) — no `Name: "deps"` entry exists. *(Not reproducible under `/VERYSILENT`: the task tree is a UI control and silent installs never build it — see* Verification protocol *)* | **P0 — installs AGPL + ~350 MB against stated intent** |
-| **F3** | The *"Download the knaif AI model now (~2.5 GB)"* task is offered and pre-checked even when the GGUF is already on disk | `Check: NeedsModel` sits only on the `[Run]` entry ([`knaif.iss:126`](../../installers/windows/knaif.iss#L126)), not on the `[Tasks]` entry. The download is correctly skipped — but the user is never told that, so the wizard promises a 2.5 GB download it will not perform | `NeedsModel`'s path and filename confirmed exact against the on-disk store (`~/.knaif/models/knaif-qwen3-4b-v1-q4_k_m.gguf`, 2 497 280 960 B) and [`contracts/models/model-manifest.yaml:49-50`](../../contracts/models/model-manifest.yaml#L49-L50) — the predicate is right, its placement is wrong | P1 |
+| **F2** | Ghostscript, LibreOffice and Tesseract are **pre-checked** on the Tasks page, and the *"Install supporting tools (via winget):"* heading never renders — the four winget tasks appear indented under *"Add knaif to my PATH"* in the **Integration:** group | The `deps\*` tasks declare a parent task named `deps` that **is never defined** in `[Tasks]`. They render as children of the preceding (checked) task, which defeats their `Flags: unchecked` and discards their `GroupDescription` | Owner screenshot of the real 1.0.1 wizard: all four checked, one heading. Cross-read against [`knaif.iss:95-110`](../../installers/windows/knaif.iss#L95-L110) — no `Name: "deps"` entry exists. *(Not reproducible under `/VERYSILENT`: the task tree is a UI control and silent installs never build it — see* Verification protocol *)* | **P0 — installs AGPL + ~350 MB against stated intent** |
+| **F3** | The *"Download the knaif AI model now (~2.5 GB)"* task is offered and pre-checked even when the GGUF is already on disk | `Check: NeedsModel` sits only on the `[Run]` entry ([`knaif.iss:161`](../../installers/windows/knaif.iss#L161)), not on the `[Tasks]` entry. The download is correctly skipped — but the user is never told that, so the wizard promises a 2.5 GB download it will not perform | `NeedsModel`'s path and filename confirmed exact against the on-disk store (`~/.knaif/models/knaif-qwen3-4b-v1-q4_k_m.gguf`, 2 497 280 960 B) and [`contracts/models/model-manifest.yaml:49-50`](../../contracts/models/model-manifest.yaml#L49-L50) — the predicate is right, its placement is wrong | P1 |
 | **F4** | Generic icons everywhere: setup.exe, the Add/Remove row, and the wizard's stock CD-ROM artwork | No `.ico` exists in the repo (only [`media/logo.png`](../../media/logo.png) + an SVG); `apps/cli` has no `build.rs`, so `knaif.exe` carries no icon and no VERSIONINFO; the `.iss` sets no `SetupIconFile`, `UninstallDisplayIcon` or `WizardSmallImageFile` | `Get-ChildItem`/`Cargo.toml` read; built setup.exe reports **blank `FileVersion`** (ProductVersion 1.0.1 comes from Inno's `AppVersion`) | P1 — compounds F5 |
 | **F5** | SmartScreen *"Windows protected your PC"* | Ships unsigned by design for v1 ([`docs/RELEASE.md:283`](../RELEASE.md#L283)) | Documented decision | P1 |
 | **F6** | License page defaults to *"I do not accept"* | Inno's built-in default; no directive exists to change it | Owner screenshot | **Fixed 2026-07-25 (W0)** |
-| **F7** | Add/Remove Programs shows a dead *Publisher website* link | `AppPublisherURL=https://github.com/` is a placeholder ([`knaif.iss:53`](../../installers/windows/knaif.iss#L53)) | Script read | P2 |
-| **F8** | Nothing in the installed tree says **what knaif is or who maintains it** — no project description, no license name, no homepage, no bug address. `{app}\README.txt` opens on `bin\knaif.exe skills list` | The shipped `README.txt` is generated by a heredoc in [`installers/package.sh`](../../installers/package.sh) that is pure quick-start; the only other prose is `LICENSE` (bare Apache-2.0 text) and `licenses/`. `AppPublisher=knaif` names no entity and F7's URL goes nowhere, so Add/Remove Programs adds nothing either | Owner observation (2026-07-25) + read of the `README.txt` heredoc and [`knaif.iss:48-66`](../../installers/windows/knaif.iss#L48-L66) | P1 — **the only finding that also affects the Linux/macOS artifacts** |
-| **F9** | Reinstalling with a skill **deselected** leaves it installed and still listed by `skills list`; kind/version changes leave orphaned DLLs in `bin\` | `[Files]` only ever *copies*. There is no `[InstallDelete]`, so a component that stops being selected keeps its payload from the previous install ([`knaif.iss:98-99`](../../installers/windows/knaif.iss#L98-L99)) and the component tree stops describing what is on disk | Script read (not reproduced — needs the F1 upgrade path working first) | P1 |
+| **F7** | Add/Remove Programs shows a dead *Publisher website* link | `AppPublisherURL=https://github.com/` is a placeholder ([`knaif.iss:70`](../../installers/windows/knaif.iss#L70)) | Script read | P2 |
+| **F8** | Nothing in the installed tree says **what knaif is or who maintains it** — no project description, no license name, no homepage, no bug address. `{app}\README.txt` opens on `bin\knaif.exe skills list` | The shipped `README.txt` is generated by a heredoc in [`installers/package.sh`](../../installers/package.sh) that is pure quick-start; the only other prose is `LICENSE` (bare Apache-2.0 text) and `licenses/`. `AppPublisher=knaif` names no entity and F7's URL goes nowhere, so Add/Remove Programs adds nothing either | Owner observation (2026-07-25) + read of the `README.txt` heredoc and [`knaif.iss:64-83`](../../installers/windows/knaif.iss#L64-L83) | P1 — **the only finding that also affects the Linux/macOS artifacts** |
+| **F9** | Reinstalling with a skill **deselected** leaves it installed and still listed by `skills list`; kind/version changes leave orphaned DLLs in `bin\` | `[Files]` only ever *copies*. There is no `[InstallDelete]`, so a component that stops being selected keeps its payload from the previous install ([`knaif.iss:127-128`](../../installers/windows/knaif.iss#L127-L128)) and the component tree stops describing what is on disk | Script read (not reproduced — needs the F1 upgrade path working first) | P1 |
 | **F10** | Typing `knaif` in an already-open terminal right after install fails with *"not recognized"* | `ChangesEnvironment=yes` broadcasts `WM_SETTINGCHANGE`, which only reaches processes started **after** it. No finish-page text says to open a new terminal; there is no `InfoAfterFile` and `[Icons]` is deliberately empty, so the wizard ends with no next step at all | Script read + documented Windows behaviour | P2 — first impression |
 | **F11** | **`NOTICE` is never distributed.** It is not in the installed tree, not in the zip, not in `licenses/` | [`installers/package.sh:320`](../../installers/package.sh#L320) copies `LICENSE` and the third-party files into `licenses/`, but there is no `cp NOTICE`. Apache-2.0 **§4(d)** requires the NOTICE file to travel with redistributions, and [`AGENTS.md`](../../AGENTS.md) designates `NOTICE` as *the* legal-attribution surface — it carries the Qwen3 derivation attribution for the shipped models | Read of the `package.sh` staging block + `ls` of the staged tree: `LICENSE README.txt bin contracts licenses skills`, no `NOTICE` | **P0 — license compliance, and cross-OS like F8.** One `cp` |
 
 ## Decision — ARM64 Windows *(settled 2026-07-25: warn and allow)*
 
-`ArchitecturesAllowed=x64compatible` ([`knaif.iss:57`](../../installers/windows/knaif.iss#L57))
+`ArchitecturesAllowed=x64compatible` ([`knaif.iss:74`](../../installers/windows/knaif.iss#L74))
 matches **ARM64 Windows as well as x64** — that is what `x64compatible` means, as opposed to
 `x64os`. So an ARM64 box installs the x64 build and runs llama.cpp inference under Prism emulation,
 with no warning anywhere and the `ggml-cpu-*` variant dispatch selecting against an emulated CPUID.
@@ -82,35 +83,45 @@ The one thing not to do is leave it as-is: today's behaviour is the single shape
 ### - [x] W0 — License page defaults to accept *(shipped 2026-07-25)*
 
 `CurPageChanged` forces `WizardForm.LicenseAcceptedRadio.Checked` on `wpLicense`
-([`knaif.iss:166-176`](../../installers/windows/knaif.iss#L166-L176)). Re-applies on Back.
+([`knaif.iss:291-300`](../../installers/windows/knaif.iss#L291-L300)). Re-applies on Back.
 Apache-2.0 is a permissive grant requiring no click-through assent, so the page is informational
 and defaulting to refusal only adds a step every user undoes.
 
-### - [ ] W1 — Task-page correctness *(F2, F3 — do this first)*
+### - [x] W1 — Task-page correctness *(F2, F3 — shipped 2026-07-26)*
 
-- [ ] **Flatten the `deps\*` task names.** Rename to `depsffmpeg` / `depsgs` / `depssoffice` /
+- [x] **Flatten the `deps\*` task names.** Rename to `depsffmpeg` / `depsgs` / `depssoffice` /
   `depstesseract`, keeping each task's `GroupDescription` and `Components:` filter. Update the four
   matching `Tasks:` references in `[Run]`.
   **Do not fix this by adding a parent `deps` task** — Inno's task tree force-checks children when
   the parent is checked, so a parent would re-break the `unchecked` flags the moment anyone ticks it.
   Flat names are the only shape where per-task defaults survive.
-- [ ] **Gate the `getmodel` task itself.** Add `Check: NeedsModel` to the `[Tasks]` entry; Inno hides
+- [x] **Gate the `getmodel` task itself.** Add `Check: NeedsModel` to the `[Tasks]` entry; Inno hides
   a task whose `Check` returns False, so the whole **AI model:** group disappears once the GGUF is
   present. Keep the `Check` on the `[Run]` entry too — it is the guard against the store being
   emptied between the wizard page and the install step.
-- [ ] **Make `ShouldInstall` actually mirror the runtime probe.** [`knaif.iss:132`](../../installers/windows/knaif.iss#L132)
+- [x] **Make `ShouldInstall` actually mirror the runtime probe.** [`knaif.iss:163`](../../installers/windows/knaif.iss#L163)
   claims it "mirrors the runtime `knaif skills deps` probe". It does not:
   [`deps.rs:175-205`](../../native/crates/knaif-core/src/deps.rs#L175-L205) resolves
   `$KNAIF_<CMD>_BIN` **first**, then scans PATH honouring `PATHEXT` and **command aliases** — for
   Ghostscript, *any one* of `gs` / `gswin64c` / `gswin32c` satisfies it
   ([`deps.rs:243`](../../native/crates/knaif-core/src/deps.rs#L243)). The installer probes one bare
-  name + `.exe` ([`knaif.iss:145`](../../installers/windows/knaif.iss#L145)), so a box the runtime
+  name + `.exe` ([`knaif.iss:174-197`](../../installers/windows/knaif.iss#L174-L197)), so a box the runtime
   considers satisfied still gets a redundant winget install. Take the alias list and the
   `KNAIF_*_BIN` override; W1 is already editing these lines. **Read the aliases from
   `skills/*/skill.yaml`-declared deps if they are reachable at compile time — otherwise duplicate
   them and let W6 assert the two lists agree.**
-- [ ] **Say that setup waits for the 2.5 GB download** *(settled 2026-07-25: keep it in setup)*. The
-  `getmodel` `[Run]` entry ([`knaif.iss:124-126`](../../installers/windows/knaif.iss#L124-L126)) has
+  - **`all_required` is part of the contract and was missing from this bullet** *(added 2026-07-26)*.
+    [`deps.rs:26`](../../native/crates/knaif-core/src/deps.rs#L26) defines it: `true` means the
+    commands are **distinct binaries and every one must resolve**; the default `false` means they are
+    **alternative names and any one satisfies**. `ffmpeg` sets `all_required: true` over
+    `[ffmpeg, ffprobe]` ([`skills/ffmpeg/skill.yaml:21`](../../skills/ffmpeg/skill.yaml#L21)), so a
+    probe that treats the list as aliases reports satisfied when only `ffmpeg` is on PATH. Alias
+    semantics alone are **not** runtime-equivalent.
+  - **The source of truth is `skills/*/skill.yaml`, not `deps.rs`.** `deps.rs` holds the schema and
+    the probe; the `gs/gswin64c/gswin32c` list at `deps.rs:243` that this plan originally cited is a
+    `#[cfg(test)]` fixture. W6's lint must parse the YAML contracts.
+- [x] **Say that setup waits for the 2.5 GB download** *(settled 2026-07-25: keep it in setup)*. The
+  `getmodel` `[Run]` entry ([`knaif.iss:159-161`](../../installers/windows/knaif.iss#L159-L161)) has
   no `nowait`, and Inno **disables Cancel during the `[Run]` stage** — so setup sits on
   *"Downloading…"* for the length of a 2.5 GB transfer, uncancellable, with the only progress in a
   detached console window the user did not ask for. **Decision: keep it there** — a CLI whose
@@ -118,7 +129,7 @@ and defaulting to refusal only adds a step every user undoes.
   surprise: extend the task description with **"setup will wait for this"**, so the wizard discloses
   the wait at the point the user opts in rather than at the point it starts. Independent of F3, which
   removes the task entirely when the GGUF is already present.
-- [ ] **Re-verify by eye** (per *Verification protocol* — this page cannot be probed silently):
+- [x] **Re-verify by eye** (per *Verification protocol* — this page cannot be probed silently):
   ffmpeg checked, the other three unchecked, *"Install supporting tools (via winget):"* renders as
   its own heading, and the model task is **absent** on a box that already has the GGUF.
 
@@ -144,7 +155,7 @@ and defaulting to refusal only adds a step every user undoes.
 - [ ] **Clear the stale payload before installing** *(F9)*. `[InstallDelete] Type: filesandordirs`
   over `{app}\skills`, `{app}\contracts` and the staged `{app}\bin` libs, run before `[Files]`.
   This is safe **only** because `~/.knaif` is deliberately outside `{app}`
-  ([`knaif.iss:206-214`](../../installers/windows/knaif.iss#L206-L214)) — all three dirs are pure
+  ([`knaif.iss:331-339`](../../installers/windows/knaif.iss#L331-L339)) — all three dirs are pure
   staged payload with no user data in them, so a wipe-and-recopy costs nothing but disk churn and is
   the only shape where deselecting a component, dropping a file, or switching kind leaves a tree that
   matches what was chosen. **State that dependency in the `[InstallDelete]` comment**: if anything
@@ -189,7 +200,7 @@ artifacts**.
 - [ ] **Stage `NOTICE`** *(F11 — do this first; it is a licensing obligation, not polish)*. Add
   `cp NOTICE "$STAGE/"` beside the existing `cp LICENSE` at
   [`package.sh:320`](../../installers/package.sh#L320), and a matching `Source:` line in
-  [`[Files]`](../../installers/windows/knaif.iss#L90-L99) so it lands in `{app}`. Apache-2.0 §4(d)
+  [`[Files]`](../../installers/windows/knaif.iss#L119-L128) so it lands in `{app}`. Apache-2.0 §4(d)
   requires it, and it is the file carrying the Qwen3 derivation attribution for the shipped models.
   **Add it to `installers/smoke.sh`'s expected-tree assertion** — a file that must ship but that
   nothing executes is exactly the kind that silently stops shipping again.
@@ -213,7 +224,7 @@ artifacts**.
 
   | `.iss` directive | Value | Source |
   |---|---|---|
-  | `AppPublisher` ([`:52`](../../installers/windows/knaif.iss#L52), today the bare product name) | `Blackdeep Technologies Ltd.` | `NOTICE` |
+  | `AppPublisher` ([`:52`](../../installers/windows/knaif.iss#L69), today the bare product name) | `Blackdeep Technologies Ltd.` | `NOTICE` |
   | `AppPublisherURL` *(F7 — today `https://github.com/`)* | `https://blackdeep.tech` | [`README.md:261`](../../README.md#L261) |
   | `AppSupportURL` | `https://github.com/blackdeep-tech/knaif/issues` | `blackdeep-tech/knaif` origin |
   | `AppUpdatesURL` | `https://github.com/blackdeep-tech/knaif/releases` | as above |
@@ -359,10 +370,17 @@ Learned the hard way on 2026-07-25; follow it for every change in this plan.
   `dist/SHA256SUMS`**; a stray rebuild silently invalidates the published checksum.
 - **Install contained** — `/VERYSILENT /TASKS="" /DIR=<scratch>`. Empty `/TASKS` is what keeps the
   run from touching PATH or pulling 2.5 GB.
+- **Always compile scratch builds with a throwaway `AppId`** — `ISCC /DAppIdGuid=<throwaway>`
+  (added 2026-07-26; `AppIdGuid` is overridable, and an overridden build labels itself
+  *"(TEST BUILD)"* in Add/Remove Programs). Inno treats two builds sharing an `AppId` as the **same
+  application** and derives the same `{AppId}_is1` uninstall key from it. Without this, a scratch
+  install registers itself against the production key — and the teardown step below then deletes the
+  *real* install's Add/Remove registration, **recreating F1 by following this protocol**. Never
+  delete the production `{AppId}_is1` key as test cleanup.
 - **Never run the uninstaller with `/SUPPRESSMSGBOXES`.** `CurUninstallStepChanged` asks whether to
   delete `~/.knaif`, and `SuppressibleMsgBox` answers **IDYES** — a "cleanup" of a test install
   destroys the real model store and costs a 2.5 GB re-download. Tear down by hand instead: remove
-  the scratch dir and delete the `{AppId}_is1` key.
+  the scratch dir and delete the **throwaway** build's `{AppId}_is1` key.
 - **The Tasks page cannot be probed silently.** A `/VERYSILENT` run never builds the task tree, so
   the F2 class of bug does not reproduce and the install log records no task selection. Confirmed by
   probe on 2026-07-25. **Task-page defaults must be verified in the GUI.**
