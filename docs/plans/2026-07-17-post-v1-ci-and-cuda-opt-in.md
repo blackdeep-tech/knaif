@@ -100,6 +100,23 @@ into `~/.knaif/backends`.
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`
   names — do **not** hard-code the retired lane.
+- [ ] **C5 — Enforce the git conventions in CI** _(added 2026-07-25, when the conventions landed in
+  CONTRIBUTING.md)_. The hooks in `.pre-commit-config.yaml` are **opt-in**, so today a contributor
+  who never ran `just hooks-install` is caught only at review. Two small jobs close that:
+  - a `hooks` job running `pre-commit run --all-files --show-diff-on-failure` (use the
+    `pre-commit/action` or a plain `uv run`), which also makes the formatters a gate — `just check`
+    currently runs `ruff` but never `black --check`, so formatting is unenforced;
+  - a **PR-title lint**, since PRs are squash-merged and the title *is* the commit subject on
+    `main`. Reuse `scripts/check_commit_msg.py` — it takes a file path, so the job writes the title
+    to a temp file and calls it. One implementation, so the hook and CI cannot disagree.
+  - **Branch protection** on `main` in the same pass: require the C1 jobs, squash-merge only,
+    linear history, no direct pushes. Like all settings here, protections do **not** survive an org
+    transfer — this is why the whole plan runs after OSS-prep.
+  - **Known debt this will surface:** four notebooks are not `black`-formatted and carry metadata
+    `nbstripout` strips (`notebooks/baseline_authoring.ipynb`, both under
+    `skills/documents/notebooks/`, `skills/ffmpeg/notebooks/ffmpeg_skill_tester.ipynb`). Land that
+    reformat as its own `chore:` commit *before* the hooks job goes green-required, or the first CI
+    run fails on unrelated churn.
 
 ---
 

@@ -1,3 +1,9 @@
+<!-- PR TITLE: this PR is squash-merged, so the title becomes the commit subject on main.
+     It must follow the commit convention — `type(scope): subject`, imperative, no
+     trailing period, 72 characters or fewer. See CONTRIBUTING.md -> Git conventions.
+       feat(ffmpeg): add a batch-convert intent
+       fix(sdk): validate Arg schemas on Python 3.10 -->
+
 # What and why
 
 <!-- What changes, and what problem it solves. Link any issue. -->

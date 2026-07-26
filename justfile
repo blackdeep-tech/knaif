@@ -83,6 +83,28 @@ install-dev:
 install-notebook:
     uv pip install -e "python/core[notebook]"
 
+# --- Git hooks (see .pre-commit-config.yaml and CONTRIBUTING.md) ---
+
+# Install the git hooks (pre-commit, commit-msg, pre-push). Run once after `just init`.
+hooks-install:
+    uv run pre-commit install --install-hooks
+
+# Run every hook against the whole repo (not just staged files)
+hooks:
+    uv run pre-commit run --all-files
+
+# Run only the slow pre-push tier (mypy, pytest, clippy) against the whole repo
+hooks-push:
+    uv run pre-commit run --all-files --hook-stage pre-push
+
+# Bump the pinned hook revisions in .pre-commit-config.yaml
+hooks-update:
+    uv run pre-commit autoupdate
+
+# Remove the installed git hooks
+hooks-uninstall:
+    uv run pre-commit uninstall --hook-type pre-commit --hook-type commit-msg --hook-type pre-push
+
 # Format code with black
 format:
     uv run black .

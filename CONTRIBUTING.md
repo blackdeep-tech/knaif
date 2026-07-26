@@ -20,6 +20,7 @@ runtime you also need a Rust toolchain.
 ```bash
 just bootstrap        # provisions the pinned toolchain via mise, if you have it
 just init             # uv venv + all dependencies, including dev
+just hooks-install    # optional git hooks — see "Git conventions" below
 ```
 
 `just bootstrap` is optional — it installs the versions pinned in [mise.toml](mise.toml)
@@ -75,6 +76,137 @@ just parity ffmpeg --mode plan --batch   # diff plan envelopes for every intent,
 
 Read the recipe's comments in the [justfile](justfile) first — the two modes cover
 different ground, and both want a warm native build.
+
+## Git conventions
+
+`main` is the only long-lived branch. It is always releasable, and nothing lands on it
+except by squash-merged pull request.
+
+### Branches
+
+Work on a branch named `type/short-slug` — lowercase, kebab-case, and short enough to read
+in a PR list:
+
+```text
+fix/cli-sdk-py310-args        feat/ffmpeg-batch-intent
+docs/eval-ladder              corpus/documents-ocr-rows
+refactor/planner-var-binding  release/1.1.0
+```
+
+`type` is one of the commit types below, plus `release/` for release prep and `exp/` for
+experiments you may never merge (fine-tune runs, backend spikes). Branch names are a
+convention, not a gate — nothing rejects a differently named branch.
+
+### Commits
+
+Commit subjects are Conventional-Commits-shaped:
+
+```text
+type(scope): subject
+```
+
+| Group | Types | Use for |
+|---|---|---|
+| Code | `feat` `fix` `perf` `refactor` | behaviour a user could notice, or a rewrite that changes none |
+| Support | `docs` `test` `build` `ci` `chore` `deps` `revert` | everything around the code |
+| Domain | `eval` `corpus` `snapshot` `model` | knaif's own lifecycle — see below |
+
+The **scope** is optional and unvalidated, but prefer an established one: `core`, `cli`,
+`sdk`, `native`, `contracts`, `training`, `installers`, `site`, or a skill name
+(`ffmpeg`, `documents`, `io`).
+
+Rules the hook enforces:
+
+- subject line **≤ 72 characters**, including the `type(scope): ` prefix
+- no trailing period
+- a blank line between the subject and the body
+
+Rules it cannot enforce, but reviewers will:
+
+- **imperative mood** — "add a batch intent", not "added" or "adds"
+- the body explains **why**, not what; the diff already says what
+- breaking changes get a `!` (`refactor(native)!: …`) and a `BREAKING CHANGE:` footer
+
+The domain types exist because this repo's lifecycle has steps that are neither features
+nor chores, and they get their own release-note treatment:
+
+| Type | Means |
+|---|---|
+| `eval` | eval harness, verifiers, or a saved run + its `evals/INDEX.md` row |
+| `corpus` | rows added or re-annotated in a skill's `data/*.jsonl` |
+| `snapshot` | **re-locking an acceptance bar** (`data/eval_snapshot.json`) |
+| `model` | promoting a model — `models.yaml`, the manifest, a skill's `recommended_model:` |
+
+`snapshot` is deliberately its own type: re-locking moves the bar a regression gate is
+measured against, so it belongs in **its own commit** whose message says which measured
+improvement justified it. A snapshot buried in a feature commit is how a quality
+regression gets silently ratified.
+
+Examples:
+
+```text
+fix(sdk): validate Arg schemas on Python 3.10
+feat(ffmpeg): add a batch-convert intent
+snapshot(documents): re-lock at 0.91 success after the retrieval fix
+deps: add tomli backport for the 3.10 floor
+refactor(native)!: rename HandlerContext::sandbox to root
+```
+
+Git's own messages are exempt — merges, `git revert`'s default subject, and
+`fixup!`/`squash!` commits headed for `--autosquash` all pass unchecked.
+
+### Pull requests
+
+PRs are **squash-merged**, so the **PR title becomes the commit subject on `main`** and
+must itself follow the commit convention. Your branch's individual commits are squashed
+away; they can be as messy as you like.
+
+GitHub appends ` (#123)` to the squashed subject, so a title at the full 72 characters
+lands as 78 on `main`. Keep PR titles to **about 65 characters** to leave room for the
+number — the `commit-msg` hook checks your local commits, not the squashed result, so
+nothing will warn you about this.
+
+Keep a PR to one reviewable change. If you find yourself writing "and also" in the
+description, it is probably two PRs — and a `snapshot` re-lock is *always* its own commit,
+which in a squash-merge world means its own PR.
+
+Fill in [the template](.github/PULL_REQUEST_TEMPLATE.md), and say which platform you ran
+`just check` on — there is no CI yet, so that statement is the only evidence a reviewer has.
+
+### Tags and releases
+
+Releases are [SemVer](https://semver.org), tagged `vMAJOR.MINOR.PATCH` (`v1.0.1`) to match
+the `v*.*.*` trigger the release workflow will use. Every release gets a
+[Keep a Changelog](https://keepachangelog.com) entry in [CHANGELOG.md](CHANGELOG.md)
+written from the squashed commit subjects. Cutting one is a documented procedure —
+[`docs/RELEASE.md`](docs/RELEASE.md).
+
+### Git hooks
+
+Optional, and **never a substitute for `just check`** — they catch the cheap mechanical
+mistakes in seconds instead of at the end of a full test run.
+
+```bash
+just hooks-install    # once, after `just init`
+just hooks            # run every hook over the whole repo
+just hooks-push       # just the slow tier
+```
+
+Three tiers, split by what they cost:
+
+| Stage | Runs | Cost |
+|---|---|---|
+| `pre-commit` | whitespace/EOF, YAML+TOML+JSON syntax, large-file guard, `nbstripout`, `ruff --fix`, `black`, `cargo fmt`, generated-copy drift | ~3 s |
+| `commit-msg` | the commit convention above | instant |
+| `pre-push` | `mypy`, `pytest`, `cargo clippy` | minutes |
+
+The drift hooks are the ones worth having: they catch a `core_tools.yaml`, `LICENSE`, or
+README-inventory copy that got edited on the wrong side *before* you commit it, rather than
+as a confusing test failure later. Formatters run through `uv run`, so a hook uses the same
+version as `just check` — a hook and the gate disagreeing is worse than either alone.
+
+`git commit --no-verify` skips them when a hook is simply wrong. If you reach for it often,
+the hook is the bug — open an issue.
 
 ## Running it by hand
 
@@ -181,13 +313,14 @@ Verifying results by hand: [`docs/EVAL_VERIFICATION_SOP.md`](docs/EVAL_VERIFICAT
 
 ## Conventions
 
-- **Commits** follow `type: subject` (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`,
-  `chore:`, plus domain prefixes like `eval:`, `corpus:`, `native:`).
+- **Branches, commits, PR titles, and tags:** see [Git conventions](#git-conventions)
+  above. `just hooks-install` enforces the commit format locally.
 - **Don't** import a specific skill from core, hard-code skill-specific safety rules in
   core, or resolve variable references during `validate_plan` (resolution is runtime
   behaviour).
 - **Notebooks:** clear outputs before committing — they carry absolute paths and execution
-  metadata otherwise. Skill-specific notebooks live with their skill under
+  metadata otherwise. The `nbstripout` hook does this for you if you installed the hooks.
+  Skill-specific notebooks live with their skill under
   `skills/<name>/notebooks/`; top-level `notebooks/` is reserved for cross-skill
   experiments and authoring tools. Open one with `just notebook <path>`.
 - **Performance claims:** cite [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) rather than

@@ -87,6 +87,8 @@ dev = [
     "ruff>=0.0.280",
     "mypy>=1.5.0",
     "types-requests>=2.31.0",
+    # Git hooks (.pre-commit-config.yaml); install them with `just hooks-install`.
+    "pre-commit>=4.0.0",
     # tomllib is stdlib from 3.11; the backport keeps the test suite collectable on the
     # 3.10 floor that requires-python advertises.
     "tomli>=2.0.1; python_version < '3.11'",
