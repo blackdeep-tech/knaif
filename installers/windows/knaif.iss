@@ -53,6 +53,10 @@
 #ifndef AppIdGuid
   #define AppIdGuid "7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B"
 #endif
+; The default install location, defined once: [Setup] sets DefaultDirName from it, and the
+; stale-install rescue probes it. Those two must never drift — the rescue can only look where the
+; install would have gone by default.
+#define DefaultDir "{localappdata}\Programs\knaif"
 ; Mark an overridden build in Add/Remove Programs so a test install is never mistaken for the real
 ; one — the two now coexist there rather than overwriting each other.
 #if AppIdGuid == "7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B"
@@ -68,8 +72,19 @@ AppName=knaif
 AppVersion={#AppVersion}
 AppPublisher=knaif
 AppPublisherURL=https://github.com/
-DefaultDirName={localappdata}\Programs\knaif
+DefaultDirName={#DefaultDir}
 DisableProgramGroupPage=yes
+; Refuse to install over a running CLI. Without this an upgrade hits a locked bin\knaif.exe and
+; silently defers the replacement to the next reboot, so the user keeps running the old build with
+; no indication why. knaif.exe holds this exact name (see hold_app_mutex in apps/cli/src/main.rs);
+; the two strings must stay in step. SetupMutex is the same class of problem between two setups —
+; scoped by AppId so a TEST BUILD cannot block the real installer. A per-user install needs no
+; Global\ namespace for either.
+AppMutex=knaif-cli-running
+SetupMutex=knaif-setup-{#AppIdGuid}
+; Give Add/Remove Programs the product icon rather than a generic one. W3 puts a real icon into
+; knaif.exe; until then this still beats Inno's default.
+UninstallDisplayIcon={app}\bin\knaif.exe
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -127,6 +142,21 @@ Source: "{#Stage}\licenses\*";DestDir: "{app}\licenses";Components: core; Flags:
 Source: "{#Stage}\skills\ffmpeg\*";    DestDir: "{app}\skills\ffmpeg";    Components: skills\ffmpeg;    Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Stage}\skills\documents\*"; DestDir: "{app}\skills\documents"; Components: skills\documents; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Wipe the staged payload before [Files] runs. Without this, deselecting a skill on a reinstall
+; leaves the old one on disk and still listed by `knaif skills list`, and a file dropped between
+; releases survives forever. Wipe-and-recopy costs only disk churn and is the one shape where the
+; installed tree always matches what was actually selected.
+;
+; SAFE ONLY BECAUSE THE USER DATA DIR IS OUTSIDE {app} — see KnaifDataDir, which puts the GGUF
+; store and the backends payload under ~/.knaif. All four directories below are pure staged
+; payload. If anything ever starts writing user state under {app}, this section becomes
+; destructive and must be narrowed first.
+Type: filesandordirs; Name: "{app}\bin"
+Type: filesandordirs; Name: "{app}\skills"
+Type: filesandordirs; Name: "{app}\contracts"
+Type: filesandordirs; Name: "{app}\licenses"
+
 [Registry]
 ; PATH is only touched with explicit consent (the addtopath task); appended, never overwritten.
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\bin"; \
@@ -163,6 +193,57 @@ Filename: "{app}\bin\knaif.exe"; Parameters: "models pull {#DefaultModel}"; \
 [Code]
 const
   EnvKey = 'Environment';
+  UninstallRoot = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\';
+
+// The uninstall key Inno derives from AppId. Built from the same AppIdGuid define as [Setup], so an
+// overridden (scratch) build probes ITS OWN key and never inspects or acts on the production
+// install. In '{{#AppIdGuid}}_is1' the preprocessor expands the inner {#AppIdGuid}, leaving the
+// literal braces that Inno's key name carries — this is a plain Pascal string, not a constant, so
+// nothing expands it further at runtime.
+function UninstallKeyPath: string;
+begin
+  Result := UninstallRoot + '{{#AppIdGuid}}_is1';
+end;
+
+function InstallIsRegistered: Boolean;
+begin
+  Result := RegKeyExists(HKCU, UninstallKeyPath) or RegKeyExists(HKLM, UninstallKeyPath);
+end;
+
+// Rescue an install whose uninstall key is gone while its tree is still on disk (F1). In that state
+// Add/Remove Programs shows no row and an upgrade degrades to the "folder already exists" warning,
+// with no way out from the UI. Inno writes the key at install and removes it at the END of an
+// uninstall, so a cancelled uninstall leaves it behind — reaching this state normally means the key
+// was deleted by hand or by a registry cleaner. This is recovery, not prevention.
+//
+// LIMITATION: only the DEFAULT directory is discoverable. Once the key is gone nothing records a
+// custom /DIR=, so a non-default install in this state must be removed by hand.
+//
+// The orphaned uninstaller is the one already on disk, built from an OLDER script — it still
+// carries whatever data-deletion default it shipped with, which for <=1.0.1 is DELETE. So it runs
+// INTERACTIVELY (never /SILENT) and the prompt says to answer No, rather than us silently invoking
+// a binary that can erase a 2.5 GB model store. Defaults to No so an unattended run skips it.
+function InitializeSetup: Boolean;
+var
+  Orphan: string;
+  Code: Integer;
+begin
+  Result := True;
+  if InstallIsRegistered then
+    Exit;
+  Orphan := ExpandConstant('{#DefaultDir}\unins000.exe');
+  if not FileExists(Orphan) then
+    Exit;
+  if SuppressibleMsgBox(
+       'A previous knaif installation was found at' + #13#10#13#10 +
+       ExpandConstant('{#DefaultDir}') + #13#10#13#10 +
+       'but it is not registered in Add/Remove Programs, so setup cannot upgrade it in place.'
+       + #13#10#13#10 +
+       'Run the old uninstaller now to clear it?' + #13#10#13#10 +
+       'It will ask whether to delete your downloaded AI models — answer No to keep them.',
+       mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
+    Exec(Orphan, '', '', SW_SHOW, ewWaitUntilTerminated, Code);
+end;
 
 { Dependency detection below mirrors the runtime probe in
   native/crates/knaif-core/src/deps.rs (resolve_command / which / executable_extensions). Any
@@ -345,14 +426,16 @@ begin
   if CurUninstallStep = usUninstall then
     RemovePath(ExpandConstant('{app}\bin'));
 
-  { Offer to remove the data dir after the files are gone. DELETING IS THE DEFAULT: uninstall means
-    gone, and most users never learn ~/.knaif exists to clean it up by hand — leaving multiple GB
-    behind is the more surprising outcome. Choosing No is the escape hatch for someone who intends
-    to reinstall.
-    The same IDYES is what SuppressibleMsgBox answers under /SILENT and /VERYSILENT, so an
-    unattended uninstall also removes the data. That is deliberate and consistent. It is safe for
-    upgrades because Inno installs over an existing install WITHOUT running the uninstaller; the
-    only cost is a re-download for a deployment tool that does uninstall-then-reinstall. }
+  { Offer to remove the data dir after the files are gone. KEEPING IS THE DEFAULT (changed
+    2026-07-26, W2). The default is also what SuppressibleMsgBox answers under /SILENT and
+    /VERYSILENT, so the old IDYES meant any unattended uninstall silently destroyed a 2.5 GB model
+    store — including a deployment tool doing uninstall-then-reinstall, and any scripted teardown
+    that forgot the flag. Deleting is recoverable only by re-downloading 2.5 GB; keeping costs
+    disk space the user can reclaim whenever they like, so the asymmetry decides it.
+    A user who genuinely wants the data gone is asked here and can still say Yes.
+    TWO SEPARATE DEFAULTS, both needed: MB_DEFBUTTON2 focuses "No" in the dialog, so Enter keeps
+    the data; SuppressibleMsgBox's last argument is only the answer used when message boxes are
+    SUPPRESSED. Setting one without the other leaves the other path on the destructive answer. }
   if CurUninstallStep = usPostUninstall then
   begin
     DataDir := KnaifDataDir;
@@ -361,8 +444,8 @@ begin
            'Also delete downloaded AI models and knaif data?' + #13#10#13#10 +
            DataDir + #13#10#13#10 +
            'This includes the AI model (~2.5 GB) and any optional GPU backends you added.' + #13#10 +
-           'Choose No only if you plan to reinstall — keeping them avoids re-downloading the model.',
-           mbConfirmation, MB_YESNO, IDYES) = IDYES then
+           'Choose No to keep them — that avoids re-downloading the model if you reinstall.',
+           mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
         DelTree(DataDir, True, True, True);
   end;
 end;

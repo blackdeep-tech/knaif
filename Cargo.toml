@@ -65,7 +65,10 @@ calamine = "0.26"
 # `image` (MIT/Apache) backs rasters + image→pdf + downsampling. See project rendering-strategy memory.
 pdfium-render = "0.8"
 image = "0.25"
-# Win32 bindings (MIT/Apache) — only for SetConsoleOutputCP, so the CLI's non-ASCII output
-# survives the cp1252 code page a default Windows console starts in. Already in the graph
-# transitively; the Console feature adds nothing measurable to build time.
-windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+# Win32 bindings (MIT/Apache), used for two things: SetConsoleOutputCP, so the CLI's non-ASCII
+# output survives the cp1252 code page a default Windows console starts in; and CreateMutexW, so
+# the installer's AppMutex can tell that knaif is running instead of deferring a locked exe to the
+# next reboot. Threading pulls Security + Foundation because CreateMutexW's signature names
+# SECURITY_ATTRIBUTES and HANDLE. Already in the graph transitively; these features add nothing
+# measurable to build time.
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_Security", "Win32_Foundation"] }
