@@ -41,3 +41,6 @@ vulkan = ["knaif-llm/vulkan"]
 dynamic-backends = ["knaif-llm/dynamic-backends"]
 # Bundle-PDFium desktop rasterizer for documents (compress rasterize fallback / OCR PDF rendering).
 pdfium = ["knaif-skill-documents/pdfium"]
+
+[build-dependencies]
+winresource = { workspace = true }

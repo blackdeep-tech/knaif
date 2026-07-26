@@ -70,8 +70,24 @@
 AppId={{{#AppIdGuid}}
 AppName=knaif
 AppVersion={#AppVersion}
-AppPublisher=knaif
-AppPublisherURL=https://github.com/
+; Identity shown in Add/Remove Programs and setup.exe's Properties tab. AppPublisher must name the
+; maintaining entity, not the product — it is what Windows displays beside the verified-publisher
+; string once W4 signs, and a user comparing the two has no way to tell a benign mismatch from a
+; malicious one. When a certificate is issued, reconcile AppPublisher with the CERT SUBJECT and
+; leave LICENSE/NOTICE alone: those are ownership statements with no matching requirement.
+AppPublisher=Blackdeep Technologies Ltd.
+AppPublisherURL=https://blackdeep.tech
+AppSupportURL=https://github.com/blackdeep-tech/knaif/issues
+AppUpdatesURL=https://github.com/blackdeep-tech/knaif/releases
+AppContact=knaif@blackdeep.tech
+AppReadmeFile={app}\README.txt
+; setup.exe's Properties -> Details tab is blank without these, and that tab is exactly what a
+; cautious user checks after the SmartScreen prompt (F5).
+VersionInfoVersion={#AppVersion}
+VersionInfoCompany=Blackdeep Technologies Ltd.
+VersionInfoProductName=knaif
+VersionInfoDescription=knaif installer
+VersionInfoCopyright=Copyright 2026 Blackdeep Technologies Ltd.
 DefaultDirName={#DefaultDir}
 DisableProgramGroupPage=yes
 ; Refuse to install over a running CLI. Without this an upgrade hits a locked bin\knaif.exe and
@@ -96,6 +112,15 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName=knaif {#AppVersion}{#TestSuffix}
 LicenseFile={#Stage}\LICENSE
+; A last page that says what to do next (F10). ChangesEnvironment only reaches processes started
+; after the broadcast, so the PATH task genuinely does not work in a terminal the user already had
+; open — and with [Icons] deliberately empty, the wizard would otherwise finish offering nothing.
+; Compile-time content from the repo, not staged into {app}. NB the command is `skills deps`;
+; there is no `knaif doctor` subcommand.
+InfoAfterFile=postinstall.txt
+; setup.exe's own icon. The same .ico is embedded into knaif.exe by apps/cli/build.rs, so the
+; installer, the executable and the Add/Remove Programs row (UninstallDisplayIcon) all match.
+SetupIconFile=..\..\media\knaif.ico
 
 [Types]
 Name: "full"; Description: "Full installation (all skills)"
@@ -136,6 +161,9 @@ Name: "getmodel"; Description: "Download the knaif AI model now — {#DefaultMod
 Source: "{#Stage}\bin\*";     DestDir: "{app}\bin";    Components: core; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Stage}\contracts\*";  DestDir: "{app}\contracts"; Components: core; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Stage}\LICENSE";   DestDir: "{app}";        Components: core; Flags: ignoreversion
+; NOTICE is an Apache-2.0 §4(d) obligation, not documentation — it must land in the installed tree
+; alongside LICENSE. installers/smoke.sh asserts both are staged.
+Source: "{#Stage}\NOTICE";    DestDir: "{app}";        Components: core; Flags: ignoreversion
 Source: "{#Stage}\README.txt";DestDir: "{app}";        Components: core; Flags: ignoreversion
 Source: "{#Stage}\licenses\*";DestDir: "{app}\licenses";Components: core; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Skills (runtime data only) — one component each.

@@ -100,4 +100,17 @@ case "$out" in
   *) fail "plan --json did not emit a JSON plan envelope, got: $out" ;;
 esac
 
+# 6. legal attribution actually ships. Apache-2.0 §4(a) requires LICENSE and §4(d) requires NOTICE
+# to travel with every redistribution; NOTICE also carries the Qwen3 derivation attribution for the
+# models knaif downloads. NOTICE was absent from every artifact on every OS until 2026-07-26 (F11)
+# precisely because nothing executed it — a file that must ship but that no test reads is the kind
+# that stops shipping unnoticed. This is that test.
+# NB: $ROOT is the repo, not the artifact — checking there would pass unconditionally and assert
+# nothing. The artifact root is the parent of the bin/ dir $BIN was found in.
+ART="$(cd "$(dirname "$BIN")/.." && pwd)"
+for f in LICENSE NOTICE; do
+  [ -f "$ART/$f" ] || fail "$f is missing from the artifact (Apache-2.0 requires it to ship)"
+done
+echo "  ok  LICENSE + NOTICE present"
+
 echo "PASS: $(basename "$ARTIFACT") (v$VER)"

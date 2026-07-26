@@ -1,0 +1,22 @@
+knaif is installed.
+
+OPEN A NEW TERMINAL before using it. If you chose "Add knaif to my PATH", that change
+only reaches programs started afterwards — terminals you already had open will not
+find the command until they are restarted.
+
+Then check what the skills need on this machine:
+
+    knaif skills deps
+
+That reports which external tools (ffmpeg, Ghostscript, LibreOffice, Tesseract) each
+skill uses and which are missing. knaif never installs them behind your back.
+
+To download the AI model later, if you skipped it during setup:
+
+    knaif models pull knaif-qwen3-4b-v1
+
+If you did not add knaif to PATH, run it by full path instead:
+
+    %LOCALAPPDATA%\Programs\knaif\bin\knaif.exe
+
+Docs and issues: https://github.com/blackdeep-tech/knaif

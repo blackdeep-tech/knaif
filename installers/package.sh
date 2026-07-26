@@ -208,6 +208,10 @@ EOF
   OUT_ART="dist/$NAME.tar.gz"
   tar czf "$OUT_ART" -C dist/staging "$NAME"
   echo "Created $OUT_ART ($(du -h "$OUT_ART" | cut -f1)) [kind=cuda payload]"
+  # Deliberately no LICENSE/NOTICE here, unlike the full artifacts below: this payload ships no
+  # knaif Apache-2.0 code — only llama.cpp's CUDA backend and NVIDIA's redistributables, whose
+  # notices are staged into licenses/ above. Apache-2.0 §4(d) attaches to redistributing the Work,
+  # which this is not. Revisit if the payload ever carries knaif-authored binaries.
   exit 0
 fi
 
@@ -318,6 +322,11 @@ done
 cp contracts/runtime/core_tools.yaml "$STAGE/contracts/runtime/"
 cp contracts/models/model-manifest.yaml "$STAGE/contracts/models/"
 cp LICENSE "$STAGE/"
+# NOTICE ships beside LICENSE, not instead of it. Apache-2.0 §4(d) requires the NOTICE file to
+# travel with every redistribution, and this is the file carrying the Qwen3 derivation attribution
+# for the models knaif downloads. It was missing from every artifact on every OS until 2026-07-26
+# (F11); installers/smoke.sh now asserts both files are present so it cannot silently stop again.
+cp NOTICE "$STAGE/"
 
 # Third-party license notices. Rust deps always; llama.cpp for any inference build; NVIDIA redist
 # for CUDA; PDFium for pdfium builds. (installers/licenses/ is the committed source; regen the Rust
@@ -348,6 +357,14 @@ esac
 
 cat > "$STAGE/README.txt" <<EOF
 knaif $VER — native CLI ($OS-$ARCH${SUFFIX})
+
+knaif turns a natural-language request into a validated, executable action plan: the
+model only proposes the plan, and deterministic code validates, confirms and runs it.
+
+Maintained by Blackdeep Technologies Ltd. — https://blackdeep.tech
+License:  Apache-2.0 (see LICENSE; NOTICE carries required attribution).
+          licenses/ holds third-party notices for bundled components.
+Issues:   https://github.com/blackdeep-tech/knaif/issues
 
 Quick start:
   bin/$EXE skills list                        list available skills

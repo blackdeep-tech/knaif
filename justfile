@@ -172,6 +172,13 @@ gen-skills:
 gen-skills-check:
     uv run python scripts/gen_skills.py --check
 
+# Regenerate media/knaif.ico from media/logo-square.png (run after changing the logo).
+# Deliberately NOT part of `just check`: Pillow is not a dev dependency, and gating every check
+# run on an ephemeral download to verify an asset that changes once a year is a bad trade.
+# `--check` exists for the day that calculus changes.
+gen-icon *args:
+    uv run --with pillow python scripts/gen_icon.py {{args}}
+
 # --- Grouped recipes (Python authoring + native release runtimes) ---
 
 # Python lint (grouped naming used by CI); delegates to `lint`

@@ -72,3 +72,8 @@ image = "0.25"
 # SECURITY_ATTRIBUTES and HANDLE. Already in the graph transitively; these features add nothing
 # measurable to build time.
 windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_Security", "Win32_Foundation"] }
+# Embeds VERSIONINFO (and later the icon) into knaif.exe. Declared unconditionally rather than
+# under [target.'cfg(windows)'.build-dependencies]: a build-dependency cfg is evaluated for the
+# HOST, so a Linux->Windows cross build would skip the crate while still targeting Windows, and
+# the build script would fail to compile. apps/cli/build.rs gates on CARGO_CFG_TARGET_OS instead.
+winresource = "0.1"
