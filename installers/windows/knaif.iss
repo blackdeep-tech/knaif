@@ -163,6 +163,17 @@ begin
   Result := not FileExists(ExpandConstant('{%USERPROFILE}\.knaif\models\{#DefaultModelFile}'));
 end;
 
+{ Pre-select "I accept the agreement" on the license page. Inno has no directive for this — the
+  radio defaults to "I do not accept" and can only be flipped from code, each time the page is
+  shown (so it also re-applies after Back). The license is Apache-2.0, a permissive grant that
+  requires no click-through assent; the page is informational, and defaulting to refusal just adds
+  a step every user has to undo. }
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpLicense then
+    WizardForm.LicenseAcceptedRadio.Checked := True;
+end;
+
 function NeedsAddPath(PathDir: string): Boolean;
 var
   OrigPath: string;
