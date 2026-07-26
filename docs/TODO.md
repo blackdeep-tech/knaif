@@ -433,6 +433,65 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **A `destructive` SDK example** — `clock` is read-only, so the gate has no example
     coverage (ffmpeg/io tests cover the machinery). ~30 lines: saved-zones `save`/`forget`.
     Trigger: wanted for docs; otherwise leave it.
+- [ ] **Windows installer polish — two P0s found in a live 1.0.1 install session (2026-07-25).**
+  Plan: [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md).
+  **(a)** The `deps\*` winget tasks name a parent task `deps` that is never declared, so they render
+  as children of the checked "Add to PATH" task — which **defeats their `Flags: unchecked`**:
+  Ghostscript (AGPL) and LibreOffice (~350 MB) come up pre-checked against the script's stated
+  intent, and their `GroupDescription` never renders. Fix is flat task names, *not* a parent task
+  (Inno force-checks children of a checked parent). **(b)** Nothing detects or repairs a missing
+  `{AppId}_is1` key: with it absent there is no Add/Remove Programs row and an upgrade degrades to
+  the *"folder already exists"* warning. A fresh install writes the key correctly — the gap is that
+  a machine once in that state (the Windows dev box is) can never get out of it.
+  Also: `getmodel` is offered when the GGUF already exists (`Check: NeedsModel` is on the `[Run]`
+  entry but not the `[Tasks]` entry), no `.ico`/VERSIONINFO anywhere (`knaif.exe` `FileVersion` is
+  blank), the signing path (W4, blocked on a cert decision), and a placeholder `AppPublisherURL`.
+  License-accept default already fixed 2026-07-25.
+  **Five more added on a follow-up script cross-read (2026-07-25):** **(c0) P0, licensing:**
+  `package.sh` never stages **`NOTICE`** — it copies `LICENSE` and `licenses/` and stops, so the
+  Apache-2.0 §4(d) attribution file (which carries the Qwen3 derivation notice for the shipped
+  models) is in no artifact on any OS. One `cp`, plus a `smoke.sh` assertion so it cannot silently
+  stop shipping again; **(c)** nothing in the installed
+  tree says what knaif *is* or who maintains it — the `README.txt` `package.sh` generates is pure
+  quick-start, so this one is **not Windows-only** and fixing it fixes all three OS artifacts;
+  **(d)** no `[InstallDelete]`, so reinstalling with a skill deselected leaves it installed and still
+  listed by `skills list`; **(e)** `ArchitecturesAllowed=x64compatible` silently accepts ARM64
+  Windows and runs inference under emulation with no warning — decide warn-and-allow vs `x64os`;
+  **(f)** `ChangesEnvironment` never reaches already-open terminals and no finish page says so.
+  New **W6** adds an `.iss` lint to `python/core/tests/` (parent-task, `Tasks:`/`Components:`/`Check:`
+  references) so the (a) class cannot recur — W1's only guard today is "verify by eye", which is
+  exactly how (a) shipped.
+  **Owner decisions 2026-07-25, both now closed:** the copyright holder is
+  **Blackdeep Technologies Ltd.**, and this one is **already applied** — root + `python/core/` copies
+  of `LICENSE` and `NOTICE` all carry it; `LICENSE:189` had said *"knaif contributors"*, the
+  jointly-owned-project convention, which was never accurate and contradicted `NOTICE`. Open
+  follow-up: when a signing cert is issued, reconcile the installer's `AppPublisher` with the **cert
+  subject** (a CA renders a Bulgarian ЕООД from registry records, likely "EOOD" not "Ltd.") — those
+  two are what Windows shows side by side; the copyright notices need no such match. And
+  **knaif stays OSS** — a future
+  commercial product would *use* Apache-2.0 knaif rather than relicense it, so **SignPath Foundation**
+  is confirmed for signing and **no CLA is ever needed** (Apache-2.0 §5 covers inbound contributions;
+  a DCO is the lightweight option if outside PRs start). Surviving constraint: a proprietary UI must
+  ship as its **own** signed artifact, never folded into the Foundation-signed knaif installer.
+- [ ] **Spinner claims "CPU" and "first run" on every real run — both wrong (cosmetic; 1.0.2).**
+  `thinking_spinner()` (`apps/cli/src/main.rs:295`) hardcodes *"Loading model and planning (first
+  run on CPU can take a minute)…"* with no backend check, so a Vulkan or CUDA run is told it is on
+  the CPU. The genuine CPU-only warning a few lines away (`main.rs:487`) **is** correctly gated on
+  `knaif_llm::gpu_present(...) == Some(false)`; the spinner simply never consults it. Fix: hoist
+  that one `gpu_present` call (calling it a second time would double-print its probe under
+  `--verbose`) and branch the spinner text on the result. Only visible without `--verbose`, since
+  `main.rs:496` suppresses the spinner when llama.cpp is printing its own trace.
+  **"first run" is independently wrong**, on any backend: every `knaif run` is a fresh process that
+  re-reads the GGUF, re-uploads weights to VRAM, re-allocates the KV cache and re-prefills the
+  planner prompt, so runs do not get cheaper with repetition. Measured 2026-07-25, packaged v1.0.1
+  artifact on an RTX 3070 Laptop (Vulkan, `knaif-qwen3-4b-v1` Q4_K_M): **7.73 / 7.06 / 6.84 s**
+  over three consecutive runs — flat, fastest last. Repeat runs can only get cheaper once the
+  **persistent inference daemon** exists, which is explicitly out of scope in
+  [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
+  So the wording should lose "first run" as well as the unconditional "on CPU".
+  **Deliberately not fixed in 1.0.1:** `v1.0.1` is already tagged, pushed, and protected by the
+  `release-tags` ruleset (the tag cannot be moved), and `CHANGELOG.md` states the native runtime is
+  unchanged in 1.0.1 — a spinner string does not justify falsifying either.
 - [ ] **ffmpeg consolidation** — `_standard_pipeline` builder, `$var.field` over dict-unwraps,
   `_append_codec_flags`, test fixtures (~1,000 removable lines).
 - [ ] **Constrain `container` (and friends) with `arg_value_sets`.** `convert_video.container`
