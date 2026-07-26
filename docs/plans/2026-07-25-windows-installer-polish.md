@@ -222,12 +222,12 @@ artifacts**.
   | `VersionInfoCompany` | `Blackdeep Technologies Ltd.` | as above |
 
   - [ ] **Reconcile `AppPublisher` with the certificate subject when W4 lands — not before.** The
-    cert subject is **not self-declared**: the CA issues it from official registry records, and a
-    Bulgarian ООД/ЕООД is commonly rendered **OOD/EOOD** there rather than "Ltd.". Windows shows the
+    cert subject is **not self-declared**: the CA issues it from official registry records, so it
+    is worth reading the issued cert rather than assuming it matches. Windows shows the
     cert subject as the *verified publisher* in the SmartScreen/UAC prompt while Add/Remove Programs
     shows `AppPublisher`, so **those two are the pair that must agree** — a user comparing them has
-    no way to tell a benign mismatch from a malicious one. If the issued cert says something other
-    than "Ltd.", change `AppPublisher` to match the cert, and **leave the copyright notices alone**:
+    no way to tell a benign mismatch from a malicious one. If the issued cert differs from
+    `AppPublisher`, change `AppPublisher` to match it, and **leave the copyright notices alone**:
     `LICENSE`/`NOTICE` are ownership statements with no matching requirement against a certificate.
 - [ ] **Give the wizard a last page that says what to do next** *(F10)*: `InfoAfterFile` (or a custom
   finished label) carrying **"open a new terminal, then `knaif skills deps`"** — *there is no

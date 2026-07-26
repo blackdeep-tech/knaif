@@ -466,8 +466,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
   of `LICENSE` and `NOTICE` all carry it; `LICENSE:189` had said *"knaif contributors"*, the
   jointly-owned-project convention, which was never accurate and contradicted `NOTICE`. Open
   follow-up: when a signing cert is issued, reconcile the installer's `AppPublisher` with the **cert
-  subject** (a CA renders a Bulgarian ЕООД from registry records, likely "EOOD" not "Ltd.") — those
-  two are what Windows shows side by side; the copyright notices need no such match. And
+  subject**, since the CA issues that subject from registry records rather than letting it be
+  self-declared — those two are what Windows shows side by side; the copyright notices need no
+  such match. And
   **knaif stays OSS** — a future
   commercial product would *use* Apache-2.0 knaif rather than relicense it, so **SignPath Foundation**
   is confirmed for signing and **no CLA is ever needed** (Apache-2.0 §5 covers inbound contributions;
