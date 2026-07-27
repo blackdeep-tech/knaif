@@ -219,6 +219,42 @@ be isolated:
 ISCC /DKind=cpu /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
 ```
 
+- **Uninstall every test build when done.** A throwaway-`AppId` install that sits in the *default*
+  directory is its own hazard: the real installer does not recognise it as a prior version, so it
+  installs over the same tree and leaves **two Add/Remove Programs rows sharing one directory**,
+  where uninstalling either one breaks the other. Pass `/DIR=<scratch>` or remove the test build
+  before building release artifacts.
+
+### Exercise the upgrade path — every release, not once
+
+**Two of the installer's directives only ever run on an upgrade, so a fresh install proves nothing
+about them:**
+
+- **`[InstallDelete]`** is a no-op on a fresh install, because none of the four target directories
+  exist yet. It is a destructive section, and an upgrade is the only time it actually deletes.
+- **`AppMutex`** is never triggered without a running `knaif.exe`. If its string and
+  `hold_app_mutex` in `apps/cli/src/main.rs` ever drift apart, the directive silently does nothing
+  and an upgrade over a running CLI goes back to being deferred to reboot with no signal.
+
+Do this under a throwaway `AppId`, against a scratch directory, with **two** builds:
+
+```bash
+# 1. baseline
+ISCC /DAppVersion=<prev> /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
+# install it, then leave `knaif.exe` running in a terminal
+
+# 2. the upgrade
+ISCC /DAppVersion=<new> /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
+```
+
+Assert, in order: setup **refuses to proceed while the CLI is running** (`AppMutex`); after closing
+it, **no *"folder already exists"* warning**; the directory is reused from `InstallLocation`; the
+Add/Remove row's `DisplayVersion` advances to the new version rather than adding a second row; and
+`{app}\bin` contains no library left over from the previous build. Then uninstall the test build.
+
+Each `ISCC` run needs its `dist\staging\knaif-<ver>-windows-x64` to exist — copy the staged tree to
+the second version's name rather than rebuilding, since the payload is irrelevant to this check.
+
 Then, per artifact set:
 
 - **Artifact hygiene** — no `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/`notebook`

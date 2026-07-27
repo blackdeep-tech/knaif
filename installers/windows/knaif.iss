@@ -75,6 +75,7 @@ AppVersion={#AppVersion}
 ; string once W4 signs, and a user comparing the two has no way to tell a benign mismatch from a
 ; malicious one. When a certificate is issued, reconcile AppPublisher with the CERT SUBJECT and
 ; leave LICENSE/NOTICE alone: those are ownership statements with no matching requirement.
+; Tracked in docs/plans/2026-07-27-code-signing.md (S3).
 AppPublisher=Blackdeep Technologies Ltd.
 AppPublisherURL=https://blackdeep.tech
 AppSupportURL=https://github.com/blackdeep-tech/knaif/issues
@@ -98,8 +99,8 @@ DisableProgramGroupPage=yes
 ; Global\ namespace for either.
 AppMutex=knaif-cli-running
 SetupMutex=knaif-setup-{#AppIdGuid}
-; Give Add/Remove Programs the product icon rather than a generic one. W3 puts a real icon into
-; knaif.exe; until then this still beats Inno's default.
+; Give Add/Remove Programs the product icon rather than a generic one. apps/cli/build.rs embeds the
+; same media/knaif.ico into knaif.exe, so the row, the exe and setup.exe all show one mark.
 UninstallDisplayIcon={app}\bin\knaif.exe
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -198,8 +199,10 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 ; The command lists below MIRROR `dependencies.external_tools` in skills/<skill>/skill.yaml, which is
 ; the source of truth. `ShouldInstallAll` is `all_required: true` (distinct binaries, every one
 ; needed); `ShouldInstallAny` is the default (alternative names for one binary, any one satisfies).
-; These lists are duplicated here because ISPP cannot read YAML — W6 adds the test that asserts the
-; two agree.
+; These lists are duplicated here because ISPP cannot read YAML; python/core/tests/test_installer_iss.py
+; asserts the two agree — commands, all_required-vs-alias semantics, and the task's default checked
+; state against the tool's `required` flag. Change a list here and that test tells you which contract
+; it no longer matches.
 Filename: "winget"; Parameters: "install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing FFmpeg via winget (this can take a minute)..."; Flags: shellexec waituntilterminated; \
     Tasks: depsffmpeg; Check: ShouldInstallAll('ffmpeg,ffprobe')

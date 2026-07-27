@@ -324,6 +324,22 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
+- [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
+  [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
+  2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
+  is what it means, as opposed to `x64os`. So an ARM64 box installs the x64 build and runs llama.cpp
+  inference under Prism emulation, silently, with the `ggml-cpu-*` variant dispatch selecting against
+  an emulated CPUID. **The decision is settled (2026-07-25): warn and allow** — keep
+  `x64compatible`, add an `IsArm64` check in `InitializeSetup` (the function exists in the installed
+  Inno 6) showing a one-time *"this is an x64 build; it will run under emulation and inference will be
+  slow"* message with continue/cancel. `x64os` was rejected: a slow knaif beats no knaif, and
+  `skills list` / `skills deps` / `models pull` are unaffected by emulation. Today's behaviour is the
+  one shape that is both slow **and** silent.
+  **Blocked on:** no ARM64 machine to test on. A wizard path that cannot be exercised is how F1 and
+  F2 reached users, and this lands in `InitializeSetup` — the procedure that already gates every
+  install, including the stale-install rescue. Do it when a box exists, or drop it if a native ARM64
+  artifact ships first and makes it moot.
+
 - [x] **Close `feature/native-implemetation` (native v1 release) — MERGED to `dev` 2026-07-19 (PR #39).**
   The branch is closed; the two downstream plans in the sequence (OSS-prep, post-v1 CI) remain live,
   tracked as their own plans below. Single closeout plan:
