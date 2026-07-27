@@ -72,12 +72,26 @@ WINDOWS_PROVIDED = {
     "ws2_32.dll",
 }
 
-# Installed by the GPU driver, never by us and never by Windows. Only ever imported by a
-# *loadable* backend (`ggml-vulkan.dll`, `ggml-cuda.dll`), which the runtime probes and skips
-# when it fails to load — so a box without the driver degrades to CPU instead of dying. An
-# import of one of these from `knaif.exe` or a core lib would be a real bug, so the check
-# below only tolerates them in a `ggml-*` backend.
-DRIVER_PROVIDED = {"vulkan-1.dll", "nvcuda.dll", "cudart64_12.dll", "cublas64_12.dll"}
+# Installed by the GPU DRIVER — never by us, never by Windows. Only a *loadable* backend may
+# import one: the runtime probes those and skips a backend that fails to load, so a box with no
+# driver degrades to CPU instead of dying. An import from `knaif.exe` or a core lib would be a
+# hard startup failure, so LOADABLE_ONLY below is enforced by name, not by prefix.
+#
+# NB the CUDA *runtime* libs (`cudart64_*`, `cublas64_*`, `cublasLt64_*`) are deliberately NOT
+# here. They are redistributable payload that `installers/package.sh` copies into the artifact
+# from $CUDA_PATH — so they must be STAGED, and allowlisting them would invert the check and
+# pass an artifact whose CUDA payload is missing. `nvcuda.dll` is the actual driver entry point
+# and is the only NVIDIA library that legitimately comes from the machine.
+DRIVER_PROVIDED = {"vulkan-1.dll", "nvcuda.dll"}
+
+# The libraries staged as *core* by package.sh. These are hard imports of `knaif.exe`, loaded at
+# process start, so nothing in this set may depend on a GPU driver. Everything else matching
+# `ggml-*` is a loadable backend (`ggml-cpu-*`, `ggml-vulkan`, `ggml-cuda`) — mirroring the
+# staging logic in package.sh, which excludes exactly `ggml-base` from the backends glob.
+#
+# Matching on the `ggml-` prefix alone would wrongly classify `ggml-base.dll` — a core lib — as
+# loadable, and let a GPU-driver import into the startup path unnoticed.
+CORE_LIBS = {"ggml-base.dll", "ggml.dll", "llama.dll", "llama-common.dll"}
 
 PE_SUFFIXES = {".exe", ".dll"}
 
@@ -120,7 +134,7 @@ def imported_dlls(path: Path) -> list[str]:
     def to_offset(rva: int) -> int | None:
         for virt_addr, size, raw_ptr in sections:
             if virt_addr <= rva < virt_addr + size:
-                return raw_ptr + (rva - virt_addr)
+                return int(raw_ptr + (rva - virt_addr))
         return None
 
     def read_cstr(offset: int) -> str:
@@ -175,15 +189,18 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  ok   {binary.name} -> {dll} ({where})")
                 continue
             if dll in DRIVER_PROVIDED:
-                # Tolerated only in a loadable backend, which the runtime skips when the
-                # driver is absent. A core lib importing this would hard-fail at startup.
-                if binary.name.lower().startswith("ggml-"):
+                # Tolerated only in a loadable backend, which the runtime skips when the driver
+                # is absent. `ggml-base.dll` is a CORE lib despite the ggml- prefix, so it is
+                # excluded here — a driver import from the startup path is a hard failure.
+                name = binary.name.lower()
+                if name.startswith("ggml-") and name not in CORE_LIBS:
                     if args.verbose:
                         print(f"  ok   {binary.name} -> {dll} (gpu driver, loadable backend)")
                     continue
                 failures.append(
                     f"{binary.name} imports {dll}, which only a loadable ggml-* backend may "
-                    "depend on — a core binary must not need a GPU driver to start"
+                    "depend on. This binary is loaded at process start, so a machine without "
+                    "the driver would fail to launch knaif at all"
                 )
                 continue
             failures.append(

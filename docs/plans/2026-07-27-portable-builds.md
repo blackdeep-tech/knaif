@@ -1,4 +1,4 @@
-# Portable Builds — pinned release environments for Linux and Windows
+# Portable Builds — floor-pinned release environments for Linux and Windows
 
 **Status:** Planning · **Created:** 2026-07-27 · **Completed:** —
 **Owner:** packaging · **Ref:** [`installers/package.sh`](../../installers/package.sh) · [`installers/linux/build-appimage.sh`](../../installers/linux/build-appimage.sh) · [`installers/smoke.sh`](../../installers/smoke.sh) · [`docs/RELEASE.md`](../RELEASE.md)
@@ -22,7 +22,7 @@ repository instead of the state of one box.
 
 ## Decision log
 
-**2026-07-27 — the pinned container is a *release* tool, not a *development* tool.** `cargo build`,
+**2026-07-27 — the release container is a *release* tool, not a *development* tool.** `cargo build`,
 `just check`, `just test-native` and running the CLI stay **native, on whatever distro a contributor
 has**; Docker appears nowhere in the contribution path. `installers/package.sh` keeps working
 natively and unchanged, documented as *"the floor is your distro's glibc."* Only **cutting a
@@ -77,7 +77,7 @@ the exe. The alternative — having `setup.exe` run `vc_redist.x64.exe` — was 
 **Deliberately not bound to the CI plan.** When
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) lands `release.yml`, this
 image is what its Linux job runs. That is an *adoption* of this plan, not a dependency of it — a
-hand-cut release from the pinned container is a complete outcome, and 1.0.2 needs to ship before CI
+hand-cut release from the release container is a complete outcome, and 1.0.2 needs to ship before CI
 exists.
 
 ---
@@ -110,6 +110,27 @@ Ordered by what blocks the release. P1 and P2 are independent of the container w
 without it; P3 is what makes the Linux artifact worth publishing at all.
 
 ### - [x] P1 — Ship the Windows C runtime *(W1, W2 — shipped 2026-07-27)*
+
+> **Reopened and re-closed the same day after an external audit (2026-07-27).** Three real defects
+> in the first cut, all now fixed and re-verified:
+> - **The guard was never mandatory.** `package.sh` *claimed* in a comment that the checker "is run
+>   below" and did not run it at all; it executed only via `smoke.sh`, which is per-artifact, manual,
+>   and **passed silently when python was absent**. A guard that opts itself out on the machine
+>   lacking the tooling is worth nothing — that is the exact shape of the bug it exists to catch. It
+>   is now a **required packaging step** that hard-fails without python.
+> - **The allowlist could pass a fatal dependency.** Loadable backends were matched by the `ggml-`
+>   prefix, which also matches **`ggml-base.dll` — a core lib loaded at process start**. A GPU-driver
+>   import there would have passed while making the CLI unlaunchable. Now matched against an explicit
+>   `CORE_LIBS` set mirroring `package.sh`'s own staging split.
+> - **CUDA runtime libs were allowlisted as driver-provided**, inverting the check: `package.sh`
+>   *stages* `cudart64_*`/`cublas64_*` from `$CUDA_PATH`, so an artifact with a **missing** CUDA
+>   payload would have passed. Only `nvcuda.dll` (the actual driver) remains allowlisted.
+>
+> Also hardened: CRT discovery now prefers **`VCToolsRedistDir`** from the active developer
+> environment — Microsoft's documented method, and the only one that guarantees the runtime matches
+> the *compiler* rather than merely existing on the disk. The filesystem scan is a fallback that
+> announces itself, searches per-arch, and sorts versions with `sort -V` (lexically, `14.9` sorts
+> after `14.51` and `2022` after `18` — both the wrong answer).
 
 - [x] **Stage the four VC++ runtime DLLs beside the exe** in `package.sh`'s Windows branch:
       `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, `MSVCP140.dll` and **`VCOMP140.dll`** into `bin\`.
@@ -203,7 +224,20 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
       than adding a third copy of the mark. Keep the generator as the single path — the icon is a
       *generated* asset, like the licence reports.
 
-### - [ ] P3 — The pinned Linux release container *(L1, L5)*
+### - [ ] P3 — The Linux release container *(L1, L5)*
+
+> **"Pinned" is the wrong word until the inputs are pinned, so decide which this is.** As specified,
+> the image floats on three axes: the `ubuntu:22.04` **tag** (not a digest), a **live LunarG apt
+> repo**, and appimagetool's rolling **`continuous`** release. That still fixes the *glibc floor* —
+> which is the property this plan exists for — but it is **not** a reproducible build environment,
+> and calling it "pinned" would promise something it does not deliver.
+>
+> - [ ] **Pick one and say so.** Either (a) call it **floor-pinned**, accepting that tool inputs
+>   move, or (b) actually pin: base image by `sha256:` digest, the LunarG `shaderc` package by exact
+>   version, and appimagetool by URL plus a checksum verified in the Dockerfile. (b) costs a
+>   periodic bump and is the honest reading of "reproducible"; (a) costs nothing and is fine **if
+>   the wording everywhere stops claiming more**. Whichever is chosen, the *floor* guarantee holds —
+>   these are different properties and the plan should stop conflating them.
 
 - [ ] **`installers/linux/Dockerfile`** on **`ubuntu:22.04`** (**glibc 2.35**, verified), installing
       the eleven build packages plus `git`/`curl`/`ca-certificates`, the Rust toolchain via rustup,
@@ -221,13 +255,65 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
     then provably the tag with no local dirt — which is the direct answer to the stale
     `dist/staging` that produced a *"knaif contributors"* installer earlier in this cycle.
   - **Mount a cache volume** for `~/.cargo` and `target/`, or every run recompiles llama.cpp.
-- [ ] **Prove the floor rather than assume it.** Run the built artifact in a container *older* than
-      the build image — `docker run --rm -v <artifact>:/x ubuntu:22.04 /x/bin/knaif skills list`.
-      This is the Linux counterpart of P1's Sandbox check, and it is nearly free.
-- [ ] **Decide and record the supported floor.** glibc 2.35 covers Ubuntu 22.04+, Debian 12+,
-      Fedora 36+ and Mint 21. **RHEL/Rocky/Alma 9 is 2.34 and still misses** — accept that, or go
-      older and say so. Whatever is chosen goes in `site/docs/index.md` and the release body as a
-      stated requirement, not left for a user to discover.
+- [ ] **Prove the floor — both directions, with runnable commands.** An earlier draft of this bullet
+      said to test "in a container *older* than the build image" and then named `ubuntu:22.04`, which
+      **is** the build image; and it mounted `<artifact>` at `/x` then ran `/x/bin/knaif`, a path that
+      only exists for an already-extracted directory, not for a tarball or an AppImage. Both
+      corrected. A floor claim needs a **pass at the floor and a fail below it** — otherwise the
+      number is decoration:
+
+      ```bash
+      # extract once on the host
+      tar xzf dist/knaif-<ver>-linux-x64.tar.gz -C /tmp/floor
+      ./dist/knaif-<ver>-linux-x86_64.AppImage --appimage-extract   # -> squashfs-root/
+
+      # MUST PASS at the claimed floor (glibc 2.35)
+      docker run --rm -v /tmp/floor/knaif-<ver>-linux-x64:/x:ro ubuntu:22.04 /x/bin/knaif skills list
+      docker run --rm -v "$PWD/squashfs-root:/x:ro" ubuntu:22.04 /x/usr/bin/knaif skills list
+
+      # MUST FAIL below it — this is what proves the floor is real and not merely untested
+      docker run --rm -v /tmp/floor/knaif-<ver>-linux-x64:/x:ro ubuntu:20.04 /x/bin/knaif skills list
+      ```
+
+      The AppImage is tested **extracted**, because running it as a single file needs FUSE the
+      container does not have. That checks the payload's floor, not the AppRun wrapper — run the
+      `.AppImage` itself on a real desktop at least once.
+- [ ] **Audit the full ELF requirement set, not just glibc.** A glibc version is **not** sufficient
+      to claim a distro works. llama.cpp is C++, so the artifact also carries versioned `GLIBCXX_*`
+      and `CXXABI_*` requirements from `libstdc++`, plus whatever `DT_NEEDED` names must be resolved
+      by the host. A build on 22.04 links GCC 11's `libstdc++`, and a distro can satisfy glibc 2.35
+      while lagging on `GLIBCXX`. **Write the Linux counterpart of `scripts/check_pe_imports.py`** —
+      audit `DT_NEEDED` against what is staged plus a documented baseline, and report the maximum
+      required `GLIBC_` / `GLIBCXX_` / `CXXABI_` symbol version:
+      `readelf -dV`, or `objdump -T | grep -o 'GLIBCXX_[0-9.]*' | sort -V | tail -1`. Only then is
+      the compatibility table below a claim rather than a guess. **Decide too whether to bundle
+      `libstdc++.so.6`** — it removes the axis entirely at the cost of ~2 MB, exactly as the VC++
+      runtime does on Windows, and the symmetry is not an accident.
+- [ ] **Decide and record the supported floor**, *after* the audit above rather than from the glibc
+      number alone. glibc 2.35 reaches Ubuntu 22.04+, Debian 12+, Fedora 36+ and Mint 21;
+      **RHEL/Rocky/Alma 9 is 2.34 and still misses** — accept that or go older and say so. Whatever
+      is chosen goes in `site/docs/index.md` and the release body as a stated requirement, not left
+      for a user to discover.
+
+### - [ ] P3b — Choose a Windows floor *(the goal promises one for both OSes)*
+
+P1 made the Windows artifact self-contained; it did **not** pick a minimum Windows version. The
+plan's goal says "chosen and documented" for both platforms, and only Linux has a number. Left
+alone, the floor is whatever the allowlist happens to imply.
+
+- [ ] **State a minimum Windows version and put it beside the Linux floor.** The two constraints
+      that set it: the artifact imports the **UCRT** (`api-ms-win-crt-*`), an OS component **from
+      Windows 10 onward**, and Microsoft supports the v14 runtime on **Windows 10 and 11**. So
+      **Windows 10 x64** is the defensible claim. Record it in `site/docs/index.md`, the release
+      body, and `installers/windows/README.md`.
+- [ ] **Note what has actually been tested, which is not the floor.** The clean-room run was
+      Windows 11 24H2 — the *top* of the range. Testing the floor needs a Windows 10 image, and
+      until that exists the claim rests on Microsoft's support statement rather than on a run of
+      ours. Say so rather than implying both ends were exercised.
+- [ ] **Consider tying the allowlist to the claimed floor.** `check_pe_imports.py` accepts every
+      `api-ms-win-*` contract regardless of which Windows release introduced it, so a future
+      dependency on a newer API set would raise the real floor silently. Not urgent — the current
+      imports are long-standing — but the allowlist is where that check belongs if it is wanted.
 
 ### - [ ] P4 — Make portability testable, not incidental
 
