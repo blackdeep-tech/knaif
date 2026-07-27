@@ -286,13 +286,13 @@ Two items there are worth knowing about from here:
 - **W3's `AppPublisher` reconciliation** is carried in that plan's S3, since it can only be done once
   a certificate subject exists.
 
-### - [ ] W5 — Docs
+### - [x] W5 — Docs *(shipped 2026-07-27)*
 
-- [ ] [`installers/windows/README.md`](../../installers/windows/README.md) — its *Uninstall* section
+- [x] [`installers/windows/README.md`](../../installers/windows/README.md) — its *Uninstall* section
   describes upgrade behaviour that F1 shows can silently fail; add the detection dependency. Its
   *What the installer does* section also states the winget tools are optional, which F2 makes untrue
   in the shipped wizard — correct it when W1 lands, not before.
-- [ ] [`docs/RELEASE.md`](../RELEASE.md) — the new verification protocol below. *(Signing and the
+- [x] [`docs/RELEASE.md`](../RELEASE.md) — the new verification protocol below. *(Signing and the
   Microsoft submission step are [code-signing](2026-07-27-code-signing.md) S3's, not this plan's —
   do not wait for them to close W5.)*
 

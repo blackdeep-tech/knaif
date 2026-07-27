@@ -189,6 +189,36 @@ version `Cargo.toml` claims; `skills list` finds ffmpeg + documents via exe-rela
 `skills deps` probes (a `[MISS]` is a **pass** — it tests the probe, not the box); one offline mock
 `plan --json` emits a JSON envelope. It never downloads.
 
+`smoke.sh` also asserts **`LICENSE` and `NOTICE` are both in the artifact** — Apache-2.0 §4(a) and
+§4(d) respectively, and `NOTICE` carries the Qwen3 derivation attribution for the models knaif
+downloads. `NOTICE` was absent from every artifact on every OS through 1.0.1 precisely because no
+check read it.
+
+### Testing the Windows installer without damaging a real install
+
+The wizard cannot be verified silently — `/VERYSILENT` never builds the task tree, which is how
+pre-checked tasks shipped in 1.0.1 unnoticed. So installer changes need a GUI run, and that run must
+be isolated:
+
+- **Compile to a scratch dir** — `ISCC /O<scratch>`. Compiling to the default output overwrites
+  `dist/knaif-<ver>-windows-x64-setup.exe`, a **published artifact with a row in `SHA256SUMS`**; a
+  stray rebuild silently invalidates the published checksum.
+- **Always pass a throwaway `AppId`** — `ISCC /DAppIdGuid=<throwaway-guid>`. Inno treats two builds
+  sharing an `AppId` as the **same application** and derives the same `{AppId}_is1` uninstall key
+  from it, so without this a scratch install registers against the production key — and removing it
+  afterwards destroys the real install's Add/Remove Programs registration and its upgrade detection.
+  An overridden build labels itself *"(TEST BUILD)"* in Add/Remove Programs so the two cannot be
+  confused.
+- **Never delete the production `{AppId}_is1` key as cleanup.** Tear down the throwaway build's key
+  only.
+- **Never run the uninstaller with `/SUPPRESSMSGBOXES`** unless you mean it. It answers the
+  data-directory prompt with that prompt's default — which keeps `~/.knaif` from 1.0.2 onward, but
+  a 1.0.1-or-earlier uninstaller still on disk will delete a 2.5 GB model store.
+
+```bash
+ISCC /DKind=cpu /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
+```
+
 Then, per artifact set:
 
 - **Artifact hygiene** — no `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/`notebook`
@@ -280,9 +310,15 @@ time, so no re-upload is needed. Skill bundles are deliberately excluded from th
 
 ## 6. Notes for users (put these in the release body)
 
-**Windows SmartScreen.** v1 ships **unsigned** (an OV certificate is out of scope for v1), so
-Windows shows *"Windows protected your PC"*. Bypass: **More info → Run anyway**. Tell users to verify
-the checksum first — that, not the absence of a warning, is what proves the download is intact.
+**Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
+Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence
+of a warning, is what proves the download is intact.
+
+Signing is tracked in [`plans/2026-07-27-code-signing.md`](plans/2026-07-27-code-signing.md). Note
+that no certificate would make this prompt disappear on day one: Microsoft removed EV's
+instant-SmartScreen privilege in 2024, so every certificate type now accrues reputation per file
+hash through download volume. Signing is worth doing for integrity and enterprise allow-listing —
+not for the first-run prompt.
 
 **Checksum verification.**
 
