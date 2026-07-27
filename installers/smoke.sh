@@ -14,7 +14,7 @@
 # KNAIF_LLM_BACKEND=mock opts out of default-model auto-select, so a CI box that happens to have a
 # GGUF in ~/.knaif/models still tests the mock path rather than loading 2.5 GB.
 #
-# Usage: installers/smoke.sh <artifact.zip | artifact.tar.gz | staged-dir>
+# Usage: installers/smoke.sh <artifact.zip | .tar.gz | .AppImage | staged-dir>
 #   e.g. installers/smoke.sh dist/knaif-1.0.0-windows-x64.zip
 #        installers/smoke.sh dist/staging/knaif-1.0.0-linux-x64
 #
@@ -23,7 +23,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-[ $# -eq 1 ] || { echo "usage: installers/smoke.sh <artifact.zip|artifact.tar.gz|staged-dir>" >&2; exit 1; }
+[ $# -eq 1 ] || { echo "usage: installers/smoke.sh <artifact.zip|.tar.gz|.AppImage|staged-dir>" >&2; exit 1; }
 ARTIFACT="$1"
 [ -e "$ARTIFACT" ] || { echo "ERROR: no such artifact: $ARTIFACT" >&2; exit 1; }
 ARTIFACT="$(cd "$(dirname "$ARTIFACT")" && pwd)/$(basename "$ARTIFACT")"
@@ -45,6 +45,21 @@ case "$ARTIFACT" in
     fi
     ;;
   *.tar.gz|*.tgz) tar xzf "$ARTIFACT" -C "$WORK" ;;
+  *.AppImage)
+    # `--appimage-extract` is handled by the AppImage runtime itself and needs NO FUSE, so this
+    # works inside a container and on a box with no libfuse — which is exactly where a release
+    # artifact gets verified. It extracts to ./squashfs-root relative to the CWD, hence the
+    # subshell cd. The layout mirrors the tarball one level down (usr/bin/knaif, usr/LICENSE),
+    # and the BIN search plus the ART=dirname(BIN)/.. below both handle that unchanged.
+    #
+    # Until this existed the AppImage was the ONE artifact no check could open, and it is
+    # precisely the one that shipped without NOTICE for weeks after package.sh was fixed.
+    chmod +x "$ARTIFACT" 2>/dev/null || true
+    ( cd "$WORK" && "$ARTIFACT" --appimage-extract >/dev/null ) || {
+      echo "ERROR: --appimage-extract failed on $ARTIFACT" >&2
+      exit 1
+    }
+    ;;
   *)
     [ -d "$ARTIFACT" ] || { echo "ERROR: not an archive or directory: $ARTIFACT" >&2; exit 1; }
     cp -r "$ARTIFACT" "$WORK/"

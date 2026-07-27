@@ -46,7 +46,19 @@ cp -a "$STAGED/bin/." "$APPDIR/usr/bin/"
 for d in skills contracts licenses; do
   [ -d "$STAGED/$d" ] && cp -a "$STAGED/$d" "$APPDIR/usr/"
 done
-[ -f "$STAGED/LICENSE" ]    && cp "$STAGED/LICENSE" "$APPDIR/usr/"
+# LICENSE (Apache-2.0 §4(a)) and NOTICE (§4(d)) are BOTH distribution obligations, so both are
+# hard requirements rather than best-effort copies. NOTICE was missing here long after
+# installers/package.sh was fixed to stage it: the tarball became compliant and the AppImage —
+# assembled by this second script — silently did not. `installers/smoke.sh` could not catch that
+# either, because it had no way to unpack an .AppImage. Both halves are fixed together.
+for f in LICENSE NOTICE; do
+  [ -f "$STAGED/$f" ] || {
+    echo "ERROR: $STAGED/$f is missing — Apache-2.0 requires it to travel with the artifact." >&2
+    echo "       Re-stage with installers/package.sh; do not hand-copy it." >&2
+    exit 1
+  }
+  cp "$STAGED/$f" "$APPDIR/usr/"
+done
 [ -f "$STAGED/README.txt" ] && cp "$STAGED/README.txt" "$APPDIR/usr/"
 
 # AppRun: resolve our own mount dir and exec the CLI. Libs load via the exe's $ORIGIN RPATH.
@@ -68,10 +80,17 @@ Icon=knaif
 Categories=Utility;
 Terminal=true
 EOF
-# Minimal valid 1x1 PNG icon (appimagetool only needs the file to exist and match Icon=).
-base64 -d > "$APPDIR/knaif.png" <<'EOF'
-iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMEAYET4dfLAAAAAElFTkSuQmCC
-EOF
+# The product mark, 256x256 — the size desktops reach for in launchers and app grids. This was a
+# 1x1 transparent placeholder from before media/logo-square.png existed: appimagetool only checks
+# that the file is present and matches Icon=, so an invisible icon builds and ships perfectly
+# happily. Same source of truth as the Windows icon (scripts/gen_icon.py builds media/knaif.ico
+# from it), so the two platforms cannot drift apart.
+LOGO="$ROOT/media/logo-square.png"
+[ -f "$LOGO" ] || {
+  echo "ERROR: $LOGO not found — it is the source for both the AppImage icon and knaif.ico." >&2
+  exit 1
+}
+cp "$LOGO" "$APPDIR/knaif.png"
 
 mkdir -p dist
 OUT="dist/knaif-$VER-linux-$ARCH.AppImage"

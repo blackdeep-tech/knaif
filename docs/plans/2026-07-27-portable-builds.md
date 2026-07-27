@@ -211,15 +211,32 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
       allowlist split: the UCRT is an OS component, so accepting `api-ms-win-crt-*` while rejecting
       `VCRUNTIME140` was correct rather than a guess. Windows 11 24H2 (10.0.26100.8875).
 
-### - [ ] P2 — Finish F11 on Linux *(L2, L3, L4)*
+### - [x] P2 — Finish F11 on Linux *(L2, L3, L4 — shipped 2026-07-27)*
 
-- [ ] **Copy `NOTICE` into the AppDir** in `build-appimage.sh`, beside the existing `LICENSE` copy.
+> **Verified on Linux against a synthetic staged tree** (WSL, 2026-07-27) — a real Linux build
+> needs P3's container, but none of these three defects depend on a real binary, so waiting for it
+> would have been theatre:
+> - staged tree **without** `NOTICE` → `build-appimage.sh` **exits 1** naming the file; **with** it,
+>   exit 0. `NOTICE` confirmed present inside the built AppImage.
+> - `smoke.sh` opens the `.AppImage` and reaches **check 6** — the LICENSE+NOTICE assertion that
+>   previously had no way to see this artifact at all.
+> - the extracted icon measures **256×256**, not the 1×1 transparent placeholder.
+>
+> **Line endings are load-bearing here.** `installers/smoke.sh` briefly carried CRLF in the working
+> tree, and Linux refused to run it at all: the kernel reads the shebang literally, so a trailing
+> carriage return becomes part of the interpreter name and `env` reports it cannot find an
+> interpreter whose name ends in a stray CR. `.gitattributes` already declares `text eol=lf` for
+> these scripts and git stores LF, so a fresh clone — including one made **inside** the release
+> container, as P3 specifies — is correct. The hazard is confined to editing on Windows, and it is
+> one more reason the container clones the tag rather than mounting the Windows checkout.
+
+- [x] **Copy `NOTICE` into the AppDir** in `build-appimage.sh`, beside the existing `LICENSE` copy.
       One line. It is an Apache-2.0 §4(d) obligation and the last place F11 still survives.
-- [ ] **Teach `smoke.sh` to accept an `.AppImage`.** Unpack with `--appimage-extract` (no FUSE
+- [x] **Teach `smoke.sh` to accept an `.AppImage`.** Unpack with `--appimage-extract` (no FUSE
       needed, which matters in a container), then run the existing checks against the extracted
       `squashfs-root/usr/` tree. **Without this the fix above has no regression guard** — and L2
       exists precisely because there wasn't one.
-- [ ] **Give the AppImage the real icon.** `media/knaif.ico` is generated from `media/logo-square.png`
+- [x] **Give the AppImage the real icon.** `media/knaif.ico` is generated from `media/logo-square.png`
       by `scripts/gen_icon.py`; the AppImage wants a PNG, so render one from the same source rather
       than adding a third copy of the mark. Keep the generator as the single path — the icon is a
       *generated* asset, like the licence reports.
