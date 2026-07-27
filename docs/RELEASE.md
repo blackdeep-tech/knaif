@@ -75,11 +75,43 @@ blocks nothing; just do not promise Windows users the manual route.
 
 ## 2. Build & package
 
-### Linux (builds itself)
+### Linux — PUBLISHED artifacts are built in the container
+
+```bash
+just package-linux                  # builds HEAD's commit -> tar.gz + AppImage
+just package-linux --rev=v1.0.2     # builds that tag
+```
+
+**This is the only supported way to build a Linux artifact that gets published**, and it is the
+only step in the whole repo that needs Docker. It fixes the artifact's runtime floor instead of
+inheriting it from whoever happened to run the build — a maintainer on Arch (glibc 2.42) or Fedora
+42 (2.41) building natively ships a binary that starts on almost nothing, and **nothing warns
+them**. See [`installers/linux/Dockerfile`](../installers/linux/Dockerfile) for what is pinned.
+
+It checks out a **commit** into a clean tree inside the container rather than mounting the working
+copy, so uncommitted dirt cannot reach a published artifact, file modes come from git rather than
+from a 9p mount, and `.gitattributes` line endings are correct. `--dev` mounts the worktree instead,
+for iterating on packaging; never publish what it produces.
+
+### Linux — native build (local artifacts only)
+
+`installers/package.sh --kind=vulkan` still works natively on any distro. **The floor is then your
+own distro's**, which is fine for a local build and wrong for a release.
 
 Needs `build-essential pkg-config cmake ninja-build patchelf libclang-dev`; Vulkan also
 `libvulkan-dev glslc glslang-tools spirv-headers`; CUDA needs the toolkit (13.3 to match the
-bundled redist). AppImage needs `libfuse2t64` + `appimagetool`.
+bundled redist). AppImage needs `libfuse2`/`libfuse2t64` + `appimagetool`.
+
+> **That package list is right for 24.04 and wrong for anything older**, which is exactly why the
+> container exists. On Ubuntu 22.04: `glslc` **is not packaged by Ubuntu at all**; `libfuse2t64` is
+> **`libfuse2`** (the `t64` suffix arrived with 24.04's 64-bit `time_t` transition); and — the one
+> no amount of reading would have found — **22.04's Vulkan headers are 1.3.204 and llama.cpp's
+> Vulkan backend does not compile against them**, needing `VkPhysicalDeviceCooperativeMatrixFeaturesKHR`,
+> `LayerSettingsCreateInfoEXT` and `vk::DriverId::eMesaDozen`. The Dockerfile takes Vulkan headers,
+> loader, `spirv-headers`, `glslang-tools` and `shaderc` from **LunarG**, not from Ubuntu.
+>
+> A prose dependency list cannot be wrong in a way that stops the build. An executable one cannot be
+> wrong in a way that doesn't.
 
 - **A cached `llama-cpp-sys-2` build hides missing `-dev` packages.** cmake configure and bindgen
   run once and are then cached, so a box that built successfully can later lose `libclang-dev` or the
@@ -254,6 +286,47 @@ Add/Remove row's `DisplayVersion` advances to the new version rather than adding
 
 Each `ISCC` run needs its `dist\staging\knaif-<ver>-windows-x64` to exist — copy the staged tree to
 the second version's name rather than rebuilding, since the payload is irrelevant to this check.
+
+### Clean-room verification — REQUIRED, both OSes
+
+> **The rule these findings earned, which applies to every artifact shape added later:
+> a verification step that runs on the build box tests STAGING, never PORTABILITY.**
+> `installers/smoke.sh` executes the artifact on the machine that built it, so it can only ever
+> prove that machine can run it — and that machine has the full toolchain. Every 1.0.x Windows
+> binary imported `VCRUNTIME140`/`MSVCP140`/`VCOMP140` with none of them staged, and every Linux
+> binary needed `libgomp.so.1` unstaged, precisely because nothing ran anywhere else. A new
+> artifact shape (a second Linux format, macOS, a container image) needs its own clean-room run
+> before it is published.
+
+Two layers, and they are not redundant. The **static** checks read what a binary *requires* and run
+on any machine, so they fail where the mistake was made. The **clean-room** runs prove what a real
+loader *does*, and catch requirements nobody thought to look for. Each has caught something the
+other missed.
+
+```bash
+# Static — no VM, no container, runs anywhere. Both must exit 0.
+python scripts/check_pe_imports.py dist/staging/knaif-<ver>-windows-x64/bin
+python3 scripts/check_elf_deps.py  dist/staging/knaif-<ver>-linux-x64/bin
+
+# Dynamic — Linux, both artifacts, BOTH directions
+installers/linux/check-floor.sh dist/knaif-<ver>-linux-x64.tar.gz
+installers/linux/check-floor.sh dist/knaif-<ver>-linux-x86_64.AppImage
+```
+
+`check_elf_deps.py` prints the **measured** floor. Read it rather than assuming: the artifact
+requires `GLIBC_2.34`, **below** the 2.35 base image, and the binding constraint is
+`GLIBCXX_3.4.30` / `CXXABI_1.3.13` from `libstdc++` — *not* glibc. Any support table quoting a
+glibc number alone is measuring the wrong thing.
+
+`check-floor.sh` must **pass at the floor and fail below it**. One direction proves nothing about
+where support ends, and the failure must be a symbol-version error — the script rejects any other
+failure as inconclusive rather than counting it as success.
+
+**Windows: run the unpacked zip in Windows Sandbox** (`Containers-DisposableClientVM`) — a
+disposable VM with no developer tooling, which is the machine that reproduces a missing runtime.
+Drive it from a `.wsb` with the artifact mapped read-only, a writable folder for results, and a
+`LogonCommand`. Assert `knaif.exe skills list` exits 0; a missing runtime exits **-1073741515**
+(`0xC0000135`) printing nothing at all.
 
 Then, per artifact set:
 

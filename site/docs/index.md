@@ -388,12 +388,14 @@ deterministic domains, not a dull one for everything.
 
 | | |
 |---|---|
-| **Platforms** | Windows x64, Linux x64 |
+| **Windows** | x64, **Windows 10 or later** |
+| **Linux** | x64, **glibc 2.34+ and libstdc++ with `GLIBCXX_3.4.30`** — Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+ |
+| **Not supported** | RHEL / Rocky / Alma 9 — glibc is new enough, but its `libstdc++` is one version short |
 | **macOS** | not yet — core is cross-platform, packaging is a fast-follow |
 | **GPU** | CPU and Vulkan in every artifact; CUDA is a manual opt-in build |
 | **Skills** | `ffmpeg` and `documents` are production; `io` is stale and under rebuild |
-| **Windows binaries** | unsigned at v1 — SmartScreen will warn |
-| **Python package** | not on PyPI yet — install from a checkout for now |
+| **Windows binaries** | unsigned — SmartScreen will warn |
+| **Python package** | on PyPI — `pip install knaif` |
 
 External tools are **not bundled**. Skills that shell out to FFmpeg need FFmpeg installed;
 `knaif skills deps` reports what's missing.
@@ -402,8 +404,10 @@ External tools are **not bundled**. Skills that shell out to FFmpeg need FFmpeg 
 
 ## Getting started
 
-**As a tool** — the native CLI, a single binary, no Python needed. Download from
-[Releases](https://github.com/blackdeep-tech/knaif/releases), then:
+**As a tool** — the native CLI, no Python needed. Download from
+[Releases](https://github.com/blackdeep-tech/knaif/releases) — a `.zip` or installer on Windows,
+a `.tar.gz` or `.AppImage` on Linux. Everything it needs ships beside the binary, so unpack it
+anywhere and run:
 
 ```console
 $ knaif models pull knaif-qwen3-4b-v1        # ~2.5 GB, verified against a pinned SHA-256

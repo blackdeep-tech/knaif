@@ -293,6 +293,33 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
   [ "$OS" = linux ] && rpath_note=" (\$ORIGIN RPATH)"
   echo "  staged core libs + $n_be loadable backend(s) beside the exe$rpath_note"
 
+  # The GNU OpenMP runtime is NOT part of a base Linux system — it ships with GCC's runtime
+  # libraries (libgomp1), which a minimal install need not have. libggml-base and every
+  # ggml-cpu-* variant link it, so without it the artifact fails to load its CPU backends on a
+  # machine that merely lacks a compiler toolchain.
+  #
+  # This is the exact counterpart of VCOMP140.dll on Windows: same library, same set of binaries,
+  # missed for the same reason — it resolves on the build box because the build box has GCC.
+  # Found by scripts/check_elf_deps.py, not by running the artifact, because running it here
+  # could never fail.
+  #
+  # LICENCE: libgomp is GPLv3 **with the GCC Runtime Library Exception**, which exists precisely
+  # to allow shipping it alongside independent programs. No copyleft obligation propagates to
+  # knaif, and no additional notice file is required.
+  if [ "$OS" = linux ]; then
+    gomp="$(gcc -print-file-name=libgomp.so.1 2>/dev/null || true)"
+    [ -n "$gomp" ] && [ -e "$gomp" ] || {
+      echo "ERROR: libgomp.so.1 not found via gcc -print-file-name." >&2
+      echo "       Every ggml-cpu-* backend links it; the artifact would fail to load them on" >&2
+      echo "       any machine without GCC's runtime libraries installed." >&2
+      exit 1
+    }
+    # -L dereferences the symlink so the artifact carries the real file under its SONAME.
+    cp -L "$gomp" "$STAGE/bin/libgomp.so.1"
+    set_origin_rpath "$STAGE/bin/libgomp.so.1"
+    echo "  staged libgomp.so.1 (OpenMP runtime, not guaranteed present on a base system)"
+  fi
+
   # The Visual C++ runtime is NOT part of Windows and must ship beside the exe like every other
   # lib above. Without it the artifact dies at process start with STATUS_DLL_NOT_FOUND
   # (0xC0000135) printing nothing — confirmed in Windows Sandbox on a clean 11 24H2 image, where

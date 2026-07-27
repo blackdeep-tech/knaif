@@ -1,6 +1,6 @@
 # Portable Builds — floor-pinned release environments for Linux and Windows
 
-**Status:** Planning · **Created:** 2026-07-27 · **Completed:** —
+**Status:** Done · **Created:** 2026-07-27 · **Completed:** 2026-07-27
 **Owner:** packaging · **Ref:** [`installers/package.sh`](../../installers/package.sh) · [`installers/linux/build-appimage.sh`](../../installers/linux/build-appimage.sh) · [`installers/smoke.sh`](../../installers/smoke.sh) · [`docs/RELEASE.md`](../RELEASE.md)
 
 > **Why this plan exists now.** 1.0.2 will be the project's **first native release** — no GitHub
@@ -41,7 +41,10 @@ command.
   packages, so a box can package successfully while being broken. A fresh container structurally
   cannot have that failure; a long-lived hand-built distro is precisely where it hides.
 - **A Dockerfile *is* the dependency list**, in executable form. Writing it immediately surfaced two
-  errors in RELEASE.md's prose list (L5 below) that had been invisible for months.
+  errors in RELEASE.md's prose list (L5 below) that had been invisible for months — and *building*
+  it surfaced a third that no amount of reading would have (L6: the floor base's Vulkan headers are
+  too old to compile against). A prose list cannot be wrong in a way that stops the build; an
+  executable one cannot be wrong in a way that doesn't.
 
 **2026-07-27 — the floor is a property of the artifact, not of the builder's OS.** This is why the
 container is not a Windows workaround. A maintainer on Arch (glibc 2.42) or Fedora 42 (2.41) who
@@ -74,6 +77,31 @@ the exe. The alternative — having `setup.exe` run `vc_redist.x64.exe` — was 
 > of which is already contemplated as post-v1 work. This is a decision with an expiry condition, not
 > a permanent one.
 
+**2026-07-27 — do NOT bundle `libstdc++.so.6`; RHEL/Rocky/Alma 9 is documented as unsupported.**
+Taken *after* the ELF audit, which is what the earlier "audit first, then decide" deferral was for.
+The audit changed the shape of the question twice over:
+
+- **glibc was never the binding constraint.** The artifact requires `GLIBC_2.34` — *below* the
+  2.35 floor image — while `libstdc++` requires **`GLIBCXX_3.4.30`** and **`CXXABI_1.3.13`**. So
+  RHEL 9 (glibc 2.34, GLIBCXX 3.4.29) misses by **one libstdc++ version and nothing else**, and
+  bundling would genuinely bring the whole enterprise family in.
+- **It would still be the wrong trade.** Our `libstdc++` is GCC 12's; a modern host's Mesa/Vulkan
+  driver is commonly built against GCC 13/14 (`GLIBCXX_3.4.32`+). Because `libggml-vulkan.so`
+  **dlopens that driver**, forcing our older copy ahead of the system one via `$ORIGIN` can break
+  GPU support on the newest and most common desktops. That trades a real regression for
+  Ubuntu/Fedora users against reach for a distro nobody has yet asked for.
+
+**If enterprise reach is ever wanted, the right fix is a second artifact built on an `almalinux:9`
+base**, so the binary actually targets that toolchain instead of grafting a newer `libstdc++` onto
+a glibc-2.35 build. No driver risk, at the cost of a second Dockerfile and a fifth published
+artifact. Revisit on demand, not speculatively.
+
+**2026-07-27 — this release is 1.0.2 (patch), not 1.1.0.** It publishes the first-ever Linux
+artifacts and the project's first GitHub Release, which is arguably MINOR under semver — but **no
+runtime code changed**. Everything here is packaging correctness plus artifacts that should always
+have shipped, so the patch number is the honest description. The release notes carry the burden of
+explaining that a patch adds a platform.
+
 **Deliberately not bound to the CI plan.** When
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) lands `release.yml`, this
 image is what its Linux job runs. That is an *adoption* of this plan, not a dependency of it — a
@@ -94,13 +122,27 @@ Every row below was verified on 2026-07-27, not inferred. The *Verified* column 
 | **L2** | The AppImage ships **without `NOTICE`** — an Apache-2.0 §4(d) violation | [`build-appimage.sh:49`](../../installers/linux/build-appimage.sh#L49) copies `LICENSE` only. F11 was fixed in `package.sh`, so the staged tree and the tarball are compliant, but the AppImage is assembled from that tree by a **second script that was never updated** | Script read | **P0 — licence compliance** |
 | **L3** | Nothing catches L2 | `smoke.sh` accepts `.zip`, `.tar.gz` or a staged dir — **not `.AppImage`** ([`smoke.sh:17`](../../installers/smoke.sh#L17)). The LICENSE+NOTICE assertion cannot run against the one artifact that has the bug | Script read | P1 — the reason L2 survived |
 | **L4** | The AppImage's icon is a **1×1 transparent PNG** | A placeholder from before `media/knaif.ico` existed ([`build-appimage.sh:72`](../../installers/linux/build-appimage.sh#L72)). W3 gave Windows a real mark; Linux was never revisited | Script read | P2 |
-| **L5** | RELEASE.md's Linux dependency list is **wrong for any distro older than 24.04** | It names `glslc` (**not packaged on Ubuntu 22.04** — llama.cpp's Vulkan backend needs it, and cmake fails with *"Could NOT find Vulkan (missing: … glslc)"*) and `libfuse2t64` (**named `libfuse2`** before 24.04's 64-bit `time_t` rename) | `apt-cache policy` for all 11 packages inside `ubuntu:22.04` | P1 |
+| **L5** | RELEASE.md's Linux dependency list is **wrong for any distro older than 24.04**, in three ways | (a) `glslc` is **not packaged by Ubuntu at all**, and llama.cpp compiles its Vulkan shaders with it — cmake fails at configure with *"Could NOT find Vulkan (missing: … glslc)"*; (b) `libfuse2t64` is **`libfuse2`** before 24.04's 64-bit `time_t` rename; (c) **22.04's Vulkan headers (1.3.204, early 2022) are too old to build against** — see L6 | `apt-cache policy` for all 11 packages inside `ubuntu:22.04`; then a full build | P1 |
+| **L6** | The Vulkan backend **does not compile** on the floor base, and nothing short of a full build reveals it | `libvulkan-dev` on Ubuntu 22.04 is **1.3.204**. `ggml-vulkan.cpp` needs `VkPhysicalDeviceCooperativeMatrixFeaturesKHR`, `VkPhysicalDevicePipelineRobustnessFeaturesEXT`, `vk::LayerSettingsCreateInfoEXT` and `vk::DriverId::eMesaDozen`, none of which exist in those headers. Fixed by taking `vulkan-headers` / `libvulkan-dev` / `spirv-headers` / `glslang-tools` from **LunarG 1.4.313.0** instead of Ubuntu | Container build: dozens of *"was not declared in this scope"* errors in `ggml-vulkan.cpp`, then `ninja: build stopped` | **P0 for the container — it blocked the Linux artifact entirely** |
+
+| **C1** | `just package-linux --kind=cpu` after a `vulkan` build panics: `hard_link … AlreadyExists` | Every feature set gets its own `llama-cpp-sys-2` out dir but they all **hard-link into the same `target/release/`**. Its build.rs does `if !dst.exists() { hard_link(..).unwrap() }`, and `exists()` **follows symlinks** — a stale SONAME symlink left by the other kind reads as absent while still occupying the name. One shared cache volume therefore made kind-switching fail | Owner ran `--kind=cpu` against a warm cache | P1 — blocked a documented flag |
+| **C2** | A `--kind=cpu` run built an AppImage **from the leftover `vulkan` staging tree**, smoke-tested it, and printed `PASS` | The staged-dir glob `knaif-*-linux-x64` cannot match `…-linux-x64-cpu` (package.sh's SUFFIX rule), so it silently selected the unsuffixed vulkan tree. Every check then passed — on the wrong artifact | Same run: `dist/` held a cpu tarball beside a vulkan AppImage | **P0 — a mislabelled artifact that reports success.** Same shape as the stale `dist/staging` that once produced a "knaif contributors" installer |
+| **C3** | A **clean** Vulkan build is OOM-killed: `c++: fatal error: Killed signal terminated program cc1plus` | llama.cpp's generated shader TUs need 1–2 GB each in `cc1plus`; cargo defaults `NUM_JOBS` to the CPU count and the cmake crate passes it through as `--parallel 16`, against a **7.5 GB** Docker VM | Clean-volume rebuild after C1's fix. **An earlier "clean build works" claim in this plan was wrong** — that run had a partially warm cache | **P0 for releases — it only bites a from-scratch build**, i.e. exactly what cutting a release does |
 
 > **W1 and L2 are the same failure mode wearing different clothes**, and W2/L3 say why neither was
 > caught. In both cases a compliance-or-startup dependency is added in one place and a *second*
 > packaging path silently doesn't get it, while the verification step runs in the one environment
 > where the defect is invisible. **Every workstream below that fixes a defect also moves its check
 > somewhere the defect can actually occur.** That is the through-line of this plan.
+
+> **C1–C3 were found by the owner running `--kind=cpu`, after this plan was already marked done —
+> and they are the sharpest evidence for the plan's own thesis.** Each one passed every check I had
+> written. C2 is the worst: it produced a mislabelled artifact and reported `PASS`, because the
+> checks verified *an* artifact rather than *the* artifact. C3 is the most dangerous in practice,
+> because it is invisible until a from-scratch build — so the machine works for weeks and fails on
+> release day. Fixes: one cache volume **per kind** (structural, not documented-around), a staged
+> path derived from `$KIND` with the AppImage built only for the release kind, and build
+> parallelism capped by **memory** rather than CPU count.
 
 ---
 
@@ -241,22 +283,39 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
       than adding a third copy of the mark. Keep the generator as the single path — the icon is a
       *generated* asset, like the licence reports.
 
-### - [ ] P3 — The Linux release container *(L1, L5)*
+### - [x] P3 — The Linux release container *(L1, L5, L6 — shipped 2026-07-27)*
 
-> **"Pinned" is the wrong word until the inputs are pinned, so decide which this is.** As specified,
-> the image floats on three axes: the `ubuntu:22.04` **tag** (not a digest), a **live LunarG apt
-> repo**, and appimagetool's rolling **`continuous`** release. That still fixes the *glibc floor* —
-> which is the property this plan exists for — but it is **not** a reproducible build environment,
-> and calling it "pinned" would promise something it does not deliver.
+> **Owner decision 2026-07-27: fully pinned**, over the cheaper "floor-pinned" option that would
+> have left the `ubuntu:22.04` tag, a live LunarG repo and appimagetool's rolling `continuous`
+> build floating. Every input is now fixed:
 >
-> - [ ] **Pick one and say so.** Either (a) call it **floor-pinned**, accepting that tool inputs
->   move, or (b) actually pin: base image by `sha256:` digest, the LunarG `shaderc` package by exact
->   version, and appimagetool by URL plus a checksum verified in the Dockerfile. (b) costs a
->   periodic bump and is the honest reading of "reproducible"; (a) costs nothing and is fine **if
->   the wording everywhere stops claiming more**. Whichever is chosen, the *floor* guarantee holds —
->   these are different properties and the plan should stop conflating them.
+> | Input | Pin |
+> |---|---|
+> | base image | `ubuntu:22.04@sha256:0e0a0fc6d18f…5ef8982` |
+> | apt packages | `snapshot.ubuntu.com/ubuntu/20260727T000000Z` |
+> | Vulkan headers / loader | LunarG `1.4.313.0~rc1-1lunarg22.04-1` |
+> | spirv-headers / glslang / shaderc | LunarG, exact versions |
+> | appimagetool | `1.9.1`, `sha256:ed4ce84f…cb384eb0` |
+> | Rust | `1.96.0`, matching `rust-toolchain.toml` |
+>
+> **Three things pinning forced that a floating config never hits**, all found by building it:
+>
+> - **A TLS bootstrap step.** `snapshot.ubuntu.com` is HTTPS-only and the minimal `ubuntu:22.04`
+>   image ships **no CA bundle** — so apt cannot reach the snapshot until `ca-certificates` exists,
+>   which apt installs. The image now installs it from Ubuntu's default http sources first, then
+>   re-installs it from the snapshot so nothing unpinned survives. Integrity is unaffected: apt
+>   verifies by repository signature, not by TLS.
+> - **A checksum, not just a tag, for appimagetool.** It self-reports as a *continuous build dated
+>   2025-12-04* despite tag `1.9.1` being published **2025-11-18** — the GitHub API confirms the
+>   asset was **re-uploaded onto the existing tag**. A tag-only pin would have silently handed us
+>   different bytes; the checksum makes it deterministic, and a future substitution now fails the
+>   build loudly instead of drifting.
+> - **The security trade, written into the Dockerfile.** A fixed apt snapshot receives no security
+>   updates. Same shape as the app-local VC++ runtime decision, same remedy: bump deliberately, at
+>   least every release and immediately on a relevant CVE. Reproducibility and patching pull in
+>   opposite directions and the file says which one it chose.
 
-- [ ] **`installers/linux/Dockerfile`** on **`ubuntu:22.04`** (**glibc 2.35**, verified), installing
+- [x] **`installers/linux/Dockerfile`** on **`ubuntu:22.04`** (**glibc 2.35**, verified), installing
       the eleven build packages plus `git`/`curl`/`ca-certificates`, the Rust toolchain via rustup,
       and `appimagetool`. Two corrections that prose missed and a container caught:
   - **`glslc` is not packaged on 22.04.** Add **LunarG's jammy apt repo** and install `shaderc`,
@@ -265,14 +324,14 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
   - **`libfuse2t64` is `libfuse2`** before 24.04.
   - No FUSE device or extra container privileges are needed: `build-appimage.sh` already invokes
     `appimagetool --appimage-extract-and-run` ([line 81](../../installers/linux/build-appimage.sh#L81)).
-- [ ] **A `just` recipe** that builds the tarball and the AppImage inside it. Two constraints:
+- [x] **A `just` recipe** that builds the tarball and the AppImage inside it. Two constraints:
   - **Never bind-mount the Windows checkout.** `/mnt/c` is 9p **without the `metadata` option**, so
     every file reads `-rwxrwxrwx` and those modes would be baked into the tarball and the AppDir.
     For a release build, `git clone --depth 1 --branch <tag>` **inside** the container: the tree is
     then provably the tag with no local dirt — which is the direct answer to the stale
     `dist/staging` that produced a *"knaif contributors"* installer earlier in this cycle.
   - **Mount a cache volume** for `~/.cargo` and `target/`, or every run recompiles llama.cpp.
-- [ ] **Prove the floor — both directions, with runnable commands.** An earlier draft of this bullet
+- [x] **Prove the floor — both directions, with runnable commands.** An earlier draft of this bullet
       said to test "in a container *older* than the build image" and then named `ubuntu:22.04`, which
       **is** the build image; and it mounted `<artifact>` at `/x` then ran `/x/bin/knaif`, a path that
       only exists for an already-extracted directory, not for a tarball or an AppImage. Both
@@ -295,7 +354,7 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
       The AppImage is tested **extracted**, because running it as a single file needs FUSE the
       container does not have. That checks the payload's floor, not the AppRun wrapper — run the
       `.AppImage` itself on a real desktop at least once.
-- [ ] **Audit the full ELF requirement set, not just glibc.** A glibc version is **not** sufficient
+- [x] **Audit the full ELF requirement set, not just glibc.** A glibc version is **not** sufficient
       to claim a distro works. llama.cpp is C++, so the artifact also carries versioned `GLIBCXX_*`
       and `CXXABI_*` requirements from `libstdc++`, plus whatever `DT_NEEDED` names must be resolved
       by the host. A build on 22.04 links GCC 11's `libstdc++`, and a distro can satisfy glibc 2.35
@@ -306,33 +365,39 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
       the compatibility table below a claim rather than a guess. **Decide too whether to bundle
       `libstdc++.so.6`** — it removes the axis entirely at the cost of ~2 MB, exactly as the VC++
       runtime does on Windows, and the symmetry is not an accident.
-- [ ] **Decide and record the supported floor**, *after* the audit above rather than from the glibc
+- [x] **Decide and record the supported floor**, *after* the audit above rather than from the glibc
       number alone. glibc 2.35 reaches Ubuntu 22.04+, Debian 12+, Fedora 36+ and Mint 21;
       **RHEL/Rocky/Alma 9 is 2.34 and still misses** — accept that or go older and say so. Whatever
       is chosen goes in `site/docs/index.md` and the release body as a stated requirement, not left
       for a user to discover.
 
-### - [ ] P3b — Choose a Windows floor *(the goal promises one for both OSes)*
+### - [x] P3b — Choose a Windows floor *(shipped 2026-07-27)*
 
 P1 made the Windows artifact self-contained; it did **not** pick a minimum Windows version. The
 plan's goal says "chosen and documented" for both platforms, and only Linux has a number. Left
 alone, the floor is whatever the allowlist happens to imply.
 
-- [ ] **State a minimum Windows version and put it beside the Linux floor.** The two constraints
+- [x] **State a minimum Windows version and put it beside the Linux floor.** The two constraints
       that set it: the artifact imports the **UCRT** (`api-ms-win-crt-*`), an OS component **from
       Windows 10 onward**, and Microsoft supports the v14 runtime on **Windows 10 and 11**. So
       **Windows 10 x64** is the defensible claim. Record it in `site/docs/index.md`, the release
       body, and `installers/windows/README.md`.
-- [ ] **Note what has actually been tested, which is not the floor.** The clean-room run was
+- [x] **Note what has actually been tested, which is not the floor.** The clean-room run was
       Windows 11 24H2 — the *top* of the range. Testing the floor needs a Windows 10 image, and
       until that exists the claim rests on Microsoft's support statement rather than on a run of
       ours. Say so rather than implying both ends were exercised.
-- [ ] **Consider tying the allowlist to the claimed floor.** `check_pe_imports.py` accepts every
-      `api-ms-win-*` contract regardless of which Windows release introduced it, so a future
-      dependency on a newer API set would raise the real floor silently. Not urgent — the current
-      imports are long-standing — but the allowlist is where that check belongs if it is wanted.
+- [~] **Considered and not done: tying the `api-ms-win-*` allowlist to a specific Windows release.**
+      `check_pe_imports.py` accepts every API-set contract regardless of which release introduced
+      it, so a future dependency on a newer set would raise the real floor silently. **Decided
+      against for now**, on two grounds: the artifact's current API-set imports are the long-standing
+      UCRT ones, which are exactly what "Windows 10 or later" already means; and encoding a
+      per-contract introduction table would be a large, hand-maintained mapping whose staleness
+      would itself become a source of false results — the failure mode the allowlist exists to
+      avoid. **Revisit if** the Windows floor is ever raised deliberately, or if a dependency lands
+      that plausibly needs a newer API set — at which point the mapping only needs to cover the
+      contracts actually imported, not all of them.
 
-### - [ ] P4 — Make portability testable, not incidental
+### - [x] P4 — Make portability testable, not incidental *(shipped 2026-07-27)*
 
 P1's static import check and P2's `smoke.sh` work make the *artifact* self-describing. Execution on a
 foreign machine is still the thing that proves it, and that gap is what produced W1 and L1.
@@ -344,23 +409,23 @@ foreign machine is still the thing that proves it, and that gap is what produced
 > and a clean-room run nobody performs catches nothing. **Windows Sandbox needs a reboot as of
 > 2026-07-27**, which is precisely why the static check is P1's primary guard.
 
-- [ ] **Add a clean-room step to `RELEASE.md` §4** covering both OSes: the Linux artifact executed in
+- [x] **Add a clean-room step to `RELEASE.md` §4** covering both OSes: the Linux artifact executed in
       a floor-glibc container, the Windows artifact executed in Windows Sandbox. Both are free, both
       take minutes, and **neither can pass on the build box by accident** — which is the only
       property that matters here.
-- [ ] **State the rule the findings table earned**, so the next packaging path inherits it: *a
+- [x] **State the rule the findings table earned**, so the next packaging path inherits it: *a
       verification step that runs on the build box tests staging, never portability.* Any new
       artifact shape (a second Linux format, macOS, a container image) needs its own clean-room run
       before it is published.
 
-### - [ ] P5 — Docs
+### - [x] P5 — Docs *(shipped 2026-07-27)*
 
-- [ ] **[`docs/RELEASE.md`](../RELEASE.md)** — split §2 into **native build** (any distro, floor is
+- [x] **[`docs/RELEASE.md`](../RELEASE.md)** — split §2 into **native build** (any distro, floor is
       yours, fine for local artifacts) and **pinned release build** (the container, the only shape
       that gets published). Correct the dependency list per L5.
-- [ ] **[`installers/linux/README.md`](../../installers/linux/README.md)** — the AppImage's `NOTICE`,
+- [x] **[`installers/linux/README.md`](../../installers/linux/README.md)** — the AppImage's `NOTICE`,
       icon, and the container path.
-- [ ] **[`site/docs/index.md`](../../site/docs/index.md)** — two claims are currently false and both
+- [x] **[`site/docs/index.md`](../../site/docs/index.md)** — two claims are currently false and both
       predate this plan: line ~396 says *"Python package | not on PyPI yet"* (it has been on PyPI
       since 1.0.0) and line ~405 says *"Download from Releases"*, linking to a page that is empty.
       Both must be true before the first native release, and the Linux floor from P3 belongs in the
