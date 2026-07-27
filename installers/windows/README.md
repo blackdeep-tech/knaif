@@ -89,6 +89,29 @@ reaches processes started after the broadcast, so the PATH task cannot affect an
 The installed tree carries `LICENSE` **and `NOTICE`** (Apache-2.0 §4(a) and §4(d)) beside
 `licenses/` for third-party notices.
 
+## Supported Windows version, and the runtime that ships with it
+
+**Windows 10 x64 or later.** Two things set that floor: the artifact imports the **Universal CRT**
+(`api-ms-win-crt-*`), an OS component from Windows 10 onward, and Microsoft supports the v14 C++
+runtime on Windows 10 and 11. *Only Windows 11 24H2 has actually been tested* — the floor itself
+rests on Microsoft's support statement rather than a run of ours, and testing it needs a Windows 10
+image.
+
+**`bin\` carries four VC++ runtime DLLs** — `VCRUNTIME140`, `VCRUNTIME140_1`, `MSVCP140` and
+`VCOMP140` — because the Visual C++ Redistributable is **not part of Windows**. Every 1.0.x
+artifact imported them without shipping them, so on a clean machine `knaif.exe` died at process
+start with `STATUS_DLL_NOT_FOUND` (`0xC0000135`), printing nothing. `VCOMP140` is the OpenMP
+runtime that every `ggml-cpu-*` backend needs; omitting it would break inference rather than
+startup.
+
+They ship **app-local** rather than via a chained redistributable installer, because the portable
+zip has no installer to chain, this installer is deliberately per-user with no admin rights, and
+Windows resolves from the executable's own directory first — so a machine-wide redistributable
+would never be loaded anyway. The trade-off is that these copies get no servicing through Windows
+Update; the remedy is to rebuild and re-release. `scripts/check_pe_imports.py` reads the import
+table and fails the build if anything is unstaged, which — unlike running the artifact — works on
+the build machine itself.
+
 v1 ships **unsigned**, so SmartScreen shows *"Windows protected your PC"* → **More info → Run anyway**.
 Signing is tracked in [`docs/plans/2026-07-27-code-signing.md`](../../docs/plans/2026-07-27-code-signing.md).
 

@@ -14,7 +14,7 @@
 # KNAIF_LLM_BACKEND=mock opts out of default-model auto-select, so a CI box that happens to have a
 # GGUF in ~/.knaif/models still tests the mock path rather than loading 2.5 GB.
 #
-# Usage: installers/smoke.sh <artifact.zip | artifact.tar.gz | staged-dir>
+# Usage: installers/smoke.sh <artifact.zip | .tar.gz | .AppImage | staged-dir>
 #   e.g. installers/smoke.sh dist/knaif-1.0.0-windows-x64.zip
 #        installers/smoke.sh dist/staging/knaif-1.0.0-linux-x64
 #
@@ -23,7 +23,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-[ $# -eq 1 ] || { echo "usage: installers/smoke.sh <artifact.zip|artifact.tar.gz|staged-dir>" >&2; exit 1; }
+[ $# -eq 1 ] || { echo "usage: installers/smoke.sh <artifact.zip|.tar.gz|.AppImage|staged-dir>" >&2; exit 1; }
 ARTIFACT="$1"
 [ -e "$ARTIFACT" ] || { echo "ERROR: no such artifact: $ARTIFACT" >&2; exit 1; }
 ARTIFACT="$(cd "$(dirname "$ARTIFACT")" && pwd)/$(basename "$ARTIFACT")"
@@ -45,6 +45,21 @@ case "$ARTIFACT" in
     fi
     ;;
   *.tar.gz|*.tgz) tar xzf "$ARTIFACT" -C "$WORK" ;;
+  *.AppImage)
+    # `--appimage-extract` is handled by the AppImage runtime itself and needs NO FUSE, so this
+    # works inside a container and on a box with no libfuse — which is exactly where a release
+    # artifact gets verified. It extracts to ./squashfs-root relative to the CWD, hence the
+    # subshell cd. The layout mirrors the tarball one level down (usr/bin/knaif, usr/LICENSE),
+    # and the BIN search plus the ART=dirname(BIN)/.. below both handle that unchanged.
+    #
+    # Until this existed the AppImage was the ONE artifact no check could open, and it is
+    # precisely the one that shipped without NOTICE for weeks after package.sh was fixed.
+    chmod +x "$ARTIFACT" 2>/dev/null || true
+    ( cd "$WORK" && "$ARTIFACT" --appimage-extract >/dev/null ) || {
+      echo "ERROR: --appimage-extract failed on $ARTIFACT" >&2
+      exit 1
+    }
+    ;;
   *)
     [ -d "$ARTIFACT" ] || { echo "ERROR: not an archive or directory: $ARTIFACT" >&2; exit 1; }
     cp -r "$ARTIFACT" "$WORK/"
@@ -112,5 +127,24 @@ for f in LICENSE NOTICE; do
   [ -f "$ART/$f" ] || fail "$f is missing from the artifact (Apache-2.0 requires it to ship)"
 done
 echo "  ok  LICENSE + NOTICE present"
+
+# 7. no undeclared runtime dependency (Windows). Everything above RUNS the exe, so on the build box
+# it proves only that the build box can run it — and the build box has Visual Studio. That blind
+# spot is how every 1.0.x Windows binary came to import VCRUNTIME140/MSVCP140/VCOMP140 without any
+# of them being staged: on a clean Windows 11 24H2 image all three are absent and the process dies
+# at startup with STATUS_DLL_NOT_FOUND (0xC0000135), printing nothing at all. Verified in Windows
+# Sandbox, 2026-07-27.
+#
+# Reading the import table is machine-independent, so unlike every check above it fails HERE, on
+# the machine that introduced the problem, instead of in a user's hands.
+if [ "$(uname -s)" != Linux ] && [ -f "$ART/bin/knaif.exe" ]; then
+  if command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
+    py="$(command -v python || command -v python3)"
+    "$py" "$ROOT/scripts/check_pe_imports.py" "$ART/bin" \
+      || fail "artifact has undeclared runtime dependencies (see above)"
+  else
+    echo "  --  skipped import check (no python on PATH)"
+  fi
+fi
 
 echo "PASS: $(basename "$ARTIFACT") (v$VER)"

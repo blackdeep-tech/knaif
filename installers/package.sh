@@ -292,6 +292,142 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
   rpath_note=""
   [ "$OS" = linux ] && rpath_note=" (\$ORIGIN RPATH)"
   echo "  staged core libs + $n_be loadable backend(s) beside the exe$rpath_note"
+
+  # The GNU OpenMP runtime is NOT part of a base Linux system — it ships with GCC's runtime
+  # libraries (libgomp1), which a minimal install need not have. libggml-base and every
+  # ggml-cpu-* variant link it, so without it the artifact fails to load its CPU backends on a
+  # machine that merely lacks a compiler toolchain.
+  #
+  # This is the exact counterpart of VCOMP140.dll on Windows: same library, same set of binaries,
+  # missed for the same reason — it resolves on the build box because the build box has GCC.
+  # Found by scripts/check_elf_deps.py, not by running the artifact, because running it here
+  # could never fail.
+  #
+  # LICENCE: libgomp is GPLv3 **with the GCC Runtime Library Exception**, which exists precisely
+  # to allow shipping it alongside independent programs. No copyleft obligation propagates to
+  # knaif, and no additional notice file is required.
+  if [ "$OS" = linux ]; then
+    gomp="$(gcc -print-file-name=libgomp.so.1 2>/dev/null || true)"
+    [ -n "$gomp" ] && [ -e "$gomp" ] || {
+      echo "ERROR: libgomp.so.1 not found via gcc -print-file-name." >&2
+      echo "       Every ggml-cpu-* backend links it; the artifact would fail to load them on" >&2
+      echo "       any machine without GCC's runtime libraries installed." >&2
+      exit 1
+    }
+    # -L dereferences the symlink so the artifact carries the real file under its SONAME.
+    cp -L "$gomp" "$STAGE/bin/libgomp.so.1"
+    set_origin_rpath "$STAGE/bin/libgomp.so.1"
+    echo "  staged libgomp.so.1 (OpenMP runtime, not guaranteed present on a base system)"
+  fi
+
+  # The Visual C++ runtime is NOT part of Windows and must ship beside the exe like every other
+  # lib above. Without it the artifact dies at process start with STATUS_DLL_NOT_FOUND
+  # (0xC0000135) printing nothing — confirmed in Windows Sandbox on a clean 11 24H2 image, where
+  # VCRUNTIME140/MSVCP140/VCOMP140 are all absent. (`ucrtbase.dll` IS present: the Universal CRT
+  # has been an OS component since Windows 10, which is why the `api-ms-win-crt-*` imports need
+  # nothing staged.)
+  #
+  # Nothing catches this by running the artifact HERE — the build box has Visual Studio, so the
+  # dependency always resolves. `scripts/check_pe_imports.py` reads the import table instead and
+  # is machine-independent. It runs at the end of this block as a REQUIRED packaging step, so
+  # every Windows artifact is verified at the moment it is assembled.
+  #
+  # VCOMP140 is llama.cpp's OpenMP runtime and lives in a DIFFERENT redist folder from the CRT.
+  # Omitting it does not merely break startup — it breaks every ggml-cpu-* variant, i.e. inference.
+  if [ "$OS" = windows ]; then
+    # PREFER THE ACTIVE DEVELOPER ENVIRONMENT. Windows functional kinds are built in a "Developer
+    # PowerShell for VS", which exports VCToolsRedistDir pointing at the redist tree for the very
+    # toolset that compiled the binaries. That is Microsoft's documented way to locate these files,
+    # and it is the only method that guarantees the runtime MATCHES the compiler rather than merely
+    # being present somewhere on the disk.
+    #
+    # Scanning the filesystem is the fallback, and it is a poor one: a box with several Visual
+    # Studios installed offers several answers, and shell globs sort LEXICALLY, not by version — so
+    # "2022" sorts after "18", and a hypothetical "14.9" sorts after "14.51". Picking the wrong tree
+    # can stage a runtime OLDER than the compiler, which is exactly the unsupported direction.
+    vcredist_dir=""
+    if [ -n "${VCToolsRedistDir:-}" ]; then
+      # MSVC exports a Windows path; convert if cygpath is available (Git Bash ships it).
+      if command -v cygpath >/dev/null 2>&1; then
+        vcredist_dir="$(cygpath -u "$VCToolsRedistDir" 2>/dev/null || echo "$VCToolsRedistDir")"
+      else
+        vcredist_dir="$VCToolsRedistDir"
+      fi
+      vcredist_dir="${vcredist_dir%/}/$ARCH"
+      [ -d "$vcredist_dir" ] || vcredist_dir=""
+    fi
+    if [ -z "$vcredist_dir" ]; then
+      echo "  NOTE: VCToolsRedistDir unset or unusable — falling back to a filesystem scan."
+      echo "        Run packaging from a Developer PowerShell so the runtime matches the compiler."
+      # Sort version dirs numerically (-V) so 14.51 beats 14.9, newest last.
+      for root in "/c/Program Files/Microsoft Visual Studio"/*/*/VC/Redist/MSVC \
+                  "/c/Program Files (x86)/Microsoft Visual Studio"/*/*/VC/Redist/MSVC; do
+        [ -d "$root" ] || continue
+        for v in $(ls -1 "$root" 2>/dev/null | sort -V); do
+          [ -d "$root/$v/$ARCH" ] && vcredist_dir="$root/$v/$ARCH"
+        done
+      done
+    fi
+    [ -n "$vcredist_dir" ] && [ -d "$vcredist_dir" ] || {
+      echo "ERROR: no VC++ redistributable directory found for arch '$ARCH'." >&2
+      echo "       Set VCToolsRedistDir (a VS Developer shell does this) or install the" >&2
+      echo "       'C++ ... Redistributable MSMs' component. The artifact cannot be made" >&2
+      echo "       self-contained without it." >&2
+      exit 1
+    }
+    n_crt=0
+    for dll in vcruntime140.dll vcruntime140_1.dll msvcp140.dll vcomp140.dll; do
+      # CRT and OpenMP live in sibling Microsoft.VC*.{CRT,OpenMP} dirs under the same arch dir.
+      src=""
+      for cand in "$vcredist_dir"/Microsoft.VC*/"$dll"; do
+        [ -e "$cand" ] && src="$cand"
+      done
+      [ -n "$src" ] || {
+        echo "ERROR: $dll not found under $vcredist_dir — cannot stage the VC++ runtime." >&2
+        exit 1
+      }
+      # The single licence boundary. Microsoft's Distributable List grants everything under
+      # VC\redist EXCEPT debug_nonredist/ and onecore/debug_nonredist/, which hold the DEBUG
+      # CRT/OpenMP and are explicitly non-redistributable. Today's glob cannot reach them
+      # (debug_nonredist is a sibling of x64/, not a child), so this asserts a property rather
+      # than fixing a bug — but shipping a debug CRT is a licence violation, not a bug, and it
+      # would look identical in the artifact. Cheap insurance against a future loosened glob.
+      case "$src" in
+        *debug_nonredist*)
+          echo "ERROR: refusing to stage $dll from a debug_nonredist path:" >&2
+          echo "       $src" >&2
+          echo "       Microsoft's Distributable List excludes it. This is a licence" >&2
+          echo "       boundary, not a build preference." >&2
+          exit 1
+          ;;
+      esac
+      cp "$src" "$STAGE/bin/"
+      n_crt=$((n_crt + 1))
+    done
+    echo "  staged $n_crt VC++ runtime DLL(s) from $(basename "$(dirname "$(dirname "$src")")")"
+
+    # Verify the tree is actually self-contained, HERE, at the moment it is assembled. This must
+    # not be deferred to smoke.sh: smoke.sh is run per-artifact and by hand, and an artifact that
+    # was never smoke-tested would ship with no check at all. Packaging is the only step that
+    # every Windows artifact passes through by construction.
+    #
+    # Hard-fail when python is missing rather than skipping. A guard that silently opts out on
+    # the machine that lacks the tooling is worth nothing — this exact defect shipped in every
+    # 1.0.x artifact because nothing on the build box could observe it.
+    py=""
+    for cand in python python3; do
+      command -v "$cand" >/dev/null 2>&1 && { py="$cand"; break; }
+    done
+    [ -n "$py" ] || {
+      echo "ERROR: python not found — cannot verify the artifact is self-contained." >&2
+      echo "       scripts/check_pe_imports.py is a required packaging step, not optional." >&2
+      exit 1
+    }
+    "$py" "$ROOT/scripts/check_pe_imports.py" "$STAGE/bin" || {
+      echo "ERROR: staged tree has undeclared runtime dependencies (see above)." >&2
+      exit 1
+    }
+  fi
 fi
 
 # CUDA on Windows keeps the historical static-with-redist shape (Windows functional builds are

@@ -343,6 +343,21 @@ package-native kind="cpu":
     CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
     bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}}
 
+# Build the PUBLISHED Linux artifacts inside the floor-pinned container, so the glibc floor is
+# chosen rather than inherited from whichever machine ran the build. Docker is required here and
+# NOWHERE else in this justfile. See installers/linux/Dockerfile for what is pinned and why.
+#
+#   just package-linux                 release: builds HEAD's commit from a clean checkout
+#   just package-linux --rev=v1.0.2    release: builds that tag
+#   just package-linux --dev           development: mounts the worktree (never publish this)
+#
+# For a LOCAL artifact you do not need this: `just package-native vulkan` builds natively and the
+# floor is simply your own distro's.
+#
+# Linux release artifacts (tar.gz + AppImage) at a pinned glibc 2.35 floor. Needs Docker.
+package-linux *args:
+    bash "{{justfile_directory()}}/installers/linux/build-in-container.sh" {{args}}
+
 # Compile the Windows Inno Setup installer from the STAGED artifact (stage it first, e.g.
 # `just package-native cpu`). Produces dist/knaif-<ver>-windows-x64[-<kind>]-setup.exe. Needs
 # Inno Setup 6 (ISCC). kind selects which staged artifact to wrap (cpu|vulkan|cuda).
