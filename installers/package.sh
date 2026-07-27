@@ -292,6 +292,65 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
   rpath_note=""
   [ "$OS" = linux ] && rpath_note=" (\$ORIGIN RPATH)"
   echo "  staged core libs + $n_be loadable backend(s) beside the exe$rpath_note"
+
+  # The Visual C++ runtime is NOT part of Windows and must ship beside the exe like every other
+  # lib above. Without it the artifact dies at process start with STATUS_DLL_NOT_FOUND
+  # (0xC0000135) printing nothing — confirmed in Windows Sandbox on a clean 11 24H2 image, where
+  # VCRUNTIME140/MSVCP140/VCOMP140 are all absent. (`ucrtbase.dll` IS present: the Universal CRT
+  # has been an OS component since Windows 10, which is why the `api-ms-win-crt-*` imports need
+  # nothing staged.)
+  #
+  # Nothing catches this by running the artifact HERE — the build box has Visual Studio, so the
+  # dependency always resolves. `scripts/check_pe_imports.py` reads the import table instead and
+  # is machine-independent; it is run below and is the guard that keeps this fixed.
+  #
+  # VCOMP140 is llama.cpp's OpenMP runtime and lives in a DIFFERENT redist folder from the CRT.
+  # Omitting it does not merely break startup — it breaks every ggml-cpu-* variant, i.e. inference.
+  if [ "$OS" = windows ]; then
+    # Newest redist wins: the VC14 runtime is backward compatible, so a redistributable at least as
+    # new as the compiler is the supported configuration. Several versions coexist on a box with
+    # more than one VS toolset installed.
+    vcredist_root=""
+    for root in "/c/Program Files/Microsoft Visual Studio"/*/*/VC/Redist/MSVC \
+                "/c/Program Files (x86)/Microsoft Visual Studio"/*/*/VC/Redist/MSVC; do
+      [ -d "$root" ] && vcredist_root="$root"
+    done
+    [ -n "$vcredist_root" ] || {
+      echo "ERROR: no VC++ redistributable directory found under a Visual Studio install." >&2
+      echo "       The artifact cannot be made self-contained without it." >&2
+      exit 1
+    }
+    n_crt=0
+    for dll in vcruntime140.dll vcruntime140_1.dll msvcp140.dll vcomp140.dll; do
+      # Newest version dir last; CRT and OpenMP live in sibling Microsoft.VC*.{CRT,OpenMP} dirs.
+      src=""
+      for cand in "$vcredist_root"/*/"${ARCH/x64/x64}"/Microsoft.VC*/"$dll"; do
+        [ -e "$cand" ] && src="$cand"
+      done
+      [ -n "$src" ] || {
+        echo "ERROR: $dll not found under $vcredist_root — cannot stage the VC++ runtime." >&2
+        exit 1
+      }
+      # The single licence boundary. Microsoft's Distributable List grants everything under
+      # VC\redist EXCEPT debug_nonredist/ and onecore/debug_nonredist/, which hold the DEBUG
+      # CRT/OpenMP and are explicitly non-redistributable. Today's glob cannot reach them
+      # (debug_nonredist is a sibling of x64/, not a child), so this asserts a property rather
+      # than fixing a bug — but shipping a debug CRT is a licence violation, not a bug, and it
+      # would look identical in the artifact. Cheap insurance against a future loosened glob.
+      case "$src" in
+        *debug_nonredist*)
+          echo "ERROR: refusing to stage $dll from a debug_nonredist path:" >&2
+          echo "       $src" >&2
+          echo "       Microsoft's Distributable List excludes it. This is a licence" >&2
+          echo "       boundary, not a build preference." >&2
+          exit 1
+          ;;
+      esac
+      cp "$src" "$STAGE/bin/"
+      n_crt=$((n_crt + 1))
+    done
+    echo "  staged $n_crt VC++ runtime DLL(s) from $(basename "$(dirname "$(dirname "$src")")")"
+  fi
 fi
 
 # CUDA on Windows keeps the historical static-with-redist shape (Windows functional builds are

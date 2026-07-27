@@ -113,4 +113,23 @@ for f in LICENSE NOTICE; do
 done
 echo "  ok  LICENSE + NOTICE present"
 
+# 7. no undeclared runtime dependency (Windows). Everything above RUNS the exe, so on the build box
+# it proves only that the build box can run it — and the build box has Visual Studio. That blind
+# spot is how every 1.0.x Windows binary came to import VCRUNTIME140/MSVCP140/VCOMP140 without any
+# of them being staged: on a clean Windows 11 24H2 image all three are absent and the process dies
+# at startup with STATUS_DLL_NOT_FOUND (0xC0000135), printing nothing at all. Verified in Windows
+# Sandbox, 2026-07-27.
+#
+# Reading the import table is machine-independent, so unlike every check above it fails HERE, on
+# the machine that introduced the problem, instead of in a user's hands.
+if [ "$(uname -s)" != Linux ] && [ -f "$ART/bin/knaif.exe" ]; then
+  if command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
+    py="$(command -v python || command -v python3)"
+    "$py" "$ROOT/scripts/check_pe_imports.py" "$ART/bin" \
+      || fail "artifact has undeclared runtime dependencies (see above)"
+  else
+    echo "  --  skipped import check (no python on PATH)"
+  fi
+fi
+
 echo "PASS: $(basename "$ARTIFACT") (v$VER)"

@@ -48,6 +48,32 @@ container is not a Windows workaround. A maintainer on Arch (glibc 2.42) or Fedo
 builds a release natively ships a binary that starts on almost nothing, and **nothing warns them**.
 The container exists to make that outcome impossible regardless of who cuts the release.
 
+**2026-07-27 — ship the VC++ runtime app-local; do NOT chain the redistributable installer.**
+Windows artifacts carry `VCRUNTIME140` / `VCRUNTIME140_1` / `MSVCP140` / `VCOMP140` in `bin\` beside
+the exe. The alternative — having `setup.exe` run `vc_redist.x64.exe` — was rejected:
+
+- **The portable zip cannot chain anything.** Its whole promise is *unpack and run*, and there is no
+  installer to hook. App-local is therefore required **regardless**, so chaining would add a second
+  mechanism without retiring the first.
+- **With app-local DLLs present, a machine-wide redist is never loaded.** Windows resolves from the
+  executable's own directory first — the same rule that makes `llama.dll` and the `ggml-*` backends
+  work. Chaining would install something the artifact structurally cannot use.
+- **The redist installer requires admin; this installer deliberately does not.**
+  `PrivilegesRequired=lowest`, per-user, `%LOCALAPPDATA%`. Chaining either raises UAC mid-install —
+  breaking a documented product property — or hard-fails for a user who cannot elevate.
+- **The cost is 1.06 MB on a 31 MB artifact (3.4 %)**: `msvcp140` 628 KB, `vcomp140` 208 KB,
+  `vcruntime140` 174 KB, `vcruntime140_1` 49 KB.
+- **Also rejected: static CRT.** See P1 — allocations cross the `knaif.exe` ↔ `llama.dll` boundary
+  and a static CRT gives each module its own heap, trading a link error for a rare crash.
+
+> **The accepted cost, stated plainly: app-local copies get no security servicing.** A machine-wide
+> redistributable receives CRT fixes through Windows Update; ours do not, and the only remedy is to
+> rebuild and re-release. Judged acceptable because knaif is a local CLI rather than a network-facing
+> service, so the CRT surface exposed to untrusted input is small. **Revisit if** a CRT CVE is
+> reachable from knaif's input handling, or if knaif ever grows a listening/daemon mode — the second
+> of which is already contemplated as post-v1 work. This is a decision with an expiry condition, not
+> a permanent one.
+
 **Deliberately not bound to the CI plan.** When
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) lands `release.yml`, this
 image is what its Linux job runs. That is an *adoption* of this plan, not a dependency of it — a
@@ -83,9 +109,9 @@ Every row below was verified on 2026-07-27, not inferred. The *Verified* column 
 Ordered by what blocks the release. P1 and P2 are independent of the container work and could ship
 without it; P3 is what makes the Linux artifact worth publishing at all.
 
-### - [ ] P1 — Ship the Windows C runtime *(W1, W2)*
+### - [x] P1 — Ship the Windows C runtime *(W1, W2 — shipped 2026-07-27)*
 
-- [ ] **Stage the four VC++ runtime DLLs beside the exe** in `package.sh`'s Windows branch:
+- [x] **Stage the four VC++ runtime DLLs beside the exe** in `package.sh`'s Windows branch:
       `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, `MSVCP140.dll` and **`VCOMP140.dll`** into `bin\`.
       App-local deployment is the shape this artifact already uses — `dynamic-backends` puts every
       llama/ggml lib beside `knaif.exe` and Windows resolves from the exe's own directory first, so
@@ -100,11 +126,29 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
     a redistributable at least as new as the compiler is the supported configuration. Fail loudly if
     none is found rather than silently producing a broken artifact, which is the failure this whole
     workstream exists to end.
-  - **Confirm the redistribution grant before shipping.** Microsoft's Visual Studio licence permits
-    app-local distribution of the files on its Distributable Code / REDIST list, which is what makes
-    this legal rather than merely convenient. Read the licence shipped with the installed VS and
-    record the conclusion here — this is a **licence obligation like `NOTICE`, not a build detail**,
-    and it should end up in the artifact's `licenses/` dir if the terms call for it.
+  - **Redistribution grant — CONFIRMED 2026-07-27, and it adds no obligation to the artifact.**
+    The `Redist.txt` shipped with VS 18 is a **three-line stub** pointing at
+    `https://aka.ms/vs/18/redistribution`; the authoritative Distributable List is
+    [online](https://learn.microsoft.com/visualstudio/releases/vs18/redistribution). Its *Visual C++
+    Runtime Files* section grants, verbatim: *"you may copy and distribute with your program any of
+    the files within the following folder and its subfolders … `[VisualStudioFolder]\VC\redist`"*,
+    subject to not modifying them. Both source directories sit inside that tree
+    (`…\VC\Redist\MSVC\<ver>\x64\Microsoft.VC145.CRT` and `…\Microsoft.VC145.OpenMP`), so all four
+    DLLs are covered. Three things worth having written down:
+    - **The only carve-out is `debug_nonredist`** (and `onecore\debug_nonredist`), which is where
+      `Microsoft.VC[version].DebugOpenMP` lives. `package.sh` takes the **release** OpenMP from
+      `Microsoft.VC145.OpenMP`, so it is on the right side of the one boundary that matters — but a
+      future glob loosened to `Microsoft.VC*` **must not** be allowed to reach a debug folder.
+    - **No attribution or licence-inclusion requirement.** Unlike the bundled CUDA libs — where
+      `package.sh` *hard-fails* without `NVIDIA-CUDA-EULA.txt` — the VC++ grant asks only that the
+      files be unmodified. **Nothing new goes into the artifact's `licenses/` dir**, and this bullet
+      is the record of why that absence is deliberate rather than an oversight.
+    - **The grant is conditional on being a licensed VS user.** The page states distribution *"is
+      limited to licensed Visual Studio users and is subject to its license terms."* Builds come
+      from **VS Community**, whose terms cover open-source projects and small organisations. That is
+      a condition on **who may cut a release**, not on the artifact — and it is another reason the
+      pinned-container work in P3 matters: it keeps the Linux build reproducible by anyone, while
+      the Windows build stays tied to a properly licensed toolchain.
   - **Rejected: static CRT** (`-Ctarget-feature=+crt-static` plus
     `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`). Allocations cross the `knaif.exe` ↔ `llama.dll`
     boundary, and a statically linked CRT gives each module **its own heap** — freeing across the
@@ -112,7 +156,7 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
     Not worth it to avoid shipping three DLLs.
   - **Rejected: chaining the redistributable installer.** It would fix `setup.exe` and leave the
     **portable zip** — the artifact whose entire promise is "unpack and run" — still broken.
-- [ ] **Assert the artifact has no undeclared runtime dependency — statically.** This is the primary
+- [x] **Assert the artifact has no undeclared runtime dependency — statically.** This is the primary
       guard, not the clean room. Parse the **PE import table** of every binary in `bin\` and require
       each imported DLL to be either (a) **staged beside it** or (b) on an explicit **clean-Windows
       baseline** allowlist. `VCRUNTIME140.dll` / `MSVCP140.dll` / `VCRUNTIME140_1.dll` are **not** on
@@ -128,15 +172,23 @@ without it; P3 is what makes the Linux artifact worth publishing at all.
   - **No tooling to install.** `objdump` and `strings` are absent from this box's Git Bash, but
       Python is present, and a PE import directory is a short `struct` parse — the same hand-rolled
       approach as `test_installer_iss.py`. Do **not** add a `pefile` dependency for this.
-- [ ] **Prove it catches W1 before trusting it**, the way W6's lint was mutation-tested: run it
+- [x] **Prove it catches W1 before trusting it**, the way W6's lint was mutation-tested: run it
       against the **current, unfixed** staged tree and require it to fail naming `VCRUNTIME140.dll`,
       then against the fixed tree and require it to pass.
-- [ ] **Confirm in a clean room, once the box can reboot.** Windows 11 Enterprise ships **Windows
-      Sandbox** (`Containers-DisposableClientVM`) — a disposable VM with no developer tooling, which
-      is exactly the machine that reproduces W1. **Enabled 2026-07-27, pending a restart**, so this
-      is deferred rather than skipped. It confirms the static check's baseline is *right*; the static
-      check is what stops the defect recurring. Run the unpacked zip there and assert the pre-fix
-      artifact fails and the post-fix one succeeds.
+- [x] **Confirmed in a clean room** *(Windows Sandbox, 2026-07-27)*. Driven headlessly from a
+      `.wsb` config: artifact mapped read-only, a writable folder for results, `LogonCommand`
+      running the probe and shutting the VM down. **Same image, before and after the fix:**
+
+      | | exit code | stdout |
+      |---|---|---|
+      | before | `-1073741515` (`0xC0000135` STATUS_DLL_NOT_FOUND) | *(empty)* |
+      | after | `0` | `documents … / ffmpeg …` |
+
+      The image reported `VCRUNTIME140.dll ABSENT`, `MSVCP140.dll ABSENT`, `VCOMP140.dll ABSENT`
+      **in both runs** — so the artifact was fixed by shipping them, not by the environment
+      changing. It also reported **`ucrtbase.dll PRESENT`**, which independently confirms the
+      allowlist split: the UCRT is an OS component, so accepting `api-ms-win-crt-*` while rejecting
+      `VCRUNTIME140` was correct rather than a guess. Windows 11 24H2 (10.0.26100.8875).
 
 ### - [ ] P2 — Finish F11 on Linux *(L2, L3, L4)*
 
