@@ -69,20 +69,65 @@ an optional component. Optional tasks: add to PATH, download the recommended GGU
 supporting third-party tools (ffmpeg, Ghostscript, LibreOffice, Tesseract) **via winget** — these are
 never bundled, and each is skipped when already present or when winget is unavailable.
 
+**The task defaults are load-bearing.** ffmpeg defaults *checked* (the ffmpeg skill requires it);
+Ghostscript (AGPL), LibreOffice (~350 MB) and Tesseract default *unchecked*. Through 1.0.1 all four
+shipped **pre-checked** against that stated intent: the entries used dotted `deps\*` names, which
+declare a parent task that was never defined, and Inno rendered them as children of the preceding
+checked task — discarding both their `unchecked` flag and their group heading. Task names must stay
+flat. Declaring a real `deps` parent does *not* fix it, because Inno force-checks the children of a
+checked parent.
+
+"Already present" now means what the runtime means: the probe honours `PATHEXT`, the
+`KNAIF_<CMD>_BIN` overrides, and each tool's `all_required` flag from `skills/*/skill.yaml` — so
+ffmpeg counts as satisfied only when **both** `ffmpeg` and `ffprobe` resolve, while any one of
+`gs` / `gswin64c` / `gswin32c` satisfies Ghostscript.
+
+The model task is hidden entirely when the GGUF is already in `~/.knaif/models`, and the wizard's
+final page says to open a new terminal and run `knaif skills deps` — `ChangesEnvironment` only
+reaches processes started after the broadcast, so the PATH task cannot affect an already-open shell.
+
+The installed tree carries `LICENSE` **and `NOTICE`** (Apache-2.0 §4(a) and §4(d)) beside
+`licenses/` for third-party notices.
+
 v1 ships **unsigned**, so SmartScreen shows *"Windows protected your PC"* → **More info → Run anyway**.
+Signing is tracked in [`docs/plans/2026-07-27-code-signing.md`](../../docs/plans/2026-07-27-code-signing.md).
 
 ## Uninstall
 
 Removes the installed files and un-appends its own `{app}\bin` PATH entry (never rewriting the rest
 of `Path`). It then asks whether to also delete `~/.knaif` — the model store (~2.5 GB) and the
-opt-in `backends/` payload dir — and **deletes by default**. Uninstall means gone: most users never
-learn that directory exists, so orphaning multiple GB is the more surprising outcome. Answering No
-is the escape hatch for someone who intends to reinstall.
+opt-in `backends/` payload dir — and **keeps it by default**. *(Changed in 1.0.2; through 1.0.1 it
+deleted by default.)*
+
+Two independent defaults govern that, and both now point at *keep*: `MB_DEFBUTTON2` focuses **No**
+in the dialog, while `SuppressibleMsgBox`'s default answer is what `/SILENT` and `/VERYSILENT` use.
+Setting one without the other leaves the other path deleting, which is exactly how 1.0.1 shipped —
+**a silent uninstall destroyed the model store without asking**, including for a deployment tool
+doing uninstall-then-reinstall. Deleting is recoverable only by re-downloading 2.5 GB; keeping costs
+disk space the user can reclaim at will.
 
 That data lives outside the app dir on purpose: it must survive an **upgrade** so a reinstall does
-not re-download the GGUF. Upgrades are unaffected — Inno installs over an existing install **without**
-running the uninstaller, so nothing prompts and nothing is deleted.
+not re-download the GGUF. Upgrades are unaffected either way — Inno installs over an existing
+install **without** running the uninstaller, so nothing prompts and nothing is deleted.
 
-**A silent uninstall also deletes** (`SuppressibleMsgBox` answers with the same default under
-`/SILENT` / `/VERYSILENT`). Deliberate and consistent; the only cost is a re-download for a
-deployment tool that does uninstall-then-reinstall.
+### Upgrade detection depends on a registry key
+
+Inno recognises a prior install **only** through its `…\Uninstall\{AppId}_is1` key under `HKCU`.
+With that key absent there is no Add/Remove Programs row, and installing over the existing tree
+degrades to a *"folder already exists"* warning instead of upgrading.
+
+Inno writes the key at install and removes it at the **end** of an uninstall, so a cancelled
+uninstall leaves it in place. Reaching the broken state normally means the key was deleted by hand
+or by a registry cleaner. It is also why scratch builds must be compiled with a throwaway `AppId`
+(see [`docs/RELEASE.md`](../../docs/RELEASE.md)): with a shared `AppId`, tearing a test install down
+by deleting "its" key deletes the real install's registration.
+
+Since 1.0.2 setup detects and offers to repair that state: if
+`%LOCALAPPDATA%\Programs\knaif\unins000.exe` exists with no matching key, it offers to run the
+orphaned uninstaller before continuing. Two limits worth knowing:
+
+- **Only the default directory is discoverable.** Nothing records a custom `/DIR=` once the key is
+  gone, so a non-default install in that state must be removed by hand.
+- **The offer defaults to No and runs the old uninstaller interactively.** That uninstaller was built
+  from an older script and still deletes the model store by default, so setup never invokes it
+  silently — the prompt tells the user to answer No when it asks about their models.

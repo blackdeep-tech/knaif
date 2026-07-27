@@ -166,8 +166,28 @@ fn enable_utf8_console() {
 #[cfg(not(windows))]
 fn enable_utf8_console() {}
 
+/// Hold a named mutex for the life of the process so the Windows installer's `AppMutex` can see
+/// that knaif is running. Without it, an upgrade started while a `run` is in flight hits a locked
+/// `bin\knaif.exe`, silently defers the replacement to the next reboot, and leaves the user on the
+/// old build with no indication why. The name must match `AppMutex` in installers/windows/knaif.iss.
+/// Session-local (no `Global\`) because the install is per-user.
+#[cfg(windows)]
+fn hold_app_mutex() {
+    let name: Vec<u16> = "knaif-cli-running\0".encode_utf16().collect();
+    // SAFETY: an FFI call taking a null security descriptor and a NUL-terminated UTF-16 name.
+    // The handle is deliberately never closed — it must live as long as the process, and Windows
+    // releases it on exit. Best-effort: a failure here only costs the installer its detection.
+    unsafe {
+        windows_sys::Win32::System::Threading::CreateMutexW(std::ptr::null(), 0, name.as_ptr());
+    }
+}
+
+#[cfg(not(windows))]
+fn hold_app_mutex() {}
+
 fn main() -> anyhow::Result<()> {
     enable_utf8_console();
+    hold_app_mutex();
     let cli = Cli::parse();
     match cli.command {
         Command::Skills { action } => match action {

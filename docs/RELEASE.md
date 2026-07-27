@@ -189,6 +189,72 @@ version `Cargo.toml` claims; `skills list` finds ffmpeg + documents via exe-rela
 `skills deps` probes (a `[MISS]` is a **pass** — it tests the probe, not the box); one offline mock
 `plan --json` emits a JSON envelope. It never downloads.
 
+`smoke.sh` also asserts **`LICENSE` and `NOTICE` are both in the artifact** — Apache-2.0 §4(a) and
+§4(d) respectively, and `NOTICE` carries the Qwen3 derivation attribution for the models knaif
+downloads. `NOTICE` was absent from every artifact on every OS through 1.0.1 precisely because no
+check read it.
+
+### Testing the Windows installer without damaging a real install
+
+The wizard cannot be verified silently — `/VERYSILENT` never builds the task tree, which is how
+pre-checked tasks shipped in 1.0.1 unnoticed. So installer changes need a GUI run, and that run must
+be isolated:
+
+- **Compile to a scratch dir** — `ISCC /O<scratch>`. Compiling to the default output overwrites
+  `dist/knaif-<ver>-windows-x64-setup.exe`, a **published artifact with a row in `SHA256SUMS`**; a
+  stray rebuild silently invalidates the published checksum.
+- **Always pass a throwaway `AppId`** — `ISCC /DAppIdGuid=<throwaway-guid>`. Inno treats two builds
+  sharing an `AppId` as the **same application** and derives the same `{AppId}_is1` uninstall key
+  from it, so without this a scratch install registers against the production key — and removing it
+  afterwards destroys the real install's Add/Remove Programs registration and its upgrade detection.
+  An overridden build labels itself *"(TEST BUILD)"* in Add/Remove Programs so the two cannot be
+  confused.
+- **Never delete the production `{AppId}_is1` key as cleanup.** Tear down the throwaway build's key
+  only.
+- **Never run the uninstaller with `/SUPPRESSMSGBOXES`** unless you mean it. It answers the
+  data-directory prompt with that prompt's default — which keeps `~/.knaif` from 1.0.2 onward, but
+  a 1.0.1-or-earlier uninstaller still on disk will delete a 2.5 GB model store.
+
+```bash
+ISCC /DKind=cpu /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
+```
+
+- **Uninstall every test build when done.** A throwaway-`AppId` install that sits in the *default*
+  directory is its own hazard: the real installer does not recognise it as a prior version, so it
+  installs over the same tree and leaves **two Add/Remove Programs rows sharing one directory**,
+  where uninstalling either one breaks the other. Pass `/DIR=<scratch>` or remove the test build
+  before building release artifacts.
+
+### Exercise the upgrade path — every release, not once
+
+**Two of the installer's directives only ever run on an upgrade, so a fresh install proves nothing
+about them:**
+
+- **`[InstallDelete]`** is a no-op on a fresh install, because none of the four target directories
+  exist yet. It is a destructive section, and an upgrade is the only time it actually deletes.
+- **`AppMutex`** is never triggered without a running `knaif.exe`. If its string and
+  `hold_app_mutex` in `apps/cli/src/main.rs` ever drift apart, the directive silently does nothing
+  and an upgrade over a running CLI goes back to being deferred to reboot with no signal.
+
+Do this under a throwaway `AppId`, against a scratch directory, with **two** builds:
+
+```bash
+# 1. baseline
+ISCC /DAppVersion=<prev> /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
+# install it, then leave `knaif.exe` running in a terminal
+
+# 2. the upgrade
+ISCC /DAppVersion=<new> /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
+```
+
+Assert, in order: setup **refuses to proceed while the CLI is running** (`AppMutex`); after closing
+it, **no *"folder already exists"* warning**; the directory is reused from `InstallLocation`; the
+Add/Remove row's `DisplayVersion` advances to the new version rather than adding a second row; and
+`{app}\bin` contains no library left over from the previous build. Then uninstall the test build.
+
+Each `ISCC` run needs its `dist\staging\knaif-<ver>-windows-x64` to exist — copy the staged tree to
+the second version's name rather than rebuilding, since the payload is irrelevant to this check.
+
 Then, per artifact set:
 
 - **Artifact hygiene** — no `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/`notebook`
@@ -280,9 +346,15 @@ time, so no re-upload is needed. Skill bundles are deliberately excluded from th
 
 ## 6. Notes for users (put these in the release body)
 
-**Windows SmartScreen.** v1 ships **unsigned** (an OV certificate is out of scope for v1), so
-Windows shows *"Windows protected your PC"*. Bypass: **More info → Run anyway**. Tell users to verify
-the checksum first — that, not the absence of a warning, is what proves the download is intact.
+**Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
+Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence
+of a warning, is what proves the download is intact.
+
+Signing is tracked in [`plans/2026-07-27-code-signing.md`](plans/2026-07-27-code-signing.md). Note
+that no certificate would make this prompt disappear on day one: Microsoft removed EV's
+instant-SmartScreen privilege in 2024, so every certificate type now accrues reputation per file
+hash through download volume. Signing is worth doing for integrity and enterprise allow-listing —
+not for the first-run prompt.
 
 **Checksum verification.**
 
