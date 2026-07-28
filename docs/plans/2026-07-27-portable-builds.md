@@ -102,6 +102,16 @@ runtime code changed**. Everything here is packaging correctness plus artifacts 
 have shipped, so the patch number is the honest description. The release notes carry the burden of
 explaining that a patch adds a platform.
 
+> **REVERSED 2026-07-28 — this work now ships as `1.1.0`.** The reasoning above was sound while the
+> release was packaging-only. It no longer is: the release was held so the **CUDA opt-in surface**
+> could ship in it (see
+> [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md), decision log), which adds a
+> new `knaif backend` subcommand — new functionality, therefore MINOR, with no reading of semver that
+> makes patch defensible. The premise that made patch honest, *"no runtime code changed"*, simply
+> stopped being true. Nothing else in this plan is affected; the artifacts it defines are unchanged
+> apart from their version string, and the changelog no longer has to explain a patch adding a
+> platform.
+
 **Deliberately not bound to the CI plan.** When
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) lands `release.yml`, this
 image is what its Linux job runs. That is an *adoption* of this plan, not a dependency of it — a

@@ -490,7 +490,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   is confirmed for signing and **no CLA is ever needed** (Apache-2.0 §5 covers inbound contributions;
   a DCO is the lightweight option if outside PRs start). Surviving constraint: a proprietary UI must
   ship as its **own** signed artifact, never folded into the Foundation-signed knaif installer.
-- [ ] **Spinner claims "CPU" and "first run" on every real run — both wrong (cosmetic; 1.0.2).**
+- [ ] **Spinner claims "CPU" and "first run" on every real run — both wrong (cosmetic; 1.1.0).**
   `thinking_spinner()` (`apps/cli/src/main.rs:295`) hardcodes *"Loading model and planning (first
   run on CPU can take a minute)…"* with no backend check, so a Vulkan or CUDA run is told it is on
   the CPU. The genuine CPU-only warning a few lines away (`main.rs:487`) **is** correctly gated on

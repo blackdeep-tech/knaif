@@ -5,21 +5,25 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.2] — 2026-07-28
+## [1.1.0] — unreleased
 
-Packaging release. **No runtime code changed** — the planner, the skills and both runtimes behave
-exactly as in 1.0.1; the only edit to shipped code adds an icon and VERSIONINFO to `knaif.exe`.
-Everything below is packaging correctness and artifacts that should always have shipped.
+> **Not finished.** The CUDA opt-in surface (`knaif backend install cuda`, the published payloads,
+> the driver-aware offer) is being built and is not written up below. Add its entries and revisit
+> this summary before tagging — see
+> [`docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md`](docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md),
+> Workstream U. Set the release date at the same time.
 
-**Why a patch release adds a platform.** 1.0.2 is the first knaif release with **downloadable
-binaries at all**. No GitHub Release existed before it: 1.0.0 and 1.0.1 published the `knaif` wheel
-to PyPI, and the Windows artifacts built alongside them were never uploaded. So the Linux tarball
-and AppImage listed under *Added* are not newly *supported* — they are the first artifacts of any
-kind to reach a user, and Windows is in the same position. Adding a published platform is arguably
-MINOR under semver, but no behavior changed for anyone running 1.0.1, so PATCH is the honest
-number and this paragraph carries what the number cannot.
+**The first knaif release with downloadable binaries.** No GitHub Release existed before it: 1.0.0
+and 1.0.1 published the `knaif` wheel to PyPI, and the Windows artifacts built alongside them were
+never uploaded. The Linux tarball and AppImage below are therefore not newly *supported* — they are
+the first artifacts of any kind to reach a user, and Windows is in the same position.
 
-Two consequences of that, both real: every artifact here is unproven in the field by definition,
+**Planning behaviour is unchanged from 1.0.1.** Nothing in the pipeline that turns an utterance into
+a validated plan was touched — no prompt, validation, expansion or skill change. What makes this a
+minor release rather than a patch is the new `knaif backend` subcommand; everything else is packaging
+correctness and artifacts that should always have shipped.
+
+Two consequences worth stating plainly: every artifact here is unproven in the field by definition,
 and every defect fixed below was found by looking rather than by a bug report — the Windows
 artifact **could not start on a machine without Visual Studio installed**, and nothing in the
 release process could have noticed, because every check ran on the box that built it.
@@ -38,7 +42,7 @@ number alone is measuring the wrong thing.
 
 ### Added
 
-- **Linux x64 artifacts** — `knaif-1.0.2-linux-x64.tar.gz` and `knaif-1.0.2-linux-x86_64.AppImage`,
+- **Linux x64 artifacts** — `knaif-1.1.0-linux-x64.tar.gz` and `knaif-1.1.0-linux-x86_64.AppImage`,
   both carrying CPU and Vulkan backends.
 - **A pinned Linux release container** (`installers/linux/Dockerfile`, `just package-linux`). It
   builds a git commit checked out inside the container rather than a mounted worktree, so the
@@ -223,6 +227,6 @@ Each default artifact carries **CPU and Vulkan** backends.
 1.0.0 and 1.0.1 have no GitHub Release — they shipped only as a PyPI wheel, so their links
 point there.
 
-[1.0.2]: https://github.com/blackdeep-tech/knaif/releases/tag/v1.0.2
+[1.1.0]: https://github.com/blackdeep-tech/knaif/releases/tag/v1.1.0
 [1.0.1]: https://pypi.org/project/knaif/1.0.1/
 [1.0.0]: https://pypi.org/project/knaif/1.0.0/

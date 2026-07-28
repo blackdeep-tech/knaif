@@ -119,7 +119,7 @@ Signing is tracked in [`docs/plans/2026-07-27-code-signing.md`](../../docs/plans
 
 Removes the installed files and un-appends its own `{app}\bin` PATH entry (never rewriting the rest
 of `Path`). It then asks whether to also delete `~/.knaif` — the model store (~2.5 GB) and the
-opt-in `backends/` payload dir — and **keeps it by default**. *(Changed in 1.0.2; through 1.0.1 it
+opt-in `backends/` payload dir — and **keeps it by default**. *(Changed in 1.1.0; through 1.0.1 it
 deleted by default.)*
 
 Two independent defaults govern that, and both now point at *keep*: `MB_DEFBUTTON2` focuses **No**
@@ -145,7 +145,7 @@ or by a registry cleaner. It is also why scratch builds must be compiled with a 
 (see [`docs/RELEASE.md`](../../docs/RELEASE.md)): with a shared `AppId`, tearing a test install down
 by deleting "its" key deletes the real install's registration.
 
-Since 1.0.2 setup detects and offers to repair that state: if
+Since 1.1.0 setup detects and offers to repair that state: if
 `%LOCALAPPDATA%\Programs\knaif\unins000.exe` exists with no matching key, it offers to run the
 orphaned uninstaller before continuing. Two limits worth knowing:
 

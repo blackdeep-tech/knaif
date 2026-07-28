@@ -38,7 +38,10 @@ that can be switched on the day a certificate exists.
 
 ## Release framing
 
-**This plan targets 1.0.2.** `v1.0.1` is tagged, pushed, and protected by the `release-tags` ruleset,
+**This plan targets 1.0.2.** *(Renumbered `1.1.0` on 2026-07-28 — the release was held so CUDA could
+ship in it, which makes it a minor. See [portable-builds](2026-07-27-portable-builds.md)'s decision
+log for the reversal. Everything below is unaffected apart from the version string.)*
+`v1.0.1` is tagged, pushed, and protected by the `release-tags` ruleset,
 so the tag cannot be moved — nothing here can be retrofitted into it, exactly as recorded for the
 spinner-text bug in [`docs/TODO.md`](../TODO.md). Every workstream below ships in the next cut.
 

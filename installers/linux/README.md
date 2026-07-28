@@ -38,7 +38,7 @@ knaif and no extra notice file is required.
 
 ```bash
 just package-linux                  # HEAD's commit -> tar.gz + AppImage
-just package-linux --rev=v1.0.2     # a specific tag
+just package-linux --rev=v1.1.0     # a specific tag
 just package-linux --dev            # mount the worktree; never publish the result
 ```
 

@@ -105,7 +105,7 @@ calibration, caveats, and a one-command harness to reproduce all of it:
 
 ## Status
 
-**v1.0.2** — first release with downloadable binaries.
+**v1.1.0** — first release with downloadable binaries.
 
 | | |
 |---|---|
