@@ -227,6 +227,37 @@ into `~/.knaif/backends`.
     elevation and still works when the install is read-only (AppImage mount).
   - Model the fetch on `models pull`: same fetcher, same sha-pinning, same store-outside-the-install-dir
     shape (`~/.knaif/backends`, per C6b).
+  - **The backend manifest does not exist yet, and "reuse the manifest path" understates this**
+    *(established 2026-07-28)*. `contracts/` holds `models/` and `runtime/` only; `knaif-models`
+    exposes `backends_dir()` — the resolved directory — and nothing behind it. There is no manifest
+    file, no `BackendEntry`, no store. Five structural differences from the model manifest, each a
+    schema change rather than a parameter:
+    1. **Many files per entry, not one.** A model is a single GGUF with one `sha256`. A backend is
+       `ggml-cuda` plus the NVIDIA redist libs, plus whatever runtime must sit beside them on that
+       OS. C6a already calls for per-file shas; `ModelEntry`'s shape cannot express it.
+    2. **Two source tags, one destination directory.** The ABI-coupled lib rides the product tag
+       while the redist rides `redist-cuda-13.3` (C6a), so URLs are per-file and point at different
+       releases while all files land in one directory.
+    3. **The binding is inverted.** The model manifest is deliberately forgiving — an upgrade with an
+       unchanged recommendation re-downloads nothing, because the store keys on the model's own
+       filename. A backend is the opposite: an upgrade MUST replace the ABI-coupled lib, and an
+       older payload against a newer binary has to be **refused**, not tolerated. This is the
+       "stricter than the model manifest" requirement above, made concrete.
+    4. **Platform-keyed.** GGUFs are platform-independent; backend payloads are per OS and arch.
+    5. **It should carry the driver floor** that U3 gates on, so bumping the toolkit is one edit
+       beside the payload rather than a second edit in the gate.
+  - **What genuinely is reusable**, and it is real leverage: the injectable `Fetcher` trait, the
+    verify-then-atomically-install logic, `VerifyOutcome`, and `backends_dir()`. The download
+    plumbing is done; the schema and the store are new.
+  - **Scope, therefore:** a `contracts/backends/` manifest, `BackendManifest`/`BackendEntry` types
+    carrying a file list, a `BackendStore` paralleling `ModelStore`, the `backend install|remove|list`
+    subcommand, and a release-readiness guard mirroring
+    `python/core/tests/test_model_manifest_release_ready.py`. Likely native-only — the Python runtime
+    does not manage backends — so a guard test rather than a second reader.
+  - **Confirm the new contract actually ships.** `package.sh` stages `contracts/` into the artifact,
+    but verify it picks up a new subdirectory rather than assuming: a manifest that does not reach
+    the installed tree is a payload nobody can install, and it would fail at the user rather than at
+    the build.
 - [ ] **U3 — Driver-aware detection gate** _(C6's audit finding, verbatim)_: offer/nudge CUDA only
   when an NVIDIA GPU is present **and the driver is R580+** (CUDA 13 floor) — `nvcuda.dll` presence
   alone is insufficient; probe the driver version (e.g. NVML / `nvidia-smi`) and, if too old, tell the
