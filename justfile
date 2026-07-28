@@ -12,6 +12,22 @@ cuda_arch := "native"
 _default:
     @just --list
 
+# Resolve a bash that can run installers/*.sh. Unix has exactly one answer; Windows has two, and
+# only one of them works: WSL's `bash` (System32\bash.exe) usually shadows Git for Windows on PATH,
+# reports `uname -s` = Linux, and therefore sends package.sh looking for `target/release/knaif`
+# instead of `knaif.exe`. It also strips backslashes from Windows-style path arguments. The scripts
+# need an MSYS bash. Nothing is hardcoded: prefer a non-WSL bash already on PATH, else take the one
+# Git for Windows ships beside `git` itself, wherever that happens to be installed.
+[windows]
+[private]
+_bash:
+    @$c = Get-Command bash -All -EA SilentlyContinue | Where-Object { $_.Source -notmatch '\\(System32|WindowsApps)\\' } | Select-Object -First 1 -ExpandProperty Source; if (-not $c) { $g = (Get-Command git -EA SilentlyContinue).Source; if ($g) { $c = Join-Path (Split-Path (Split-Path $g)) 'bin\bash.exe' } }; if (-not $c -or -not (Test-Path $c)) { throw 'No MSYS bash found. installers/*.sh need Git for Windows (winget install Git.Git); WSL bash cannot package a Windows build.' }; Write-Output $c
+
+[unix]
+[private]
+_bash:
+    @command -v bash
+
 # Initialize the project virtual environment and install dependencies
 init:
     uv venv
@@ -306,6 +322,11 @@ licenses-all: licenses licenses-python
 
 # Stage + archive a portable, self-contained native artifact into dist/ (zip on Windows,
 # tar.gz on Unix). BASE build (no llama/GPU features yet). Usage: just package [--no-build].
+[windows]
+package *args:
+    & (just _bash) installers/package.sh {{args}}
+
+[unix]
 package *args:
     bash "{{justfile_directory()}}/installers/package.sh" {{args}}
 
@@ -328,7 +349,7 @@ package *args:
 # onto Option 3 is post-v1 (C6); v1 publishes no CUDA artifact on either OS.
 [windows]
 package-native kind="cpu":
-    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; bash '{{justfile_directory()}}/installers/package.sh' --no-build --kind={{kind}}
+    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
 
 [unix]
 package-native kind="cpu":
@@ -348,13 +369,18 @@ package-native kind="cpu":
 # NOWHERE else in this justfile. See installers/linux/Dockerfile for what is pinned and why.
 #
 #   just package-linux                 release: builds HEAD's commit from a clean checkout
-#   just package-linux --rev=v1.0.2    release: builds that tag
+#   just package-linux --rev=v1.1.0    release: builds that tag
 #   just package-linux --dev           development: mounts the worktree (never publish this)
 #
 # For a LOCAL artifact you do not need this: `just package-native vulkan` builds natively and the
 # floor is simply your own distro's.
 #
 # Linux release artifacts (tar.gz + AppImage) at a pinned glibc 2.35 floor. Needs Docker.
+[windows]
+package-linux *args:
+    & (just _bash) installers/linux/build-in-container.sh {{args}}
+
+[unix]
 package-linux *args:
     bash "{{justfile_directory()}}/installers/linux/build-in-container.sh" {{args}}
 
