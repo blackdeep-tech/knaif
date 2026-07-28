@@ -112,6 +112,91 @@ likewise excluded; llama.cpp's own MIT license ships as
 commit them as part of cutting a release — a report naming the previous version
 misdescribes what the artifact actually ships.
 
+## Bundled runtime libraries
+
+Every artifact ships a small number of **third-party runtime libraries that are not
+part of a base OS install**. They are the only foreign binaries knaif redistributes,
+and they exist because the artifact must run on a machine that has never had a
+compiler. `python/core/tests/test_runtime_redistribution.py` asserts this section
+agrees with what `installers/package.sh` actually stages.
+
+### Windows — the Visual C++ runtime
+
+| File | Size | Redist folder |
+|---|---:|---|
+| `msvcp140.dll` | 628 KB | `Microsoft.VC*.CRT` |
+| `vcomp140.dll` | 208 KB | `Microsoft.VC*.OpenMP` |
+| `vcruntime140.dll` | 174 KB | `Microsoft.VC*.CRT` |
+| `vcruntime140_1.dll` | 49 KB | `Microsoft.VC*.CRT` |
+
+Staged into `bin\` beside `knaif.exe` — **app-local deployment**, which Microsoft
+documents as a supported method with its own
+[walkthrough](https://learn.microsoft.com/en-us/cpp/windows/walkthrough-deploying-a-visual-cpp-application-to-an-application-local-folder?view=msvc-170).
+Microsoft *prefers* central deployment via the redistributable installer and says so;
+central is not available here, because the portable `.zip` has no installer to chain and
+the Windows installer is deliberately per-user (`PrivilegesRequired=lowest`) while the
+redistributable requires administrator rights.
+
+**Permission.** Microsoft's Distributable List for Visual Studio grants redistribution of
+*"any of the files within … `[VisualStudioFolder]\VC\redist`"*, conditional on the files
+being unmodified. All four sit inside that tree. Three conditions, all satisfied and all
+checkable:
+
+1. **Unmodified** — `package.sh` copies them verbatim; nothing rewrites or repacks them.
+2. **Not from `debug_nonredist/`** — the single carve-out, holding the *debug* CRT and
+   OpenMP. `package.sh` sources from `$VCToolsRedistDir/<arch>/Microsoft.VC*/` and
+   additionally **hard-fails** on any resolved path containing `debug_nonredist`.
+3. **Builder is a licensed Visual Studio user** — releases are cut from VS Community,
+   whose terms cover open-source projects and small organisations. This is a condition on
+   *who may cut a release*, not on the artifact. It is why moving the Windows build to a
+   hosted CI runner needs answering first.
+
+**No attribution obligation.** Unlike the NVIDIA CUDA payload below, the grant asks only
+that the files be unmodified. Nothing is added to the artifact's `licenses/` directory for
+these four, and that absence is deliberate.
+
+**Accepted trade: app-local copies get no security servicing.** A machine-wide
+redistributable receives CRT fixes through Windows Update; ours do not, and the remedy is
+to rebuild and re-release. Judged acceptable because knaif is a local CLI rather than a
+network-facing service. **Revisit if** a CRT CVE is reachable from knaif's input handling,
+or if knaif grows a listening/daemon mode.
+
+**Not bundled, deliberately:** the Universal CRT (`ucrtbase.dll`, the `api-ms-win-crt-*`
+forwarders). It has been an OS component since Windows 10 — confirmed present in a clean
+Windows 11 Sandbox image — which is what sets the Windows 10 floor.
+
+### Linux — the GNU OpenMP runtime
+
+| File | Source |
+|---|---|
+| `libgomp.so.1` | the build container's GCC runtime |
+
+`libggml-base` and every `ggml-cpu-*` variant links it, and it ships with GCC rather than
+with a base system, so without it the CPU backends fail to load on any machine that merely
+lacks a compiler. It is the exact counterpart of `vcomp140.dll`.
+
+Licensed **GPLv3 with the GCC Runtime Library Exception**, which exists to permit this:
+the exception removes the copyleft requirement for programs compiled with GCC, so nothing
+propagates to knaif and no additional notice file is required.
+
+**Not bundled, deliberately:** `libstdc++.so.6`. Bundling it would remove an entire
+compatibility axis, but `libggml-vulkan.so` **dlopens the host GPU driver**, which is
+commonly built against a newer `libstdc++` than ours — forcing our copy ahead via
+`$ORIGIN` risks breaking GPU support on current desktops. That choice is what sets the
+`GLIBCXX_3.4.30` floor and excludes RHEL/Rocky/Alma 9.
+
+### CUDA opt-in payload (not part of any default artifact)
+
+`package.sh --kind=cuda` stages NVIDIA's redistributable `cudart` / `cublas` / `cublasLt`
+alongside `ggml-cuda`. Redistribution is EULA-permitted **only with the licence text**, so
+`package.sh` **hard-fails** when `installers/licenses/NVIDIA-CUDA-EULA.txt` is absent
+rather than warning — a warning scrolls past in a build log and ships anyway.
+
+The payload deliberately carries no `LICENSE`/`NOTICE`: it ships no knaif Apache-2.0 code,
+only llama.cpp's CUDA backend and NVIDIA's redistributables, whose notices are staged into
+its own `licenses/`. Apache-2.0 §4(d) attaches to redistributing the Work, which this is
+not. Revisit if the payload ever carries knaif-authored binaries.
+
 ## External binaries (not bundled)
 
 Skills that shell out to external tools do not ship them. FFmpeg in particular is
