@@ -19,7 +19,7 @@ to justify a new runtime dependency.
 
 Usage::
 
-    python scripts/check_pe_imports.py dist/staging/knaif-1.0.2-windows-x64/bin
+    python scripts/check_pe_imports.py dist/staging/knaif-1.1.0-windows-x64/bin
     python scripts/check_pe_imports.py <dir> --verbose
 
 Exits non-zero listing every unresolved import. No third-party dependency: a PE import

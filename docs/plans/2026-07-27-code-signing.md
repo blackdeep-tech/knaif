@@ -6,7 +6,7 @@
 > **Why this is its own plan.** Signing was W4 of the installer-polish plan, but it is the only
 > workstream there gated on an **external party** — every other one is code the owner can write
 > today. Leaving it in place meant a plan that could never close. Extracted 2026-07-27 so the
-> installer work ships as 1.0.2 while this waits on a certificate.
+> installer work ships as 1.1.0 while this waits on a certificate.
 >
 > **Deliberately NOT bound to the CI plan.** The obvious home would be
 > [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md), since SignPath Foundation

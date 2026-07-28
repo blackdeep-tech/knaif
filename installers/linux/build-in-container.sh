@@ -7,7 +7,7 @@
 #
 # Usage:
 #   installers/linux/build-in-container.sh                 # release: build HEAD's commit
-#   installers/linux/build-in-container.sh --rev=v1.0.2    # release: build that tag
+#   installers/linux/build-in-container.sh --rev=v1.1.0    # release: build that tag
 #   installers/linux/build-in-container.sh --dev           # development: mount the worktree
 #   installers/linux/build-in-container.sh --kind=cpu      # default kind is vulkan
 #   installers/linux/build-in-container.sh --rebuild-image # force a docker build first

@@ -18,7 +18,7 @@ compatibility table in the docs is measured rather than assumed.
 
 Usage::
 
-    python3 scripts/check_elf_deps.py dist/staging/knaif-1.0.2-linux-x64/bin
+    python3 scripts/check_elf_deps.py dist/staging/knaif-1.1.0-linux-x64/bin
     python3 scripts/check_elf_deps.py <dir> --verbose
 
 Exits non-zero if a library is neither staged nor on the baseline. No third-party dependency and

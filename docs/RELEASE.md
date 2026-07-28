@@ -79,7 +79,7 @@ blocks nothing; just do not promise Windows users the manual route.
 
 ```bash
 just package-linux                  # builds HEAD's commit -> tar.gz + AppImage
-just package-linux --rev=v1.0.2     # builds that tag
+just package-linux --rev=v1.1.0     # builds that tag
 ```
 
 **This is the only supported way to build a Linux artifact that gets published**, and it is the
@@ -244,7 +244,7 @@ be isolated:
 - **Never delete the production `{AppId}_is1` key as cleanup.** Tear down the throwaway build's key
   only.
 - **Never run the uninstaller with `/SUPPRESSMSGBOXES`** unless you mean it. It answers the
-  data-directory prompt with that prompt's default — which keeps `~/.knaif` from 1.0.2 onward, but
+  data-directory prompt with that prompt's default — which keeps `~/.knaif` from 1.1.0 onward, but
   a 1.0.1-or-earlier uninstaller still on disk will delete a 2.5 GB model store.
 
 ```bash

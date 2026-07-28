@@ -17,8 +17,8 @@
 # semantics rather than the artifact's.
 #
 # Usage:
-#   installers/linux/check-floor.sh dist/knaif-1.0.2-linux-x64.tar.gz
-#   installers/linux/check-floor.sh dist/knaif-1.0.2-linux-x86_64.AppImage
+#   installers/linux/check-floor.sh dist/knaif-1.1.0-linux-x64.tar.gz
+#   installers/linux/check-floor.sh dist/knaif-1.1.0-linux-x86_64.AppImage
 #   FLOOR_IMAGE=ubuntu:22.04 BELOW_IMAGE=ubuntu:20.04 installers/linux/check-floor.sh <artifact>
 set -euo pipefail
 
