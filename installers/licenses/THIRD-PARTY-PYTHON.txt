@@ -14,7 +14,7 @@ SUMMARY
 ------------------------------------------------------------------------------
 
 PACKAGE                 VERSION       LICENSE
-certifi                 2026.6.17     Mozilla Public License 2.0 (MPL 2.0)
+certifi                 2026.7.22     Mozilla Public License 2.0 (MPL 2.0)
 charset-normalizer      3.4.9         MIT
 click                   8.4.2         BSD-3-Clause
 colorama                0.4.6         BSD License
@@ -28,7 +28,7 @@ FULL LICENSE TEXTS
 ------------------------------------------------------------------------------
 
 ==============================================================================
-certifi 2026.6.17 -- Mozilla Public License 2.0 (MPL 2.0)
+certifi 2026.7.22 -- Mozilla Public License 2.0 (MPL 2.0)
 ==============================================================================
 
 This package contains a modified version of ca-bundle.crt:
