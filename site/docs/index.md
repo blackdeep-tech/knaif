@@ -9,7 +9,7 @@ hide:
 </p>
 
 <p align="center">
-  <strong>v1.0.1 — open source under Apache 2.0.</strong>
+  <strong>v1.0.2 — open source under Apache 2.0.</strong>
   <a href="https://github.com/blackdeep-tech/knaif">GitHub</a> ·
   <a href="https://github.com/blackdeep-tech/knaif/releases">Releases</a>
 </p>
@@ -384,7 +384,7 @@ deterministic domains, not a dull one for everything.
 
 ---
 
-## Status at v1.0.1
+## Status at v1.0.2
 
 | | |
 |---|---|
