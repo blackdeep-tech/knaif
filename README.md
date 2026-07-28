@@ -105,11 +105,13 @@ calibration, caveats, and a one-command harness to reproduce all of it:
 
 ## Status
 
-**v1.0.1** — first public release.
+**v1.0.2** — first release with downloadable binaries.
 
 | | |
 |---|---|
-| **Platforms** | Windows x64, Linux x64 |
+| **Windows** | x64, **Windows 10 or later** |
+| **Linux** | x64, **glibc 2.34+ and libstdc++ with `GLIBCXX_3.4.30`** — Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+ |
+| **Not supported** | RHEL / Rocky / Alma 9 — glibc is new enough, but its `libstdc++` is one version short |
 | **macOS** | not yet — core is cross-platform, packaging is a fast-follow |
 | **GPU** | CPU and Vulkan in every artifact; CUDA is a manual opt-in build |
 | **Skills** | `ffmpeg` and `documents` are production; `io` is stale and under rebuild |

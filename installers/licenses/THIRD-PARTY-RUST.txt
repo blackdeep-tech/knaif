@@ -5393,13 +5393,13 @@ limitations under the License.
 ================================================================================
 Apache License 2.0  (Apache-2.0)
 Applies to:
-  - knaif-cli 1.0.1
-  - knaif-core 1.0.1
-  - knaif-llm 1.0.1
-  - knaif-models 1.0.1
-  - knaif-skill-api 1.0.1
-  - knaif-skill-documents 1.0.1
-  - knaif-skill-ffmpeg 1.0.1
+  - knaif-cli 1.0.2
+  - knaif-core 1.0.2
+  - knaif-llm 1.0.2
+  - knaif-models 1.0.2
+  - knaif-skill-api 1.0.2
+  - knaif-skill-documents 1.0.2
+  - knaif-skill-ffmpeg 1.0.2
   - android_system_properties 0.1.5
   - anyhow 1.0.103
   - fdeflate 0.3.7
