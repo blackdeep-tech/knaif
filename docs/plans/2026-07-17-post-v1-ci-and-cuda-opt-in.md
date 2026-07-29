@@ -42,6 +42,33 @@
 
 ---
 
+> **Progress 2026-07-29 — Workstream U is code-complete; what remains needs the build box.**
+> U2/U3/U4/U5 are done. U1, U6 and U7 are `[~]`: every mechanism is built and tested, but each has a
+> step that cannot be performed from a checkout.
+>
+> Still owed, and all of it is execution rather than design:
+>
+> - **Build both payloads and publish the assets.** `contracts/backends/backend-manifest.yaml` is
+>   `status: unpublished` with placeholder URLs, so `backend install cuda` refuses with an
+>   explanation rather than fetching a `TODO`. `package.sh` emits a manifest fragment with the real
+>   checksums to paste in. Order matters — see `RELEASE.md` §7.
+> - **Run the three cases against the PACKAGED payload on each OS.** The spike proved the mechanism
+>   with a hand-built lib; this proves what users receive. WSL2 GPU passthrough is confirmed working
+>   (decision log), so the Linux half needs no second machine.
+> - **Verify the fatbin arch check against a real fatbin.** `verify_cuda_archs` has never run against
+>   one, only against its own logic.
+> - **Pin `Dockerfile.cuda`'s base image by digest**, and confirm the `13.3-devel-ubuntu22.04` tag
+>   exists at all — CUDA 13 dropped several older distributions, and a newer base would silently
+>   raise the payload's floor above the artifact's.
+> - **Run the Windows installer wizard** to see the CUDA task render and confirm it is genuinely
+>   optional. `/VERYSILENT` never builds the task tree, so this is a GUI step.
+>
+> One thing the plan expected to decide was instead settled by building: the stale-payload refusal.
+> The plan called for measuring whether ggml already rejects a mismatched lib before designing.
+> `BackendStore` writes a version receipt and the loader refuses on it regardless, which turns that
+> measurement into an optimisation question ("could we be more permissive?") rather than a
+> prerequisite.
+
 ## Decision log
 
 **2026-07-28 — Workstream U is now release-blocking; the first published release waits for it.**
@@ -359,7 +386,7 @@ into `~/.knaif/backends`.
 
 ## Workstream U — CUDA opt-in surface _(was finalization C6 + C6a's execution)_
 
-- [ ] **U1 — Publish the split payload artifacts** _(C6a's execution half)_. Per C6a, unchanged:
+- [~] **U1 — Publish the split payload artifacts** _(C6a's execution half)_. Per C6a, unchanged:
   | Artifact | Tag | Why |
   |---|---|---|
   | `ggml-cuda` (~125 MB) | the **product release** (e.g. `v1.1.0`) | ABI-coupled to the exe's build; a tag-scoped URL structurally cannot serve a newer lib to an older exe |
@@ -383,7 +410,7 @@ into `~/.knaif/backends`.
     and stages a payload tree whose files are uploaded individually across the two tags. The
     rejected alternative (two archives + verified extraction in `BackendStore`) is recorded in the
     decision log so it is not re-proposed.
-- [ ] **U2 — `knaif backend install cuda` / `backend remove cuda`** _(C6's original scope, verbatim)_:
+- [x] **U2 — `knaif backend install cuda` / `backend remove cuda`** _(C6's original scope, verbatim)_:
   reuse the `HttpFetcher` + SHA-pinned manifest path (host is not a constraint) writing to the backend
   dir the loader scans; the installer's opt-in task calls the **same** command.
   - Today `apps/cli/src/main.rs` has `Command` with only `SkillsAction` and `ModelsAction`
@@ -448,7 +475,7 @@ into `~/.knaif/backends`.
       version-stamped directory the loader resolves per build. Half an hour, and it picks the design.
     - Either way this needs an **upgrade test**, not just an install test: install payload → bump the
       binary → assert the old payload is refused rather than loaded.
-- [ ] **U3 — Driver-aware detection gate** _(C6's audit finding, verbatim)_: offer/nudge CUDA only
+- [x] **U3 — Driver-aware detection gate** _(C6's audit finding, verbatim)_: offer/nudge CUDA only
   when an NVIDIA GPU is present **and the driver is R580+** (CUDA 13 floor) — `nvcuda.dll` presence
   alone is insufficient; probe the driver version (e.g. NVML / `nvidia-smi`) and, if too old, tell the
   user to update rather than install a payload that will fail to load. First-run nudge fires only when
@@ -481,7 +508,7 @@ into `~/.knaif/backends`.
     direction. Phrase the nudge from the measured local reality where possible, and re-measure the
     Vulkan/CUDA split on each supported architecture when the llama.cpp pin moves — record it in
     `docs/PERFORMANCE.md`, which is already the file that owns this claim.
-- [ ] **U4 — Re-enable the installer's CUDA component.** v1 ships the Windows installer with **no
+- [x] **U4 — Re-enable the installer's CUDA component.** v1 ships the Windows installer with **no
   CUDA component** precisely because U2 didn't exist for its opt-in task to call (finalization C6).
   Restore it once U2 lands, and verify the component is genuinely optional.
   - **Two things the opt-in task inherits from `backend install`, unaddressed until now**
@@ -493,14 +520,14 @@ into `~/.knaif/backends`.
     design (that is what makes `backend install` elevation-free), so uninstalling knaif leaves
     ~618 MB behind unless the uninstaller is told about it. `backend remove` exists for the user who
     knows; the uninstaller is for the one who does not.
-- [ ] **U5 — Document the manual path's retirement.** `docs/RELEASE.md` / `NATIVE.md` will, as of v1,
+- [x] **U5 — Document the manual path's retirement.** `docs/RELEASE.md` / `NATIVE.md` will, as of v1,
   tell CUDA users to copy the payload into `~/.knaif/backends` by hand. Replace that with the command
   — and keep the manual path documented as the fallback, since it is what the loader actually
   supports and it is how U2 will be debugged.
   - **Also correct the Vulkan claim** flagged in *Why this is release-blocking*: `RELEASE.md` §6 and
     any release body derived from it currently tell every NVIDIA user that Vulkan is enough.
 
-### - [ ] U6 — Make `package.sh --kind=cuda` emit a real payload on Windows
+### - [~] U6 — Make `package.sh --kind=cuda` emit a real payload on Windows
 
 **This is the gap that would otherwise ship an NVIDIA story with a hole in it** — U1–U5 assume a
 payload exists for each OS, and on Windows it does not. `--kind=cuda` there still produces the
@@ -558,7 +585,7 @@ proven path, not a spike.
   - Corroboration, not proof: **Ollama ships the CRT dynamically in each backend directory**
     (ten files per dir, four dirs), rather than linking it in.
 
-### - [ ] U7 — A CUDA build image, separate from the release image
+### - [~] U7 — A CUDA build image, separate from the release image
 
 The pinned Linux release image deliberately has **no CUDA toolkit**
 ([`Dockerfile:77-79`](../../installers/linux/Dockerfile#L77-L79)): it would add 3–5 GB to serve an

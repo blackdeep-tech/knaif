@@ -173,6 +173,24 @@ Installing is **stage-all → verify-all → swap**, not a per-file `rename` loo
 operations are not one atomic operation, and an interrupted install would otherwise leave a
 directory holding a mix of two payloads. Payload assets are published as **loose per-file assets**
 rather than archives, so nothing on the install path extracts anything.
+
+```bash
+knaif backend list             # what exists, and its state on this machine
+knaif backend install cuda     # download + verify + install (~618 MB, needs an R580+ driver)
+knaif backend verify cuda      # re-check the installed files against the manifest
+knaif backend remove cuda      # back to CPU/Vulkan
+```
+
+**The manual route still works, and is the fallback.** Build a payload
+(`installers/package.sh --kind=cuda`) and copy its files into `~/.knaif/backends`. That is what the
+loader actually supports — `backend install` is a convenience over it, not a separate mechanism —
+and it is how `backend install` gets debugged. Two caveats that matter only on this path:
+
+- **Match the versions yourself.** A hand-copied payload writes no receipt, so the staleness check
+  above cannot see it. That is deliberate: refusing an unrecognised directory would break the very
+  route used to debug the managed one.
+- **Every file has to go in**, including the NVIDIA redistributables — the ggml lib alone will not
+  load.
 - **`GGML_CPU_ALL_VARIANTS`** emits ~9–14 `ggml-cpu-*` libs (`sse42` … `alderlake`, ~8 MB total;
   count varies by target) and dispatches on the host CPU at runtime — strictly better than one
   static CPU baseline.
@@ -405,7 +423,7 @@ stages the dynamic libs for you:
 ```bash
 installers/package.sh --kind=cpu                                  # llama,dynamic-backends
 installers/package.sh --kind=vulkan                               # + vulkan  (the default artifact)
-CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real" \
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
   installers/package.sh --kind=cuda                               # opt-in payload
 installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 ```
@@ -416,7 +434,7 @@ installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 cargo build --release -p knaif-cli --features llama,dynamic-backends            # cpu
 CMAKE_GENERATOR=Ninja \
   cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan   # vulkan
-CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real" \
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
   cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda     # cuda payload
 installers/package.sh --no-build --kind=<cpu|vulkan|cuda>
 ```
@@ -475,23 +493,13 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 
 ## 12. Known limitations & roadmap
 
-- **CUDA distribution — mechanism DONE, install surface DEFERRED to post-v1.** The default download
-  carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~½ GB of NVIDIA redist
-  that non-NVIDIA users never pay for) loaded from `~/.knaif/backends`. The **loader** is proven on
-  Windows and Linux (C5a), and the multi-arch fatbin per §5.3/§10 is built; payload split +
-  GH-Releases hosting are decided.
-  **v1 ships no `knaif backend install cuda` command and no CUDA component in the installer** — the
-  only documented v1 route is copying the payload into `~/.knaif/backends` by hand. The install
-  surface, plus its **driver gate** (CUDA 13 needs R580+; `nvcuda.dll`/`libcuda.so` presence alone is
-  not sufficient), lands in
-  [post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
-  - **That manual route is LINUX-ONLY in practice at v1.** `package.sh --kind=cuda` emits a real
-    payload only on Linux (D4: built, and C6b verified CUDA then wins device selection). On Windows
-    the same flag still produces the **historical static-with-redist app**, not a payload, so there is
-    nothing a Windows user could copy into `~/.knaif/backends` — even though the Windows loader would
-    happily pick it up (the default Windows artifact is a `dynamic-backends` build). Aligning Windows
-    `cuda` onto Option 3 is part of the same post-v1 plan. Neither OS publishes a CUDA asset at v1, so
-    this blocks nothing — but do not tell a Windows user the manual route is available to them.
+- **CUDA distribution — the install surface exists from 1.1.0** (it was deferred through 1.0.x). The
+  default download carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~618 MB
+  of NVIDIA redist that non-NVIDIA users never pay for) loaded from `~/.knaif/backends`. Users get it
+  with `knaif backend install cuda`; the Windows installer offers the same command as an unchecked
+  task, and knaif offers it on first run when it detects an eligible GPU (§5.5).
+  Both OSes now emit a real payload from `package.sh --kind=cuda` — through 1.0.x, Windows produced
+  the historical static-with-redist *app* instead, so a Windows user had nothing to install at all.
 - **CI** — there is no `.github/workflows/` yet; v1 gates on **local** green. CI + `release.yml` +
   eval-parity are tracked in the same post-v1 plan (they need the final org, so they land after the
   transfer).

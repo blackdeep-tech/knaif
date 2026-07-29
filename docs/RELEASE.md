@@ -509,13 +509,32 @@ explicitly, e.g.
 `knaif-<ver>-windows-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /TYPE=full /DIR="<path>"`
 (add `/TASKS=""` to skip PATH, winget deps, and the model download).
 
-**GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU — on
-every vendor, so most users need nothing else. NVIDIA CUDA offload in v1 is manual **and Linux-only**:
-build a matching `ggml-cuda` payload + NVIDIA redist (`installers/package.sh --kind=cuda`) and drop it
-into `~/.knaif/backends` (needs an R580+ driver). The payload is ABI-coupled to the exe — use the one
-built for your exact knaif version. **Windows has no CUDA route at v1**: `package.sh --kind=cuda`
-still stages the historical static app there rather than cutting a payload, so there is nothing to
-copy (post-v1, C6). Windows NVIDIA users get Vulkan, which is the default anyway.
+**GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU. That
+covers every vendor, and it is enough for most users — **but not for NVIDIA users on the newest
+cards.** On Blackwell (RTX 50xx, sm_120) the Vulkan path generates at roughly CPU speed: ~5.7 tok/s
+against the CPU's ~5.9, measured on knaif's real workload ([PERFORMANCE.md](PERFORMANCE.md) §2).
+That is not a slower option, it is a product that reads as broken, so say so plainly in the release
+body rather than letting "Vulkan works everywhere" stand.
+
+NVIDIA users install the CUDA backend with one command:
+
+```
+knaif backend install cuda
+```
+
+~618 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
+undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
+faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
+Windows installer offers it as an unchecked task.
+
+The payload is ABI-coupled to the exe, so it is re-installed per knaif release — the loader detects a
+payload from another release and ignores it with a message rather than loading it. Copying the files
+into `~/.knaif/backends` by hand still works and stays documented as the fallback, but it is not the
+route to put in a release body.
+
+> **This paragraph was wrong through 1.0.x** and is the text a release body would have been written
+> from. It told every NVIDIA user that Vulkan was enough. The measurement that contradicts it was
+> taken 2026-07-14 and simply never reached this file.
 
 ---
 
