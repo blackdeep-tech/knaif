@@ -351,6 +351,29 @@ The tag and every release URL must be **born in the final org** — never redire
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
 URL has ever depended on an org redirect.
 
+### Rehearse the publish flow before the first real cut
+
+**Everything below is irreversible, and none of it has ever been executed.** No GitHub Release has
+existed, so step 5 is untested procedure — and each of its outputs is permanent: the `release-tags`
+ruleset means a pushed tag cannot be moved, a published Release URL is public the moment it exists,
+and a PyPI version can **never** be reused. There is no revision to a first release, only a second
+one that looks like an apology.
+
+So run the whole path once against throwaway outputs before running it for real:
+
+- **A draft GitHub Release** — create it, upload the artifacts and `SHA256SUMS`, check the rendered
+  body and the asset names, then **delete it without publishing**. Drafts are invisible to everyone
+  but the repo's maintainers, so this exercises upload, size limits, and the body's markdown with no
+  public trace.
+- **TestPyPI** for the wheel (§5a) — it needs its own token in a `[testpypi]` section, which is
+  precisely the guard against fat-fingering the real index.
+- **Do not push a throwaway tag.** A draft Release can be attached to an existing tag or created
+  against a branch; a tag is the one artifact here with no undo, so it stays for the real cut.
+
+Cheap, and it converts "the publish procedure is written down" into "the publish procedure has been
+run". Skip it only on a release whose flow is already proven — which, until one has shipped, is
+none of them.
+
 1. Open the PR; review; ensure **local suites green** (not "CI green" — there is no CI).
 2. **Merge to `dev`.** *The branch is closed here; everything below is release mechanics.*
 3. **v1.0.0 only — OSS prep.** Run the OSS-prep pass to completion, ending
