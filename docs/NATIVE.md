@@ -221,6 +221,38 @@ Conclusions (all evidence-backed):
 - Consider `knaif-qwen3-1.7b-v1` for the Vulkan/CPU fallback paths to offset slower compute.
 - Do **not** invest in a Vulkan pipeline-cache patch for speed.
 
+**The first-run CUDA offer.** The default artifact ships CPU+Vulkan; CUDA is an opt-in payload, so
+something has to tell an NVIDIA user it exists — *before* their first slow run, not after. A Blackwell
+user who runs first and reads later gets one CPU-speed request and may reasonably conclude the
+product is broken.
+
+The offer has **two strengths**, because the two populations are genuinely different:
+
+| Population | Message | Why |
+|---|---|---|
+| Compute cap in `nudge.vulkan_inadequate_compute_caps` (today: `12.0`, Blackwell) | prominent, stated as *correctness* | Vulkan generates at ~CPU speed there (§5.4 / PERFORMANCE.md §2) — the payload is what makes the product work |
+| Any other NVIDIA GPU | quiet, stated as *optional* | CUDA is faster, Vulkan is perfectly usable |
+| Driver below `requires.min_driver` | update hint, **no offer** | the payload would download and then fail to load, which reaches the user as "CUDA didn't work" |
+| No NVIDIA GPU, or already installed | nothing at all | an unsolicited GPU message on an AMD laptop is noise |
+
+Three properties worth keeping:
+
+- **The architecture list is data, not code** (`contracts/backends/backend-manifest.yaml`). The
+  defect behind the strong case lives in a llama.cpp/driver code path and may be fixed upstream, at
+  which point a list baked into the source would start lying in the other direction. Re-measure each
+  supported architecture when the llama.cpp pin moves, record it in `PERFORMANCE.md`, edit the list.
+- **The probe is `nvidia-smi`, not ggml.** It must work on a machine where CUDA is *not* installed,
+  which is the whole point. `LlamaBackendDevice` carries no compute capability, and the
+  `compute capability 8.6` line people remember is a CUDA-backend init log that by definition does
+  not exist yet. One `nvidia-smi --query-gpu=driver_version,compute_cap` returns both fields the
+  gate needs, so the architecture half costs nothing beyond the driver check.
+- **The soft message quotes no speed figure.** It used to say "~3%", which was the *generation*
+  column; knaif's workload is prompt-decode-dominated. No replacement number is quotable until
+  `PERFORMANCE.md` §2 is reconciled — its per-phase rates and its stated totals do not add up.
+
+`$KNAIF_NO_CUDA_NUDGE` suppresses it. Failure is silent throughout: an unreadable manifest or a
+missing `nvidia-smi` must never disturb a run that was going to work.
+
 ### 5.6 Default model auto-select
 
 `run` is usable without `--model`: when none is given, the manifest's `recommendations.cli`
@@ -429,8 +461,10 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 |---|---|---|
 | `KNAIF_SKILLS_ROOT` | Override the skills directory | (resolved) |
 | `KNAIF_MODEL_MANIFEST` | Override the model-manifest path | (resolved) |
+| `KNAIF_BACKEND_MANIFEST` | Override the backend-manifest path | (resolved) |
 | `KNAIF_MODELS_DIR` | Override the GGUF store directory | `~/.knaif/models` |
 | `KNAIF_BACKENDS_DIR` | Override where loadable `ggml-*` backends are scanned for (`dynamic-backends` builds; the exe's own directory is always scanned too) | `~/.knaif/backends` |
+| `KNAIF_NO_CUDA_NUDGE` | Suppress the first-run CUDA offer (§5.5) | off |
 | `KNAIF_LLM_BACKEND` | `mock` opts out of default-model auto-select (§5.6); `llama` needs a model | auto-select, else `mock` |
 | `KNAIF_LLM_MOCK_RESPONSE` | Canned mock plan (offline dev/eval) | empty plan |
 | `KNAIF_N_GPU_LAYERS` | GPU offload layer count (`0` = CPU) | `999` |

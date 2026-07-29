@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
-use knaif_models::{BackendState, BackendStore, HttpFetcher, ModelStore, VerifyOutcome};
+use knaif_models::{BackendState, BackendStore, CudaOffer, HttpFetcher, ModelStore, VerifyOutcome};
 
 /// `--version` reports the compiled inference backend next to the release number, so a
 /// mock-only build is identifiable without loading a 2.5 GB GGUF first. `just parity`
@@ -643,6 +643,12 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             "⚠  No GPU detected — running on CPU. Inference will be slow \
              (the first request can take a minute or more)."
         );
+    }
+    // Tell an NVIDIA user about the opt-in CUDA payload, once, before the slow run rather than
+    // after it. A Blackwell user who runs first and reads later gets one CPU-speed request and may
+    // reasonably conclude the product is broken.
+    if model.is_some() {
+        print_cuda_offer();
     }
     // Model load + inference is the one silent stretch of a real run; show a live spinner so a
     // slow CPU-only run is not mistaken for a hang. Skip it for the mock (instant) and in verbose
@@ -1324,6 +1330,50 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
             "model manifest not found (set KNAIF_MODEL_MANIFEST or run from a checkout)"
         )
     })
+}
+
+/// Print the CUDA offer for this machine, if there is one worth printing.
+///
+/// Deliberately **best-effort and silent on failure**: an unreadable manifest or a missing
+/// `nvidia-smi` must never interfere with a run that was going to work. It is also silent for the
+/// large majority of machines — no NVIDIA GPU, or the payload already installed — because an
+/// unsolicited GPU message on an AMD laptop is noise.
+///
+/// `$KNAIF_NO_CUDA_NUDGE` suppresses it for anyone who has decided not to install the payload and
+/// does not want to be told again.
+fn print_cuda_offer() {
+    if std::env::var("KNAIF_NO_CUDA_NUDGE").is_ok_and(|v| !v.is_empty()) {
+        return;
+    }
+    let Ok(store) = resolve_backend_manifest_path().and_then(|p| BackendStore::open(&p)) else {
+        return;
+    };
+    match knaif_models::cuda_offer(&store, &knaif_models::probe_nvidia()) {
+        CudaOffer::NotApplicable | CudaOffer::AlreadyInstalled => {}
+        // Stated in correctness terms, not speed terms: on this hardware the Vulkan fallback
+        // generates at CPU speed, so the payload is what makes the product work.
+        CudaOffer::Recommended { gpu } => eprintln!(
+            "⚠  {gpu}: the bundled Vulkan backend runs at roughly CPU speed on this GPU \
+             generation.\n   Install the CUDA backend for usable performance:  \
+             knaif backend install cuda"
+        ),
+        // No number quoted. The "~3%" this used to claim was the generation column, and knaif's
+        // workload is prompt-decode-dominated; no replacement figure is quotable until
+        // PERFORMANCE.md §2 is reconciled.
+        CudaOffer::Optional { gpu } => eprintln!(
+            "ℹ  {gpu}: CUDA offload is available and faster than the bundled Vulkan backend, \
+             which\n   already works here. Optional:  knaif backend install cuda"
+        ),
+        // An offer would hand them ~618 MB that cannot load, which reaches the user as
+        // "CUDA didn't work" — the least debuggable outcome available.
+        CudaOffer::DriverTooOld { gpu, have, need } => eprintln!(
+            "ℹ  {gpu}: CUDA offload needs NVIDIA driver R{need}+ and this machine has {have}.\n   \
+             Update the driver to enable it; the current run uses Vulkan or CPU."
+        ),
+        CudaOffer::NeedsReinstall { reason } => {
+            eprintln!("⚠  {reason}.\n   Run `knaif backend install cuda` to update it.")
+        }
+    }
 }
 
 /// Locate the backend manifest: `$KNAIF_BACKEND_MANIFEST` else walk up for

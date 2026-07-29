@@ -83,6 +83,21 @@ pub enum PublishStatus {
     Published,
 }
 
+/// How strongly to offer this payload, expressed as data.
+///
+/// The offer has two strengths — on some hardware the payload is what makes the product usable,
+/// on the rest it is an optimisation — and which is which is a **measurement**, not a fact about
+/// the architecture. The defect behind the strong case is in a llama.cpp/driver code path and may
+/// be fixed upstream, at which point a list baked into the code would start lying in the other
+/// direction. Keeping it here means re-measuring when the llama.cpp pin moves is one edit.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct BackendNudge {
+    /// Compute capabilities (`"12.0"`) where the *fallback* backend has been measured to be
+    /// inadequate rather than merely slower. Sourced from `docs/PERFORMANCE.md` §2.
+    #[serde(default)]
+    pub vulkan_inadequate_compute_caps: Vec<String>,
+}
+
 /// One installable backend payload (e.g. `cuda`).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct BackendSpec {
@@ -92,6 +107,8 @@ pub struct BackendSpec {
     pub status: PublishStatus,
     #[serde(default)]
     pub requires: BackendRequires,
+    #[serde(default)]
+    pub nudge: BackendNudge,
     /// Keyed `<os>-<arch>`, matching what `installers/package.sh` names its artifacts.
     #[serde(default)]
     pub platforms: BTreeMap<String, BackendPlatform>,

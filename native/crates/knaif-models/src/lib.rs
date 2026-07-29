@@ -9,15 +9,17 @@ pub mod backend_manifest;
 pub mod backend_store;
 pub mod fetcher;
 pub mod manifest;
+pub mod nvidia;
 pub mod store;
 
 pub use backend_manifest::{
-    current_platform, BackendFile, BackendManifest, BackendPlatform, BackendRequires, BackendSpec,
-    PublishStatus,
+    current_platform, BackendFile, BackendManifest, BackendNudge, BackendPlatform, BackendRequires,
+    BackendSpec, PublishStatus,
 };
 pub use backend_store::{
     backend_dir_state, BackendDirState, BackendEntry, BackendProgress, BackendState, BackendStore,
 };
 pub use fetcher::HttpFetcher;
 pub use manifest::{Manifest, ModelSpec, Recommendations};
+pub use nvidia::{cuda_offer, probe_nvidia, CudaOffer, NvidiaGpu};
 pub use store::{backends_dir, store_dir, Fetcher, ModelEntry, ModelStore, VerifyOutcome};
