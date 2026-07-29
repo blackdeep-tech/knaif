@@ -232,7 +232,7 @@ if [ "$KIND" = vulkan ]; then SUFFIX=""; else SUFFIX="-$KIND"; fi
 NAME="knaif-$VER-$OS-$ARCH$SUFFIX"
 STAGE="dist/staging/$NAME"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/bin" "$STAGE/contracts/runtime" "$STAGE/contracts/models"
+mkdir -p "$STAGE/bin" "$STAGE/contracts/runtime" "$STAGE/contracts/models" "$STAGE/contracts/backends"
 
 cp "$BIN" "$STAGE/bin/"
 
@@ -457,6 +457,13 @@ done
 
 cp contracts/runtime/core_tools.yaml "$STAGE/contracts/runtime/"
 cp contracts/models/model-manifest.yaml "$STAGE/contracts/models/"
+# The backend manifest is read by an ALREADY-INSTALLED knaif deciding what to download, so it cannot
+# live in the payload it describes — it ships in the product artifact, beside the other two. Staging
+# is per-file by design (`cp -r contracts/` would sweep in READMEs and any future dev-only contract),
+# so a new contract reaches users only when it is named here. installers/smoke.sh asserts all three
+# are present, because a manifest nobody has is a payload nobody can install — a failure that lands
+# on the user rather than on the build.
+cp contracts/backends/backend-manifest.yaml "$STAGE/contracts/backends/"
 cp LICENSE "$STAGE/"
 # NOTICE ships beside LICENSE, not instead of it. Apache-2.0 §4(d) requires the NOTICE file to
 # travel with every redistribution, and this is the file carrying the Qwen3 derivation attribution

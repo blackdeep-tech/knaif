@@ -42,13 +42,14 @@ pub(crate) fn gpu_present(verbose: bool) -> bool {
 /// Register the loadable `ggml-*` backends before any llama.cpp init.
 ///
 /// Only does anything in a `dynamic-backends` build, where each backend (cpu/vulkan/cuda) is a
-/// separate shared lib `dlopen`ed at runtime rather than static-linked. Scans, in order: the exe's
-/// own directory (where a packaged artifact ships the default CPU+Vulkan backends), then
+/// separate shared lib `dlopen`ed at runtime rather than static-linked. Scans, in order:
 /// [`knaif_models::backends_dir`] — `$KNAIF_BACKENDS_DIR`, else `~/.knaif/backends`, where the
-/// opt-in CUDA payload lands.
+/// opt-in CUDA payload lands — then the exe's own directory, where a packaged artifact ships the
+/// default CPU+Vulkan backends. See [`backend_dirs`] for why the payload dir must come first.
 ///
 /// A missing directory is skipped silently — that is the mechanism by which a user *without* the
-/// CUDA payload simply never loads it, rather than failing. ggml's registry is process-global, so
+/// CUDA payload simply never loads it, rather than failing. A payload belonging to a *different*
+/// knaif release is skipped loudly (see [`backend_dirs`]). ggml's registry is process-global, so
 /// this runs exactly once.
 #[cfg(feature = "dynamic-backends")]
 fn load_dynamic_backends(verbose: bool) {
@@ -105,10 +106,21 @@ fn backend_dirs() -> Vec<std::path::PathBuf> {
     // same id"). Scanning the exe dir first therefore let the artifact's bundled Vulkan win and made
     // an installed CUDA payload inert — 619 MB downloaded to change nothing.
     //
-    // Ordering picks the *device*; it does not decide whether a stale lib gets loaded, since both
-    // dirs are always scanned regardless. A payload that no longer matches this exe is prevented by
-    // pinning it to the exe's build when it is installed, not by the loader.
-    dirs.push(knaif_models::backends_dir());
+    // Ordering picks the *device*; it does not decide whether a STALE lib gets loaded. That is the
+    // check below, and it has to happen here rather than at install time: `~/.knaif/backends` is
+    // deliberately outside the install dir, so it survives an app upgrade and is scanned first —
+    // an upgraded knaif would otherwise reach the previous release's `ggml-cuda` before any
+    // `backend install` command could run. `BackendStore` stamps the installing release into a
+    // receipt; a directory whose receipt names a different release (or a half-finished install) is
+    // skipped with a message that says how to fix it.
+    //
+    // A directory with NO receipt is still loaded. That is the documented manual route — build the
+    // payload and drop it in — which is how `backend install` itself gets debugged.
+    let payload_dir = knaif_models::backends_dir();
+    match knaif_models::backend_dir_state(&payload_dir, env!("CARGO_PKG_VERSION")) {
+        knaif_models::BackendDirState::Refuse { reason } => eprintln!("knaif: {reason}"),
+        _ => dirs.push(payload_dir),
+    }
     // Then the artifact's own backends, beside the binary.
     let exe_dir = std::env::current_exe()
         .ok()

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
-use knaif_models::{HttpFetcher, ModelStore, VerifyOutcome};
+use knaif_models::{BackendState, BackendStore, HttpFetcher, ModelStore, VerifyOutcome};
 
 /// `--version` reports the compiled inference backend next to the release number, so a
 /// mock-only build is identifiable without loading a 2.5 GB GGUF first. `just parity`
@@ -49,6 +49,11 @@ enum Command {
     Models {
         #[command(subcommand)]
         action: ModelsAction,
+    },
+    /// Manage optional GPU backend payloads (CUDA) in ~/.knaif/backends.
+    Backend {
+        #[command(subcommand)]
+        action: BackendAction,
     },
     /// Produce a validated plan envelope for a request (JSON to stdout).
     Plan(PlanArgs),
@@ -91,6 +96,18 @@ enum ModelsAction {
         #[arg(long)]
         all: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum BackendAction {
+    /// List the optional GPU backend payloads and whether they're installed here.
+    List,
+    /// Download a backend payload and install it where the runtime scans for it.
+    Install { name: String },
+    /// Verify an installed payload's files against the manifest checksums.
+    Verify { name: String },
+    /// Remove an installed backend payload (falls back to CPU/Vulkan).
+    Remove { name: String },
 }
 
 #[derive(Args)]
@@ -198,6 +215,7 @@ fn main() -> anyhow::Result<()> {
             } => cmd_skills_deps(name.as_deref(), include_stale),
         },
         Command::Models { action } => cmd_models(action),
+        Command::Backend { action } => cmd_backend(action),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => cmd_run(args),
     }
@@ -406,6 +424,122 @@ fn cmd_models(action: ModelsAction) -> anyhow::Result<()> {
                 }
             } else {
                 anyhow::bail!("specify a model name or --all");
+            }
+            Ok(())
+        }
+    }
+}
+
+/// A byte-oriented progress bar for one file of a multi-file backend payload. The message carries
+/// the position in the set (`[2/4] libcudart.so.13`), because a CUDA payload is ~618 MB across
+/// several files and a bar with no such context looks stalled between files.
+fn backend_bar() -> ProgressBar {
+    let bar = ProgressBar::new(0);
+    if let Ok(style) = ProgressStyle::with_template(
+        "{msg}\n{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+         {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
+    ) {
+        bar.set_style(style.progress_chars("#>-"));
+    }
+    bar
+}
+
+fn cmd_backend(action: BackendAction) -> anyhow::Result<()> {
+    let store = BackendStore::open(&resolve_backend_manifest_path()?)?;
+    match action {
+        BackendAction::List => {
+            let entries = store.list();
+            if entries.is_empty() {
+                println!("No backend payloads in the manifest.");
+                return Ok(());
+            }
+            println!(
+                "Backends dir: {}   (platform: {})",
+                store.dir().display(),
+                store.platform()
+            );
+            for e in entries {
+                let state = match &e.state {
+                    BackendState::Installed => "installed".to_string(),
+                    BackendState::NotInstalled if !e.platform_supported => {
+                        "unavailable on this platform".to_string()
+                    }
+                    BackendState::NotInstalled
+                        if e.status != knaif_models::PublishStatus::Published =>
+                    {
+                        "not published yet".to_string()
+                    }
+                    BackendState::NotInstalled => "available".to_string(),
+                    BackendState::Stale { installed_by } => {
+                        format!("STALE (installed by knaif {installed_by}; re-install to use it)")
+                    }
+                    BackendState::Interrupted => {
+                        "INCOMPLETE (a previous install did not finish; re-install)".to_string()
+                    }
+                };
+                let size = match e.total_bytes {
+                    Some(b) if b > 0 => format!("  ~{} MB", b / 1_000_000),
+                    _ => String::new(),
+                };
+                println!("  {:<10} {}{}", e.name, state, size);
+                if let Some(d) = &e.description {
+                    println!("             {d}");
+                }
+            }
+            Ok(())
+        }
+        BackendAction::Install { name } => {
+            let bar = backend_bar();
+            let mut current = String::new();
+            let result = store.install_with_progress(&name, &HttpFetcher::new(), &mut |p| {
+                if current != p.file {
+                    current = p.file.to_string();
+                    bar.set_length(p.total_bytes.unwrap_or(0));
+                    bar.set_message(format!("[{}/{}] {}", p.index, p.total_files, p.file));
+                }
+                if let Some(t) = p.total_bytes {
+                    if bar.length() != Some(t) {
+                        bar.set_length(t);
+                    }
+                }
+                bar.set_position(p.done_bytes);
+            });
+            match result {
+                Ok(dir) => {
+                    bar.finish_and_clear();
+                    println!("Installed the {name} backend -> {}", dir.display());
+                    println!(
+                        "It is picked up on the next run; no restart of anything else needed."
+                    );
+                    Ok(())
+                }
+                Err(e) => {
+                    bar.abandon();
+                    Err(e)
+                }
+            }
+        }
+        BackendAction::Verify { name } => {
+            match store.verify(&name)? {
+                VerifyOutcome::Ok => println!("{name}: ok (every file matches the manifest)"),
+                VerifyOutcome::Mismatch { expected, actual } => anyhow::bail!(
+                    "{name}: CHECKSUM MISMATCH\n  expected {expected}\n  actual   {actual}\n  \
+                     Re-run `knaif backend install {name}`."
+                ),
+                VerifyOutcome::NotInstalled => println!("{name}: not installed"),
+                VerifyOutcome::NoChecksum => {
+                    println!(
+                        "{name}: installed, but the manifest has no checksums to verify against"
+                    )
+                }
+            }
+            Ok(())
+        }
+        BackendAction::Remove { name } => {
+            if store.remove(&name)? {
+                println!("Removed the {name} backend. Runs fall back to CPU/Vulkan.");
+            } else {
+                println!("{name}: not installed");
             }
             Ok(())
         }
@@ -1188,6 +1322,21 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
     resolve_repo_file("contracts/models/model-manifest.yaml").ok_or_else(|| {
         anyhow::anyhow!(
             "model manifest not found (set KNAIF_MODEL_MANIFEST or run from a checkout)"
+        )
+    })
+}
+
+/// Locate the backend manifest: `$KNAIF_BACKEND_MANIFEST` else walk up for
+/// `contracts/backends/backend-manifest.yaml` in a checkout / beside the installed exe.
+fn resolve_backend_manifest_path() -> anyhow::Result<PathBuf> {
+    if let Ok(p) = std::env::var("KNAIF_BACKEND_MANIFEST") {
+        if !p.is_empty() {
+            return Ok(PathBuf::from(p));
+        }
+    }
+    resolve_repo_file("contracts/backends/backend-manifest.yaml").ok_or_else(|| {
+        anyhow::anyhow!(
+            "backend manifest not found (set KNAIF_BACKEND_MANIFEST or run from a checkout)"
         )
     })
 }

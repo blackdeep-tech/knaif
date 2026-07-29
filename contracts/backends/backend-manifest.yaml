@@ -1,0 +1,127 @@
+# Language-neutral loadable-backend manifest — read by the shared BackendStore (knaif-models).
+# Records the opt-in GPU backend payloads `knaif backend install` can fetch into the directory the
+# runtime scans (`~/.knaif/backends`, or $KNAIF_BACKENDS_DIR).
+#
+# THIS IS A BILL OF MATERIALS, NOT A CATALOG, and it is STRICTER THAN THE MODEL MANIFEST. It ships
+# inside the *product* artifact — beside core_tools.yaml and model-manifest.yaml — and answers "what
+# payload does THIS build load?", never "what is the newest payload?". It must never resolve
+# "latest": a backend whose ABI does not match the binary that loads it is undefined behaviour that
+# presents to the user as a driver bug, which is the least debuggable outcome available.
+#
+# The manifest is read by an already-installed knaif deciding what to download, so it cannot live in
+# the payload it describes. That is why it ships in the product artifact and why installers/package.sh
+# stages contracts/backends/ explicitly (a manifest nobody has is a payload nobody can install).
+#
+# --- Five ways this differs from contracts/models/model-manifest.yaml ---
+#   1. MANY FILES PER ENTRY. A model is one GGUF with one sha256; a backend is the ggml lib plus
+#      NVIDIA's redistributables plus whatever runtime must sit beside them on that OS. Every file
+#      carries its own sha256 (C6a).
+#   2. TWO SOURCE TAGS, ONE DESTINATION DIRECTORY. The ABI-coupled `ggml-cuda` rides the product
+#      release tag; NVIDIA's redist rides the dedicated `redist-cuda-13.3` pre-release tag, which is
+#      never deleted and is shared across knaif releases. `tag:` records which is which; the URL is
+#      what the store acts on. All files land in one flat directory, because that is what the loader
+#      scans.
+#   3. THE BINDING IS INVERTED. The model manifest is deliberately forgiving — a knaif upgrade with
+#      an unchanged recommendation re-downloads nothing, because the store keys on the model's own
+#      filename. A backend is the opposite: an upgrade MUST replace the ABI-coupled lib, and an older
+#      payload under a newer binary has to be REFUSED, not tolerated. `knaif_version` below is that
+#      binding, and BackendStore stamps it into an install receipt the loader checks before scanning
+#      the directory. See docs/NATIVE.md §5.3.
+#   4. PLATFORM-KEYED. GGUFs are platform-independent; backend payloads are per OS and arch. Keys are
+#      `<os>-<arch>` and match what installers/package.sh names its artifacts.
+#   5. IT CARRIES THE DRIVER FLOOR the first-run nudge gates on, so bumping the CUDA toolkit is one
+#      edit here rather than a second edit in the gate.
+#
+# --- Loose files, not archives (decided 2026-07-29) ---
+# Each file is its own release asset with its own sha256. Nothing on the install path extracts an
+# archive, so BackendStore is the model store's fetch -> .part -> hash -> rename in a loop, plus a
+# stage-then-swap of the directory. This is also what keeps per-file SHA pinning, which is the reason
+# statically linking the MSVC CRT into ggml-cuda.dll was rejected: a Microsoft CRT fix republishes
+# four ~1 MB assets instead of a ~123 MB lib.
+#
+# --- Publishing ---
+# `status: unpublished` means the assets are built but not yet uploaded; `backend install` refuses
+# such an entry rather than fetching a `TODO` URL. Flip to `published` only once every url/sha256 is
+# real — `python/core/tests/test_backend_manifest_release_ready.py` fails the build otherwise.
+# Write URLs against `blackdeep-tech/knaif`; the repo is public, so the tokenless HttpFetcher works
+# against release assets with no auth.
+
+# The knaif release this manifest ships inside. BackendStore records it in the install receipt and
+# the loader refuses a payload stamped with a different one — an upgraded binary must not load the
+# previous release's ggml lib out of ~/.knaif/backends, which survives the upgrade and is scanned
+# first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
+knaif_version: "1.1.0"
+
+backends:
+  cuda:
+    description: "NVIDIA CUDA offload (llama.cpp ggml-cuda backend + NVIDIA redistributables)"
+    status: unpublished
+
+    requires:
+      vendor: nvidia
+      # R580+ is the CUDA 13 driver floor. `nvcuda.dll` / libcuda.so presence alone is NOT
+      # sufficient — an older driver loads the lib and then fails, which reads as "CUDA didn't
+      # work". The first-run nudge reads this number; do not duplicate it in code.
+      min_driver: 580
+      cuda_toolkit: "13.3"
+
+    platforms:
+      linux-x64:
+        files:
+          - name: libggml-cuda.so
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: libcudart.so.13
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
+          - name: libcublas.so.13
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
+          - name: libcublasLt.so.13
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
+
+      windows-x64:
+        files:
+          - name: ggml-cuda.dll
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: cudart64_13.dll
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
+          - name: cublas64_13.dll
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
+          - name: cublasLt64_13.dll
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
+          # The MSVC runtime travels WITH the payload rather than being borrowed from the install
+          # dir. It normally resolves from beside knaif.exe, so this is redundancy — but it makes the
+          # payload self-contained under any future artifact layout, and it is the arrangement that
+          # keeps a Microsoft security fix to ~1 MB of individually pinned files instead of a
+          # republished ~123 MB ggml-cuda.dll. Ollama ships the CRT per backend directory for the
+          # same reason. Microsoft's Distributable List grants these files; see docs/PROVENANCE.md.
+          - name: vcruntime140.dll
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: vcruntime140_1.dll
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: msvcp140.dll
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: vcomp140.dll
+            tag: product
+            url: TODO
+            sha256: TODO

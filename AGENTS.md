@@ -19,7 +19,7 @@ python/training/       LoRA/DPO dataset builders + training scripts
 native/crates/         reusable Rust engine crates (knaif-core, -models, -llm, -skill-api)
 apps/cli/              the native `knaif` CLI binary
 skills/<name>/         self-contained skill bundles (YAML + python/ + native/ + data/ + eval/)
-contracts/             no-code, cross-language contracts (runtime/, models/, parity/)
+contracts/             no-code, cross-language contracts (runtime/, models/, backends/, parity/)
 evals/                 all eval run history, baselines, retrieval + parity results
 models/                local GGUF files (gitignored)
 notebooks/             cross-skill model experiments and authoring tools (see Notebooks below)

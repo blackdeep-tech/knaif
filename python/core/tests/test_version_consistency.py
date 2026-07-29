@@ -5,17 +5,27 @@
 installer each carry their own copy. If they drift, a release ships artifacts
 whose names and reported versions disagree, so assert they move together.
 
+The backend manifest's `knaif_version` is a fourth declaration, and the one with
+teeth: `BackendStore` stamps it into the install receipt and the loader refuses
+a payload whose stamp does not match the running binary. Drift there does not
+merely misname an artifact — it makes every CUDA payload look stale to the
+build that shipped with it, so `knaif backend install` would be told to re-run
+forever.
+
 Deliberately asserts agreement rather than pinning a literal, so a version bump
-touches only the three declarations and never this file.
+touches only the four declarations and never this file.
 """
 
 import re
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(".").resolve()
 CARGO = ROOT / "Cargo.toml"
 PYPROJECT = ROOT / "python" / "core" / "pyproject.toml"
 ISS = ROOT / "installers" / "windows" / "knaif.iss"
+BACKEND_MANIFEST = ROOT / "contracts" / "backends" / "backend-manifest.yaml"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
@@ -47,11 +57,19 @@ def _iss_version() -> str:
     return match.group(1)
 
 
+def _backend_manifest_version() -> str:
+    data = yaml.safe_load(BACKEND_MANIFEST.read_text(encoding="utf-8"))
+    version = (data or {}).get("knaif_version")
+    assert version, "no knaif_version in contracts/backends/backend-manifest.yaml"
+    return str(version)
+
+
 def test_release_version_is_consistent_across_surfaces() -> None:
     versions = {
         "Cargo.toml [workspace.package]": _cargo_version(),
         "python/core/pyproject.toml [project]": _pyproject_version(),
         "installers/windows/knaif.iss AppVersion": _iss_version(),
+        "contracts/backends/backend-manifest.yaml knaif_version": _backend_manifest_version(),
     }
 
     assert len(set(versions.values())) == 1, f"version drift across surfaces: {versions}"

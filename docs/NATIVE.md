@@ -144,7 +144,35 @@ payload in enables GPU offload next run, and a CUDA-present-but-no-usable-GPU bo
   never loads it. The order matters because when two backends drive the **same physical GPU**,
   llama.cpp dedupes by PCI id and the **first-registered wins** — with the exe dir first, the
   bundled Vulkan backend won and an installed CUDA payload was inert. Ordering picks the *device*;
-  it does not decide whether a stale lib loads (both dirs load regardless).
+  staleness is a separate check, below.
+- **Stale payloads are refused at load time.** `~/.knaif/backends` is deliberately outside the
+  install dir — that is what makes `backend install` elevation-free and keeps it working when the
+  install is read-only — so it **survives an app upgrade** and is scanned first. Without a check, an
+  upgraded `knaif` would load the previous release's `ggml-cuda`, whose ABI no longer matches. So
+  `BackendStore` writes a receipt (`.knaif-backends.yaml`) stamped with the installing release, and
+  the loader skips the whole directory with a message naming the fix when the stamp does not match
+  the running binary, or when a previous install did not finish. Install-time pinning alone cannot
+  cover this: the mismatch exists *before* any `backend install` could run.
+  A directory with **no receipt** still loads — that is the documented manual route (build a payload
+  and drop it in), which is how `backend install` itself gets debugged.
+
+**The `backend` command and its manifest.** `knaif backend list|install|verify|remove` manages the
+opt-in payloads. What each carries is declared in
+[`contracts/backends/backend-manifest.yaml`](../contracts/backends/backend-manifest.yaml): per
+platform, a list of files with a per-file SHA-256 and the release tag each rides. It ships in the
+**product** artifact beside `core_tools.yaml` and `model-manifest.yaml` — it is read by an
+already-installed `knaif` deciding what to download, so it cannot live in the payload it describes.
+
+It is a bill of materials and is **stricter than the model manifest**, which is forgiving by design
+(a knaif upgrade with an unchanged model recommendation re-downloads nothing). A backend inverts
+that: the ABI-coupled lib *must* be replaced on upgrade, an older payload has to be refused, and an
+unverified file is refused rather than installed — `ModelStore` tolerates a checksumless pull,
+`BackendStore` does not, because unverified backend bytes fail inside ggml and read as a driver bug.
+
+Installing is **stage-all → verify-all → swap**, not a per-file `rename` loop: four atomic
+operations are not one atomic operation, and an interrupted install would otherwise leave a
+directory holding a mix of two payloads. Payload assets are published as **loose per-file assets**
+rather than archives, so nothing on the install path extracts anything.
 - **`GGML_CPU_ALL_VARIANTS`** emits ~9–14 `ggml-cpu-*` libs (`sse42` … `alderlake`, ~8 MB total;
   count varies by target) and dispatches on the host CPU at runtime — strictly better than one
   static CPU baseline.
@@ -257,9 +285,10 @@ directory:
 
 - `resolve_skills_root()` — `$KNAIF_SKILLS_ROOT`, else walk up for `skills/` (dev
   checkout), else exe-relative (`<install>/skills`).
-- `resolve_repo_file()` — for `contracts/runtime/core_tools.yaml` and the model manifest:
-  walk up from cwd (checkout), else beside/one-level-up from the exe (the
-  `<install>/bin/knaif` + `<install>/contracts/...` layout).
+- `resolve_repo_file()` — for `contracts/runtime/core_tools.yaml`, the model manifest, and the
+  backend manifest: walk up from cwd (checkout), else beside/one-level-up from the exe (the
+  `<install>/bin/knaif` + `<install>/contracts/...` layout). `$KNAIF_MODEL_MANIFEST` /
+  `$KNAIF_BACKEND_MANIFEST` override their respective lookups.
 
 ## 9. Packaging & distribution
 
@@ -271,8 +300,13 @@ bin/*.so | *.dll                    (functional kinds) core llama/ggml libs + lo
 skills/<name>/                      RUNTIME DATA ONLY (skill.yaml, tools.yaml, prompt.yaml, vocab.yaml, profiles/)
 contracts/runtime/core_tools.yaml      core control-tool registry
 contracts/models/model-manifest.yaml   model catalog
+contracts/backends/backend-manifest.yaml  opt-in GPU payloads `knaif backend install` fetches
 LICENSE, README.txt, licenses/      license notices (Rust deps always; llama.cpp for inference builds; NVIDIA EULA for cuda)
 ```
+
+`package.sh` names each contract file individually rather than copying `contracts/` wholesale, so a
+new contract reaches the installed tree only when it is added there — `installers/smoke.sh` asserts
+all three are present, and that `backend list` can actually read the last one from an unrelated cwd.
 
 `package.sh --kind=base|cpu|vulkan|cuda`:
 
