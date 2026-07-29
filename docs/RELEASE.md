@@ -52,24 +52,40 @@ offers a user nothing the default lacks, at the cost of making them choose. (Bef
 backends were statically linked, so cpu/vulkan were different binaries and both had to ship — that
 is why older docs list two. It is no longer true.)
 
-**No CUDA artifact at v1** (C6 deferred) — see the CUDA section below.
-
 **GGUF models are never attached to a release** — they live on Hugging Face
 (`blackdeep/knaif`) and are pulled at runtime.
 
-### CUDA payloads are NOT published at v1
+### CUDA payload assets (from 1.1.0)
 
-The CUDA payload builds and is proven, but v1 ships **no `knaif backend install cuda` command**, so
-nothing would fetch a published payload — and publishing it would bake org URLs into the release.
-The **Windows installer must therefore offer no CUDA component** (an opt-in task with no command
-behind it is worse than no offer). Payload publishing + the install surface land in the post-v1 plan.
-The only CUDA route v1 documents is manual: build the payload and copy it into `~/.knaif/backends`.
+The CUDA payload is **not an artifact in the table above** — it is not a downloadable app and no user
+should be choosing between it and the default. It is fetched by `knaif backend install cuda`, and it
+is published as **loose per-file assets split across two tags**:
 
-**That manual route is LINUX-ONLY at v1.** `--kind=cuda` emits a real payload only on Linux; on
-Windows it still produces the historical static-with-redist app, so a Windows user has nothing to
-copy into `~/.knaif/backends` (the Windows loader would load one — there just isn't one to build).
-Aligning Windows `cuda` onto Option 3 is post-v1. Neither OS publishes a CUDA asset at v1, so this
-blocks nothing; just do not promise Windows users the manual route.
+| Files | Tag | Why |
+|---|---|---|
+| `ggml-cuda.dll` / `libggml-cuda.so` (~125 MB), plus the four MSVC runtime DLLs on Windows | the **product release** (`v<ver>`) | ABI-coupled to that release's exe; a tag-scoped URL structurally cannot serve a newer lib to an older binary |
+| `cudart*` / `cublas*` / `cublasLt*` (~493 MB), `NVIDIA-CUDA-EULA.txt` | **`redist-cuda-13.3`** (pre-release, never deleted) | keyed to the CUDA toolkit, byte-identical across knaif releases, so it is uploaded once |
+
+**Loose files, not archives** (decided 2026-07-29). Each asset carries its own `sha256` in the
+manifest, so nothing on the install path extracts an archive — `BackendStore` is fetch → hash →
+stage → swap. It also keeps a Microsoft CRT security fix to ~1 MB of individually pinned files rather
+than a republished ~123 MB `ggml-cuda.dll`, which is the servicing argument that ruled out static
+linking in the first place.
+
+**The licence files ship inside the payload**, landing in the user's backends directory alongside the
+libraries. Under loose-file publishing the release *page* is not what reaches a user's disk, and
+NVIDIA's EULA permits redistribution only *with* the licence text. `package.sh` hard-fails if
+`installers/licenses/NVIDIA-CUDA-EULA.txt` is absent.
+
+**Both OSes emit a real payload from 1.1.0.** Through 1.0.x, `--kind=cuda` produced a genuine payload
+only on Linux; on Windows it produced the historical static-with-redist *app*, so a Windows user had
+nothing to install and the installer's opt-in task had nothing to place. That shape is now behind
+`--legacy-windows-cuda-app` and is not publishable.
+
+Nothing is published until every `url`/`sha256` in
+[`contracts/backends/backend-manifest.yaml`](../contracts/backends/backend-manifest.yaml) is real and
+its `status:` is flipped to `published` — `test_backend_manifest_release_ready.py` fails the build
+on a payload that claims to be published while carrying a placeholder. See §7.
 
 ---
 
@@ -176,7 +192,7 @@ Release arch list (never `native`, and it must be set via the **`CUDAARCHS` env 
 initialises `CMAKE_CUDA_ARCHITECTURES` from it and `llama-cpp-sys-2` offers no passthrough):
 
 ```
-CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real"
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
 ```
 
 | Arch | GPU generation | Status |
@@ -185,14 +201,25 @@ CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real"
 | `sm_80` | Ampere (A100) | **built, UNVERIFIED** (no card) |
 | `sm_86` | Ampere (RTX 30xx) | **built + runtime-verified** (RTX 3070) |
 | `sm_89` | Ada (RTX 40xx) | **built, UNVERIFIED** (no card) |
+| `sm_90` | Hopper (H100) | **built, UNVERIFIED** (no card) |
 | `compute_90` PTX | forward-compat | built — JITs forward to post-Blackwell |
 | `sm_120` | Blackwell (RTX 50xx) | **built + runtime-verified** (RTX 5080) |
 
-Running on 86 and 120 does **not** validate 75/80/89 — state exactly that; there is no interpolation
-claim. **sm_75 is the hard floor:** CUDA Toolkit 13 removed offline compilation and library support
-for Maxwell/Pascal/Volta. Those users fall back to Vulkan or CPU — they are not cut off.
+Running on 86 and 120 does **not** validate 75/80/89/90 — state exactly that; there is no
+interpolation claim. **sm_75 is the hard floor:** CUDA Toolkit 13 removed offline compilation and
+library support for Maxwell/Pascal/Volta. Those users fall back to Vulkan or CPU — they are not cut
+off.
 
 **Driver floor: NVIDIA R580+** (CUDA 13). Presence of `nvcuda.dll` / `libcuda.so` is not sufficient.
+Declared once, in
+[`contracts/backends/backend-manifest.yaml`](../contracts/backends/backend-manifest.yaml)
+(`requires.min_driver`), so the payload and the gate that offers it cannot disagree.
+
+**`90-real` is built as well as `90-virtual`** *(added 2026-07-29)*. `90-virtual` alone leaves Hopper
+on PTX JIT, and PTX JIT is the documented **exception** to CUDA's minor-version driver compatibility
+— i.e. precisely the case the R580 floor does *not* cover. A few MB of fatbin removes the caveat.
+Deliberately **not** doing the larger version of this fix (a per-architecture driver floor): sm_90 is
+a data-center part that will not run this CLI, and that is complexity bought for nobody.
 
 **Forward-compat PTX must come from a non-`12X` virtual arch.** ggml rewrites every `12X` → `12Xa`,
 so `120-virtual` yields architecture-specific `sm_120a` PTX that cannot JIT forward. `90-virtual`
@@ -489,3 +516,52 @@ into `~/.knaif/backends` (needs an R580+ driver). The payload is ABI-coupled to 
 built for your exact knaif version. **Windows has no CUDA route at v1**: `package.sh --kind=cuda`
 still stages the historical static app there rather than cutting a payload, so there is nothing to
 copy (post-v1, C6). Windows NVIDIA users get Vulkan, which is the default anyway.
+
+---
+
+## 7. Publish the CUDA payload assets
+
+Only when cutting a release whose payload changed, or the first time a toolkit version is used.
+Ordering matters: the manifest cannot be filled in until the assets exist, and the product artifact
+cannot be built until the manifest is filled in — so the redist half goes first and the product half
+is a two-pass build.
+
+**1. Build the payloads.** Windows in a VS Developer shell on the maintainer's box, Linux in the CUDA
+container (`installers/linux/Dockerfile.cuda`). Set the arch list explicitly — changing `CUDAARCHS`
+needs a *clean* build, see §3:
+
+```bash
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
+  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda
+installers/package.sh --no-build --kind=cuda
+```
+
+This writes `dist/staging/knaif-<ver>-<os>-<arch>-cuda-backend/` as **loose files** plus
+`dist/knaif-<ver>-<os>-<arch>-cuda-backend.manifest-fragment.yaml` carrying every file's real
+`sha256` and size. `package.sh` verifies the fatbin actually contains every requested arch
+(`cuobjdump`) and hard-fails if one was silently dropped.
+
+**2. Upload the redist half once, to `redist-cuda-13.3`.** A pre-release tag, and one that is
+**never deleted** — installed manifests point at it forever. Skip this entirely if the tag already
+carries this toolkit's files; they are byte-identical across knaif releases, which is the whole
+reason for the split.
+
+**3. Upload the product half to the release tag**, alongside the normal artifacts.
+
+**4. Fill in `contracts/backends/backend-manifest.yaml`** from the fragments: paste each platform's
+`files:` block and replace every `url: TODO` with the asset's download URL. Write URLs against
+`blackdeep-tech/knaif`. Then set `status: published`.
+
+**5. Rebuild and re-verify the product artifacts.** The manifest ships *inside* them, so the tree
+built in step 1 carries the pre-publication copy. This is unavoidable — the manifest describes assets
+that do not exist until they are uploaded.
+
+**6. Only now generate `SHA256SUMS`**, over the complete final set, and publish.
+
+Two rules worth restating because getting them wrong is silent:
+
+- **Never resolve `latest`.** A tag-scoped URL is what structurally prevents a newer lib reaching an
+  older exe. `test_backend_manifest_release_ready.py` asserts this.
+- **Asset names must be unique within a tag.** Today's payloads collide on nothing (`.so` vs `.dll`),
+  but if a future platform produces a duplicate filename, suffix the *asset* name and keep the
+  manifest's `name:` as the on-disk name — the two are separate fields precisely so they can differ.

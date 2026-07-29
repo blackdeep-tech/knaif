@@ -22,13 +22,24 @@
 # `$ORIGIN` RPATH (added here with patchelf) so a relocated binary finds them. The default download
 # ships CPU (+ Vulkan) backends beside the exe; the CUDA backend ships as a separate opt-in payload.
 #
-# Usage: installers/package.sh [--no-build] [--kind=base|cpu|vulkan|cuda]
+# Usage: installers/package.sh [--no-build] [--kind=base|cpu|vulkan|cuda] [--legacy-windows-cuda-app]
 #   base   (default) no inference backend — layout/plumbing only. Builds with no extra toolchain.
 #   cpu    llama.cpp CPU inference (loadable ggml-cpu-* backends, runtime CPU dispatch).
 #   vulkan llama.cpp + Vulkan GPU (cross-vendor) + CPU. THE DEFAULT FUNCTIONAL ARTIFACT.
-#   cuda   llama.cpp + CUDA GPU as an OPT-IN PAYLOAD: only ggml-cuda plus NVIDIA's redistributable
-#          cudart/cublas/cublasLt libs (users never install the CUDA SDK; they supply the driver).
-#          The payload is dropped into ~/.knaif/backends on an existing install — not a standalone app.
+#   cuda   llama.cpp + CUDA GPU as an OPT-IN PAYLOAD, on BOTH Linux and Windows: only ggml-cuda plus
+#          NVIDIA's redistributable cudart/cublas/cublasLt libs (users never install the CUDA SDK;
+#          they supply the driver), plus the MSVC runtime on Windows. Not a standalone app — it lands
+#          in ~/.knaif/backends on an existing install, via `knaif backend install cuda`.
+#
+#          Emitted as LOOSE FILES in dist/staging/<name>/, not an archive: each file is published as
+#          its own release asset with its own sha256 (decided 2026-07-29), so nothing on the install
+#          path has to extract anything. A `<name>.manifest-fragment.yaml` with the real checksums is
+#          written beside it, ready to paste into contracts/backends/backend-manifest.yaml.
+#
+#   --legacy-windows-cuda-app  reproduce the pre-Option-3 Windows shape (a full app with NVIDIA's
+#          redist DLLs beside the exe). NOT publishable — half a gigabyte of NVIDIA libraries in an
+#          artifact every user downloads is exactly what the opt-in payload exists to avoid. Kept
+#          only so a bisect or a comparison can still produce one.
 #
 # On Linux the functional kinds are built by this script directly (gcc + cmake + ninja). On Windows
 # they must be COMPILED FIRST in a "Developer PowerShell for VS" (MSVC + cmake; Vulkan also needs
@@ -42,12 +53,18 @@ cd "$ROOT"
 
 NO_BUILD=0
 KIND=base
+# Escape hatch for the pre-Option-3 Windows `cuda` shape: a full app with NVIDIA's redist DLLs
+# static-linked beside the exe. It is NOT publishable — it is half a gigabyte of NVIDIA libraries in
+# an artifact every user downloads, which is the thing the opt-in payload exists to avoid — so it is
+# reachable only by asking for it explicitly. Kept so a bisect or a comparison can still produce one.
+LEGACY_WINDOWS_CUDA_APP=0
 for a in "$@"; do
   case "$a" in
     --no-build)       NO_BUILD=1 ;;
     --kind=*)         KIND="${a#--kind=}" ;;
+    --legacy-windows-cuda-app) LEGACY_WINDOWS_CUDA_APP=1 ;;
     base|cpu|vulkan|cuda) KIND="$a" ;;
-    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda]" >&2; exit 1 ;;
+    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
   esac
 done
 
@@ -60,6 +77,11 @@ esac
 ARCH="$(uname -m)"
 [ "$ARCH" = "x86_64" ] && ARCH=x64
 [ "$ARCH" = "aarch64" ] && ARCH=arm64
+
+if [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ] && { [ "$KIND" != cuda ] || [ "$OS" = linux ]; }; then
+  echo "ERROR: --legacy-windows-cuda-app only applies to --kind=cuda on Windows." >&2
+  exit 1
+fi
 
 VER="$(grep -A3 '\[workspace.package\]' Cargo.toml | grep -m1 '^version' | sed -E 's/.*"([^"]+)".*/\1/')"
 
@@ -149,74 +171,304 @@ set_origin_rpath() {
   patchelf --set-rpath '$ORIGIN' "$1"
 }
 
+# Copy the VC++ runtime + OpenMP DLLs into $1. Windows only.
+#
+# The Visual C++ runtime is NOT part of Windows and must ship beside the binaries that import it.
+# Without it a tree dies at process start with STATUS_DLL_NOT_FOUND (0xC0000135) printing nothing —
+# confirmed in Windows Sandbox on a clean 11 24H2 image, where VCRUNTIME140/MSVCP140/VCOMP140 are all
+# absent. (`ucrtbase.dll` IS present: the Universal CRT has been an OS component since Windows 10,
+# which is why the `api-ms-win-crt-*` imports need nothing staged.)
+#
+# VCOMP140 is llama.cpp's OpenMP runtime and lives in a DIFFERENT redist folder from the CRT.
+# Omitting it does not merely break startup — it breaks every ggml-cpu-* variant, i.e. inference.
+#
+# Used by BOTH the full artifact (beside the exe) and the CUDA payload (beside ggml-cuda), because
+# the payload installs into ~/.knaif/backends and must not depend on what the install dir happens to
+# hold. See docs/PROVENANCE.md for why app-local deployment is the supported arrangement.
+stage_vcredist() {
+  local dest="$1" vcredist_dir="" root v dll src cand n_crt=0
+  # PREFER THE ACTIVE DEVELOPER ENVIRONMENT. Windows functional kinds are built in a "Developer
+  # PowerShell for VS", which exports VCToolsRedistDir pointing at the redist tree for the very
+  # toolset that compiled the binaries. That is Microsoft's documented way to locate these files,
+  # and it is the only method that guarantees the runtime MATCHES the compiler rather than merely
+  # being present somewhere on the disk.
+  #
+  # Scanning the filesystem is the fallback, and it is a poor one: a box with several Visual
+  # Studios installed offers several answers, and shell globs sort LEXICALLY, not by version — so
+  # "2022" sorts after "18", and a hypothetical "14.9" sorts after "14.51". Picking the wrong tree
+  # can stage a runtime OLDER than the compiler, which is exactly the unsupported direction.
+  if [ -n "${VCToolsRedistDir:-}" ]; then
+    # MSVC exports a Windows path; convert if cygpath is available (Git Bash ships it).
+    if command -v cygpath >/dev/null 2>&1; then
+      vcredist_dir="$(cygpath -u "$VCToolsRedistDir" 2>/dev/null || echo "$VCToolsRedistDir")"
+    else
+      vcredist_dir="$VCToolsRedistDir"
+    fi
+    vcredist_dir="${vcredist_dir%/}/$ARCH"
+    [ -d "$vcredist_dir" ] || vcredist_dir=""
+  fi
+  if [ -z "$vcredist_dir" ]; then
+    echo "  NOTE: VCToolsRedistDir unset or unusable — falling back to a filesystem scan."
+    echo "        Run packaging from a Developer PowerShell so the runtime matches the compiler."
+    # Sort version dirs numerically (-V) so 14.51 beats 14.9, newest last.
+    for root in "/c/Program Files/Microsoft Visual Studio"/*/*/VC/Redist/MSVC \
+                "/c/Program Files (x86)/Microsoft Visual Studio"/*/*/VC/Redist/MSVC; do
+      [ -d "$root" ] || continue
+      for v in $(ls -1 "$root" 2>/dev/null | sort -V); do
+        [ -d "$root/$v/$ARCH" ] && vcredist_dir="$root/$v/$ARCH"
+      done
+    done
+  fi
+  [ -n "$vcredist_dir" ] && [ -d "$vcredist_dir" ] || {
+    echo "ERROR: no VC++ redistributable directory found for arch '$ARCH'." >&2
+    echo "       Set VCToolsRedistDir (a VS Developer shell does this) or install the" >&2
+    echo "       'C++ ... Redistributable MSMs' component. The artifact cannot be made" >&2
+    echo "       self-contained without it." >&2
+    exit 1
+  }
+  for dll in $VCREDIST_DLLS; do
+    # CRT and OpenMP live in sibling Microsoft.VC*.{CRT,OpenMP} dirs under the same arch dir.
+    src=""
+    for cand in "$vcredist_dir"/Microsoft.VC*/"$dll"; do
+      [ -e "$cand" ] && src="$cand"
+    done
+    [ -n "$src" ] || {
+      echo "ERROR: $dll not found under $vcredist_dir — cannot stage the VC++ runtime." >&2
+      exit 1
+    }
+    # The single licence boundary. Microsoft's Distributable List grants everything under
+    # VC\redist EXCEPT debug_nonredist/ and onecore/debug_nonredist/, which hold the DEBUG
+    # CRT/OpenMP and are explicitly non-redistributable. Today's glob cannot reach them
+    # (debug_nonredist is a sibling of x64/, not a child), so this asserts a property rather
+    # than fixing a bug — but shipping a debug CRT is a licence violation, not a bug, and it
+    # would look identical in the artifact. Cheap insurance against a future loosened glob.
+    case "$src" in
+      *debug_nonredist*)
+        echo "ERROR: refusing to stage $dll from a debug_nonredist path:" >&2
+        echo "       $src" >&2
+        echo "       Microsoft's Distributable List excludes it. This is a licence" >&2
+        echo "       boundary, not a build preference." >&2
+        exit 1
+        ;;
+    esac
+    cp "$src" "$dest/"
+    n_crt=$((n_crt + 1))
+  done
+  # Name the toolset VERSION, not the arch dir. The comment above is about picking the wrong redist
+  # tree; a log line reading "from x64" cannot tell anyone which one was picked.
+  echo "  staged $n_crt VC++ runtime DLL(s) from MSVC $(basename "$(dirname "$vcredist_dir")")"
+}
+
+# The Microsoft runtime files staged beside any binary that imports them. Named once so the full
+# artifact and the CUDA payload cannot drift apart.
+VCREDIST_DLLS="vcruntime140.dll vcruntime140_1.dll msvcp140.dll vcomp140.dll"
+
+# The release CUDA arch list. Kept in step with docs/RELEASE.md §3 — `test_cuda_arch_list.py`
+# asserts the two agree, because a fatbin that silently lost an arch is invisible until a user with
+# that GPU hits it. `90-real` is built as well as `90-virtual`: PTX JIT is the documented exception
+# to CUDA's minor-version driver compatibility, i.e. exactly what the R580 floor does not cover.
+CUDA_RELEASE_ARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
+
+# Assert the fatbin in $1 actually carries every arch the release list asks for.
+#
+# Match `sm_[0-9]+[a-z]*`, never `sm_[0-9]+` — the latter silently truncates `sm_120a` to `sm_120`
+# and would report a pass for an arch that is not there. `--list-ptx`, never `--dump-ptx` (dumping
+# ~125 MB of PTX text times out).
+verify_cuda_archs() {
+  local lib="$1" want arch expect_sm elf ptx missing=""
+  local cuobjdump="$CUDA_PATH/bin/cuobjdump"
+  command -v "$cuobjdump" >/dev/null 2>&1 || cuobjdump="$(cygpath -u "$CUDA_PATH" 2>/dev/null || echo "$CUDA_PATH")/bin/cuobjdump"
+  [ -x "$cuobjdump" ] || cuobjdump="$cuobjdump.exe"
+  [ -x "$cuobjdump" ] || {
+    echo "ERROR: cuobjdump not found under \$CUDA_PATH/bin — cannot verify the fatbin's arch list." >&2
+    echo "       It ships with the CUDA toolkit, which this build necessarily has. This is a" >&2
+    echo "       required packaging step: a dropped arch is invisible until a user with that GPU" >&2
+    echo "       hits it, and by then the artifact is published." >&2
+    exit 1
+  }
+  elf="$("$cuobjdump" --list-elf "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
+  ptx="$("$cuobjdump" --list-ptx "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
+  for want in ${CUDA_RELEASE_ARCHS//;/ }; do
+    arch="${want%-*}"
+    case "$want" in
+      # ggml rewrites every `12X` virtual arch to `12Xa`, so a requested sm_120 lands as sm_120a.
+      *-real)    expect_sm="sm_$arch"; echo "$elf" | grep -qE "^sm_${arch}[a-z]*$" || missing="$missing $expect_sm(SASS)" ;;
+      *-virtual) expect_sm="sm_$arch"; echo "$ptx" | grep -qE "^sm_${arch}[a-z]*$" || missing="$missing $expect_sm(PTX)" ;;
+    esac
+  done
+  [ -z "$missing" ] || {
+    echo "ERROR: $(basename "$lib") is missing CUDA arch(s):$missing" >&2
+    echo "       Requested: CUDAARCHS=\"$CUDA_RELEASE_ARCHS\"" >&2
+    echo "       Built SASS: $(echo "$elf" | tr '\n' ' ')" >&2
+    echo "       Built PTX:  $(echo "$ptx" | tr '\n' ' ')" >&2
+    echo "       Changing CUDAARCHS needs a CLEAN build — cmake's always_configure(false) means an" >&2
+    echo "       incremental build keeps the old settings. Wipe target/release/build/llama-cpp-sys-2-*" >&2
+    exit 1
+  }
+  echo "  verified fatbin archs: $(echo "$elf" | tr '\n' ' ')(SASS) $(echo "$ptx" | tr '\n' ' ')(PTX)"
+}
+
+# Emit a contracts/backends/backend-manifest.yaml `files:` block for the staged payload in $1,
+# carrying each file's real sha256 and size. $2 is the platform key.
+#
+# URLs stay TODO: they are only knowable after upload, and the release-readiness guard fails the
+# build if `status: published` is set while any placeholder remains. Tags are assigned by what the
+# file IS — the ggml lib is ABI-coupled to this build and rides the product tag; everything NVIDIA
+# ships rides the toolkit-keyed tag and is shared across knaif releases.
+write_manifest_fragment() {
+  local stage="$1" platform="$2" f base tag sum size
+  echo "      # generated by installers/package.sh for knaif $VER on $platform"
+  echo "      $platform:"
+  echo "        files:"
+  for f in "$stage"/*; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    case "$base" in
+      README.txt) continue ;;
+      cudart*|cublas*|libcudart*|libcublas*|NVIDIA-CUDA-EULA.txt) tag="redist-cuda-13.3" ;;
+      *) tag="product" ;;
+    esac
+    sum="$(sha256sum "$f" | cut -d' ' -f1)"
+    size="$(wc -c < "$f" | tr -d ' ')"
+    echo "          - name: $base"
+    echo "            tag: $tag"
+    echo "            url: TODO"
+    echo "            sha256: \"$sum\""
+    echo "            size_bytes: $size"
+  done
+}
+
 # ---------------------------------------------------------------------------------------------------
-# CUDA opt-in payload (Linux): only ggml-cuda + NVIDIA redist, for ~/.knaif/backends on an existing
-# install. Not a standalone app, so it gets its own layout and skips the skills/contracts/smoke steps.
+# CUDA opt-in payload (Linux AND Windows): only ggml-cuda + NVIDIA redist (+ the MSVC runtime on
+# Windows), for ~/.knaif/backends on an existing install. Not a standalone app, so it gets its own
+# layout and skips the skills/contracts/smoke steps.
+#
+# WINDOWS USED TO PRODUCE THE HISTORICAL STATIC-WITH-REDIST APP HERE and that was the gap that would
+# have shipped an NVIDIA story with a hole in it: U1-U5 assume a payload exists per OS, and on
+# Windows there was none, so a Windows user had nothing to install and the installer's opt-in task
+# would have had nothing to place. The mechanism was already proven on Windows in finalization
+# (2026-07-16) with a hand-built ggml-cuda.dll — including cross-build ABI compatibility with the
+# default artifact, and the NVIDIA redist resolving from beside ggml-cuda.dll with no PATH games. Only
+# the packaging was missing. `--legacy-windows-cuda-app` keeps the old shape reachable so nobody
+# publishes it by accident.
+#
+# EMITTED AS LOOSE FILES, NOT AN ARCHIVE (decided 2026-07-29). Each file is uploaded as its own
+# release asset with its own sha256 — the ABI-coupled ggml lib on the product tag, NVIDIA's redist on
+# `redist-cuda-13.3`. Nothing on the install path extracts an archive, so BackendStore stays a
+# fetch -> hash -> stage -> swap. `backend-manifest-fragment.yaml` is generated beside the payload
+# with every file's real sha256 and size, ready to paste into contracts/backends/.
 # ---------------------------------------------------------------------------------------------------
-if [ "$KIND" = cuda ] && [ "$OS" = linux ]; then
+if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 0 ]; then
   OUT="$(out_dir)"
-  [ -n "$OUT" ] && [ -f "$OUT/backends/libggml-cuda.$LIB" ] || {
-    echo "ERROR: libggml-cuda.$LIB not found under target/release/build/.../out/backends —" >&2
+  if [ "$OS" = linux ]; then PFX=lib; else PFX=; fi
+  CUDA_LIB="${PFX}ggml-cuda.$LIB"
+  [ -n "$OUT" ] && [ -f "$OUT/backends/$CUDA_LIB" ] || {
+    echo "ERROR: $CUDA_LIB not found under target/release/build/.../out/backends —" >&2
     echo "       build with --features $(feats_for_kind cuda) first." >&2
+    [ "$OS" = windows ] && \
+      echo "       On Windows that build must run in a VS Developer shell; then re-run with --no-build." >&2
     exit 1
   }
   NAME="knaif-$VER-$OS-$ARCH-cuda-backend"
   STAGE="dist/staging/$NAME"
   rm -rf "$STAGE"
-  mkdir -p "$STAGE/licenses"
+  mkdir -p "$STAGE"
 
-  cp "$OUT/backends/libggml-cuda.$LIB" "$STAGE/"
-  set_origin_rpath "$STAGE/libggml-cuda.$LIB"
+  cp "$OUT/backends/$CUDA_LIB" "$STAGE/"
+  set_origin_rpath "$STAGE/$CUDA_LIB"
 
-  # NVIDIA redistributable runtime libs, resolved from beside libggml-cuda via the $ORIGIN RPATH.
-  # -L dereferences the SONAME symlink so the payload carries the real versioned file named .so.13.
-  : "${CUDA_PATH:?CUDA_PATH not set (need it to locate the redist .so.13 libs)}"
-  cudalib="$CUDA_PATH/targets/${ARCH/x64/x86_64}-linux/lib"
-  [ -d "$cudalib" ] || cudalib="$CUDA_PATH/lib64"
+  # Every arch in the release list must actually be in the fatbin — a flag typo silently drops one,
+  # and the loss is invisible until a user with that GPU hits a JIT fallback or an outright failure.
+  # cuobjdump ships with the toolkit, and a CUDA payload build necessarily has the toolkit, so this
+  # hard-fails rather than skipping when it is absent: a guard that opts out on the only machine that
+  # can run it is worth nothing.
+  verify_cuda_archs "$STAGE/$CUDA_LIB"
+
+  # NVIDIA redistributable runtime libs, resolved from beside ggml-cuda (via the $ORIGIN RPATH on
+  # Linux; on Windows the loader searches the module's own directory, proven in the 2026-07-16 spike).
+  : "${CUDA_PATH:?CUDA_PATH not set (need it to locate the NVIDIA redist libs)}"
   copied=0
-  for soname in libcudart.so.13 libcublas.so.13 libcublasLt.so.13; do
-    if [ -e "$cudalib/$soname" ]; then
-      cp -L "$cudalib/$soname" "$STAGE/$soname"; copied=$((copied + 1))
-    fi
-  done
+  if [ "$OS" = linux ]; then
+    cudalib="$CUDA_PATH/targets/${ARCH/x64/x86_64}-linux/lib"
+    [ -d "$cudalib" ] || cudalib="$CUDA_PATH/lib64"
+    # -L dereferences the SONAME symlink so the payload carries the real versioned file named .so.13.
+    for soname in libcudart.so.13 libcublas.so.13 libcublasLt.so.13; do
+      if [ -e "$cudalib/$soname" ]; then
+        cp -L "$cudalib/$soname" "$STAGE/$soname"; copied=$((copied + 1))
+      fi
+    done
+  else
+    cudalib="$(cygpath -u "$CUDA_PATH" 2>/dev/null || echo "$CUDA_PATH")/bin/x64"
+    for pat in 'cudart64_*.dll' 'cublas64_*.dll' 'cublasLt64_*.dll'; do
+      for dll in "$cudalib"/$pat; do
+        [ -f "$dll" ] && { cp "$dll" "$STAGE/"; copied=$((copied + 1)); }
+      done
+    done
+  fi
   [ "$copied" -ge 3 ] || { echo "ERROR: expected 3 CUDA redist libs in $cudalib, found $copied" >&2; exit 1; }
-  echo "  bundled $copied CUDA redist .so.13 lib(s) from $cudalib"
+  echo "  bundled $copied CUDA redist lib(s) from $cudalib"
 
-  cp installers/licenses/llama.cpp-LICENSE.txt "$STAGE/licenses/"
-  # Hard failure, not a warning: redistributing NVIDIA's cudart/cublas/cublasLt is EULA-permitted only
-  # WITH the licence text. A warning scrolls past in a build log and ships anyway.
+  # The MSVC runtime travels WITH the payload. It normally resolves from beside knaif.exe, so this is
+  # redundancy — but the payload installs into ~/.knaif/backends and must not depend on what the
+  # install dir happens to hold, and shipping the CRT as separate SHA-pinned files is exactly what
+  # keeps a Microsoft security fix to ~1 MB rather than a republished ~123 MB ggml-cuda.dll. (That
+  # servicing argument is why statically linking the CRT into ggml-cuda.dll was rejected; see the
+  # post-v1 plan, U6.) Ollama ships the CRT per backend directory for the same reason.
+  [ "$OS" = windows ] && stage_vcredist "$STAGE"
+
+  # Licences travel WITH the bytes, into the user's backends dir — not merely attached to a release
+  # page. Redistributing NVIDIA's cudart/cublas/cublasLt is EULA-permitted only WITH the licence text,
+  # and under loose-file publishing the release page is not what reaches the user's disk. Hard
+  # failure, not a warning: a warning scrolls past in a build log and ships anyway.
+  cp installers/licenses/llama.cpp-LICENSE.txt "$STAGE/"
   [ -f installers/licenses/NVIDIA-CUDA-EULA.txt ] || {
     echo "ERROR: installers/licenses/NVIDIA-CUDA-EULA.txt is missing — REQUIRED to redistribute the" >&2
     echo "       bundled CUDA libs. Copy it from the toolkit: \$CUDA_PATH/EULA.txt" >&2
     exit 1
   }
-  cp installers/licenses/NVIDIA-CUDA-EULA.txt "$STAGE/licenses/"
+  cp installers/licenses/NVIDIA-CUDA-EULA.txt "$STAGE/"
 
   cat > "$STAGE/README.txt" <<EOF
 knaif $VER — CUDA backend opt-in payload ($OS-$ARCH)
 
-This is NOT a standalone app. It contains the loadable CUDA backend (libggml-cuda.so) and NVIDIA's
-redistributable CUDA runtime libraries. Drop these files into ~/.knaif/backends (or wherever
-\$KNAIF_BACKENDS_DIR points) on an existing knaif install; the next run auto-detects and uses the
-GPU. Requires an NVIDIA driver (R580+ for CUDA 13). Remove the files to fall back to CPU/Vulkan.
+This is NOT a standalone app. It contains the loadable CUDA backend ($CUDA_LIB) and NVIDIA's
+redistributable CUDA runtime libraries.
 
-The libggml-cuda in this payload is ABI-coupled to the knaif $VER binary — use the payload built for
-your exact knaif version.
+The supported way to install it is:
+
+  knaif backend install cuda
+
+which downloads and checksum-verifies these same files. Copying them into ~/.knaif/backends (or
+wherever \$KNAIF_BACKENDS_DIR points) by hand still works and is the documented fallback. Requires an
+NVIDIA driver (R580+ for CUDA 13). Remove the files, or run 'knaif backend remove cuda', to fall back
+to CPU/Vulkan.
+
+The $CUDA_LIB in this payload is ABI-coupled to the knaif $VER binary — use the payload built for
+your exact knaif version. A hand-copied payload from another release is NOT detected as stale (that
+check reads a receipt only 'backend install' writes), so match the versions yourself.
 EOF
 
-  mkdir -p dist
-  OUT_ART="dist/$NAME.tar.gz"
-  tar czf "$OUT_ART" -C dist/staging "$NAME"
-  echo "Created $OUT_ART ($(du -h "$OUT_ART" | cut -f1)) [kind=cuda payload]"
+  # A manifest fragment with real checksums, so filling in contracts/backends/backend-manifest.yaml
+  # is a paste rather than a hand-transcription of four to eight sha256 values. URLs stay TODO until
+  # the assets are uploaded — the release-readiness guard fails the build if `status: published` is
+  # set while any of them is still a placeholder.
+  write_manifest_fragment "$STAGE" "$OS-$ARCH" > "dist/$NAME.manifest-fragment.yaml"
+
+  echo "Created dist/staging/$NAME/ ($(du -sh "$STAGE" | cut -f1)) [kind=cuda payload, loose files]"
+  echo "  fragment: dist/$NAME.manifest-fragment.yaml"
+  echo "  Upload each file in that directory as its own release asset (see docs/RELEASE.md §7)."
   # Deliberately no LICENSE/NOTICE here, unlike the full artifacts below: this payload ships no
   # knaif Apache-2.0 code — only llama.cpp's CUDA backend and NVIDIA's redistributables, whose
-  # notices are staged into licenses/ above. Apache-2.0 §4(d) attaches to redistributing the Work,
-  # which this is not. Revisit if the payload ever carries knaif-authored binaries.
+  # notices are staged above. Apache-2.0 §4(d) attaches to redistributing the Work, which this is
+  # not. Revisit if the payload ever carries knaif-authored binaries.
   exit 0
 fi
 
 # ---------------------------------------------------------------------------------------------------
-# Full artifact (base / cpu / vulkan, and Windows cuda): a runnable, self-contained knaif tree.
+# Full artifact (base / cpu / vulkan): a runnable, self-contained knaif tree.
+#
+# `cuda` no longer reaches here on EITHER OS — both emit the opt-in payload and exit above. The one
+# exception is the explicit --legacy-windows-cuda-app escape hatch.
 # ---------------------------------------------------------------------------------------------------
 # The DEFAULT RELEASE ARTIFACT gets the plain name; every other kind carries a suffix.
 #
@@ -246,10 +498,8 @@ cp "$BIN" "$STAGE/bin/"
 #           which are link-time only and must never ship
 # so the core-lib step branches while the backend step only differs by the prefix.
 #
-# Windows `cuda` is deliberately NOT handled here: it keeps the historical static-with-redist shape
-# (see the block below), so it has no core libs or loadable backends to stage. Linux `cuda` never
-# reaches this point — it is an opt-in payload and exits above. Aligning Windows cuda onto Option 3
-# is post-v1 (C6), and v1 publishes no CUDA artifact at all.
+# `cuda` reaches this point only under --legacy-windows-cuda-app, which produces the pre-Option-3
+# static-with-redist app and therefore has no loadable backends to stage.
 if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
    { [ "$OS" = windows ] && { [ "$KIND" = cpu ] || [ "$KIND" = vulkan ]; }; }; then
   OUT="$(out_dir)"
@@ -320,91 +570,14 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
     echo "  staged libgomp.so.1 (OpenMP runtime, not guaranteed present on a base system)"
   fi
 
-  # The Visual C++ runtime is NOT part of Windows and must ship beside the exe like every other
-  # lib above. Without it the artifact dies at process start with STATUS_DLL_NOT_FOUND
-  # (0xC0000135) printing nothing — confirmed in Windows Sandbox on a clean 11 24H2 image, where
-  # VCRUNTIME140/MSVCP140/VCOMP140 are all absent. (`ucrtbase.dll` IS present: the Universal CRT
-  # has been an OS component since Windows 10, which is why the `api-ms-win-crt-*` imports need
-  # nothing staged.)
+  # The Visual C++ runtime ships beside the exe like every other lib above — see stage_vcredist.
   #
-  # Nothing catches this by running the artifact HERE — the build box has Visual Studio, so the
-  # dependency always resolves. `scripts/check_pe_imports.py` reads the import table instead and
-  # is machine-independent. It runs at the end of this block as a REQUIRED packaging step, so
-  # every Windows artifact is verified at the moment it is assembled.
-  #
-  # VCOMP140 is llama.cpp's OpenMP runtime and lives in a DIFFERENT redist folder from the CRT.
-  # Omitting it does not merely break startup — it breaks every ggml-cpu-* variant, i.e. inference.
+  # Nothing catches a missing CRT by RUNNING the artifact here: the build box has Visual Studio, so
+  # the dependency always resolves. `scripts/check_pe_imports.py` reads the import table instead and
+  # is machine-independent. It runs at the end of this block as a REQUIRED packaging step, so every
+  # Windows artifact is verified at the moment it is assembled.
   if [ "$OS" = windows ]; then
-    # PREFER THE ACTIVE DEVELOPER ENVIRONMENT. Windows functional kinds are built in a "Developer
-    # PowerShell for VS", which exports VCToolsRedistDir pointing at the redist tree for the very
-    # toolset that compiled the binaries. That is Microsoft's documented way to locate these files,
-    # and it is the only method that guarantees the runtime MATCHES the compiler rather than merely
-    # being present somewhere on the disk.
-    #
-    # Scanning the filesystem is the fallback, and it is a poor one: a box with several Visual
-    # Studios installed offers several answers, and shell globs sort LEXICALLY, not by version — so
-    # "2022" sorts after "18", and a hypothetical "14.9" sorts after "14.51". Picking the wrong tree
-    # can stage a runtime OLDER than the compiler, which is exactly the unsupported direction.
-    vcredist_dir=""
-    if [ -n "${VCToolsRedistDir:-}" ]; then
-      # MSVC exports a Windows path; convert if cygpath is available (Git Bash ships it).
-      if command -v cygpath >/dev/null 2>&1; then
-        vcredist_dir="$(cygpath -u "$VCToolsRedistDir" 2>/dev/null || echo "$VCToolsRedistDir")"
-      else
-        vcredist_dir="$VCToolsRedistDir"
-      fi
-      vcredist_dir="${vcredist_dir%/}/$ARCH"
-      [ -d "$vcredist_dir" ] || vcredist_dir=""
-    fi
-    if [ -z "$vcredist_dir" ]; then
-      echo "  NOTE: VCToolsRedistDir unset or unusable — falling back to a filesystem scan."
-      echo "        Run packaging from a Developer PowerShell so the runtime matches the compiler."
-      # Sort version dirs numerically (-V) so 14.51 beats 14.9, newest last.
-      for root in "/c/Program Files/Microsoft Visual Studio"/*/*/VC/Redist/MSVC \
-                  "/c/Program Files (x86)/Microsoft Visual Studio"/*/*/VC/Redist/MSVC; do
-        [ -d "$root" ] || continue
-        for v in $(ls -1 "$root" 2>/dev/null | sort -V); do
-          [ -d "$root/$v/$ARCH" ] && vcredist_dir="$root/$v/$ARCH"
-        done
-      done
-    fi
-    [ -n "$vcredist_dir" ] && [ -d "$vcredist_dir" ] || {
-      echo "ERROR: no VC++ redistributable directory found for arch '$ARCH'." >&2
-      echo "       Set VCToolsRedistDir (a VS Developer shell does this) or install the" >&2
-      echo "       'C++ ... Redistributable MSMs' component. The artifact cannot be made" >&2
-      echo "       self-contained without it." >&2
-      exit 1
-    }
-    n_crt=0
-    for dll in vcruntime140.dll vcruntime140_1.dll msvcp140.dll vcomp140.dll; do
-      # CRT and OpenMP live in sibling Microsoft.VC*.{CRT,OpenMP} dirs under the same arch dir.
-      src=""
-      for cand in "$vcredist_dir"/Microsoft.VC*/"$dll"; do
-        [ -e "$cand" ] && src="$cand"
-      done
-      [ -n "$src" ] || {
-        echo "ERROR: $dll not found under $vcredist_dir — cannot stage the VC++ runtime." >&2
-        exit 1
-      }
-      # The single licence boundary. Microsoft's Distributable List grants everything under
-      # VC\redist EXCEPT debug_nonredist/ and onecore/debug_nonredist/, which hold the DEBUG
-      # CRT/OpenMP and are explicitly non-redistributable. Today's glob cannot reach them
-      # (debug_nonredist is a sibling of x64/, not a child), so this asserts a property rather
-      # than fixing a bug — but shipping a debug CRT is a licence violation, not a bug, and it
-      # would look identical in the artifact. Cheap insurance against a future loosened glob.
-      case "$src" in
-        *debug_nonredist*)
-          echo "ERROR: refusing to stage $dll from a debug_nonredist path:" >&2
-          echo "       $src" >&2
-          echo "       Microsoft's Distributable List excludes it. This is a licence" >&2
-          echo "       boundary, not a build preference." >&2
-          exit 1
-          ;;
-      esac
-      cp "$src" "$STAGE/bin/"
-      n_crt=$((n_crt + 1))
-    done
-    echo "  staged $n_crt VC++ runtime DLL(s) from $(basename "$(dirname "$(dirname "$src")")")"
+    stage_vcredist "$STAGE/bin"
 
     # Verify the tree is actually self-contained, HERE, at the moment it is assembled. This must
     # not be deferred to smoke.sh: smoke.sh is run per-artifact and by hand, and an artifact that
@@ -430,9 +603,10 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
   fi
 fi
 
-# CUDA on Windows keeps the historical static-with-redist shape (Windows functional builds are
-# produced manually in a VS Dev shell and packaged with --no-build).
-if [ "$KIND" = cuda ] && [ "$OS" != linux ]; then
+# The pre-Option-3 Windows CUDA app: NVIDIA's redist DLLs beside the exe in one heavy artifact.
+# Reachable only via --legacy-windows-cuda-app; the publishable Windows CUDA output is the opt-in
+# payload emitted much earlier.
+if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ]; then
   [ -n "${CUDA_PATH:-}" ] || { echo "ERROR: CUDA_PATH not set (need it to locate the redist DLLs)." >&2; exit 1; }
   cudabin="$(cygpath -u "$CUDA_PATH" 2>/dev/null || echo "$CUDA_PATH")/bin/x64"
   copied=0
@@ -479,7 +653,7 @@ cp installers/licenses/THIRD-PARTY-RUST.txt "$STAGE/licenses/"
 if [ "$KIND" != base ]; then
   cp installers/licenses/llama.cpp-LICENSE.txt "$STAGE/licenses/"
 fi
-if [ "$KIND" = cuda ] && [ "$OS" != linux ]; then
+if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ]; then
   # Hard failure, not a warning: we are redistributing NVIDIA's cudart/cublas/cublasLt, which their
   # EULA permits only WITH the licence text. A warning scrolls past in a build log and ships anyway;
   # a licence violation is worse than a failed build.

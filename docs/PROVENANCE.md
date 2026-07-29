@@ -132,6 +132,17 @@ agrees with what `installers/package.sh` actually stages.
 Staged into `bin\` beside `knaif.exe` — **app-local deployment**, which Microsoft
 documents as a supported method with its own
 [walkthrough](https://learn.microsoft.com/en-us/cpp/windows/walkthrough-deploying-a-visual-cpp-application-to-an-application-local-folder?view=msvc-170).
+
+**The same four files also ship in the opt-in CUDA payload** (from 1.1.0), landing in
+`~/.knaif/backends` beside `ggml-cuda.dll`. That directory sits outside the install dir by
+design, so the payload cannot assume what the install dir holds. In practice the copies
+beside `knaif.exe` are the ones the loader resolves, making this redundancy rather than a
+second dependency — but it is a second *redistribution*, which is why it is recorded here.
+It is also what keeps a Microsoft security fix to ~1 MB of individually SHA-pinned assets
+instead of a republished ~123 MB `ggml-cuda.dll`; that servicing argument is why statically
+linking the CRT into the backend was considered and rejected. Ollama ships the CRT per
+backend directory for the same reason. `package.sh` stages both copies from one
+`VCREDIST_DLLS` declaration, so the two sets cannot drift.
 Microsoft *prefers* central deployment via the redistributable installer and says so;
 central is not available here, because the portable `.zip` has no installer to chain and
 the Windows installer is deliberately per-user (`PrivilegesRequired=lowest`) while the
