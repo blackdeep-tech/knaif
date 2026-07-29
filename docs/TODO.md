@@ -324,6 +324,24 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
+- [ ] **1.1.0 release — the 2026-07-28 verification does NOT carry over, despite looking like it
+  should.** The Windows artifacts were built and fully verified while the release was still numbered
+  1.0.2: `smoke.sh`, the PE import check, and the first-ever successful run of the upgrade path
+  under a throwaway `AppId` (setup refused while the CLI held the mutex, no folder-exists warning,
+  the directory was reused, `DisplayVersion` advanced, and a planted sentinel DLL in `{app}\bin` was
+  gone afterwards). It is tempting to treat that as banked. It is not:
+  - **Re-run the upgrade path.** `docs/RELEASE.md` §4 says every release, not once, and 1.1.0's
+    installer wraps a different payload.
+  - **Re-run both clean rooms.** A CUDA payload is a new artifact shape, and P4's rule is that a new
+    shape needs its own clean-room run before publishing.
+  - `smoke.sh` and `check_pe_imports.py` re-run automatically as required packaging steps, so those
+    are free.
+
+  **What that session did buy, and it is not nothing:** `AppMutex` and `hold_app_mutex` were proven
+  to agree, `[InstallDelete]` was proven to actually execute, and the CRT staging was proven to find
+  the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
+  them out as never having run. A failure there next time is a regression, not a first discovery.
+
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
   2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
