@@ -74,6 +74,41 @@ under a throwaway `AppId`) stay valid and simply ride this release instead of th
 verification that must be **re-run** after CUDA lands is the clean-room pass on both OSes and the
 checksums, because the artifact set changes.
 
+**2026-07-29 — CI builds Linux only; Windows artifacts are built locally and attached by hand.**
+Owner decision. Windows release builds run **directly on Windows, never in a container** — and
+specifically on the maintainer's own box rather than a hosted runner. Three consequences worth
+stating, because each closes a question that was otherwise open:
+
+- **The VS licensing question is moot.** The VC++ redistribution grant is limited to licensed Visual
+  Studio users; that condition is satisfied by the maintainer's own VS Community install and stops
+  being a question the moment the build never moves to a hosted image. Nothing to confirm, and
+  [`PROVENANCE.md`](../PROVENANCE.md)'s "licensed builder" condition already describes this shape.
+- **No CUDA toolkit install per job.** Hosted Windows images do not ship the CUDA toolkit, so a
+  Windows payload job would download multiple GB every run. Building locally avoids it entirely.
+- **CI can never cut a complete release on its own**, and that is accepted. Windows artifacts are
+  attached by hand, which is what `docs/RELEASE.md` already describes.
+
+**2026-07-29 — `release.yml` builds and verifies; it does not publish.** The irreversible steps stay
+under human control. Consistent with `RELEASE.md` §5: a pushed tag cannot be moved under the
+`release-tags` ruleset, a published Release is public immediately, and a PyPI version can never be
+reused. CI producing checked artifacts and a human performing the one-way step is the split that
+matches which failures are recoverable.
+
+**2026-07-29 — CI lands AFTER 1.1.0; the first release is cut by hand.** This accepts the cost the
+plan warned about ("doing C6 by hand and then automating it a week later means cutting the same
+release mechanics twice") and takes it deliberately: `RELEASE.md` is the spec `release.yml`
+mechanises, and **that spec has never been executed end to end**. Encoding an unexecuted procedure
+means debugging the procedure and its automation simultaneously. Cut once by hand, then automate a
+path known to work. Workstream U is already release-blocking; putting CI in front of it would delay
+the first release for no gain.
+
+**2026-07-29 — the Linux CUDA payload is verified via WSL2 GPU passthrough if that works.**
+Docker Desktop's WSL2 backend can expose an NVIDIA GPU to Linux containers, which would let U7's
+three cases run without a second machine. **Unproven here — it needs a short spike before being
+relied on**, and if it does not work the payload is built but published only after a run on a real
+Linux box with an NVIDIA driver. Do not publish an unrun payload: a backend that fails to `dlopen`
+presents to the user as "CUDA didn't work", which is the least debuggable outcome available.
+
 ---
 
 **Goal:** Automate what v1 did by hand (CI + `release.yml`) and make the already-built CUDA payload
@@ -172,9 +207,27 @@ into `~/.knaif/backends`.
 - [ ] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
   (`ffmpeg`, `documents`) load in **both** the Python loader and the Rust loader; stale `io`
   excluded unless explicitly opted in.
-- [ ] **C3 — `release.yml`** _(was F5)_: on tag `v*.*.*`, matrix (windows-2022, ubuntu-22.04)
-  → build → package → attach to a draft GH Release with `SHA256SUMS`. Automates the manual cut that
-  v1 did in finalization E2/H3. (Add macos-* only when macOS packaging lands post-v1.)
+- [ ] **C3 — `release.yml`** _(was F5)_: on tag `v*.*.*`, build → package → verify → attach to a
+  **draft** GH Release with `SHA256SUMS`. Automates part of the manual cut that v1 did in
+  finalization E2/H3. (Add macOS only when macOS packaging lands post-v1.)
+  - **REVISED 2026-07-29 — the original matrix `(windows-2022, ubuntu-22.04)` is wrong twice over**;
+    see the decision log. Both corrections matter more than they look:
+    - **Linux only, and inside the pinned container.** Building the Linux artifact directly on an
+      `ubuntu-22.04` runner reintroduces the exact defect
+      [portable-builds](2026-07-27-portable-builds.md) exists to eliminate: a runtime floor inherited
+      from whatever the builder happens to be, with nothing to warn you. The job runs
+      `installers/linux/build-in-container.sh`, so the floor is the image's, not the runner's. A
+      hosted runner has Docker, so this costs nothing.
+    - **Windows is not in the matrix at all.** Windows release builds happen locally on the
+      maintainer's box and are attached by hand.
+  - **It builds and verifies; it does not publish.** Draft only, never `--publish`. The tag, the
+    public Release and the PyPI upload stay manual because none of them can be undone.
+  - **Two checks cannot move into CI, and saying so prevents a false sense of coverage:**
+    the **Windows clean room** needs Windows Sandbox, which exists on no runner; and the **installer
+    upgrade path** needs a GUI run, since `/VERYSILENT` never builds the task tree. Both stay in
+    `RELEASE.md` §4 as human steps. A green pipeline is not a verified release.
+  - **Sequencing: this lands AFTER 1.1.0 ships** (decision log). `RELEASE.md` is the spec, and it
+    has never been executed end to end — mechanising an unexecuted procedure debugs both at once.
   - **The manual procedure is the spec:** `docs/RELEASE.md` (finalization G1) documents exactly what
     v1 did by hand. `release.yml` should mechanize *that*, and any divergence is a bug in one of them.
   - Reuse `installers/smoke.sh` (finalization E1) as the job's gate — it already checks
@@ -355,10 +408,19 @@ the same argument [portable-builds](2026-07-27-portable-builds.md) made for the 
 - [ ] **The payload's floor must be checked like any other artifact.** `scripts/check_elf_deps.py`
       over the staged payload, and a load test in a floor container — a backend that fails to
       `dlopen` presents as "CUDA didn't work", which is the least debuggable outcome there is.
-- [ ] **Windows has no container answer and does not need one.** Its payload builds in the same VS
-      Developer shell as the main artifact, under the licensed-toolchain condition already recorded
-      in [portable-builds](2026-07-27-portable-builds.md) P1. Say so, so the asymmetry is a decision
-      rather than an omission.
+- [ ] **Spike WSL2 GPU passthrough BEFORE relying on it** *(decided 2026-07-29)*. Building the
+      payload needs the toolkit, not a GPU — but running the three cases needs an NVIDIA driver on
+      Linux, and there is no second machine. Docker Desktop's WSL2 backend can expose the GPU to a
+      Linux container; if it does, U7's verification runs here with no extra hardware. Treat it as
+      unproven until a container reports the device. **If it does not work, the payload is built but
+      not published** until it has run on a real Linux box with an NVIDIA driver — an unrun backend
+      reaches the user as "CUDA didn't work", which is the least debuggable failure available.
+- [ ] **Windows has no container answer and does not need one** *(reaffirmed 2026-07-29)*. Its
+      payload builds in the same VS Developer shell as the main artifact, on the maintainer's own
+      machine — which is also what keeps the VC++ redistribution grant's "licensed Visual Studio
+      user" condition satisfied without anything further to confirm (see
+      [`PROVENANCE.md`](../PROVENANCE.md) and [portable-builds](2026-07-27-portable-builds.md) P1).
+      Say so, so the asymmetry is a decision rather than an omission.
 
 ---
 
