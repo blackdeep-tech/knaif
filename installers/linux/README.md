@@ -48,6 +48,54 @@ rather than inheriting it from whoever ran the build. A native `package.sh` run 
 [`docs/RELEASE.md`](../../docs/RELEASE.md) §2 and
 [`docs/plans/2026-07-27-portable-builds.md`](../../docs/plans/2026-07-27-portable-builds.md).
 
+### The CUDA payload
+
+```bash
+just package-linux --kind=cuda      # opt-in ggml-cuda + NVIDIA redist, as loose files
+```
+
+Built in [`Dockerfile.cuda`](Dockerfile.cuda) — a **separate** image, because the release image
+deliberately carries no CUDA toolkit (3–5 GB to serve an artifact it does not produce) and the
+payload needs none of its Vulkan packages. Both pin the same Ubuntu release, apt snapshot and Rust
+version: the payload is `dlopen`ed by the exe from the other image, so a higher floor here would
+fail on exactly the older systems the release image exists to serve, and nowhere else.
+`test_linux_build_images.py` asserts that, because "keep these in step" is not something a comment
+can enforce.
+
+The payload is not a runnable tree, so it gets the floor audit
+(`scripts/check_elf_deps.py`) instead of `smoke.sh`, and no AppImage.
+
+**Building the payload needs no GPU; verifying it does.** The toolkit compiles it; only the three
+required cases (absent → CPU/Vulkan, present → offloads, present-with-no-usable-GPU → clean silent
+fallback) need an NVIDIA driver on Linux.
+
+**WSL2 GPU passthrough works — verified 2026-07-29**, so those cases run on the Windows box and no
+second machine is needed. Docker Desktop's WSL2 backend exposes the host NVIDIA GPU to Linux
+containers:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi
+```
+
+On the bench box that reports `NVIDIA GeForce RTX 3070 Laptop GPU`, `NVIDIA-SMI 610.53`,
+`KMD Version: 610.74`, `CUDA UMD Version: 13.3` — i.e. the container sees the real device, and at a
+driver above the R580 floor. Re-run it before relying on it on any other machine; it depends on the
+host driver and on Docker Desktop's WSL2 (not Hyper-V) backend.
+
+If it ever stops working, **the payload is built but NOT published** until it has run on a real Linux
+box with an NVIDIA driver. Do not publish an unrun payload: a backend that fails to `dlopen` reaches
+the user as "CUDA didn't work", which is the least debuggable outcome available.
+
+Note this proves *passthrough*, not the payload. The three cases still have to be run against the
+packaged payload — that is a separate step, and the reason this one mattered is only that it was
+the blocker.
+
+**Windows has no container answer and does not need one.** Its payload builds in the same VS
+Developer shell as the main artifact, on the maintainer's own machine — which is also what keeps the
+VC++ redistribution grant's "licensed Visual Studio user" condition satisfied with nothing further
+to confirm (see [`docs/PROVENANCE.md`](../../docs/PROVENANCE.md)). The asymmetry is a decision, not
+an omission.
+
 ## The supported floor, measured
 
 | Requirement | Value |

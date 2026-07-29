@@ -120,12 +120,16 @@ is generated once, locally, over the final complete set.** Three things follow, 
 - **The asymmetry gets documented in `RELEASE.md`**, so a fork can see that Linux is fully available
   to it and that Windows is maintainer-built for stated reasons.
 
-**2026-07-29 — the Linux CUDA payload is verified via WSL2 GPU passthrough if that works.**
-Docker Desktop's WSL2 backend can expose an NVIDIA GPU to Linux containers, which would let U7's
-three cases run without a second machine. **Unproven here — it needs a short spike before being
-relied on**, and if it does not work the payload is built but published only after a run on a real
-Linux box with an NVIDIA driver. Do not publish an unrun payload: a backend that fails to `dlopen`
-presents to the user as "CUDA didn't work", which is the least debuggable outcome available.
+**2026-07-29 — the Linux CUDA payload is verified via WSL2 GPU passthrough. SPIKED, and it works.**
+Docker Desktop's WSL2 backend exposes the host NVIDIA GPU to Linux containers, so U7's three cases
+run here without a second machine. Measured the same day:
+`docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi` reports
+`NVIDIA GeForce RTX 3070 Laptop GPU`, `KMD Version: 610.74`, `CUDA UMD Version: 13.3` — the real
+device, above the R580 floor, from inside a Linux container. The contingency stands if it ever
+regresses: the payload is built but published only after a run on a real Linux box with an NVIDIA
+driver. Do not publish an unrun payload — a backend that fails to `dlopen` presents to the user as
+"CUDA didn't work", which is the least debuggable outcome available. Note this proves *passthrough*,
+not the payload; running the three cases against the packaged payload is still owed.
 
 **2026-07-29 — SETTLED: the payload publishes as loose per-file assets, not archives.** Owner
 decision, answering U1's *DECIDE FIRST*. Each lib is its own release asset with its own `sha256`,

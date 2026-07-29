@@ -1,0 +1,93 @@
+# Linux CUDA *payload* build environment for knaif.
+#
+# WHAT THIS IS FOR. The same argument that produced installers/linux/Dockerfile: a published
+# artifact must not inherit its runtime floor from whoever happened to build it. That applies to the
+# CUDA payload too — arguably more, because a backend that fails to `dlopen` presents to the user as
+# "CUDA didn't work", which is the least debuggable outcome available.
+#
+# WHY IT IS A SEPARATE IMAGE. The release image deliberately has NO CUDA toolkit: it would add 3-5 GB
+# to serve an artifact that image does not produce. That file names this one as the fix, and this is
+# it. Contributors need neither.
+#
+#   docker build -t knaif-linux-cuda-build -f installers/linux/Dockerfile.cuda installers/linux/
+#   just package-linux --kind=cuda
+#
+# ---------------------------------------------------------------------------------------------
+# THE TWO FLOORS MUST NOT DRIFT.
+# ---------------------------------------------------------------------------------------------
+# The payload is `dlopen`ed by the exe from the release image, in one process. If this image had a
+# newer glibc, the payload would fail to load on exactly the older systems the release image exists
+# to support — and it would fail there and nowhere else, so no amount of local testing would show
+# it. So: same Ubuntu release (22.04 / glibc 2.35), same apt snapshot, same Rust pin.
+#
+# `test_linux_build_images.py` asserts these ARGs match the release Dockerfile's, because "keep them
+# in step" is not a thing a comment can enforce.
+# ---------------------------------------------------------------------------------------------
+
+# NVIDIA's devel image supplies nvcc, the CUDA headers, cuobjdump, and the redistributable libraries
+# package.sh stages into the payload. It is Ubuntu 22.04-based, so the glibc floor matches the
+# release image by construction rather than by coincidence.
+#
+# PIN THE DIGEST BEFORE PUBLISHING A PAYLOAD. It is a tag today, which is exactly the drift this
+# project pins against everywhere else — two builds of this file can silently differ. It is left as
+# a tag only because the digest has to be read from a registry the build box can reach:
+# `just package-linux --kind=cuda` prints the resolved digest after pulling, so pinning it is one
+# copy-paste into CUDA_BASE. Do that in its own commit, like the other pins.
+#
+# Also confirm the tag exists before the first build: CUDA 13 dropped support for several older
+# distributions, and if 22.04 is not among the published `13.3.*-devel-ubuntu22.04` tags then the
+# floor question has to be reopened rather than worked around — a newer base here would silently
+# raise the payload's floor above the artifact's.
+ARG CUDA_BASE=nvidia/cuda:13.3.0-devel-ubuntu22.04
+FROM ${CUDA_BASE}
+
+# Kept in step with installers/linux/Dockerfile — see the header. Asserted by a test.
+ARG APT_SNAPSHOT=20260727T000000Z
+ARG RUST_VERSION=1.96.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# --- 1a. Bootstrap TLS before apt can reach the snapshot ---------------------------------------
+# snapshot.ubuntu.com is HTTPS-only and the base image may carry no CA bundle; apt bootstraps over
+# the signed http archive. Same reasoning as the release image, same two-pass structure.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
+
+# --- 1b. Pin apt to the SAME snapshot as the release image, then install build deps -------------
+#
+# NVIDIA's image ships its own /etc/apt/sources.list.d entries for the CUDA repo; those are left
+# alone (the toolkit is already installed) and only the Ubuntu archive is repointed at the snapshot.
+#
+# NO VULKAN HERE. The payload is `ggml-cuda` plus NVIDIA's redistributables and nothing else, so the
+# ~1 GB of LunarG packages the release image needs would be dead weight. This is also why the two
+# images cannot simply be one.
+RUN set -eux; \
+    printf 'deb https://snapshot.ubuntu.com/ubuntu/%s jammy main restricted universe multiverse\n\
+deb https://snapshot.ubuntu.com/ubuntu/%s jammy-updates main restricted universe multiverse\n\
+deb https://snapshot.ubuntu.com/ubuntu/%s jammy-security main restricted universe multiverse\n' \
+      "$APT_SNAPSHOT" "$APT_SNAPSHOT" "$APT_SNAPSHOT" > /etc/apt/sources.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      build-essential pkg-config cmake ninja-build patchelf \
+      libclang-dev \
+      binutils file git curl ca-certificates python3; \
+    rm -rf /var/lib/apt/lists/*
+# binutils + file are for the ELF dependency audit (scripts/check_elf_deps.py over the staged
+# payload), not for the build. patchelf sets the $ORIGIN RPATH so the redist libs resolve from
+# beside libggml-cuda.so with no LD_LIBRARY_PATH games.
+
+# --- 2. Rust, at the version the workspace pins ------------------------------------------------
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
+RUN set -eux; \
+    curl -fsSL https://sh.rustup.rs | sh -s -- \
+      -y --no-modify-path --profile minimal \
+      --default-toolchain "${RUST_VERSION}" \
+      --component rustfmt --component clippy; \
+    chmod -R a+w "$CARGO_HOME" "$RUSTUP_HOME"; \
+    rustc --version; cargo --version
+
+# CUDA_PATH is what installers/package.sh reads to locate the redistributable libraries and
+# cuobjdump. NVIDIA's images set CUDA_HOME but not this.
+ENV CUDA_PATH=/usr/local/cuda
+
+WORKDIR /src

@@ -44,13 +44,20 @@ for a in "$@"; do
     --kind=*)         KIND="${a#--kind=}" ;;
     --rebuild-image)  REBUILD_IMAGE=1 ;;
     --clean)          CLEAN=1 ;;
-    *) echo "usage: build-in-container.sh [--dev] [--rev=<rev>] [--kind=cpu|vulkan] [--rebuild-image] [--clean]" >&2; exit 1 ;;
+    *) echo "usage: build-in-container.sh [--dev] [--rev=<rev>] [--kind=cpu|vulkan|cuda] [--rebuild-image] [--clean]" >&2; exit 1 ;;
   esac
 done
 case "$KIND" in
   cpu|vulkan) ;;
-  *) echo "ERROR: --kind must be cpu or vulkan (cuda is an opt-in payload, not built here)." >&2; exit 1 ;;
+  # The CUDA payload builds in its OWN image: the release image deliberately carries no toolkit
+  # (3-5 GB for an artifact it does not produce), and the payload needs no Vulkan. The two images
+  # pin the same Ubuntu release, apt snapshot and Rust version, because the payload is dlopen'ed by
+  # an exe from the other image — a higher floor here would fail on exactly the older systems the
+  # release image exists to serve, and nowhere else.
+  cuda) IMAGE=knaif-linux-cuda-build; DOCKERFILE=Dockerfile.cuda ;;
+  *) echo "ERROR: --kind must be cpu, vulkan or cuda." >&2; exit 1 ;;
 esac
+DOCKERFILE="${DOCKERFILE:-Dockerfile}"
 
 command -v docker >/dev/null 2>&1 || {
   echo "ERROR: docker not found. This is the only step that needs it — every other build path" >&2
@@ -64,7 +71,31 @@ docker version >/dev/null 2>&1 || {
 
 if [ "$REBUILD_IMAGE" -eq 1 ] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "Building $IMAGE (first run takes a few minutes; afterwards it is cached)…"
-  docker build -t "$IMAGE" "$ROOT/installers/linux"
+  docker build -t "$IMAGE" -f "$ROOT/installers/linux/$DOCKERFILE" "$ROOT/installers/linux"
+fi
+
+# Report the CUDA base image's digest so pinning it is a copy-paste rather than a registry lookup.
+# Dockerfile.cuda still names a TAG, which is precisely the drift everything else here pins against;
+# it is left that way only because the digest has to be read from a registry, which a Dockerfile
+# cannot do. Nagging once per build is deliberate — a silent unpinned base is how two "identical"
+# payload builds come to differ.
+if [ "$KIND" = cuda ]; then
+  cuda_base="$(awk -F= '/^ARG CUDA_BASE=/{print $2}' "$ROOT/installers/linux/Dockerfile.cuda")"
+  case "$cuda_base" in
+    *@sha256:*) ;;
+    *)
+      digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$cuda_base" 2>/dev/null || true)"
+      echo
+      echo "NOTE: the CUDA base image is pinned by TAG, not by digest — two builds of this image can"
+      echo "      silently differ. Before publishing a payload, pin it in Dockerfile.cuda:"
+      if [ -n "$digest" ]; then
+        echo "        ARG CUDA_BASE=$digest"
+      else
+        echo "        ARG CUDA_BASE=<repo>@sha256:<digest>   (docker image inspect $cuda_base)"
+      fi
+      echo
+      ;;
+  esac
 fi
 
 mkdir -p dist
@@ -180,6 +211,26 @@ docker run --rm -i \
     cd /src
 
     installers/package.sh --kind=\"\$KIND\"
+
+    # The CUDA payload is not a runnable tree, so none of the artifact checks below apply to it:
+    # there is no exe to smoke, no skills/ to resolve, and no AppImage. What it DOES need is the
+    # floor audit — the whole reason this runs in a container — because a backend that fails to
+    # dlopen on an older system presents to the user as \"CUDA didn't work\" rather than as a
+    # missing symbol. check_elf_deps.py reads the ELF headers, so unlike running the payload it
+    # gives the same answer here as on a user's machine.
+    if [ \"\$KIND\" = cuda ]; then
+      staged=\"\$(ls -d dist/staging/knaif-*-linux-x64-cuda-backend 2>/dev/null | head -1)\"
+      [ -n \"\$staged\" ] || { echo \"ERROR: no staged CUDA payload\" >&2; exit 1; }
+      echo \"staged payload: \$staged\"
+      python3 scripts/check_elf_deps.py \"\$staged\"
+      if [ \"\$DEV\" != 1 ]; then
+        mkdir -p \"/out/\$(basename \"\$staged\")\"
+        cp -f \"\$staged\"/* \"/out/\$(basename \"\$staged\")/\"
+        cp -f dist/*.manifest-fragment.yaml /out/ 2>/dev/null || true
+      fi
+      chown -R \"\$HOST_UID:\$HOST_GID\" \"/out/\$(basename \"\$staged\")\" 2>/dev/null || true
+      exit 0
+    fi
 
     # Mirror package.sh's SUFFIX rule: vulkan is THE release artifact and gets the plain name;
     # every other kind carries its kind as a suffix. Globbing 'knaif-*-linux-x64' matches ONLY the

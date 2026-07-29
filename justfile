@@ -371,6 +371,13 @@ package-native kind="cpu":
 #   just package-linux                 release: builds HEAD's commit from a clean checkout
 #   just package-linux --rev=v1.1.0    release: builds that tag
 #   just package-linux --dev           development: mounts the worktree (never publish this)
+#   just package-linux --kind=cuda     the opt-in CUDA payload, in its own toolkit image
+#
+# `--kind=cuda` uses installers/linux/Dockerfile.cuda and its own cache volume. Both are separate
+# on purpose: the release image carries no CUDA toolkit (3-5 GB for an artifact it does not
+# produce), and one volume per kind is required, not tidy — every kind hard-links its libraries
+# into the same target/release/, so a stale SONAME symlink from another kind makes the next build
+# panic with AlreadyExists.
 #
 # For a LOCAL artifact you do not need this: `just package-native vulkan` builds natively and the
 # floor is simply your own distro's.
