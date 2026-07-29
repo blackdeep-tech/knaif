@@ -449,3 +449,90 @@ def test_installdelete_runs_only_over_staged_payload() -> None:
         assert entry["Name"].startswith(
             "{app}\\"
         ), f"[InstallDelete] entry {entry['Name']!r} is outside the app dir"
+
+
+# --------------------------------------------------------------------------------------
+# The opt-in CUDA backend task (U4)
+# --------------------------------------------------------------------------------------
+#
+# The installer duplicates two facts it cannot read from their source: ISPP has no YAML
+# parser, so the CUDA driver floor and the payload's filename are `#define`s here. Both
+# have an authoritative home in contracts/backends/backend-manifest.yaml, and a duplicate
+# that drifts is worse than no duplicate — it decides, silently, whether a user is offered
+# a 618 MB download that can never load.
+
+
+def _define(name: str) -> str:
+    match = re.search(rf'^\s*#define\s+{name}\s+"([^"]+)"', ISS_TEXT, re.M)
+    assert match, f"no #define {name} in knaif.iss"
+    return match.group(1)
+
+
+def _backend_manifest() -> dict:
+    import yaml
+
+    path = ROOT / "contracts" / "backends" / "backend-manifest.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _cuda_task() -> dict[str, str]:
+    for task in TASKS:
+        if task.get("Name") == "cudabackend":
+            return task
+    raise AssertionError("no `cudabackend` task in [Tasks]")
+
+
+def test_cuda_driver_floor_matches_the_backend_manifest() -> None:
+    declared = (
+        ((_backend_manifest().get("backends") or {}).get("cuda") or {}).get("requires") or {}
+    ).get("min_driver")
+    assert str(declared) == _define("MinNvidiaDriver"), (
+        f"installer MinNvidiaDriver={_define('MinNvidiaDriver')!r} but the backend manifest "
+        f"declares requires.min_driver={declared!r}. Below the real floor the installer offers a "
+        f"~618 MB payload that then fails to load; above it, it silently withholds one that works."
+    )
+
+
+def test_cuda_backend_filename_matches_the_backend_manifest() -> None:
+    # Presence of this file is how the installer avoids re-offering a payload the user already has
+    # across an upgrade (the backends dir lives outside {app} and survives one).
+    windows = (
+        ((_backend_manifest().get("backends") or {}).get("cuda") or {}).get("platforms") or {}
+    ).get("windows-x64") or {}
+    names = {f.get("name") for f in (windows.get("files") or [])}
+    assert _define("CudaBackendFile") in names, (
+        f"installer CudaBackendFile={_define('CudaBackendFile')!r} is not among the Windows "
+        f"payload files {sorted(n for n in names if n)} — the 'already installed?' check would "
+        f"never fire, so every upgrade would re-offer the download."
+    )
+
+
+def test_cuda_task_is_opt_in() -> None:
+    # The whole point of an opt-in component. A checked-by-default 618 MB download is exactly the
+    # defect that shipped for Ghostscript and LibreOffice.
+    assert "unchecked" in _flags(_cuda_task()), "the cudabackend task must default to unchecked"
+
+
+def test_cuda_task_is_gated() -> None:
+    # Without a Check the task renders on AMD boxes and below the driver floor, where the payload
+    # cannot work.
+    assert (
+        _cuda_task().get("Check") == "CudaOfferable"
+    ), "the cudabackend task must be gated on CudaOfferable"
+
+
+def test_cuda_task_is_flat() -> None:
+    # Same trap as the deps tasks: a dotted name declares an undefined parent, and the child then
+    # loses both its GroupDescription and its `unchecked` flag.
+    assert "\\" not in _cuda_task()["Name"], "task names must be flat (see the deps-task comment)"
+
+
+def test_cuda_run_entry_uses_the_same_command_a_user_would() -> None:
+    # One install path, one set of checksums, one atomic swap. An installer-specific copy of the
+    # download logic is a second path that can rot independently.
+    entries = [e for e in _entries("Run") if e.get("Tasks", "").strip('"') == "cudabackend"]
+    assert entries, "no [Run] entry is bound to the cudabackend task"
+    assert len(entries) == 1, "expected exactly one CUDA [Run] entry"
+    entry = entries[0]
+    assert entry["Filename"] == "{app}\\bin\\knaif.exe", entry["Filename"]
+    assert entry["Parameters"] == "backend install cuda", entry["Parameters"]

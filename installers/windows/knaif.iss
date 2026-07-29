@@ -44,6 +44,19 @@
 #ifndef DefaultModelFile
   #define DefaultModelFile "knaif-qwen3-4b-v1-q4_k_m.gguf"
 #endif
+; Minimum NVIDIA driver major version for the opt-in CUDA backend (the CUDA 13 floor). The
+; authoritative declaration is `requires.min_driver` in contracts/backends/backend-manifest.yaml;
+; this is a duplicate because ISPP cannot read YAML, and python/core/tests/test_installer_iss.py
+; asserts the two agree. Offering the payload below this floor would hand the user ~618 MB that
+; then fails to load — which reaches them as "CUDA didn't work", the least debuggable outcome.
+#ifndef MinNvidiaDriver
+  #define MinNvidiaDriver "580"
+#endif
+; The loadable backend file the payload installs. Its presence in the backends dir is how the
+; installer knows not to re-offer the download.
+#ifndef CudaBackendFile
+  #define CudaBackendFile "ggml-cuda.dll"
+#endif
 ; AppId is how Windows identifies the application: Inno derives the uninstall registry key
 ; ({AppId}_is1) from it, and two builds that share an AppId ARE the same application. Overridable
 ; so a scratch verification install cannot collide with a real one — tearing a test install down by
@@ -156,6 +169,16 @@ Name: "depstesseract"; Description: "Tesseract OCR — scanned-PDF / image text 
 ; step. The description states that setup waits, because the [Run] entry has no `nowait` and Inno
 ; disables Cancel during that stage — the wait is disclosed where the user opts in, not when it starts.
 Name: "getmodel"; Description: "Download the knaif AI model now — {#DefaultModel}, a Qwen3-4B fine-tune (~2.5 GB, needed for ""run""; setup will wait for this)"; GroupDescription: "AI model:"; Check: NeedsModel
+; The opt-in NVIDIA CUDA backend. Re-enabled for 1.1.0: v1 shipped no such component precisely
+; because `knaif backend install` did not exist for it to call, and an opt-in task with no command
+; behind it is worse than no offer.
+;
+; UNCHECKED, and hidden entirely unless CudaOfferable. Three conditions, all of which must hold:
+; an NVIDIA GPU is present, its driver meets the CUDA 13 floor, and the backend is not already
+; installed. Below the floor the payload would download and then fail to load; on an AMD box the
+; offer is pure noise. `knaif backend install cuda` remains available afterwards either way, which
+; is what makes it safe for this to be conservative.
+Name: "cudabackend"; Description: "Download the NVIDIA CUDA backend now (~618 MB — faster inference on your NVIDIA GPU; you can also run ""knaif backend install cuda"" later)"; GroupDescription: "GPU acceleration:"; Flags: unchecked; Check: CudaOfferable
 
 [Files]
 ; Core: binary + language-neutral contracts + docs.
@@ -220,6 +243,16 @@ Filename: "winget"; Parameters: "install -e --id UB-Mannheim.TesseractOCR --acce
 Filename: "{app}\bin\knaif.exe"; Parameters: "models pull {#DefaultModel}"; \
     StatusMsg: "Downloading the {#DefaultModel} AI model (~2.5 GB, one time)..."; Flags: waituntilterminated; \
     Tasks: "getmodel"; Check: NeedsModel
+; The CUDA backend, through the SAME command a user would run by hand — so there is one install
+; path with one set of checksums and one atomic swap, not an installer-specific copy of it.
+;
+; NON-FATAL BY CONSTRUCTION, and that is the point. A [Run] entry's exit code does not fail the
+; installation, so a timed-out or refused 618 MB download leaves a fully working knaif behind
+; rather than rolling one back over an optional GPU extra. The user is told they can re-run it; the
+; command is identical, so nothing about the retry is second-class.
+Filename: "{app}\bin\knaif.exe"; Parameters: "backend install cuda"; \
+    StatusMsg: "Downloading the NVIDIA CUDA backend (~618 MB, one time)..."; Flags: waituntilterminated; \
+    Tasks: "cudabackend"
 
 [Code]
 const
@@ -398,6 +431,75 @@ end;
 function NeedsModel: Boolean;
 begin
   Result := not FileExists(ExpandConstant('{%USERPROFILE}\.knaif\models\{#DefaultModelFile}'));
+end;
+
+// --- The opt-in CUDA backend offer ------------------------------------------------------------
+//
+// Mirrors the runtime gate in knaif-models' `cuda_offer`, but has to answer the same question
+// BEFORE knaif is installed, so it cannot call the CLI and probes nvidia-smi directly. Two
+// deliberate simplifications against the runtime version: it does not read compute capability (the
+// wizard has one offer, not two strengths), and it detects an existing payload by file presence
+// rather than by receipt (the CLI does the authoritative check and will simply re-install).
+//
+// Probed ONCE and cached: `Check:` is evaluated repeatedly — per wizard page and again at install
+// time — and spawning nvidia-smi each time would make the wizard visibly stutter.
+var
+  NvidiaProbed: Boolean;
+  NvidiaDriverMajorCached: Integer;
+
+// Major version of the installed NVIDIA driver, or 0 when there is no NVIDIA GPU, no nvidia-smi,
+// or the output cannot be parsed. Zero always means "do not offer" — on a box we cannot read, the
+// safe answer is silence, since `knaif backend install cuda` still works by hand.
+function NvidiaDriverMajor: Integer;
+var
+  TmpFile, Line: string;
+  Lines: TArrayOfString;
+  ResultCode, DotPos: Integer;
+begin
+  if NvidiaProbed then
+  begin
+    Result := NvidiaDriverMajorCached;
+    Exit;
+  end;
+  NvidiaProbed := True;
+  NvidiaDriverMajorCached := 0;
+  Result := 0;
+
+  TmpFile := ExpandConstant('{tmp}\knaif-nvsmi.txt');
+  { Routed through cmd /C because Exec cannot redirect on its own. 2>nul keeps a missing
+    nvidia-smi from flashing a console error at a user who simply has no NVIDIA card. }
+  if not Exec(ExpandConstant('{cmd}'),
+              '/C nvidia-smi --query-gpu=driver_version --format=csv,noheader > "' + TmpFile + '" 2>nul',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Exit;
+  if ResultCode <> 0 then
+    Exit;
+  if not LoadStringsFromFile(TmpFile, Lines) then
+    Exit;
+  if GetArrayLength(Lines) = 0 then
+    Exit;
+
+  Line := Trim(Lines[0]);
+  DotPos := Pos('.', Line);
+  if DotPos > 1 then
+    Line := Copy(Line, 1, DotPos - 1);
+  NvidiaDriverMajorCached := StrToIntDef(Line, 0);
+  Result := NvidiaDriverMajorCached;
+end;
+
+// True when the payload is already sitting in the backends dir. That directory lives outside {app}
+// (see KnaifDataDir) precisely so it survives upgrades, which is exactly why an upgrade must not
+// re-offer a 618 MB download the user already has.
+function CudaBackendInstalled: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{%USERPROFILE}\.knaif\backends\{#CudaBackendFile}'));
+end;
+
+// Offer only when all three hold: NVIDIA present, driver at or above the CUDA 13 floor, payload
+// absent. Below the floor the download would succeed and the library would then fail to load.
+function CudaOfferable: Boolean;
+begin
+  Result := (NvidiaDriverMajor >= {#MinNvidiaDriver}) and not CudaBackendInstalled;
 end;
 
 { Pre-select "I accept the agreement" on the license page. Inno has no directive for this — the
