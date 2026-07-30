@@ -28,17 +28,24 @@
 # package.sh stages into the payload. It is Ubuntu 22.04-based, so the glibc floor matches the
 # release image by construction rather than by coincidence.
 #
-# PIN THE DIGEST BEFORE PUBLISHING A PAYLOAD. It is a tag today, which is exactly the drift this
-# project pins against everywhere else — two builds of this file can silently differ. It is left as
-# a tag only because the digest has to be read from a registry the build box can reach:
-# `just package-linux --kind=cuda` prints the resolved digest after pulling, so pinning it is one
-# copy-paste into CUDA_BASE. Do that in its own commit, like the other pins.
+# Pinned by digest as well as tag, matching the release image's `ubuntu:22.04@sha256:…` form. The
+# tag stays for readability; the digest is what actually resolves, so two builds of this file cannot
+# silently differ. Bump both together, deliberately, in their own commit.
 #
-# Also confirm the tag exists before the first build: CUDA 13 dropped support for several older
-# distributions, and if 22.04 is not among the published `13.3.*-devel-ubuntu22.04` tags then the
-# floor question has to be reopened rather than worked around — a newer base here would silently
-# raise the payload's floor above the artifact's.
-ARG CUDA_BASE=nvidia/cuda:13.3.0-devel-ubuntu22.04
+# TAG SHAPE, CONFIRMED 2026-07-30. NVIDIA publishes three-component versions only — there is no
+# `13.3-devel-ubuntu22.04` alias, and asking for one fails with `no such manifest`. Any prose that
+# names a two-component CUDA tag is describing something that does not exist.
+#
+# THE FLOOR QUESTION IS CLOSED, which this file previously left open: CUDA 13 did drop several older
+# distributions, but 22.04 is NOT among them. `13.3.0-devel-ubuntu22.04` and `13.3.1-devel-ubuntu22.04`
+# are both published, so the payload's glibc floor matches the release image by construction and
+# nothing has to be reopened or worked around.
+#
+# 13.3.1 exists and is newer. Staying on 13.3.0 is deliberate: it is the version this file already
+# declared, docs record the toolkit only as "13.3", and moving the toolkit under a payload the
+# Windows half was built against is a decision to take on its own evidence, not a side effect of
+# adding a digest.
+ARG CUDA_BASE=nvidia/cuda:13.3.0-devel-ubuntu22.04@sha256:e7cb11515d3931675b57eb26c5e70055e702a4d51320c60ebcd899380ee3c7d5
 FROM ${CUDA_BASE}
 
 # Kept in step with installers/linux/Dockerfile — see the header. Asserted by a test.

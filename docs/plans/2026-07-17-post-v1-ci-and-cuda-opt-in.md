@@ -655,22 +655,46 @@ is ever containerised it belongs in a separate image `FROM nvidia/cuda:*-devel-u
 That is now needed, because a published payload must not inherit its floor from whoever built it —
 the same argument [portable-builds](2026-07-27-portable-builds.md) made for the main artifact.
 
-- [ ] `installers/linux/Dockerfile.cuda` on `nvidia/cuda:13.3-devel-ubuntu22.04`, pinned by digest,
-      reusing the release image's apt snapshot and Rust pin so the two floors cannot drift.
-- [ ] A `just` recipe beside `package-linux`, with **its own cache volume** — the one-volume-per-kind
+- [x] `installers/linux/Dockerfile.cuda` on `nvidia/cuda:13.3.0-devel-ubuntu22.04`, **pinned by
+      digest** (`sha256:e7cb1151…`) alongside the tag, in the release image's `ubuntu:22.04@sha256:…`
+      form, reusing its apt snapshot and Rust pin so the two floors cannot drift.
+      - **The tag this plan asked for does not exist** *(2026-07-30)*. NVIDIA publishes
+        three-component versions only — there is no `13.3-devel-ubuntu22.04` alias, and requesting
+        one fails with `no such manifest`. The file always named a real tag; it was this plan's prose
+        that was wrong, which is worth recording because the same shorthand appears wherever a CUDA
+        image is discussed.
+      - **The floor question is closed rather than reopened.** CUDA 13 did drop several older
+        distributions, but 22.04 is not among them: `13.3.0-devel-ubuntu22.04` and
+        `13.3.1-devel-ubuntu22.04` are both published, so the payload's glibc floor matches the
+        release image by construction. 13.3.1 is newer and deliberately not adopted here — moving the
+        toolkit under a payload whose Windows half is already built is its own decision, not a side
+        effect of adding a digest.
+- [x] A `just` recipe beside `package-linux`, with **its own cache volume** — the one-volume-per-kind
       rule exists because kinds hard-link into the same `target/release/` and a stale SONAME symlink
-      makes the next kind panic with `AlreadyExists`.
+      makes the next kind panic with `AlreadyExists`. `just package-linux --kind=cuda` routes to
+      `Dockerfile.cuda`, its own image and `knaif-target-cuda`.
 - [ ] **The payload's floor must be checked like any other artifact.** `scripts/check_elf_deps.py`
       over the staged payload, and a load test in a floor container — a backend that fails to
       `dlopen` presents as "CUDA didn't work", which is the least debuggable outcome there is.
-- [ ] **Spike WSL2 GPU passthrough BEFORE relying on it** *(decided 2026-07-29)*. Building the
+- [x] **Spike WSL2 GPU passthrough BEFORE relying on it** *(decided 2026-07-29)*. Building the
       payload needs the toolkit, not a GPU — but running the three cases needs an NVIDIA driver on
       Linux, and there is no second machine. Docker Desktop's WSL2 backend can expose the GPU to a
       Linux container; if it does, U7's verification runs here with no extra hardware. Treat it as
       unproven until a container reports the device. **If it does not work, the payload is built but
       not published** until it has run on a real Linux box with an NVIDIA driver — an unrun backend
       reaches the user as "CUDA didn't work", which is the least debuggable failure available.
-- [ ] **Windows has no container answer and does not need one** *(reaffirmed 2026-07-29)*. Its
+      - **IT WORKS — verified 2026-07-29**, written up in
+        [`installers/linux/README.md`](../../installers/linux/README.md). This box was stale, not
+        outstanding. Re-confirmed 2026-07-30 on a newer host driver (R610 series, container CUDA UMD
+        13.3), so the three cases run here and the payload is not blocked on a second machine.
+      - Re-confirming costs a **30 MB base image, not the 4 GB devel one** — the container runtime
+        injects the driver and `nvidia-smi`, so proving passthrough needs no CUDA image at all.
+        `docker run --rm --gpus all ubuntu:22.04 nvidia-smi` is the whole check.
+      - What it does **not** prove: Ampere is the *optional* half of the story. The Blackwell case
+        that makes CUDA a must-have rather than an optimisation still has no hardware behind it here,
+        and the nudge's two strengths remain asserted on one card.
+- [x] **Windows has no container answer and does not need one** *(reaffirmed 2026-07-29; stated in
+      [`installers/linux/README.md`](../../installers/linux/README.md))*. Its
       payload builds in the same VS Developer shell as the main artifact, on the maintainer's own
       machine — which is also what keeps the VC++ redistribution grant's "licensed Visual Studio
       user" condition satisfied without anything further to confirm (see
