@@ -632,6 +632,21 @@ This writes `dist/staging/knaif-<ver>-<os>-<arch>-cuda-backend/` as **loose file
 `sha256` and size. `package.sh` verifies the fatbin actually contains every requested arch
 (`cuobjdump`) and hard-fails if one was silently dropped.
 
+**2a. Rehearse the install before uploading anything.**
+
+```bash
+installers/rehearse-backend-install.sh          # add --platform linux-x64 when packaging there
+```
+
+Serves the staged payload over `127.0.0.1`, splices the fragment's real checksums into a copy of the
+real manifest, and drives `list → install → verify → remove` plus the two failure paths (a corrupted
+`sha256` must land nothing and must not damage an existing install) and the stale-receipt refusal.
+Roughly fifteen seconds, no uploads, and it fails on the two things unit tests structurally cannot
+see: a fragment whose checksums have drifted from the staged bytes, and a payload file `package.sh`
+stages but never declares. What it does *not* cover is the three backend cases — those need the GPU,
+and on Windows the third one wants `CUDA_VISIBLE_DEVICES="-1"`, since an empty string reads as
+*unset* there and the case then passes without testing anything.
+
 **The fragment is the upload list, not the directory listing.** The staging directory holds one more
 file than the fragment does: a generated `README.txt` orienting whoever opens the folder locally.
 `write_manifest_fragment` skips it deliberately and the manifest must not declare it — it is not
