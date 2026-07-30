@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] — unreleased
 
-> **Not finished.** The CUDA opt-in surface (`knaif backend install cuda`, the published payloads,
-> the driver-aware offer) is being built and is not written up below. Add its entries and revisit
-> this summary before tagging — see
+> **Not finished.** The CUDA opt-in surface is written up below, but the payloads are **not yet
+> published**: `contracts/backends/backend-manifest.yaml` still says `status: unpublished` and every
+> `url` is a placeholder, so `backend install cuda` refuses with an explanation rather than
+> downloading. Before tagging: build both payloads, upload the assets, fill in the manifest, flip
+> the status, and re-run the three backend cases against the *packaged* payload on each OS. Set the
+> release date at the same time. See
 > [`docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md`](docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md),
-> Workstream U. Set the release date at the same time.
+> Workstream U, and `docs/RELEASE.md` §7 for the publish order.
 
 **The first knaif release with downloadable binaries.** No GitHub Release existed before it: 1.0.0
 and 1.0.1 published the `knaif` wheel to PyPI, and the Windows artifacts built alongside them were
@@ -42,6 +45,32 @@ number alone is measuring the wrong thing.
 
 ### Added
 
+- **`knaif backend install cuda`** — the opt-in NVIDIA CUDA backend, in one command. ~668 MB,
+  needs an R580+ driver, and it takes effect on the next run; `knaif backend list|verify|remove`
+  complete the set. The payload itself has worked since the native branch closed, but the only way
+  to get it was to copy files into `~/.knaif/backends` by hand — and on Windows there was no payload
+  to copy at all. Both are fixed here.
+
+  **This matters most on the newest NVIDIA cards.** On Blackwell (RTX 50xx) the bundled Vulkan
+  backend generates at roughly CPU speed — ~5.7 tok/s against the CPU's ~5.9 on knaif's own
+  workload. That is not a slower option, it is a product that reads as broken, and it is why this
+  release waited for CUDA rather than shipping without it. On older NVIDIA cards CUDA is faster and
+  genuinely optional, and knaif says so in those terms rather than the alarming ones.
+
+  knaif offers it on first run when it finds an eligible GPU, and the Windows installer runs the
+  same command from a task it shows only when the GPU and driver already qualify — and, because it
+  is shown only there, one that is checked by default. A driver below the CUDA 13 floor gets an
+  update hint and no offer — downloading 668 MB that then fails to load is the least debuggable
+  outcome available.
+  `KNAIF_NO_CUDA_NUDGE` silences the offer — but not the report that an installed payload is being
+  ignored, which is about a download the user already paid for rather than one being suggested.
+
+  The backend is ABI-coupled to the binary that loads it, so an upgraded knaif **refuses** a payload
+  left behind by an earlier release rather than loading it, and says how to update it. That check
+  had to exist here: `~/.knaif/backends` lives outside the install directory by design, survives an
+  upgrade, and is scanned first, so no install-time mechanism could have caught it.
+
+  Copying the payload in by hand still works and stays documented as the fallback.
 - **Linux x64 artifacts** — `knaif-1.1.0-linux-x64.tar.gz` and `knaif-1.1.0-linux-x86_64.AppImage`,
   both carrying CPU and Vulkan backends.
 - **A pinned Linux release container** (`installers/linux/Dockerfile`, `just package-linux`). It

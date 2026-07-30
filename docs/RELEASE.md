@@ -52,24 +52,47 @@ offers a user nothing the default lacks, at the cost of making them choose. (Bef
 backends were statically linked, so cpu/vulkan were different binaries and both had to ship — that
 is why older docs list two. It is no longer true.)
 
-**No CUDA artifact at v1** (C6 deferred) — see the CUDA section below.
-
 **GGUF models are never attached to a release** — they live on Hugging Face
 (`blackdeep/knaif`) and are pulled at runtime.
 
-### CUDA payloads are NOT published at v1
+### CUDA payload assets (from 1.1.0)
 
-The CUDA payload builds and is proven, but v1 ships **no `knaif backend install cuda` command**, so
-nothing would fetch a published payload — and publishing it would bake org URLs into the release.
-The **Windows installer must therefore offer no CUDA component** (an opt-in task with no command
-behind it is worse than no offer). Payload publishing + the install surface land in the post-v1 plan.
-The only CUDA route v1 documents is manual: build the payload and copy it into `~/.knaif/backends`.
+The CUDA payload is **not an artifact in the table above** — it is not a downloadable app and no user
+should be choosing between it and the default. It is fetched by `knaif backend install cuda`, and it
+is published as **loose per-file assets split across two tags**:
 
-**That manual route is LINUX-ONLY at v1.** `--kind=cuda` emits a real payload only on Linux; on
-Windows it still produces the historical static-with-redist app, so a Windows user has nothing to
-copy into `~/.knaif/backends` (the Windows loader would load one — there just isn't one to build).
-Aligning Windows `cuda` onto Option 3 is post-v1. Neither OS publishes a CUDA asset at v1, so this
-blocks nothing; just do not promise Windows users the manual route.
+| Files | Tag | Why |
+|---|---|---|
+| `ggml-cuda.dll` / `libggml-cuda.so` (~150 MB), plus the four MSVC runtime DLLs on Windows | the **product release** (`v<ver>`) | ABI-coupled to that release's exe; a tag-scoped URL structurally cannot serve a newer lib to an older binary |
+| `cudart*` / `cublas*` / `cublasLt*` (~517 MB), `NVIDIA-CUDA-EULA.txt` | **`redist-cuda-13.3`** (pre-release, never deleted) | keyed to the CUDA toolkit, byte-identical across knaif releases, so it is uploaded once |
+
+**Sizes are the measured Windows 1.1.0 payload**, staged 2026-07-30: **668 MB** total across ten
+files — `cublasLt64_13.dll` 464 MB, `ggml-cuda.dll` 150 MB (six real archs), `cublas64_13.dll` 53 MB,
+and ~1 MB of CRT, `cudart`, and licence text. The figure `backend list` shows is computed from the
+manifest, so it is right by construction; prose is not, and the earlier "~618 MB" predated the CRT
+and licence files joining the payload. Re-measure when the arch list or toolkit moves, and take the
+Linux numbers from that payload's own fragment rather than assuming these.
+
+**Loose files, not archives** (decided 2026-07-29). Each asset carries its own `sha256` in the
+manifest, so nothing on the install path extracts an archive — `BackendStore` is fetch → hash →
+stage → swap. It also keeps a Microsoft CRT security fix to ~1 MB of individually pinned files rather
+than a republished ~150 MB `ggml-cuda.dll`, which is the servicing argument that ruled out static
+linking in the first place.
+
+**The licence files ship inside the payload**, landing in the user's backends directory alongside the
+libraries. Under loose-file publishing the release *page* is not what reaches a user's disk, and
+NVIDIA's EULA permits redistribution only *with* the licence text. `package.sh` hard-fails if
+`installers/licenses/NVIDIA-CUDA-EULA.txt` is absent.
+
+**Both OSes emit a real payload from 1.1.0.** Through 1.0.x, `--kind=cuda` produced a genuine payload
+only on Linux; on Windows it produced the historical static-with-redist *app*, so a Windows user had
+nothing to install and the installer's opt-in task had nothing to place. That shape is now behind
+`--legacy-windows-cuda-app` and is not publishable.
+
+Nothing is published until every `url`/`sha256` in
+[`contracts/backends/backend-manifest.yaml`](../contracts/backends/backend-manifest.yaml) is real and
+its `status:` is flipped to `published` — `test_backend_manifest_release_ready.py` fails the build
+on a payload that claims to be published while carrying a placeholder. See §7.
 
 ---
 
@@ -155,6 +178,37 @@ does not identify which build is current. `out_dir()` resolves the right one by 
 emitted — but only ever package the kind you just built, and never assume a rebuilt-but-cached kind
 refreshed anything.
 
+**Package from that same Developer shell, not just build from it.** `package.sh` stages the four
+VC++ runtime DLLs from `$VCToolsRedistDir`, which a Developer shell exports pointing at the redist
+tree for the *very toolset that compiled the binaries*. Run packaging from a plain Git Bash and the
+variable is unset, so the script falls back to scanning the filesystem and says so:
+
+```text
+NOTE: VCToolsRedistDir unset or unusable — falling back to a filesystem scan.
+```
+
+The scan picks the newest redist tree it finds, which on a single-VS box is normally the right
+answer — verified 2026-07-30, where scanned and exported resolution produced byte-identical
+payloads. It stops being the right answer when you pin an older toolset (`vcvarsall.bat x64
+-vcvars_ver=<ver>`) or have several Visual Studios installed: the scan's answer and the compiler's
+diverge, and a mismatched CRT loads fine and fails later. Treat the NOTE as "this release was
+packaged on inference" and re-run rather than shipping it.
+
+If you must package outside a Developer shell, export the variable by hand — the script accepts a
+Windows path and a trailing backslash:
+
+```bash
+export VCToolsRedistDir='C:\Program Files\Microsoft Visual Studio\18\Community\VC\Redist\MSVC\<ver>\'
+```
+
+`<ver>` is whatever `VC/Auxiliary/Build/Microsoft.VCRedistVersion.default.txt` contains.
+
+**Do not "fix" a missing redist tree with `vc_redist.x64.exe`.** That installer deploys the CRT into
+`System32`; it does not create the `VC\Redist\MSVC\<ver>\x64\Microsoft.VC*\` tree `package.sh` copies
+from, and it is the wrong licence path besides — the Distributable List grant the packaging relies on
+is scoped to files inside a Visual Studio installation's `VC\redist` (see `docs/PROVENANCE.md`). The
+tree comes from the MSVC v14x **build tools** component in the VS Installer, nothing else.
+
 ### Build traps (both OSes)
 
 - **Changing `CUDAARCHS` or the generator needs a clean.** `always_configure(false)` means cmake will
@@ -166,7 +220,37 @@ refreshed anything.
   `AlreadyExists`. Delete them before switching kinds.
 - **Memory.** llama.cpp's Vulkan `mul_mm` shader and nvcc are memory-hungry; on a ~7 GB box, 16
   parallel jobs OOM-kill `cc1plus`. Cap with `CARGO_BUILD_JOBS=<n>` — cmake-rs reads cargo's
-  `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`.
+  `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
+  not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
+
+### A Windows CUDA build takes about an hour, and shows nothing while it does
+
+Measured 2026-07-30: **54 minutes**, on 16 CPUs / 15.4 GB with `CARGO_BUILD_JOBS=4` and the default
+MSBuild generator. State this plainly because the failure mode is misreading it as a hang — cargo
+prints one `Compiling llama-cpp-sys-2` line and then goes silent for the whole build, since the
+per-file progress belongs to a build script and never reaches the terminal.
+
+The cost is structural: ggml-cuda has **183 translation units** (64 top-level plus 119 generated
+template instances), and each is compiled once per real architecture. Six real archs means roughly
+six times the nvcc work of a single-arch build.
+
+To tell a slow build from a stuck one, watch objects rather than stdout:
+
+```bash
+find target/release/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
+```
+
+Two things worth knowing:
+
+- **Don't build six archs to test packaging.** `KNAIF_CUDA_DEV_ARCHS=86-real` (or whatever card you
+  have) verifies against that shorter list and names the payload `-DEVARCH` so it cannot be
+  published by accident. Roughly a sixth of the work.
+- **The MSBuild generator serialises most of it.** Object paths under `*.dir/Release/` confirm it is
+  in use, and it parallelises across projects rather than within a target — so `CARGO_BUILD_JOBS=4`
+  still yields one compiler at a time for long stretches. `CMAKE_GENERATOR=Ninja` very likely fixes
+  that (it is what `package.sh` uses on Linux for every functional kind), but **it is unverified for
+  CUDA on Windows** and switching forces a full reconfigure, discarding the build cache. Try it on a
+  build you can afford to lose.
 
 ---
 
@@ -176,7 +260,7 @@ Release arch list (never `native`, and it must be set via the **`CUDAARCHS` env 
 initialises `CMAKE_CUDA_ARCHITECTURES` from it and `llama-cpp-sys-2` offers no passthrough):
 
 ```
-CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real"
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
 ```
 
 | Arch | GPU generation | Status |
@@ -185,14 +269,25 @@ CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real"
 | `sm_80` | Ampere (A100) | **built, UNVERIFIED** (no card) |
 | `sm_86` | Ampere (RTX 30xx) | **built + runtime-verified** (RTX 3070) |
 | `sm_89` | Ada (RTX 40xx) | **built, UNVERIFIED** (no card) |
+| `sm_90` | Hopper (H100) | **built, UNVERIFIED** (no card) |
 | `compute_90` PTX | forward-compat | built — JITs forward to post-Blackwell |
 | `sm_120` | Blackwell (RTX 50xx) | **built + runtime-verified** (RTX 5080) |
 
-Running on 86 and 120 does **not** validate 75/80/89 — state exactly that; there is no interpolation
-claim. **sm_75 is the hard floor:** CUDA Toolkit 13 removed offline compilation and library support
-for Maxwell/Pascal/Volta. Those users fall back to Vulkan or CPU — they are not cut off.
+Running on 86 and 120 does **not** validate 75/80/89/90 — state exactly that; there is no
+interpolation claim. **sm_75 is the hard floor:** CUDA Toolkit 13 removed offline compilation and
+library support for Maxwell/Pascal/Volta. Those users fall back to Vulkan or CPU — they are not cut
+off.
 
 **Driver floor: NVIDIA R580+** (CUDA 13). Presence of `nvcuda.dll` / `libcuda.so` is not sufficient.
+Declared once, in
+[`contracts/backends/backend-manifest.yaml`](../contracts/backends/backend-manifest.yaml)
+(`requires.min_driver`), so the payload and the gate that offers it cannot disagree.
+
+**`90-real` is built as well as `90-virtual`** *(added 2026-07-29)*. `90-virtual` alone leaves Hopper
+on PTX JIT, and PTX JIT is the documented **exception** to CUDA's minor-version driver compatibility
+— i.e. precisely the case the R580 floor does *not* cover. A few MB of fatbin removes the caveat.
+Deliberately **not** doing the larger version of this fix (a per-architecture driver floor): sm_90 is
+a data-center part that will not run this CLI, and that is complexity bought for nobody.
 
 **Forward-compat PTX must come from a non-`12X` virtual arch.** ggml rewrites every `12X` → `12Xa`,
 so `120-virtual` yields architecture-specific `sm_120a` PTX that cannot JIT forward. `90-virtual`
@@ -232,30 +327,41 @@ The wizard cannot be verified silently — `/VERYSILENT` never builds the task t
 pre-checked tasks shipped in 1.0.1 unnoticed. So installer changes need a GUI run, and that run must
 be isolated:
 
-- **Compile to a scratch dir** — `ISCC /O<scratch>`. Compiling to the default output overwrites
+Use the recipe rather than calling `ISCC` by hand — it is the isolation, not a shortcut to it:
+
+```bash
+just package-native vulkan     # stage an artifact first, as `just installer` needs
+just installer-test            # -> dist/test-installer/knaif-<ver>-windows-x64-setup.exe
+```
+
+It encodes three separations, each guarding a different failure:
+
+- **Its own output dir.** Compiling to the default output overwrites
   `dist/knaif-<ver>-windows-x64-setup.exe`, a **published artifact with a row in `SHA256SUMS`**; a
   stray rebuild silently invalidates the published checksum.
-- **Always pass a throwaway `AppId`** — `ISCC /DAppIdGuid=<throwaway-guid>`. Inno treats two builds
-  sharing an `AppId` as the **same application** and derives the same `{AppId}_is1` uninstall key
-  from it, so without this a scratch install registers against the production key — and removing it
-  afterwards destroys the real install's Add/Remove Programs registration and its upgrade detection.
-  An overridden build labels itself *"(TEST BUILD)"* in Add/Remove Programs so the two cannot be
-  confused.
+- **A throwaway `AppId`** (`/DAppIdGuid=`). Inno treats two builds sharing an `AppId` as the **same
+  application** and derives the same `{AppId}_is1` uninstall key from it, so without this a scratch
+  install registers against the production key — and removing it afterwards destroys the real
+  install's Add/Remove Programs registration and its upgrade detection. An overridden build labels
+  itself *"(TEST BUILD)"* in Add/Remove Programs so the two cannot be confused.
+- **Its own install directory** (`/DTestInstall`). The throwaway `AppId` separates the uninstall
+  *key* but not the *tree*: a test build landing in the production default is one the real
+  installer does not recognise as a prior version, so it installs over the same directory and
+  leaves **two Add/Remove Programs rows sharing one**, where uninstalling either breaks the other.
+
+Extra `ISPP` defines pass through, which is how branches gated on hardware get exercised without
+it — `just installer-test /DMinNvidiaDriver=9999` puts the driver floor above any real driver, so
+the CUDA task must not render.
+
+Two rules the recipe cannot enforce:
+
 - **Never delete the production `{AppId}_is1` key as cleanup.** Tear down the throwaway build's key
   only.
 - **Never run the uninstaller with `/SUPPRESSMSGBOXES`** unless you mean it. It answers the
   data-directory prompt with that prompt's default — which keeps `~/.knaif` from 1.1.0 onward, but
   a 1.0.1-or-earlier uninstaller still on disk will delete a 2.5 GB model store.
 
-```bash
-ISCC /DKind=cpu /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
-```
-
-- **Uninstall every test build when done.** A throwaway-`AppId` install that sits in the *default*
-  directory is its own hazard: the real installer does not recognise it as a prior version, so it
-  installs over the same tree and leaves **two Add/Remove Programs rows sharing one directory**,
-  where uninstalling either one breaks the other. Pass `/DIR=<scratch>` or remove the test build
-  before building release artifacts.
+**Uninstall every test build when done**, before building release artifacts.
 
 ### Exercise the upgrade path — every release, not once
 
@@ -482,10 +588,114 @@ explicitly, e.g.
 `knaif-<ver>-windows-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /TYPE=full /DIR="<path>"`
 (add `/TASKS=""` to skip PATH, winget deps, and the model download).
 
-**GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU — on
-every vendor, so most users need nothing else. NVIDIA CUDA offload in v1 is manual **and Linux-only**:
-build a matching `ggml-cuda` payload + NVIDIA redist (`installers/package.sh --kind=cuda`) and drop it
-into `~/.knaif/backends` (needs an R580+ driver). The payload is ABI-coupled to the exe — use the one
-built for your exact knaif version. **Windows has no CUDA route at v1**: `package.sh --kind=cuda`
-still stages the historical static app there rather than cutting a payload, so there is nothing to
-copy (post-v1, C6). Windows NVIDIA users get Vulkan, which is the default anyway.
+**GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU. That
+covers every vendor, and it is enough for most users — **but not for NVIDIA users on the newest
+cards.** On Blackwell (RTX 50xx, sm_120) the Vulkan path generates at roughly CPU speed: ~5.7 tok/s
+against the CPU's ~5.9, measured on knaif's real workload ([PERFORMANCE.md](PERFORMANCE.md) §2).
+That is not a slower option, it is a product that reads as broken, so say so plainly in the release
+body rather than letting "Vulkan works everywhere" stand.
+
+NVIDIA users install the CUDA backend with one command:
+
+```
+knaif backend install cuda
+```
+
+~668 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
+undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
+faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
+Windows installer offers it as a task that is checked by default — the task renders only on a machine
+whose GPU and driver already qualify and that has no payload yet, so it is never shown to a user it
+cannot help. Setup blocks on the download, which the task description states.
+
+The payload is ABI-coupled to the exe, so it is re-installed per knaif release — the loader detects a
+payload from another release and ignores it with a message rather than loading it. Copying the files
+into `~/.knaif/backends` by hand still works and stays documented as the fallback, but it is not the
+route to put in a release body.
+
+> **This paragraph was wrong through 1.0.x** and is the text a release body would have been written
+> from. It told every NVIDIA user that Vulkan was enough. The measurement that contradicts it was
+> taken 2026-07-14 and simply never reached this file.
+
+---
+
+## 7. Publish the CUDA payload assets
+
+Only when cutting a release whose payload changed, or the first time a toolkit version is used.
+Ordering matters: the manifest cannot be filled in until the assets exist, and the product artifact
+cannot be built until the manifest is filled in — so the redist half goes first and the product half
+is a two-pass build.
+
+**1. Build the payloads.** Windows in a VS Developer shell on the maintainer's box, Linux in the CUDA
+container (`installers/linux/Dockerfile.cuda`). Set the arch list explicitly — changing `CUDAARCHS`
+needs a *clean* build, see §3:
+
+```bash
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
+CARGO_BUILD_JOBS=4 \
+  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda   # ~1 hour, silent
+installers/package.sh --no-build --kind=cuda
+```
+
+Budget an hour and don't mistake the silence for a hang — see §2's build traps, which also cover the
+job cap and the fast single-arch loop for packaging work.
+
+This writes `dist/staging/knaif-<ver>-<os>-<arch>-cuda-backend/` as **loose files** plus
+`dist/knaif-<ver>-<os>-<arch>-cuda-backend.manifest-fragment.yaml` carrying every file's real
+`sha256` and size. `package.sh` verifies the fatbin actually contains every requested arch
+(`cuobjdump`) and hard-fails if one was silently dropped.
+
+**2a. Rehearse the install before uploading anything.**
+
+```bash
+installers/rehearse-backend-install.sh          # add --platform linux-x64 when packaging there
+```
+
+Serves the staged payload over `127.0.0.1`, splices the fragment's real checksums into a copy of the
+real manifest, and drives `list → install → verify → remove` plus the two failure paths (a corrupted
+`sha256` must land nothing and must not damage an existing install) and the stale-receipt refusal.
+Roughly fifteen seconds, no uploads, and it fails on the two things unit tests structurally cannot
+see: a fragment whose checksums have drifted from the staged bytes, and a payload file `package.sh`
+stages but never declares. What it does *not* cover is the three backend cases — those need the GPU,
+and on Windows the third one wants `CUDA_VISIBLE_DEVICES="-1"`, since an empty string reads as
+*unset* there and the case then passes without testing anything.
+
+**The fragment is the upload list, not the directory listing.** The staging directory holds one more
+file than the fragment does: a generated `README.txt` orienting whoever opens the folder locally.
+`write_manifest_fragment` skips it deliberately and the manifest must not declare it — it is not
+payload, and `backend install` would fetch it into `~/.knaif/backends` if it were. Upload exactly the
+files the fragment names, and read each one's `tag:` to decide which of the next two steps it belongs
+to.
+
+**2. Upload the redist half once, to `redist-cuda-13.3`.** Everything the fragment tags
+`redist-cuda-13.3`: NVIDIA's three libraries plus `NVIDIA-CUDA-EULA.txt`. A pre-release tag, and one
+that is **never deleted** — installed manifests point at it forever. Skip this entirely if the tag
+already carries this toolkit's files; they are byte-identical across knaif releases, which is the
+whole reason for the split.
+
+**3. Upload the product half to the release tag**, alongside the normal artifacts. Everything the
+fragment tags `product`: the ggml CUDA lib, `llama.cpp-LICENSE.txt`, and on Windows the four VC++
+runtime DLLs.
+
+Both licence texts are payload files that land on the user's disk, not release-page attachments —
+under loose-file publishing the page is not what reaches a user. Omitting the EULA breaks the
+condition NVIDIA's redistribution grant is subject to;
+`python/core/tests/test_backend_payload_manifest.py` guards the manifest side of that.
+
+**4. Fill in `contracts/backends/backend-manifest.yaml`** from the fragments: paste each platform's
+`files:` block and replace every `url: TODO` with the asset's download URL. Write URLs against
+`blackdeep-tech/knaif`. Then set `status: published`.
+
+**5. Rebuild and re-verify the product artifacts.** The manifest ships *inside* them, so the tree
+built in step 1 carries the pre-publication copy. This is unavoidable — the manifest describes assets
+that do not exist until they are uploaded.
+
+**6. Only now generate `SHA256SUMS`**, over the complete final set, and publish.
+
+Two rules worth restating because getting them wrong is silent:
+
+- **Never resolve `latest`.** A tag-scoped URL is what structurally prevents a newer lib reaching an
+  older exe. `test_backend_manifest_release_ready.py` asserts this.
+- **Asset names must be unique within a tag.** Today's payloads collide on nothing (`.so` vs `.dll`),
+  but if a future platform produces a duplicate filename, suffix the *asset* name and keep the
+  manifest's `name:` as the on-disk name — the two are separate fields precisely so they can differ.

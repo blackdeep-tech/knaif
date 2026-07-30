@@ -322,7 +322,7 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     hex(&h.finalize())
 }
 
-fn sha256_file(path: &Path) -> anyhow::Result<String> {
+pub(crate) fn sha256_file(path: &Path) -> anyhow::Result<String> {
     let mut f = std::fs::File::open(path)?;
     let mut h = Sha256::new();
     let mut buf = [0u8; 8192];

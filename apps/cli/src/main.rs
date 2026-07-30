@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
-use knaif_models::{HttpFetcher, ModelStore, VerifyOutcome};
+use knaif_models::{BackendState, BackendStore, CudaOffer, HttpFetcher, ModelStore, VerifyOutcome};
 
 /// `--version` reports the compiled inference backend next to the release number, so a
 /// mock-only build is identifiable without loading a 2.5 GB GGUF first. `just parity`
@@ -49,6 +49,11 @@ enum Command {
     Models {
         #[command(subcommand)]
         action: ModelsAction,
+    },
+    /// Manage optional GPU backend payloads (CUDA) in ~/.knaif/backends.
+    Backend {
+        #[command(subcommand)]
+        action: BackendAction,
     },
     /// Produce a validated plan envelope for a request (JSON to stdout).
     Plan(PlanArgs),
@@ -91,6 +96,18 @@ enum ModelsAction {
         #[arg(long)]
         all: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum BackendAction {
+    /// List the optional GPU backend payloads and whether they're installed here.
+    List,
+    /// Download a backend payload and install it where the runtime scans for it.
+    Install { name: String },
+    /// Verify an installed payload's files against the manifest checksums.
+    Verify { name: String },
+    /// Remove an installed backend payload (falls back to CPU/Vulkan).
+    Remove { name: String },
 }
 
 #[derive(Args)]
@@ -198,6 +215,7 @@ fn main() -> anyhow::Result<()> {
             } => cmd_skills_deps(name.as_deref(), include_stale),
         },
         Command::Models { action } => cmd_models(action),
+        Command::Backend { action } => cmd_backend(action),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => cmd_run(args),
     }
@@ -412,6 +430,122 @@ fn cmd_models(action: ModelsAction) -> anyhow::Result<()> {
     }
 }
 
+/// A byte-oriented progress bar for one file of a multi-file backend payload. The message carries
+/// the position in the set (`[2/4] libcudart.so.13`), because a CUDA payload is ~668 MB across
+/// several files and a bar with no such context looks stalled between files.
+fn backend_bar() -> ProgressBar {
+    let bar = ProgressBar::new(0);
+    if let Ok(style) = ProgressStyle::with_template(
+        "{msg}\n{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+         {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
+    ) {
+        bar.set_style(style.progress_chars("#>-"));
+    }
+    bar
+}
+
+fn cmd_backend(action: BackendAction) -> anyhow::Result<()> {
+    let store = BackendStore::open(&resolve_backend_manifest_path()?)?;
+    match action {
+        BackendAction::List => {
+            let entries = store.list();
+            if entries.is_empty() {
+                println!("No backend payloads in the manifest.");
+                return Ok(());
+            }
+            println!(
+                "Backends dir: {}   (platform: {})",
+                store.dir().display(),
+                store.platform()
+            );
+            for e in entries {
+                let state = match &e.state {
+                    BackendState::Installed => "installed".to_string(),
+                    BackendState::NotInstalled if !e.platform_supported => {
+                        "unavailable on this platform".to_string()
+                    }
+                    BackendState::NotInstalled
+                        if e.status != knaif_models::PublishStatus::Published =>
+                    {
+                        "not published yet".to_string()
+                    }
+                    BackendState::NotInstalled => "available".to_string(),
+                    BackendState::Stale { installed_by } => {
+                        format!("STALE (installed by knaif {installed_by}; re-install to use it)")
+                    }
+                    BackendState::Interrupted => {
+                        "INCOMPLETE (a previous install did not finish; re-install)".to_string()
+                    }
+                };
+                let size = match e.total_bytes {
+                    Some(b) if b > 0 => format!("  ~{} MB", b / 1_000_000),
+                    _ => String::new(),
+                };
+                println!("  {:<10} {}{}", e.name, state, size);
+                if let Some(d) = &e.description {
+                    println!("             {d}");
+                }
+            }
+            Ok(())
+        }
+        BackendAction::Install { name } => {
+            let bar = backend_bar();
+            let mut current = String::new();
+            let result = store.install_with_progress(&name, &HttpFetcher::new(), &mut |p| {
+                if current != p.file {
+                    current = p.file.to_string();
+                    bar.set_length(p.total_bytes.unwrap_or(0));
+                    bar.set_message(format!("[{}/{}] {}", p.index, p.total_files, p.file));
+                }
+                if let Some(t) = p.total_bytes {
+                    if bar.length() != Some(t) {
+                        bar.set_length(t);
+                    }
+                }
+                bar.set_position(p.done_bytes);
+            });
+            match result {
+                Ok(dir) => {
+                    bar.finish_and_clear();
+                    println!("Installed the {name} backend -> {}", dir.display());
+                    println!(
+                        "It is picked up on the next run; no restart of anything else needed."
+                    );
+                    Ok(())
+                }
+                Err(e) => {
+                    bar.abandon();
+                    Err(e)
+                }
+            }
+        }
+        BackendAction::Verify { name } => {
+            match store.verify(&name)? {
+                VerifyOutcome::Ok => println!("{name}: ok (every file matches the manifest)"),
+                VerifyOutcome::Mismatch { expected, actual } => anyhow::bail!(
+                    "{name}: CHECKSUM MISMATCH\n  expected {expected}\n  actual   {actual}\n  \
+                     Re-run `knaif backend install {name}`."
+                ),
+                VerifyOutcome::NotInstalled => println!("{name}: not installed"),
+                VerifyOutcome::NoChecksum => {
+                    println!(
+                        "{name}: installed, but the manifest has no checksums to verify against"
+                    )
+                }
+            }
+            Ok(())
+        }
+        BackendAction::Remove { name } => {
+            if store.remove(&name)? {
+                println!("Removed the {name} backend. Runs fall back to CPU/Vulkan.");
+            } else {
+                println!("{name}: not installed");
+            }
+            Ok(())
+        }
+    }
+}
+
 fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
     let root = resolve_known_skill(&args.skill)?;
     // Open/CLI mode: resolve relative paths against cwd, no sandbox boundary.
@@ -501,14 +635,34 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         None => std::env::current_dir()?,
     };
     let sandbox = args.sandbox.as_deref();
+    // Probe the GPU ONCE and reuse the answer. Calling `gpu_present` twice would double-print its
+    // device trace under `--verbose`, and the two messages below both need the same fact.
+    //
+    // `None` means this build has no inference backend at all (a mock-only build), which is the
+    // distinction both messages depend on: `Some(false)` is "a real backend, and it found no GPU".
+    let gpu = if model.is_some() {
+        knaif_llm::gpu_present(args.verbose)
+    } else {
+        None
+    };
     // Before the (silent) model load + inference, tell the user if it will run entirely on the CPU:
     // no GPU device means a minute-plus wait for a 4B model, and saying so up front turns a
     // baffling "nothing happened" into an expected slow run. Only meaningful for real inference.
-    if model.is_some() && knaif_llm::gpu_present(args.verbose) == Some(false) {
+    if gpu == Some(false) {
         eprintln!(
             "⚠  No GPU detected — running on CPU. Inference will be slow \
              (the first request can take a minute or more)."
         );
+    }
+    // Tell an NVIDIA user about the opt-in CUDA payload, once, before the slow run rather than
+    // after it. A Blackwell user who runs first and reads later gets one CPU-speed request and may
+    // reasonably conclude the product is broken.
+    //
+    // `gpu.is_some()` is the "this build can actually infer" test. Offering a GPU backend to a
+    // mock-only binary is noise — there is nothing for it to accelerate — and the CPU warning above
+    // has always been silent in that case, so this keeps the two consistent.
+    if gpu.is_some() {
+        print_cuda_offer();
     }
     // Model load + inference is the one silent stretch of a real run; show a live spinner so a
     // slow CPU-only run is not mistaken for a hang. Skip it for the mock (instant) and in verbose
@@ -1188,6 +1342,77 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
     resolve_repo_file("contracts/models/model-manifest.yaml").ok_or_else(|| {
         anyhow::anyhow!(
             "model manifest not found (set KNAIF_MODEL_MANIFEST or run from a checkout)"
+        )
+    })
+}
+
+/// Print the CUDA offer for this machine, if there is one worth printing.
+///
+/// Deliberately **best-effort and silent on failure**: an unreadable manifest or a missing
+/// `nvidia-smi` must never interfere with a run that was going to work. It is also silent for the
+/// large majority of machines — no NVIDIA GPU, or the payload already installed — because an
+/// unsolicited GPU message on an AMD laptop is noise.
+///
+/// `$KNAIF_NO_CUDA_NUDGE` suppresses the *offer* for anyone who has decided not to install the
+/// payload and does not want to be told again. It does not suppress the stale/interrupted report:
+/// that one is about a payload they already have.
+fn print_cuda_offer() {
+    let Ok(store) = resolve_backend_manifest_path().and_then(|p| BackendStore::open(&p)) else {
+        return;
+    };
+    // `KNAIF_NO_CUDA_NUDGE` answers an *offer* — "I know about the payload and I don't want it". It
+    // must not silence `NeedsReinstall`, which is not an offer but a report that a payload the user
+    // already downloaded is being ignored; the loader itself only says so under `--verbose`, so
+    // this is the only place that fact reaches them.
+    //
+    // Passing no GPUs is what keeps the suppression cheap: every offer branch needs the probe and
+    // collapses to `NotApplicable` without one, while both reinstall branches are decided by the
+    // receipt alone. So a suppressed run still spawns no `nvidia-smi`.
+    let suppressed = std::env::var("KNAIF_NO_CUDA_NUDGE").is_ok_and(|v| !v.is_empty());
+    let gpus = if suppressed {
+        Vec::new()
+    } else {
+        knaif_models::probe_nvidia()
+    };
+    match knaif_models::cuda_offer(&store, &gpus) {
+        CudaOffer::NotApplicable | CudaOffer::AlreadyInstalled => {}
+        // Stated in correctness terms, not speed terms: on this hardware the Vulkan fallback
+        // generates at CPU speed, so the payload is what makes the product work.
+        CudaOffer::Recommended { gpu } => eprintln!(
+            "⚠  {gpu}: the bundled Vulkan backend runs at roughly CPU speed on this GPU \
+             generation.\n   Install the CUDA backend for usable performance:  \
+             knaif backend install cuda"
+        ),
+        // No number quoted. The "~3%" this used to claim was the generation column, and knaif's
+        // workload is prompt-decode-dominated; no replacement figure is quotable until
+        // PERFORMANCE.md §2 is reconciled.
+        CudaOffer::Optional { gpu } => eprintln!(
+            "ℹ  {gpu}: CUDA offload is available and faster than the bundled Vulkan backend, \
+             which\n   already works here. Optional:  knaif backend install cuda"
+        ),
+        // An offer would hand them ~668 MB that cannot load, which reaches the user as
+        // "CUDA didn't work" — the least debuggable outcome available.
+        CudaOffer::DriverTooOld { gpu, have, need } => eprintln!(
+            "ℹ  {gpu}: CUDA offload needs NVIDIA driver R{need}+ and this machine has {have}.\n   \
+             Update the driver to enable it; the current run uses Vulkan or CPU."
+        ),
+        CudaOffer::NeedsReinstall { reason } => {
+            eprintln!("⚠  {reason}.\n   Run `knaif backend install cuda` to update it.")
+        }
+    }
+}
+
+/// Locate the backend manifest: `$KNAIF_BACKEND_MANIFEST` else walk up for
+/// `contracts/backends/backend-manifest.yaml` in a checkout / beside the installed exe.
+fn resolve_backend_manifest_path() -> anyhow::Result<PathBuf> {
+    if let Ok(p) = std::env::var("KNAIF_BACKEND_MANIFEST") {
+        if !p.is_empty() {
+            return Ok(PathBuf::from(p));
+        }
+    }
+    resolve_repo_file("contracts/backends/backend-manifest.yaml").ok_or_else(|| {
+        anyhow::anyhow!(
+            "backend manifest not found (set KNAIF_BACKEND_MANIFEST or run from a checkout)"
         )
     })
 }

@@ -42,6 +42,73 @@
 
 ---
 
+> **Progress 2026-07-29 — Workstream U is code-complete; what remains needs the build box.**
+> U2/U3/U4/U5 are done. U1, U6 and U7 are `[~]`: every mechanism is built and tested, but each has a
+> step that cannot be performed from a checkout.
+>
+> Still owed, and all of it is execution rather than design:
+>
+> - **Build both payloads and publish the assets.** `contracts/backends/backend-manifest.yaml` is
+>   `status: unpublished` with placeholder URLs, so `backend install cuda` refuses with an
+>   explanation rather than fetching a `TODO`. `package.sh` emits a manifest fragment with the real
+>   checksums to paste in. Order matters — see `RELEASE.md` §7.
+> - **Run the three cases against the PACKAGED payload on each OS.** The spike proved the mechanism
+>   with a hand-built lib; this proves what users receive. WSL2 GPU passthrough is confirmed working
+>   (decision log), so the Linux half needs no second machine.
+> - **Verify the fatbin arch check against a real fatbin.** `verify_cuda_archs` has never run against
+>   one, only against its own logic.
+> - **Pin `Dockerfile.cuda`'s base image by digest**, and confirm the `13.3-devel-ubuntu22.04` tag
+>   exists at all — CUDA 13 dropped several older distributions, and a newer base would silently
+>   raise the payload's floor above the artifact's.
+> - **Run the Windows installer wizard** to see the CUDA task render and confirm it is genuinely
+>   optional. `/VERYSILENT` never builds the task tree, so this is a GUI step.
+>
+> **Progress 2026-07-30 — the Windows half is built and exercised end to end; only publishing and the
+> Linux payload remain.** Of the five items above, three are closed: the payload is **built** (six
+> real archs, 54 min, 668 MB), `verify_cuda_archs` has **run against a real fatbin** (and found the
+> `sm_120a` truncation to be a live concern), and the **three cases pass against the packaged
+> payload** (U6). The install path was rehearsed against a local HTTP server with the real fragment
+> checksums — `list` → `install` → `verify` clean, a corrupted sha lands **nothing** in a fresh dir
+> and leaves an existing install untouched, and the **stale-payload refusal** was driven end to end by
+> stamping a 1.0.9 receipt: `backend list` reports `STALE`, the loader skips the directory, the run
+> falls back and exits 0, and re-installing restores it. That is U2's "upgrade test, not just an
+> install test", performed rather than argued.
+>
+> Still owed: **publish the assets** (U1) and the **Linux payload** (U7 — image unbuilt, base tag
+> unconfirmed, digest unpinned).
+>
+> **The wizard GUI run is done (U4), and it was not a formality.** It found a defect no lint could
+> reach and changed a shipped default:
+>
+> - **The Components → Next click stalled for one to two seconds.** `CudaOfferable` is evaluated
+>   when Inno rebuilds the task list on leaving that page, and it was spawning `nvidia-smi`
+>   synchronously — which costs ~1.8 s on a machine that has a driver, because it initialises one to
+>   answer. A blocking `Exec` cannot be narrated (no message loop is running, so nothing repaints),
+>   so the probe is now started with `ewNoWait` from `InitializeWizard` and settled in
+>   `NextButtonClick`. By the time a user has read the licence and picked components the answer is
+>   already on disk; a bounded poll behind a progress page covers anyone faster than that.
+> - **The CUDA task is now checked by default.** U4 asked whether the component is "genuinely
+>   optional" and the honest answer turned out to be "optional, but off was the wrong default". It
+>   renders only when `CudaOfferable` holds — NVIDIA silicon, driver above the floor, no payload
+>   installed — so unchecked meant declining acceleration on behalf of a user already proven to
+>   benefit. This is **not** the F2 pattern: Ghostscript and LibreOffice render unconditionally,
+>   which is what made a checked default wrong for them. The gate and the default are load-bearing
+>   together, and `test_cuda_task_is_checked_by_default` says so.
+> - **Verification is now a recipe.** `just installer-test` compiles with a throwaway `AppId`, its
+>   own install directory and its own output dir, and passes `ISPP` defines through so branches
+>   gated on hardware (`/DMinNvidiaDriver=9999`) can be reached without different hardware.
+>   `RELEASE.md` §4 points at it instead of a hand-typed `ISCC` line.
+>
+> Exercised on an NVIDIA machine with a driver above the floor: no stall on Next, the task rendering
+> under its own heading and pre-ticked, and the task correctly absent both below the floor and with
+> a payload already in place.
+>
+> One thing the plan expected to decide was instead settled by building: the stale-payload refusal.
+> The plan called for measuring whether ggml already rejects a mismatched lib before designing.
+> `BackendStore` writes a version receipt and the loader refuses on it regardless, which turns that
+> measurement into an optimisation question ("could we be more permissive?") rather than a
+> prerequisite.
+
 ## Decision log
 
 **2026-07-28 — Workstream U is now release-blocking; the first published release waits for it.**
@@ -102,12 +169,72 @@ means debugging the procedure and its automation simultaneously. Cut once by han
 path known to work. Workstream U is already release-blocking; putting CI in front of it would delay
 the first release for no gain.
 
-**2026-07-29 — the Linux CUDA payload is verified via WSL2 GPU passthrough if that works.**
-Docker Desktop's WSL2 backend can expose an NVIDIA GPU to Linux containers, which would let U7's
-three cases run without a second machine. **Unproven here — it needs a short spike before being
-relied on**, and if it does not work the payload is built but published only after a run on a real
-Linux box with an NVIDIA driver. Do not publish an unrun payload: a backend that fails to `dlopen`
-presents to the user as "CUDA didn't work", which is the least debuggable outcome available.
+**2026-07-29 — the Linux-only split stands, but `release.yml` is re-scoped: a packaging check that
+uploads, not a release.** Owner question — *is a CI that still needs manual steps the right shape?*
+The instinct is right and the target was wrong. Manual steps are not the problem: publishing is
+manual **by decision** (above), because the irreversible steps stay human. The problem is **two
+authorities over one artifact set** — a CI-generated `SHA256SUMS` covering only the Linux half of a
+draft the maintainer is still adding Windows files to. One rule removes it: **the checksum manifest
+is generated once, locally, over the final complete set.** Three things follow, all in C3:
+
+- **CI is not the only machine that can build the Linux artifact.** `just package-linux --rev=<tag>`
+  builds from a clean checkout in the pinned container via Docker Desktop *on the maintainer's
+  Windows box*, and the floor comes from the image, not the host. So the job cannot justify itself on
+  capability — which is why its trigger moves to `pull_request` as well as the tag, where catching
+  packaging breakage is worth something.
+- **A self-hosted Windows runner is rejected**, not deferred — see C3 for why a public repo makes it
+  the worst available option.
+- **The asymmetry gets documented in `RELEASE.md`**, so a fork can see that Linux is fully available
+  to it and that Windows is maintainer-built for stated reasons.
+
+**2026-07-29 — the Linux CUDA payload is verified via WSL2 GPU passthrough. SPIKED, and it works.**
+Docker Desktop's WSL2 backend exposes the host NVIDIA GPU to Linux containers, so U7's three cases
+run here without a second machine. Measured the same day:
+`docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi` reports
+`NVIDIA GeForce RTX 3070 Laptop GPU`, `KMD Version: 610.74`, `CUDA UMD Version: 13.3` — the real
+device, above the R580 floor, from inside a Linux container. The contingency stands if it ever
+regresses: the payload is built but published only after a run on a real Linux box with an NVIDIA
+driver. Do not publish an unrun payload — a backend that fails to `dlopen` presents to the user as
+"CUDA didn't work", which is the least debuggable outcome available. Note this proves *passthrough*,
+not the payload; running the three cases against the packaged payload is still owed.
+
+**2026-07-29 — SETTLED: the payload publishes as loose per-file assets, not archives.** Owner
+decision, answering U1's *DECIDE FIRST*. Each lib is its own release asset with its own `sha256`,
+split across the two tags; `package.sh` stops tarring the payload. Two reasons, in order:
+
+- **It puts no new code on the trusted install path.** `BackendStore` becomes `ModelStore`'s
+  existing fetch → `.part` → hash → rename in a loop, plus a stage-then-swap of the directory.
+  Nothing extracts an archive, so there is no member-name validation to get wrong on a path that
+  runs against a URL. Nothing in the workspace unpacks a tarball today, on either OS.
+- **It keeps per-file SHA pinning, which this plan already spent.** U6's rejection of static-linking
+  the MSVC CRT into `ggml-cuda.dll` rests on a CRT fix republishing four ~1 MB assets rather than a
+  ~123 MB lib. Archives would have quietly taken that back.
+
+Accepted costs: ~7 assets per platform on the release page, and U5's manual fallback becomes a
+multi-file download. Both are cosmetic, and the fallback exists to debug `backend install` rather
+than as a route anyone is steered to. An archive form can be added on top of a working per-file
+store later; removing extraction from a trusted path afterwards is the harder direction.
+
+**2026-07-29 — audit pass against the live tree; four statements in this plan were false and are
+corrected in place.** Each was a claim *about existing code*, which is the class of plan error that
+survives review and fails at implementation time:
+
+- U2's "`package.sh` stages `contracts/`" — it does not; it copies two named files
+  ([`package.sh:458-459`](../../installers/package.sh#L458-L459)). Now a task, not a check.
+- U3's "ggml already reports compute capability, so no new probe is needed" — `LlamaBackendDevice`
+  carries name/description/backend/memory/type and no compute capability; the `compute capability
+  8.6` string is a CUDA-init log, and the nudge by definition runs before CUDA exists on the box.
+- U1's per-file assets vs. what `package.sh` actually emits (one tarball) — see U1.
+- Workstream C's definition of done ("without anyone touching a build box") vs. the Windows decision
+  taken the same day.
+
+One further gap is not a false claim but a requirement with no mechanism behind it: **U2 states that
+a stale payload must be refused and then lists only install-time mechanisms.** See U2.
+
+Not adopted, and recorded so they are not re-raised: re-measuring the C1 baseline (the task already
+says to), pinning the exact `nvidia/cuda` tag (U7 already says by digest), and making the driver gate
+architecture-dependent for sm_90 — a data-center part that will not run this CLI. The `90-real` half
+of that last one *is* adopted (U6), because it costs a few MB.
 
 ---
 
@@ -156,8 +283,22 @@ sm_120 / coopmat2 path is the identified culprit.
 
 Three consequences that shape the workstream:
 
-- **CUDA is a *correctness* requirement on Blackwell and a ~3% *optimisation* on Ampere.** Both are
+- **CUDA is a *correctness* requirement on Blackwell and an *optimisation* on Ampere.** Both are
   served by the same payload, but they justify very different nudge strength — see U3.
+  - **"~3%" was the wrong number to quote and is withdrawn** *(2026-07-29)*. It is the **generation**
+    column, and knaif's workload is prompt-decode-dominated (~4k-token prompt, ~32 output tokens —
+    [`PERFORMANCE.md`](../PERFORMANCE.md) §3), so generation is the least relevant column in the
+    table for this product. The **inference total** on the same two rows is 1524 ms CUDA vs 2143 ms
+    Vulkan.
+  - **But do not simply quote 41% instead — that table does not reconcile.** At the stated per-phase
+    rates the two totals should be ~1.47 s and ~1.54 s; the published totals differ by ~600 ms with
+    nothing accounting for it, and §6 rules out model load (excluded from "inference total"). So
+    **no Ampere CUDA-vs-Vulkan figure is quotable until `PERFORMANCE.md` §2 is re-measured or the
+    overhead is explained.** Fixing that doc is a prerequisite for U3's copy, not a footnote.
+  - **The two-population split survives either way**, which is why this is a wording fix and not a
+    re-decision: even at the pessimistic reading Ampere Vulkan is 2.1 s against CUDA's 1.5 s — both
+    interactive, a preference. Blackwell Vulkan runs at CPU speed — not a preference. What changes is
+    that U3 may no longer call the Ampere gap a rounding error.
 - **A Vulkan-only artifact cannot be the first thing anyone downloads.** With no users today
   (decision log), that is a scheduling choice rather than a regression to manage.
 - **Do not derive hardware ratios from the `5080` CUDA row.** PERFORMANCE.md flags it as suspect —
@@ -207,9 +348,32 @@ into `~/.knaif/backends`.
 - [ ] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
   (`ffmpeg`, `documents`) load in **both** the Python loader and the Rust loader; stale `io`
   excluded unless explicitly opted in.
-- [ ] **C3 — `release.yml`** _(was F5)_: on tag `v*.*.*`, build → package → verify → attach to a
-  **draft** GH Release with `SHA256SUMS`. Automates part of the manual cut that v1 did in
-  finalization E2/H3. (Add macOS only when macOS packaging lands post-v1.)
+- [ ] **C3 — `release.yml`** _(was F5)_: build → package → verify → attach the **Linux** artifacts to
+  a **draft** GH Release. Automates part of the manual cut that v1 did in finalization E2/H3.
+  (Add macOS only when macOS packaging lands post-v1.)
+  - **REVISED 2026-07-29 (second pass) — it is a packaging *check* that happens to upload, not a
+    release.** Three changes, all from the same realisation: `just package-linux --rev=<tag>` already
+    builds the Linux artifacts from a clean checkout in the pinned container **on the maintainer's
+    Windows box** via Docker ([`justfile:371-385`](../../justfile#L371-L385)). The floor comes from
+    the image, not the host, so CI is not the only machine that can produce a correct Linux artifact —
+    which means the job has to justify itself on something other than capability.
+    - **Trigger on `pull_request` as well as on `v*.*.*`.** This is where the job earns its keep:
+      packaging breakage found on the PR that caused it is free, and found on release day is
+      expensive. Tag-time upload is the smaller half of its value, not the point of it.
+    - **CI must NOT generate `SHA256SUMS`.** A checksum manifest covering only the Linux half, sitting
+      in a draft that a human then adds Windows files to, is a manifest that is silently incomplete —
+      one artifact set with two authorities over it. **`SHA256SUMS` is generated once, locally, over
+      the final complete set**, immediately before publishing. That single rule is what makes the
+      hand-off unambiguous, and it is the reason the job's output is "artifacts", never "a release".
+    - **Say why Windows is maintainer-built, in `RELEASE.md`** — licensed VS install (the VC++
+      redistribution grant), the CUDA toolkit a hosted image does not carry, and clean-room +
+      GUI-upgrade verification that no runner can perform. A fork reading the workflow should be able
+      to tell that the asymmetry is a decision, and that the Linux path is fully available to them.
+  - **Rejected: a self-hosted Windows runner** *(2026-07-29)*. It is the obvious way to make CI cut a
+    complete release and it is the wrong one. On a **public** repo a self-hosted runner is the
+    documented worst case — a fork's PR can execute on the maintainer's machine — and it additionally
+    requires that machine online at tag time. It buys nothing `just package-*` does not already give.
+    Recorded here so it is not re-proposed as an obvious improvement.
   - **REVISED 2026-07-29 — the original matrix `(windows-2022, ubuntu-22.04)` is wrong twice over**;
     see the decision log. Both corrections matter more than they look:
     - **Linux only, and inside the pinned container.** Building the Linux artifact directly on an
@@ -249,17 +413,20 @@ into `~/.knaif/backends`.
   - **Branch protection** on `main` in the same pass: require the C1 jobs, squash-merge only,
     linear history, no direct pushes. Like all settings here, protections do **not** survive an org
     transfer — this is why the whole plan runs after OSS-prep.
-  - **Known debt this will surface:** four notebooks are not `black`-formatted and carry metadata
-    `nbstripout` strips (`notebooks/baseline_authoring.ipynb`, both under
-    `skills/documents/notebooks/`, `skills/ffmpeg/notebooks/ffmpeg_skill_tester.ipynb`). Land that
-    reformat as its own `chore:` commit *before* the hooks job goes green-required, or the first CI
-    run fails on unrelated churn.
+  - **Known debt this will surface —** four notebooks carry metadata `nbstripout` strips
+    (`notebooks/baseline_authoring.ipynb`, both under `skills/documents/notebooks/`,
+    `skills/ffmpeg/notebooks/ffmpeg_skill_tester.ipynb`). Land the strip as its own `chore:` commit
+    *before* the hooks job goes green-required, or the first CI run fails on unrelated churn.
+    - **The `black` half of this is stale** *(re-checked 2026-07-29: `uv run black --check .` →
+      198 files unchanged)*. No reformat is needed; only the metadata strip. The reason to still run
+      `black --check` in CI is unchanged — `just check` runs `ruff` but never `black`, so formatting
+      is enforced by nothing today.
 
 ---
 
 ## Workstream U — CUDA opt-in surface _(was finalization C6 + C6a's execution)_
 
-- [ ] **U1 — Publish the split payload artifacts** _(C6a's execution half)_. Per C6a, unchanged:
+- [~] **U1 — Publish the split payload artifacts** _(C6a's execution half)_. Per C6a, unchanged:
   | Artifact | Tag | Why |
   |---|---|---|
   | `ggml-cuda` (~125 MB) | the **product release** (e.g. `v1.1.0`) | ABI-coupled to the exe's build; a tag-scoped URL structurally cannot serve a newer lib to an older exe |
@@ -270,7 +437,20 @@ into `~/.knaif/backends`.
     artifact, pins that release's exact files by per-file sha, and **must never resolve "latest"**.
     A backend mismatch is undefined behaviour that reads like a driver bug, which is why this is
     stricter than the model manifest.
-- [ ] **U2 — `knaif backend install cuda` / `backend remove cuda`** _(C6's original scope, verbatim)_:
+  - **"Inside the artifact" means the product artifact, not the payload** *(2026-07-29)*. The payload
+    cannot carry the manifest that describes how to fetch the payload. The manifest is read by an
+    already-installed `knaif` deciding what to download, so it ships beside `core_tools.yaml` and
+    `model-manifest.yaml` in the installed `contracts/` tree — which is exactly why the staging gap
+    in U2 has to be closed before this is testable end to end.
+  - **DECIDED 2026-07-29 — loose per-file assets** (see the decision log). The table above assumed
+    individually addressable files with per-file shas, and `package.sh` disagreed: it emitted a
+    single `tar czf` payload containing all four Linux libs
+    ([`package.sh:206`](../../installers/package.sh#L206)), which nothing on the fetch path can
+    unpack. The packaging moves to the plan, not the other way round — `package.sh` stops tarring
+    and stages a payload tree whose files are uploaded individually across the two tags. The
+    rejected alternative (two archives + verified extraction in `BackendStore`) is recorded in the
+    decision log so it is not re-proposed.
+- [x] **U2 — `knaif backend install cuda` / `backend remove cuda`** _(C6's original scope, verbatim)_:
   reuse the `HttpFetcher` + SHA-pinned manifest path (host is not a constraint) writing to the backend
   dir the loader scans; the installer's opt-in task calls the **same** command.
   - Today `apps/cli/src/main.rs` has `Command` with only `SkillsAction` and `ModelsAction`
@@ -302,16 +482,40 @@ into `~/.knaif/backends`.
   - **What genuinely is reusable**, and it is real leverage: the injectable `Fetcher` trait, the
     verify-then-atomically-install logic, `VerifyOutcome`, and `backends_dir()`. The download
     plumbing is done; the schema and the store are new.
+    - Note the atomicity is **per file** — `pull_with_progress` is `.part` → hash → `rename` of one
+      path ([`store.rs:231`](../../native/crates/knaif-models/src/store.rs#L231)). Installing four
+      files that way is four atomic operations, not one, so an interrupted install still leaves a
+      torn directory. `BackendStore` wants stage-all → verify-all → swap the directory. Cheap to get
+      right when written down, annoying to retrofit.
   - **Scope, therefore:** a `contracts/backends/` manifest, `BackendManifest`/`BackendEntry` types
     carrying a file list, a `BackendStore` paralleling `ModelStore`, the `backend install|remove|list`
     subcommand, and a release-readiness guard mirroring
     `python/core/tests/test_model_manifest_release_ready.py`. Likely native-only — the Python runtime
     does not manage backends — so a guard test rather than a second reader.
-  - **Confirm the new contract actually ships.** `package.sh` stages `contracts/` into the artifact,
-    but verify it picks up a new subdirectory rather than assuming: a manifest that does not reach
-    the installed tree is a payload nobody can install, and it would fail at the user rather than at
-    the build.
-- [ ] **U3 — Driver-aware detection gate** _(C6's audit finding, verbatim)_: offer/nudge CUDA only
+  - **Ship the new contract — this is a packaging task, not a check** *(corrected 2026-07-29)*.
+    `package.sh` does **not** stage `contracts/`; it creates `contracts/runtime` and
+    `contracts/models` and copies exactly two named files
+    ([`package.sh:235`](../../installers/package.sh#L235),
+    [`:458-459`](../../installers/package.sh#L458-L459)). A new `contracts/backends/` subdirectory
+    reaches the installed tree only if it is added there explicitly, with a test. Left as written,
+    this failed at the user — a manifest nobody has, hence a payload nobody can install — rather than
+    at the build.
+  - **Refusing a stale payload needs a mechanism at LOAD time; install-time pinning cannot do it**
+    *(2026-07-29)*. Difference 3 above states the requirement and every task under it is an install
+    path, which leaves the requirement unmet by construction: `~/.knaif/backends` is deliberately
+    outside the install dir and survives an app upgrade, and it is scanned **first**, so an upgraded
+    `knaif` loads the previous release's `ggml-cuda` before any `backend install` command could run.
+    The loader says so itself — *"Ordering picks the device; it does not decide whether a stale lib
+    gets loaded … prevented by pinning it to the exe's build when it is installed, not by the
+    loader"* ([`llama.rs:98-111`](../../native/crates/knaif-llm/src/llama.rs#L98-L111)).
+    - **Measure before designing.** Both this plan and the audit that found the gap assume a
+      mismatched payload is undefined behaviour; neither knows that. Drop a previous-release
+      `ggml-cuda` beside a current exe and look: if ggml's registry already rejects it cleanly, a
+      version check in `BackendStore` is enough. If it loads and misbehaves, the payload needs a
+      version-stamped directory the loader resolves per build. Half an hour, and it picks the design.
+    - Either way this needs an **upgrade test**, not just an install test: install payload → bump the
+      binary → assert the old payload is refused rather than loaded.
+- [x] **U3 — Driver-aware detection gate** _(C6's audit finding, verbatim)_: offer/nudge CUDA only
   when an NVIDIA GPU is present **and the driver is R580+** (CUDA 13 floor) — `nvcuda.dll` presence
   alone is insufficient; probe the driver version (e.g. NVML / `nvidia-smi`) and, if too old, tell the
   user to update rather than install a payload that will fail to load. First-run nudge fires only when
@@ -322,26 +526,48 @@ into `~/.knaif/backends`.
     *whether* CUDA is installable; it does not distinguish the two populations in *Why this is
     release-blocking*. On **Blackwell (sm_120)** a Vulkan run generates at CPU speed, so the payload
     is what makes the product work and the nudge should be prominent and stated in those terms. On
-    **Ampere and earlier** Vulkan is within 3% of CUDA, so the same message would be scaremongering
-    over a rounding error — there it is an optional optimisation, worth ~618 MB only to someone who
-    wants it. Detect the **compute capability**, not just the vendor: ggml already reports it
-    (`Device 0: … compute capability 8.6`), so no new probe is needed.
+    **Ampere** it is an optional optimisation, worth ~618 MB only to someone who wants it. Detect the
+    **compute capability**, not just the vendor.
+    - **Corrected 2026-07-29 — "ggml already reports it, so no new probe is needed" is false.**
+      `LlamaBackendDevice` exposes index/name/description/backend/memory/device_type and **no**
+      compute capability; the `compute capability 8.6` line is a CUDA-backend init log, and the whole
+      point of the nudge is that it fires on a machine where CUDA is *not* installed, so that log
+      does not exist. Use the probe U3 already requires for the driver — one `nvidia-smi
+      --query-gpu=driver_version,compute_cap --format=csv` (or the NVML equivalent) returns both
+      fields, so this costs nothing beyond what the gate above already does. Verified on the bench
+      box: `NVIDIA GeForce RTX 3070 Laptop GPU, 610.74, 8.6`.
+    - **Say "Ampere", not "Ampere and earlier".** sm_86 is the only pre-Blackwell architecture ever
+      measured; Turing and everything else in the arch list are unmeasured, and the copy should not
+      imply otherwise.
+    - **Do not call the Ampere gap a rounding error** — the "~3%" it rested on is withdrawn, and no
+      replacement figure is quotable until `PERFORMANCE.md` §2 is reconciled (see *Why this is
+      release-blocking*). Until then the Ampere nudge says CUDA is faster and optional, without a
+      number.
   - **Do not gate on a hardcoded "Blackwell is broken" list.** The defect is in a llama.cpp/driver
     code path and may be fixed upstream, at which point a baked-in list silently lies in the other
     direction. Phrase the nudge from the measured local reality where possible, and re-measure the
     Vulkan/CUDA split on each supported architecture when the llama.cpp pin moves — record it in
     `docs/PERFORMANCE.md`, which is already the file that owns this claim.
-- [ ] **U4 — Re-enable the installer's CUDA component.** v1 ships the Windows installer with **no
+- [x] **U4 — Re-enable the installer's CUDA component.** v1 ships the Windows installer with **no
   CUDA component** precisely because U2 didn't exist for its opt-in task to call (finalization C6).
   Restore it once U2 lands, and verify the component is genuinely optional.
-- [ ] **U5 — Document the manual path's retirement.** `docs/RELEASE.md` / `NATIVE.md` will, as of v1,
+  - **Two things the opt-in task inherits from `backend install`, unaddressed until now**
+    *(2026-07-29)*. Ticking that box makes the installer download **~618 MB mid-install**. Decide
+    what it does when the network is absent or the download fails — an installer that rolls back a
+    working knaif because an optional GPU extra timed out is a worse outcome than no component at
+    all, so the failure must be non-fatal and re-runnable from the CLI afterwards.
+  - **And decide what uninstall does with it.** `backends_dir()` sits outside the install dir by
+    design (that is what makes `backend install` elevation-free), so uninstalling knaif leaves
+    ~618 MB behind unless the uninstaller is told about it. `backend remove` exists for the user who
+    knows; the uninstaller is for the one who does not.
+- [x] **U5 — Document the manual path's retirement.** `docs/RELEASE.md` / `NATIVE.md` will, as of v1,
   tell CUDA users to copy the payload into `~/.knaif/backends` by hand. Replace that with the command
   — and keep the manual path documented as the fallback, since it is what the loader actually
   supports and it is how U2 will be debugged.
   - **Also correct the Vulkan claim** flagged in *Why this is release-blocking*: `RELEASE.md` §6 and
     any release body derived from it currently tell every NVIDIA user that Vulkan is enough.
 
-### - [ ] U6 — Make `package.sh --kind=cuda` emit a real payload on Windows
+### - [x] U6 — Make `package.sh --kind=cuda` emit a real payload on Windows
 
 **This is the gap that would otherwise ship an NVIDIA story with a hole in it** — U1–U5 assume a
 payload exists for each OS, and on Windows it does not. `--kind=cuda` there still produces the
@@ -358,18 +584,47 @@ and an independently produced payload, and that the **NVIDIA redist resolves fro
 `ggml-cuda.dll`** in the backends dir with no PATH games. So this task is a packaging change on a
 proven path, not a spike.
 
-- [ ] Add a Windows branch to `package.sh`'s `cuda` kind that stages `ggml-cuda.dll` **plus** the
+- [x] Add a Windows branch to `package.sh`'s `cuda` kind that stages `ggml-cuda.dll` **plus** the
       NVIDIA redist DLLs from `$CUDA_PATH/bin/x64` into a payload tree, mirroring the Linux `.so.13`
       branch — and **stop producing the static app** for that kind, or keep it behind an explicit
-      legacy flag so nobody publishes it by accident.
-- [ ] Keep the `NVIDIA-CUDA-EULA.txt` hard-fail the Linux branch already has. The redist carries a
+      legacy flag so nobody publishes it by accident. *(The legacy shape is `--legacy-windows-cuda-app`
+      and is not publishable. The payload also carries the four CRT DLLs, which is why it measures
+      **668 MB**, not the 618 MB this plan estimated before they were part of it.)*
+- [x] Keep the `NVIDIA-CUDA-EULA.txt` hard-fail the Linux branch already has. The redist carries a
       redistribution condition the VC++ runtime does not, and the payload is the artifact that ships it.
-- [ ] Build at the full release arch list, not the spike's single arch:
+- [x] Build at the full release arch list, not the spike's single arch:
       `CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real"` (`RELEASE.md` §3), and verify
       with `cuobjdump --list-elf` / `--list-ptx` that every arch actually landed — matching
-      `sm_[0-9]+[a-z]*`, since `sm_[0-9]+` silently truncates `sm_120a`.
-- [ ] **Re-run the three cases on Windows against the packaged payload**, not a hand-built one. The
-      spike proved the mechanism; this proves the thing users receive.
+      `sm_[0-9]+[a-z]*`, since `sm_[0-9]+` silently truncates `sm_120a`. *(Built and verified
+      2026-07-30: six SASS archs + `compute_90` PTX, 54 minutes. The `sm_120a` concern is live, not
+      theoretical — a `120-real` request does land as `sm_120a`. `KNAIF_CUDA_DEV_ARCHS` exists for
+      packaging iteration and names its output `-DEVARCH` so it cannot be published by mistake.)*
+  - [x] **Add `90-real` to that list** *(2026-07-29)*, in `RELEASE.md` §3 as well as here so the two
+        cannot drift. `90-virtual` alone leaves Hopper on PTX JIT, and PTX JIT is the documented
+        exception to CUDA's minor-version driver compatibility — i.e. exactly the case the R580 floor
+        does *not* cover. A few MB of fatbin removes the caveat. **Deliberately not doing** the
+        larger version of this fix (making the minimum-driver gate architecture-dependent): sm_90 is
+        a data-center part that will not run this CLI, and a per-arch driver floor is complexity
+        bought for nobody. Note also that the R580 floor is a documented CUDA 13 requirement, not
+        something tested here — the bench box is on R610.74.
+- [x] **Re-run the three cases on Windows against the packaged payload**, not a hand-built one. The
+      spike proved the mechanism; this proves the thing users receive. **Done 2026-07-30**, against
+      `dist/staging/knaif-1.1.0-windows-x64/bin/knaif.exe` (the vulkan artifact) and the payload
+      installed by `backend install` from a local server: (1) empty backends dir → Vulkan1 = RTX
+      3070, 36/36 layers, exit 0, soft Ampere nudge fires; (2) payload present → `load_backend:
+      loaded CUDA backend from …\ggml-cuda.dll`, `found 1 CUDA devices (Total VRAM: 8191 MiB)`, all
+      layers on `CUDA0`, nudge silent, identical rendered command — **cross-build ABI compatibility
+      now proven against the packaged payload, not a hand-built one**; (3) no usable GPU → falls back
+      to Vulkan0, exit 0, and a plain run prints nothing but the command.
+  - [x] **`CUDA_VISIBLE_DEVICES=""` does not test case 3 on Windows** *(found 2026-07-30)*. With the
+        empty string, `ggml_cuda_init` still reported `found 1 CUDA devices` and every layer went to
+        `CUDA0` — the case passed by not running. Windows treats an env var set to the empty string
+        as *unset*, so the recipe deletes the variable it meant to set. **Use
+        `CUDA_VISIBLE_DEVICES="-1"`**, which produces the intended `failed to initialize CUDA: no
+        CUDA-capable device is detected`. The empty-string form is written into this plan and twice
+        into [native-branch-finalization](2026-07-15-native-branch-finalization.md), so **the
+        2026-07-16 Windows case-3 ✔ there should be read as unproven**; the Linux one is unaffected
+        (POSIX keeps an empty variable set, and NVIDIA documents that as "no devices visible").
 - [~] **Rejected: statically linking the MSVC CRT into `ggml-cuda.dll`** *(considered and dropped
       2026-07-28)*. It was raised to shrink the set of Microsoft files knaif redistributes, and it
       is more defensible here than for the main artifact — a loadable backend sits behind ggml's
@@ -391,7 +646,7 @@ proven path, not a spike.
   - Corroboration, not proof: **Ollama ships the CRT dynamically in each backend directory**
     (ten files per dir, four dirs), rather than linking it in.
 
-### - [ ] U7 — A CUDA build image, separate from the release image
+### - [~] U7 — A CUDA build image, separate from the release image
 
 The pinned Linux release image deliberately has **no CUDA toolkit**
 ([`Dockerfile:77-79`](../../installers/linux/Dockerfile#L77-L79)): it would add 3–5 GB to serve an
@@ -439,8 +694,18 @@ silent fallback) **as packaged**, and `docs/RELEASE.md` no longer claims Vulkan 
 
 **Workstream C — not release-blocking, and explicitly allowed to land after:**
 
-CI runs on every PR with the split jobs green, and a `v*.*.*` tag produces a draft release with
-artifacts + `SHA256SUMS` without anyone touching a build box.
+CI runs on every PR with the split jobs green — **including Linux packaging**, so a packaging break
+surfaces on the PR that caused it. A `v*.*.*` tag additionally attaches the **Linux** artifacts to a
+draft release, built in the pinned container rather than on a runner. No `SHA256SUMS` comes out of
+CI: the maintainer adds the Windows artifacts, generates the checksum manifest once over the complete
+set, and publishes.
+
+**Corrected 2026-07-29** — this previously read "a tag produces a draft release with artifacts +
+`SHA256SUMS` without anyone touching a build box", which is wrong twice. Windows artifacts are built
+on the maintainer's machine, so CI can never cut a complete release; and a `SHA256SUMS` emitted by CI
+would cover only the Linux half of a set a human is still adding to — one artifact set with two
+authorities over it. A tag that produces a complete draft is not the bar. A tag that produces the
+half that *can* be automated, without leaving behind a manifest that looks complete and is not, is.
 
 ---
 

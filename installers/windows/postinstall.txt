@@ -15,6 +15,18 @@ To download the AI model later, if you skipped it during setup:
 
     knaif models pull knaif-qwen3-4b-v1
 
+NVIDIA GPU? knaif runs on Vulkan out of the box, which works on every vendor. The
+optional CUDA backend is faster, and on the newest NVIDIA cards it is the difference
+between GPU speed and CPU speed:
+
+    knaif backend install cuda
+
+That is the same command setup would have run, so it is safe to use whether you
+skipped the offer, declined it, or the download failed part-way. It needs an NVIDIA
+driver R580 or newer. To undo it:
+
+    knaif backend remove cuda
+
 If you did not add knaif to PATH, run it by full path instead:
 
     %LOCALAPPDATA%\Programs\knaif\bin\knaif.exe

@@ -33,10 +33,29 @@ def _provenance() -> str:
 
 
 def _staged_crt_dlls() -> list[str]:
-    """The DLL list package.sh actually iterates when staging the VC++ runtime."""
-    match = re.search(r"^\s*for dll in ([^;]+); do", _package_sh(), re.M)
-    assert match, "no `for dll in ...` CRT staging loop found in package.sh"
+    """The DLL list package.sh actually stages as the VC++ runtime.
+
+    Read from the `VCREDIST_DLLS` assignment rather than the `for dll in ...` loop that
+    consumes it: the same list is staged twice — beside the exe in the full artifact, and
+    beside `ggml-cuda` in the CUDA payload, which installs into `~/.knaif/backends` and so
+    cannot borrow the install dir's copy. One declaration is what keeps those two from
+    drifting, and it is the thing this file must actually check.
+    """
+    match = re.search(r'^VCREDIST_DLLS="([^"]+)"', _package_sh(), re.M)
+    assert match, "no VCREDIST_DLLS declaration found in package.sh"
     return sorted(match.group(1).split())
+
+
+def test_the_crt_list_is_declared_once_and_reused() -> None:
+    # Guard the guard. If a caller ever inlines its own literal list again, the assertion
+    # above would still pass while silently checking only one of the two staged copies.
+    text = _package_sh()
+    assert (
+        len(re.findall(r"^VCREDIST_DLLS=", text, re.M)) == 1
+    ), "VCREDIST_DLLS must be declared exactly once"
+    assert not re.search(
+        r"for dll in .*vcruntime140", text
+    ), "a CRT DLL list is inlined somewhere instead of using $VCREDIST_DLLS"
 
 
 def _documented_crt_dlls() -> list[str]:

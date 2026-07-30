@@ -128,6 +128,26 @@ for f in LICENSE NOTICE; do
 done
 echo "  ok  LICENSE + NOTICE present"
 
+# 6b. the language-neutral contracts ship. package.sh names each file individually rather than
+# copying contracts/ wholesale, so a NEW contract reaches the installed tree only when someone
+# remembers to add it — and forgetting fails at the user, not at the build. That already applied to
+# the backend manifest: without it, `knaif backend install` cannot resolve a payload at all, so the
+# CUDA opt-in surface would be a command that can never work on a packaged artifact while working
+# perfectly in a checkout.
+for f in contracts/runtime/core_tools.yaml contracts/models/model-manifest.yaml \
+         contracts/backends/backend-manifest.yaml; do
+  [ -f "$ART/$f" ] || fail "$f is missing from the artifact (package.sh must stage it explicitly)"
+done
+echo "  ok  contracts present (core tools, model manifest, backend manifest)"
+
+# 6c. ...and the backend manifest is actually READABLE by the packaged binary from an unrelated cwd,
+# which is the property that check above cannot prove. Listing needs no network and no payload.
+out="$(run backend list 2>&1)" || fail "backend list exited non-zero: $out"
+case "$out" in
+  *cuda*) echo "  ok  backend list -> manifest resolves exe-relative" ;;
+  *) fail "backend list never mentioned cuda (backend manifest not resolvable?): $out" ;;
+esac
+
 # 7. no undeclared runtime dependency (Windows). Everything above RUNS the exe, so on the build box
 # it proves only that the build box can run it — and the build box has Visual Studio. That blind
 # spot is how every 1.0.x Windows binary came to import VCRUNTIME140/MSVCP140/VCOMP140 without any

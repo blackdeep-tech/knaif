@@ -144,7 +144,53 @@ payload in enables GPU offload next run, and a CUDA-present-but-no-usable-GPU bo
   never loads it. The order matters because when two backends drive the **same physical GPU**,
   llama.cpp dedupes by PCI id and the **first-registered wins** — with the exe dir first, the
   bundled Vulkan backend won and an installed CUDA payload was inert. Ordering picks the *device*;
-  it does not decide whether a stale lib loads (both dirs load regardless).
+  staleness is a separate check, below.
+- **Stale payloads are refused at load time.** `~/.knaif/backends` is deliberately outside the
+  install dir — that is what makes `backend install` elevation-free and keeps it working when the
+  install is read-only — so it **survives an app upgrade** and is scanned first. Without a check, an
+  upgraded `knaif` would load the previous release's `ggml-cuda`, whose ABI no longer matches. So
+  `BackendStore` writes a receipt (`.knaif-backends.yaml`) stamped with the installing release, and
+  the loader skips the whole directory with a message naming the fix when the stamp does not match
+  the running binary, or when a previous install did not finish. Install-time pinning alone cannot
+  cover this: the mismatch exists *before* any `backend install` could run.
+  A directory with **no receipt** still loads — that is the documented manual route (build a payload
+  and drop it in), which is how `backend install` itself gets debugged.
+
+**The `backend` command and its manifest.** `knaif backend list|install|verify|remove` manages the
+opt-in payloads. What each carries is declared in
+[`contracts/backends/backend-manifest.yaml`](../contracts/backends/backend-manifest.yaml): per
+platform, a list of files with a per-file SHA-256 and the release tag each rides. It ships in the
+**product** artifact beside `core_tools.yaml` and `model-manifest.yaml` — it is read by an
+already-installed `knaif` deciding what to download, so it cannot live in the payload it describes.
+
+It is a bill of materials and is **stricter than the model manifest**, which is forgiving by design
+(a knaif upgrade with an unchanged model recommendation re-downloads nothing). A backend inverts
+that: the ABI-coupled lib *must* be replaced on upgrade, an older payload has to be refused, and an
+unverified file is refused rather than installed — `ModelStore` tolerates a checksumless pull,
+`BackendStore` does not, because unverified backend bytes fail inside ggml and read as a driver bug.
+
+Installing is **stage-all → verify-all → swap**, not a per-file `rename` loop: four atomic
+operations are not one atomic operation, and an interrupted install would otherwise leave a
+directory holding a mix of two payloads. Payload assets are published as **loose per-file assets**
+rather than archives, so nothing on the install path extracts anything.
+
+```bash
+knaif backend list             # what exists, and its state on this machine
+knaif backend install cuda     # download + verify + install (~668 MB, needs an R580+ driver)
+knaif backend verify cuda      # re-check the installed files against the manifest
+knaif backend remove cuda      # back to CPU/Vulkan
+```
+
+**The manual route still works, and is the fallback.** Build a payload
+(`installers/package.sh --kind=cuda`) and copy its files into `~/.knaif/backends`. That is what the
+loader actually supports — `backend install` is a convenience over it, not a separate mechanism —
+and it is how `backend install` gets debugged. Two caveats that matter only on this path:
+
+- **Match the versions yourself.** A hand-copied payload writes no receipt, so the staleness check
+  above cannot see it. That is deliberate: refusing an unrecognised directory would break the very
+  route used to debug the managed one.
+- **Every file has to go in**, including the NVIDIA redistributables — the ggml lib alone will not
+  load.
 - **`GGML_CPU_ALL_VARIANTS`** emits ~9–14 `ggml-cpu-*` libs (`sse42` … `alderlake`, ~8 MB total;
   count varies by target) and dispatches on the host CPU at runtime — strictly better than one
   static CPU baseline.
@@ -192,6 +238,41 @@ Conclusions (all evidence-backed):
 - **CPU** is the no-GPU last resort.
 - Consider `knaif-qwen3-1.7b-v1` for the Vulkan/CPU fallback paths to offset slower compute.
 - Do **not** invest in a Vulkan pipeline-cache patch for speed.
+
+**The first-run CUDA offer.** The default artifact ships CPU+Vulkan; CUDA is an opt-in payload, so
+something has to tell an NVIDIA user it exists — *before* their first slow run, not after. A Blackwell
+user who runs first and reads later gets one CPU-speed request and may reasonably conclude the
+product is broken.
+
+The offer has **two strengths**, because the two populations are genuinely different:
+
+| Population | Message | Why |
+|---|---|---|
+| Compute cap in `nudge.vulkan_inadequate_compute_caps` (today: `12.0`, Blackwell) | prominent, stated as *correctness* | Vulkan generates at ~CPU speed there (§5.4 / PERFORMANCE.md §2) — the payload is what makes the product work |
+| Any other NVIDIA GPU | quiet, stated as *optional* | CUDA is faster, Vulkan is perfectly usable |
+| Driver below `requires.min_driver` | update hint, **no offer** | the payload would download and then fail to load, which reaches the user as "CUDA didn't work" |
+| No NVIDIA GPU, or already installed | nothing at all | an unsolicited GPU message on an AMD laptop is noise |
+
+Three properties worth keeping:
+
+- **The architecture list is data, not code** (`contracts/backends/backend-manifest.yaml`). The
+  defect behind the strong case lives in a llama.cpp/driver code path and may be fixed upstream, at
+  which point a list baked into the source would start lying in the other direction. Re-measure each
+  supported architecture when the llama.cpp pin moves, record it in `PERFORMANCE.md`, edit the list.
+- **The probe is `nvidia-smi`, not ggml.** It must work on a machine where CUDA is *not* installed,
+  which is the whole point. `LlamaBackendDevice` carries no compute capability, and the
+  `compute capability 8.6` line people remember is a CUDA-backend init log that by definition does
+  not exist yet. One `nvidia-smi --query-gpu=driver_version,compute_cap` returns both fields the
+  gate needs, so the architecture half costs nothing beyond the driver check.
+- **The soft message quotes no speed figure.** It used to say "~3%", which was the *generation*
+  column; knaif's workload is prompt-decode-dominated. No replacement number is quotable until
+  `PERFORMANCE.md` §2 is reconciled — its per-phase rates and its stated totals do not add up.
+
+`$KNAIF_NO_CUDA_NUDGE` suppresses the offer — but **not** the stale/interrupted report, which is
+about a payload the user already downloaded and is not getting. The loader prints its own detailed
+form of that one only under `--verbose`, so this line is where it reaches a normal run. Failure is
+silent throughout: an unreadable manifest or a missing `nvidia-smi` must never disturb a run that
+was going to work.
 
 ### 5.6 Default model auto-select
 
@@ -257,9 +338,10 @@ directory:
 
 - `resolve_skills_root()` — `$KNAIF_SKILLS_ROOT`, else walk up for `skills/` (dev
   checkout), else exe-relative (`<install>/skills`).
-- `resolve_repo_file()` — for `contracts/runtime/core_tools.yaml` and the model manifest:
-  walk up from cwd (checkout), else beside/one-level-up from the exe (the
-  `<install>/bin/knaif` + `<install>/contracts/...` layout).
+- `resolve_repo_file()` — for `contracts/runtime/core_tools.yaml`, the model manifest, and the
+  backend manifest: walk up from cwd (checkout), else beside/one-level-up from the exe (the
+  `<install>/bin/knaif` + `<install>/contracts/...` layout). `$KNAIF_MODEL_MANIFEST` /
+  `$KNAIF_BACKEND_MANIFEST` override their respective lookups.
 
 ## 9. Packaging & distribution
 
@@ -271,8 +353,13 @@ bin/*.so | *.dll                    (functional kinds) core llama/ggml libs + lo
 skills/<name>/                      RUNTIME DATA ONLY (skill.yaml, tools.yaml, prompt.yaml, vocab.yaml, profiles/)
 contracts/runtime/core_tools.yaml      core control-tool registry
 contracts/models/model-manifest.yaml   model catalog
+contracts/backends/backend-manifest.yaml  opt-in GPU payloads `knaif backend install` fetches
 LICENSE, README.txt, licenses/      license notices (Rust deps always; llama.cpp for inference builds; NVIDIA EULA for cuda)
 ```
+
+`package.sh` names each contract file individually rather than copying `contracts/` wholesale, so a
+new contract reaches the installed tree only when it is added there — `installers/smoke.sh` asserts
+all three are present, and that `backend list` can actually read the last one from an unrelated cwd.
 
 `package.sh --kind=base|cpu|vulkan|cuda`:
 
@@ -339,7 +426,7 @@ stages the dynamic libs for you:
 ```bash
 installers/package.sh --kind=cpu                                  # llama,dynamic-backends
 installers/package.sh --kind=vulkan                               # + vulkan  (the default artifact)
-CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real" \
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
   installers/package.sh --kind=cuda                               # opt-in payload
 installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 ```
@@ -350,7 +437,7 @@ installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 cargo build --release -p knaif-cli --features llama,dynamic-backends            # cpu
 CMAKE_GENERATOR=Ninja \
   cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan   # vulkan
-CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real" \
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
   cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda     # cuda payload
 installers/package.sh --no-build --kind=<cpu|vulkan|cuda>
 ```
@@ -395,8 +482,10 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 |---|---|---|
 | `KNAIF_SKILLS_ROOT` | Override the skills directory | (resolved) |
 | `KNAIF_MODEL_MANIFEST` | Override the model-manifest path | (resolved) |
+| `KNAIF_BACKEND_MANIFEST` | Override the backend-manifest path | (resolved) |
 | `KNAIF_MODELS_DIR` | Override the GGUF store directory | `~/.knaif/models` |
 | `KNAIF_BACKENDS_DIR` | Override where loadable `ggml-*` backends are scanned for (`dynamic-backends` builds; the exe's own directory is always scanned too) | `~/.knaif/backends` |
+| `KNAIF_NO_CUDA_NUDGE` | Suppress the first-run CUDA offer (§5.5); a stale payload is still reported | off |
 | `KNAIF_LLM_BACKEND` | `mock` opts out of default-model auto-select (§5.6); `llama` needs a model | auto-select, else `mock` |
 | `KNAIF_LLM_MOCK_RESPONSE` | Canned mock plan (offline dev/eval) | empty plan |
 | `KNAIF_N_GPU_LAYERS` | GPU offload layer count (`0` = CPU) | `999` |
@@ -407,23 +496,14 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 
 ## 12. Known limitations & roadmap
 
-- **CUDA distribution — mechanism DONE, install surface DEFERRED to post-v1.** The default download
-  carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~½ GB of NVIDIA redist
-  that non-NVIDIA users never pay for) loaded from `~/.knaif/backends`. The **loader** is proven on
-  Windows and Linux (C5a), and the multi-arch fatbin per §5.3/§10 is built; payload split +
-  GH-Releases hosting are decided.
-  **v1 ships no `knaif backend install cuda` command and no CUDA component in the installer** — the
-  only documented v1 route is copying the payload into `~/.knaif/backends` by hand. The install
-  surface, plus its **driver gate** (CUDA 13 needs R580+; `nvcuda.dll`/`libcuda.so` presence alone is
-  not sufficient), lands in
-  [post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
-  - **That manual route is LINUX-ONLY in practice at v1.** `package.sh --kind=cuda` emits a real
-    payload only on Linux (D4: built, and C6b verified CUDA then wins device selection). On Windows
-    the same flag still produces the **historical static-with-redist app**, not a payload, so there is
-    nothing a Windows user could copy into `~/.knaif/backends` — even though the Windows loader would
-    happily pick it up (the default Windows artifact is a `dynamic-backends` build). Aligning Windows
-    `cuda` onto Option 3 is part of the same post-v1 plan. Neither OS publishes a CUDA asset at v1, so
-    this blocks nothing — but do not tell a Windows user the manual route is available to them.
+- **CUDA distribution — the install surface exists from 1.1.0** (it was deferred through 1.0.x). The
+  default download carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~668 MB
+  of NVIDIA redist that non-NVIDIA users never pay for) loaded from `~/.knaif/backends`. Users get it
+  with `knaif backend install cuda`; the Windows installer runs the same command from a task that is
+  shown only when the GPU and driver already qualify and is **checked by default** there, and knaif
+  offers it on first run when it detects an eligible GPU (§5.5).
+  Both OSes now emit a real payload from `package.sh --kind=cuda` — through 1.0.x, Windows produced
+  the historical static-with-redist *app* instead, so a Windows user had nothing to install at all.
 - **CI** — there is no `.github/workflows/` yet; v1 gates on **local** green. CI + `release.yml` +
   eval-parity are tracked in the same post-v1 plan (they need the final org, so they land after the
   transfer).
