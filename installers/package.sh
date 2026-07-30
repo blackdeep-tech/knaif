@@ -269,11 +269,37 @@ VCREDIST_DLLS="vcruntime140.dll vcruntime140_1.dll msvcp140.dll vcomp140.dll"
 # to CUDA's minor-version driver compatibility, i.e. exactly what the R580 floor does not cover.
 CUDA_RELEASE_ARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
 
-# Assert the fatbin in $1 actually carries every arch the release list asks for.
+# DEV ESCAPE HATCH: verify against a shorter arch list than the release one.
+#
+# A full six-real-arch fatbin is ~55 minutes on a laptop (measured 2026-07-30, Windows, MSBuild
+# generator, CARGO_BUILD_JOBS=4), because all 183 ggml-cuda translation units are compiled once per
+# architecture. Iterating on the PACKAGING at that cost is not viable, and a one-arch build is
+# roughly a sixth of the work:
+#
+#   CUDAARCHS=86-real cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda
+#   KNAIF_CUDA_DEV_ARCHS=86-real installers/package.sh --no-build --kind=cuda
+#
+# Without this the arch check hard-fails on five "missing" architectures and the payload cannot be
+# packaged at all, so the only way to test the packaging was to build the full list every time.
+#
+# The output is renamed `-DEVARCH` rather than merely warned about. A warning scrolls past in a
+# build log; a filename does not, and it makes an accidentally published one-arch payload obvious in
+# `dist/`, on a release page, and in the manifest fragment. Same principle as
+# `--legacy-windows-cuda-app`.
+if [ -n "${KNAIF_CUDA_DEV_ARCHS:-}" ]; then
+  CUDA_ARCHS_TO_VERIFY="$KNAIF_CUDA_DEV_ARCHS"
+  CUDA_DEV_ARCH_SUFFIX="-DEVARCH"
+else
+  CUDA_ARCHS_TO_VERIFY="$CUDA_RELEASE_ARCHS"
+  CUDA_DEV_ARCH_SUFFIX=""
+fi
+
+# Assert the fatbin in $1 actually carries every arch asked for.
 #
 # Match `sm_[0-9]+[a-z]*`, never `sm_[0-9]+` — the latter silently truncates `sm_120a` to `sm_120`
-# and would report a pass for an arch that is not there. `--list-ptx`, never `--dump-ptx` (dumping
-# ~125 MB of PTX text times out).
+# and would report a pass for an arch that is not there. (Verified 2026-07-30 against a real fatbin:
+# a `120-real` request does land as `sm_120a`, so this is a live concern, not a theoretical one.)
+# `--list-ptx`, never `--dump-ptx` (dumping ~125 MB of PTX text times out).
 verify_cuda_archs() {
   local lib="$1" want arch expect_sm elf ptx missing=""
   local cuobjdump="$CUDA_PATH/bin/cuobjdump"
@@ -288,17 +314,21 @@ verify_cuda_archs() {
   }
   elf="$("$cuobjdump" --list-elf "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
   ptx="$("$cuobjdump" --list-ptx "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
-  for want in ${CUDA_RELEASE_ARCHS//;/ }; do
+  for want in ${CUDA_ARCHS_TO_VERIFY//;/ }; do
     arch="${want%-*}"
     case "$want" in
       # ggml rewrites every `12X` virtual arch to `12Xa`, so a requested sm_120 lands as sm_120a.
       *-real)    expect_sm="sm_$arch"; echo "$elf" | grep -qE "^sm_${arch}[a-z]*$" || missing="$missing $expect_sm(SASS)" ;;
       *-virtual) expect_sm="sm_$arch"; echo "$ptx" | grep -qE "^sm_${arch}[a-z]*$" || missing="$missing $expect_sm(PTX)" ;;
+      # Anything else is a MALFORMED entry, not an architecture. Skipping it silently is how a typo
+      # like `90-vitual` passes: cmake ignores the entry, the PTX never gets built, and a check that
+      # only looks for what it recognises reports success.
+      *) missing="$missing $want(UNRECOGNISED)" ;;
     esac
   done
   [ -z "$missing" ] || {
     echo "ERROR: $(basename "$lib") is missing CUDA arch(s):$missing" >&2
-    echo "       Requested: CUDAARCHS=\"$CUDA_RELEASE_ARCHS\"" >&2
+    echo "       Requested: \"$CUDA_ARCHS_TO_VERIFY\"" >&2
     echo "       Built SASS: $(echo "$elf" | tr '\n' ' ')" >&2
     echo "       Built PTX:  $(echo "$ptx" | tr '\n' ' ')" >&2
     echo "       Changing CUDAARCHS needs a CLEAN build — cmake's always_configure(false) means an" >&2
@@ -306,6 +336,10 @@ verify_cuda_archs() {
     exit 1
   }
   echo "  verified fatbin archs: $(echo "$elf" | tr '\n' ' ')(SASS) $(echo "$ptx" | tr '\n' ' ')(PTX)"
+  [ -z "$CUDA_DEV_ARCH_SUFFIX" ] || {
+    echo "  *** DEV BUILD: verified against KNAIF_CUDA_DEV_ARCHS=\"$CUDA_ARCHS_TO_VERIFY\", NOT the"
+    echo "  *** release list. This payload is named -DEVARCH and MUST NOT be published."
+  }
 }
 
 # Emit a contracts/backends/backend-manifest.yaml `files:` block for the staged payload in $1,
@@ -369,7 +403,7 @@ if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 0 ]; then
       echo "       On Windows that build must run in a VS Developer shell; then re-run with --no-build." >&2
     exit 1
   }
-  NAME="knaif-$VER-$OS-$ARCH-cuda-backend"
+  NAME="knaif-$VER-$OS-$ARCH-cuda-backend$CUDA_DEV_ARCH_SUFFIX"
   STAGE="dist/staging/$NAME"
   rm -rf "$STAGE"
   mkdir -p "$STAGE"
