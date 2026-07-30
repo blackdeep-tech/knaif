@@ -102,6 +102,19 @@ backends:
             tag: redist-cuda-13.3
             url: TODO
             sha256: TODO
+          # The licence texts travel WITH the bytes, into the user's backends directory. Under
+          # loose-file publishing the release *page* is not what reaches a user's disk, and NVIDIA's
+          # EULA permits redistribution only WITH the licence text — so these are payload files, not
+          # release-page attachments. package.sh stages both unconditionally and hard-fails without
+          # the EULA; `test_backend_payload_manifest.py` asserts this list keeps up with it.
+          - name: llama.cpp-LICENSE.txt
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: NVIDIA-CUDA-EULA.txt
+            tag: redist-cuda-13.3
+            url: TODO
+            sha256: TODO
 
       windows-x64:
         files:
@@ -141,5 +154,15 @@ backends:
             sha256: TODO
           - name: vcomp140.dll
             tag: product
+            url: TODO
+            sha256: TODO
+          # See the linux-x64 note: the licence texts are payload files, not release-page
+          # attachments, because the page is not what lands on a user's disk.
+          - name: llama.cpp-LICENSE.txt
+            tag: product
+            url: TODO
+            sha256: TODO
+          - name: NVIDIA-CUDA-EULA.txt
+            tag: redist-cuda-13.3
             url: TODO
             sha256: TODO
