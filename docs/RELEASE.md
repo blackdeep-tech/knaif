@@ -182,7 +182,37 @@ refreshed anything.
   `AlreadyExists`. Delete them before switching kinds.
 - **Memory.** llama.cpp's Vulkan `mul_mm` shader and nvcc are memory-hungry; on a ~7 GB box, 16
   parallel jobs OOM-kill `cc1plus`. Cap with `CARGO_BUILD_JOBS=<n>` — cmake-rs reads cargo's
-  `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`.
+  `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
+  not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
+
+### A Windows CUDA build takes about an hour, and shows nothing while it does
+
+Measured 2026-07-30: **54 minutes**, on 16 CPUs / 15.4 GB with `CARGO_BUILD_JOBS=4` and the default
+MSBuild generator. State this plainly because the failure mode is misreading it as a hang — cargo
+prints one `Compiling llama-cpp-sys-2` line and then goes silent for the whole build, since the
+per-file progress belongs to a build script and never reaches the terminal.
+
+The cost is structural: ggml-cuda has **183 translation units** (64 top-level plus 119 generated
+template instances), and each is compiled once per real architecture. Six real archs means roughly
+six times the nvcc work of a single-arch build.
+
+To tell a slow build from a stuck one, watch objects rather than stdout:
+
+```bash
+find target/release/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
+```
+
+Two things worth knowing:
+
+- **Don't build six archs to test packaging.** `KNAIF_CUDA_DEV_ARCHS=86-real` (or whatever card you
+  have) verifies against that shorter list and names the payload `-DEVARCH` so it cannot be
+  published by accident. Roughly a sixth of the work.
+- **The MSBuild generator serialises most of it.** Object paths under `*.dir/Release/` confirm it is
+  in use, and it parallelises across projects rather than within a target — so `CARGO_BUILD_JOBS=4`
+  still yields one compiler at a time for long stretches. `CMAKE_GENERATOR=Ninja` very likely fixes
+  that (it is what `package.sh` uses on Linux for every functional kind), but **it is unverified for
+  CUDA on Windows** and switching forces a full reconfigure, discarding the build cache. Try it on a
+  build you can afford to lose.
 
 ---
 
@@ -551,9 +581,13 @@ needs a *clean* build, see §3:
 
 ```bash
 CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda
+CARGO_BUILD_JOBS=4 \
+  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda   # ~1 hour, silent
 installers/package.sh --no-build --kind=cuda
 ```
+
+Budget an hour and don't mistake the silence for a hang — see §2's build traps, which also cover the
+job cap and the fast single-arch loop for packaging work.
 
 This writes `dist/staging/knaif-<ver>-<os>-<arch>-cuda-backend/` as **loose files** plus
 `dist/knaif-<ver>-<os>-<arch>-cuda-backend.manifest-fragment.yaml` carrying every file's real
