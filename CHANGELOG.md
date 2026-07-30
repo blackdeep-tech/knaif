@@ -60,7 +60,8 @@ number alone is measuring the wrong thing.
   knaif offers it on first run when it finds an eligible GPU, and the Windows installer offers the
   same command as an unchecked task. A driver below the CUDA 13 floor gets an update hint and no
   offer — downloading 668 MB that then fails to load is the least debuggable outcome available.
-  `KNAIF_NO_CUDA_NUDGE` silences the offer.
+  `KNAIF_NO_CUDA_NUDGE` silences the offer — but not the report that an installed payload is being
+  ignored, which is about a download the user already paid for rather than one being suggested.
 
   The backend is ABI-coupled to the binary that loads it, so an upgraded knaif **refuses** a payload
   left behind by an earlier release rather than loading it, and says how to update it. That check

@@ -268,8 +268,11 @@ Three properties worth keeping:
   column; knaif's workload is prompt-decode-dominated. No replacement number is quotable until
   `PERFORMANCE.md` §2 is reconciled — its per-phase rates and its stated totals do not add up.
 
-`$KNAIF_NO_CUDA_NUDGE` suppresses it. Failure is silent throughout: an unreadable manifest or a
-missing `nvidia-smi` must never disturb a run that was going to work.
+`$KNAIF_NO_CUDA_NUDGE` suppresses the offer — but **not** the stale/interrupted report, which is
+about a payload the user already downloaded and is not getting. The loader prints its own detailed
+form of that one only under `--verbose`, so this line is where it reaches a normal run. Failure is
+silent throughout: an unreadable manifest or a missing `nvidia-smi` must never disturb a run that
+was going to work.
 
 ### 5.6 Default model auto-select
 
@@ -482,7 +485,7 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 | `KNAIF_BACKEND_MANIFEST` | Override the backend-manifest path | (resolved) |
 | `KNAIF_MODELS_DIR` | Override the GGUF store directory | `~/.knaif/models` |
 | `KNAIF_BACKENDS_DIR` | Override where loadable `ggml-*` backends are scanned for (`dynamic-backends` builds; the exe's own directory is always scanned too) | `~/.knaif/backends` |
-| `KNAIF_NO_CUDA_NUDGE` | Suppress the first-run CUDA offer (§5.5) | off |
+| `KNAIF_NO_CUDA_NUDGE` | Suppress the first-run CUDA offer (§5.5); a stale payload is still reported | off |
 | `KNAIF_LLM_BACKEND` | `mock` opts out of default-model auto-select (§5.6); `llama` needs a model | auto-select, else `mock` |
 | `KNAIF_LLM_MOCK_RESPONSE` | Canned mock plan (offline dev/eval) | empty plan |
 | `KNAIF_N_GPU_LAYERS` | GPU offload layer count (`0` = CPU) | `999` |

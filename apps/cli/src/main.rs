@@ -1353,16 +1353,28 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
 /// large majority of machines — no NVIDIA GPU, or the payload already installed — because an
 /// unsolicited GPU message on an AMD laptop is noise.
 ///
-/// `$KNAIF_NO_CUDA_NUDGE` suppresses it for anyone who has decided not to install the payload and
-/// does not want to be told again.
+/// `$KNAIF_NO_CUDA_NUDGE` suppresses the *offer* for anyone who has decided not to install the
+/// payload and does not want to be told again. It does not suppress the stale/interrupted report:
+/// that one is about a payload they already have.
 fn print_cuda_offer() {
-    if std::env::var("KNAIF_NO_CUDA_NUDGE").is_ok_and(|v| !v.is_empty()) {
-        return;
-    }
     let Ok(store) = resolve_backend_manifest_path().and_then(|p| BackendStore::open(&p)) else {
         return;
     };
-    match knaif_models::cuda_offer(&store, &knaif_models::probe_nvidia()) {
+    // `KNAIF_NO_CUDA_NUDGE` answers an *offer* — "I know about the payload and I don't want it". It
+    // must not silence `NeedsReinstall`, which is not an offer but a report that a payload the user
+    // already downloaded is being ignored; the loader itself only says so under `--verbose`, so
+    // this is the only place that fact reaches them.
+    //
+    // Passing no GPUs is what keeps the suppression cheap: every offer branch needs the probe and
+    // collapses to `NotApplicable` without one, while both reinstall branches are decided by the
+    // receipt alone. So a suppressed run still spawns no `nvidia-smi`.
+    let suppressed = std::env::var("KNAIF_NO_CUDA_NUDGE").is_ok_and(|v| !v.is_empty());
+    let gpus = if suppressed {
+        Vec::new()
+    } else {
+        knaif_models::probe_nvidia()
+    };
+    match knaif_models::cuda_offer(&store, &gpus) {
         CudaOffer::NotApplicable | CudaOffer::AlreadyInstalled => {}
         // Stated in correctness terms, not speed terms: on this hardware the Vulkan fallback
         // generates at CPU speed, so the payload is what makes the product work.

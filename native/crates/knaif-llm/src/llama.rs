@@ -49,8 +49,8 @@ pub(crate) fn gpu_present(verbose: bool) -> bool {
 ///
 /// A missing directory is skipped silently — that is the mechanism by which a user *without* the
 /// CUDA payload simply never loads it, rather than failing. A payload belonging to a *different*
-/// knaif release is skipped loudly (see [`backend_dirs`]). ggml's registry is process-global, so
-/// this runs exactly once.
+/// knaif release is skipped too, with a trace line under `verbose` (see [`backend_dirs`]). ggml's
+/// registry is process-global, so this runs exactly once.
 #[cfg(feature = "dynamic-backends")]
 fn load_dynamic_backends(verbose: bool) {
     use std::sync::Once;
@@ -66,7 +66,7 @@ fn load_dynamic_backends(verbose: bool) {
                 llama_cpp_2::LogOptions::default().with_logs_enabled(false),
             );
         }
-        for dir in backend_dirs() {
+        for dir in backend_dirs(verbose) {
             if dir.is_dir() {
                 llama_cpp_2::llama_backend::load_backends_from_path(&dir);
             }
@@ -97,7 +97,7 @@ fn has_backend_libs(dir: &std::path::Path) -> bool {
 }
 
 #[cfg(feature = "dynamic-backends")]
-fn backend_dirs() -> Vec<std::path::PathBuf> {
+fn backend_dirs(verbose: bool) -> Vec<std::path::PathBuf> {
     let mut dirs = Vec::new();
     // The opt-in payload dir goes FIRST, ahead of the artifact's own backends — deliberately.
     //
@@ -116,9 +116,20 @@ fn backend_dirs() -> Vec<std::path::PathBuf> {
     //
     // A directory with NO receipt is still loaded. That is the documented manual route — build the
     // payload and drop it in — which is how `backend install` itself gets debugged.
+    //
+    // The refusal is reported here only under `verbose`, because this is not the message the user
+    // reads. The CLI prints the same fact as one short `⚠` line from `cuda_offer`, and printing
+    // both meant a plain run said it twice — the second time with an absolute payload path in it.
+    // Keep the detailed form for a trace, where the full path is the point. Any embedder that does
+    // not surface `CudaOffer::NeedsReinstall` must say so itself: a silently ignored payload leaves
+    // the user believing CUDA is active.
     let payload_dir = knaif_models::backends_dir();
     match knaif_models::backend_dir_state(&payload_dir, env!("CARGO_PKG_VERSION")) {
-        knaif_models::BackendDirState::Refuse { reason } => eprintln!("knaif: {reason}"),
+        knaif_models::BackendDirState::Refuse { reason } => {
+            if verbose {
+                eprintln!("knaif: {reason}");
+            }
+        }
         _ => dirs.push(payload_dir),
     }
     // Then the artifact's own backends, beside the binary.
