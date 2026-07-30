@@ -68,8 +68,18 @@
 #endif
 ; The default install location, defined once: [Setup] sets DefaultDirName from it, and the
 ; stale-install rescue probes it. Those two must never drift — the rescue can only look where the
-; install would have gone by default.
-#define DefaultDir "{localappdata}\Programs\knaif"
+; install would have gone by default, which is also why overriding it has to move both together.
+;
+; /DTestInstall moves a scratch verification build out of the real default directory. A throwaway
+; AppIdGuid is NOT sufficient on its own: it separates the uninstall KEY, but a test build landing
+; in the production default leaves two Add/Remove Programs rows over one tree, where removing
+; either one breaks the other. A switch rather than a path so nothing has to quote a brace through
+; two shells; `just installer-test` passes it alongside the throwaway AppIdGuid.
+#ifdef TestInstall
+  #define DefaultDir "{localappdata}\Programs\knaif-testbuild"
+#else
+  #define DefaultDir "{localappdata}\Programs\knaif"
+#endif
 ; Mark an overridden build in Add/Remove Programs so a test install is never mistaken for the real
 ; one — the two now coexist there rather than overwriting each other.
 #if AppIdGuid == "7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B"

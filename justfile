@@ -400,10 +400,11 @@ installer kind="cpu":
 
 # Compile a THROWAWAY installer for wizard verification — the wizard pages are the one part of the
 # installer no test can reach, so they have to be looked at, and looking at them must not touch a
-# real install. Two things keep it separate: a scratch AppIdGuid (so it gets its own uninstall key
-# and its own Add/Remove row, labelled "(TEST BUILD)") and its own output dir. Tearing a test build
-# down by deleting the production key is exactly how an install ends up with no Add/Remove row and
-# no upgrade path.
+# real install. Three things keep it separate: a scratch AppIdGuid (its own uninstall key and its
+# own Add/Remove row, labelled "(TEST BUILD)"), /DTestInstall (its own install directory, so the
+# two rows cannot end up sharing one tree), and its own output dir (so a rebuild cannot overwrite
+# a published setup.exe and invalidate its SHA256SUMS row). Tearing a test build down by deleting
+# the production key is exactly how an install ends up with no Add/Remove row and no upgrade path.
 #
 # Extra ISPP defines pass straight through, which is how the hidden branches get exercised without
 # different hardware:
@@ -414,7 +415,7 @@ installer kind="cpu":
 # Stage an artifact first (`just package-native vulkan`), as `just installer` needs.
 [windows]
 installer-test *args:
-    $iscc=@("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe","${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1; if(-not $iscc){throw 'ISCC.exe not found — install Inno Setup 6 (winget install JRSoftware.InnoSetup)'}; $out="{{justfile_directory()}}\dist\test-installer"; New-Item -ItemType Directory -Force $out | Out-Null; & $iscc /DAppIdGuid=00000000-0000-0000-0000-00000000TEST "/O$out" {{args}} "{{justfile_directory()}}\installers\windows\knaif.iss"; if($LASTEXITCODE){exit $LASTEXITCODE}; Get-ChildItem "$out\*.exe" | ForEach-Object { Write-Host "`ntest installer: $($_.FullName)" }
+    $iscc=@("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe","${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1; if(-not $iscc){throw 'ISCC.exe not found — install Inno Setup 6 (winget install JRSoftware.InnoSetup)'}; $out="{{justfile_directory()}}\dist\test-installer"; New-Item -ItemType Directory -Force $out | Out-Null; & $iscc /DAppIdGuid=00000000-0000-0000-0000-00000000TEST /DTestInstall "/O$out" {{args}} "{{justfile_directory()}}\installers\windows\knaif.iss"; if($LASTEXITCODE){exit $LASTEXITCODE}; Get-ChildItem "$out\*.exe" | ForEach-Object { Write-Host "`ntest installer: $($_.FullName)" }
 
 # Clean up tool caches and build artifacts (__pycache__, pytest/mypy/ruff caches,
 # *.egg-info, dist/, build/, and the packaged python/core/build/).

@@ -327,30 +327,41 @@ The wizard cannot be verified silently — `/VERYSILENT` never builds the task t
 pre-checked tasks shipped in 1.0.1 unnoticed. So installer changes need a GUI run, and that run must
 be isolated:
 
-- **Compile to a scratch dir** — `ISCC /O<scratch>`. Compiling to the default output overwrites
+Use the recipe rather than calling `ISCC` by hand — it is the isolation, not a shortcut to it:
+
+```bash
+just package-native vulkan     # stage an artifact first, as `just installer` needs
+just installer-test            # -> dist/test-installer/knaif-<ver>-windows-x64-setup.exe
+```
+
+It encodes three separations, each guarding a different failure:
+
+- **Its own output dir.** Compiling to the default output overwrites
   `dist/knaif-<ver>-windows-x64-setup.exe`, a **published artifact with a row in `SHA256SUMS`**; a
   stray rebuild silently invalidates the published checksum.
-- **Always pass a throwaway `AppId`** — `ISCC /DAppIdGuid=<throwaway-guid>`. Inno treats two builds
-  sharing an `AppId` as the **same application** and derives the same `{AppId}_is1` uninstall key
-  from it, so without this a scratch install registers against the production key — and removing it
-  afterwards destroys the real install's Add/Remove Programs registration and its upgrade detection.
-  An overridden build labels itself *"(TEST BUILD)"* in Add/Remove Programs so the two cannot be
-  confused.
+- **A throwaway `AppId`** (`/DAppIdGuid=`). Inno treats two builds sharing an `AppId` as the **same
+  application** and derives the same `{AppId}_is1` uninstall key from it, so without this a scratch
+  install registers against the production key — and removing it afterwards destroys the real
+  install's Add/Remove Programs registration and its upgrade detection. An overridden build labels
+  itself *"(TEST BUILD)"* in Add/Remove Programs so the two cannot be confused.
+- **Its own install directory** (`/DTestInstall`). The throwaway `AppId` separates the uninstall
+  *key* but not the *tree*: a test build landing in the production default is one the real
+  installer does not recognise as a prior version, so it installs over the same directory and
+  leaves **two Add/Remove Programs rows sharing one**, where uninstalling either breaks the other.
+
+Extra `ISPP` defines pass through, which is how branches gated on hardware get exercised without
+it — `just installer-test /DMinNvidiaDriver=9999` puts the driver floor above any real driver, so
+the CUDA task must not render.
+
+Two rules the recipe cannot enforce:
+
 - **Never delete the production `{AppId}_is1` key as cleanup.** Tear down the throwaway build's key
   only.
 - **Never run the uninstaller with `/SUPPRESSMSGBOXES`** unless you mean it. It answers the
   data-directory prompt with that prompt's default — which keeps `~/.knaif` from 1.1.0 onward, but
   a 1.0.1-or-earlier uninstaller still on disk will delete a 2.5 GB model store.
 
-```bash
-ISCC /DKind=cpu /DAppIdGuid=<throwaway-guid> /O<scratch> installers/windows/knaif.iss
-```
-
-- **Uninstall every test build when done.** A throwaway-`AppId` install that sits in the *default*
-  directory is its own hazard: the real installer does not recognise it as a prior version, so it
-  installs over the same tree and leaves **two Add/Remove Programs rows sharing one directory**,
-  where uninstalling either one breaks the other. Pass `/DIR=<scratch>` or remove the test build
-  before building release artifacts.
+**Uninstall every test build when done**, before building release artifacts.
 
 ### Exercise the upgrade path — every release, not once
 

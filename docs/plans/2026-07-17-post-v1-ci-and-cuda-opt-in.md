@@ -74,8 +74,34 @@
 > falls back and exits 0, and re-installing restores it. That is U2's "upgrade test, not just an
 > install test", performed rather than argued.
 >
-> Still owed: **publish the assets** (U1), the **Linux payload** (U7 — image unbuilt, base tag
-> unconfirmed, digest unpinned), and the **installer wizard GUI run** (U4).
+> Still owed: **publish the assets** (U1) and the **Linux payload** (U7 — image unbuilt, base tag
+> unconfirmed, digest unpinned).
+>
+> **The wizard GUI run is done (U4), and it was not a formality.** It found a defect no lint could
+> reach and changed a shipped default:
+>
+> - **The Components → Next click stalled for one to two seconds.** `CudaOfferable` is evaluated
+>   when Inno rebuilds the task list on leaving that page, and it was spawning `nvidia-smi`
+>   synchronously — which costs ~1.8 s on a machine that has a driver, because it initialises one to
+>   answer. A blocking `Exec` cannot be narrated (no message loop is running, so nothing repaints),
+>   so the probe is now started with `ewNoWait` from `InitializeWizard` and settled in
+>   `NextButtonClick`. By the time a user has read the licence and picked components the answer is
+>   already on disk; a bounded poll behind a progress page covers anyone faster than that.
+> - **The CUDA task is now checked by default.** U4 asked whether the component is "genuinely
+>   optional" and the honest answer turned out to be "optional, but off was the wrong default". It
+>   renders only when `CudaOfferable` holds — NVIDIA silicon, driver above the floor, no payload
+>   installed — so unchecked meant declining acceleration on behalf of a user already proven to
+>   benefit. This is **not** the F2 pattern: Ghostscript and LibreOffice render unconditionally,
+>   which is what made a checked default wrong for them. The gate and the default are load-bearing
+>   together, and `test_cuda_task_is_checked_by_default` says so.
+> - **Verification is now a recipe.** `just installer-test` compiles with a throwaway `AppId`, its
+>   own install directory and its own output dir, and passes `ISPP` defines through so branches
+>   gated on hardware (`/DMinNvidiaDriver=9999`) can be reached without different hardware.
+>   `RELEASE.md` §4 points at it instead of a hand-typed `ISCC` line.
+>
+> Exercised on an NVIDIA machine with a driver above the floor: no stall on Next, the task rendering
+> under its own heading and pre-ticked, and the task correctly absent both below the floor and with
+> a payload already in place.
 >
 > One thing the plan expected to decide was instead settled by building: the stale-payload refusal.
 > The plan called for measuring whether ggml already rejects a mismatched lib before designing.
