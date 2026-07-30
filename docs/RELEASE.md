@@ -171,6 +171,37 @@ does not identify which build is current. `out_dir()` resolves the right one by 
 emitted — but only ever package the kind you just built, and never assume a rebuilt-but-cached kind
 refreshed anything.
 
+**Package from that same Developer shell, not just build from it.** `package.sh` stages the four
+VC++ runtime DLLs from `$VCToolsRedistDir`, which a Developer shell exports pointing at the redist
+tree for the *very toolset that compiled the binaries*. Run packaging from a plain Git Bash and the
+variable is unset, so the script falls back to scanning the filesystem and says so:
+
+```text
+NOTE: VCToolsRedistDir unset or unusable — falling back to a filesystem scan.
+```
+
+The scan picks the newest redist tree it finds, which on a single-VS box is normally the right
+answer — verified 2026-07-30, where scanned and exported resolution produced byte-identical
+payloads. It stops being the right answer when you pin an older toolset (`vcvarsall.bat x64
+-vcvars_ver=<ver>`) or have several Visual Studios installed: the scan's answer and the compiler's
+diverge, and a mismatched CRT loads fine and fails later. Treat the NOTE as "this release was
+packaged on inference" and re-run rather than shipping it.
+
+If you must package outside a Developer shell, export the variable by hand — the script accepts a
+Windows path and a trailing backslash:
+
+```bash
+export VCToolsRedistDir='C:\Program Files\Microsoft Visual Studio\18\Community\VC\Redist\MSVC\<ver>\'
+```
+
+`<ver>` is whatever `VC/Auxiliary/Build/Microsoft.VCRedistVersion.default.txt` contains.
+
+**Do not "fix" a missing redist tree with `vc_redist.x64.exe`.** That installer deploys the CRT into
+`System32`; it does not create the `VC\Redist\MSVC\<ver>\x64\Microsoft.VC*\` tree `package.sh` copies
+from, and it is the wrong licence path besides — the Distributable List grant the packaging relies on
+is scoped to files inside a Visual Studio installation's `VC\redist` (see `docs/PROVENANCE.md`). The
+tree comes from the MSVC v14x **build tools** component in the VS Installer, nothing else.
+
 ### Build traps (both OSes)
 
 - **Changing `CUDAARCHS` or the generator needs a clean.** `always_configure(false)` means cmake will
@@ -594,12 +625,27 @@ This writes `dist/staging/knaif-<ver>-<os>-<arch>-cuda-backend/` as **loose file
 `sha256` and size. `package.sh` verifies the fatbin actually contains every requested arch
 (`cuobjdump`) and hard-fails if one was silently dropped.
 
-**2. Upload the redist half once, to `redist-cuda-13.3`.** A pre-release tag, and one that is
-**never deleted** — installed manifests point at it forever. Skip this entirely if the tag already
-carries this toolkit's files; they are byte-identical across knaif releases, which is the whole
-reason for the split.
+**The fragment is the upload list, not the directory listing.** The staging directory holds one more
+file than the fragment does: a generated `README.txt` orienting whoever opens the folder locally.
+`write_manifest_fragment` skips it deliberately and the manifest must not declare it — it is not
+payload, and `backend install` would fetch it into `~/.knaif/backends` if it were. Upload exactly the
+files the fragment names, and read each one's `tag:` to decide which of the next two steps it belongs
+to.
 
-**3. Upload the product half to the release tag**, alongside the normal artifacts.
+**2. Upload the redist half once, to `redist-cuda-13.3`.** Everything the fragment tags
+`redist-cuda-13.3`: NVIDIA's three libraries plus `NVIDIA-CUDA-EULA.txt`. A pre-release tag, and one
+that is **never deleted** — installed manifests point at it forever. Skip this entirely if the tag
+already carries this toolkit's files; they are byte-identical across knaif releases, which is the
+whole reason for the split.
+
+**3. Upload the product half to the release tag**, alongside the normal artifacts. Everything the
+fragment tags `product`: the ggml CUDA lib, `llama.cpp-LICENSE.txt`, and on Windows the four VC++
+runtime DLLs.
+
+Both licence texts are payload files that land on the user's disk, not release-page attachments —
+under loose-file publishing the page is not what reaches a user. Omitting the EULA breaks the
+condition NVIDIA's redistribution grant is subject to;
+`python/core/tests/test_backend_payload_manifest.py` guards the manifest side of that.
 
 **4. Fill in `contracts/backends/backend-manifest.yaml`** from the fragments: paste each platform's
 `files:` block and replace every `url: TODO` with the asset's download URL. Write URLs against
