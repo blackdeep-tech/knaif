@@ -124,18 +124,31 @@ BIN="target/release/$EXE"
 # "does it import llama?" separates a functional build from a base one. This does NOT distinguish
 # cpu from vulkan — under Option 3 the exe is backend-agnostic and dlopens whatever is staged beside
 # it, so that mix is harmless. Still: package each kind immediately after its own build.
+# Linux: patchelf is already a hard dep here. Windows: grep straight at the binary — Git Bash ships
+# no binutils (no strings/objdump/nm), and the PE import directory stores the DLL name as plain
+# ASCII, so the literal is present iff the exe imports it.
+case "$OS" in
+  linux) exe_imports_llama() { patchelf --print-needed "$1" 2>/dev/null | grep -q '^libllama\.so'; } ;;
+  *)     exe_imports_llama() { grep -qa 'llama\.dll' "$1"; } ;;
+esac
 if [ "$KIND" != base ]; then
-  # Linux: patchelf is already a hard dep here. Windows: grep straight at the binary — Git Bash ships
-  # no binutils (no strings/objdump/nm), and the PE import directory stores the DLL name as plain
-  # ASCII, so the literal is present iff the exe imports it.
-  case "$OS" in
-    linux) exe_imports_llama() { patchelf --print-needed "$1" 2>/dev/null | grep -q '^libllama\.so'; } ;;
-    *)     exe_imports_llama() { grep -qa 'llama\.dll' "$1"; } ;;
-  esac
   exe_imports_llama "$BIN" || {
     echo "ERROR: $BIN does not link llama — it is a 'base' build, but --kind=$KIND needs a" >&2
     echo "       functional one. Cargo overwrote it with the last build; rebuild for this kind:" >&2
     echo "         cargo build --release -p knaif-cli --features $(feats_for_kind "$KIND")" >&2
+    exit 1
+  }
+else
+  # ...and the mirror image, which was missing. The guard above stops a base exe being packaged as a
+  # functional kind; nothing stopped a FUNCTIONAL exe being packaged as `base`. That direction is
+  # just as broken and less obvious: `base` stages no core libs, so the artifact imports llama.dll,
+  # ggml.dll and ggml-base.dll and cannot start at all. Hit while testing this very change —
+  # packaging `base` straight after the CUDA build produced exactly that tree.
+  ! exe_imports_llama "$BIN" || {
+    echo "ERROR: $BIN links llama — it is a functional build, but --kind=base stages no core libs," >&2
+    echo "       so the artifact would import llama/ggml and fail to start. Cargo overwrote the" >&2
+    echo "       binary with the last build; rebuild for this kind:" >&2
+    echo "         cargo build --release -p knaif-cli" >&2
     exit 1
   }
 fi
@@ -604,37 +617,6 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
     echo "  staged libgomp.so.1 (OpenMP runtime, not guaranteed present on a base system)"
   fi
 
-  # The Visual C++ runtime ships beside the exe like every other lib above — see stage_vcredist.
-  #
-  # Nothing catches a missing CRT by RUNNING the artifact here: the build box has Visual Studio, so
-  # the dependency always resolves. `scripts/check_pe_imports.py` reads the import table instead and
-  # is machine-independent. It runs at the end of this block as a REQUIRED packaging step, so every
-  # Windows artifact is verified at the moment it is assembled.
-  if [ "$OS" = windows ]; then
-    stage_vcredist "$STAGE/bin"
-
-    # Verify the tree is actually self-contained, HERE, at the moment it is assembled. This must
-    # not be deferred to smoke.sh: smoke.sh is run per-artifact and by hand, and an artifact that
-    # was never smoke-tested would ship with no check at all. Packaging is the only step that
-    # every Windows artifact passes through by construction.
-    #
-    # Hard-fail when python is missing rather than skipping. A guard that silently opts out on
-    # the machine that lacks the tooling is worth nothing — this exact defect shipped in every
-    # 1.0.x artifact because nothing on the build box could observe it.
-    py=""
-    for cand in python python3; do
-      command -v "$cand" >/dev/null 2>&1 && { py="$cand"; break; }
-    done
-    [ -n "$py" ] || {
-      echo "ERROR: python not found — cannot verify the artifact is self-contained." >&2
-      echo "       scripts/check_pe_imports.py is a required packaging step, not optional." >&2
-      exit 1
-    }
-    "$py" "$ROOT/scripts/check_pe_imports.py" "$STAGE/bin" || {
-      echo "ERROR: staged tree has undeclared runtime dependencies (see above)." >&2
-      exit 1
-    }
-  fi
 fi
 
 # The pre-Option-3 Windows CUDA app: NVIDIA's redist DLLs beside the exe in one heavy artifact.
@@ -651,6 +633,54 @@ if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ]; then
   done
   [ "$copied" -gt 0 ] || { echo "ERROR: no CUDA redist DLLs found in $cudabin" >&2; exit 1; }
   echo "  bundled $copied CUDA redist DLL(s) from $cudabin"
+fi
+
+# ---------------------------------------------------------------------------------------------------
+# The Visual C++ runtime — for EVERY Windows kind, including `base`.
+# ---------------------------------------------------------------------------------------------------
+# This used to sit inside the functional-kind block, which left `base` staging no CRT at all. That
+# was not a harmless omission: Rust's MSVC target links the dynamic CRT regardless of cargo features,
+# so a base `knaif.exe` imports vcruntime140.dll and dies on a clean Windows box with
+# STATUS_DLL_NOT_FOUND (0xC0000135), printing nothing. package.sh did not check it either — the
+# import check was in the same block — so nothing observed it; `installers/smoke.sh` DID check, and
+# failed on every base artifact. The two scripts disagreed and smoke.sh was right.
+#
+# `base` is never published, so nobody was bitten. It is still the cheapest artifact to produce (no
+# MSVC/CUDA build required), which makes it the natural thing to smoke-test the packaging with — and
+# it could not pass. Four files and ~1 MB buys one uniform guarantee: every Windows artifact this
+# script produces is self-contained.
+#
+# PLACED AFTER the legacy CUDA redist staging on purpose. The import check reads the finished bin/
+# directory, so running it earlier would flag NVIDIA's DLLs as undeclared on the one path that
+# stages them last.
+if [ "$OS" = windows ]; then
+  stage_vcredist "$STAGE/bin"
+
+  # Verify the tree is actually self-contained, HERE, at the moment it is assembled. This must not
+  # be deferred to smoke.sh: smoke.sh is run per-artifact and by hand, and an artifact that was
+  # never smoke-tested would ship with no check at all. Packaging is the only step that every
+  # Windows artifact passes through by construction.
+  #
+  # Nothing catches this by RUNNING the artifact here — the build box has Visual Studio, so the
+  # dependency always resolves. check_pe_imports.py reads the import table instead and is
+  # machine-independent.
+  #
+  # Hard-fail when python is missing rather than skipping. A guard that silently opts out on the
+  # machine that lacks the tooling is worth nothing — this exact defect shipped in every 1.0.x
+  # artifact because nothing on the build box could observe it.
+  py=""
+  for cand in python python3; do
+    command -v "$cand" >/dev/null 2>&1 && { py="$cand"; break; }
+  done
+  [ -n "$py" ] || {
+    echo "ERROR: python not found — cannot verify the artifact is self-contained." >&2
+    echo "       scripts/check_pe_imports.py is a required packaging step, not optional." >&2
+    exit 1
+  }
+  "$py" "$ROOT/scripts/check_pe_imports.py" "$STAGE/bin" || {
+    echo "ERROR: staged tree has undeclared runtime dependencies (see above)." >&2
+    exit 1
+  }
 fi
 
 # Skills: runtime data only. Native v1 ships ffmpeg + documents (io is stale, excluded).
