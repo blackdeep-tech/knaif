@@ -400,6 +400,13 @@ still pending and the one with portability caveats.
       3. **CUDA present but NO usable GPU** (`CUDA_VISIBLE_DEVICES=""`) → **clean silent fallback to
          CPU**, correct output, exit 0, no crash. This is the case the plan singled out
          ("test the CUDA-*present* path, not only CUDA-absent"). ✔
+         - **RETRACTED 2026-07-30 — this recipe does not hide the GPU on Windows.** Re-running it
+           against the packaged 1.1.0 payload, `ggml_cuda_init` still reported `found 1 CUDA devices`
+           and every layer went to `CUDA0`: Windows treats an env var set to the empty string as
+           unset, so the variable is deleted rather than emptied and the case passes without ever
+           testing the fallback. `CUDA_VISIBLE_DEVICES="-1"` is the working form, and with it the
+           case does pass. Read this ✔ as unproven; the real one is in
+           [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) U6.
       Also proven incidentally: **CPU (exe dir) and CUDA (backends dir) load together** — multi-dir
       scanning works, confirming "first dir wins" would have been the wrong dedupe fix; and the
       **NVIDIA redist resolves from beside `ggml-cuda.dll`** in the backends dir, so the opt-in
@@ -441,7 +448,8 @@ still pending and the one with portability caveats.
          compat, and that `libggml-cuda.so` finds its `.so.13` redist via `$ORIGIN` and `libggml-base`
          from the already-loaded exe process, and `libcuda.so` from `/usr/lib/wsl/lib`. ✔
       3. **CUDA present but no usable GPU** (`CUDA_VISIBLE_DEVICES=""`) → **clean silent CPU fallback**,
-         correct output, exit 0, no crash. ✔
+         correct output, exit 0, no crash. ✔ *(Linux, so the empty-string form is valid here — see the
+         Windows retraction above, which applies only to Windows' unset-on-empty semantics.)*
     - **LINUX LOADER BUG FOUND + FIXED (`crates/knaif-llm/src/llama.rs`, `has_backend_libs`).** The
       dev-fallback dedupe checked `name.starts_with("ggml-")`, but Linux backends are `libggml-*.so`
       (Windows `ggml-*.dll`), so it returned **false on Linux** and the baked `BACKENDS_DIR` dev

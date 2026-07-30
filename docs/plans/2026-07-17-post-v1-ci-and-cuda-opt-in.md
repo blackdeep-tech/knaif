@@ -63,6 +63,20 @@
 > - **Run the Windows installer wizard** to see the CUDA task render and confirm it is genuinely
 >   optional. `/VERYSILENT` never builds the task tree, so this is a GUI step.
 >
+> **Progress 2026-07-30 — the Windows half is built and exercised end to end; only publishing and the
+> Linux payload remain.** Of the five items above, three are closed: the payload is **built** (six
+> real archs, 54 min, 668 MB), `verify_cuda_archs` has **run against a real fatbin** (and found the
+> `sm_120a` truncation to be a live concern), and the **three cases pass against the packaged
+> payload** (U6). The install path was rehearsed against a local HTTP server with the real fragment
+> checksums — `list` → `install` → `verify` clean, a corrupted sha lands **nothing** in a fresh dir
+> and leaves an existing install untouched, and the **stale-payload refusal** was driven end to end by
+> stamping a 1.0.9 receipt: `backend list` reports `STALE`, the loader skips the directory, the run
+> falls back and exits 0, and re-installing restores it. That is U2's "upgrade test, not just an
+> install test", performed rather than argued.
+>
+> Still owed: **publish the assets** (U1), the **Linux payload** (U7 — image unbuilt, base tag
+> unconfirmed, digest unpinned), and the **installer wizard GUI run** (U4).
+>
 > One thing the plan expected to decide was instead settled by building: the stale-payload refusal.
 > The plan called for measuring whether ggml already rejects a mismatched lib before designing.
 > `BackendStore` writes a version receipt and the loader refuses on it regardless, which turns that
@@ -527,7 +541,7 @@ into `~/.knaif/backends`.
   - **Also correct the Vulkan claim** flagged in *Why this is release-blocking*: `RELEASE.md` §6 and
     any release body derived from it currently tell every NVIDIA user that Vulkan is enough.
 
-### - [~] U6 — Make `package.sh --kind=cuda` emit a real payload on Windows
+### - [x] U6 — Make `package.sh --kind=cuda` emit a real payload on Windows
 
 **This is the gap that would otherwise ship an NVIDIA story with a hole in it** — U1–U5 assume a
 payload exists for each OS, and on Windows it does not. `--kind=cuda` there still produces the
@@ -544,17 +558,22 @@ and an independently produced payload, and that the **NVIDIA redist resolves fro
 `ggml-cuda.dll`** in the backends dir with no PATH games. So this task is a packaging change on a
 proven path, not a spike.
 
-- [ ] Add a Windows branch to `package.sh`'s `cuda` kind that stages `ggml-cuda.dll` **plus** the
+- [x] Add a Windows branch to `package.sh`'s `cuda` kind that stages `ggml-cuda.dll` **plus** the
       NVIDIA redist DLLs from `$CUDA_PATH/bin/x64` into a payload tree, mirroring the Linux `.so.13`
       branch — and **stop producing the static app** for that kind, or keep it behind an explicit
-      legacy flag so nobody publishes it by accident.
-- [ ] Keep the `NVIDIA-CUDA-EULA.txt` hard-fail the Linux branch already has. The redist carries a
+      legacy flag so nobody publishes it by accident. *(The legacy shape is `--legacy-windows-cuda-app`
+      and is not publishable. The payload also carries the four CRT DLLs, which is why it measures
+      **668 MB**, not the 618 MB this plan estimated before they were part of it.)*
+- [x] Keep the `NVIDIA-CUDA-EULA.txt` hard-fail the Linux branch already has. The redist carries a
       redistribution condition the VC++ runtime does not, and the payload is the artifact that ships it.
-- [ ] Build at the full release arch list, not the spike's single arch:
+- [x] Build at the full release arch list, not the spike's single arch:
       `CUDAARCHS="75-real;80-real;86-real;89-real;90-virtual;120-real"` (`RELEASE.md` §3), and verify
       with `cuobjdump --list-elf` / `--list-ptx` that every arch actually landed — matching
-      `sm_[0-9]+[a-z]*`, since `sm_[0-9]+` silently truncates `sm_120a`.
-  - [ ] **Add `90-real` to that list** *(2026-07-29)*, in `RELEASE.md` §3 as well as here so the two
+      `sm_[0-9]+[a-z]*`, since `sm_[0-9]+` silently truncates `sm_120a`. *(Built and verified
+      2026-07-30: six SASS archs + `compute_90` PTX, 54 minutes. The `sm_120a` concern is live, not
+      theoretical — a `120-real` request does land as `sm_120a`. `KNAIF_CUDA_DEV_ARCHS` exists for
+      packaging iteration and names its output `-DEVARCH` so it cannot be published by mistake.)*
+  - [x] **Add `90-real` to that list** *(2026-07-29)*, in `RELEASE.md` §3 as well as here so the two
         cannot drift. `90-virtual` alone leaves Hopper on PTX JIT, and PTX JIT is the documented
         exception to CUDA's minor-version driver compatibility — i.e. exactly the case the R580 floor
         does *not* cover. A few MB of fatbin removes the caveat. **Deliberately not doing** the
@@ -562,8 +581,24 @@ proven path, not a spike.
         a data-center part that will not run this CLI, and a per-arch driver floor is complexity
         bought for nobody. Note also that the R580 floor is a documented CUDA 13 requirement, not
         something tested here — the bench box is on R610.74.
-- [ ] **Re-run the three cases on Windows against the packaged payload**, not a hand-built one. The
-      spike proved the mechanism; this proves the thing users receive.
+- [x] **Re-run the three cases on Windows against the packaged payload**, not a hand-built one. The
+      spike proved the mechanism; this proves the thing users receive. **Done 2026-07-30**, against
+      `dist/staging/knaif-1.1.0-windows-x64/bin/knaif.exe` (the vulkan artifact) and the payload
+      installed by `backend install` from a local server: (1) empty backends dir → Vulkan1 = RTX
+      3070, 36/36 layers, exit 0, soft Ampere nudge fires; (2) payload present → `load_backend:
+      loaded CUDA backend from …\ggml-cuda.dll`, `found 1 CUDA devices (Total VRAM: 8191 MiB)`, all
+      layers on `CUDA0`, nudge silent, identical rendered command — **cross-build ABI compatibility
+      now proven against the packaged payload, not a hand-built one**; (3) no usable GPU → falls back
+      to Vulkan0, exit 0, and a plain run prints nothing but the command.
+  - [x] **`CUDA_VISIBLE_DEVICES=""` does not test case 3 on Windows** *(found 2026-07-30)*. With the
+        empty string, `ggml_cuda_init` still reported `found 1 CUDA devices` and every layer went to
+        `CUDA0` — the case passed by not running. Windows treats an env var set to the empty string
+        as *unset*, so the recipe deletes the variable it meant to set. **Use
+        `CUDA_VISIBLE_DEVICES="-1"`**, which produces the intended `failed to initialize CUDA: no
+        CUDA-capable device is detected`. The empty-string form is written into this plan and twice
+        into [native-branch-finalization](2026-07-15-native-branch-finalization.md), so **the
+        2026-07-16 Windows case-3 ✔ there should be read as unproven**; the Linux one is unaffected
+        (POSIX keeps an empty variable set, and NVIDIA documents that as "no devices visible").
 - [~] **Rejected: statically linking the MSVC CRT into `ggml-cuda.dll`** *(considered and dropped
       2026-07-28)*. It was raised to shrink the set of Microsoft files knaif redistributes, and it
       is more defensible here than for the main artifact — a loadable backend sits behind ggml's
