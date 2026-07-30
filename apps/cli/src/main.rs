@@ -635,10 +635,20 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         None => std::env::current_dir()?,
     };
     let sandbox = args.sandbox.as_deref();
+    // Probe the GPU ONCE and reuse the answer. Calling `gpu_present` twice would double-print its
+    // device trace under `--verbose`, and the two messages below both need the same fact.
+    //
+    // `None` means this build has no inference backend at all (a mock-only build), which is the
+    // distinction both messages depend on: `Some(false)` is "a real backend, and it found no GPU".
+    let gpu = if model.is_some() {
+        knaif_llm::gpu_present(args.verbose)
+    } else {
+        None
+    };
     // Before the (silent) model load + inference, tell the user if it will run entirely on the CPU:
     // no GPU device means a minute-plus wait for a 4B model, and saying so up front turns a
     // baffling "nothing happened" into an expected slow run. Only meaningful for real inference.
-    if model.is_some() && knaif_llm::gpu_present(args.verbose) == Some(false) {
+    if gpu == Some(false) {
         eprintln!(
             "⚠  No GPU detected — running on CPU. Inference will be slow \
              (the first request can take a minute or more)."
@@ -647,7 +657,11 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // Tell an NVIDIA user about the opt-in CUDA payload, once, before the slow run rather than
     // after it. A Blackwell user who runs first and reads later gets one CPU-speed request and may
     // reasonably conclude the product is broken.
-    if model.is_some() {
+    //
+    // `gpu.is_some()` is the "this build can actually infer" test. Offering a GPU backend to a
+    // mock-only binary is noise — there is nothing for it to accelerate — and the CPU warning above
+    // has always been silent in that case, so this keeps the two consistent.
+    if gpu.is_some() {
         print_cuda_offer();
     }
     // Model load + inference is the one silent stretch of a real run; show a live spinner so a
