@@ -37,7 +37,7 @@
 # archive, so BackendStore is the model store's fetch -> .part -> hash -> rename in a loop, plus a
 # stage-then-swap of the directory. This is also what keeps per-file SHA pinning, which is the reason
 # statically linking the MSVC CRT into ggml-cuda.dll was rejected: a Microsoft CRT fix republishes
-# four ~1 MB assets instead of a ~123 MB lib.
+# four ~1 MB assets instead of a ~150 MB lib.
 #
 # --- Publishing ---
 # `status: unpublished` means the assets are built but not yet uploaded; `backend install` refuses
@@ -138,7 +138,7 @@ backends:
           # dir. It normally resolves from beside knaif.exe, so this is redundancy — but it makes the
           # payload self-contained under any future artifact layout, and it is the arrangement that
           # keeps a Microsoft security fix to ~1 MB of individually pinned files instead of a
-          # republished ~123 MB ggml-cuda.dll. Ollama ships the CRT per backend directory for the
+          # republished ~150 MB ggml-cuda.dll. Ollama ships the CRT per backend directory for the
           # same reason. Microsoft's Distributable List grants these files; see docs/PROVENANCE.md.
           - name: vcruntime140.dll
             tag: product

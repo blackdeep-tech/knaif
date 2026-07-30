@@ -176,7 +176,7 @@ rather than archives, so nothing on the install path extracts anything.
 
 ```bash
 knaif backend list             # what exists, and its state on this machine
-knaif backend install cuda     # download + verify + install (~618 MB, needs an R580+ driver)
+knaif backend install cuda     # download + verify + install (~668 MB, needs an R580+ driver)
 knaif backend verify cuda      # re-check the installed files against the manifest
 knaif backend remove cuda      # back to CPU/Vulkan
 ```
@@ -494,7 +494,7 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 ## 12. Known limitations & roadmap
 
 - **CUDA distribution — the install surface exists from 1.1.0** (it was deferred through 1.0.x). The
-  default download carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~618 MB
+  default download carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~668 MB
   of NVIDIA redist that non-NVIDIA users never pay for) loaded from `~/.knaif/backends`. Users get it
   with `knaif backend install cuda`; the Windows installer offers the same command as an unchecked
   task, and knaif offers it on first run when it detects an eligible GPU (§5.5).

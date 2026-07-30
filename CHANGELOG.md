@@ -45,7 +45,7 @@ number alone is measuring the wrong thing.
 
 ### Added
 
-- **`knaif backend install cuda`** — the opt-in NVIDIA CUDA backend, in one command. ~618 MB,
+- **`knaif backend install cuda`** — the opt-in NVIDIA CUDA backend, in one command. ~668 MB,
   needs an R580+ driver, and it takes effect on the next run; `knaif backend list|verify|remove`
   complete the set. The payload itself has worked since the native branch closed, but the only way
   to get it was to copy files into `~/.knaif/backends` by hand — and on Windows there was no payload
@@ -59,7 +59,7 @@ number alone is measuring the wrong thing.
 
   knaif offers it on first run when it finds an eligible GPU, and the Windows installer offers the
   same command as an unchecked task. A driver below the CUDA 13 floor gets an update hint and no
-  offer — downloading 618 MB that then fails to load is the least debuggable outcome available.
+  offer — downloading 668 MB that then fails to load is the least debuggable outcome available.
   `KNAIF_NO_CUDA_NUDGE` silences the offer.
 
   The backend is ABI-coupled to the binary that loads it, so an upgraded knaif **refuses** a payload

@@ -459,7 +459,7 @@ def test_installdelete_runs_only_over_staged_payload() -> None:
 # parser, so the CUDA driver floor and the payload's filename are `#define`s here. Both
 # have an authoritative home in contracts/backends/backend-manifest.yaml, and a duplicate
 # that drifts is worse than no duplicate — it decides, silently, whether a user is offered
-# a 618 MB download that can never load.
+# a 668 MB download that can never load.
 
 
 def _define(name: str) -> str:
@@ -489,7 +489,7 @@ def test_cuda_driver_floor_matches_the_backend_manifest() -> None:
     assert str(declared) == _define("MinNvidiaDriver"), (
         f"installer MinNvidiaDriver={_define('MinNvidiaDriver')!r} but the backend manifest "
         f"declares requires.min_driver={declared!r}. Below the real floor the installer offers a "
-        f"~618 MB payload that then fails to load; above it, it silently withholds one that works."
+        f"~668 MB payload that then fails to load; above it, it silently withholds one that works."
     )
 
 
@@ -508,7 +508,7 @@ def test_cuda_backend_filename_matches_the_backend_manifest() -> None:
 
 
 def test_cuda_task_is_opt_in() -> None:
-    # The whole point of an opt-in component. A checked-by-default 618 MB download is exactly the
+    # The whole point of an opt-in component. A checked-by-default 668 MB download is exactly the
     # defect that shipped for Ghostscript and LibreOffice.
     assert "unchecked" in _flags(_cuda_task()), "the cudabackend task must default to unchecked"
 

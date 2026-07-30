@@ -93,7 +93,7 @@ pub enum CudaOffer {
     /// this machine, and an unsolicited GPU message on an AMD laptop is noise.
     NotApplicable,
     /// NVIDIA hardware, but the driver predates the CUDA floor. Offering the payload here would
-    /// hand the user 618 MB that cannot load; tell them what to update instead.
+    /// hand the user 668 MB that cannot load; tell them what to update instead.
     DriverTooOld {
         gpu: String,
         have: String,
@@ -350,7 +350,7 @@ backends:
 
     #[test]
     fn a_stale_payload_is_reported_rather_than_silently_ignored() {
-        // The user paid ~618 MB for a backend the loader is now skipping. Saying nothing would
+        // The user paid ~668 MB for a backend the loader is now skipping. Saying nothing would
         // leave them believing CUDA is active.
         let s = store();
         write_receipt(s.dir(), "1.0.9", "complete");

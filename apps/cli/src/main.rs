@@ -431,7 +431,7 @@ fn cmd_models(action: ModelsAction) -> anyhow::Result<()> {
 }
 
 /// A byte-oriented progress bar for one file of a multi-file backend payload. The message carries
-/// the position in the set (`[2/4] libcudart.so.13`), because a CUDA payload is ~618 MB across
+/// the position in the set (`[2/4] libcudart.so.13`), because a CUDA payload is ~668 MB across
 /// several files and a bar with no such context looks stalled between files.
 fn backend_bar() -> ProgressBar {
     let bar = ProgressBar::new(0);
@@ -1378,7 +1378,7 @@ fn print_cuda_offer() {
             "ℹ  {gpu}: CUDA offload is available and faster than the bundled Vulkan backend, \
              which\n   already works here. Optional:  knaif backend install cuda"
         ),
-        // An offer would hand them ~618 MB that cannot load, which reaches the user as
+        // An offer would hand them ~668 MB that cannot load, which reaches the user as
         // "CUDA didn't work" — the least debuggable outcome available.
         CudaOffer::DriverTooOld { gpu, have, need } => eprintln!(
             "ℹ  {gpu}: CUDA offload needs NVIDIA driver R{need}+ and this machine has {have}.\n   \

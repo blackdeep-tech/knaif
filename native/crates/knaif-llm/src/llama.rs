@@ -104,7 +104,7 @@ fn backend_dirs() -> Vec<std::path::PathBuf> {
     // When two backends can drive the same physical GPU, llama.cpp dedupes them by PCI id and keeps
     // whichever registered FIRST ("skipping device CUDA0 … already using device Vulkan1 with the
     // same id"). Scanning the exe dir first therefore let the artifact's bundled Vulkan win and made
-    // an installed CUDA payload inert — 619 MB downloaded to change nothing.
+    // an installed CUDA payload inert — 668 MB downloaded to change nothing.
     //
     // Ordering picks the *device*; it does not decide whether a STALE lib gets loaded. That is the
     // check below, and it has to happen here rather than at install time: `~/.knaif/backends` is

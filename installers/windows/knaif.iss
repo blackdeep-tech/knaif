@@ -47,7 +47,7 @@
 ; Minimum NVIDIA driver major version for the opt-in CUDA backend (the CUDA 13 floor). The
 ; authoritative declaration is `requires.min_driver` in contracts/backends/backend-manifest.yaml;
 ; this is a duplicate because ISPP cannot read YAML, and python/core/tests/test_installer_iss.py
-; asserts the two agree. Offering the payload below this floor would hand the user ~618 MB that
+; asserts the two agree. Offering the payload below this floor would hand the user ~668 MB that
 ; then fails to load — which reaches them as "CUDA didn't work", the least debuggable outcome.
 #ifndef MinNvidiaDriver
   #define MinNvidiaDriver "580"
@@ -178,7 +178,7 @@ Name: "getmodel"; Description: "Download the knaif AI model now — {#DefaultMod
 ; installed. Below the floor the payload would download and then fail to load; on an AMD box the
 ; offer is pure noise. `knaif backend install cuda` remains available afterwards either way, which
 ; is what makes it safe for this to be conservative.
-Name: "cudabackend"; Description: "Download the NVIDIA CUDA backend now (~618 MB — faster inference on your NVIDIA GPU; you can also run ""knaif backend install cuda"" later)"; GroupDescription: "GPU acceleration:"; Flags: unchecked; Check: CudaOfferable
+Name: "cudabackend"; Description: "Download the NVIDIA CUDA backend now (~668 MB — faster inference on your NVIDIA GPU; you can also run ""knaif backend install cuda"" later)"; GroupDescription: "GPU acceleration:"; Flags: unchecked; Check: CudaOfferable
 
 [Files]
 ; Core: binary + language-neutral contracts + docs.
@@ -247,11 +247,11 @@ Filename: "{app}\bin\knaif.exe"; Parameters: "models pull {#DefaultModel}"; \
 ; path with one set of checksums and one atomic swap, not an installer-specific copy of it.
 ;
 ; NON-FATAL BY CONSTRUCTION, and that is the point. A [Run] entry's exit code does not fail the
-; installation, so a timed-out or refused 618 MB download leaves a fully working knaif behind
+; installation, so a timed-out or refused 668 MB download leaves a fully working knaif behind
 ; rather than rolling one back over an optional GPU extra. The user is told they can re-run it; the
 ; command is identical, so nothing about the retry is second-class.
 Filename: "{app}\bin\knaif.exe"; Parameters: "backend install cuda"; \
-    StatusMsg: "Downloading the NVIDIA CUDA backend (~618 MB, one time)..."; Flags: waituntilterminated; \
+    StatusMsg: "Downloading the NVIDIA CUDA backend (~668 MB, one time)..."; Flags: waituntilterminated; \
     Tasks: "cudabackend"
 
 [Code]
@@ -489,7 +489,7 @@ end;
 
 // True when the payload is already sitting in the backends dir. That directory lives outside {app}
 // (see KnaifDataDir) precisely so it survives upgrades, which is exactly why an upgrade must not
-// re-offer a 618 MB download the user already has.
+// re-offer a 668 MB download the user already has.
 function CudaBackendInstalled: Boolean;
 begin
   Result := FileExists(ExpandConstant('{%USERPROFILE}\.knaif\backends\{#CudaBackendFile}'));

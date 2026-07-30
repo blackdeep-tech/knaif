@@ -63,13 +63,20 @@ is published as **loose per-file assets split across two tags**:
 
 | Files | Tag | Why |
 |---|---|---|
-| `ggml-cuda.dll` / `libggml-cuda.so` (~125 MB), plus the four MSVC runtime DLLs on Windows | the **product release** (`v<ver>`) | ABI-coupled to that release's exe; a tag-scoped URL structurally cannot serve a newer lib to an older binary |
-| `cudart*` / `cublas*` / `cublasLt*` (~493 MB), `NVIDIA-CUDA-EULA.txt` | **`redist-cuda-13.3`** (pre-release, never deleted) | keyed to the CUDA toolkit, byte-identical across knaif releases, so it is uploaded once |
+| `ggml-cuda.dll` / `libggml-cuda.so` (~150 MB), plus the four MSVC runtime DLLs on Windows | the **product release** (`v<ver>`) | ABI-coupled to that release's exe; a tag-scoped URL structurally cannot serve a newer lib to an older binary |
+| `cudart*` / `cublas*` / `cublasLt*` (~517 MB), `NVIDIA-CUDA-EULA.txt` | **`redist-cuda-13.3`** (pre-release, never deleted) | keyed to the CUDA toolkit, byte-identical across knaif releases, so it is uploaded once |
+
+**Sizes are the measured Windows 1.1.0 payload**, staged 2026-07-30: **668 MB** total across ten
+files — `cublasLt64_13.dll` 464 MB, `ggml-cuda.dll` 150 MB (six real archs), `cublas64_13.dll` 53 MB,
+and ~1 MB of CRT, `cudart`, and licence text. The figure `backend list` shows is computed from the
+manifest, so it is right by construction; prose is not, and the earlier "~618 MB" predated the CRT
+and licence files joining the payload. Re-measure when the arch list or toolkit moves, and take the
+Linux numbers from that payload's own fragment rather than assuming these.
 
 **Loose files, not archives** (decided 2026-07-29). Each asset carries its own `sha256` in the
 manifest, so nothing on the install path extracts an archive — `BackendStore` is fetch → hash →
 stage → swap. It also keeps a Microsoft CRT security fix to ~1 MB of individually pinned files rather
-than a republished ~123 MB `ggml-cuda.dll`, which is the servicing argument that ruled out static
+than a republished ~150 MB `ggml-cuda.dll`, which is the servicing argument that ruled out static
 linking in the first place.
 
 **The licence files ship inside the payload**, landing in the user's backends directory alongside the
@@ -583,7 +590,7 @@ NVIDIA users install the CUDA backend with one command:
 knaif backend install cuda
 ```
 
-~618 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
+~668 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
 undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
 faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
 Windows installer offers it as an unchecked task.

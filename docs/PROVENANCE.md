@@ -139,7 +139,7 @@ design, so the payload cannot assume what the install dir holds. In practice the
 beside `knaif.exe` are the ones the loader resolves, making this redundancy rather than a
 second dependency — but it is a second *redistribution*, which is why it is recorded here.
 It is also what keeps a Microsoft security fix to ~1 MB of individually SHA-pinned assets
-instead of a republished ~123 MB `ggml-cuda.dll`; that servicing argument is why statically
+instead of a republished ~150 MB `ggml-cuda.dll`; that servicing argument is why statically
 linking the CRT into the backend was considered and rejected. Ollama ships the CRT per
 backend directory for the same reason. `package.sh` stages both copies from one
 `VCREDIST_DLLS` declaration, so the two sets cannot drift.
