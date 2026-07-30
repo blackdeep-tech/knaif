@@ -507,10 +507,35 @@ def test_cuda_backend_filename_matches_the_backend_manifest() -> None:
     )
 
 
-def test_cuda_task_is_opt_in() -> None:
-    # The whole point of an opt-in component. A checked-by-default 668 MB download is exactly the
-    # defect that shipped for Ghostscript and LibreOffice.
-    assert "unchecked" in _flags(_cuda_task()), "the cudabackend task must default to unchecked"
+def test_cuda_task_is_checked_by_default() -> None:
+    # Changed 2026-07-30, and deliberately NOT a repeat of F2. Ghostscript and LibreOffice render
+    # for every user who takes the documents skill, so a checked default there pushed an AGPL tool
+    # and a ~350 MB suite onto machines that had shown no sign of needing them. This task is gated
+    # (see the next test) and therefore only ever rendered on a machine already proven to benefit:
+    # NVIDIA silicon, a driver above the floor, no payload installed. Leaving it unticked there
+    # ships a user who qualifies to the CPU/Vulkan path with the hardware to do better sitting
+    # idle. The pairing is what makes it safe — flip this back and the gate stops mattering.
+    assert "unchecked" not in _flags(_cuda_task()), (
+        "the cudabackend task must be checked by default; it is only shown to users whose GPU and "
+        "driver already qualify, so unchecked means declining acceleration on their behalf"
+    )
+
+
+def test_cuda_task_discloses_that_setup_waits() -> None:
+    # The [Run] entry is `waituntilterminated` and Inno disables Cancel during that stage, so a
+    # ticked box means setup sits on a ~668 MB download with no way out. Checked-by-default is only
+    # defensible while the description says so where the user decides whether to UNtick it — the
+    # same disclosure the getmodel task carries for the same reason.
+    entries = [e for e in _entries("Run") if e.get("Tasks", "").strip('"') == "cudabackend"]
+    assert "waituntilterminated" in _flags(entries[0]), (
+        "the CUDA [Run] entry no longer blocks setup — if that is intentional, the 'setup will "
+        "wait' disclosure in the task description is now false and must go"
+    )
+    description = _cuda_task().get("Description", "")
+    assert "setup will wait" in description.lower(), (
+        "the cudabackend task is checked by default and blocks setup on a ~668 MB download; its "
+        f"description must say so. Got: {description!r}"
+    )
 
 
 def test_cuda_task_is_gated() -> None:
@@ -523,7 +548,8 @@ def test_cuda_task_is_gated() -> None:
 
 def test_cuda_task_is_flat() -> None:
     # Same trap as the deps tasks: a dotted name declares an undefined parent, and the child then
-    # loses both its GroupDescription and its `unchecked` flag.
+    # renders under the preceding task, losing its own GroupDescription (and, for any task that
+    # carries one, its `unchecked` flag).
     assert "\\" not in _cuda_task()["Name"], "task names must be flat (see the deps-task comment)"
 
 

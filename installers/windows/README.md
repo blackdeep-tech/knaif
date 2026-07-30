@@ -32,11 +32,27 @@ The functional kinds build llama.cpp with `dynamic-backends` (Option 3 / C5), so
 `llama-common.dll`) and the loadable `ggml-*.dll` backends ship **beside it** in `bin\`.
 Windows resolves them from the exe's own directory, so no RPATH equivalent is needed.
 
-**CUDA is not shipped.** The default artifact carries CPU + Vulkan only; `ggml-cuda` is an opt-in
+**CUDA is not bundled.** The default artifact carries CPU + Vulkan only; `ggml-cuda` is a separate
 payload dropped into `~/.knaif/backends`, which is scanned ahead of the artifact's own backends.
-**v1 publishes no CUDA asset and the installer offers no CUDA component** — an opt-in task with no
-command behind it is worse than no offer at all. Aligning the Windows `cuda` kind onto Option 3
-(it still uses the historical static-with-redist shape) is post-v1.
+v1 published no CUDA asset and the installer therefore offered no CUDA component — a task with no
+command behind it is worse than no offer at all. From **1.1.0** the asset exists and
+`knaif backend install cuda` can fetch it, so the installer carries a `cudabackend` task that runs
+exactly that command.
+
+That task is **gated and then checked by default**, and the two halves belong together. It renders
+only when `CudaOfferable` holds — an NVIDIA GPU is present, its driver meets the `MinNvidiaDriver`
+floor, and `~/.knaif/backends\ggml-cuda.dll` is not already there — so it is never shown to a user
+it cannot help, and that is what earns it the checked default. It is not the F2 pattern below:
+those tasks render unconditionally, this one has already proved the hardware qualifies. Setup
+blocks on the ~668 MB download (the `[Run]` entry has no `nowait`), which the description states so
+the disclosure sits where the user decides whether to untick.
+
+Detection is `nvidia-smi`, which costs 1-2s on a machine with a driver. It runs **asynchronously
+from `InitializeWizard`** and is settled in `NextButtonClick(wpSelectComponents)`, one step before
+Inno rebuilds the task list and evaluates the `Check:`. Run inline there instead, it is a wizard
+that freezes on the Next click with nothing on screen — and a blocking `Exec` cannot be narrated,
+since no message loop is running to repaint a caption or animate a bar. A user who outruns the
+probe gets a bounded poll loop behind an output progress page; everyone else sees nothing.
 
 ## Build
 

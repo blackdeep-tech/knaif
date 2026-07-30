@@ -499,8 +499,9 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 - **CUDA distribution — the install surface exists from 1.1.0** (it was deferred through 1.0.x). The
   default download carries CPU+Vulkan loadable backends (§5.3); CUDA is an **opt-in payload** (~668 MB
   of NVIDIA redist that non-NVIDIA users never pay for) loaded from `~/.knaif/backends`. Users get it
-  with `knaif backend install cuda`; the Windows installer offers the same command as an unchecked
-  task, and knaif offers it on first run when it detects an eligible GPU (§5.5).
+  with `knaif backend install cuda`; the Windows installer runs the same command from a task that is
+  shown only when the GPU and driver already qualify and is **checked by default** there, and knaif
+  offers it on first run when it detects an eligible GPU (§5.5).
   Both OSes now emit a real payload from `package.sh --kind=cuda` — through 1.0.x, Windows produced
   the historical static-with-redist *app* instead, so a Windows user had nothing to install at all.
 - **CI** — there is no `.github/workflows/` yet; v1 gates on **local** green. CI + `release.yml` +

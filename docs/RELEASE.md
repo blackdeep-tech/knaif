@@ -593,7 +593,9 @@ knaif backend install cuda
 ~668 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
 undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
 faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
-Windows installer offers it as an unchecked task.
+Windows installer offers it as a task that is checked by default — the task renders only on a machine
+whose GPU and driver already qualify and that has no payload yet, so it is never shown to a user it
+cannot help. Setup blocks on the download, which the task description states.
 
 The payload is ABI-coupled to the exe, so it is re-installed per knaif release — the loader detects a
 payload from another release and ignores it with a message rather than loading it. Copying the files

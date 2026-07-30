@@ -173,12 +173,24 @@ Name: "getmodel"; Description: "Download the knaif AI model now — {#DefaultMod
 ; because `knaif backend install` did not exist for it to call, and an opt-in task with no command
 ; behind it is worse than no offer.
 ;
-; UNCHECKED, and hidden entirely unless CudaOfferable. Three conditions, all of which must hold:
-; an NVIDIA GPU is present, its driver meets the CUDA 13 floor, and the backend is not already
-; installed. Below the floor the payload would download and then fail to load; on an AMD box the
-; offer is pure noise. `knaif backend install cuda` remains available afterwards either way, which
-; is what makes it safe for this to be conservative.
-Name: "cudabackend"; Description: "Download the NVIDIA CUDA backend now (~668 MB — faster inference on your NVIDIA GPU; you can also run ""knaif backend install cuda"" later)"; GroupDescription: "GPU acceleration:"; Flags: unchecked; Check: CudaOfferable
+; Hidden entirely unless CudaOfferable. Three conditions, all of which must hold: an NVIDIA GPU is
+; present, its driver meets the CUDA 13 floor, and the backend is not already installed. Below the
+; floor the payload would download and then fail to load; on an AMD box the offer is pure noise.
+;
+; CHECKED BY DEFAULT (changed 2026-07-30). This is deliberately NOT the Ghostscript/LibreOffice
+; defect repeated: those two render on every machine that picks the documents skill, so a checked
+; default pushed an AGPL tool and a ~350 MB suite onto users who had shown no sign of needing
+; either. This task is rendered ONLY on a machine already proven to benefit — NVIDIA silicon, a
+; driver above the floor, no payload yet — and there, leaving it off means the user finishes setup
+; running inference on the CPU/Vulkan path while the hardware to do better sits idle. The size is
+; stated, the tick is one click away, and `knaif backend install cuda` is the identical command
+; afterwards, so the cost of the wrong default is small in the direction we have now chosen and
+; large in the other.
+;
+; The description discloses the wait for the same reason getmodel's does: the [Run] entry has no
+; `nowait` and Inno disables Cancel during that stage. Now that the task is checked by default the
+; disclosure is doing real work — it is read by the user deciding whether to UNtick.
+Name: "cudabackend"; Description: "Download the NVIDIA CUDA backend now — ~668 MB, one time, for faster inference on your NVIDIA GPU (setup will wait for this; you can also run ""knaif backend install cuda"" later)"; GroupDescription: "GPU acceleration:"; Check: CudaOfferable
 
 [Files]
 ; Core: binary + language-neutral contracts + docs.
@@ -443,38 +455,125 @@ end;
 //
 // Probed ONCE and cached: `Check:` is evaluated repeatedly — per wizard page and again at install
 // time — and spawning nvidia-smi each time would make the wizard visibly stutter.
+//
+// It is also STARTED EARLY AND ASYNCHRONOUSLY, which is the whole reason this is three routines
+// instead of one. nvidia-smi costs 1-2s on a box that actually has a driver (it initialises one to
+// answer), and the first `Check:` evaluation lands when Inno rebuilds the task list — i.e. on the
+// Next click that leaves the Components page. Run synchronously there, that is a wizard which
+// simply stops responding for a second or two with nothing on screen to say why, and a blocking
+// Exec cannot be narrated: the message loop is not running, so no spinner would animate and no
+// caption would repaint. The fix is not to decorate the wait but to have already spent it — the
+// probe is launched with ewNoWait when the wizard is created, and by the time the user has read
+// the licence and picked components the answer is sitting in a file.
+//
+// The bounded wait below is the fallback for the user who clicks through faster than the driver
+// answers. Only that path shows UI, and it can show a moving bar precisely because it is a poll
+// loop rather than a blocked Exec.
+const
+  NvsmiPollMs = 100;
+  { Generous: the value only bounds the pathological case, and the cost of giving up early is a
+    silently withheld offer on a machine that qualifies. }
+  NvsmiTimeoutMs = 5000;
 var
   NvidiaProbed: Boolean;
   NvidiaDriverMajorCached: Integer;
+  NvidiaProbeStarted: Boolean;
+  GpuProbePage: TOutputProgressWizardPage;
+
+// Where the async probe drops its answer. It writes `.part` first and MOVEs it into place, so the
+// existence of the final file means "nvidia-smi has finished", not "the shell has created the
+// redirect target" — reading the redirect target directly would race and usually read it empty.
+function NvsmiPartFile: string;
+begin
+  Result := ExpandConstant('{tmp}\knaif-nvsmi.part');
+end;
+
+function NvsmiOutFile: string;
+begin
+  Result := ExpandConstant('{tmp}\knaif-nvsmi.txt');
+end;
+
+// Fire the probe and return immediately. Safe to call more than once; only the first call runs.
+procedure StartNvidiaProbe;
+var
+  ResultCode: Integer;
+begin
+  if NvidiaProbeStarted then
+    Exit;
+  NvidiaProbeStarted := True;
+  DeleteFile(NvsmiPartFile);
+  DeleteFile(NvsmiOutFile);
+  { Routed through cmd /C because Exec cannot redirect on its own. 2>nul keeps a missing
+    nvidia-smi from flashing a console error at a user who simply has no NVIDIA card.
+    NB the exit code is unreachable under ewNoWait — every failure mode (no nvidia-smi, driver
+    error) instead lands as an EMPTY output file, which parses to 0 and so reads as "do not
+    offer", exactly as the old `ResultCode <> 0` guard did. }
+  if not Exec(ExpandConstant('{cmd}'),
+              '/C nvidia-smi --query-gpu=driver_version --format=csv,noheader > "' + NvsmiPartFile + '" 2>nul'
+              + ' & move /Y "' + NvsmiPartFile + '" "' + NvsmiOutFile + '" >nul 2>nul',
+              '', SW_HIDE, ewNoWait, ResultCode) then
+    { cmd itself would not start. Nothing will ever write the file, so do not sit out the timeout. }
+    NvidiaProbeStarted := False;
+end;
+
+// Block until the probe's answer is on disk, for at most NvsmiTimeoutMs. Shows a progress page
+// only if it actually has to wait — on the intended path the file is already there and this
+// returns without a flicker. The page is what makes the rare slow case legible instead of looking
+// like a hang; SetProgress is also what pumps the message loop, so the bar really does move.
+procedure AwaitNvidiaProbe;
+var
+  Waited: Integer;
+  Showing: Boolean;
+begin
+  Waited := 0;
+  Showing := False;
+  try
+    while (not FileExists(NvsmiOutFile)) and (Waited < NvsmiTimeoutMs) do
+    begin
+      if (not Showing) and (not WizardSilent) and (GpuProbePage <> nil) then
+      begin
+        GpuProbePage.SetText('Checking your graphics hardware...', 'Looking for an NVIDIA GPU.');
+        GpuProbePage.Show;
+        Showing := True;
+      end;
+      Sleep(NvsmiPollMs);
+      Waited := Waited + NvsmiPollMs;
+      if Showing then
+        GpuProbePage.SetProgress(Waited, NvsmiTimeoutMs);
+    end;
+  finally
+    if Showing then
+      GpuProbePage.Hide;
+  end;
+end;
 
 // Major version of the installed NVIDIA driver, or 0 when there is no NVIDIA GPU, no nvidia-smi,
 // or the output cannot be parsed. Zero always means "do not offer" — on a box we cannot read, the
 // safe answer is silence, since `knaif backend install cuda` still works by hand.
 function NvidiaDriverMajor: Integer;
 var
-  TmpFile, Line: string;
+  Line: string;
   Lines: TArrayOfString;
-  ResultCode, DotPos: Integer;
+  DotPos: Integer;
 begin
   if NvidiaProbed then
   begin
     Result := NvidiaDriverMajorCached;
     Exit;
   end;
+  { Normally a no-op — InitializeWizard already started it. This covers any path that reaches a
+    `Check:` without a wizard having been created. }
+  StartNvidiaProbe;
   NvidiaProbed := True;
   NvidiaDriverMajorCached := 0;
   Result := 0;
+  if not NvidiaProbeStarted then
+    Exit;
 
-  TmpFile := ExpandConstant('{tmp}\knaif-nvsmi.txt');
-  { Routed through cmd /C because Exec cannot redirect on its own. 2>nul keeps a missing
-    nvidia-smi from flashing a console error at a user who simply has no NVIDIA card. }
-  if not Exec(ExpandConstant('{cmd}'),
-              '/C nvidia-smi --query-gpu=driver_version --format=csv,noheader > "' + TmpFile + '" 2>nul',
-              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  AwaitNvidiaProbe;
+  if not FileExists(NvsmiOutFile) then
     Exit;
-  if ResultCode <> 0 then
-    Exit;
-  if not LoadStringsFromFile(TmpFile, Lines) then
+  if not LoadStringsFromFile(NvsmiOutFile, Lines) then
     Exit;
   if GetArrayLength(Lines) = 0 then
     Exit;
@@ -500,6 +599,27 @@ end;
 function CudaOfferable: Boolean;
 begin
   Result := (NvidiaDriverMajor >= {#MinNvidiaDriver}) and not CudaBackendInstalled;
+end;
+
+// Create the fallback progress page and fire the GPU probe as early as the wizard exists. Every
+// page the user then walks — welcome, licence, directory, components — is time nvidia-smi is
+// already spending, and it needs about two seconds of the several a human takes to get there.
+procedure InitializeWizard;
+begin
+  GpuProbePage := CreateOutputProgressPage('Checking your system', 'One moment.');
+  StartNvidiaProbe;
+end;
+
+// Settle the probe HERE rather than letting the first `Check:` do it. Inno rebuilds the task list
+// when this click is accepted (task visibility depends on the selected components), and that
+// rebuild evaluates CudaOfferable from inside its own machinery, where showing a page of our own
+// is not ours to do. Forcing the value one step earlier means the rebuild reads a cached integer,
+// and any wait that is left happens somewhere we own the screen.
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpSelectComponents then
+    NvidiaDriverMajor;
 end;
 
 { Pre-select "I accept the agreement" on the license page. Inno has no directive for this — the

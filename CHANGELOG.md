@@ -57,9 +57,11 @@ number alone is measuring the wrong thing.
   release waited for CUDA rather than shipping without it. On older NVIDIA cards CUDA is faster and
   genuinely optional, and knaif says so in those terms rather than the alarming ones.
 
-  knaif offers it on first run when it finds an eligible GPU, and the Windows installer offers the
-  same command as an unchecked task. A driver below the CUDA 13 floor gets an update hint and no
-  offer — downloading 668 MB that then fails to load is the least debuggable outcome available.
+  knaif offers it on first run when it finds an eligible GPU, and the Windows installer runs the
+  same command from a task it shows only when the GPU and driver already qualify — and, because it
+  is shown only there, one that is checked by default. A driver below the CUDA 13 floor gets an
+  update hint and no offer — downloading 668 MB that then fails to load is the least debuggable
+  outcome available.
   `KNAIF_NO_CUDA_NUDGE` silences the offer — but not the report that an installed payload is being
   ignored, which is about a download the user already paid for rather than one being suggested.
 
