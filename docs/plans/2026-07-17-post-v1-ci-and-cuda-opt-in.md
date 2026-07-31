@@ -74,8 +74,9 @@
 > falls back and exits 0, and re-installing restores it. That is U2's "upgrade test, not just an
 > install test", performed rather than argued.
 >
-> Still owed: **publish the assets** (U1) and the **Linux payload** (U7 — image unbuilt, base tag
-> unconfirmed, digest unpinned).
+> Still owed: **publish the assets** (U1). **U7 is closed** — the image is pinned, the payload is
+> built and audited, and the three cases pass against it (see below); only U1's uploads remain, and
+> the manifest's `url: TODO` fields are what stand between the payload and a user.
 >
 > **Progress 2026-07-31 — the Linux payload is built, and building it found four defects.** The
 > image is pinned by digest, the payload stages at 698 MB across seven files with per-file SHA256 in
@@ -678,7 +679,7 @@ proven path, not a spike.
   - Corroboration, not proof: **Ollama ships the CRT dynamically in each backend directory**
     (ten files per dir, four dirs), rather than linking it in.
 
-### - [~] U7 — A CUDA build image, separate from the release image
+### - [x] U7 — A CUDA build image, separate from the release image
 
 The pinned Linux release image deliberately has **no CUDA toolkit**
 ([`Dockerfile:77-79`](../../installers/linux/Dockerfile#L77-L79)): it would add 3–5 GB to serve an
@@ -705,7 +706,7 @@ the same argument [portable-builds](2026-07-27-portable-builds.md) made for the 
       rule exists because kinds hard-link into the same `target/release/` and a stale SONAME symlink
       makes the next kind panic with `AlreadyExists`. `just package-linux --kind=cuda` routes to
       `Dockerfile.cuda`, its own image and `knaif-target-cuda`.
-- [~] **The payload's floor must be checked like any other artifact.** `scripts/check_elf_deps.py`
+- [x] **The payload's floor must be checked like any other artifact.** `scripts/check_elf_deps.py`
       over the staged payload, and a load test in a floor container — a backend that fails to
       `dlopen` presents as "CUDA didn't work", which is the least debuggable outcome there is.
       - **Floor audit passes** *(2026-07-31)*: `ok 4 binaries: every DT_NEEDED is staged or
@@ -723,9 +724,29 @@ the same argument [portable-builds](2026-07-27-portable-builds.md) made for the 
         `check_pe_imports.py` runs over the main artifact's `bin/`, which contains `ggml-base.dll`.
         The Linux path audits the payload directory alone, which is stricter. Worth closing that
         gap, but as its own change rather than inside U7.
-      - **Still owed: the load test itself.** The floor audit reads ELF headers; it does not prove
-        the backend `dlopen`s. That needs a Linux knaif artifact to load it, which is a separate
-        build — the three cases stay open until it has run.
+      - **The load test has run, and the three cases pass** *(2026-07-31)*, against the packaged
+        payload, in `ubuntu:22.04` — the declared glibc floor — with `--gpus all`. The artifact
+        itself starts there with no missing `DT_NEEDED`, which is the "runs on the floor" half of
+        the floor claim.
+
+        | Case | Evidence | Exit |
+        |---|---|---|
+        | present → offloads | `ggml_cuda_init: found 1 CUDA devices (8191 MiB)`, `load_backend: loaded CUDA backend from ~/.knaif/backends/libggml-cuda.so`, `using device CUDA0`, layers assigned to `CUDA0` | 0 |
+        | present, no usable GPU | `failed to initialize CUDA: no CUDA-capable device is detected`, layers assigned to `CPU` | 0 |
+        | absent | no `ggml_cuda` lines at all, layers assigned to `CPU` | 0 |
+
+        `load_backend: loaded CUDA backend from …` is the line that matters: it is the `dlopen`
+        succeeding against the payload as packaged, which is the failure the whole workstream exists
+        to prevent.
+      - **The nudge fires in the "present" case, and that is the manual fallback, not a defect.**
+        `cuda_offer` returns `AlreadyInstalled` only when `BackendStore::state` is `Installed`, which
+        is receipt-based; the loader deliberately loads a receipt-less directory because that is the
+        documented hand-placement fallback. So a hand-placed payload works *and* keeps being offered.
+        Installing through `knaif backend install cuda` writes the receipt and silences it, so the
+        release path is unaffected — but anyone following the manual route will see it, which is
+        worth a line in the docs rather than a code change.
+      - Case 3 used `CUDA_VISIBLE_DEVICES=-1`, the corrected recipe. On Linux an empty string would
+        also work, but `-1` is the form that behaves the same on both OSes.
 - [x] **Spike WSL2 GPU passthrough BEFORE relying on it** *(decided 2026-07-29)*. Building the
       payload needs the toolkit, not a GPU — but running the three cases needs an NVIDIA driver on
       Linux, and there is no second machine. Docker Desktop's WSL2 backend can expose the GPU to a
