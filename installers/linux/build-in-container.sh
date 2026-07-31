@@ -203,6 +203,8 @@ docker run --rm -i \
   -v "$TARGET_VOL:/src/target" \
   -e CMAKE_GENERATOR=Ninja \
   -e CARGO_BUILD_JOBS="$JOBS" \
+  -e CUDAARCHS="${CUDAARCHS:-}" \
+  -e KNAIF_CUDA_DEV_ARCHS="${KNAIF_CUDA_DEV_ARCHS:-}" \
   -e KIND="$KIND" -e DEV="$DEV" -e HOST_UID="$HOST_UID" -e HOST_GID="$HOST_GID" \
   -w /src \
   "$IMAGE" bash -euo pipefail -c "
