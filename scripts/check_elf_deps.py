@@ -196,6 +196,27 @@ def main(argv: list[str] | None = None) -> int:
                     "the driver could not launch knaif at all"
                 )
                 continue
+            # Provided by the HOST APPLICATION rather than by this directory. The ggml/llama core
+            # libraries ship in the main artifact, and a backend payload is only ever reached by a
+            # knaif process that has already loaded them — so the linker satisfies the SONAME from
+            # the process's link map, not from the payload directory.
+            #
+            # Same shape as DRIVER_PROVIDED, and for the same reason: tolerated in a *loadable*
+            # backend, a hard failure in a core library, because nothing would have loaded a core
+            # library first.
+            #
+            # This branch cannot weaken the main-artifact audit. There, the core libs are present in
+            # the directory, so `lib in staged` short-circuits above and execution never arrives
+            # here. It only fires for a payload dir, which is the one case package.sh audits in an
+            # isolation the payload is never used in.
+            if _is_core(lib):
+                if not _is_core(binary.name) and binary.name.startswith("libggml-"):
+                    continue
+                failures.append(
+                    f"{binary.name} needs {lib}, a core knaif library that only a loadable "
+                    "ggml-* backend may rely on the host process having loaded first"
+                )
+                continue
             failures.append(
                 f"{binary.name} needs {lib}, which is neither staged in "
                 f"{args.bindir.name}/ nor part of a base Linux system"
