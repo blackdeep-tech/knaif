@@ -325,12 +325,19 @@ fn download_bar(name: &str) -> ProgressBar {
 /// reads as a hang. Steady tick keeps it animating even though `generate_plan` blocks the calling
 /// thread; the elapsed timer makes a long wait visibly *progressing* rather than dead. Caller
 /// `finish_and_clear`s it before printing the result.
+///
+/// It says nothing about WHICH device, deliberately. It is created before llama.cpp initialises, so
+/// at this point the device is not yet chosen — and naming one here is how the message came to tell
+/// every CUDA user their GPU run was "on CPU", which is the opposite of reassuring for someone who
+/// installed a ~700 MB payload precisely to avoid that. The accurate statement is already made,
+/// conditionally, by the `gpu == Some(false)` warning at the call site; repeating it here could only
+/// ever duplicate that warning or contradict it.
 fn thinking_spinner() -> ProgressBar {
     let bar = ProgressBar::new_spinner();
     if let Ok(style) = ProgressStyle::with_template("{spinner:.green} {msg} [{elapsed_precise}]") {
         bar.set_style(style);
     }
-    bar.set_message("Loading model and planning (first run on CPU can take a minute)…");
+    bar.set_message("Loading model and planning (the first run can take a minute)…");
     bar.enable_steady_tick(std::time::Duration::from_millis(120));
     bar
 }
