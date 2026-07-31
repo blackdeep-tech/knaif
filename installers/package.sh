@@ -95,6 +95,23 @@ feats_for_kind() {
   esac
 }
 
+# The release CUDA arch list. Kept in step with docs/RELEASE.md §3 — `test_cuda_arch_list.py`
+# asserts the two agree, because a fatbin that silently lost an arch is invisible until a user with
+# that GPU hits it. `90-real` is built as well as `90-virtual`: PTX JIT is the documented exception
+# to CUDA's minor-version driver compatibility, i.e. exactly what the R580 floor does not cover.
+#
+# DEFINED BEFORE THE BUILD, not just before the check, because this script now has to SET it as well
+# as verify against it — see the CUDAARCHS export below.
+CUDA_RELEASE_ARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
+
+if [ -n "${KNAIF_CUDA_DEV_ARCHS:-}" ]; then
+  CUDA_ARCHS_TO_VERIFY="$KNAIF_CUDA_DEV_ARCHS"
+  CUDA_DEV_ARCH_SUFFIX="-DEVARCH"
+else
+  CUDA_ARCHS_TO_VERIFY="$CUDA_RELEASE_ARCHS"
+  CUDA_DEV_ARCH_SUFFIX=""
+fi
+
 if [ "$NO_BUILD" -eq 0 ]; then
   if [ "$KIND" = base ]; then
     echo "Building release binary (base build — no llama/GPU features)…"
@@ -102,6 +119,23 @@ if [ "$NO_BUILD" -eq 0 ]; then
   elif [ "$OS" = linux ]; then
     feats="$(feats_for_kind "$KIND")"
     echo "Building '$KIND' release binary (--features $feats)…"
+    # A CUDA build MUST carry the arch list, and CUDAARCHS is the only way in: CMake initialises
+    # CMAKE_CUDA_ARCHITECTURES from that environment variable, and llama-cpp-sys-2 offers no
+    # passthrough for it. Setting it here rather than leaving it to the caller is what makes the
+    # containerised path correct — `--no-build` users set it before their own cargo build (that is
+    # the documented Windows flow), but when THIS script builds, nothing else can.
+    #
+    # Left unset, ggml's own default list fires and the result is not a subset of the release list:
+    # a 2026-07-30 container build produced SASS for sm_86/sm_89/sm_120a/sm_121a and PTX-only for
+    # sm_75/sm_80/sm_90 — i.e. three requested architectures carried no SASS, and one architecture
+    # nobody asked for was built. verify_cuda_archs caught it, 90 minutes after the fact.
+    #
+    # `${CUDAARCHS:-...}` so an explicit override still wins, and CUDA_ARCHS_TO_VERIFY so that
+    # KNAIF_CUDA_DEV_ARCHS shortens the BUILD as well as the check — one knob, not two.
+    if [ "$KIND" = cuda ]; then
+      export CUDAARCHS="${CUDAARCHS:-$CUDA_ARCHS_TO_VERIFY}"
+      echo "  CUDAARCHS=$CUDAARCHS"
+    fi
     # CMAKE_GENERATOR=Ninja is required for the Vulkan shader-gen step; harmless for cpu/cuda.
     CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
   else
@@ -276,12 +310,6 @@ stage_vcredist() {
 # artifact and the CUDA payload cannot drift apart.
 VCREDIST_DLLS="vcruntime140.dll vcruntime140_1.dll msvcp140.dll vcomp140.dll"
 
-# The release CUDA arch list. Kept in step with docs/RELEASE.md §3 — `test_cuda_arch_list.py`
-# asserts the two agree, because a fatbin that silently lost an arch is invisible until a user with
-# that GPU hits it. `90-real` is built as well as `90-virtual`: PTX JIT is the documented exception
-# to CUDA's minor-version driver compatibility, i.e. exactly what the R580 floor does not cover.
-CUDA_RELEASE_ARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
-
 # DEV ESCAPE HATCH: verify against a shorter arch list than the release one.
 #
 # A full six-real-arch fatbin is ~55 minutes on a laptop (measured 2026-07-30, Windows, MSBuild
@@ -299,14 +327,6 @@ CUDA_RELEASE_ARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
 # build log; a filename does not, and it makes an accidentally published one-arch payload obvious in
 # `dist/`, on a release page, and in the manifest fragment. Same principle as
 # `--legacy-windows-cuda-app`.
-if [ -n "${KNAIF_CUDA_DEV_ARCHS:-}" ]; then
-  CUDA_ARCHS_TO_VERIFY="$KNAIF_CUDA_DEV_ARCHS"
-  CUDA_DEV_ARCH_SUFFIX="-DEVARCH"
-else
-  CUDA_ARCHS_TO_VERIFY="$CUDA_RELEASE_ARCHS"
-  CUDA_DEV_ARCH_SUFFIX=""
-fi
-
 # Assert the fatbin in $1 actually carries every arch asked for.
 #
 # Match `sm_[0-9]+[a-z]*`, never `sm_[0-9]+` — the latter silently truncates `sm_120a` to `sm_120`
@@ -325,8 +345,16 @@ verify_cuda_archs() {
     echo "       hits it, and by then the artifact is published." >&2
     exit 1
   }
-  elf="$("$cuobjdump" --list-elf "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
-  ptx="$("$cuobjdump" --list-ptx "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
+  # `|| true` on both, and it is load-bearing. grep exits 1 when it matches nothing; under
+  # `set -o pipefail` that fails the assignment and `set -e` kills the script — before the loop
+  # below can report which arch is missing. An empty result is a legitimate state to REPORT, not to
+  # die on. cuobjdump itself exits 0 and merely prints "No PTX file found", so it is not the culprit.
+  #
+  # An all-`-real` arch list produces exactly that: no PTX at all. Which is what
+  # KNAIF_CUDA_DEV_ARCHS is for, so the dev escape hatch died on its own success and printed nothing
+  # explaining why. The release list hides it, because `90-virtual` guarantees PTX exists.
+  elf="$("$cuobjdump" --list-elf "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u || true)"
+  ptx="$("$cuobjdump" --list-ptx "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u || true)"
   for want in ${CUDA_ARCHS_TO_VERIFY//;/ }; do
     arch="${want%-*}"
     case "$want" in

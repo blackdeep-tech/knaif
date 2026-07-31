@@ -74,8 +74,41 @@
 > falls back and exits 0, and re-installing restores it. That is U2's "upgrade test, not just an
 > install test", performed rather than argued.
 >
-> Still owed: **publish the assets** (U1) and the **Linux payload** (U7 — image unbuilt, base tag
-> unconfirmed, digest unpinned).
+> Still owed: **publish the assets** (U1). **U7 is closed** — the image is pinned, the payload is
+> built and audited, and the three cases pass against it (see below); only U1's uploads remain, and
+> the manifest's `url: TODO` fields are what stand between the payload and a user.
+>
+> **Progress 2026-07-31 — the Linux payload is built, and building it found four defects.** The
+> image is pinned by digest, the payload stages at 698 MB across seven files with per-file SHA256 in
+> the manifest fragment, all six architectures are verified as SASS against a real fatbin
+> (`sm_75 sm_80 sm_86 sm_89 sm_90 sm_120a`, plus `compute_90` PTX), and the floor audit passes at the
+> same `GLIBC_2.34` / `GLIBCXX_3.4.30` / `CXXABI_1.3.9` floor the main artifact declares.
+>
+> **Every one of the four was invisible to a build that merely succeeded**, which is the argument for
+> these checks existing at all:
+>
+> 1. **The CUDA base image was pinned by tag.** Also: the two-component tag this plan's prose asked
+>    for does not exist — NVIDIA publishes three-component versions only.
+> 2. **`CUDAARCHS` was never set on the containerised path.** It is the only way in (CMake
+>    initialises `CMAKE_CUDA_ARCHITECTURES` from it; `llama-cpp-sys-2` offers no passthrough), and
+>    the Windows flow hides it because the maintainer exports it before calling `--no-build`. The
+>    container builds *inside* `package.sh`, where nothing else could. Unset, ggml's own default
+>    fired and produced a list that is **not a subset of the release list**: SASS for `sm_86`,
+>    `sm_89`, `sm_120a` and an unrequested `sm_121a`, with PTX only for `sm_75`, `sm_80`, `sm_90`.
+>    A payload shipped from that build would have carried **no SASS for Turing, Ampere-80 or
+>    Hopper** — and would have run perfectly on the machine that built it.
+> 3. **The arch check died on a fatbin with no PTX.** `grep` exits 1 on no match, and under
+>    `pipefail` that killed the script before the loop that names the missing arch. Every all-`-real`
+>    list hits it, so the documented `KNAIF_CUDA_DEV_ARCHS` escape hatch had never once completed a
+>    run since it was added.
+> 4. **The floor audit modelled the payload in an isolation it never runs in** — see U7.
+>
+> Two costs worth recording. A cold six-arch build is **86 minutes** at three jobs (all 183
+> ggml-cuda translation units, once per architecture); the same build on a warm volume restages in
+> **34 seconds**, so a failure after the compile is cheap to retry and a failure that forces
+> `--clean` is not. And the job cap is sized for Vulkan shader units at ~2 GB each — nvcc peaked
+> around 1 GB of 7.5, so a CUDA build leaves most of the machine idle. Distinguishing the two kinds
+> when picking the cap is an easy win nobody has taken.
 >
 > **The wizard GUI run is done (U4), and it was not a formality.** It found a defect no lint could
 > reach and changed a shipped default:
@@ -646,7 +679,7 @@ proven path, not a spike.
   - Corroboration, not proof: **Ollama ships the CRT dynamically in each backend directory**
     (ten files per dir, four dirs), rather than linking it in.
 
-### - [~] U7 — A CUDA build image, separate from the release image
+### - [x] U7 — A CUDA build image, separate from the release image
 
 The pinned Linux release image deliberately has **no CUDA toolkit**
 ([`Dockerfile:77-79`](../../installers/linux/Dockerfile#L77-L79)): it would add 3–5 GB to serve an
@@ -655,22 +688,84 @@ is ever containerised it belongs in a separate image `FROM nvidia/cuda:*-devel-u
 That is now needed, because a published payload must not inherit its floor from whoever built it —
 the same argument [portable-builds](2026-07-27-portable-builds.md) made for the main artifact.
 
-- [ ] `installers/linux/Dockerfile.cuda` on `nvidia/cuda:13.3-devel-ubuntu22.04`, pinned by digest,
-      reusing the release image's apt snapshot and Rust pin so the two floors cannot drift.
-- [ ] A `just` recipe beside `package-linux`, with **its own cache volume** — the one-volume-per-kind
+- [x] `installers/linux/Dockerfile.cuda` on `nvidia/cuda:13.3.0-devel-ubuntu22.04`, **pinned by
+      digest** (`sha256:e7cb1151…`) alongside the tag, in the release image's `ubuntu:22.04@sha256:…`
+      form, reusing its apt snapshot and Rust pin so the two floors cannot drift.
+      - **The tag this plan asked for does not exist** *(2026-07-30)*. NVIDIA publishes
+        three-component versions only — there is no `13.3-devel-ubuntu22.04` alias, and requesting
+        one fails with `no such manifest`. The file always named a real tag; it was this plan's prose
+        that was wrong, which is worth recording because the same shorthand appears wherever a CUDA
+        image is discussed.
+      - **The floor question is closed rather than reopened.** CUDA 13 did drop several older
+        distributions, but 22.04 is not among them: `13.3.0-devel-ubuntu22.04` and
+        `13.3.1-devel-ubuntu22.04` are both published, so the payload's glibc floor matches the
+        release image by construction. 13.3.1 is newer and deliberately not adopted here — moving the
+        toolkit under a payload whose Windows half is already built is its own decision, not a side
+        effect of adding a digest.
+- [x] A `just` recipe beside `package-linux`, with **its own cache volume** — the one-volume-per-kind
       rule exists because kinds hard-link into the same `target/release/` and a stale SONAME symlink
-      makes the next kind panic with `AlreadyExists`.
-- [ ] **The payload's floor must be checked like any other artifact.** `scripts/check_elf_deps.py`
+      makes the next kind panic with `AlreadyExists`. `just package-linux --kind=cuda` routes to
+      `Dockerfile.cuda`, its own image and `knaif-target-cuda`.
+- [x] **The payload's floor must be checked like any other artifact.** `scripts/check_elf_deps.py`
       over the staged payload, and a load test in a floor container — a backend that fails to
       `dlopen` presents as "CUDA didn't work", which is the least debuggable outcome there is.
-- [ ] **Spike WSL2 GPU passthrough BEFORE relying on it** *(decided 2026-07-29)*. Building the
+      - **Floor audit passes** *(2026-07-31)*: `ok 4 binaries: every DT_NEEDED is staged or
+        base-system`. The measured floor is `GLIBC_2.34` / `GLIBCXX_3.4.30` / `CXXABI_1.3.9` — the
+        same floor the main artifact declares, so the payload cannot fail on a distro the artifact
+        itself claims to support. That equality is the whole reason for the separate pinned image.
+      - **The audit had to be taught a fourth way a dependency can be satisfied.** It knew three —
+        staged in the directory, base system, GPU driver — and a payload has a fourth: the host
+        application. `libggml-cuda.so` needs `libggml-base.so.0`, which ships in the main artifact
+        and is already loaded by the process that `dlopen`s the backend, so the linker resolves it
+        from the link map rather than from the payload directory. Tolerated for loadable `ggml-*`
+        backends only; a core library still hard-fails, and the main-artifact audit is untouched
+        because its `staged` check short-circuits first.
+      - **Windows never showed this**, and still does not audit its payload at all:
+        `check_pe_imports.py` runs over the main artifact's `bin/`, which contains `ggml-base.dll`.
+        The Linux path audits the payload directory alone, which is stricter. Worth closing that
+        gap, but as its own change rather than inside U7.
+      - **The load test has run, and the three cases pass** *(2026-07-31)*, against the packaged
+        payload, in `ubuntu:22.04` — the declared glibc floor — with `--gpus all`. The artifact
+        itself starts there with no missing `DT_NEEDED`, which is the "runs on the floor" half of
+        the floor claim.
+
+        | Case | Evidence | Exit |
+        |---|---|---|
+        | present → offloads | `ggml_cuda_init: found 1 CUDA devices (8191 MiB)`, `load_backend: loaded CUDA backend from ~/.knaif/backends/libggml-cuda.so`, `using device CUDA0`, layers assigned to `CUDA0` | 0 |
+        | present, no usable GPU | `failed to initialize CUDA: no CUDA-capable device is detected`, layers assigned to `CPU` | 0 |
+        | absent | no `ggml_cuda` lines at all, layers assigned to `CPU` | 0 |
+
+        `load_backend: loaded CUDA backend from …` is the line that matters: it is the `dlopen`
+        succeeding against the payload as packaged, which is the failure the whole workstream exists
+        to prevent.
+      - **The nudge fires in the "present" case, and that is the manual fallback, not a defect.**
+        `cuda_offer` returns `AlreadyInstalled` only when `BackendStore::state` is `Installed`, which
+        is receipt-based; the loader deliberately loads a receipt-less directory because that is the
+        documented hand-placement fallback. So a hand-placed payload works *and* keeps being offered.
+        Installing through `knaif backend install cuda` writes the receipt and silences it, so the
+        release path is unaffected — but anyone following the manual route will see it, which is
+        worth a line in the docs rather than a code change.
+      - Case 3 used `CUDA_VISIBLE_DEVICES=-1`, the corrected recipe. On Linux an empty string would
+        also work, but `-1` is the form that behaves the same on both OSes.
+- [x] **Spike WSL2 GPU passthrough BEFORE relying on it** *(decided 2026-07-29)*. Building the
       payload needs the toolkit, not a GPU — but running the three cases needs an NVIDIA driver on
       Linux, and there is no second machine. Docker Desktop's WSL2 backend can expose the GPU to a
       Linux container; if it does, U7's verification runs here with no extra hardware. Treat it as
       unproven until a container reports the device. **If it does not work, the payload is built but
       not published** until it has run on a real Linux box with an NVIDIA driver — an unrun backend
       reaches the user as "CUDA didn't work", which is the least debuggable failure available.
-- [ ] **Windows has no container answer and does not need one** *(reaffirmed 2026-07-29)*. Its
+      - **IT WORKS — verified 2026-07-29**, written up in
+        [`installers/linux/README.md`](../../installers/linux/README.md). This box was stale, not
+        outstanding. Re-confirmed 2026-07-30 on a newer host driver (R610 series, container CUDA UMD
+        13.3), so the three cases run here and the payload is not blocked on a second machine.
+      - Re-confirming costs a **30 MB base image, not the 4 GB devel one** — the container runtime
+        injects the driver and `nvidia-smi`, so proving passthrough needs no CUDA image at all.
+        `docker run --rm --gpus all ubuntu:22.04 nvidia-smi` is the whole check.
+      - What it does **not** prove: Ampere is the *optional* half of the story. The Blackwell case
+        that makes CUDA a must-have rather than an optimisation still has no hardware behind it here,
+        and the nudge's two strengths remain asserted on one card.
+- [x] **Windows has no container answer and does not need one** *(reaffirmed 2026-07-29; stated in
+      [`installers/linux/README.md`](../../installers/linux/README.md))*. Its
       payload builds in the same VS Developer shell as the main artifact, on the maintainer's own
       machine — which is also what keeps the VC++ redistribution grant's "licensed Visual Studio
       user" condition satisfied without anything further to confirm (see
