@@ -345,8 +345,16 @@ verify_cuda_archs() {
     echo "       hits it, and by then the artifact is published." >&2
     exit 1
   }
-  elf="$("$cuobjdump" --list-elf "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
-  ptx="$("$cuobjdump" --list-ptx "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u)"
+  # `|| true` on both, and it is load-bearing. grep exits 1 when it matches nothing; under
+  # `set -o pipefail` that fails the assignment and `set -e` kills the script — before the loop
+  # below can report which arch is missing. An empty result is a legitimate state to REPORT, not to
+  # die on. cuobjdump itself exits 0 and merely prints "No PTX file found", so it is not the culprit.
+  #
+  # An all-`-real` arch list produces exactly that: no PTX at all. Which is what
+  # KNAIF_CUDA_DEV_ARCHS is for, so the dev escape hatch died on its own success and printed nothing
+  # explaining why. The release list hides it, because `90-virtual` guarantees PTX exists.
+  elf="$("$cuobjdump" --list-elf "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u || true)"
+  ptx="$("$cuobjdump" --list-ptx "$lib" | grep -oE 'sm_[0-9]+[a-z]*' | sort -u || true)"
   for want in ${CUDA_ARCHS_TO_VERIFY//;/ }; do
     arch="${want%-*}"
     case "$want" in
