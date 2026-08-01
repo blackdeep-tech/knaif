@@ -342,6 +342,28 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
+- [ ] **Inference latency: daemon + prompt-prefix KV reuse (1.2.0, NOT 1.1.0).** Measured
+  2026-08-01 on the shipped Linux CUDA payload; full budget in
+  [PERFORMANCE.md §6](PERFORMANCE.md). A CUDA `run` is ~5.2 s wall of which only ~1.6 s is compute:
+  ~1.9 s CUDA context init + ~1.3 s model load + ~1.2 s prompt decode + ~0.4 s generation + ~0.24 s
+  teardown. Target ~0.5 s.
+  - **Do these two together.** `plan --batch` already proves the daemon half (1.78 s/utterance vs
+    5.2 s cold) — but it still re-decodes all 3938 prompt tokens every request, so the daemon alone
+    stops at ~1.8 s. The prompt is a fixed ~3900-token prefix with only the utterance at the tail;
+    nothing in `knaif-llm` reuses it (no KV reuse, no `state_seq`).
+  - **Free prerequisite, do it first:** re-measure CUDA context init on **bare-metal** Linux. The
+    ~1.9 s is a WSL number and bare metal is typically 100–300 ms. If so, the daemon's payoff drops
+    from −3.5 s to ~−1.8 s and prefix reuse becomes the better first move — i.e. this measurement
+    decides the ordering, so taking it before design is not optional.
+  - **Both need `eval-success` + `parity`, not a smoke test.** KV reuse changes decode chunking and
+    can perturb FP accumulation; under greedy argmax that can flip a near-tie into a different plan.
+    Same reason flash attention is not a free win (and it is likely already AUTO-enabled anyway).
+  - **Explicitly rejected as quality risks (owner, 2026-08-01):** switching the default to
+    1.7B-Q6, and trimming the prompt. Both move the number; neither is worth the accuracy.
+  - **`nvprune`ing the 668 MB payload is a download-size lever only** — `dlopen` was measured at
+    ~120 ms warm for all four CUDA libs, so it buys no startup time. Weigh against the
+    `90-virtual` forward-compat PTX rationale in NATIVE.md §10.
+
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
   2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
