@@ -18,7 +18,8 @@ the inference figure quoted there.
 > NVIDIA"](#2-backend-cuda-vs-vulkan-vs-cpu) — turns out to be **true only on Blackwell**.
 
 Last measured 2026-07-14 (Qwen3-4B q4_k_m, ffmpeg skill prompt of **3938 tokens**, 32-token
-generation, `n_ctx = 8192`, fresh process, median of warm reps).
+generation, `n_ctx = 8192`, fresh process, median of warm reps). **Linux CUDA payload added
+2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`.
 
 ---
 
@@ -28,6 +29,12 @@ generation, `n_ctx = 8192`, fresh process, median of warm reps).
 |---|---|---|---|---|
 | **`5080`** | RTX 5080 (desktop) | Blackwell, sm_120 | 16 GB | 32 threads |
 | **`3070L`** | RTX 3070 **Laptop** | Ampere, sm_86 | 8 GB | AMD, **8 physical / 16 logical** |
+| **`3070L-WSL`** | the **same box** as `3070L`, under WSL2 | Ampere, sm_86 | 8 GB | same (driver 610.88) |
+
+`3070L-WSL` is the **Linux** artifact measured on the `3070L` hardware through WSL2, not a third
+machine. Its GPU numbers land ~10–12% behind bare-metal `3070L` (§2), which is small enough to
+trust for *shape* — but see the §6 warning: **one slice of its wall-clock budget is a WSL artifact
+and must not be quoted as Linux.**
 
 `3070L` also exposes an **AMD iGPU as Vulkan device 0**. llama.cpp correctly selects `Vulkan1`
 (the NVIDIA) — but *verify it in any new Vulkan measurement*, or you will benchmark the iGPU.
@@ -79,6 +86,39 @@ shipped decision, so it is the most load-bearing fact here.
 | CUDA | ~4600 tok/s | ~80 tok/s ⚠️ | ~1350 ms |
 | Vulkan | ~1040 tok/s | **~5.7 tok/s** | ~9700 ms |
 | CPU | ~520 tok/s | ~5.9 tok/s | ~13 000 ms |
+
+### `3070L-WSL` (Ampere) — the **Linux** artifact, 1.1.0 opt-in CUDA payload
+
+Measured 2026-08-01 on the shipped `knaif-1.1.0-linux-x64.tar.gz` plus the
+`knaif-1.1.0-linux-x64-cuda-backend` payload staged via `$KNAIF_BACKENDS_DIR`. Same prompt (3938
+tok), same GGUF, 12 warm reps. The payload loaded, selected `CUDA0`, and offloaded 37/37 layers.
+
+| Backend | prompt decode | generation | inference total | wall |
+|---|---:|---:|---:|---:|
+| **CUDA** (opt-in payload) | 1233 ms (**3194 tok/s**) | 398 ms (**80.4 tok/s**) | **1709 ms** | ~5.2 s |
+| ngl=0, CUDA registered (**hybrid**, §4) | 7296 ms (540 tok/s) | 6460 ms (5.0 tok/s) | 14 274 ms | 19.0 s |
+| true CPU (no GPU device present) | 76 382 ms (51.6 tok/s) | 5702 ms (5.6 tok/s) | 83 617 ms | ~81 s |
+
+- **CUDA is ~49× faster than honest CPU on inference**, ~15.6× on wall clock. This is the
+  headline number for the 1.1.0 opt-in payload.
+- The middle row reproduces the §4 `op_offload` trap on Linux: `n_gpu_layers=0` still ran prompt
+  matmuls on the GPU, giving **540 vs 51.6 tok/s** — a 10.5× gap between "CPU" and *actual* CPU.
+- vs bare-metal `3070L` CUDA: prompt 3194 vs 3522 tok/s, generation 80.4 vs 90.9 tok/s, inference
+  1709 vs 1524 ms. **WSL costs ~10–12% on compute**, consistently.
+
+### ⚠️ A WSL "Vulkan" run is silently a **CPU** run
+
+WSL exposes **no NVIDIA Vulkan ICD** (`/usr/share/vulkan/icd.d/` carries only Mesa's `lvp`,
+`radeon`, `nouveau`, …). The default artifact's Vulkan backend loads fine and then reports:
+
+```
+ggml_vulkan: No devices found.
+```
+
+…after which llama.cpp falls back to CPU **without failing**. That is how the true-CPU row above was
+obtained — it was collected as a "Vulkan" arm and had to be relabelled. **No Vulkan number in this
+document may be measured under WSL.** Same failure mode as the `op_offload` trap in §4: a backend
+that silently isn't the one you think you are benchmarking.
 
 ### What this means
 
@@ -201,12 +241,55 @@ Quality is machine-independent; speed is not. Distilled from
 
 ## 6. Where the wall-clock actually goes
 
-A native CUDA `run` on the `3070L` is **~5.0 s wall**: **~2.6 s model load** + ~1.5 s inference +
-process start/teardown. Model load is paid **on every CLI invocation**.
+A native CUDA `run` is **~5.2 s wall**, of which only ~1.6 s is model compute. Per-phase, timestamped
+relative to process start on `3070L-WSL` (p50, warm):
 
-**A persistent daemon is the biggest remaining win** — it amortizes the ~2.6 s load to zero on
-repeat calls, turning a ~5 s command into a ~1.5 s one. (On the `5080` this applied only to CUDA
-because Vulkan's compute was hopeless there; on Ampere it applies to **both** GPU backends.)
+| Slice | p50 | Notes |
+|---|---:|---|
+| process start | 6 ms | |
+| knaif pipeline | 60 ms | registry + prompt build + validate + dispatch — measured with the mock backend |
+| **CUDA context init** | **~1900 ms** | before the model load begins; ⚠️ **partly a WSL artifact — see below** |
+| model load | 1318 ms | 2.5 GB GGUF → VRAM, warm page cache (**cold: 9395 ms**) |
+| `new_context` | 66 ms | |
+| prompt decode | 1233 ms | 3938 tokens |
+| generation | 398 ms | 32 tokens |
+| teardown | 240 ms | freeing ~4 GB VRAM at exit |
+| **wall** | **~5180 ms** | |
+
+> ❌ **The earlier "~2.6 s model load" was two costs conflated.** Loading the GGUF is ~1.3 s; a
+> *separate* ~1.9 s goes to CUDA driver/context creation **before** the load starts. Both are paid on
+> every CLI invocation, so the amortizable total is **~3.5 s, not ~2.6 s**.
+
+> ❌ **`dlopen` is NOT the cost** (a plausible theory, tested and refuted). All four CUDA libraries
+> load in **~120 ms** warm — including the 490 MB `libcublasLt.so.13` at ~52 ms. Shrinking the payload
+> (e.g. `nvprune`) is a **download-size** lever, not a startup-latency one.
+
+> ⚠️ **Do not design against the ~1.9 s CUDA init until it is re-measured on bare metal.** Bare-metal
+> CUDA context creation is typically 100–300 ms; WSL's `/dev/dxg` paravirtualization is a known tax,
+> and this is the one slice least trustworthy from WSL. Every other slice tracked bare-metal `3070L`
+> within ~10%. **If bare metal is ~300 ms, the daemon's payoff drops from −3.5 s to ~−1.8 s and
+> prompt-prefix KV reuse becomes the better first move.** Free to check; do it first.
+
+**A persistent daemon plus prompt-prefix KV reuse is the biggest remaining win — and they are worth
+~2× more together than separately.** The daemon amortizes CUDA init + model load + teardown; prefix
+reuse removes the prompt decode. Measured proxy for the daemon alone: `plan --batch` over 10
+utterances ran in **17.8 s = 1.78 s/utterance** vs ~5.2 s cold (2.9×) — but it still paid the **full
+~1.6 s decode on every utterance**, because a fresh context is built per request and all 3938 prompt
+tokens are re-decoded.
+
+The skill prompt is a fixed ~3900-token prefix with only the utterance varying at the tail (batch
+token counts ranged 3938–3943), so the prefix is reusable in principle. Nothing in `knaif-llm`
+exploits it today — there is no KV-cache reuse or `state_seq` persistence. Together the two target
+**~5.2 s → ~0.5 s**; the daemon alone stops at ~1.8 s.
+
+Two caveats on that work:
+
+- **Persisting the prefix KV to disk is not worth it** — ~580 MB f16 for a 3938-token Qwen3-4B
+  prefix costs more to read than the 1.2 s of decode it saves. In-memory reuse only.
+- **KV reuse needs parity validation.** Reusing a prefix changes how the decode is chunked, which can
+  perturb floating-point accumulation and — under greedy argmax — flip a near-tie into a different
+  plan. Gate it on `just eval-success` + `just parity`, not a smoke test. The same caveat applies to
+  enabling flash attention, which is why neither is a free win.
 
 ---
 
@@ -227,7 +310,11 @@ because Vulkan's compute was hopeless there; on Ampere it applies to **both** GP
    `MAX_PATH`. The Vulkan build nests an ExternalProject deep inside the target dir — build into a
    **short** target dir (`cargo build … --target-dir C:\kv`).
 
-3. **(Fixed) `UnicodeEncodeError` destroyed finished eval runs on Windows.** `print_scoreboard`
+3. **WSL has no NVIDIA Vulkan ICD — a "Vulkan" arm there is really CPU.** See §2. Benchmark Vulkan
+   on bare metal or not at all. CUDA *does* work under WSL (via `/dev/dxg`), at a ~10–12% compute
+   cost plus an inflated context-init time (§6).
+
+4. **(Fixed) `UnicodeEncodeError` destroyed finished eval runs on Windows.** `print_scoreboard`
    wrote box-drawing rules (`═`, U+2550 — *not in cp1252*) to a default console and died **after**
    all inference and **before** `--save`. Now the writer degrades unencodable characters, and
    `cli.py` **saves before it prints**. A cosmetic failure can no longer destroy an hour of compute.
@@ -285,13 +372,29 @@ knaif.exe run ffmpeg "compress clip.mp4 for email" --model models\knaif-qwen3-4b
 #   CMAKE_ARGS="-DGGML_VULKAN=on -DGGML_CUDA=off" uv pip install --no-binary llama-cpp-python llama-cpp-python
 ```
 
+```bash
+# Linux CUDA payload, against the SHIPPED artifacts (no build needed) — §2 / §6.
+# Stage the payload out-of-tree so ~/.knaif/backends is left alone:
+tar xzf dist/knaif-1.1.0-linux-x64.tar.gz -C /tmp/kbench
+cp dist/knaif-1.1.0-linux-x64-cuda-backend/* /tmp/kbench/backends/
+KNAIF_TIMING=1 KNAIF_BACKENDS_DIR=/tmp/kbench/backends \
+  /tmp/kbench/knaif-1.1.0-linux-x64/bin/knaif run ffmpeg "compress clip.mp4 for email" --dry-run
+
+# Confirm the payload actually won device selection (not the bundled Vulkan backend):
+#   --verbose | grep -E 'load_backend|prepare_model_devices'
+# Isolate the non-inference wall-clock: KNAIF_LLM_BACKEND=mock  -> pipeline only, no llama.
+```
+
 ## 10. Open items
 
 - ⚠️ **Native is 1.8–1.9× faster than Python at prompt decode and we don't know why** (§3).
   `n_batch` refuted. Next suspect: llama.cpp version/build flags between the wheel and
   `llama-cpp-sys-2`.
 - ⚠️ Vulkan's ~36 s first-run shader compile needs an install-time warm-up (§2).
-- 🚀 Persistent daemon to amortize the ~2.6 s model load (§6) — the biggest remaining win.
+- ❓ **Re-measure CUDA context init on bare-metal Linux** (§6). ~1.9 s under WSL, expected 100–300 ms
+  bare metal. Free, and it decides the ordering of the two items below.
+- 🚀 **Persistent daemon + prompt-prefix KV reuse** (§6) — the biggest remaining win, ~5.2 s → ~0.5 s.
+  Do them together: the daemon alone stops at ~1.8 s because it still re-decodes the full prompt.
 - 💡 Expose the CPU+GPU **hybrid** mode (§4) for models that don't fit in VRAM.
 - 🧹 `models.yaml` `default:` points at a GGUF that isn't on this machine (§8).
 - ❓ Re-measure the `5080` native backends if that box returns (§2).
