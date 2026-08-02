@@ -337,19 +337,28 @@ package *args:
 #                                 # (Option 3 / C5). Gets the plain name; forces the Ninja generator.
 #   just package-native cpu       # build kind only (a box with no Vulkan SDK) -> `-cpu` suffix.
 #                                 # NOT a release artifact: C5b ships one default artifact per OS.
-#   just package-native cuda      # Linux: opt-in CUDA payload for ~/.knaif/backends (NOT an app)
+#   just package-native cuda      # opt-in CUDA payload for ~/.knaif/backends (NOT an app), BOTH OSes
 #
-# `dynamic-backends` is REQUIRED for cpu/vulkan: it is what makes the ggml backends loadable, which
-# is what lets CUDA be opt-in (C5/Option 3). Building without it produces a static exe that
-# installers/package.sh will not stage core libs for — the resulting artifact cannot start.
+# `dynamic-backends` is REQUIRED for EVERY functional kind, `cuda` included: it is what makes the
+# ggml backends loadable, which is what lets CUDA be opt-in (C5/Option 3). Building without it
+# produces a static exe that installers/package.sh will not stage core libs for — the resulting
+# artifact cannot start, and for `cuda` there is no separable ggml-cuda lib at all, so package.sh's
+# payload branch has nothing to stage and stops.
 # KEEP THE FEATURE SETS IN SYNC WITH `feats_for_kind` in installers/package.sh (the source of truth).
 #
-# Windows `cuda` is the ONE exception: it keeps the historical static-with-redist shape that
-# package.sh's Windows cuda branch expects, so it is built WITHOUT dynamic-backends. Aligning it
-# onto Option 3 is post-v1 (C6); v1 publishes no CUDA artifact on either OS.
+# Windows `cuda` USED to be an exception — the pre-Option-3 static-with-redist app, built without
+# dynamic-backends. It is not one any more: package.sh emits the opt-in payload on both OSes, and
+# 1.1.0 publishes both payloads. The old shape survives only behind `--legacy-windows-cuda-app`.
+#
+# A cuda build must also carry CUDAARCHS, and on Windows THIS RECIPE is the only place that can set
+# it: package.sh refuses to build on Windows (no MSVC from bash), so its own CUDAARCHS export never
+# runs and the caller is the last line of defence. Left unset, ggml's default arch list fires and
+# package.sh's verify_cuda_archs rejects the result after the full ~183-TU compile. The list is read
+# out of package.sh rather than copied, so there is still one source of truth; an explicit CUDAARCHS
+# wins, and KNAIF_CUDA_DEV_ARCHS shortens the build exactly as it does on Linux.
 [windows]
 package-native kind="cpu":
-    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
+    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,dynamic-backends,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
 
 [unix]
 package-native kind="cpu":
