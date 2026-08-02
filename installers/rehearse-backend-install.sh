@@ -77,12 +77,33 @@ if [ -z "$EXE" ]; then
 fi
 [ -n "$EXE" ] && [ -x "$EXE" ] || { echo "ERROR: no knaif binary found; pass --exe PATH." >&2; exit 1; }
 
-# A python with PyYAML, for the splice and the server. The repo venv first: on Windows `python3` is
-# usually the Microsoft Store stub, which resolves through `command -v` and then refuses to run —
-# so the probe is "can it import yaml", never "does the name exist".
+# A python with PyYAML, for the splice and the server — and never one from the OTHER operating
+# system. The probe is "can it import yaml", never "does the name exist": on Windows `python3` is
+# usually the Microsoft Store stub, which resolves through `command -v` and then refuses to run.
+#
+# The repo venv is offered first because it is the one guaranteed to have PyYAML, but which venv
+# layout exists depends on where the checkout was made, not on where this script is running. A
+# Windows checkout mounted into WSL (which is exactly how this repo builds Linux artifacts) has
+# `.venv/Scripts/python.exe`, and WSL's interop will happily EXECUTE it. `import yaml` then
+# succeeds, so it gets picked — and the splice dies with `KeyError: 'KNAIF_REHEARSE_ARGS'`, because
+# environment variables do not cross into a Windows process unless they are listed in $WSLENV. The
+# traceback names a `C:\...` path from a bash prompt and explains nothing.
+#
+# So gate the venv candidate on the host we are actually running as, and let PY_BIN override
+# everything for the case where neither default is right.
 pick_python() {
-  local c
-  for c in "$REPO/.venv/Scripts/python.exe" "$REPO/.venv/bin/python" python3 python py; do
+  local c candidates=()
+  if [ -n "${PY_BIN:-}" ]; then
+    "$PY_BIN" -c "import yaml" >/dev/null 2>&1 && { echo "$PY_BIN"; return 0; }
+    echo "ERROR: PY_BIN='$PY_BIN' cannot import yaml." >&2
+    return 1
+  fi
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) candidates+=("$REPO/.venv/Scripts/python.exe") ;;
+    *)                    candidates+=("$REPO/.venv/bin/python") ;;
+  esac
+  candidates+=(python3 python py)
+  for c in "${candidates[@]}"; do
     "$c" -c "import yaml" >/dev/null 2>&1 && { echo "$c"; return 0; }
   done
   return 1
