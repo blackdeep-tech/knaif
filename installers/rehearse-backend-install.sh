@@ -69,8 +69,14 @@ esac
 # the cheap loop this exists for — say so, so a green run is not mistaken for release sign-off.
 case "$STAGE" in *-DEVARCH*) echo "NOTE: this is a -DEVARCH payload — good enough to rehearse the install path, NOT a release payload." ;; esac
 
+# The binary must come from the SAME release as the payload, not merely the same platform. A plain
+# glob sorts `knaif-1.0.1-windows-x64` ahead of `knaif-1.1.0-windows-x64`, so with both staged it
+# silently rehearsed the new payload against the previous release's exe — which is exactly the
+# mismatch BackendStore's receipt exists to REFUSE, so the run fails for a reason that has nothing to
+# do with the release being rehearsed. STAGE is `<name>-<platform>-cuda-backend[-DEVARCH]`; the app
+# tree beside it is the same name without that suffix, which pins the version exactly.
 if [ -z "$EXE" ]; then
-  for c in "$REPO"/dist/staging/*-"$PLATFORM"/bin/knaif "$REPO"/dist/staging/*-"$PLATFORM"/bin/knaif.exe \
+  for c in "${STAGE%-cuda-backend*}/bin/knaif" "${STAGE%-cuda-backend*}/bin/knaif.exe" \
            "$REPO"/target/release/knaif "$REPO"/target/release/knaif.exe; do
     [ -x "$c" ] && EXE="$c" && break
   done
@@ -190,6 +196,19 @@ splice "$WORK/manifest.yaml"       ""       ""
 splice "$WORK/manifest-bad.yaml"   ""       "$(declared | tail -1)"
 splice "$WORK/manifest-stale.yaml" "0.0.9"  ""
 
+# Test 1 asserts that an unpublished entry is refused, so it needs an unpublished entry to assert
+# against. It used to read the SHIPPED manifest, which only worked while cuda was still unpublished:
+# the moment 1.1.0 published the payload the assertion inverted and the whole rehearsal exited 1 —
+# reporting a normal release-state change as a product failure, on the one script RELEASE.md §7 tells
+# you to run before publishing. Synthesize the unpublished case instead, so the refusal is covered
+# permanently and the test says nothing about what happens to be published today. That the shipped
+# manifest is in the right state for its release is a different question, and
+# test_backend_manifest_release_ready.py is what answers it.
+sed 's/^\( *\)status: published$/\1status: unpublished/' \
+  "$REPO/contracts/backends/backend-manifest.yaml" > "$WORK/manifest-unpublished.yaml"
+grep -q "^ *status: unpublished$" "$WORK/manifest-unpublished.yaml" \
+  || { echo "ERROR: no 'status:' line in the shipped manifest — cannot rehearse the refusal." >&2; exit 1; }
+
 ( cd "$STAGE" && exec "$PY_BIN" -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 ) &
 SERVER_PID=$!
 for _ in $(seq 1 50); do
@@ -206,8 +225,8 @@ run()  { KNAIF_BACKEND_MANIFEST="$1" KNAIF_BACKENDS_DIR="$2" "$EXE" "${@:3}"; }
 DIR="$WORK/backends"
 
 echo "1. unpublished entry is refused before any download"
-run "$REPO/contracts/backends/backend-manifest.yaml" "$DIR" backend list 2>/dev/null | grep -q "not published yet" \
-  && ok "shipped manifest reports 'not published yet'" || bad "shipped manifest should refuse: is it already published?"
+run "$WORK/manifest-unpublished.yaml" "$DIR" backend list 2>/dev/null | grep -q "not published yet" \
+  && ok "an unpublished entry reports 'not published yet'" || bad "an unpublished entry should refuse"
 
 echo "2. install"
 run "$WORK/manifest.yaml" "$DIR" backend list | sed 's/^/     /'
