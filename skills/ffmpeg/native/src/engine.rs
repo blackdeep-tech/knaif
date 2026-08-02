@@ -812,6 +812,43 @@ pub fn build_one_recipe(
     let mut remux = options.remux;
     let mut copy_audio = remux || options.copy_audio;
 
+    // A container that accepts only a restricted set of VIDEO codecs cannot stream-copy an
+    // incompatible source. `-c copy` into webm from an h264 source makes ffmpeg exit 1 and leave a
+    // truncated file behind — which the user reads as "knaif produced a broken file", not as an
+    // unsupported request.
+    //
+    // Unlike the audio guard below, this one MUST override a remux rather than skip it: the remux
+    // is precisely how the bad command gets built. A remux copying everything verbatim holds for
+    // mkv/mov, which accept h264; it does not hold for webm.
+    //
+    // Dropping the remux alone is not enough — the encoder would fall back to `copy` and rebuild
+    // the same command — so the container's default encoder has to be named here.
+    //
+    // ogg carries the same restriction (theora/vp8 only) and is deliberately absent: vocab.yaml has
+    // no theora entry to fall back to and the corpus has no ogg rows, so listing it would be an
+    // untested guess. Closing that one means adding the encoder first.
+    if remux {
+        let compatible: Option<&[&str]> = match container.as_str() {
+            "webm" => Some(&["vp8", "vp9", "av1"]),
+            _ => None,
+        };
+        if let (Some(src), Some(compat)) = (
+            probe.video_codec.as_deref().filter(|s| !s.is_empty()),
+            compatible,
+        ) {
+            if !compat.contains(&src) {
+                remux = false;
+                copy_audio = false;
+                if options.video_encoder.is_none() {
+                    video_encoder = match container.as_str() {
+                        "webm" => "libvpx-vp9".to_string(),
+                        _ => video_encoder,
+                    };
+                }
+            }
+        }
+    }
+
     // Stream-copy into a container that can't hold the source audio codec → re-encode instead.
     if copy_audio && !remux {
         let compatible: Option<&[&str]> = match container.as_str() {

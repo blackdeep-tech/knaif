@@ -531,6 +531,31 @@ def _build_one_recipe(
     remux = bool(options.get("remux"))
     copy_audio = remux or bool(options.get("copy_audio"))
 
+    # A container that accepts only a restricted set of VIDEO codecs cannot stream-copy an
+    # incompatible source. `-c copy` into webm from an h264 source makes ffmpeg exit 1 and
+    # leave a truncated file behind — a failure the user sees as "knaif produced a broken
+    # file", not as an unsupported request.
+    #
+    # Unlike the audio guard below, this one MUST override a remux rather than skip it: the
+    # remux is precisely how the bad command gets built. "A remux copies everything verbatim
+    # by design" holds for mkv/mov, which accept h264; it does not hold for webm.
+    #
+    # Dropping the remux is not enough on its own — the encoder would fall back to `copy` and
+    # rebuild the same command — so the container's default encoder has to be named here.
+    #
+    # ogg carries the same restriction (theora/vp8 only) and is deliberately absent: vocab.yaml
+    # has no theora entry to fall back to and the corpus has no ogg rows, so listing it would be
+    # an untested guess. Closing that one means adding the encoder first.
+    _COMPATIBLE_VIDEO: dict[str, set[str]] = {"webm": {"vp8", "vp9", "av1"}}
+    _CONTAINER_VIDEO_ENCODER: dict[str, str] = {"webm": "libvpx-vp9"}
+    if remux:
+        src_video = probe.get("video_codec")
+        compatible = _COMPATIBLE_VIDEO.get(container)
+        if src_video and compatible and src_video not in compatible:
+            remux = False
+            copy_audio = False
+            video_encoder = options.get("video_encoder") or _CONTAINER_VIDEO_ENCODER[container]
+
     # When stream-copy was requested but the source audio codec is incompatible
     # with the target container, fall back to the container's default encoder.
     # webm only accepts opus/vorbis; ogg only accepts vorbis/opus/flac.

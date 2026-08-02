@@ -1817,6 +1817,68 @@ def test_convert_video_webm_opus_source_copies_audio(stub_ffmpeg, media_root, mo
     assert cmd[ca_idx + 1] == "copy", f"Expected copy, got {cmd[ca_idx + 1]!r}; cmd={cmd}"
 
 
+# ── T3b: webm VIDEO copy-incompatibility guard ────────────────────────────────
+#
+# The audio tests above all pass `video_codec: "vp9"` explicitly, which is exactly why they never
+# caught the video-side hole: with a codec named, the engine re-encodes and never reaches the remux
+# path. A plain "convert to webm" names no codec, takes the remux path, and emitted `-c copy` — a
+# command ffmpeg rejects, leaving a truncated file. Found by running the packaged artifact against a
+# real file in a clean container, not by any unit test.
+
+
+def _codec_probe(video_codec: str, audio_codec: str | None = "aac") -> dict:
+    streams = [{"codec_type": "video", "codec_name": video_codec, "width": 1920, "height": 1080}]
+    if audio_codec:
+        streams.append({"codec_type": "audio", "codec_name": audio_codec})
+    return {"streams": streams, "format": {"format_name": "mp4", "duration": "10", "size": "100"}}
+
+
+def _render_convert(agent, media_root, container: str) -> list[str]:
+    payload = {
+        "plan": [
+            {
+                "tool": "convert_video",
+                "args": {"inputs": [str(media_root / "clip2.mp4")], "container": container},
+            }
+        ]
+    }
+    results = agent.execute_plan(payload, dry_run=True)
+    batch_step = next(r for r in results if r["tool"] == "render_batch_commands")
+    return batch_step["result"]["commands"][0]["command"]
+
+
+def test_convert_video_webm_h264_source_reencodes_video(stub_ffmpeg, media_root, monkeypatch):
+    """h264 → webm must re-encode: webm holds only vp8/vp9/av1, so `-c copy` cannot work."""
+    agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
+    handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _codec_probe("h264"))
+
+    cmd = _render_convert(agent, media_root, "webm")
+    assert "copy" not in cmd, f"stream-copy into webm cannot work; cmd={cmd}"
+    assert "-c:v" in cmd, f"no video encoder selected; cmd={cmd}"
+    assert cmd[cmd.index("-c:v") + 1] == "libvpx-vp9", f"cmd={cmd}"
+
+
+def test_convert_video_webm_vp9_source_still_remuxes(stub_ffmpeg, media_root, monkeypatch):
+    """A source already in a webm-compatible codec must still stream-copy — no needless re-encode."""
+    agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
+    handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _codec_probe("vp9", "opus"))
+
+    cmd = _render_convert(agent, media_root, "webm")
+    assert "copy" in cmd, f"vp9 → webm is a valid remux and must stay one; cmd={cmd}"
+
+
+def test_convert_video_mkv_h264_source_still_remuxes(stub_ffmpeg, media_root, monkeypatch):
+    """The guard must not over-correct: mkv accepts h264, so a container swap stays a remux."""
+    agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
+    handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _codec_probe("h264"))
+
+    cmd = _render_convert(agent, media_root, "mkv")
+    assert "copy" in cmd, f"h264 → mkv is a valid remux and must stay one; cmd={cmd}"
+
+
 def test_convert_video_webm_no_audio_source_no_error(stub_ffmpeg, media_root, monkeypatch):
     """Video-only input converted to webm must build a plan without error."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
