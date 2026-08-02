@@ -55,7 +55,7 @@ knaif_version: "1.1.0"
 backends:
   cuda:
     description: "NVIDIA CUDA offload (llama.cpp ggml-cuda backend + NVIDIA redistributables)"
-    status: unpublished
+    status: published
 
     requires:
       vendor: nvidia
@@ -88,20 +88,24 @@ backends:
         files:
           - name: libggml-cuda.so
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/libggml-cuda.so
+            sha256: "85d0bdb66c92e84ee206c3817673938bedf08a34833bf387311a6c8d188c07f5"
+            size_bytes: 162984592
           - name: libcudart.so.13
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/libcudart.so.13
+            sha256: "9f92e4c3f7e14d0fed69ef876a45d4255a2dc88cb552a673a90ce881c26282fe"
+            size_bytes: 782080
           - name: libcublas.so.13
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/libcublas.so.13
+            sha256: "bdcdcd88306621a8d6748b2750b14ad9c73fd80c8085d6a122bf39a6e9dd1375"
+            size_bytes: 54502040
           - name: libcublasLt.so.13
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/libcublasLt.so.13
+            sha256: "db5c748bc095423401029c00294fb8eb3c721c75c363f3d8b744b7c274504ae0"
+            size_bytes: 513446912
           # The licence texts travel WITH the bytes, into the user's backends directory. Under
           # loose-file publishing the release *page* is not what reaches a user's disk, and NVIDIA's
           # EULA permits redistribution only WITH the licence text — so these are payload files, not
@@ -109,31 +113,37 @@ backends:
           # the EULA; `test_backend_payload_manifest.py` asserts this list keeps up with it.
           - name: llama.cpp-LICENSE.txt
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/llama.cpp-LICENSE.txt
+            sha256: "bffc7e34493908aeadebf13d831b189173e6d91e612352ada29192c0c44f37e6"
+            size_bytes: 1259
           - name: NVIDIA-CUDA-EULA.txt
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/NVIDIA-CUDA-EULA.txt
+            sha256: "088381bc2d891e719a2a9398645b00bb45f3b24231473a8283ac7e3e66b8a028"
+            size_bytes: 68070
 
       windows-x64:
         files:
           - name: ggml-cuda.dll
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/ggml-cuda.dll
+            sha256: "72193fa38c4afe439ace1768b653a4d74379374fafaeb5123855336e34167f7e"
+            size_bytes: 150217216
           - name: cudart64_13.dll
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cudart64_13.dll
+            sha256: "b00ca6f53699120da815bf3e06e2e4285fae2f201235b883dcbb50eec51e2a2a"
+            size_bytes: 551024
           - name: cublas64_13.dll
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cublas64_13.dll
+            sha256: "8c6bac24474af29627ec96500025a5d410a1b7e8ffa00e1fe13b1781fc6b3ddc"
+            size_bytes: 52697712
           - name: cublasLt64_13.dll
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cublasLt64_13.dll
+            sha256: "e323abd89e0f03c1db91a09d7aeb1928de08e1f86192cc713b335fefe3e368a9"
+            size_bytes: 463655536
           # The MSVC runtime travels WITH the payload rather than being borrowed from the install
           # dir. It normally resolves from beside knaif.exe, so this is redundancy — but it makes the
           # payload self-contained under any future artifact layout, and it is the arrangement that
@@ -142,27 +152,33 @@ backends:
           # same reason. Microsoft's Distributable List grants these files; see docs/PROVENANCE.md.
           - name: vcruntime140.dll
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcruntime140.dll
+            sha256: "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
+            size_bytes: 178616
           - name: vcruntime140_1.dll
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcruntime140_1.dll
+            sha256: "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e"
+            size_bytes: 50112
           - name: msvcp140.dll
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/msvcp140.dll
+            sha256: "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
+            size_bytes: 643512
           - name: vcomp140.dll
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcomp140.dll
+            sha256: "95d4ce4a6802d1e18b5e0e1722cc30ea72ca7e033f83828f05c0b7b993fe7cbf"
+            size_bytes: 212920
           # See the linux-x64 note: the licence texts are payload files, not release-page
           # attachments, because the page is not what lands on a user's disk.
           - name: llama.cpp-LICENSE.txt
             tag: product
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/llama.cpp-LICENSE.txt
+            sha256: "bffc7e34493908aeadebf13d831b189173e6d91e612352ada29192c0c44f37e6"
+            size_bytes: 1259
           - name: NVIDIA-CUDA-EULA.txt
             tag: redist-cuda-13.3
-            url: TODO
-            sha256: TODO
+            url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/NVIDIA-CUDA-EULA.txt
+            sha256: "088381bc2d891e719a2a9398645b00bb45f3b24231473a8283ac7e3e66b8a028"
+            size_bytes: 68070
