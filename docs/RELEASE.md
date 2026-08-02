@@ -696,6 +696,16 @@ Two rules worth restating because getting them wrong is silent:
 
 - **Never resolve `latest`.** A tag-scoped URL is what structurally prevents a newer lib reaching an
   older exe. `test_backend_manifest_release_ready.py` asserts this.
-- **Asset names must be unique within a tag.** Today's payloads collide on nothing (`.so` vs `.dll`),
-  but if a future platform produces a duplicate filename, suffix the *asset* name and keep the
+- **Asset names must be unique within a tag** — so a shared name must mean shared bytes. The
+  binaries collide on nothing (`.so` vs `.dll`), but the two licence texts are staged into *both*
+  payloads and therefore upload **once each**, shared: `NVIDIA-CUDA-EULA.txt` on `redist-cuda-13.3`
+  and `llama.cpp-LICENSE.txt` on the product tag. That is only safe because
+  `installers/licenses/**` is pinned to LF in `.gitattributes` — without the pin a Windows checkout
+  stages CRLF and the Linux container LF, giving one file two sha256 values and two platforms one
+  asset name, so at most one platform's `backend install` could pass its checksum.
+  `test_backend_payload_manifest.py` asserts the pin and
+  `test_backend_manifest_release_ready.py` asserts the consequence. If a future platform produces a
+  genuinely different file under a name already taken, suffix the *asset* name and keep the
   manifest's `name:` as the on-disk name — the two are separate fields precisely so they can differ.
+  Note `gh release upload` takes the asset name from the file's basename, so a suffixed asset means
+  renaming the file before upload, not a flag.
