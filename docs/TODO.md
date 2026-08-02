@@ -325,8 +325,10 @@ This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
 - [x] **1.1.0 release — verification COMPLETE 2026-08-02. Every gate below has now been re-run
-  against the rebuilt artifacts; what remains is publishing (tag `52f9045`, publish the draft,
-  `twine upload python/core/dist/*`), not verifying.** The original concern, kept because it is the
+  against the rebuilt artifacts; what remains is publishing (tag the current tip of `main`, publish
+  the draft, `twine upload python/core/dist/*`), not verifying.** Naming a commit here would be
+  self-invalidating — merging the commit that names it moves the tip. Everything after the build
+  commit is docs-only, so any tip that still carries the rebuilt artifacts' source reproduces them. The original concern, kept because it is the
   reason this list exists: the Windows artifacts were built and fully verified while the release was
   still numbered 1.0.2: `smoke.sh`, the PE import check, and the first-ever successful run of the upgrade path
   under a throwaway `AppId` (setup refused while the CLI held the mutex, no folder-exists warning,
