@@ -374,12 +374,15 @@ all three are present, and that `backend list` can actually read the last one fr
 produces is misleading: on an older driver the payload copies in cleanly, the loader finds it,
 and the load then fails in a way that reads like a driver bug rather than a version mismatch.
 The presence of `nvcuda.dll` is **not** a sufficient check — it says a driver exists, not that it
-is new enough. Until `knaif backend install cuda` ships with a driver-aware gate
-([post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md), U2–U3), the CUDA
-payload is a manual copy into `~/.knaif/backends` and this documentation is the only thing
-standing between an old-driver user and that failure. Probe the actual driver version
-(`nvidia-smi`) before installing; if it is below R580, update the driver rather than trying the
-payload. Vulkan is the supported path on any NVIDIA card whose driver is older.
+is new enough.
+
+**That check now lives in the product, not in this file.** `knaif backend install cuda` ships and
+fetches the payload, and the first-run nudge reads `requires.min_driver` from
+`contracts/backends/backend-manifest.yaml` (`knaif-models/src/nvidia.rs`): a driver below the floor
+gets an update hint and **no offer**, rather than a download that then fails to load. The number
+lives in the manifest and not in code, so bumping the toolkit is one edit. Copying the files into
+`~/.knaif/backends` by hand still works and stays supported as a fallback, but it is no longer the
+route. Vulkan remains the supported path on any NVIDIA card whose driver is older.
 
 **One default artifact per OS** (C5b), never one per backend: `vulkan` is a strict superset of `cpu`
 (the Vulkan backend is one extra loadable lib, and it loses device selection where there is no usable
