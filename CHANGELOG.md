@@ -5,16 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] — unreleased
-
-> **Not finished.** The CUDA opt-in surface is written up below, but the payloads are **not yet
-> published**: `contracts/backends/backend-manifest.yaml` still says `status: unpublished` and every
-> `url` is a placeholder, so `backend install cuda` refuses with an explanation rather than
-> downloading. Before tagging: build both payloads, upload the assets, fill in the manifest, flip
-> the status, and re-run the three backend cases against the *packaged* payload on each OS. Set the
-> release date at the same time. See
-> [`docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md`](docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md),
-> Workstream U, and `docs/RELEASE.md` §7 for the publish order.
+## [1.1.0] — 2026-08-02
 
 **The first knaif release with downloadable binaries.** No GitHub Release existed before it: 1.0.0
 and 1.0.1 published the `knaif` wheel to PyPI, and the Windows artifacts built alongside them were
@@ -142,9 +133,14 @@ number alone is measuring the wrong thing.
 
 ### Known limitations
 
-Unchanged from 1.0.0: no macOS artifact, no published CUDA artifact (Vulkan covers NVIDIA
-hardware; the manual payload route is Linux-only), Windows binaries are unsigned so SmartScreen
-will warn, the `io` skill is stale, and external tools are not bundled.
+Unchanged from 1.0.0: no macOS artifact, Windows binaries are unsigned so SmartScreen will warn,
+the `io` skill is stale, and external tools are not bundled.
+
+The CUDA limitation is **lifted** in this release — `knaif backend install cuda` publishes a
+payload for Windows and Linux, which is what 1.0.0's *"no published CUDA artifact"* referred to.
+Still true: there is no combined bundle that ships CUDA to everyone by default, and there will not
+be. NVIDIA's redistributables are ~493 MB against a ~26 MB artifact, so bundling would re-ship half
+a gigabyte of byte-identical DLLs to every user on every release, most of whom have no NVIDIA card.
 
 ## [1.0.1] — 2026-07-25
 
