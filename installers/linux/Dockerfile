@@ -74,9 +74,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # scope" errors deep in ggml-vulkan.cpp. This is a real cost of choosing an older base for the
 # glibc floor, and it is invisible until a full build runs.
 #
-# CUDA is likewise absent: v1 publishes no CUDA artifact, and the toolkit would add 3-5 GB to
-# serve an artifact this image does not produce. If a CUDA payload build is ever containerised it
-# belongs in a separate image FROM nvidia/cuda:*-devel-ubuntu22.04.
+# CUDA is likewise absent: the toolkit would add 3-5 GB to serve an artifact this image does not
+# produce. The CUDA payload IS containerised now, in the separate image this comment used to
+# anticipate — see installers/linux/Dockerfile.cuda.
 #
 # libclang-dev is the only piece of LLVM involved — llama-cpp-sys-2 uses bindgen, which dlopens
 # libclang.so at build time.

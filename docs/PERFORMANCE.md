@@ -56,7 +56,10 @@ are counted. Routing came out ~99% identical on both arms and outcome accuracy d
 (4B: 0.903 → 0.914) — same model, same decisions, only slower. Full offload confirmed (37/37
 layers); not a VRAM spill on the smaller card.
 
-Evidence: [`evals/runs/2026-07-14_rtx3070-speed_cheap/`](../evals/runs/2026-07-14_rtx3070-speed_cheap/).
+Evidence: the `runs/2026-07-14_rtx3070-speed_cheap` row in [evals/INDEX.md](../evals/INDEX.md),
+which carries the paired per-utterance comparison. The run directory itself is generated scratch and
+is not in the repository — `.gitignore` excludes `evals/**` bar the durable summaries, so INDEX.md is
+the committed record for this and most other runs. Link to the row, never to a run directory.
 
 > **Quality never moves with hardware — only speed does.** Every accuracy number in this repo
 > survived the machine change. Greedy decoding on the same GGUF makes the same plan.
