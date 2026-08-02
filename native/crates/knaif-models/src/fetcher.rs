@@ -14,12 +14,15 @@
 //! **resumes** the missing chunks instead of restarting. A server that ignores `Range` (200 to the
 //! probe) transparently falls back to the original single-stream download.
 //!
-//! The probe also captures the post-redirect URL, and every chunk GET targets *that* (the CDN),
-//! not the original `huggingface.co/.../resolve/...` URL. Re-hitting the resolve URL per chunk
-//! would 302 through huggingface.co each time — the request-rate-limited surface for tokenless
-//! clients — so pinning to the CDN keeps the ~1-request-per-chunk fan-out off it. The URL is
-//! re-resolved on every call (never persisted), so a resumed pull picks up a fresh CDN link rather
-//! than a stale signed one.
+//! Every request — the probe and each chunk — targets the **original** URL and follows redirects
+//! itself. Reusing the post-redirect CDN link instead is tempting (it keeps the per-chunk fan-out
+//! off `huggingface.co`, the rate-limited surface for tokenless clients) and it is **unsound**: a
+//! signed CDN URL may carry arbitrary conditions, and Hugging Face's Xet storage signs the
+//! requested *byte range* into the policy. A link obtained by probing `bytes=0-0` therefore answers
+//! **403** to every other range *and* to a full GET, so pinning it breaks every download of a
+//! Xet-backed repo. Nothing in the redirect distinguishes a range-bound link from a plain one, so
+//! re-resolving is the only correct default; the 429 retry path above absorbs the rate-limit risk
+//! it buys back.
 //!
 //! Because chunks land out of order (and possibly across runs), the file is hashed by the caller
 //! ([`crate::store::ModelStore::pull_with_progress`]) in one pass after assembly, not on the write
@@ -530,11 +533,9 @@ impl Fetcher for HttpFetcher {
         // A 200 means it ignored the range, and the body is already the whole file, so stream it
         // rather than waste it.
         let probe = self.get(url, Some((0, 0)))?;
-        // Pin every subsequent request to the redirect target (HF `resolve` URLs 302 to a CDN). All
-        // the chunk GETs then hit the CDN directly instead of re-triggering the redirect through
-        // huggingface.co on each one — which is the request-rate-limited surface for tokenless
-        // clients, and the amplification (~1 redirect per chunk) that a shared IP would feel.
-        let fetch_url = probe.get_url().to_string();
+        // Deliberately NOT pinned to `probe.get_url()`. See the module docs: a Xet-backed HF repo
+        // signs the probed byte range into the CDN link's policy, so reusing it 403s on every
+        // chunk. Each request below re-resolves `url` and follows the redirect itself.
         match probe.status() {
             206 => {
                 let total = content_range_total(&probe).ok_or_else(|| {
@@ -548,11 +549,11 @@ impl Fetcher for HttpFetcher {
                 }
                 if total <= self.chunk_size {
                     // One chunk's worth: the parallel machinery buys nothing, so stream it.
-                    let resp = self.get(&fetch_url, None)?;
+                    let resp = self.get(url, None)?;
                     let total = content_length(&resp).or(Some(total));
                     return self.stream_whole(resp, dest, total, progress);
                 }
-                self.download_parallel(&fetch_url, dest, total, progress)
+                self.download_parallel(url, dest, total, progress)
             }
             200 => {
                 let total = content_length(&probe);
@@ -693,6 +694,87 @@ mod tests {
         (format!("http://127.0.0.1:{port}/model.gguf"), ranges)
     }
 
+    /// A Hugging Face **Xet**-shaped server, and the only one here that can catch the pinning bug.
+    ///
+    /// `/resolve/...` 302s to a CDN link whose signature encodes *the byte range that request asked
+    /// for*; the CDN then answers **403** to any other range, and to a full GET. That is what
+    /// `us.aws.cdn.hf.co` does — its policy carries a `ByteRange` condition — and it is why
+    /// `models pull` failed in the field against a repo migrated to Xet.
+    ///
+    /// [`serve_ranges`] structurally cannot catch it: it honors every range on one URL, which is
+    /// precisely the assumption Xet violates. Counts refusals so the test can assert **zero**,
+    /// rather than merely that the download somehow completed.
+    fn serve_range_bound_redirect(body: Vec<u8>) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = Arc::new(body);
+        let refusals = Arc::new(AtomicUsize::new(0));
+        let refusals_srv = Arc::clone(&refusals);
+        std::thread::spawn(move || {
+            for conn in listener.incoming() {
+                let Ok(mut stream) = conn else { break };
+                let body = Arc::clone(&body);
+                let refusals = Arc::clone(&refusals_srv);
+                std::thread::spawn(move || {
+                    let req = read_request(&mut stream);
+                    let text = String::from_utf8_lossy(&req);
+                    let path = text
+                        .lines()
+                        .next()
+                        .and_then(|l| l.split_whitespace().nth(1))
+                        .unwrap_or("/")
+                        .to_string();
+                    let range = text.lines().find_map(parse_range_header);
+                    let total = body.len() as u64;
+                    let asked = match range {
+                        Some((s, e)) => format!("{s}-{e}"),
+                        None => "full".to_string(),
+                    };
+
+                    // The signing step: hand back a link valid ONLY for the range just requested.
+                    if path.starts_with("/resolve") {
+                        let header = format!(
+                            "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{port}/cdn/{asked}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        );
+                        let _ = stream.write_all(header.as_bytes());
+                        return;
+                    }
+
+                    if path.trim_start_matches("/cdn/") != asked {
+                        refusals.fetch_add(1, Ordering::SeqCst);
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                        return;
+                    }
+
+                    match range {
+                        Some((s, e)) => {
+                            let slice = &body[s as usize..=e as usize];
+                            let header = format!(
+                                "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {s}-{e}/{total}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                slice.len()
+                            );
+                            let _ = stream.write_all(header.as_bytes());
+                            let _ = stream.write_all(slice);
+                        }
+                        None => {
+                            let header = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Length: {total}\r\nConnection: close\r\n\r\n"
+                            );
+                            let _ = stream.write_all(header.as_bytes());
+                            let _ = stream.write_all(&body);
+                        }
+                    }
+                });
+            }
+        });
+        (
+            format!("http://127.0.0.1:{port}/resolve/model.gguf"),
+            refusals,
+        )
+    }
+
     fn parse_range_header(line: &str) -> Option<(u64, u64)> {
         let rest = line
             .strip_prefix("Range:")
@@ -700,6 +782,41 @@ mod tests {
         let spec = rest.trim().strip_prefix("bytes=")?;
         let (s, e) = spec.split_once('-')?;
         Some((s.trim().parse().ok()?, e.trim().parse().ok()?))
+    }
+
+    #[test]
+    fn a_cdn_that_binds_its_signature_to_the_probed_range_still_downloads() {
+        // The regression this file exists for. HF migrated `blackdeep/knaif` to Xet storage, whose
+        // signed CDN links carry a `ByteRange` policy condition. The fetcher used to pin the URL it
+        // got back from the `bytes=0-0` probe and reuse it for every chunk, so the first chunk GET
+        // was refused with 403 and `knaif models pull` could not download a model at all.
+        //
+        // Multi-chunk on purpose: a single-chunk body would take the `stream_whole` path and miss
+        // the parallel one, and both used the pinned URL.
+        let body: Vec<u8> = (0..160u32).map(|i| (i % 251) as u8).collect();
+        let (url, refusals) = serve_range_bound_redirect(body.clone());
+        let dest = tmp_path("xet_range_bound");
+
+        HttpFetcher::new()
+            .with_backoff(0, Duration::from_millis(1))
+            .with_chunk_size(32) // 160 / 32 = 5 chunks
+            .with_parallelism(2)
+            .fetch_to_file(&url, &dest, &mut |_, _| {})
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(&dest).unwrap(),
+            body,
+            "every chunk must land at its own offset"
+        );
+        assert_eq!(
+            refusals.load(Ordering::SeqCst),
+            0,
+            "the CDN refused a request, which means a signed link was reused for a range it was \
+             not issued for — re-resolve the original URL per request instead of pinning"
+        );
+        let _ = std::fs::remove_file(&dest);
+        let _ = std::fs::remove_file(resume_sidecar_path(&dest));
     }
 
     #[test]
