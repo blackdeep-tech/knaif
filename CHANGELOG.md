@@ -86,6 +86,15 @@ number alone is measuring the wrong thing.
 
 ### Fixed
 
+- **`knaif models pull` could not download a model at all.** The fetcher probed the file with
+  `Range: bytes=0-0`, pinned the CDN URL it was redirected to, and reused that link for every
+  chunk. Hugging Face has since moved the model repo to Xet storage, whose signed links carry a
+  byte-range condition — so the pinned link served the one byte it was issued for and answered
+  `403` to everything else, including the single-stream fallback. Every request now re-resolves the
+  original URL. Pinning saved ~155 redirects on a 2.5 GB download and was unsound: a signed URL can
+  encode any condition, and nothing in a redirect says whether it did. Found by running the
+  packaged artifact in a bare container; the earlier liveness check was a `curl` of the URL, which
+  never exercises the pin-and-rechunk path.
 - **The Windows artifact did not start on a clean Windows machine.** All 13 staged binaries import
   the VC++ runtime — `VCRUNTIME140`, `VCRUNTIME140_1`, `MSVCP140`, and `VCOMP140`, the OpenMP
   runtime every `ggml-cpu-*` variant links — and none of it was staged. On a box without Visual
