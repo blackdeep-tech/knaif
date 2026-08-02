@@ -25,13 +25,17 @@ statically-knowable set exactly, and the glob-resolved set by shape.
 """
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(".").resolve()
 MANIFEST = ROOT / "contracts" / "backends" / "backend-manifest.yaml"
 PACKAGE_SH = ROOT / "installers" / "package.sh"
+LICENSES = ROOT / "installers" / "licenses"
 
 
 def _manifest() -> dict:
@@ -89,6 +93,41 @@ def test_every_platform_declares_the_licence_files_that_ship_with_it() -> None:
             f"{sorted(staged)} into every payload. `backend install` fetches exactly what this "
             f"manifest lists, so those files would never reach the user — and the NVIDIA EULA is "
             f"a condition on redistributing the libraries beside it, not an optional extra."
+        )
+
+
+def test_staged_licence_texts_are_pinned_to_lf() -> None:
+    """A payload file must be byte-identical wherever it was staged from.
+
+    These licence texts are tracked files copied verbatim into *both* payloads, and each is
+    published as a single release asset shared by both platforms. `.gitattributes` declares
+    `* text=auto`, so without an explicit pin a Windows checkout stages them CRLF while the
+    Linux container stages them LF — the same file with two sha256 values, competing for one
+    asset name on one tag. That is what happened; the manifest pins per-file checksums, so at
+    most one platform's `backend install` could have passed its verification.
+
+    Asked of git rather than parsed out of `.gitattributes`, so a future reorganisation of the
+    patterns is followed rather than defeated.
+    """
+    if not shutil.which("git"):
+        pytest.skip("git is not available to resolve gitattributes")
+
+    for name in sorted(_staged_licence_files()):
+        path = LICENSES / name
+        assert path.is_file(), f"package.sh stages {name}, but {path} does not exist"
+        proc = subprocess.run(
+            ["git", "check-attr", "eol", "--", str(path.relative_to(ROOT).as_posix())],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            check=True,
+        )
+        # `<path>: eol: lf` when pinned; `unspecified` when it falls through to `* text=auto`.
+        assert proc.stdout.strip().endswith(": lf"), (
+            f"{name} ships inside the CUDA payload but is not pinned to LF "
+            f"(git reports {proc.stdout.strip()!r}). A Windows checkout will stage it with CRLF "
+            f"and the Linux container with LF, producing two sha256 values for one file — and "
+            f"one release asset name per tag cannot serve both. Pin it in .gitattributes."
         )
 
 

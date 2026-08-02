@@ -7,6 +7,14 @@
 *.sh   text eol=lf
 *.bash text eol=lf
 
+# Files that ship INSIDE a release payload must be byte-identical wherever they are staged
+# from. `* text=auto` converts these on a Windows checkout, so one tracked licence text was
+# staged CRLF on Windows and LF in the Linux container — two sha256 values for one file. The
+# backend manifest pins per-file checksums and publishes each file as a release asset, so
+# that lands as two different assets claiming the same name on one tag. Enforced by
+# `test_backend_payload_manifest.py`.
+installers/licenses/** text eol=lf
+
 # Windows-native scripts stay CRLF.
 *.ps1 text eol=crlf
 *.bat text eol=crlf

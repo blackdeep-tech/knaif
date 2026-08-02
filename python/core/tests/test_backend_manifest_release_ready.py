@@ -106,6 +106,52 @@ def test_published_payload_files_pin_an_immutable_url() -> None:
         )
 
 
+def _assets() -> dict[tuple[str, str], list[tuple[str, str, dict]]]:
+    """(tag, filename) -> [(backend, platform, file)], across every backend and platform.
+
+    A GitHub release asset name is unique within its tag, so this key is the identity of the
+    thing that actually gets uploaded — not the per-platform manifest entry.
+    """
+    out: dict[tuple[str, str], list[tuple[str, str, dict]]] = {}
+    for name, spec in _backends().items():
+        for platform, entry in ((spec or {}).get("platforms") or {}).items():
+            for file in (entry or {}).get("files") or []:
+                out.setdefault((file.get("tag"), file.get("name")), []).append(
+                    (name, platform, file)
+                )
+    return out
+
+
+@pytest.mark.parametrize("field", ["sha256", "url"])
+def test_one_asset_name_per_tag_means_one_set_of_bytes(field: str) -> None:
+    """Two platforms may share an asset, but then they must agree on what it is.
+
+    Release asset names are unique per tag, so two files with the same name on the same tag are
+    not two files — they are one upload. If the manifest gives them different checksums, at most
+    one platform can be right, and the other's `backend install` fails its checksum after
+    downloading. If it gives them different URLs, one of them points at an asset that cannot
+    exist.
+
+    This is not hypothetical. Both licence texts are staged into *both* payloads from the same
+    tracked file, and a Windows checkout converted them to CRLF while the Linux container kept
+    LF — one file, two sha256 values, one asset name per tag. Fixed at the source by pinning
+    `installers/licenses/**` to LF (see `test_backend_payload_manifest.py`); this asserts the
+    consequence directly, so any future divergence fails here rather than at a user's download.
+    """
+    for (tag, filename), entries in _assets().items():
+        values = {str(f.get(field)) for _, _, f in entries}
+        if len(values) == 1:
+            continue
+        where = ", ".join(f"{b}/{p}" for b, p, _ in entries)
+        pytest.fail(
+            f"{filename!r} on tag {tag!r} is declared by {where} with {len(values)} different "
+            f"{field} values: {sorted(values)}. One asset name per tag is one upload, so these "
+            f"cannot all be served. Either make the file byte-identical across platforms and "
+            f"share one asset, or give each platform a distinct asset name and keep `name:` as "
+            f"the on-disk name (docs/RELEASE.md §7)."
+        )
+
+
 def test_cuda_declares_the_driver_floor_the_nudge_gates_on() -> None:
     # The floor lives beside the payload so bumping the toolkit is one edit, not two. If it moved
     # into code, the manifest and the gate could disagree with nothing to catch it.
