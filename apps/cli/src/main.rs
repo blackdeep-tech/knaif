@@ -332,12 +332,17 @@ fn download_bar(name: &str) -> ProgressBar {
 /// installed a ~700 MB payload precisely to avoid that. The accurate statement is already made,
 /// conditionally, by the `gpu == Some(false)` warning at the call site; repeating it here could only
 /// ever duplicate that warning or contradict it.
+///
+/// It says nothing about WHICH RUN either. The message is emitted on every `run`, so calling this
+/// one "the first run" was wrong every time after the first — and the claim was never doing the
+/// work: what stops the silence reading as a hang is that a wait is expected AT ALL, which "this can
+/// take a minute" states without asserting anything the process cannot know.
 fn thinking_spinner() -> ProgressBar {
     let bar = ProgressBar::new_spinner();
     if let Ok(style) = ProgressStyle::with_template("{spinner:.green} {msg} [{elapsed_precise}]") {
         bar.set_style(style);
     }
-    bar.set_message("Loading model and planning (the first run can take a minute)…");
+    bar.set_message("Loading model and planning (this can take a minute)…");
     bar.enable_steady_tick(std::time::Duration::from_millis(120));
     bar
 }

@@ -530,7 +530,15 @@ This **Open / Next** section is the live backlog (originally distilled from the
   is confirmed for signing and **no CLA is ever needed** (Apache-2.0 §5 covers inbound contributions;
   a DCO is the lightweight option if outside PRs start). Surviving constraint: a proprietary UI must
   ship as its **own** signed artifact, never folded into the Foundation-signed knaif installer.
-- [ ] **Spinner claims "CPU" and "first run" on every real run — both wrong (cosmetic; 1.1.0).**
+- [x] **Spinner claims "CPU" and "first run" on every real run — both wrong (cosmetic). FIXED
+  2026-08-02, in 1.1.0.** Resolved by *dropping* both claims rather than by branching the text:
+  the message is now "Loading model and planning (this can take a minute)…". Branching on a hoisted
+  `gpu_present` was the plan below, but the spinner is constructed before llama.cpp initialises, so
+  at that point no device has been chosen and any name it prints is a guess. The accurate,
+  conditional statement is already made by the `gpu == Some(false)` warning a few lines above, which
+  *does* know — so the spinner repeating it could only duplicate or contradict it. Dropping the
+  claim also avoids the double-probe problem the plan flagged. Original analysis kept below; the
+  measurement is what made the "first run" half indefensible.
   `thinking_spinner()` (`apps/cli/src/main.rs:295`) hardcodes *"Loading model and planning (first
   run on CPU can take a minute)…"* with no backend check, so a Vulkan or CUDA run is told it is on
   the CPU. The genuine CPU-only warning a few lines away (`main.rs:487`) **is** correctly gated on
