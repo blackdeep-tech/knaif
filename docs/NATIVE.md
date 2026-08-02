@@ -125,7 +125,7 @@ auto-selected when available, else the mock runs (§5.6 has the full precedence,
 | `base` | *(none)* | No inference backend — plumbing/dev artifact; `run` cannot infer. |
 | `cpu` | `llama` | CPU inference, statically linked (single exe, no extra DLLs). |
 | `vulkan` | `llama,vulkan` | Cross-vendor GPU. Needs a Vulkan-capable driver (`vulkan-1.dll`). No bundled DLLs. |
-| `cuda` | `llama,cuda` | NVIDIA GPU. Bundles NVIDIA cudart/cublas **redist** DLLs beside the exe (users supply only their driver). |
+| `cuda` | `llama,cuda` | NVIDIA GPU, linked in. A **dev/bisect shape only** — the shipped CUDA build is the loadable payload below, not this. |
 
 Device selection is automatic (e.g. the Vulkan build picks the discrete NVIDIA GPU over
 an integrated one; the CUDA build picks `CUDA0`).
@@ -368,7 +368,7 @@ all three are present, and that `backend list` can actually read the last one fr
 | `base` | plumbing artifact, no inference. Builds itself anywhere (no C++ toolchain). |
 | `vulkan` | **THE RELEASE ARTIFACT** — CPU **and** Vulkan backends in one tree. Gets the plain name. |
 | `cpu` | build kind only (a box with no Vulkan SDK): core libs + `ggml-cpu-*` variants, `-cpu` suffix. |
-| `cuda` | **Linux:** opt-in payload, not an app — `ggml-cuda` + NVIDIA redist for `~/.knaif/backends`. **Windows:** still the historical static-with-redist app (post-v1, C6). |
+| `cuda` | **Both OSes:** opt-in payload, not an app — `ggml-cuda` + NVIDIA redist for `~/.knaif/backends` (plus the MSVC runtime on Windows). The pre-Option-3 static-with-redist app survives only behind `--legacy-windows-cuda-app`, and is not publishable. |
 
 **The CUDA payload needs an R580+ driver (CUDA 13).** This is a hard floor, and the failure it
 produces is misleading: on an older driver the payload copies in cleanly, the loader finds it,

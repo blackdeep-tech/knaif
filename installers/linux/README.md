@@ -15,8 +15,9 @@
     default lacks, at the cost of making them choose.
   - `package.sh --kind=cuda` → **opt-in CUDA payload** (`libggml-cuda.so` + NVIDIA `.so.13` redist),
     dropped into `~/.knaif/backends/` (`$KNAIF_BACKENDS_DIR`) on an existing install — not a
-    standalone app. **Linux is the only OS that can build this payload** (Windows `cuda` is still the
-    historical static app — post-v1), and **v1 publishes no CUDA asset**.
+    standalone app. **Windows builds the same payload shape** (`ggml-cuda.dll` + NVIDIA redist + the
+    MSVC runtime), and **1.1.0 publishes both** as release assets that `knaif backend install cuda`
+    fetches.
 - **AppImage** — [`build-appimage.sh`](build-appimage.sh) `<staged-dir|tarball>` wraps a full
   artifact — feed it the default (vulkan) tree. It carries the same CPU+Vulkan backends; the
   opt-in `ggml-cuda.so` loads from `~/.knaif/backends/`, outside the read-only mount. Set
