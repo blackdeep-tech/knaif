@@ -324,16 +324,30 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
-- [ ] **1.1.0 release — the 2026-07-28 verification does NOT carry over, despite looking like it
-  should.** The Windows artifacts were built and fully verified while the release was still numbered
-  1.0.2: `smoke.sh`, the PE import check, and the first-ever successful run of the upgrade path
+- [x] **1.1.0 release — verification COMPLETE 2026-08-02. Every gate below has now been re-run
+  against the rebuilt artifacts; what remains is publishing (tag `52f9045`, publish the draft,
+  `twine upload python/core/dist/*`), not verifying.** The original concern, kept because it is the
+  reason this list exists: the Windows artifacts were built and fully verified while the release was
+  still numbered 1.0.2: `smoke.sh`, the PE import check, and the first-ever successful run of the upgrade path
   under a throwaway `AppId` (setup refused while the CLI held the mutex, no folder-exists warning,
   the directory was reused, `DisplayVersion` advanced, and a planted sentinel DLL in `{app}\bin` was
   gone afterwards). It is tempting to treat that as banked. It is not:
-  - [ ] **Re-run the upgrade path.** `docs/RELEASE.md` §4 says every release, not once, and 1.1.0's
-    installer wraps a different payload. **STILL OPEN** — it needs a GUI run (`/VERYSILENT` never
-    builds the task tree), so it cannot be automated.
-  - [ ] **Windows clean room.** **STILL OPEN** — Windows Sandbox, by hand.
+  - [x] **Re-run the upgrade path — DONE 2026-08-02**, against the rebuilt 1.1.0 installer. Two
+    builds from one staged tree (`just installer-test /DAppVersion=1.0.99` then `=1.1.0`), so the
+    throwaway `AppId`, `/DTestInstall` directory and separate output dir all held. All four
+    assertions passed: setup refused while the CLI held `knaif-cli-running`, no folder-exists
+    warning after closing it, `DisplayVersion` advanced to 1.1.0 on a single Add/Remove row, and a
+    planted sentinel DLL in `{app}\bin` was gone afterwards (`[InstallDelete]` really ran). Torn
+    down cleanly — no `knaif-testbuild` tree and no leftover `knaif*` uninstall key.
+  - [x] **Windows clean room — DONE 2026-08-02.** The published zip, unpacked and run in Windows
+    Sandbox (`Containers-DisposableClientVM`) with the tree mapped read-only, a writable results
+    folder and a `LogonCommand` — a machine with no developer tooling and no VC++ redistributable
+    beyond what Windows ships. `knaif --version` and `knaif skills list` both exit **0**, and both
+    skills resolve exe-relative. Not `-1073741515` (`0xC0000135`), which is the missing-runtime
+    failure this gate exists to catch and which every 1.0.x artifact would have produced.
+    Artifact hygiene re-checked on the same unpacked tree: 50 files, **0** violations — 18 `.dll`,
+    1 `.exe`, 3 `.txt`, 26 `.yaml`, `LICENSE`, `NOTICE`; no `.gguf`/`.py`/`.ipynb`/`.jsonl` and no
+    `eval`/`sandbox`/`notebook` paths.
   - [x] **Linux clean room — DONE 2026-08-02**, against the rebuilt artifacts. `smoke.sh` passes on
     both the tarball and the AppImage inside a container with no checkout; `check_elf_deps.py`
     reports every `DT_NEEDED` staged or base-system across 21 binaries; and `check-floor.sh` proves
