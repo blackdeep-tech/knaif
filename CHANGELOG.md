@@ -12,9 +12,10 @@ and 1.0.1 published the `knaif` wheel to PyPI, and the Windows artifacts built a
 never uploaded. The Linux tarball and AppImage below are therefore not newly *supported* — they are
 the first artifacts of any kind to reach a user, and Windows is in the same position.
 
-**Planning behaviour is unchanged from 1.0.1.** Nothing in the pipeline that turns an utterance into
-a validated plan was touched — no prompt, validation, expansion or skill change. What makes this a
-minor release rather than a patch is the new `knaif backend` subcommand; everything else is packaging
+**Planning is unchanged from 1.0.1; one expansion fix is not.** No prompt, validation or model
+change — the same utterance yields the same plan. The single exception is `convert_video` into
+webm, which emitted an impossible `ffmpeg` command and is fixed below. What makes this a minor
+release rather than a patch is the new `knaif backend` subcommand; everything else is packaging
 correctness and artifacts that should always have shipped.
 
 Two consequences worth stating plainly: every artifact here is unproven in the field by definition,
@@ -86,6 +87,14 @@ number alone is measuring the wrong thing.
 
 ### Fixed
 
+- **Converting to webm produced a file ffmpeg refused to write.** `convert_video` with only a
+  container change stream-copies the source, which is right for mkv and mov and impossible for
+  webm: webm holds only VP8/VP9/AV1, so `-c copy` from an H.264 source made ffmpeg exit 1 and leave
+  a truncated `.webm` behind. It now re-encodes to VP9 + Opus when the source codec cannot live in
+  the target container, and still remuxes whenever the codec is compatible. The audio side of this
+  guard already existed; the video side did not. A unit test had asserted the broken command, which
+  is why a suite that covers conversion thoroughly never flagged it — the eval corpus disagreed all
+  along, since every webm row re-encodes.
 - **`knaif models pull` could not download a model at all.** The fetcher probed the file with
   `Range: bytes=0-0`, pinned the CDN URL it was redirected to, and reused that link for every
   chunk. Hugging Face has since moved the model repo to Xet storage, whose signed links carry a

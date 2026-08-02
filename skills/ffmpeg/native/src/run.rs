@@ -651,7 +651,16 @@ mod tests {
     }
 
     #[test]
-    fn convert_webm_remux() {
+    fn convert_webm_re_encodes_rather_than_remuxing() {
+        // webm accepts only vp8/vp9/av1, so `-c copy` from an h264 source makes ffmpeg exit 1 and
+        // leave a truncated file behind.
+        //
+        // This test used to assert exactly that broken command, under the name
+        // `convert_webm_remux`. It locked in what the engine did rather than what ffmpeg accepts,
+        // which is how the defect survived a suite that otherwise covers conversion thoroughly —
+        // and why it took running the packaged artifact against a real file to find it. The corpus
+        // never agreed with it: all five webm rows re-encode, and ffmpeg_095's success_criteria
+        // demands vp9 + opus.
         assert_eq!(
             cmd(
                 "convert_video",
@@ -662,9 +671,38 @@ mod tests {
                 "-y",
                 "-i",
                 "a.mov",
+                "-c:v",
+                "libvpx-vp9",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "128k",
+                "a_converted.webm"
+            ]
+        );
+    }
+
+    #[test]
+    fn convert_mkv_still_remuxes() {
+        // The guard must not over-correct. mkv and mov accept h264, so a container-only change
+        // stays a verbatim stream copy — fast, lossless, and what ffmpeg_076 locks in. Pairing this
+        // with the webm case is what distinguishes "stop emitting an impossible command" from
+        // "stop remuxing", which would be a real regression.
+        assert_eq!(
+            cmd(
+                "convert_video",
+                serde_json::json!({"inputs": "a.mov", "container": "mkv"})
+            ),
+            vec![
+                "ffmpeg",
+                "-y",
+                "-i",
+                "a.mov",
                 "-c",
                 "copy",
-                "a_converted.webm"
+                "a_converted.mkv"
             ]
         );
     }
