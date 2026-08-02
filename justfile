@@ -400,11 +400,17 @@ package-linux *args:
 package-linux *args:
     bash "{{justfile_directory()}}/installers/linux/build-in-container.sh" {{args}}
 
-# Compile the Windows Inno Setup installer from the STAGED artifact (stage it first, e.g.
-# `just package-native cpu`). Produces dist/knaif-<ver>-windows-x64[-<kind>]-setup.exe. Needs
-# Inno Setup 6 (ISCC). kind selects which staged artifact to wrap (cpu|vulkan|cuda).
+# Compile the Windows Inno Setup installer from the STAGED artifact (stage it first with
+# `just package-native vulkan`). Needs Inno Setup 6 (ISCC). kind selects which staged artifact to
+# wrap and DEFAULTS TO VULKAN, matching knaif.iss's own `#ifndef Kind` default and the one artifact
+# per OS that actually ships — `just installer` after the documented release build has to work.
+#
+# THE OUTPUT NAME CARRIES NO KIND SUFFIX: every kind compiles to
+# dist/knaif-<ver>-windows-x64-setup.exe, which is a PUBLISHED artifact with a row in SHA256SUMS.
+# So `just installer cpu` overwrites the release installer and silently invalidates its checksum.
+# For anything experimental use `just installer-test`, which has its own output dir for this reason.
 [windows]
-installer kind="cpu":
+installer kind="vulkan":
     $iscc=@("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe","${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1; if(-not $iscc){throw 'ISCC.exe not found — install Inno Setup 6 (winget install JRSoftware.InnoSetup)'}; & $iscc /DKind={{kind}} "{{justfile_directory()}}\installers\windows\knaif.iss"
 
 # Compile a THROWAWAY installer for wizard verification — the wizard pages are the one part of the
