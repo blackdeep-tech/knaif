@@ -87,6 +87,16 @@ number alone is measuring the wrong thing.
 
 ### Fixed
 
+- **The progress spinner told GPU users their run was on the CPU.** `thinking_spinner()` hardcoded
+  *"Loading model and planning (first run on CPU can take a minute)…"* and consulted no backend, so
+  it reported CPU while all 37 layers were demonstrably assigned to `CUDA0` — to precisely the users
+  who had installed a ~668 MB CUDA payload in order not to be on the CPU. The device is now left
+  unnamed: the spinner is constructed before llama.cpp initialises, so at that point nothing has
+  chosen a device, and the accurate statement is already made conditionally by the "No GPU detected"
+  warning that runs a few lines earlier. *"first run"* is gone for the same reason — every `knaif
+  run` is a fresh process that re-reads the GGUF, re-uploads weights and re-prefills the planner
+  prompt, so repetition does not make it cheaper: three consecutive runs measured 7.73 / 7.06 /
+  6.84 s (v1.0.1, RTX 3070 Laptop, Vulkan, `knaif-qwen3-4b-v1` Q4_K_M) — flat, fastest last.
 - **Converting to webm produced a file ffmpeg refused to write.** `convert_video` with only a
   container change stream-copies the source, which is right for mkv and mov and impossible for
   webm: webm holds only VP8/VP9/AV1, so `-c copy` from an H.264 source made ffmpeg exit 1 and leave
