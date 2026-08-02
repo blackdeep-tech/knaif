@@ -330,12 +330,27 @@ This **Open / Next** section is the live backlog (originally distilled from the
   under a throwaway `AppId` (setup refused while the CLI held the mutex, no folder-exists warning,
   the directory was reused, `DisplayVersion` advanced, and a planted sentinel DLL in `{app}\bin` was
   gone afterwards). It is tempting to treat that as banked. It is not:
-  - **Re-run the upgrade path.** `docs/RELEASE.md` §4 says every release, not once, and 1.1.0's
-    installer wraps a different payload.
-  - **Re-run both clean rooms.** A CUDA payload is a new artifact shape, and P4's rule is that a new
-    shape needs its own clean-room run before publishing.
+  - [ ] **Re-run the upgrade path.** `docs/RELEASE.md` §4 says every release, not once, and 1.1.0's
+    installer wraps a different payload. **STILL OPEN** — it needs a GUI run (`/VERYSILENT` never
+    builds the task tree), so it cannot be automated.
+  - [ ] **Windows clean room.** **STILL OPEN** — Windows Sandbox, by hand.
+  - [x] **Linux clean room — DONE 2026-08-02**, against the rebuilt artifacts. `smoke.sh` passes on
+    both the tarball and the AppImage inside a container with no checkout; `check_elf_deps.py`
+    reports every `DT_NEEDED` staged or base-system across 21 binaries; and `check-floor.sh` proves
+    the floor **in both directions** for each artifact — runs on `ubuntu:22.04`, refused on
+    `ubuntu:20.04` for the documented reason (`CXXABI_1.3.13`, `GLIBCXX_3.4.29`, `GLIBC_2.32/33/34`
+    absent). Measured floor — `GLIBC_2.34`, `GLIBCXX_3.4.30`, `CXXABI_1.3.13` — matches the claim.
   - `smoke.sh` and `check_pe_imports.py` re-run automatically as required packaging steps, so those
     are free.
+
+  **All four artifacts were REBUILT on 2026-08-02** from `345797d`, because the spinner fix landed
+  after the previous build and the staged binary still carried the old string. Windows `smoke.sh`
+  8/8 and `check_pe_imports.py` (19 binaries) pass; both binaries were confirmed to carry the new
+  string and not the old. `SHA256SUMS` was regenerated over the four published files and the draft's
+  assets re-uploaded and verified byte-for-byte against local. **The CUDA payload assets were
+  deliberately NOT rebuilt** — they carry no `main.rs` code, their per-file sha256s are pinned in the
+  published manifest, and a rebuild would risk non-reproducible bytes for no gain. The backend
+  install rehearsal passes 10/10 against them.
 
   **What that session did buy, and it is not nothing:** `AppMutex` and `hold_app_mutex` were proven
   to agree, `[InstallDelete]` was proven to actually execute, and the CRT staging was proven to find
