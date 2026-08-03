@@ -395,6 +395,55 @@ This **Open / Next** section is the live backlog (originally distilled from the
     ~120 ms warm for all four CUDA libs, so it buys no startup time. Weigh against the
     `90-virtual` forward-compat PTX rationale in NATIVE.md §10.
 
+- [ ] **macOS support — now planned, not deferred.**
+  [plans/2026-08-02-macos-support.md](plans/2026-08-02-macos-support.md) (Planning, not started).
+  macOS has been out of scope since the dual-runtime plan's Phase 9 and is still listed as a
+  limitation in [NATIVE.md](NATIVE.md) §12. **The inference question is settled by reading the
+  pinned `llama-cpp-sys-2 0.1.150` sources:** `GGML_METAL` defaults **ON** under `APPLE`, the Metal
+  shader library is **embedded** in the backend binary (no `default.metallib` to stage),
+  `ggml-metal` is a loadable backend under `dynamic-backends` exactly like `ggml-vulkan`, and
+  `GGML_CPU_ALL_VARIANTS` covers Apple ARM (`apple_m1`/`m2_m3`/`m4`) — so **the macOS artifact
+  needs no new cargo feature**, and MLX/Core ML and MoltenVK are both rejected in the plan.
+  The work is packaging, signing and verification:
+  - `installers/package.sh` has a `Darwin` arm but its build branch, core-lib staging and
+    `exe_imports_llama` guard are all `linux`/`windows` only, and `set_origin_rpath` is a
+    documented no-op off Linux — macOS needs `install_name_tool` / `@loader_path` surgery instead.
+  - ⚠️ **`openmp` is a *default* feature of `llama-cpp-2`**, so `GGML_OPENMP=ON` and ggml runs
+    `find_package(OpenMP)`. If Homebrew's `libomp` is found, the artifact links an absolute
+    `/opt/homebrew` path that does not exist on a clean Mac — **the third instance of the
+    `VCOMP140.dll` / `libgomp.so.1` trap**, both of which shipped in every 1.0.x artifact for the
+    same reason: the check ran on the box that could not fail it. Needs
+    `scripts/check_macho_deps.py`, the pure-Python sibling of `check_pe_imports.py` /
+    `check_elf_deps.py`.
+  - Signing is **not** optional the way Windows signing is (SmartScreen warns; Gatekeeper blocks),
+    and any `install_name_tool` edit invalidates a signature — so the order
+    stage → rpath surgery → sign → archive → notarize → staple is load-bearing.
+  - Closing this plan is what unparks macOS in
+    [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s
+    C3 runner matrix.
+
+- [ ] **⚠️ The eval regression gate currently proves nothing — and this is NOT macOS work.**
+  Surfaced 2026-08-02 by an audit of the macOS plan (its task C0), verified against the code, and
+  listed separately because it invalidates a gate every skill depends on:
+  1. `cmd_regression` sets `current = baseline` by default — *"compare snapshot to itself (no-op)"* —
+     so without `--current FILE` it **always passes**.
+  2. `just eval-regression skill:` takes no `*args`, so the recipe cannot supply `--current` even
+     though the CLI accepts it.
+  3. `just eval-success` persists no scoreboard without `--save`, so there is nothing to pass.
+  4. **Both committed snapshots are stale**, and one uses a verifier the docs forbid as a bar:
+
+     | Skill | Snapshot verifier | Snapshot rows | Corpus rows |
+     |---|---|---:|---:|
+     | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 |
+     | `documents` | `success` | 129 | 143 |
+
+  Also, `--config` defaults to `eval_backends.yaml` and omitting `--backends` runs **every** stanza,
+  including models whose GGUFs [PERFORMANCE.md](PERFORMANCE.md) §8 records as deliberately absent —
+  each scoring ~0.0 and reading as catastrophic quality loss.
+  **Fix:** re-lock both snapshots with an executing verifier against the current corpora (own commit,
+  per the standing rule), and teach `just eval-regression` to forward `*args`. Until then any claim
+  that a change "passes the regression gate" is unfounded.
+
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
   2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
