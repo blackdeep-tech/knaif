@@ -761,21 +761,36 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > present. **Fix**: `llama-cpp-sys-2`'s `build.rs` forwards any `CMAKE_`-prefixed env var
       > straight to `cmake::Config::define` (verified by reading it — the same mechanism that makes
       > `MACOSX_DEPLOYMENT_TARGET` work), so CMake's own `CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON`
-      > escape hatch reaches this with no crate patch needed. Wired into both places that build
-      > the macOS kind (`package.sh` and the `justfile` recipe, alongside `MACOSX_DEPLOYMENT_TARGET`
-      > — same bypass-path gap, same fix location). Rebuilt clean, `otool -L` confirmed
+      > escape hatch reaches this with no crate patch needed. Rebuilt clean, `otool -L` confirmed
       > libssl/libcrypto (and the now-unneeded CoreFoundation/Security frameworks they pulled in)
       > are gone, `check_macho_deps.py` now reports zero failures, real Metal inference reconfirmed.
       >
-      > **This likely also affects Linux and Windows, unverified.** `LLAMA_OPENSSL` defaults ON
-      > for every platform in llama.cpp's own CMakeLists.txt, not just Apple — if a Linux/Windows
-      > release-build environment happens to have OpenSSL dev headers installed, the same silent
-      > link could be happening there too. Neither `check_elf_deps.py`'s `BASE_SYSTEM` nor
-      > `check_pe_imports.py`'s `WINDOWS_PROVIDED` allowlists libssl/libcrypto/openssl, so if it
-      > were happening, those checkers should already be catching it — but this was not
-      > specifically re-verified on either platform (no Linux/Windows box to hand), so it is flagged
-      > here rather than silently assumed fine. Worth a five-minute check next time either artifact
-      > is built.
+      > **The cause is platform-independent, so the fix is now unconditional** (2026-08-03, second
+      > pass — it was initially scoped to the macOS build paths only). Reading llama.cpp's own
+      > sources settles what the first pass could only flag as likely: `option(LLAMA_OPENSSL ... ON)`
+      > (`CMakeLists.txt:119`) and the `find_package(OpenSSL)` it gates
+      > (`vendor/cpp-httplib/CMakeLists.txt:126`) carry **no platform guard whatsoever**, and the
+      > propagation path is equally generic — `cpp-httplib` is a STATIC library that links OpenSSL
+      > `PUBLIC`, and `common/CMakeLists.txt:140` links it into `llama-common`, so the requirement
+      > lands in a core library we ship. The trigger is nothing more than "OpenSSL >= 3 dev files
+      > present": a near-certainty on a Mac, and routine on a Linux CI box with `libssl-dev`.
+      >
+      > What differs by platform is only the *severity*, and it is Mach-O that makes macOS worst:
+      > the dependency's install name is baked in, and Homebrew's is the absolute path
+      > `/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`, so dyld looks exactly there and aborts on
+      > a clean Mac. ELF records the bare SONAME `libssl.so.3`, resolved through normal loader search
+      > paths — a softer failure, but still a dependency no floor-pinned artifact may carry.
+      >
+      > Confirmed: neither `check_elf_deps.py`'s `BASE_SYSTEM` nor `check_pe_imports.py`'s
+      > `WINDOWS_PROVIDED` lists libssl/libcrypto, so **nothing can ship broken on those platforms —
+      > packaging hard-fails instead.** That is the right outcome and the wrong time to learn it:
+      > the failure arrives after a full build, reading like a mystery, when the fix is one line that
+      > already exists. Set in all three paths that reach llama.cpp's CMake, guarding every OS:
+      > `package.sh`'s own build step (which the Linux container path at
+      > `installers/linux/build-in-container.sh:215` also goes through), and both `package-native`
+      > recipes, which build via cargo directly and then call `package.sh --no-build` — the same
+      > bypass-path gap `MACOSX_DEPLOYMENT_TARGET` has, except that the floor genuinely *is*
+      > macOS-only and stays conditional, while this one no longer is.
       >
       > **Test suite**: `python/core/tests/test_macho_deps.py`, 30 tests, mirroring
       > `test_pe_imports.py`'s synthetic-fixture approach (constructs raw Mach-O bytes — no real

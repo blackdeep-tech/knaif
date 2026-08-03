@@ -41,9 +41,11 @@
 #          artifact every user downloads is exactly what the opt-in payload exists to avoid. Kept
 #          only so a bisect or a comparison can still produce one.
 #
-# On Linux the functional kinds are built by this script directly (gcc + cmake + ninja). On Windows
-# they must be COMPILED FIRST in a "Developer PowerShell for VS" (MSVC + cmake; Vulkan also needs
-# Ninja), then packaged with --no-build, e.g.:
+# On Linux and macOS the functional kinds are built by this script directly. On Windows they must be
+# COMPILED FIRST in a "Developer PowerShell for VS" (MSVC + cmake; Vulkan also needs Ninja), then
+# packaged with --no-build. Prefer `just package-native <kind>`, which sets the build environment
+# this script cannot reach on Windows; by hand it is, e.g.:
+#   (Dev Shell) $env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'
 #   (Dev Shell) cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda
 #   installers/package.sh --no-build --kind=cuda
 set -euo pipefail
@@ -152,6 +154,36 @@ if [ "$NO_BUILD" -eq 0 ]; then
   elif [ "$OS" = linux ] || [ "$OS" = macos ]; then
     feats="$(feats_for_kind "$KIND")"
     echo "Building '$KIND' release binary (--features $feats)…"
+    # An optional dependency the BUILD BOX decides — the same trap SHAPE as OpenMP (§1.3/D3 of the
+    # 2026-08-02 macOS support plan), found by check_macho_deps.py (E1) on 2026-08-03 and NOT
+    # anticipated by the plan. llama.cpp's CMakeLists.txt defaults `option(LLAMA_OPENSSL ... ON)`
+    # to give its vendored cpp-httplib HTTPS support, and `vendor/cpp-httplib/CMakeLists.txt` then
+    # runs a bare, non-REQUIRED `find_package(OpenSSL)`. cpp-httplib is a STATIC library that links
+    # OpenSSL PUBLIC, and `common/CMakeLists.txt` links cpp-httplib into llama-common — so whenever
+    # OpenSSL >= 3 happens to be installed, the ggml/llama core library WE SHIP acquires a hard
+    # dependency on it. knaif never runs llama-server or its --hf-repo downloader (LLAMA_CURL is
+    # already forced OFF by llama-cpp-sys-2's own build.rs), so that TLS support is dead weight.
+    #
+    # NOT macOS-only, though macOS is where it was caught and where it hurts most. `find_package`
+    # has no platform guard; the trigger is simply "OpenSSL dev files present", which is a
+    # near-certainty on a Mac (Homebrew's openssl@3 arrives transitively via dozens of formulae,
+    # exactly like libomp) and routine on a Linux CI box with libssl-dev. macOS is the worst case
+    # because Mach-O bakes in the dependency's install name: Homebrew's is the ABSOLUTE path
+    # `/opt/homebrew/opt/openssl@3/lib/lib{ssl,crypto}.3.dylib`, so dyld looks exactly there and
+    # aborts on a clean Mac. ELF records only the SONAME `libssl.so.3`, a softer failure — but
+    # still a dependency no floor-pinned artifact may carry, and check_elf_deps.py rightly fails
+    # packaging over it (it is not in BASE_SYSTEM). Setting this everywhere means that failure
+    # never has to be re-diagnosed on the other two platforms.
+    #
+    # Spelled this way because `LLAMA_OPENSSL=OFF` is UNREACHABLE: llama-cpp-sys-2's build.rs
+    # forwards an environment variable to `cmake::Config::define` only if it is `CMAKE_`-prefixed
+    # (verified by reading it), and defines no `LLAMA_OPENSSL` itself. CMake's own
+    # `CMAKE_DISABLE_FIND_PACKAGE_<Name>` forces a non-REQUIRED `find_package` to fail, which the
+    # `if (OpenSSL_FOUND)` guard turns into "skip the TLS block" — the correct escape hatch, and it
+    # reaches CMake without patching the crate. Verified on macOS: rebuilt from a clean
+    # `target/release` with this set, confirmed via `otool -L` that libssl/libcrypto (and the
+    # CoreFoundation/Security frameworks they pulled in) are gone from `libllama-common.dylib`.
+    export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
     # D9 (2026-08-02 macOS support plan): the deployment floor is a DECIDED property of the
     # artifact, not whatever SDK happens to be installed — and it must be exported BEFORE the
     # first configure, because MACOSX_DEPLOYMENT_TARGET is NOT a `rerun-if-env-changed` input in
@@ -160,22 +192,6 @@ if [ "$NO_BUILD" -eq 0 ]; then
     if [ "$OS" = macos ]; then
       export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
       echo "  MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
-      # A SEPARATE library hitting the exact same trap SHAPE as OpenMP (§1.3/D3), found by
-      # check_macho_deps.py (E1) on
-      # 2026-08-03, NOT anticipated by the plan: llama.cpp's CMakeLists.txt defaults
-      # `option(LLAMA_OPENSSL ... ON)` for cpp-httplib's (unused — knaif never runs llama-server
-      # or its --hf-repo download feature; LLAMA_CURL is already forced OFF above) HTTPS support,
-      # and `find_package(OpenSSL)` succeeds silently whenever Homebrew's openssl@3 happens to be
-      # on the build box (a near-certainty — dozens of formulae pull it in transitively, exactly
-      # like libomp). The result: `libllama-common.dylib` links
-      # `/opt/homebrew/opt/openssl@3/lib/lib{ssl,crypto}.3.dylib`, an absolute path that does not
-      # exist on a clean Mac. `llama-cpp-sys-2`'s build.rs forwards any `CMAKE_`-prefixed env var
-      # straight through to `cmake::Config::define` (verified by reading it), so CMake's own
-      # `CMAKE_DISABLE_FIND_PACKAGE_<Name>` escape hatch reaches this without patching the crate.
-      # Verified fix: rebuilt from a clean `target/release` with this set, confirmed via
-      # `otool -L` that libssl/libcrypto (and the now-unneeded CoreFoundation/Security frameworks
-      # they pulled in) are gone from `libllama-common.dylib`.
-      export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
     fi
     # A CUDA build MUST carry the arch list, and CUDAARCHS is the only way in: CMake initialises
     # CMAKE_CUDA_ARCHITECTURES from that environment variable, and llama-cpp-sys-2 offers no
@@ -197,9 +213,19 @@ if [ "$NO_BUILD" -eq 0 ]; then
     # CMAKE_GENERATOR=Ninja is required for the Vulkan shader-gen step; harmless for cpu/cuda.
     CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
   else
-    echo "ERROR: a '$KIND' build needs the MSVC/C++ toolchain — compile it in a VS Developer shell:" >&2
+    # `just package-native` is offered FIRST because it sets the build environment this script
+    # cannot reach on Windows (CMAKE_DISABLE_FIND_PACKAGE_OpenSSL, LIBCLANG_PATH, CUDAARCHS,
+    # CMAKE_GENERATOR). The manual form below has to repeat the OpenSSL guard verbatim: without it
+    # a box with OpenSSL installed links libssl/libcrypto into llama-common, and check_pe_imports.py
+    # rejects the artifact at the END of a full build. Printing a command that walks into that is
+    # worse than printing nothing.
+    echo "ERROR: a '$KIND' build needs the MSVC/C++ toolchain — compile it in a VS Developer shell." >&2
+    echo "Preferred (sets the whole build environment for you):" >&2
+    echo "  just package-native $KIND" >&2
+    echo "Or by hand, then re-run this script:" >&2
+    echo "  \$env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'" >&2
     echo "  cargo build --release -p knaif-cli --features $(feats_for_kind "$KIND")" >&2
-    echo "then re-run:  installers/package.sh --no-build --kind=$KIND" >&2
+    echo "  installers/package.sh --no-build --kind=$KIND" >&2
     exit 1
   fi
 fi

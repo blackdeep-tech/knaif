@@ -161,13 +161,24 @@ installers/linux/build-appimage.sh dist/staging/knaif-<ver>-linux-x64
 
 ### Windows (compile first in a "Developer PowerShell for VS")
 
-```bash
-CMAKE_GENERATOR=Ninja cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan
+```powershell
+$env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'   # see below — required, not optional
+$env:CMAKE_GENERATOR='Ninja'
+cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan
 installers/package.sh --no-build --kind=vulkan                        # -> dist/knaif-<ver>-windows-x64.zip
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installers\windows\knaif.iss
 ```
 
-`just package-native vulkan` + `just installer` wrap the same steps.
+`just package-native vulkan` + `just installer` wrap the same steps **and set both environment
+variables for you** — prefer them.
+
+**`CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON` is required on every OS.** llama.cpp defaults
+`LLAMA_OPENSSL=ON` and runs an unguarded `find_package(OpenSSL)`; because its vendored `cpp-httplib`
+is a static library linking OpenSSL `PUBLIC`, any build box that happens to have OpenSSL >= 3 dev
+files installed links `libssl`/`libcrypto` into the `llama-common` core library the artifact ships.
+`package.sh` sets it wherever it builds, so only this by-hand Windows path can miss it. Nothing ships
+broken if you forget — `check_pe_imports.py` fails packaging — but it fails *after* the full build.
+Same trap shape as OpenMP; see the 2026-08-02 macOS support plan, E1.
 
 **Vulkan requires `CMAKE_GENERATOR=Ninja`** — the default MSBuild generator dies in
 `vulkan-shaders-gen` with `cannot find the batch label specified - VCEnd`.

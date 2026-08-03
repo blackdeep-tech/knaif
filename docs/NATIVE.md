@@ -434,16 +434,25 @@ CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
 installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 ```
 
-**Windows — compile first in a "Developer PowerShell for VS"**, then package `--no-build`:
+**Windows — compile first in a "Developer PowerShell for VS"**, then package `--no-build`. Prefer
+`just package-native <kind>`, which sets the environment below for you:
 
-```bash
+```powershell
+$env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'   # every kind — see the note under this block
 cargo build --release -p knaif-cli --features llama,dynamic-backends            # cpu
-CMAKE_GENERATOR=Ninja \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan   # vulkan
-CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda     # cuda payload
+$env:CMAKE_GENERATOR='Ninja'
+cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan     # vulkan
+$env:CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"
+cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda       # cuda payload
 installers/package.sh --no-build --kind=<cpu|vulkan|cuda>
 ```
+
+**`CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON` is not Windows-specific** — `package.sh` exports it
+wherever it builds (Linux, macOS), so this by-hand path is simply the one place that has to repeat
+it. llama.cpp defaults `LLAMA_OPENSSL=ON` behind an unguarded `find_package(OpenSSL)`, and its
+vendored `cpp-httplib` links OpenSSL `PUBLIC` into `llama-common` — so a build box that merely *has*
+OpenSSL >= 3 installed produces an artifact depending on it. The dependency checkers reject that at
+packaging time on all three platforms, i.e. after the whole build.
 
 Release artifacts use **`dynamic-backends`** (§5.3). Drop it for a static single-exe dev build
 (`--features llama[,vulkan|,cuda]`); `package.sh` will then have no backend libs to stage.

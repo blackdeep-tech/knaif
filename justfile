@@ -359,9 +359,15 @@ package *args:
 # package.sh's verify_cuda_archs rejects the result after the full ~183-TU compile. The list is read
 # out of package.sh rather than copied, so there is still one source of truth; an explicit CUDAARCHS
 # wins, and KNAIF_CUDA_DEV_ARCHS shortens the build exactly as it does on Linux.
+#
+# CMAKE_DISABLE_FIND_PACKAGE_OpenSSL is set here for the same "package.sh cannot build on Windows"
+# reason as CUDAARCHS: this recipe is the only place it can be set, and llama.cpp's LLAMA_OPENSSL
+# defaults ON with an unguarded `find_package(OpenSSL)`, so a box that happens to have OpenSSL
+# installed links libssl/libcrypto into the llama-common core library. check_pe_imports.py would
+# reject the artifact at packaging time — after the full build. See package.sh's own comment.
 [windows]
 package-native kind="cpu":
-    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,dynamic-backends,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
+    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,dynamic-backends,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; $env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
 
 [unix]
 package-native kind="cpu":
@@ -377,21 +383,23 @@ package-native kind="cpu":
       metal) feats=llama,dynamic-backends;;
       *) echo "kind must be cpu|vulkan|cuda|metal" >&2; exit 1;;
     esac
-    # D9: the macOS deployment floor is a DECIDED property of the artifact, set before the first
-    # configure — it is NOT a `rerun-if-env-changed` input in llama-cpp-sys-2's build.rs (verified),
-    # so a later change silently keeps a cached build's old value. Needed HERE specifically because
-    # this recipe builds directly via cargo rather than through package.sh's own (`--no-build`
-    # skips) build step, which is the only other place this gets set. Without it the floor silently
-    # falls back to rustc's own default for aarch64-apple-darwin (11.0, verified) rather than the
-    # chosen 12.0 — a real gap, caught 2026-08-03 by checking LC_BUILD_VERSION on the actual output.
+    # Both exports below exist in package.sh's own build step too, and are repeated HERE for one
+    # reason: this recipe builds directly via cargo and then calls package.sh with `--no-build`,
+    # so that step never runs. They must be set before the FIRST configure — neither is a
+    # `rerun-if-env-changed` input in llama-cpp-sys-2's build.rs (verified), so setting them later
+    # silently keeps a cached build's old value.
+    #
+    # NOT metal-only: llama.cpp defaults LLAMA_OPENSSL=ON and its bare `find_package(OpenSSL)` has
+    # no platform guard, so any box with OpenSSL dev files installed (routine on Linux CI) links
+    # libssl/libcrypto into the llama-common core library we ship. See package.sh's own comment on
+    # this line for the full chain and why `LLAMA_OPENSSL=OFF` is not the reachable lever.
+    export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
+    # The macOS deployment floor IS macOS-only (D9). Without it the floor silently falls back to
+    # rustc's own default for aarch64-apple-darwin (11.0, verified) rather than the chosen 12.0 —
+    # a real gap, caught 2026-08-03 by checking LC_BUILD_VERSION on the actual output.
     if [ "{{kind}}" = "metal" ]; then
       export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
       echo "  MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
-      # Same bypass-path gap as the floor above, for the same reason (this recipe builds directly
-      # via cargo, skipping package.sh's own build step) — see package.sh's own comment on this
-      # line for what it fixes: llama.cpp's LLAMA_OPENSSL defaulting ON and silently linking
-      # Homebrew's openssl@3 whenever it happens to be on the build box.
-      export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
     fi
     CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
     bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}}
