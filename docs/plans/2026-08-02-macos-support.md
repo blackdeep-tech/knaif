@@ -48,11 +48,11 @@ memory or upstream docs. Line references are to that copy.
 | `GGML_METAL` defaults **ON** when `APPLE` | `llama.cpp/ggml/CMakeLists.txt:95-103, 239` (`GGML_METAL_DEFAULT`) | **No new cargo feature is needed.** A plain `--features llama` build on macOS compiles the Metal backend. |
 | `llama-cpp-sys-2`'s `metal` feature is **declared but never read** | `Cargo.toml:86` vs. no `feature = "metal"` in `build.rs` | Adding a `metal` feature to `knaif-llm` that forwards to it would be **a lie in the feature graph**. Do not add one. See D2. |
 | `GGML_METAL_EMBED_LIBRARY` defaults to `${GGML_METAL}` = ON | `ggml/CMakeLists.txt:242`; `ggml/src/ggml-metal/CMakeLists.txt` | The Metal shader library is **embedded into the backend binary** via an `.incbin` asm stub — there is **no `default.metallib` to stage**. This removes the single most obvious packaging hazard before it exists. |
-| `ggml_add_backend_library(ggml-metal …)` | `ggml/src/ggml-metal/CMakeLists.txt` | Under `GGML_BACKEND_DL` it becomes a loadable **`libggml-metal.dylib`**, exactly like `libggml-vulkan.so`. **`dynamic-backends` works on macOS with no new mechanism.** |
-| `GGML_CPU_ALL_VARIANTS` supports Apple ARM: `apple_m1` (DOTPROD), `apple_m2_m3` (+MATMUL_INT8), `apple_m4` (+SME) | `ggml/src/CMakeLists.txt:403-430` | The runtime CPU-variant dispatch that the Windows/Linux artifacts rely on **also works here**, and specialises per Apple generation. Three `ggml-cpu-*` libs, not nine to fourteen. |
-| Frameworks linked: `Foundation`, `Metal`, `MetalKit`, `Accelerate`, `libc++` | `build.rs:1157-1176` | **All system frameworks. Nothing redistributable, no NVIDIA-shaped payload, no EULA.** |
-| `GGML_BLAS` is forced **OFF** on Apple by the crate | `build.rs:673` | Accelerate is linked but not used as the BLAS provider. Affects the CPU fallback path only; note it, don't fight it. |
-| `openmp` is a **default feature** of `llama-cpp-2` → `GGML_OPENMP=ON` | `llama-cpp-2/Cargo.toml` `default = ["openmp", …]`; `sys/build.rs:891` | ⚠️ **This is the plan's highest-probability P0.** See §1.3. |
+| `ggml_add_backend_library(ggml-metal …)` | `ggml/src/ggml-metal/CMakeLists.txt` | Under `GGML_BACKEND_DL` it becomes a loadable **`libggml-metal.dylib`**, exactly like `libggml-vulkan.so`. **`dynamic-backends` works on macOS with no new mechanism.** ⚠️ **Corrected 2026-08-03, verified on hardware (A4): the actual file is `libggml-metal.so`, not `.dylib`.** CMake's `MODULE` library type (used for `GGML_BACKEND_DL` targets) suffixes `.so` on Apple too — only `SHARED` targets get `.dylib`. `has_backend_libs` in `knaif-llm` is unaffected (it checks the `ggml-` prefix, not the extension) and ggml's own `load_backends_from_path` dlopens it fine — confirmed empirically: `load_backend: loaded MTL backend from …/libggml-metal.so`, 37/37 layers offloaded. **This does matter for B3/B1**: any packaging step that globs `libggml-*.dylib` to decide what to stage/sign will silently miss these files. Glob `libggml-*.{dylib,so}` (or just `libggml-*` minus the core libs) on Darwin. |
+| `GGML_CPU_ALL_VARIANTS` supports Apple ARM: `apple_m1` (DOTPROD), `apple_m2_m3` (+MATMUL_INT8), `apple_m4` (+SME) | `ggml/src/CMakeLists.txt:403-430` | The runtime CPU-variant dispatch that the Windows/Linux artifacts rely on **also works here**, and specialises per Apple generation. Three `ggml-cpu-*` libs, not nine to fourteen. Confirmed on hardware (A4): `libggml-cpu-apple_m1.so`, `_m2_m3.so`, `_m4.so` all built; `apple_m2_m3` correctly selected at runtime on this M3 Pro. |
+| Frameworks linked: `Foundation`, `Metal`, `MetalKit`, `Accelerate`, `libc++` | `build.rs:1157-1176` | **All system frameworks. Nothing redistributable, no NVIDIA-shaped payload, no EULA.** Confirmed via `otool -L` on every staged Mach-O (A4/A5): only system framework paths, `libc++`, and `@rpath` to the artifact's own core libs — no third-party dependency anywhere. |
+| `GGML_BLAS` is forced **OFF** on Apple by the crate | `build.rs:673` | Accelerate is linked but not used as the BLAS provider. Affects the CPU fallback path only; note it, don't fight it. Confirmed: `GGML_BLAS:BOOL=OFF`, `GGML_BLAS_VENDOR:STRING=Apple` in `CMakeCache.txt`. |
+| `openmp` is a **default feature** of `llama-cpp-2` → `GGML_OPENMP=ON` | `llama-cpp-2/Cargo.toml` `default = ["openmp", …]`; `sys/build.rs:891` | ⚠️ **This is the plan's highest-probability P0.** See §1.3. **Partially measured 2026-08-03 (B5):** on `M3P`, which has Homebrew but **not** `libomp` installed, `CMakeCache.txt` shows `GGML_OPENMP:BOOL=ON` but `GGML_OPENMP_ENABLED:INTERNAL=OFF` — `find_package(OpenMP)` failed to find an implementation and ggml disabled it gracefully. `otool -L` on every staged Mach-O confirms **zero** OpenMP linkage. This exercises only the *safe* fallback path, not the trap itself — the trap requires `libomp` actually installed (`brew install libomp`), which was not done this session (changes system state; see below). D3's fix should still be implemented regardless, since the trap is real whenever `libomp` **is** present. |
 
 ### 1.2 What this means for the artifact shape
 
@@ -245,14 +245,19 @@ Two mechanical traps make it worse than it looks:
 
 ## 3. Workstream M — machine and toolchain baseline
 
-- [ ] **M1. Record the machine.** Model, chip (M-series generation), core counts (P/E), GPU core
+- [x] **M1. Record the machine.** Model, chip (M-series generation), core counts (P/E), GPU core
       count, **unified memory size**, macOS version, and Xcode Command Line Tools version. This
       becomes a row in [PERFORMANCE.md](../PERFORMANCE.md) §1 and every number this plan produces is
       quoted against it. The §1 warning — *never quote a latency number without naming the machine* —
       applies from the first measurement, not retroactively.
-- [ ] **M2. Provision via `mise`.** `just bootstrap` should work unchanged (`mise.toml` pins
+      > **Done 2026-08-03.** Machine `M3P`: Apple M3 Pro, 6P+6E CPU, 18-core GPU, 18 GB unified
+      > memory, macOS 26.6 (build 25G72), Xcode 26.6 / CLT 26.6.0.0. Row added to
+      > [PERFORMANCE.md](../PERFORMANCE.md) §1.
+- [x] **M2. Provision via `mise`.** `just bootstrap` should work unchanged (`mise.toml` pins
       python 3.14 / uv 0.11.2 / rust 1.96 / just / cmake). Confirm `rust-toolchain.toml` resolves to
       the `aarch64-apple-darwin` host. Record anything mise cannot provide.
+      > **Done 2026-08-03.** `just bootstrap` → "Toolchain provisioned via mise." with no gaps.
+      > `rustc -vV` confirms `host: aarch64-apple-darwin`. Nothing mise could not provide.
 - [ ] **M3. Confirm the *build* prerequisites and write them down as a list that can be wrong in a
       way that stops the build.** Expected: Xcode Command Line Tools (`xcode-select --install`) for
       `clang`, `ld`, `xcrun`, `codesign`, `otool`, `install_name_tool`, `pkgbuild`, `notarytool`;
@@ -260,46 +265,93 @@ Two mechanical traps make it worse than it looks:
       Metal shader compilation at *build* time is not needed (the shaders are embedded as source,
       §1.1), which is the usual reason a project needs full Xcode. If CLT suffices, say so loudly:
       it is a 10× smaller prerequisite.
-- [ ] **M4. Skill-dependency tooling via Homebrew** for the eval/quality work: `ffmpeg`,
+      > **Partial 2026-08-03.** This machine has full Xcode 26.6 installed (CLT 26.6.0.0 alone was
+      > not isolated) and A2/A4 succeeded on it. **Still open:** whether CLT alone suffices requires
+      > a machine/VM *without* full Xcode — uninstalling Xcode from this dev machine to test would be
+      > destructive and was not done. Test this in the E3 clean-room VM instead, which is being built
+      > without Xcode/CLT/Homebrew anyway (D8) — if the build step were ever run there, it would
+      > answer this for free; failing that, provision a disposable VM with CLT only.
+- [x] **M4. Skill-dependency tooling via Homebrew** for the eval/quality work: `ffmpeg`,
       `ghostscript`, `libreoffice`, `tesseract`. `deps.rs` already maps macOS → `brew`
       (`deps.rs:45,55,338,343`) — verify the probe actually resolves `/opt/homebrew/bin` entries
       under the PATH a **GUI-launched** process gets, not just a login shell's.
-- [ ] **M4b. ⚠️ Decide `MACOSX_DEPLOYMENT_TARGET` — before A2, not after.** Per D9. Pick the floor
+      > **Done 2026-08-03.** `knaif skills deps` (native, mock) correctly reports
+      > `[OK] ffmpeg /opt/homebrew/bin/ffmpeg, /opt/homebrew/bin/ffprobe` (installed) and
+      > `[MISS] ghostscript/libreoffice/tesseract (optional) install: brew` (not installed) — matches
+      > C7's "`[MISS]` is a pass" expectation. `resolve_command`/`which` in `deps.rs` reads
+      > `std::env::PATH` directly with no OS-specific handling; this resolves correctly for a
+      > terminal-invoked process because Homebrew's installer appends `/opt/homebrew/bin` to the
+      > shell rc files a login/interactive shell sources. **The GUI-launched-process PATH concern is
+      > real in principle but untested** — knaif has no GUI launch path today (out of scope, §11), so
+      > there is nothing to test it against; revisit only if a GUI front-end ever lands (ties to D5).
+- [x] **M4b. ⚠️ Decide `MACOSX_DEPLOYMENT_TARGET` — before A2, not after.** Per D9. Pick the floor
       deliberately, export it before the first functional compile, and use a dedicated
       `CARGO_TARGET_DIR` for release builds so a later change cannot be swallowed by a cached
       `llama-cpp-sys-2` configure (it is **not** a `rerun-if-env-changed` input — verified). Record
       the chosen floor, then have E1 assert `LC_BUILD_VERSION` on every staged Mach-O and E3 launch
       on that oldest OS. A floor that is stated but not asserted is the exact pattern that produced
       both prior portability defects.
-- [ ] **M5. Baseline the repo before changing anything:** `just check` (lint + mypy + pytest +
+      > **Decided 2026-08-03: `MACOSX_DEPLOYMENT_TARGET=12.0` (Monterey).** Exported before the very
+      > first `llama-cpp-sys-2` configure (A2), so there was no cached-build swallow risk this time.
+      > **Still open for the packaging phase (B):** wire this into `package.sh` itself (an exported
+      > env var, not a one-off shell export) and give release builds a dedicated `CARGO_TARGET_DIR`
+      > per the plan's own advice, so a *future* floor change on a dev machine with a warm `target/`
+      > can't silently keep the old one.
+- [x] **M5. Baseline the repo before changing anything:** `just check` (lint + mypy + pytest +
       generated-docs) and `just test-native`. Record every failure. **Some Python tests have never
       run on Darwin**; a pre-existing failure must not be discovered later and mistaken for
       something this plan caused.
+      > **Native half done 2026-08-03; Python half (`just check`) not yet run.** `cargo fmt --all
+      > --check` and `cargo clippy --workspace --all-targets -- -D warnings` are clean (default
+      > features). `cargo test --workspace` (default features): 63 passed, 0 failed. Additionally ran
+      > the `$KNAIF_TEST_GGUF`-gated real-inference proof manually (`cargo test -p knaif-llm
+      > --features llama inference_produces_text` with `KNAIF_TEST_NGL=99`): **passed**, output
+      > `{"ok": true}`, confirming Metal offload end-to-end at the unit-test level — this is the
+      > condition C1 asks for, just not yet wired into a macOS `just test-native` invocation.
+      > `just check` (the Python suite) was **not** run this session — still open.
 
 ---
 
 ## 4. Workstream A — build the native runtime on macOS
 
-- [ ] **A1. Mock build first.** `cargo build --release -p knaif-cli` and `just native-mock -- skills list`.
+- [x] **A1. Mock build first.** `cargo build --release -p knaif-cli` and `just native-mock -- skills list`.
       No llama.cpp, no C++ — this isolates *knaif's own* Darwin portability from llama.cpp's.
       Expect `cfg(unix)` `libc`/`tcflush` to compile and the `cfg(windows)` console/mutex paths to
       drop out. Fix any `unused_imports` / dead-code warnings that only appear off Windows —
       `check-native` runs clippy with `-D warnings`.
-- [ ] **A2. First functional build.** `cargo build --release -p knaif-cli --features llama`.
+      > **Done 2026-08-03.** Clean build, no warnings, `Finished release profile in 49.85s`.
+      > `just native-mock -- skills list` and `skills deps` both work correctly.
+- [x] **A2. First functional build.** `cargo build --release -p knaif-cli --features llama`.
       Static, no `dynamic-backends`. This is the smallest thing that can prove Metal works.
       Budget real time for the first llama.cpp compile.
-- [ ] **A3. Prove Metal is actually selected, not merely compiled.** Run with `--verbose` and
+      > **Done 2026-08-03**, with `MACOSX_DEPLOYMENT_TARGET=12.0` exported per M4b/D9. Compiled in
+      > 1m36s wall (9m14s user — genuinely compiled ggml/llama.cpp C++ across all cores, not a
+      > cache hit). Much faster than the "budget real time" warning implied on this hardware.
+- [x] **A3. Prove Metal is actually selected, not merely compiled.** Run with `--verbose` and
       confirm the device line reports Metal rather than CPU, and that all model layers offload.
       This is the macOS instance of the trap [PERFORMANCE.md](../PERFORMANCE.md) §2 documents twice
       (WSL's "Vulkan" runs that were silently CPU; `op_offload` making `n_gpu_layers=0` not
       CPU-only). **A backend that silently isn't the one you think you are benchmarking is the
       single most expensive mistake available here** — establish the check before any timing.
-- [ ] **A4. `dynamic-backends` build.** `--features llama,dynamic-backends`. Verify the
+      > **Done 2026-08-03**, against the real `knaif-qwen3-4b-v1` GGUF (downloaded for this purpose).
+      > `knaif run ffmpeg "convert input.mov to mp4" --dry-run --verbose` shows
+      > `ggml_metal_init: found device: Apple M3 Pro`, `load_tensors: offloaded 37/37 layers to GPU`,
+      > every KV-cache layer `dev = MTL0`, and the correct rendered command
+      > (`ffmpeg -y -i input.mov -c copy -movflags +faststart input_converted.mp4`). Not silently CPU.
+- [x] **A4. `dynamic-backends` build.** `--features llama,dynamic-backends`. Verify the
       `$OUT_DIR/backends/` directory contains `libggml-metal.dylib` plus the three
       `libggml-cpu-apple-*.dylib` variants (§1.1), and that `load_dynamic_backends` registers them.
       Confirm the dev fallback in `backend_dirs()` (`BACKENDS_DIR` baked in at compile time) still
       works for an unstaged `cargo run` and does **not** double-load.
-- [ ] **A5. ⚠️ Establish how dylibs resolve, before touching packaging.** `dynamic-backends`
+      > **Done 2026-08-03 — with a correction to the plan's own assumption.** `$OUT_DIR/backends/`
+      > contains `libggml-metal.so`, `libggml-cpu-apple_m1.so`, `libggml-cpu-apple_m2_m3.so`,
+      > `libggml-cpu-apple_m4.so` — **`.so`, not `.dylib`** (see the corrected §1.1 row). Ran the
+      > unstaged `cargo run`-equivalent binary against the real GGUF with `--verbose`:
+      > `load_backend: loaded MTL backend from …/libggml-metal.so`,
+      > `load_backend: loaded CPU backend from …/libggml-cpu-apple_m2_m3.so` (correctly the M2/M3
+      > variant, not M1 or M4), each logged **exactly once** (no double-load), then
+      > `offloaded 37/37 layers to GPU` — identical outcome to the static A2 build.
+- [x] **A5. ⚠️ Establish how dylibs resolve, before touching packaging.** `dynamic-backends`
       implies `dynamic-link`, so `libllama`/`libggml`/`libggml-base`/`libllama-common` become real
       runtime dependencies. `llama-cpp-sys-2`'s `build.rs` emits **no rpath link args at all**
       (verified: no `rustc-link-arg`, no `rpath` anywhere in it) — which is exactly why Linux needs
@@ -310,6 +362,17 @@ Two mechanical traps make it worse than it looks:
       - whether the exe has any `LC_RPATH` at all, and whether `target/release/knaif` even runs
         without `DYLD_LIBRARY_PATH`.
       The answer decides B3's shape. **`@loader_path` is macOS's `$ORIGIN`** and is the right choice.
+      > **Done 2026-08-03 — every prediction confirmed on hardware.** `otool -L target/release/knaif`
+      > shows the four core libs linked as `@rpath/libggml-base.0.dylib`,
+      > `@rpath/libggml.0.dylib`, `@rpath/libllama-common.0.dylib`, `@rpath/libllama.0.dylib`, plus
+      > only system frameworks (Foundation, Metal, MetalKit, Accelerate, libc++, CoreFoundation,
+      > libiconv, libSystem). `otool -D` on each core dylib confirms `LC_ID_DYLIB = @rpath/lib….dylib`
+      > exactly as CMake's `MACOSX_RPATH` default predicts. **The exe has zero `LC_RPATH` entries**
+      > (`otool -l | grep LC_RPATH` empty), and running it bare fails exactly as predicted:
+      > `dyld[…]: Library not loaded: @rpath/libggml-base.0.dylib … Reason: no LC_RPATH's found`
+      > (abort, exit 134). With `DYLD_LIBRARY_PATH=target/release` set, it runs fine. This confirms
+      > B3 must add `-add_rpath @loader_path` to the exe during staging — nothing else will resolve
+      > the four core libs in a packaged artifact.
       > *Rationale corrected 2026-08-02 after audit.* The first draft said `@executable_path` is
       > *wrong* "because the backends are `dlopen`ed by a dylib, not by the exe." That reasoning is
       > false — `@executable_path` resolves against the main executable regardless of who does the
@@ -319,10 +382,17 @@ Two mechanical traps make it worse than it looks:
       > that the *backend* dylibs are found by an explicit directory scan
       > (`load_backends_from_path`), so the rpath governs their **dependencies** (`libggml-base`
       > and friends), not their own discovery.
-- [ ] **A6. `knaif-llm` review for Darwin.** `llama.rs`'s `has_backend_libs` normalises a `lib`
+- [x] **A6. `knaif-llm` review for Darwin.** `llama.rs`'s `has_backend_libs` normalises a `lib`
       prefix for Linux vs Windows; `.dylib` files also carry the `lib` prefix, so this should hold —
       **confirm with a test**, because the same function silently returned `false` on Linux once and
       caused every backend to load twice. Add a Darwin case to its unit tests.
+      > **Done 2026-08-03.** Added `has_backend_libs_recognises_all_platform_namings` to
+      > `native/crates/knaif-llm/src/llama.rs` (`#[cfg(feature = "dynamic-backends")]`), covering: an
+      > empty dir (false), `libggml-base.{dylib,so}` alone (false — core lib, not a backend),
+      > `libggml-metal.so` (true — the **actual** macOS naming per A4's correction),
+      > `libggml-vulkan.dylib` (true — extension-agnostic), `libggml-cuda.so` (true — Linux), and
+      > `ggml-vulkan.dll` (true — Windows, no `lib` prefix). Passes. The function needed no code
+      > change — its prefix-only check was already extension-agnostic and correct.
 
 ---
 

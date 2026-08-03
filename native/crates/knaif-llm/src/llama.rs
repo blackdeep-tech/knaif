@@ -373,6 +373,63 @@ impl LlmBackend for LlamaCppBackend {
 mod tests {
     use super::*;
 
+    /// `has_backend_libs` must recognise a loadable backend regardless of platform naming —
+    /// Linux/macOS `lib`-prefixed, Windows bare, and (verified empirically on macOS, see the
+    /// 2026-08-02 macOS support plan A4) macOS's own loadable modules are named `libggml-*.so`,
+    /// not `.dylib`, because CMake's `MODULE` library type suffixes differently from `SHARED` even
+    /// on Apple. The check is deliberately extension-agnostic (prefix-only), so both must pass.
+    #[cfg(feature = "dynamic-backends")]
+    #[test]
+    fn has_backend_libs_recognises_all_platform_namings() {
+        let dir = std::env::temp_dir().join(format!(
+            "knaif-has-backend-libs-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        // Nothing staged yet.
+        assert!(
+            !has_backend_libs(&dir),
+            "empty dir must not count as having backend libs"
+        );
+
+        // Only the core lib present — must not count (it is not a loadable backend).
+        std::fs::write(dir.join("libggml-base.dylib"), b"").unwrap();
+        std::fs::write(dir.join("libggml-base.so"), b"").unwrap();
+        assert!(
+            !has_backend_libs(&dir),
+            "libggml-base must never count as a backend"
+        );
+
+        // macOS dynamic-backends module naming, observed on Apple Silicon: `.so`, not `.dylib`.
+        std::fs::write(dir.join("libggml-metal.so"), b"").unwrap();
+        assert!(
+            has_backend_libs(&dir),
+            "libggml-metal.so (macOS MODULE suffix) must count"
+        );
+        std::fs::remove_file(dir.join("libggml-metal.so")).unwrap();
+
+        // Hypothetical/legacy `.dylib`-suffixed backend — still must count (extension-agnostic).
+        std::fs::write(dir.join("libggml-vulkan.dylib"), b"").unwrap();
+        assert!(has_backend_libs(&dir), "libggml-vulkan.dylib must count");
+        std::fs::remove_file(dir.join("libggml-vulkan.dylib")).unwrap();
+
+        // Linux naming.
+        std::fs::write(dir.join("libggml-cuda.so"), b"").unwrap();
+        assert!(has_backend_libs(&dir), "libggml-cuda.so (Linux) must count");
+        std::fs::remove_file(dir.join("libggml-cuda.so")).unwrap();
+
+        // Windows naming: no `lib` prefix.
+        std::fs::write(dir.join("ggml-vulkan.dll"), b"").unwrap();
+        assert!(
+            has_backend_libs(&dir),
+            "ggml-vulkan.dll (Windows) must count"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// Inference proof: gated on `$KNAIF_TEST_GGUF` (a path to any local GGUF) so the suite
     /// still passes with the `llama` feature but no model available (CI, other machines).
     /// `$KNAIF_TEST_NGL` sets `n_gpu_layers` (default 0 = CPU; e.g. 99 offloads to the GPU

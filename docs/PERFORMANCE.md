@@ -30,6 +30,13 @@ generation, `n_ctx = 8192`, fresh process, median of warm reps). **Linux CUDA pa
 | **`5080`** | RTX 5080 (desktop) | Blackwell, sm_120 | 16 GB | 32 threads |
 | **`3070L`** | RTX 3070 **Laptop** | Ampere, sm_86 | 8 GB | AMD, **8 physical / 16 logical** |
 | **`3070L-WSL`** | the **same box** as `3070L`, under WSL2 | Ampere, sm_86 | 8 GB | same (driver 610.88) |
+| **`M3P`** | Apple M3 Pro, integrated (Metal), 18-core GPU | Apple Silicon, arm64 | 18 GB unified (soft-capped via `iogpu.wired_limit_pct`) | Apple M3 Pro, 6 P + 6 E |
+
+`M3P` — macOS 26.6 (build 25G72), Xcode 26.6 / CLT 26.6.0 (full Xcode installed; §7 of the
+[2026-08-02 macOS support plan](plans/2026-08-02-macos-support.md) M3 still needs to test whether
+CLT alone suffices). `MACOSX_DEPLOYMENT_TARGET=12.0` is the chosen floor for the shipped artifact
+(D9) — this machine's own OS is far newer, so it proves nothing about the floor by itself; the E3
+clean-room VM must run the floor OS.
 
 `3070L-WSL` is the **Linux** artifact measured on the `3070L` hardware through WSL2, not a third
 machine. Its GPU numbers land ~10–12% behind bare-metal `3070L` (§2), which is small enough to
