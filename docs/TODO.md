@@ -425,10 +425,16 @@ This **Open / Next** section is the live backlog (originally distilled from the
 - [ ] **⚠️ The eval regression gate currently proves nothing — and this is NOT macOS work.**
   Surfaced 2026-08-02 by an audit of the macOS plan (its task C0), verified against the code, and
   listed separately because it invalidates a gate every skill depends on:
-  1. `cmd_regression` sets `current = baseline` by default — *"compare snapshot to itself (no-op)"* —
-     so without `--current FILE` it **always passes**.
-  2. `just eval-regression skill:` takes no `*args`, so the recipe cannot supply `--current` even
-     though the CLI accepts it.
+  1. ~~`cmd_regression` sets `current = baseline` by default — *"compare snapshot to itself
+     (no-op)"* — so without `--current FILE` it **always passes**.~~ **Fixed 2026-08-03**: it still
+     defaults to the self-compare (that mode has a legitimate use — see EVAL_VERIFICATION_SOP.md —
+     and `regression --all-skills` already existed as the version that requires a real current run),
+     but it now prints a loud `⚠` warning when it does, instead of reading identically to a real
+     check, and hard-fails if `--current` points at a file that doesn't exist (previously a typo
+     silently fell back to the self-compare too — same false-green shape, worse, since it *looked*
+     deliberate).
+  2. ~~`just eval-regression skill:` takes no `*args`, so the recipe cannot supply `--current` even
+     though the CLI accepts it.~~ **Fixed 2026-08-03**: `eval-regression skill *args:`, forwarding.
   3. `just eval-success` persists no scoreboard without `--save`, so there is nothing to pass.
   4. **Both committed snapshots are stale**, and one uses a verifier the docs forbid as a bar:
 
@@ -440,9 +446,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
   Also, `--config` defaults to `eval_backends.yaml` and omitting `--backends` runs **every** stanza,
   including models whose GGUFs [PERFORMANCE.md](PERFORMANCE.md) §8 records as deliberately absent —
   each scoring ~0.0 and reading as catastrophic quality loss.
-  **Fix:** re-lock both snapshots with an executing verifier against the current corpora (own commit,
-  per the standing rule), and teach `just eval-regression` to forward `*args`. Until then any claim
-  that a change "passes the regression gate" is unfounded.
+  **Remaining fix:** re-lock both snapshots with an executing verifier against the current corpora
+  (own commit, per the standing rule — needs a real eval-suite run across the full corpus, not
+  attempted yet). Until then any claim that a change "passes the regression gate" via `eval-success`
+  → `eval-regression` with no `--current` is unfounded; passing `--current` explicitly against a
+  freshly saved scoreboard is a real check today, but the **committed bar itself** is still stale.
 
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)

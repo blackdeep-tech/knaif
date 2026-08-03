@@ -293,22 +293,29 @@ Two mechanical traps make it worse than it looks:
       both prior portability defects.
       > **Decided 2026-08-03: `MACOSX_DEPLOYMENT_TARGET=12.0` (Monterey).** Exported before the very
       > first `llama-cpp-sys-2` configure (A2), so there was no cached-build swallow risk this time.
-      > **Still open for the packaging phase (B):** wire this into `package.sh` itself (an exported
-      > env var, not a one-off shell export) and give release builds a dedicated `CARGO_TARGET_DIR`
-      > per the plan's own advice, so a *future* floor change on a dev machine with a warm `target/`
-      > can't silently keep the old one.
+      > **Wired into `package.sh` itself in B2** (both its own build path and, after a second
+      > instance of the same gap was found, the `justfile`'s `package-native` recipe too — see B2's
+      > note). **Still not done:** a dedicated `CARGO_TARGET_DIR` for release builds, so a *future*
+      > floor change on a dev machine with a warm `target/` can't silently keep the old one. Low
+      > priority in practice — CI/release builds should use a clean checkout per `RELEASE.md`
+      > anyway — but worth doing before this plan closes.
 - [x] **M5. Baseline the repo before changing anything:** `just check` (lint + mypy + pytest +
       generated-docs) and `just test-native`. Record every failure. **Some Python tests have never
       run on Darwin**; a pre-existing failure must not be discovered later and mistaken for
       something this plan caused.
-      > **Native half done 2026-08-03; Python half (`just check`) not yet run.** `cargo fmt --all
-      > --check` and `cargo clippy --workspace --all-targets -- -D warnings` are clean (default
-      > features). `cargo test --workspace` (default features): 63 passed, 0 failed. Additionally ran
-      > the `$KNAIF_TEST_GGUF`-gated real-inference proof manually (`cargo test -p knaif-llm
-      > --features llama inference_produces_text` with `KNAIF_TEST_NGL=99`): **passed**, output
+      > **Both halves done.** Native: `cargo fmt --all --check` and
+      > `cargo clippy --workspace --all-targets -- -D warnings` clean (default features);
+      > `cargo test --workspace`: 63 passed, 0 failed. Additionally ran the
+      > `$KNAIF_TEST_GGUF`-gated real-inference proof manually (`cargo test -p knaif-llm --features
+      > llama inference_produces_text` with `KNAIF_TEST_NGL=99`): **passed**, output
       > `{"ok": true}`, confirming Metal offload end-to-end at the unit-test level — this is the
       > condition C1 asks for, just not yet wired into a macOS `just test-native` invocation.
-      > `just check` (the Python suite) was **not** run this session — still open.
+      > **Python: `just check` run 2026-08-03 — clean.** 1629 passed, 7 skipped, 16 benign warnings
+      > (missing-model-path `UserWarning`s from fixtures that intentionally construct an
+      > uninitialized orchestrator), 82.63% coverage (bar is 80%), `gen_skills.py --check` and
+      > `cargo fmt`/`clippy` all green. **No pre-existing Darwin-specific test failure found** — the
+      > "some Python tests have never run on Darwin" risk this task exists to catch did not
+      > materialize.
 
 ---
 
@@ -403,7 +410,7 @@ and `uname -m` returns `arm64`, which passes through its arch mapping unchanged.
 about macOS in that script is either missing or a Linux/Windows branch that excludes it.** Each item
 below names the specific place.
 
-- [ ] **B1. `feats_for_kind` + argument parsing: add `metal`, and refuse everything else on Darwin.**
+- [x] **B1. `feats_for_kind` + argument parsing: add `metal`, and refuse everything else on Darwin.**
       `--kind=metal` (`llama,dynamic-backends`, minus `openmp` per D3) gets the **plain artifact
       name** on macOS, the way `vulkan` does elsewhere. **Refuse `--kind=cpu|vulkan|cuda` on Darwin
       with a message that says why** — `cpu` because it would be a byte-identical build under a
@@ -413,12 +420,36 @@ below names the specific place.
       sync. Archive format is `.zip` on macOS (D6), which `package.sh` currently selects only for
       Windows — and its Windows branch requires `System32/tar.exe`, so macOS needs its own
       `ditto -c -k --keepParent` or `zip` path.
-- [ ] **B2. The build branch excludes macOS.** `package.sh:119` is `elif [ "$OS" = linux ]`, so a
+      > **Done 2026-08-03, with a correction to the plan's own suggestion.** Added `metal` to
+      > `feats_for_kind`, arg parsing, and a Darwin refusal block for `cpu`/`vulkan`/`cuda` with a
+      > message naming D2/D1 — verified all three refusal messages fire correctly. Mirrored the kind
+      > list into the `[unix] package-native` justfile recipe.
+      > **`ditto -c -k --keepParent` (the plan's first suggestion) was tried and rejected on hard
+      > evidence.** On this build box every staged file already carries a `com.apple.provenance`
+      > extended attribute (present the moment `cargo build`/`cp` create a file — not something
+      > packaging adds), and `ditto` preserves it as an inline AppleDouble `._<name>` sidecar next to
+      > **every** real file — not bundled into one `__MACOSX/` folder — doubling the entry count.
+      > Worse: `com.apple.provenance` cannot be stripped first either — `xattr -d`/`xattr -cr` both
+      > report success and silently leave it in place (it's a protected, system-managed attribute).
+      > Switched to plain `zip -qry` (the plan's other suggested option), which never attempts
+      > xattr/resource-fork preservation and produces a clean archive — verified: 0 `._*` entries.
+      > This is exactly the kind of macOS-specific hygiene wart E5 warns about (alongside
+      > `.DS_Store`); worth remembering for any *other* macOS packaging step that reaches for `ditto`.
+- [x] **B2. The build branch excludes macOS.** `package.sh:119` is `elif [ "$OS" = linux ]`, so a
       macOS `--kind=metal` falls into the `else` and prints *"needs the MSVC/C++ toolchain … compile
       it in a VS Developer shell"*. Extend the native-build branch to Darwin (macOS has a real
       compiler on the build box, like Linux and unlike Windows). `CMAKE_GENERATOR=Ninja` is harmless
       and consistent.
-- [ ] **B3. Core-lib staging + install-name surgery.** The staging block is gated
+      > **Done 2026-08-03.** `elif [ "$OS" = linux ] || [ "$OS" = macos ]`, with
+      > `MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"` exported before the build per
+      > M4b/D9. **Found and fixed a second instance of the same gap**: the `justfile`'s
+      > `[unix] package-native` recipe builds directly via `cargo build` (bypassing package.sh's own
+      > build step via `--no-build`), so it never got this export either. Confirmed empirically —
+      > `otool -l` showed `minos 11.0` (rustc's own default for `aarch64-apple-darwin`, unrelated to
+      > llama.cpp's CMake config) on a binary built through that recipe before the fix, `minos 12.0`
+      > after. Fixed the recipe the same way; re-verified every staged Mach-O in a rebuilt artifact
+      > carries `minos 12.0`, exe and every dylib/`.so` alike.
+- [x] **B3. Core-lib staging + install-name surgery.** The staging block is gated
       `linux || windows` (`package.sh:578`) and `set_origin_rpath` is an explicit no-op off Linux
       (its comment already says *"macOS uses `@loader_path`, handled elsewhere"* — this is
       "elsewhere"). Add a Darwin path that stages `libggml-base`/`libggml`/`libllama`/`libllama-common`
@@ -426,12 +457,34 @@ below names the specific place.
       `install_name_tool` to make the tree relocatable: `-add_rpath @loader_path` on the exe and
       `-id @rpath/<name>` / `-change` on the dylibs as needed. Verify by running the **staged** tree
       from a directory it was not built in.
-- [ ] **B4. The `base`-vs-functional guard needs a Darwin probe.** `exe_imports_llama` is
+      > **Done 2026-08-03 — simpler than the plan expected, verified empirically before writing the
+      > script.** Added a dedicated macOS staging block (kept separate from the Linux/Windows one
+      > rather than threaded into its conditionals, since the extension split — `.dylib` core libs
+      > vs `.so` backends per A4 — and the rpath mechanism both differ enough to make a shared block
+      > more confusing than two clear ones). Core libs staged via the SONAME-symlink-chain pattern
+      > (version embedded before the extension: `libggml-base.dylib` → `.0.dylib` → `.0.13.1.dylib`,
+      > unlike Linux's suffix style); backends staged via `$BACKEND_LIB` (`.so`).
+      > **`-id`/`-change` install-name surgery on the dylibs turned out to be unnecessary.** Tested
+      > directly: staging the four core dylibs as-is (their `LC_ID_DYLIB` already reads
+      > `@rpath/lib….dylib` from the build, per A5) and adding **only** `-add_rpath @loader_path` to
+      > the **exe** — nothing on the dylibs, nothing on the backend `.so` files — was sufficient.
+      > Proved this three ways before committing to it: (1) exe + 4 core dylibs, no backends, run
+      > from `/tmp`, no `DYLD_LIBRARY_PATH` — worked; (2) same plus both backend `.so` files, real
+      > Metal inference, external cwd — worked, 37/37 layers offloaded; (3) the actual
+      > `package.sh`-produced artifact, unzipped in a fresh temp dir, same real-inference check —
+      > worked. dyld resolves every dependent's `@rpath/...` (including the backends' *own*
+      > `@rpath/libggml-base....dylib` reference) using the rpath list accumulated from images
+      > already loaded in the process — one rpath on the exe covers the whole tree transitively.
+- [x] **B4. The `base`-vs-functional guard needs a Darwin probe.** `exe_imports_llama` is
       `patchelf --print-needed` on Linux and a raw `grep -a 'llama.dll'` everywhere else — the
       latter is wrong on macOS. Use `otool -L "$1" | grep -q 'libllama'`. This guard exists because
       cargo overwrites `target/release/knaif` and **`smoke.sh` structurally cannot catch a base exe
       packaged as functional** (`--version`, `skills list`, `skills deps` and a mock `plan` all pass
       without llama); it fails only at a real `run`, in a user's hands.
+      > **Done 2026-08-03, with a tightened pattern.** Used `grep -q '/libllama\.'` rather than the
+      > plan's suggested bare `libllama` — anchored on "`/libllama` immediately followed by a
+      > literal dot" so `libllama-common.*.dylib` (a genuinely different lib whose name happens to
+      > share the prefix) can never false-positive the check. Verified against real otool -L output.
 - [ ] **B5. ⚠️ Resolve the OpenMP question (§1.3) and implement D3's feature split.** `otool -L`
       every staged Mach-O — but judge by **resolution, not path shape**: an unresolvable
       `@rpath/libomp.dylib` is the likely form and carries no Homebrew string. Then implement D3
@@ -439,16 +492,39 @@ below names the specific place.
       enabled for the Linux/Windows kinds only) and re-check. **Re-verify the Linux and Windows
       artifacts after that change** — it touches their feature graph too, and `libgomp.so.1` /
       `VCOMP140.dll` staging depends on OpenMP still being on there.
-- [ ] **B6. Artifact naming + README.** `knaif-<ver>-macos-arm64.zip`, plain name for `metal`; no
+      > **Deliberately deferred 2026-08-03 — not done.** The `otool -L` measurement is already
+      > recorded in §1.1's corrected table: on `M3P` (Homebrew present, `libomp` **not** installed),
+      > `GGML_OPENMP:BOOL=ON` but `GGML_OPENMP_ENABLED:INTERNAL=OFF` — CMake's `find_package` failed
+      > gracefully, zero OpenMP linkage in any built artifact. **Held off on the Cargo.toml feature
+      > split itself** (`default-features = false` + explicit `common` + a real `openmp` feature)
+      > because it changes the feature graph for **every** platform — including the `just native` /
+      > `native-cuda` / `native-vulkan` dev recipes' default `FEATS`, not just `package.sh`'s release
+      > kinds — and this plan's own instruction is to *re-verify Linux and Windows after that change*,
+      > which is not possible from this Mac. Implementing it blind, without a way to confirm
+      > `libgomp.so.1`/`VCOMP140.dll` staging still works, is the kind of change the plan itself
+      > warns against ("the obvious implementation... is a bug"). Left for a session with Linux/
+      > Windows access, or CI. The residual risk this leaves: an actual Mac with Homebrew's `libomp`
+      > installed is still untested end-to-end (only the *absence* case was measured here).
+- [x] **B6. Artifact naming + README.** `knaif-<ver>-macos-arm64.zip`, plain name for `metal`; no
       `-cpu` variant exists on macOS (D2). Add the `metal` case to the `INFER=` message block, and
       confirm the existing self-containment smoke at the end of `package.sh` (run from a temp cwd
       with an empty `KNAIF_SKILLS_ROOT`) passes on macOS.
-- [ ] **B7. Licence staging.** `installers/licenses/THIRD-PARTY-RUST.txt` + `llama.cpp-LICENSE.txt`
+      > **Done 2026-08-03.** `metal`/`vulkan` both get `SUFFIX=""` (plain name); added the `metal`
+      > case to `INFER=`. The existing self-containment smoke passed unmodified on the first real run.
+      > Produced `knaif-1.1.0-macos-arm64.zip` (8.1 MB) end-to-end via both
+      > `installers/package.sh --kind=metal` and `just package-native metal`; unzipped it in a fresh
+      > temp directory and ran real Metal inference from there (37/37 layers offloaded) — the full
+      > pipeline this workstream exists to prove.
+- [x] **B7. Licence staging.** `installers/licenses/THIRD-PARTY-RUST.txt` + `llama.cpp-LICENSE.txt`
       ship for any functional kind; `LICENSE` and `NOTICE` at the artifact root. All of that is
       OS-independent and should need no change — **assert it rather than assume it**, since `NOTICE`
       was missing from every artifact on every OS until 2026-07-26 precisely because nothing read it.
       If D3 lands on staging `libomp.dylib`, its licence joins `licenses/` and
-      [PROVENANCE.md](../PROVENANCE.md) gains an entry.
+      [PROVENANCE.md](../PROVENANCE.md) gains an entry. `libomp.dylib` is not staged (B5 deferred).
+      > **Asserted 2026-08-03, not assumed.** Confirmed present in the actual macOS artifact:
+      > `LICENSE`, `NOTICE` at the root; `licenses/THIRD-PARTY-RUST.txt` and
+      > `licenses/llama.cpp-LICENSE.txt` (functional kind). No code change needed — the existing
+      > OS-independent staging lines already cover Darwin correctly.
 
 ---
 
@@ -505,6 +581,29 @@ already pass, on a third platform, for the first time.**
       cannot fail. Minimum fix: re-lock both snapshots with an **executing** verifier against the
       current corpora on a known-good platform (its own commit, per the standing rule), and teach
       `just eval-regression` to forward `*args` so `--current` is reachable.
+
+      > **Defects 2 and part of 1 fixed 2026-08-03; defects 3 and 4 (snapshot re-locking)
+      > deliberately NOT attempted.** Fixed the two purely-mechanical, zero-risk pieces:
+      > - `just eval-regression skill:` → `eval-regression skill *args:`, forwarding `{{args}}` —
+      >   `--current` is now actually reachable through the recipe (defect 2).
+      > - `cmd_regression` now (a) prints a loud `⚠` warning to stderr when `--current` is omitted,
+      >   instead of silently reporting "No regressions... OK" indistinguishably from a real check,
+      >   and (b) **hard-fails** when `--current` is given but the file doesn't exist, instead of
+      >   silently falling back to the self-compare — a mistyped path used to look exactly like a
+      >   passing gate. Both verified directly (warning fires + exit 0 on no-arg; hard error + exit 1
+      >   on a bad path). No existing test exercised `cmd_regression` at all, so nothing to break;
+      >   full `uv run pytest python/core/tests/` still 1629 passed after the change (see M5).
+      >
+      > **Left undone, deliberately:** re-locking either snapshot (defect 4) needs a real,
+      > **executing**-verifier eval-suite run across the full corpus (~314 ffmpeg rows, ~143
+      > documents rows) against a pinned backend, is explicitly called out elsewhere in this plan as
+      > "a deliberate, own-commit act" that a platform port is never the reason to trigger, and this
+      > plan's own §11 lists "re-locking any eval snapshot" as **out of scope**. Attempting it
+      > unprompted — on macOS, no less, which C4 explicitly forbids re-locking on — would be exactly
+      > the kind of scope creep this plan warns against. Acceptance criterion 0 (both snapshots
+      > re-locked) therefore still does **not** hold; criterion 6 still cannot be honestly claimed.
+      > This remains open repository work, tracked already in [TODO.md](../TODO.md), for a session
+      > where re-locking is the deliberate goal.
 - [ ] **C4. The eval ladder for both shipped skills** *(depends on C0)*. `just eval-fixtures <skill>`
       — **always first**, since missing fixtures score correct plans ~0 — then run each snapshot's
       **exact** verifier against a single pinned production backend and **save** the scoreboard, then
@@ -621,7 +720,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
 > document already names macOS as a new artifact shape requiring its own clean-room run before
 > publication.
 
-- [ ] **E1. `scripts/check_macho_deps.py` — the third sibling.** Written to match
+- [x] **E1. `scripts/check_macho_deps.py` — the third sibling.** Written to match
       `check_pe_imports.py` and `check_elf_deps.py`: **parse the Mach-O headers in pure Python** so
       it runs on any machine, including the Windows dev box, and therefore **fails where the mistake
       was made** rather than on a user's Mac. It must:
@@ -642,14 +741,68 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       Wire it into `package.sh` as a **required** macOS step, the way the PE check is required on
       Windows — not merely into `smoke.sh`, because packaging is the only step every artifact passes
       through by construction.
-- [ ] **E2. `installers/smoke.sh` on macOS.** Most of it works already: `bin/knaif` discovery, the
-      LICENSE/NOTICE and three-contracts assertions, and `backend list` resolving the manifest
-      exe-relative and reporting cuda as *unavailable on this platform*. Two changes:
+      > **Done 2026-08-03 — and it immediately caught a real, previously-shipped defect.** Wrote
+      > `scripts/check_macho_deps.py` (pure `struct` parsing, no `otool`/`lipo` shell-out, same
+      > shape as the two siblings) covering every point above, plus one the plan didn't ask for: if
+      > any dependency uses `@rpath`, the checker requires the file's own `LC_RPATH` to include
+      > `@loader_path`/`@executable_path` — directly encoding A5's finding that the default build
+      > has ZERO rpath entries, rather than only catching it indirectly via a failed resolution.
+      >
+      > **Ran it against the real artifact from B3/B6 (already "verified working" by real
+      > inference) and it failed**: `libllama-common.dylib` linked
+      > `/opt/homebrew/opt/openssl@3/lib/lib{ssl,crypto}.3.dylib` — an absolute Homebrew path,
+      > invisible to every check performed so far because this machine has that library installed
+      > (ffmpeg pulls it in transitively) and every prior `otool -L` was run on `knaif`/`libggml-*`,
+      > never on `libllama-common` specifically. **This is a fourth occurrence of the exact trap
+      > shape §1.3 documents for OpenMP, a different library**: llama.cpp's CMakeLists.txt defaults
+      > `option(LLAMA_OPENSSL ... ON)` for cpp-httplib's HTTPS support (used by the `--hf-repo`
+      > download feature knaif never calls — `LLAMA_CURL` is already forced `OFF`), and
+      > `find_package(OpenSSL)` succeeds silently whenever Homebrew's `openssl@3` happens to be
+      > present. **Fix**: `llama-cpp-sys-2`'s `build.rs` forwards any `CMAKE_`-prefixed env var
+      > straight to `cmake::Config::define` (verified by reading it — the same mechanism that makes
+      > `MACOSX_DEPLOYMENT_TARGET` work), so CMake's own `CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON`
+      > escape hatch reaches this with no crate patch needed. Wired into both places that build
+      > the macOS kind (`package.sh` and the `justfile` recipe, alongside `MACOSX_DEPLOYMENT_TARGET`
+      > — same bypass-path gap, same fix location). Rebuilt clean, `otool -L` confirmed
+      > libssl/libcrypto (and the now-unneeded CoreFoundation/Security frameworks they pulled in)
+      > are gone, `check_macho_deps.py` now reports zero failures, real Metal inference reconfirmed.
+      >
+      > **This likely also affects Linux and Windows, unverified.** `LLAMA_OPENSSL` defaults ON
+      > for every platform in llama.cpp's own CMakeLists.txt, not just Apple — if a Linux/Windows
+      > release-build environment happens to have OpenSSL dev headers installed, the same silent
+      > link could be happening there too. Neither `check_elf_deps.py`'s `BASE_SYSTEM` nor
+      > `check_pe_imports.py`'s `WINDOWS_PROVIDED` allowlists libssl/libcrypto/openssl, so if it
+      > were happening, those checkers should already be catching it — but this was not
+      > specifically re-verified on either platform (no Linux/Windows box to hand), so it is flagged
+      > here rather than silently assumed fine. Worth a five-minute check next time either artifact
+      > is built.
+      >
+      > **Test suite**: `python/core/tests/test_macho_deps.py`, 30 tests, mirroring
+      > `test_pe_imports.py`'s synthetic-fixture approach (constructs raw Mach-O bytes — no real
+      > toolchain artifact needed, so it runs anywhere). Covers: every dependency load-command kind,
+      > the legacy `LC_VERSION_MIN_MACOSX` fallback, six malformed/mutated-input cases (truncated
+      > file, wrong magic, 32-bit Mach-O, zero-`cmdsize` — which would otherwise infinite-loop, a
+      > name string with no NUL terminator, a corrupted fat-arch offset past EOF), fat-binary
+      > multi-slice walking and non-arm64 rejection, the libomp-shaped unresolvable-`@rpath` case,
+      > a dangling-symlink case, the missing-exe-rpath regression, and the deployment-floor checks.
+      > Hardened the parser itself along the way: every `struct.unpack_from` in the load-command
+      > walk is now wrapped so a malformed file raises `MachOError` (reported and skipped, matching
+      > the siblings) instead of an uncaught `struct.error` or, for a zero `cmdsize`, an infinite
+      > loop. `just check` (1659 passed, coverage 82.63%) confirms nothing else regressed.
+- [x] **E2 (first bullet only). `installers/smoke.sh` on macOS.** Most of it works already: `bin/knaif`
+      discovery, the LICENSE/NOTICE and three-contracts assertions, and `backend list` resolving the
+      manifest exe-relative and reporting cuda as *unavailable on this platform*. Two changes:
       - extend check 7 — currently gated `uname -s != Linux && -f bin/knaif.exe`, so it silently
         skips on Darwin — to call `check_macho_deps.py`;
       - **`.zip` is already handled** (via `unzip`), so D6's archive needs nothing new — but
         **`.pkg` is not**, and cannot be: `smoke.sh`'s dispatch covers zip / tar.gz / AppImage /
         directory only. See E6.
+      > **First bullet done differently than written, second bullet not started.** `check_macho_deps.py`
+      > is wired into `package.sh` itself (required, unconditional for the `metal` kind) rather than
+      > into `smoke.sh`'s check 7 — matching what E1 actually asked for ("wire it into package.sh...
+      > not merely into smoke.sh, because packaging is the only step every artifact passes through by
+      > construction") over what this bullet's first line said. `installers/smoke.sh` itself has not
+      > been touched yet; its `.pkg` gap (second bullet) is still open, tracked under E6.
 - [ ] **E3. ⚠️ Clean-room run in a macOS VM — on the OLDEST supported macOS, with real inference.**
       Per D8 and D9. A VM (Virtualization.framework via `tart`, UTM, or equivalent) with **no Xcode,
       no Command Line Tools and no Homebrew**, running the **minimum** OS the deployment floor

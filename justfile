@@ -331,13 +331,16 @@ package *args:
     bash "{{justfile_directory()}}/installers/package.sh" {{args}}
 
 # Build a FUNCTIONAL release artifact (real llama.cpp inference) and package it into dist/.
-# kind = cpu | vulkan | cuda. RUN FROM A "Developer PowerShell for VS" (needs MSVC + cmake on
-# PATH; Vulkan also needs Ninja). Sets LIBCLANG_PATH to the default LLVM\bin if unset.
-#   just package-native vulkan    # THE RELEASE ARTIFACT: exe + core libs + CPU *and* Vulkan backends
-#                                 # (Option 3 / C5). Gets the plain name; forces the Ninja generator.
+# kind = cpu | vulkan | cuda (Windows/Linux) | metal (macOS only). RUN FROM A "Developer PowerShell
+# for VS" on Windows (needs MSVC + cmake on PATH; Vulkan also needs Ninja). Sets LIBCLANG_PATH to
+# the default LLVM\bin if unset (Windows).
+#   just package-native vulkan    # THE WINDOWS/LINUX RELEASE ARTIFACT: exe + core libs + CPU *and*
+#                                 # Vulkan backends (Option 3 / C5). Gets the plain name.
 #   just package-native cpu       # build kind only (a box with no Vulkan SDK) -> `-cpu` suffix.
 #                                 # NOT a release artifact: C5b ships one default artifact per OS.
 #   just package-native cuda      # opt-in CUDA payload for ~/.knaif/backends (NOT an app), BOTH OSes
+#   just package-native metal     # THE MACOS RELEASE ARTIFACT. Gets the plain name (D2: it is the
+#                                 # ONLY functional kind there — `cpu`/`vulkan`/`cuda` are refused).
 #
 # `dynamic-backends` is REQUIRED for EVERY functional kind, `cuda` included: it is what makes the
 # ggml backends loadable, which is what lets CUDA be opt-in (C5/Option 3). Building without it
@@ -368,8 +371,28 @@ package-native kind="cpu":
       cpu) feats=llama,dynamic-backends;;
       vulkan) feats=llama,dynamic-backends,vulkan;;
       cuda) feats=llama,dynamic-backends,cuda;;
-      *) echo "kind must be cpu|vulkan|cuda" >&2; exit 1;;
+      # Metal needs no cargo feature of its own (D1) — GGML_METAL defaults ON under APPLE — so
+      # this is the same feature set as `cpu`. package.sh itself refuses cpu/vulkan/cuda on
+      # Darwin and metal everywhere else (D2); this case list only has to stay in sync on names.
+      metal) feats=llama,dynamic-backends;;
+      *) echo "kind must be cpu|vulkan|cuda|metal" >&2; exit 1;;
     esac
+    # D9: the macOS deployment floor is a DECIDED property of the artifact, set before the first
+    # configure — it is NOT a `rerun-if-env-changed` input in llama-cpp-sys-2's build.rs (verified),
+    # so a later change silently keeps a cached build's old value. Needed HERE specifically because
+    # this recipe builds directly via cargo rather than through package.sh's own (`--no-build`
+    # skips) build step, which is the only other place this gets set. Without it the floor silently
+    # falls back to rustc's own default for aarch64-apple-darwin (11.0, verified) rather than the
+    # chosen 12.0 — a real gap, caught 2026-08-03 by checking LC_BUILD_VERSION on the actual output.
+    if [ "{{kind}}" = "metal" ]; then
+      export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+      echo "  MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+      # Same bypass-path gap as the floor above, for the same reason (this recipe builds directly
+      # via cargo, skipping package.sh's own build step) — see package.sh's own comment on this
+      # line for what it fixes: llama.cpp's LLAMA_OPENSSL defaulting ON and silently linking
+      # Homebrew's openssl@3 whenever it happens to be on the build box.
+      export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
+    fi
     CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
     bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}}
 
@@ -530,9 +553,12 @@ eval-backends skill *args:
 eval-snapshot skill *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier output_diff --snapshot --save evals/runs/snapshot_{{skill}}_output_diff {{args}}
 
-# Regression check against saved snapshot (e.g.: just eval-regression ffmpeg)
-eval-regression skill:
-    uv run python -m knaif.evalsuite regression --skill {{skill}}
+# Regression check against saved snapshot (e.g.: just eval-regression ffmpeg --current path/to/scoreboard.json)
+# WITHOUT --current this compares the snapshot to itself and always passes (C0 in the 2026-08-02
+# macOS support plan / docs/TODO.md) — it is a smoke check that the snapshot loads, not a gate.
+# *args exists so --current is reachable at all; it was silently dropped before this fix.
+eval-regression skill *args:
+    uv run python -m knaif.evalsuite regression --skill {{skill}} {{args}}
 
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:

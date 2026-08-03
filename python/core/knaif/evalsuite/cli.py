@@ -1074,11 +1074,31 @@ def cmd_regression(args: argparse.Namespace) -> None:
 
     baseline = load_snapshot(snap_path)
 
-    current: dict[str, Any] = baseline  # default: compare snapshot to itself (no-op)
-    current_path = Path(args.current) if getattr(args, "current", None) else None
-    if current_path and current_path.exists():
+    current_arg = getattr(args, "current", None)
+    current: dict[str, Any]
+    if current_arg:
+        current_path = Path(current_arg)
+        # Hard-fail on a bad --current rather than silently falling back to the self-compare
+        # below: a typo'd path used to look identical to a real, passing gate (C0 in the
+        # 2026-08-02 macOS support plan / docs/TODO.md) — the file the caller pointed at not
+        # existing is a caller error, not "nothing to compare against".
+        if not current_path.exists():
+            sys.exit(f"--current file not found: {current_path}")
         with current_path.open(encoding="utf-8") as fh:
             current = json.load(fh)
+    else:
+        # No --current: compare the snapshot to itself. This is a smoke check that the snapshot
+        # file loads and is internally consistent, NOT a regression gate — it always passes. See
+        # the "self-compare false green" note in docs/EVAL_VERIFICATION_SOP.md. Said aloud rather
+        # than left implicit, because a silent no-op that prints "No regressions... OK" reads
+        # identically to a real check.
+        current = baseline
+        print(
+            "⚠ no --current given — comparing the snapshot to itself; this always "
+            "passes and is not a regression check. Pass --current <scoreboard.json> "
+            "(see docs/EVAL_VERIFICATION_SOP.md).",
+            file=sys.stderr,
+        )
 
     diff = diff_snapshots(baseline, current, threshold=args.threshold)
 

@@ -63,15 +63,21 @@ for a in "$@"; do
     --no-build)       NO_BUILD=1 ;;
     --kind=*)         KIND="${a#--kind=}" ;;
     --legacy-windows-cuda-app) LEGACY_WINDOWS_CUDA_APP=1 ;;
-    base|cpu|vulkan|cuda) KIND="$a" ;;
-    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
+    base|cpu|vulkan|cuda|metal) KIND="$a" ;;
+    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda|metal] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
   esac
 done
 
+# BACKEND_LIB is the extension of the LOADABLE ggml-* backends in $OUT/backends/ (dlopen'd at
+# runtime). It equals $LIB (the core-lib extension) everywhere EXCEPT macOS: CMake's `MODULE`
+# library type (used for GGML_BACKEND_DL targets) suffixes `.so` even on Apple — only the `SHARED`
+# core libs get `.dylib`. Verified 2026-08-03 against a real build (`libggml-metal.so`,
+# `libggml-cpu-apple_m2_m3.so` beside `libggml-base.dylib`); see the 2026-08-02 macOS support plan,
+# A4. Getting this wrong means a staging glob for `*.dylib` silently stages zero backends.
 case "$(uname -s)" in
-  MINGW* | MSYS* | CYGWIN*) OS=windows; EXE=knaif.exe; LIB=dll; ARCHIVE=zip ;;
-  Linux)  OS=linux;  EXE=knaif; LIB=so; ARCHIVE=tgz ;;
-  Darwin) OS=macos;  EXE=knaif; LIB=dylib; ARCHIVE=tgz ;;
+  MINGW* | MSYS* | CYGWIN*) OS=windows; EXE=knaif.exe; LIB=dll;   BACKEND_LIB=dll; ARCHIVE=zip ;;
+  Linux)  OS=linux;  EXE=knaif; LIB=so;    BACKEND_LIB=so;    ARCHIVE=tgz ;;
+  Darwin) OS=macos;  EXE=knaif; LIB=dylib; BACKEND_LIB=so;    ARCHIVE=zip ;;
   *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
 ARCH="$(uname -m)"
@@ -80,6 +86,29 @@ ARCH="$(uname -m)"
 
 if [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ] && { [ "$KIND" != cuda ] || [ "$OS" = linux ]; }; then
   echo "ERROR: --legacy-windows-cuda-app only applies to --kind=cuda on Windows." >&2
+  exit 1
+fi
+
+# D2 (2026-08-02 macOS support plan): `metal` is the ONLY functional kind on macOS, and it is
+# macOS-only. `cpu`/`vulkan`/`cuda` are refused THERE rather than failing later somewhere
+# unrelated: GGML_METAL defaults ON under APPLE, so a Darwin `cpu` build would be a BYTE-IDENTICAL
+# binary to `metal` under a misleading name (out_dir() cannot tell them apart — there is nothing to
+# tell apart), and vulkan/cuda do not exist on Apple hardware at all (MoltenVK rejected, D1).
+if [ "$OS" = macos ]; then
+  case "$KIND" in
+    cpu)
+      echo "ERROR: --kind=cpu is not supported on macOS." >&2
+      echo "       GGML_METAL defaults ON under APPLE, so a macOS 'cpu' build would be a" >&2
+      echo "       byte-identical binary to 'metal' under a misleading name (D2 in" >&2
+      echo "       docs/plans/2026-08-02-macos-support.md). Use --kind=metal." >&2
+      exit 1 ;;
+    vulkan|cuda)
+      echo "ERROR: --kind=$KIND does not exist on macOS." >&2
+      echo "       Metal is the only GPU backend there (MoltenVK rejected — D1). Use --kind=metal." >&2
+      exit 1 ;;
+  esac
+elif [ "$KIND" = metal ]; then
+  echo "ERROR: --kind=metal is macOS-only." >&2
   exit 1
 fi
 
@@ -92,6 +121,10 @@ feats_for_kind() {
     cpu)    echo "llama,dynamic-backends" ;;
     vulkan) echo "llama,dynamic-backends,vulkan" ;;
     cuda)   echo "llama,dynamic-backends,cuda" ;;
+    # Metal needs no cargo feature of its own (D1): GGML_METAL defaults ON under APPLE, so this is
+    # the same feature set as `cpu` — the CPU-vs-Metal distinction on macOS is made by ggml's own
+    # CMake default, not by anything knaif controls.
+    metal)  echo "llama,dynamic-backends" ;;
   esac
 }
 
@@ -116,9 +149,34 @@ if [ "$NO_BUILD" -eq 0 ]; then
   if [ "$KIND" = base ]; then
     echo "Building release binary (base build — no llama/GPU features)…"
     cargo build --release -p knaif-cli
-  elif [ "$OS" = linux ]; then
+  elif [ "$OS" = linux ] || [ "$OS" = macos ]; then
     feats="$(feats_for_kind "$KIND")"
     echo "Building '$KIND' release binary (--features $feats)…"
+    # D9 (2026-08-02 macOS support plan): the deployment floor is a DECIDED property of the
+    # artifact, not whatever SDK happens to be installed — and it must be exported BEFORE the
+    # first configure, because MACOSX_DEPLOYMENT_TARGET is NOT a `rerun-if-env-changed` input in
+    # llama-cpp-sys-2's build.rs (verified), so a later change to it silently keeps a cached build's
+    # old value. `${MACOSX_DEPLOYMENT_TARGET:-...}` lets a caller override; this is the default.
+    if [ "$OS" = macos ]; then
+      export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+      echo "  MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+      # A SEPARATE library hitting the exact same trap SHAPE as OpenMP (§1.3/D3), found by
+      # check_macho_deps.py (E1) on
+      # 2026-08-03, NOT anticipated by the plan: llama.cpp's CMakeLists.txt defaults
+      # `option(LLAMA_OPENSSL ... ON)` for cpp-httplib's (unused — knaif never runs llama-server
+      # or its --hf-repo download feature; LLAMA_CURL is already forced OFF above) HTTPS support,
+      # and `find_package(OpenSSL)` succeeds silently whenever Homebrew's openssl@3 happens to be
+      # on the build box (a near-certainty — dozens of formulae pull it in transitively, exactly
+      # like libomp). The result: `libllama-common.dylib` links
+      # `/opt/homebrew/opt/openssl@3/lib/lib{ssl,crypto}.3.dylib`, an absolute path that does not
+      # exist on a clean Mac. `llama-cpp-sys-2`'s build.rs forwards any `CMAKE_`-prefixed env var
+      # straight through to `cmake::Config::define` (verified by reading it), so CMake's own
+      # `CMAKE_DISABLE_FIND_PACKAGE_<Name>` escape hatch reaches this without patching the crate.
+      # Verified fix: rebuilt from a clean `target/release` with this set, confirmed via
+      # `otool -L` that libssl/libcrypto (and the now-unneeded CoreFoundation/Security frameworks
+      # they pulled in) are gone from `libllama-common.dylib`.
+      export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
+    fi
     # A CUDA build MUST carry the arch list, and CUDAARCHS is the only way in: CMake initialises
     # CMAKE_CUDA_ARCHITECTURES from that environment variable, and llama-cpp-sys-2 offers no
     # passthrough for it. Setting it here rather than leaving it to the caller is what makes the
@@ -163,6 +221,10 @@ BIN="target/release/$EXE"
 # ASCII, so the literal is present iff the exe imports it.
 case "$OS" in
   linux) exe_imports_llama() { patchelf --print-needed "$1" 2>/dev/null | grep -q '^libllama\.so'; } ;;
+  # otool -L lists dependencies as `@rpath/libllama.0.dylib (compatibility version ...)`; anchor on
+  # "/libllama." (not "libllama\.so") so `libllama-common.*.dylib` — a DIFFERENT lib whose name
+  # happens to start with the same prefix — never false-positives this check.
+  macos) exe_imports_llama() { otool -L "$1" 2>/dev/null | grep -q '/libllama\.'; } ;;
   *)     exe_imports_llama() { grep -qa 'llama\.dll' "$1"; } ;;
 esac
 if [ "$KIND" != base ]; then
@@ -205,6 +267,7 @@ out_dir() {
         echo "$d"; return 0 ;;
       vulkan) ls "$be"/*ggml-vulkan.* >/dev/null 2>&1 && { echo "$d"; return 0; } ;;
       cuda)   ls "$be"/*ggml-cuda.*   >/dev/null 2>&1 && { echo "$d"; return 0; } ;;
+      metal)  ls "$be"/*ggml-metal.*  >/dev/null 2>&1 && { echo "$d"; return 0; } ;;
     esac
   done
   return 1
@@ -555,7 +618,11 @@ fi
 # "one default artifact per OS ... never N per-backend artifacts". It keeps a `-cpu` suffix so a local
 # build cannot silently overwrite the real one. Before Option 3 the backends were statically linked,
 # so cpu/vulkan were genuinely different binaries and both had to ship; that is no longer true.
-if [ "$KIND" = vulkan ]; then SUFFIX=""; else SUFFIX="-$KIND"; fi
+#
+# On macOS, `metal` plays vulkan's role: it is the ONLY functional kind there (D2 — `cpu` is refused
+# earlier in this script, and there is no macOS `cpu`/`vulkan` distinction to suffix against), so it
+# gets the plain name too.
+if [ "$KIND" = vulkan ] || [ "$KIND" = metal ]; then SUFFIX=""; else SUFFIX="-$KIND"; fi
 NAME="knaif-$VER-$OS-$ARCH$SUFFIX"
 STAGE="dist/staging/$NAME"
 rm -rf "$STAGE"
@@ -647,6 +714,58 @@ if { [ "$OS" = linux ] && [ "$KIND" != base ]; } ||
 
 fi
 
+# ---------------------------------------------------------------------------------------------------
+# macOS core-lib staging + install-name surgery (B3, 2026-08-02 macOS support plan).
+#
+# `metal` is the only functional Darwin kind (D2), and `dynamic-backends` implies `dynamic-link`
+# there exactly as it does on Linux/Windows, so the core libs (llama/ggml/ggml-base/llama-common)
+# must ship beside the exe. Two things differ from the Linux block above, both verified empirically
+# against a real build (2026-08-03) rather than assumed:
+#
+#   1. Extension split: core libs are `.dylib` (CMake SHARED), loadable backends are `.so` (CMake
+#      MODULE, even on Apple) — see the BACKEND_LIB comment near the top of this script and A4/A5 in
+#      the plan. A glob for `*.dylib` alone would silently stage zero backends.
+#   2. Rpath scope: llama-cpp-sys-2's build.rs emits no rpath link args (same gap Linux's patchelf
+#      step fixes), and the exe has ZERO LC_RPATH entries by default — confirmed via `otool -l`, and
+#      confirmed to abort with "no LC_RPATH's found" without one. UNLIKE Linux, only the EXE needs
+#      `-add_rpath @loader_path`: dyld resolves every dependent's `@rpath/...` reference — including
+#      the dlopen'd backends' own `@rpath/libggml-base....dylib` reference — using the rpath list
+#      accumulated from images already loaded in the process, so one rpath on the exe covers the
+#      dylibs AND the backends transitively. Verified by staging a tree with rpath ONLY on the exe,
+#      running it from an unrelated external directory with no DYLD_LIBRARY_PATH, and confirming a
+#      real Metal inference (37/37 layers offloaded) still worked.
+if [ "$OS" = macos ] && [ "$KIND" = metal ]; then
+  OUT="$(out_dir)"
+  [ -n "$OUT" ] && [ -d "$OUT/lib" ] && [ -d "$OUT/backends" ] || {
+    echo "ERROR: llama-cpp-sys build output ($OUT/lib + backends/) not found — build first." >&2
+    exit 1
+  }
+  # Core libs: copy the SONAME-style symlink chain + its real versioned target (cp -a preserves
+  # symlinks). macOS embeds the version BEFORE the extension (libggml-base.0.13.1.dylib), unlike
+  # Linux's version-as-suffix style (libggml-base.so.13), so the glob differs from the Linux block.
+  for stem in libggml-base libggml libllama libllama-common; do
+    for f in "$OUT/lib/$stem".dylib "$OUT/lib/$stem".*.dylib; do
+      [ -e "$f" ] && cp -a "$f" "$STAGE/bin/"
+    done
+  done
+  # Loadable backends: everything ggml-* except ggml-base (already staged above as a core lib).
+  # `metal` is the only Darwin kind (D2), so there is no ggml-cuda/-vulkan sibling to exclude here.
+  for f in "$OUT/backends/libggml-"*."$BACKEND_LIB"; do
+    [ -e "$f" ] || continue
+    case "$(basename "$f")" in
+      libggml-base.*) continue ;;
+    esac
+    cp "$f" "$STAGE/bin/"
+  done
+  command -v install_name_tool >/dev/null 2>&1 || {
+    echo "ERROR: install_name_tool not found (Xcode Command Line Tools required)." >&2
+    exit 1
+  }
+  install_name_tool -add_rpath @loader_path "$STAGE/bin/$EXE"
+  n_be="$(find "$STAGE/bin" -name "libggml-*.$BACKEND_LIB" ! -name "libggml-base.*" | wc -l | tr -d ' ')"
+  echo "  staged core libs + $n_be loadable backend(s) beside the exe (@loader_path rpath on the exe)"
+fi
+
 # The pre-Option-3 Windows CUDA app: NVIDIA's redist DLLs beside the exe in one heavy artifact.
 # Reachable only via --legacy-windows-cuda-app; the publishable Windows CUDA output is the opt-in
 # payload emitted much earlier.
@@ -711,6 +830,31 @@ if [ "$OS" = windows ]; then
   }
 fi
 
+# macOS counterpart of the Windows check above — same rationale (packaging is the only step every
+# artifact passes through by construction; the build box resolves everything, so nothing short of
+# a machine-independent parse can catch this here). check_macho_deps.py (E1) is what actually
+# caught the LLAMA_OPENSSL trap fixed earlier in this script (2026-08-03): the build box had
+# Homebrew's openssl@3 installed, `otool -L`-by-hand never got run against libllama-common
+# specifically, and the artifact would have shipped linking an absolute /opt/homebrew path.
+if [ "$KIND" = metal ]; then
+  py=""
+  for cand in python3 python; do
+    command -v "$cand" >/dev/null 2>&1 && { py="$cand"; break; }
+  done
+  [ -n "$py" ] || {
+    echo "ERROR: python not found — cannot verify the artifact is self-contained." >&2
+    echo "       scripts/check_macho_deps.py is a required packaging step, not optional." >&2
+    exit 1
+  }
+  # Falls back to the same 12.0 default as the build step above (D9) — this line also runs under
+  # `--no-build`, where nothing earlier in THIS process necessarily exported the variable, even
+  # though the caller (package-native's justfile recipe) does before invoking cargo directly.
+  "$py" "$ROOT/scripts/check_macho_deps.py" "$STAGE/bin" --min-os "${MACOSX_DEPLOYMENT_TARGET:-12.0}" || {
+    echo "ERROR: staged tree has undeclared/unresolvable runtime dependencies (see above)." >&2
+    exit 1
+  }
+fi
+
 # Skills: runtime data only. Native v1 ships ffmpeg + documents (io is stale, excluded).
 for skill in ffmpeg documents; do
   dst="$STAGE/skills/$skill"
@@ -762,6 +906,7 @@ case "$KIND" in
   cpu)    INFER="Inference: CPU (llama.cpp, loadable ggml-cpu backends with runtime dispatch)." ;;
   vulkan) INFER="Inference: Vulkan GPU (cross-vendor) with CPU fallback. Needs a Vulkan-capable GPU driver. Add the CUDA opt-in payload to ~/.knaif/backends for NVIDIA CUDA offload." ;;
   cuda)   INFER="Inference: NVIDIA CUDA GPU with CPU fallback. CUDA runtime DLLs are bundled; needs an NVIDIA driver." ;;
+  metal)  INFER="Inference: Metal GPU (Apple Silicon), loadable ggml-cpu backends with runtime dispatch per Apple generation (M1/M2-M3/M4) as fallback." ;;
 esac
 
 cat > "$STAGE/README.txt" <<EOF
@@ -789,7 +934,27 @@ EOF
 
 mkdir -p dist
 OUT="dist/$NAME"
-if [ "$ARCHIVE" = "zip" ]; then
+if [ "$ARCHIVE" = "zip" ] && [ "$OS" = macos ]; then
+  rm -f "$OUT.zip"
+  # D6: `.zip` is the archive Apple's notary service accepts (along with `.pkg`/`.dmg`, never
+  # `.tar.gz`), and it is the native macOS command-line archive idiom.
+  #
+  # `zip -r`, NOT `ditto -c -k --keepParent`. `ditto` was tried first (it is what Apple's own docs
+  # recommend for exactly this) and rejected on hard evidence, not preference: on this build box
+  # EVERY staged file already carries a `com.apple.provenance` extended attribute (present the
+  # moment `cargo build`/`cp` create a file — nothing this script does adds it), and `ditto`
+  # preserves that as an inline AppleDouble `._<name>` sidecar NEXT TO every real entry (not
+  # bundled into one `__MACOSX/` folder the way older zip tools did) — one extra ~163-byte junk
+  # file per real file, doubling the entry count. `com.apple.provenance` cannot be stripped first
+  # either: `xattr -d com.apple.provenance` and `xattr -cr` both report success and silently leave
+  # it in place (verified 2026-08-03 — it is a protected/system-managed attribute). Plain `zip`
+  # does not attempt resource-fork/xattr preservation at all, so it never creates the sidecars;
+  # this artifact ships no resource forks or xattrs worth preserving, so nothing is lost.
+  # `-y` preserves symlinks as symlinks (required — the SONAME chain IS symlinks); `-r` recurses.
+  command -v zip >/dev/null 2>&1 || { echo "ERROR: zip not found (ships with macOS by default)." >&2; exit 1; }
+  ( cd dist/staging && zip -qry "$ROOT/$OUT.zip" "$NAME" )
+  ART="$OUT.zip"
+elif [ "$ARCHIVE" = "zip" ]; then
   rm -f "$OUT.zip"
   # Windows' bundled bsdtar — NOT the GNU tar on the Git-Bash PATH, which cannot write zip at all,
   # and NOT PowerShell 5.1's Compress-Archive, which writes BACKSLASH path separators in violation
