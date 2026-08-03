@@ -418,6 +418,16 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - Signing is **not** optional the way Windows signing is (SmartScreen warns; Gatekeeper blocks),
     and any `install_name_tool` edit invalidates a signature — so the order
     stage → rpath surgery → sign → archive → notarize → staple is load-bearing.
+  - **All three dependency checkers skip a file they cannot parse** (`audit()` catches the parse
+    error, prints only under `--verbose`, and continues), so a binary that IS one of ours but is
+    truncated, 32-bit, or otherwise malformed passes the gate silently rather than failing it — and
+    the closing `ok N files/binaries: ...` line counts files that were never parsed at all. Noticed
+    2026-08-03 while reviewing `check_macho_deps.py`; **deliberately not fixed there alone**, since
+    a one-checker fix creates the inconsistency it removes, and the other two currently gate
+    shipping Linux and Windows releases. The principled version distinguishes "not a Mach-O/PE/ELF
+    at all" (skip — correct, `bin/` holds non-binaries) from "claims to be one and will not parse"
+    (fail), and reports the parsed count rather than the file count. Low impact in practice: a
+    real `bin/` is all well-formed binaries. Pick it up whenever those files are next touched.
   - Closing this plan is what unparks macOS in
     [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s
     C3 runner matrix.
@@ -451,6 +461,35 @@ This **Open / Next** section is the live backlog (originally distilled from the
   attempted yet). Until then any claim that a change "passes the regression gate" via `eval-success`
   → `eval-regression` with no `--current` is unfounded; passing `--current` explicitly against a
   freshly saved scoreboard is a real check today, but the **committed bar itself** is still stale.
+
+  **Prerequisites resolved 2026-08-03 — the re-lock is blocked on ONE thing, and it is not a
+  decision.** Investigated on the Windows box so the next attempt does not re-derive any of it:
+
+  - **Which backend is canonical is not a judgment call.** Both shipped skills declare
+    `recommended_model: knaif-qwen3-4b-v1` (`skills/{ffmpeg,documents}/skill.yaml:9`), which is the
+    `qwen3-4b-sft-v3-flat-q4` stanza in `eval_backends.yaml`. Lock the bar against **that**, passed
+    explicitly as `--backends qwen3-4b-sft-v3-flat-q4`.
+  - **How bad the omitted-`--backends` trap actually is: 37 stanzas, 2 with a GGUF on disk.** Only
+    `qwen3-4b-sft-v3-flat-q4` and `qwen3-1.7b-sft-v3-flat-q6` resolve; the other 35 would score ~0.0
+    and read as catastrophic quality loss. `--backends` is not optional advice.
+  - **The local backend works — nothing is blocking the run.** Verified 2026-08-03 end-to-end on
+    the Windows box: `--skill ffmpeg --backends qwen3-4b-sft-v3-flat-q4 --limit 3` completed on GPU
+    at ~800 ms per plan row. `ffmpeg`/`ffprobe` 8.0 are on PATH, so the executing verifiers are
+    ready too. What remains is the run itself plus the deliberate decision to move the bar.
+  - ⚠️ **A bare `import llama_cpp` FAILS on this box, and that is expected — do not read it as a
+    broken install.** `llama.dll` links the CUDA runtime shipped as `nvidia/*` site-packages, which
+    are not on the default DLL search path, so the import raises `Could not find module ...
+    llama.dll (or one of its dependencies)`. `InferenceOrchestrator._prepare_llama_cpp_dlls()`
+    exists precisely to preload those in dependency order (cudart → cublas → `ggml-*` → `llama`),
+    and every real code path calls it. Diagnose through the orchestrator, never through a bare
+    import.
+  - ⚠️ **Do not `uv sync` this venv casually.** The lockfile pins `llama-cpp-python` **0.3.34** from
+    PyPI, where the project publishes an **sdist only** (71 MB, no wheel) — a sync would compile
+    from source and default to a **CPU** build, silently discarding the working CUDA install
+    (0.3.23, with its 810 MB `ggml-cuda.dll`) and making `n_gpu_layers: 99` a no-op. Prebuilt CUDA
+    wheels live at `abetlen.github.io/llama-cpp-python/whl/<cuda-tag>`, not on PyPI.
+  - Ollama is running but carries only stock `qwen3:4b` — the **untuned** model, which would measure
+    something other than what ships and must not be used to set the bar.
 
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)

@@ -187,7 +187,9 @@ def test_reads_dependencies_rpaths_and_floor(tmp_path: Path) -> None:
 )
 def test_every_dependency_load_command_kind_is_read(tmp_path: Path, lc: int) -> None:
     """The plan's explicit list: LC_LOAD_DYLIB, _WEAK_, LC_REEXPORT_, _UPWARD_, LC_LAZY_LOAD_."""
-    p = write_macho(tmp_path / "x.dylib", filetype=cmd.MH_DYLIB, deps=[(lc, "/usr/lib/libfoo.dylib")])
+    p = write_macho(
+        tmp_path / "x.dylib", filetype=cmd.MH_DYLIB, deps=[(lc, "/usr/lib/libfoo.dylib")]
+    )
     (slc,) = cmd.parse_macho(p)
     assert slc.dependencies == [(lc, "/usr/lib/libfoo.dylib")]
 
@@ -226,14 +228,18 @@ def test_wrong_magic_is_reported_not_ignored(tmp_path: Path) -> None:
 
 def test_32bit_magic_is_rejected_explicitly(tmp_path: Path) -> None:
     p = tmp_path / "x"
-    p.write_bytes(struct.pack("<IiiIIIII", cmd.MH_MAGIC, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 0, 0, 0, 0))
+    p.write_bytes(
+        struct.pack("<IiiIIIII", cmd.MH_MAGIC, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 0, 0, 0, 0)
+    )
     with pytest.raises(cmd.MachOError, match="32-bit"):
         cmd.parse_macho(p)
 
 
 def test_zero_cmdsize_fails_instead_of_hanging(tmp_path: Path) -> None:
     """A cmdsize of 0 would never advance the read cursor — this must not be an infinite loop."""
-    header = struct.pack("<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 1, 8, 0, 0)
+    header = struct.pack(
+        "<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 1, 8, 0, 0
+    )
     bogus_cmd = struct.pack("<II", cmd.LC_LOAD_DYLIB, 0)
     p = tmp_path / "x"
     p.write_bytes(header + bogus_cmd)
@@ -243,7 +249,9 @@ def test_zero_cmdsize_fails_instead_of_hanging(tmp_path: Path) -> None:
 
 def test_load_command_table_truncated_mid_command(tmp_path: Path) -> None:
     """cmdsize claims more bytes than the file actually has."""
-    header = struct.pack("<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 1, 200, 0, 0)
+    header = struct.pack(
+        "<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 1, 200, 0, 0
+    )
     truncated_cmd = struct.pack("<II", cmd.LC_LOAD_DYLIB, 200)  # claims 200 bytes, none follow
     p = tmp_path / "x"
     p.write_bytes(header + truncated_cmd)
@@ -255,8 +263,13 @@ def test_name_offset_with_no_null_terminator(tmp_path: Path) -> None:
     """A dylib name string that never terminates must fail cleanly, not raise a bare ValueError."""
     name_off = 24
     cmdsize = 32
-    body = struct.pack("<IIIIII", cmd.LC_LOAD_DYLIB, cmdsize, name_off, 0, 0, 0) + b"no-null-here-at-all"
-    header = struct.pack("<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 1, len(body), 0, 0)
+    body = (
+        struct.pack("<IIIIII", cmd.LC_LOAD_DYLIB, cmdsize, name_off, 0, 0, 0)
+        + b"no-null-here-at-all"
+    )
+    header = struct.pack(
+        "<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_EXECUTE, 1, len(body), 0, 0
+    )
     p = tmp_path / "x"
     p.write_bytes(header + body)
     with pytest.raises(cmd.MachOError):
@@ -364,8 +377,30 @@ def test_the_libomp_trap_an_unstaged_rpath_dependency_fails(artifact, capsys) ->
     assert "does not resolve" in failures[0]
 
 
-def test_a_broken_symlink_target_is_unresolved(artifact) -> None:
+def _symlinks_work(tmp: Path) -> bool:
+    """Can this process create a symlink at all?
+
+    Skipped on CAPABILITY, not on `sys.platform`. Creating a symlink on Windows needs either
+    Developer Mode or elevation, and raises WinError 1314 otherwise — but a Windows box WITH
+    Developer Mode on runs this case fine, and a blanket platform skip would disable it there
+    forever. This repo's primary development box is Windows, so a skip that can never lift is a
+    permanently-red case masquerading as a green suite (see also `test_orchestrator.py`, which
+    skips on platform because the behaviour it covers genuinely does not exist elsewhere — this
+    one does).
+    """
+    probe = tmp / "_symlink_probe"
+    try:
+        probe.symlink_to(tmp / "_symlink_probe_target")
+    except (OSError, NotImplementedError):
+        return False
+    probe.unlink()
+    return True
+
+
+def test_a_broken_symlink_target_is_unresolved(artifact, tmp_path: Path) -> None:
     """Path.exists() follows symlinks — a dangling one must fail exactly like a missing file."""
+    if not _symlinks_work(tmp_path):
+        pytest.skip("creating symlinks needs Developer Mode or elevation on this host")
     bindir = artifact(
         {
             "knaif": {
