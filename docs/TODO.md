@@ -446,12 +446,16 @@ This **Open / Next** section is the live backlog (originally distilled from the
   2. ~~`just eval-regression skill:` takes no `*args`, so the recipe cannot supply `--current` even
      though the CLI accepts it.~~ **Fixed 2026-08-03**: `eval-regression skill *args:`, forwarding.
   3. `just eval-success` persists no scoreboard without `--save`, so there is nothing to pass.
-  4. **Both committed snapshots are stale**, and one uses a verifier the docs forbid as a bar:
+  4. **Both committed snapshots are stale**, and one uses a verifier the docs forbid as a bar.
+     **Corrected 2026-08-04 — the original figures compared two different units.** A snapshot's
+     `total` counts **utterances**; each `eval.jsonl` record holds an `utterances` LIST, so
+     comparing it against the file's line count understates the drift badly. ffmpeg's bar covered
+     **35% of its corpus**, not the 95% "+17 rows" implied:
 
-     | Skill | Snapshot verifier | Snapshot rows | Corpus rows |
-     |---|---|---:|---:|
-     | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 |
-     | `documents` | `success` | 129 | 143 |
+     | Skill | Snapshot verifier | Bar (utterances) | Corpus records | Corpus utterances | Real drift |
+     |---|---|---:|---:|---:|---:|
+     | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 | **847** | **+550** |
+     | `documents` | `success` | 129 | 143 | **164** | +35 |
 
   Also, `--config` defaults to `eval_backends.yaml` and omitting `--backends` runs **every** stanza,
   including models whose GGUFs [PERFORMANCE.md](PERFORMANCE.md) §8 records as deliberately absent —
@@ -709,9 +713,10 @@ This **Open / Next** section is the live backlog (originally distilled from the
   ladder* in `docs/EVAL_FRAMEWORK.md`. `cheap` never runs the command, so it cannot see a wrong
   artifact, and it reports **false** regressions when the corpus is annotated (the 0.973→0.928
   chain-row artifact, `docs/audits/2026-06-26-ffmpeg-cheap-knaif-chain-artifact.md`).
-  **(b) Stale row set:** locked at 297 against a 314-row corpus — the pre-existing half of this,
-  noted under *Qwen3 fine-tuning pass 3* below. Fix both at once: `just eval-snapshot ffmpeg`
-  (runs `output_diff`), in its own commit, with an `evals/INDEX.md` row.
+  **(b) Stale row set:** locked at 297 utterances against a corpus that now expands to **847**
+  (314 records × their `utterances` lists) — the pre-existing half of this, noted under *Qwen3
+  fine-tuning pass 3* below. Fix both at once: `just eval-snapshot ffmpeg` (runs `output_diff`,
+  which ffmpeg owns), in its own commit, with an `evals/INDEX.md` row.
   **Why `output_diff` and not `success`:** 74 of 219 ffmpeg plan rows carry no `success_criteria`,
   and `success` returns **score 1.0 when criteria are empty** (`skills/ffmpeg/eval/verifiers.py`)
   — ~119 scored rows are free passes that can never fail, so `success` cannot hold a bar today.
@@ -760,8 +765,10 @@ This **Open / Next** section is the live backlog (originally distilled from the
   old enum-bleed contamination), applied retrieval keyword fixes (non-CJK misses 70→46,
   full +0.48pt), and closed the planner-diversity experiment (io transfers nothing to ffmpeg —
   hypothesis not supported). **Still open:** Task 6 preference tuning (only if data levers
-  plateau); re-lock stale per-skill regression snapshots against `knaif-qwen3-4b-v1` — **ffmpeg's is
-  17 rows behind** (corpus 314, snapshot locked at 297), so `eval-regression` is comparing
+  plateau); re-lock stale per-skill regression snapshots against `knaif-qwen3-4b-v1` — **ffmpeg's
+  bar covers 297 of the corpus's 847 utterances** (314 records, each with an `utterances` list;
+  the "17 rows behind" written here originally compared utterances to line count), so
+  `eval-regression` is comparing
   across a changed row set and its aggregate verdict is not trustworthy until the re-lock
   (see *The gate is only valid when the corpus row set is unchanged* in
   `docs/EVAL_VERIFICATION_SOP.md`). **The ffmpeg half of this is now owned by the dedicated
@@ -775,4 +782,5 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `evals/INDEX.md` and the snapshot was re-locked. This entry, the plan's status note, and the
   `docs/plans/README.md` row all still said "deferred" while the plan body had 3.1–3.6 checked
   with results. Separately live and **not** what this entry meant: the ffmpeg corpus has since
-  grown to 314 rows against a snapshot locked at 297 — see the snapshot re-lock item above.
+  grown to 314 records / **847 utterances** against a snapshot locked at 297 utterances — see the
+  snapshot re-lock item above.

@@ -561,10 +561,16 @@ already pass, on a third platform, for the first time.**
       4. **Neither snapshot matches its corpus, and one has the wrong verifier.** Measured
          2026-08-02:
 
-         | Skill | Snapshot verifier | Snapshot rows | Corpus rows | Drift |
-         |---|---|---:|---:|---:|
-         | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 | **+17** |
-         | `documents` | `success` | 129 | 143 | **+14** |
+         | Skill | Snapshot verifier | Bar (utterances) | Corpus records | Corpus utterances | Drift |
+         |---|---|---:|---:|---:|---:|
+         | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 | **847** | **+550** |
+         | `documents` | `success` | 129 | 143 | **164** | **+35** |
+
+         > **The +17/+14 figures published here on 2026-08-02 were wrong** — corrected 2026-08-04
+         > against a real run. A snapshot's `total` counts **utterances**, and every `eval.jsonl`
+         > record carries an `utterances` LIST, so the audit was comparing utterances against the
+         > file's line count. The audit's conclusion holds and gets stronger: ffmpeg's bar covered
+         > **35%** of its corpus, not 95%.
 
          `ffmpeg`'s bar is a **`cheap`** snapshot, which [AGENTS.md](../../AGENTS.md) and
          [EVAL_FRAMEWORK.md](../EVAL_FRAMEWORK.md) both state is an iteration instrument and never
