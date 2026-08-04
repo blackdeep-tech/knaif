@@ -558,8 +558,18 @@ eval-backends skill *args:
 # other run; .gitignore keeps only the durable summaries (score.json, report.md), so commit the
 # run and add a row to evals/INDEX.md rather than pruning by hand.
 # RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg)
-eval-snapshot skill *args:
-    uv run python -m knaif.evalsuite run --skill {{skill}} --verifier output_diff --snapshot --save evals/runs/snapshot_{{skill}}_output_diff {{args}}
+# The VERIFIER IS A PARAMETER, not a constant: `output_diff` is defined in
+# skills/ffmpeg/eval/verifiers.py and is NOT a shared verifier. `documents` owns only
+# cheap/honest/success, and score_corpus degrades to outcome-accuracy-only when it cannot find
+# the named verifier — so hardcoding output_diff here silently produced a non-executing bar for
+# every skill that does not own one, and would have downgraded documents' committed `success`
+# snapshot (measured 2026-08-04: same 97.6% outcome, every Knaif column n/a). The CLI now refuses
+# that outright, and refuses a non-executing verifier like `cheap`; this default just stops
+# steering callers into the refusal.
+#   just eval-snapshot ffmpeg    --backends <name>                      # ffmpeg owns output_diff
+#   just eval-snapshot documents success --backends <name>              # documents does not
+eval-snapshot skill verifier="output_diff" *args:
+    uv run python -m knaif.evalsuite run --skill {{skill}} --verifier {{verifier}} --snapshot --save evals/runs/snapshot_{{skill}}_{{verifier}} {{args}}
 
 # Regression check against saved snapshot (e.g.: just eval-regression ffmpeg --current path/to/scoreboard.json)
 # WITHOUT --current this compares the snapshot to itself and always passes (C0 in the 2026-08-02

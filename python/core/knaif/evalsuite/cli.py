@@ -153,6 +153,48 @@ def _snapshot_path(skill: str) -> Path:
     return Path("skills") / skill / "data" / "eval_snapshot.json"
 
 
+# Verifiers that actually EXECUTE the plan and grade what it produced. Mirrors
+# `scoring._EXECUTING_VERIFIERS`; duplicated as a name here so the refusal message can explain
+# itself without importing scoring's private.
+_LOCKABLE_VERIFIERS = frozenset({"success", "honest", "output_diff"})
+
+
+def _assert_lockable_bar(skill: str, verifier: str, verifiers: dict[str, Any]) -> None:
+    """Refuse to write a snapshot that would be a false acceptance bar.
+
+    A snapshot is the gate every future change is measured against, so the ONE moment worth
+    spending a hard failure on is the moment it gets written. Two ways to produce a bar that
+    silently proves nothing, both of them observed in this repository (C0 in the 2026-08-02
+    macOS support plan):
+
+    1. **The skill does not own the verifier.** `score_corpus` does `verifiers.get(name)` and
+       carries on with `None` when it misses, degrading to outcome/tool-accuracy only. `documents`
+       has no `output_diff` (that verifier lives in `skills/ffmpeg/eval/verifiers.py`), so
+       `just eval-snapshot documents` — which hardcoded `--verifier output_diff` — produced a
+       NON-EXECUTING score and would have replaced the skill's stronger committed `success` bar
+       with it. Measured 2026-08-04: identical 97.6% outcome either way, but `output_diff` scored
+       every Knaif column `n/a` because nothing ran.
+    2. **The verifier does not execute at all.** `cheap` grades the plan's shape, never its
+       output. AGENTS.md and EVAL_FRAMEWORK.md both call it an iteration instrument and never an
+       acceptance bar — and `ffmpeg`'s committed snapshot was a `cheap` one regardless.
+    """
+    if verifier not in verifiers:
+        owned = ", ".join(sorted(k for k in verifiers if k != "grade_outputs")) or "(none)"
+        sys.exit(
+            f"refusing to snapshot '{skill}' with --verifier {verifier}: this skill does not "
+            f"define it (it owns: {owned}).\n"
+            f"  Scoring falls back to outcome/tool accuracy only when a verifier is missing, so "
+            f"the bar would look normal and execute nothing.\n"
+            f"  Re-run with a verifier {skill} owns, e.g. --verifier success."
+        )
+    if verifier not in _LOCKABLE_VERIFIERS:
+        sys.exit(
+            f"refusing to snapshot '{skill}' with --verifier {verifier}: it does not execute the "
+            f"plan, so it cannot be an acceptance bar (see AGENTS.md, 'The eval ladder').\n"
+            f"  Lockable verifiers: {', '.join(sorted(_LOCKABLE_VERIFIERS))}."
+        )
+
+
 def _default_fixture_dir(sandbox: Path | str, skill: str) -> Path:
     """Return the default generated fixture directory for *skill*."""
     return Path(sandbox) / "fixtures" / skill
@@ -782,6 +824,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             print(f"  Saved to {out_path}")
 
         if args.snapshot:
+            _assert_lockable_bar(args.skill, args.verifier, verifiers)
             snap_path = _snapshot_path(args.skill)
             save_snapshot(scoreboard, snap_path)
             print(f"  Snapshot saved to {snap_path}")
