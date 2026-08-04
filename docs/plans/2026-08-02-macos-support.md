@@ -545,8 +545,12 @@ already pass, on a third platform, for the first time.**
       macOS. These cases involve no inference, so **any diff is a genuine platform bug** with no
       floating-point excuse available. This is the cheapest possible signal and it must be clean
       before C5 is interpreted at all.
-- [ ] **C0. ⚠️ PREREQUISITE, and it is not macOS work: the regression gate currently proves
+- [x] **C0. ⚠️ PREREQUISITE, and it is not macOS work: the regression gate currently proves
       nothing.** *Added 2026-08-02 after audit; every claim below re-verified against the code.*
+      **DISCHARGED 2026-08-04** — all four defects closed, acceptance criterion 0 met. Defects 1–2
+      fixed 2026-08-03; defect 4 (both snapshots re-locked with executing verifiers) and the
+      verifier-selection defect that surfaced underneath it, 2026-08-04. See the closing note under
+      this task.
       The first draft wrote `just eval-success <skill>` → `just eval-regression <skill>` and called
       it a gate. It is not one. Four independent defects, any one of which is sufficient:
 
@@ -610,6 +614,43 @@ already pass, on a third platform, for the first time.**
       > re-locked) therefore still does **not** hold; criterion 6 still cannot be honestly claimed.
       > This remains open repository work, tracked already in [TODO.md](../TODO.md), for a session
       > where re-locking is the deliberate goal.
+
+      > **CLOSED 2026-08-04 — that deliberate session happened, on Windows.** Defects 3 and 4 are
+      > discharged and acceptance criterion 0 now holds. Both bars re-locked against
+      > `qwen3-4b-sft-v3-flat-q4` (the stanza both skills name via `recommended_model`; of 37
+      > stanzas in `eval_backends.yaml` only 2 have a GGUF on disk, so `--backends` is mandatory),
+      > fixtures regenerated first:
+      >
+      > | Skill | Old bar | New bar |
+      > |---|---|---|
+      > | `ffmpeg` | `cheap`, 297 utt, 0.9327 | **`output_diff`, 847 utt, 0.9055** |
+      > | `documents` | `success`, 129 utt, 0.9922 | **`success`, 164 utt, 0.9756 / knaif 0.9847** |
+      >
+      > The model is byte-identical; ffmpeg's numbers are **not** comparable (`cheap` grades plan
+      > shape over 35% of the corpus, `output_diff` executes both the model's command and the
+      > reference and ffprobe-diffs the media over all of it). documents *is* comparable — same
+      > verifier — and its outcome delta is 35 new utterances, 3 of its 4 failures being the single
+      > deliberate-ambiguity row `documents_132`.
+      >
+      > **Two defects surfaced underneath defect 4, both now fixed:**
+      > - `just eval-snapshot` hardcoded `--verifier output_diff`, but `output_diff` is defined in
+      >   `skills/ffmpeg/eval/verifiers.py` and `documents` does not own it. `score_corpus` does
+      >   `verifiers.get(name)` and carries on with `None`, so running it there **executed nothing**
+      >   and would have replaced documents' stronger `success` bar with a routing score. The CLI
+      >   now refuses to snapshot a verifier the skill does not own, or one that does not execute
+      >   (which also closes the `cheap`-as-a-bar hole), and the recipe takes the verifier as a
+      >   parameter.
+      > - The first documents lock was measured with **`tesseract` absent**, so all 7 `ocr` rows
+      >   scored knaif 0.5 (routing correct, `output_exists` failing) — **−2.29pt of pure
+      >   environment artifact** in a committed bar. Re-locked after installing it. Note the
+      >   installer puts `tesseract` on **no** PATH; `skills/documents/SPEC.md` requires it on
+      >   `PATH` and `_deps.py` resolves it via `shutil.which`.
+      >
+      > The gate now works: `regression --skill ffmpeg --current <fresh scoreboard>` returns
+      > "No regressions above threshold=0.02", where before it compared the snapshot to itself and
+      > printed OK regardless. **Criterion 6 can now be honestly claimed.** Also corrected here: the
+      > audit's "+17/+14 rows" drift figures compared utterances to `eval.jsonl` line counts — the
+      > real drift was +550 / +35 utterances.
 - [ ] **C4. The eval ladder for both shipped skills** *(depends on C0)*. `just eval-fixtures <skill>`
       — **always first**, since missing fixtures score correct plans ~0 — then run each snapshot's
       **exact** verifier against a single pinned production backend and **save** the scoreboard, then

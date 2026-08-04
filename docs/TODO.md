@@ -460,14 +460,18 @@ This **Open / Next** section is the live backlog (originally distilled from the
   Also, `--config` defaults to `eval_backends.yaml` and omitting `--backends` runs **every** stanza,
   including models whose GGUFs [PERFORMANCE.md](PERFORMANCE.md) §8 records as deliberately absent —
   each scoring ~0.0 and reading as catastrophic quality loss.
-  **Remaining fix:** re-lock both snapshots with an executing verifier against the current corpora
-  (own commit, per the standing rule — needs a real eval-suite run across the full corpus, not
-  attempted yet). Until then any claim that a change "passes the regression gate" via `eval-success`
-  → `eval-regression` with no `--current` is unfounded; passing `--current` explicitly against a
-  freshly saved scoreboard is a real check today, but the **committed bar itself** is still stale.
+  **✅ DISCHARGED 2026-08-04.** Both bars re-locked with executing verifiers against their current
+  corpora, on Windows, pinned to `qwen3-4b-sft-v3-flat-q4`: **ffmpeg** `cheap`/297/0.9327 →
+  `output_diff`/847/**0.9055**; **documents** `success`/129/0.9922 → `success`/164/**0.9756**
+  (knaif **0.9847**). The model is unchanged — ffmpeg's figures are not comparable across a
+  verifier change, documents' are. `regression --current <scoreboard>` is now a real gate. Two
+  further defects surfaced and were fixed: `eval-snapshot` hardcoded a verifier `documents` does
+  not own (executing nothing — the CLI now refuses that, and refuses `cheap` as a bar), and the
+  first documents lock was measured with `tesseract` absent, costing 2.29pt of pure environment
+  artifact. Details in the C0 closing note of
+  [plans/2026-08-02-macos-support.md](plans/2026-08-02-macos-support.md).
 
-  **Prerequisites resolved 2026-08-03 — the re-lock is blocked on ONE thing, and it is not a
-  decision.** Investigated on the Windows box so the next attempt does not re-derive any of it:
+  **Reference — resolved prerequisites**, kept so a future re-lock does not re-derive them:
 
   - **Which backend is canonical is not a judgment call.** Both shipped skills declare
     `recommended_model: knaif-qwen3-4b-v1` (`skills/{ffmpeg,documents}/skill.yaml:9`), which is the
@@ -494,6 +498,14 @@ This **Open / Next** section is the live backlog (originally distilled from the
     wheels live at `abetlen.github.io/llama-cpp-python/whl/<cuda-tag>`, not on PyPI.
   - Ollama is running but carries only stock `qwen3:4b` — the **untuned** model, which would measure
     something other than what ships and must not be used to set the bar.
+  - ⚠️ **`tesseract` must be on `PATH` before locking a documents bar, and the installer does not
+    put it there.** `winget install UB-Mannheim.TesseractOCR` drops it in
+    `C:\Program Files\Tesseract-OCR` and adds it to **neither** machine nor user PATH, while
+    `skills/documents/python/_deps.py` resolves it with `shutil.which`. Without it the 7 `ocr` rows
+    route correctly (so **outcome accuracy looks untouched**) but score knaif **0.5**, failing
+    `output_exists` — worth **−2.29pt** on the committed bar, which is exactly how the first
+    2026-08-04 documents lock went out wrong. `outcome_correct` measures routing, not execution:
+    check `knaif_score` before declaring an executing run healthy.
 
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
