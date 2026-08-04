@@ -97,7 +97,18 @@ RPATH_PREFIXES = ("@rpath/", "@loader_path/", "@executable_path/")
 
 
 class MachOError(ValueError):
-    """Raised for a file that is not a (fat or thin) 64-bit Mach-O this checker can parse."""
+    """A file that IS a Mach-O (its magic says so) but cannot be parsed. Always a failure."""
+
+
+class NotAMachO(MachOError):
+    """A file whose magic is not Mach-O at all — a script, a README, a .gguf. Safe to skip.
+
+    Kept distinct from `MachOError` because collapsing the two is a silent hole: `bin/` legitimately
+    holds non-binaries, so the audit must skip them, but "skip whatever fails to parse" also skips a
+    TRUNCATED or 32-bit dylib — a real defect — and reports the tree clean. `check_pe_imports.py`
+    avoids the problem by only ever looking at `.exe`/`.dll`; Mach-O and ELF executables carry no
+    suffix, so the magic is the only thing that can make that distinction here.
+    """
 
 
 @dataclass
@@ -182,7 +193,15 @@ def parse_macho(path: Path) -> list[Slice]:
     """Return every architecture slice in *path* (one, unless it's a fat/universal binary)."""
     data = path.read_bytes()
     if len(data) < 8:
-        raise MachOError("file too short to be a Mach-O")
+        raise NotAMachO("file too short to be a Mach-O")
+
+    # Classify on magic BEFORE attempting a parse, so "not our format" and "our format, broken"
+    # stay distinguishable. Note MH_MAGIC (32-bit) deliberately falls through to the parse and
+    # fails there: a 32-bit Mach-O IS a Mach-O, and shipping one is a defect, not a non-event.
+    head_le = struct.unpack_from("<I", data, 0)[0]
+    head_be = struct.unpack_from(">I", data, 0)[0]
+    if head_le not in (MH_MAGIC_64, MH_MAGIC) and head_be not in (FAT_MAGIC, FAT_MAGIC_64):
+        raise NotAMachO(f"not a Mach-O (magic={head_be:#010x})")
 
     try:
         fat_magic = struct.unpack_from(">I", data, 0)[0]
@@ -233,18 +252,31 @@ def _resolves(name: str, bindir: Path) -> bool:
     return False  # any other absolute/relative path is a foreign, non-system dependency
 
 
-def audit(bindir: Path, min_os: tuple[int, int, int], verbose: bool) -> list[str]:
+def audit(
+    bindir: Path, min_os: tuple[int, int, int], verbose: bool, counts: dict[str, int] | None = None
+) -> list[str]:
     failures: list[str] = []
     binaries = sorted(
         p for p in bindir.iterdir() if p.is_file() and not p.is_symlink() and p.name != ".DS_Store"
     )
+    parsed = 0
     for binary in binaries:
         try:
             slices = parse_macho(binary)
-        except MachOError as exc:
+        except NotAMachO as exc:
+            # Genuinely not our format — bin/ holds scripts and data too.
             if verbose:
                 print(f"  --   {binary.name}: {exc} (skipped)")
             continue
+        except MachOError as exc:
+            # Its magic SAYS Mach-O and it still would not parse: truncated, 32-bit, or corrupt.
+            # Skipping this is how a broken binary ships while the checker prints "ok".
+            failures.append(
+                f"{binary.name}: claims to be a Mach-O but cannot be parsed — {exc}. A file this "
+                "checker cannot read is a file it cannot clear; treat it as a failure, not a skip"
+            )
+            continue
+        parsed += 1
 
         for slc in slices:
             if slc.cputype != CPU_TYPE_ARM64:
@@ -294,10 +326,13 @@ def audit(bindir: Path, min_os: tuple[int, int, int], verbose: bool) -> list[str
                         f"{binary.name}: has @rpath dependencies but declares no "
                         "@loader_path/@executable_path LC_RPATH — the default llama-cpp-sys-2 "
                         "build emits ZERO rpath entries (verified), so this binary will abort "
-                        "with \"Library not loaded ... no LC_RPATH's found\" the moment it is "
+                        'with "Library not loaded ... no LC_RPATH\'s found" the moment it is '
                         "moved off the build box"
                     )
 
+    if counts is not None:
+        counts["parsed"] = parsed
+        counts["seen"] = len(binaries)
     return failures
 
 
@@ -329,7 +364,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no files in {args.bindir}", file=sys.stderr)
         return 2
 
-    failures = audit(args.bindir, min_os, args.verbose)
+    counts: dict[str, int] = {}
+    failures = audit(args.bindir, min_os, args.verbose, counts)
 
     if failures:
         print(f"FAIL: {len(failures)} dependency/portability issue(s)\n", file=sys.stderr)
@@ -343,7 +379,23 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    print(f"  ok  {len(binaries)} files: every dependency resolves, arm64-only, floor honoured")
+    # Report what was actually PARSED, not how many files sit in the directory. "ok 14 files" while
+    # 14 were skipped and none inspected is the reassuring-but-empty message this checker exists to
+    # replace — and a Mach-O count of zero means the glob is wrong, which is worth its own failure.
+    parsed, seen = counts.get("parsed", 0), counts.get("seen", len(binaries))
+    if parsed == 0:
+        print(
+            f"FAIL: {seen} file(s) in {args.bindir.name}/ and NONE is a Mach-O — nothing was "
+            "verified. Wrong directory, or the staging glob matched nothing.",
+            file=sys.stderr,
+        )
+        return 1
+    skipped = seen - parsed
+    tail = f" ({skipped} non-Mach-O skipped)" if skipped else ""
+    print(
+        f"  ok  {parsed} Mach-O binaries{tail}: every dependency resolves, arm64-only, "
+        "floor honoured"
+    )
     return 0
 
 

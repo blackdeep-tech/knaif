@@ -531,3 +531,62 @@ def test_end_to_end_pass_and_fail_exit_codes(tmp_path: Path) -> None:
     bad.mkdir()
     write_macho(bad / "knaif", filetype=cmd.MH_EXECUTE, minos=(11, 0, 0))
     assert cmd.main([str(bad), "--min-os", "12.0"]) == 1
+
+
+# --------------------------------------------------------------------------------------
+# "Not our format" vs "our format, broken" — the two must not collapse into one skip
+# --------------------------------------------------------------------------------------
+
+
+def test_a_non_macho_file_is_skipped_not_failed(artifact, tmp_path: Path) -> None:
+    """bin/ legitimately holds scripts and data; those must not be reported as defects."""
+    bindir = artifact({"knaif": {"filetype": cmd.MH_EXECUTE}})
+    (bindir / "README.txt").write_bytes(b"just a readme, long enough to look plausible" * 4)
+    (bindir / "run.sh").write_bytes(b"#!/bin/sh\necho hi\n")
+    assert cmd.audit(bindir, (12, 0, 0), verbose=False) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "payload"),
+    [
+        # Magic says 64-bit Mach-O, then the load-command table is truncated.
+        (
+            "libtruncated.dylib",
+            struct.pack(
+                "<IiiIIIII", cmd.MH_MAGIC_64, cmd.CPU_TYPE_ARM64, 0, cmd.MH_DYLIB, 1, 200, 0, 0
+            )
+            + struct.pack("<II", cmd.LC_LOAD_DYLIB, 200),
+        ),
+        # A real 32-bit Mach-O — a Mach-O we refuse to ship, not a foreign file.
+        (
+            "lib32bit.dylib",
+            struct.pack("<IiiIIIII", cmd.MH_MAGIC, cmd.CPU_TYPE_ARM64, 0, cmd.MH_DYLIB, 0, 0, 0, 0),
+        ),
+    ],
+)
+def test_a_broken_macho_FAILS_rather_than_being_skipped(tmp_path: Path, name, payload) -> None:
+    """The hole this closes: skipping whatever won't parse also skips genuinely broken binaries."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    write_macho(bindir / "knaif", filetype=cmd.MH_EXECUTE)
+    (bindir / name).write_bytes(payload)
+    failures = cmd.audit(bindir, (12, 0, 0), verbose=False)
+    assert any(name in f and "cannot be parsed" in f for f in failures), failures
+
+
+def test_a_directory_with_no_macho_at_all_fails(tmp_path: Path) -> None:
+    """`ok 3 files` while nothing was inspected is the empty reassurance this checker replaces."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "notes.txt").write_bytes(b"nothing binary here at all, but long enough" * 4)
+    assert cmd.main([str(bindir), "--min-os", "12.0"]) == 1
+
+
+def test_success_message_counts_parsed_binaries_not_files(tmp_path: Path, capsys) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    write_macho(bindir / "knaif", filetype=cmd.MH_EXECUTE)
+    (bindir / "README.txt").write_bytes(b"not a binary, padded out to a plausible length" * 4)
+    assert cmd.main([str(bindir), "--min-os", "12.0"]) == 0
+    out = capsys.readouterr().out
+    assert "1 Mach-O binaries" in out and "1 non-Mach-O skipped" in out
