@@ -222,17 +222,25 @@ _SCALE_PRESETS: dict[str, str] = dict(_VOCAB["scale_presets"])
 _WxH_RE = re.compile(r"^(\d+)[x:](\d+)$")
 
 
-def _parse_scale(scale: str | None) -> str | None:
+def _parse_scale(scale: object | None) -> str | None:
     """Resolve a scale shorthand or WxH/W:H literal to a 'W:H' string.
 
     Returns None when *scale* is None. Raises ValueError for unrecognised values.
+
+    Coerces with ``str()`` before parsing because the value comes from MODEL OUTPUT, not from
+    typed Python: the annotation says what we want, it does not enforce it. Observed 2026-08-04
+    in an eval run — `create a 4K thumbnail ...` produced `{"scale": 2}`, and `scale.strip()`
+    raised `'int' object has no attribute 'strip'`, an unhandled TypeError escaping as a crash
+    instead of this function's own ValueError. The sibling parsers here already coerce
+    (`_parse_aspect`, `_parse_crf`); this one was the outlier.
     """
     if scale is None:
         return None
-    key = scale.strip().lower()
+    text = str(scale).strip()
+    key = text.lower()
     if key in _SCALE_PRESETS:
         return _SCALE_PRESETS[key]
-    m = _WxH_RE.match(scale.strip())
+    m = _WxH_RE.match(text)
     if m:
         return f"{m.group(1)}:{m.group(2)}"
     raise ValueError(
