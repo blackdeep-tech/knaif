@@ -1,0 +1,13 @@
+{
+  "name": "knaif-sites",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.3",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter knaif-org build && pnpm --filter knaif-dev build",
+    "check": "pnpm --filter knaif-org check && pnpm --filter knaif-dev check"
+  }
+}

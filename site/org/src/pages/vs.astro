@@ -1,0 +1,451 @@
+---
+import Base from "../layouts/Base.astro";
+import { rows, totals, MEASURED, outcomeLabel } from "../lib/comparison";
+
+const EXPERIMENT =
+  "https://github.com/blackdeep-tech/knaif/blob/main/docs/experiments/2026-07-02-agent-vs-knaif-realworld.md";
+
+const agents = ["claude", "copilot", "codex"] as const;
+const heads = [
+  { key: "knaif", name: "knaif", model: "local 4B" },
+  { key: "claude", name: "Claude Code", model: "opus-4-8" },
+  { key: "copilot", name: "Copilot CLI", model: "sonnet-5" },
+  { key: "codex", name: "Codex CLI", model: "gpt-5.5" },
+] as const;
+
+const money = (c: number | "free" | undefined) =>
+  c === "free" ? "free" : c === undefined ? "—" : `~$${c.toFixed(3).replace(/0$/, "")}`;
+---
+
+<Base
+  title="knaif compared to the big LLMs — knaif"
+  description="Eleven real ffmpeg requests, knaif against Claude Code, GitHub Copilot CLI and OpenAI Codex CLI. Every output verified with ffprobe."
+>
+  <section>
+    <p class="eyebrow">measured, not claimed</p>
+    <h1>A free 4B model on your laptop, against three premium agents.</h1>
+    <p class="lede">
+      The obvious objection to "runs locally on a small model" is that it must be worse. So
+      we measured it. Eleven real requests went to knaif and to three premium coding
+      agents, each in an isolated directory with no project memory and full tool
+      permissions. Every output was verified with <code>ffprobe</code> — container, codec,
+      resolution, duration, size — not merely "a file appeared".
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">the result</p>
+    <div class="findings">
+      <div class="finding">
+        <p class="big">9 / 9</p>
+        <p>
+          <strong>A four-way tie on the artifacts.</strong> All four produced a correct,
+          verified output for every one of the nine artifact requests — including two
+          Chinese-language requests and a four-step chain.
+        </p>
+      </div>
+      <div class="finding">
+        <p class="big">~10×</p>
+        <p>
+          <strong>Faster to answer.</strong> ~1–2s of inference against 7–30s. That is the
+          model's thinking time; a cold start also pays ~2s to load the model, which a
+          warm service amortises away.
+        </p>
+      </div>
+      <div class="finding">
+        <p class="big">$0</p>
+        <p>
+          <strong>Every time you ask.</strong> The premium agents run roughly
+          $0.058–0.14 per request — about $58–140 per thousand. knaif's column stays at
+          zero however many times you ask.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">all eleven requests</p>
+    <div class="scroll-x">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">You ask</th>
+            {
+              heads.map((h) => (
+                <th scope="col">
+                  {h.name}
+                  <span class="model">{h.model}</span>
+                </th>
+              ))
+            }
+          </tr>
+        </thead>
+        <tbody>
+          {
+            rows.map((row) => (
+              <tr class:list={{ probe: row.knaif.outcome !== "ok" }}>
+                <th scope="row">
+                  {row.request}
+                  {row.lang && <span class="tag">{row.lang}</span>}
+                  {row.steps && <span class="tag">{row.steps}-step</span>}
+                </th>
+                {(["knaif", ...agents] as const).map((key) => {
+                  const cell = row[key];
+                  const good = cell.outcome === "ok";
+                  const bad = cell.outcome === "deletes";
+                  const notable = cell.outcome === "clarifies" || cell.outcome === "rejects";
+                  return (
+                    <td
+                      class:list={[
+                        "cell",
+                        { good, bad, notable, us: key === "knaif" },
+                      ]}
+                    >
+                      <span class="outcome">{outcomeLabel[cell.outcome]}</span>
+                      <span class="detail">
+                        {cell.seconds !== undefined && <>{cell.seconds}s · </>}
+                        {money(cell.cost)}
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <th scope="row">Artifacts · avg latency · per request</th>
+            {
+              (["knaif", ...agents] as const).map((key) => (
+                <td class:list={["cell", { us: key === "knaif" }]}>
+                  <span class="outcome">{totals[key].correct}</span>
+                  <span class="detail">
+                    {totals[key].avgSeconds}s · {totals[key].perRequest}
+                  </span>
+                </td>
+              ))
+            }
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="note">
+      The last two rows produce no file — they probe behaviour, not capability, and are
+      excluded from the totals.
+    </p>
+  </section>
+
+  <section class="standout">
+    <p class="eyebrow">the row worth sitting with</p>
+    <h2>Asked to delete the source file, two of the three deleted it.</h2>
+    <p>
+      Given full tool permissions — the posture any genuinely useful autonomous agent needs
+      — Copilot ran <code>Remove-Item .\clip.mp4 -Force</code>. Codex ran the shell
+      equivalent and replied "Done." Claude Code declined, on its own reasoning rather than
+      any hard rule.
+    </p>
+    <p>
+      Copilot's underlying model <em>is</em> Claude Sonnet 5. So the same lab's model
+      complied under a different scaffold: whether a destructive request gets blocked
+      tracks the CLI, the scaffold and the model together — never the model alone.
+    </p>
+    <p>
+      <strong>knaif's refusal is the only one of the four enforced in code.</strong> A tool
+      marked <code>safety_category: destructive</code> cannot run without
+      <code>confirmed=True</code> or <code>dry_run=True</code>. That is a property of the
+      registry, checked before anything executes — not a judgement the model makes on the
+      day, and not something a differently-worded request can talk it out of.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">where knaif loses</p>
+    <p>
+      This page is nine everyday requests. Across the full 846-utterance corpus the premium
+      agents hold a real edge — <strong>0.989 against 0.967</strong> — and it lives in the
+      hard, underspecified tail: unusual phrasings, ambiguous asks, the awkward
+      multilingual cases. That gap is misrouting, not raw FFmpeg capability. For
+      bread-and-butter work the local model is not the compromise it sounds like; for the
+      strange tail, it still is one.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">how cost was compared</p>
+    <p>
+      The three CLIs meter in three incompatible units — real dollars, GitHub AI Credits,
+      and a flat ChatGPT subscription that reports no per-request charge at all. The one
+      thing all three report is token usage, so the harness prices each request's measured
+      tokens at that model's public API rates. It is an <strong>estimate, not a bill</strong>.
+    </p>
+    <p>
+      It can be calibrated, because Claude Code reports a real figure: the estimate runs
+      <strong>~1.4× high</strong> against Claude's measured
+      <strong>~$0.098 per request</strong>, since cold runs re-pay the cached system prompt
+      at list rate. Read the dollar column as a consistent cross-agent comparable and a
+      mild upper bound. Compare each arm to knaif's $0 rather than to each other — a
+      Copilot seat or a ChatGPT Plus plan does not bill these amounts per request.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">what this does not show</p>
+    <ul class="caveats">
+      <li>
+        knaif's ~1s is steady-state inference. A cold process also pays ~2s to load the
+        2.5 GB model, amortised away when it runs warm.
+      </li>
+      <li>
+        knaif's column is hardware-bound in a way the cloud columns are not. On{" "}
+        {MEASURED.hardware} the model plans in ~1s; on a desktop RTX 5080 the same model and
+        prompt measure about
+        4× faster, and a machine with no usable GPU is slower. The premium agents' latency does
+        not depend on your machine at all.
+      </li>
+      <li>
+        Claude ran on <code>opus-4-8</code>. A cheaper tier would lower its cost; that was
+        not tested.
+      </li>
+      <li>
+        All three premium agents were given maximal permissions up front, so none hit a
+        prompt it had to negotiate. Codex's default sandbox could not see
+        <code>ffmpeg</code> at all and failed every request until that was bypassed.
+      </li>
+      <li>
+        Eleven requests is a head-to-head, not a benchmark. The aggregate quality picture
+        is the 846-utterance corpus referenced above.
+      </li>
+    </ul>
+  </section>
+
+  <section class="repro">
+    <h2>Check it yourself.</h2>
+    <p>
+      The harness is committed, the scenarios are a YAML file, and the premium arm is
+      pluggable. One command reproduces the whole table.
+    </p>
+    <pre class="term"><code>just experiment-agent-vs-knaif           <span class="dim"># claude</span>
+just experiment-agent-vs-knaif copilot   <span class="dim"># swap the agent</span></code></pre>
+    <a class="btn" href={EXPERIMENT}>Read the full write-up</a>
+  </section>
+
+  <p class="as-measured">
+    Measured {MEASURED.date} against {MEASURED.arms
+      .slice(1)
+      .map((a) => `${a.name} (${a.model})`)
+      .join(", ")}. knaif ran locally on {MEASURED.hardware}; the three premium agents ran
+    in their own data centres, so knaif's is the only latency column that moves with the
+    hardware. <strong>Not since re-verified.</strong> These products change on a timescale
+    of weeks; treat every figure above as bound to that date.
+  </p>
+</Base>
+
+<style>
+  h1 {
+    font-size: var(--step-3);
+    margin: 0 0 1rem;
+    font-weight: 600;
+  }
+
+  h2 {
+    font-size: var(--step-2);
+    margin: 0 0 0.75rem;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 58ch;
+    margin: 0;
+  }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  section p {
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  /* --- findings --- */
+  .findings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: var(--density-gap);
+  }
+
+  .finding {
+    border-left: 3px solid var(--coral);
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .big {
+    font-size: var(--step-2);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+    line-height: 1;
+  }
+
+  /* --- table --- */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 46rem;
+    font-size: var(--step--1);
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 500;
+    display: table-cell;
+  }
+
+  thead .model {
+    display: block;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.7;
+  }
+
+  tbody th {
+    font-weight: 400;
+    max-width: 16rem;
+  }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 0.35em;
+    margin-left: 0.4em;
+    white-space: nowrap;
+  }
+
+  .cell {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .outcome {
+    display: block;
+  }
+
+  .detail {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .cell.us .outcome {
+    font-weight: 600;
+  }
+
+  .cell.bad .outcome {
+    color: var(--bad);
+    font-weight: 600;
+  }
+
+  .cell.notable .outcome {
+    color: var(--coral-text);
+    font-weight: 600;
+  }
+
+  tr.probe {
+    background: var(--surface);
+  }
+
+  tfoot th,
+  tfoot td {
+    border-bottom: 0;
+    border-top: 2px solid var(--border);
+    font-weight: 600;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+
+  /* --- standout --- */
+  .standout {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--coral);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 1.75rem;
+    background: var(--surface);
+  }
+
+  .caveats {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: var(--measure);
+    color: var(--muted);
+  }
+
+  /* --- reproduce --- */
+  .repro {
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .term {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    background: #14171c;
+    color: #e8eaed;
+    padding: 1rem 1.15rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    width: 100%;
+    margin: 0;
+  }
+
+  .term .dim {
+    color: #98a1b0;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--coral);
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.8rem 1.4rem;
+    border-radius: var(--radius);
+    text-decoration: none;
+  }
+
+  .as-measured {
+    color: var(--muted);
+    font-size: var(--step--1);
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+    margin: 0;
+  }
+</style>

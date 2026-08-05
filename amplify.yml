@@ -1,0 +1,105 @@
+# AWS Amplify build spec for the two knaif websites.
+#
+# NOT YET WIRED UP. No Amplify apps exist at the time of writing — this file is the
+# reviewable, versioned definition they should be created against. See
+# docs/plans/2026-08-04-website-split.md §7.
+#
+# TWO APPS, ONE REPO. Amplify's monorepo support is per-app: each app is created against
+# this repository with its own domain, and selects its application below by setting
+# AMPLIFY_MONOREPO_APP_ROOT. AWS requires that variable to match the `appRoot` value here,
+# so a mismatch is a build-time failure rather than a silently wrong deploy.
+#
+#   knaif.org  ->  AMPLIFY_MONOREPO_APP_ROOT = site/org
+#   knaif.dev  ->  AMPLIFY_MONOREPO_APP_ROOT = site/dev
+#
+# PNPM, NOT NPM. The workspace is defined by site/pnpm-workspace.yaml, which npm ignores
+# entirely — an npm build resolves no workspaces and silently builds only the root.
+#
+# AWS states plainly that pnpm is NOT in the default build container, so it has to be put
+# there: https://docs.aws.amazon.com/amplify/latest/userguide/monorepo-configuration.html
+# `corepack enable` is preferred over their `npm install -g pnpm` because it activates the
+# exact version pinned by "packageManager" in site/package.json — CI and a developer
+# machine then run the same pnpm, which is the point of pinning it. The `|| npm install`
+# fallback covers an image whose Node does not ship corepack, and `pnpm --version` fails
+# the build HERE, with an obvious message, rather than three commands later as a
+# mysterious "pnpm: not found".
+#
+# WHY THE BUILD RUNS FROM `site/` WHILE appRoot IS DEEPER: both sites are workspace members
+# of one pnpm workspace and share knaif-shared, so dependencies install once at site/ and
+# each app builds its own filter from there.
+#
+# PAGE-COUNT ASSERTION. A Starlight build with no content collection emits only 404.html
+# and still exits 0 — a silent empty site that CI would happily deploy. Exit status alone
+# cannot catch it, so each build asserts a minimum page count.
+#
+# NO `cd`. Amplify runs a phase's commands in one shell, so a `cd ../..` in the build
+# command would still be in effect for the assertion after it — which would then count
+# `*.html` under the repo root, find none, and fail a perfectly good build. `pnpm --dir`
+# takes the path instead, so every command runs with the cwd Amplify set (appRoot) and
+# `dist` means the same thing in the assertion as it does in `baseDirectory` below.
+#
+# HOISTED LINKING AND THE STORE, SET HERE AND NOT IN AN .npmrc. AWS requires pnpm-workspace
+# apps to link `hoisted` (their docs say via `.npmrc`); an .npmrc would also apply on a
+# developer machine, where pnpm's default symlinked layout is worth keeping — it is what
+# catches an undeclared dependency before a build does. pnpm honours `npm_config_*`
+# environment variables identically, so the requirement is met in the container only.
+# Hoisted is also what makes the node_modules cache below safe: caching pnpm's symlink
+# farm restores links into a store that may not be there.
+#
+# `npm_config_store_dir` is relative to `--dir` (verified), i.e. `site/.pnpm-store` — which
+# is what the cache path names. Without it pnpm stores in a home directory the cache does
+# not cover, so the store entry looks like a working cache and is a no-op.
+
+version: 1
+applications:
+  # ---------------------------------------------------------------- knaif.org
+  - appRoot: site/org
+    env:
+      variables:
+        npm_config_node_linker: hoisted
+        npm_config_store_dir: .pnpm-store
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - corepack enable || npm install -g pnpm@10
+            - pnpm --version
+            - pnpm --dir ../../site install --frozen-lockfile
+        build:
+          commands:
+            - pnpm --dir ../../site --filter knaif-org build
+            - test "$(find dist -name '*.html' | wc -l)" -ge 7
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - ../../site/node_modules/**/*
+          - ../../site/.pnpm-store/**/*
+
+  # ---------------------------------------------------------------- knaif.dev
+  - appRoot: site/dev
+    env:
+      variables:
+        npm_config_node_linker: hoisted
+        npm_config_store_dir: .pnpm-store
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - corepack enable || npm install -g pnpm@10
+            - pnpm --version
+            - pnpm --dir ../../site install --frozen-lockfile
+        build:
+          commands:
+            - pnpm --dir ../../site --filter knaif-dev build
+            - test "$(find dist -name '*.html' | wc -l)" -ge 20
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - ../../site/node_modules/**/*
+          - ../../site/.pnpm-store/**/*

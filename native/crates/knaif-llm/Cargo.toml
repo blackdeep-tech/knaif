@@ -3,6 +3,7 @@ name = "knaif-llm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
 rust-version.workspace = true
 description = "Inference backends (llama.cpp + mock) behind an LlmBackend trait. Depends on knaif-models to locate model files. No Ollama."
 

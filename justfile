@@ -206,8 +206,9 @@ type-check-py: type-check
 # Full Python check: lint + type + test + generated-docs check
 check-py: lint-py type-check-py test-py gen-skills-check
 
-# Full CI check: Python now, native when the Cargo workspace exists (skips cleanly)
-check: check-py check-native
+# Full CI check: Python, native, and both websites (astro check). Needs node + pnpm on
+# PATH — `just bootstrap` provisions them from mise.toml. Site recipes live at the bottom.
+check: check-py check-native site-check
 
 # Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent
 [windows]
@@ -575,24 +576,53 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 parity skill *args:
     uv run python "{{justfile_directory()}}/scripts/parity_check.py" --skill {{skill}} --native-bin "{{justfile_directory()}}/target/debug/knaif{{EXE}}" --model-path "{{justfile_directory()}}/{{PARITY_MODEL}}" --cwd "{{justfile_directory()}}/sandbox/fixtures/{{skill}}" {{args}}
 
-# Build the website and package it for Amplify manual upload
-# Usage: just web-build
-# Then drag site/knaif-site.zip into the Amplify console.
-web-build: _web-build-mkdocs _web-zip
+# ---------------------------------------------------------------------------
+# Websites — knaif.org (site/org) and knaif.dev (site/dev).
+# Plan: docs/plans/2026-08-04-website-split.md
+#
+# pnpm workspaces, NOT npm. `just bootstrap` provisions node + pnpm from mise.toml.
+# `site-check` runs as part of `just check`; `site-build` + `site-links` do not — they
+# need a full production build of both sites, which belongs in the release/deploy gate.
+# ---------------------------------------------------------------------------
 
-_web-build-mkdocs:
-    uv pip install mkdocs-material --quiet
-    uv run python -m mkdocs build -f site/mkdocs.yml
+# Install site dependencies (respects the committed lockfile, like Amplify does)
+site-install:
+    pnpm --dir site install --frozen-lockfile
 
-[windows]
-_web-zip:
-    Compress-Archive -Path site/site/* -DestinationPath site/knaif-site.zip -Force
-    Write-Host "Ready: site/knaif-site.zip"
+# Dev server for one site. Usage: just site-dev org   |   just site-dev dev
+site-dev app:
+    pnpm --dir site --filter knaif-{{app}} dev
 
-[unix]
-_web-zip:
-    cd site/site && zip -r ../knaif-site.zip . -x "*.DS_Store"
-    @echo "Ready: site/knaif-site.zip"
+# Production build of both sites, exactly as Amplify builds them
+site-build:
+    pnpm --dir site install --frozen-lockfile
+    pnpm --dir site --filter knaif-org build
+    pnpm --dir site --filter knaif-dev build
+
+# Type/content check for both sites (astro check) — the site half of `just check`.
+# Installs first: `astro check` on a missing node_modules reports a package resolution
+# error, which reads as a broken site rather than as an unprovisioned checkout.
+site-check:
+    pnpm --dir site install --frozen-lockfile
+    pnpm --dir site --filter knaif-org check
+    pnpm --dir site --filter knaif-dev check
+
+# Internal link + anchor check over the BUILT sites. Needs `just site-build` first —
+# Astro checks neither, so a typo'd href or a moved heading anchor is otherwise invisible.
+site-links:
+    uv run python "{{justfile_directory()}}/scripts/check_site_links.py"
+
+# Regenerate the committed catalog data both sites read (drift-guarded by a test)
+site-data:
+    uv run python "{{justfile_directory()}}/scripts/site_data.py"
+
+# Run AFTER publishing a release (RELEASE.md §5). URLs are never derived from
+# Cargo.toml — the version bump lands before the assets exist, so a derived URL
+# would advertise a download that 404s.
+#
+# Refresh site/data/release.json from the latest PUBLISHED GitHub release
+release-data:
+    uv run python "{{justfile_directory()}}/scripts/release_data.py"
 
 # Freeze dependencies to requirements.txt
 freeze: _freeze

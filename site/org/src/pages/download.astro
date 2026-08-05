@@ -1,0 +1,357 @@
+---
+import Base from "../layouts/Base.astro";
+import {
+  rel,
+  supported,
+  planned,
+  assetsFor,
+  primaryAsset,
+  gpu,
+  externalTools,
+  modelNote,
+  mb,
+  publishedOn,
+} from "../lib/release";
+---
+
+<Base
+  title={`Download knaif ${rel.version}`}
+  description="Download knaif for Windows or Linux. One binary, no Python, no account. Verify it against the published checksums."
+>
+  <section>
+    <p class="eyebrow">download · {rel.tag}</p>
+    <h1>One binary. No Python, no account.</h1>
+    <p class="lede">
+      Unpack it anywhere and run it. Everything knaif needs ships beside the binary — the
+      model is fetched on first run and verified against a pinned hash.
+    </p>
+
+    {/* OS detection is progressive enhancement: every platform is listed below regardless,
+        so a visitor with JS off simply sees the full list rather than a broken page. */}
+    <div class="picker" data-picker hidden>
+      <a class="btn" data-primary href={rel.releases_page}>Download</a>
+      <span class="picker-note" data-note></span>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">all platforms</p>
+    <div class="platforms">
+      {
+        supported.map((platform) => {
+          const assets = assetsFor(platform.id);
+          const primary = primaryAsset(platform);
+          return (
+            <article class="platform" data-platform={platform.id}>
+              <header>
+                <h2>{platform.name}</h2>
+                {platform.arch && <span class="arch">{platform.arch}</span>}
+              </header>
+
+              {platform.requires && <p class="requires">Requires {platform.requires}</p>}
+
+              <ul class="assets">
+                {Object.entries(assets).map(([kind, asset]) => {
+                  const meta = platform.artifacts?.find((a) => a.kind === kind);
+                  return (
+                    <li>
+                      <a
+                        class:list={["asset", { primary: asset === primary }]}
+                        href={asset.url}
+                      >
+                        <span class="kind">{kind}</span>
+                        <span class="size">{mb(asset.size_bytes)}</span>
+                      </a>
+                      {meta?.notes && <p class="asset-note">{meta.notes}</p>}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {platform.known_good && (
+                <p class="fine">Tested on {platform.known_good.join(", ")}.</p>
+              )}
+
+              {platform.known_bad?.map((bad) => (
+                <p class="fine warn">
+                  <strong>{bad.distro}</strong> is not supported — {bad.reason}
+                </p>
+              ))}
+
+              {platform.warnings?.map((warning) => (
+                <p class="fine warn">{warning.text}</p>
+              ))}
+            </article>
+          );
+        })
+      }
+    </div>
+
+    {
+      planned.map((platform) => (
+        <p class="planned">
+          <strong>{platform.name}</strong> — {platform.notes}
+        </p>
+      ))
+    }
+  </section>
+
+  <section class="verify">
+    <p class="eyebrow">verify what you downloaded</p>
+    <p>
+      The Windows binaries are unsigned, so the checksum — not the absence of a warning — is
+      what tells you the file is intact. Every artifact is listed in one signed-by-GitHub
+      manifest.
+    </p>
+    <a class="btn ghost" href={rel.checksums_url}>SHA256SUMS for {rel.tag}</a>
+    <div class="scroll-x">
+      <pre class="term"><code><span class="dim"># Windows (PowerShell)</span>
+Get-FileHash .\knaif-{rel.version}-windows-x64-setup.exe -Algorithm SHA256
+
+<span class="dim"># Linux / macOS</span>
+sha256sum knaif-{rel.version}-linux-x64.tar.gz</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">graphics</p>
+    <p>{gpu.default.text}</p>
+    {
+      gpu.optional.map((option) => (
+        <div class="gpu-opt">
+          <h3>{option.name}</h3>
+          <p>{option.text}</p>
+          <p class="fine">
+            <code>{option.install_command}</code> · {option.approx_size} · needs{" "}
+            {option.requires}
+          </p>
+        </div>
+      ))
+    }
+  </section>
+
+  <section>
+    <p class="eyebrow">after you install</p>
+    <p>{modelNote.text}</p>
+    <p>{externalTools.text}</p>
+    <div class="scroll-x">
+      <pre class="term"><code><span class="dim">$</span> knaif models pull
+<span class="dim">$</span> knaif run ffmpeg "make a thumbnail from the first frame of clip.mp4"
+<span class="dim">$</span> knaif run ffmpeg --dry-run "..."   <span class="dim"># print the command, don't run it</span></code></pre>
+    </div>
+  </section>
+
+  <p class="as-of">
+    knaif <strong>{rel.version}</strong>, published {publishedOn}. Older builds are on the
+    <a href={rel.releases_page}>releases page</a>.
+  </p>
+</Base>
+
+<script>
+  // Pick the likeliest artifact from the UA, but never hide the full list — detection is
+  // a shortcut, not a gate. Falls back to the releases page when nothing matches.
+  const picker = document.querySelector<HTMLElement>("[data-picker]");
+  const link = document.querySelector<HTMLAnchorElement>("[data-primary]");
+  const note = document.querySelector<HTMLElement>("[data-note]");
+  if (picker && link && note) {
+    const ua = navigator.userAgent;
+    const id = /Windows/i.test(ua) ? "windows-x64" : /Linux|X11/i.test(ua) ? "linux-x64" : null;
+    const card = id && document.querySelector<HTMLElement>(`[data-platform="${id}"]`);
+    const primary = card?.querySelector<HTMLAnchorElement>(".asset.primary");
+    if (primary) {
+      link.href = primary.href;
+      link.textContent = `Download for ${card!.querySelector("h2")!.textContent}`;
+      note.textContent = primary.querySelector(".size")?.textContent ?? "";
+      picker.hidden = false;
+    }
+  }
+</script>
+
+<style>
+  h1 {
+    font-size: var(--step-3);
+    margin: 0 0 1rem;
+    font-weight: 600;
+  }
+
+  h2 {
+    font-size: var(--step-1);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  h3 {
+    font-size: var(--step-0);
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 52ch;
+    margin: 0 0 1.5rem;
+  }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  section p {
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .picker {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .picker-note {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .platforms {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: var(--density-gap);
+    width: 100%;
+  }
+
+  .platform {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .platform header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
+  .arch {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .requires {
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .assets {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .asset {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.85rem;
+    text-decoration: none;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+  }
+
+  .asset:hover {
+    border-color: var(--coral);
+  }
+
+  .asset.primary {
+    border-color: var(--coral);
+    background: var(--coral-wash);
+  }
+
+  .size {
+    color: var(--muted);
+  }
+
+  .asset-note {
+    font-size: var(--step--1);
+    color: var(--muted);
+    margin: 0.35rem 0 0;
+  }
+
+  .fine {
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .fine.warn {
+    color: var(--warn);
+  }
+
+  .planned {
+    color: var(--muted);
+  }
+
+  .gpu-opt {
+    border-left: 3px solid var(--coral);
+    padding-left: 1.25rem;
+  }
+
+  .term {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    background: #14171c;
+    color: #e8eaed;
+    padding: 1rem 1.15rem;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin: 0;
+    width: 100%;
+  }
+
+  .term .dim {
+    color: #98a1b0;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--coral);
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.8rem 1.4rem;
+    border-radius: var(--radius);
+    text-decoration: none;
+  }
+
+  .btn.ghost {
+    background: none;
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .btn.ghost:hover {
+    border-color: var(--coral);
+  }
+
+  .as-of {
+    color: var(--muted);
+    font-size: var(--step--1);
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+    margin: 0;
+  }
+</style>

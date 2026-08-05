@@ -5,6 +5,10 @@
 # cmake, just, and node pins are declared now so `just bootstrap` can provision them as
 # native work lands (Phase 4+). The authoritative Rust pin will be `rust-toolchain.toml`
 # added alongside the Cargo workspace in Phase 4; keep this in sync when that lands.
+#
+# node/pnpm exist for the websites (docs/plans/2026-08-04-website-split.md). Keep the node
+# major in sync with whatever the Amplify build image runs — a mismatch between the pin
+# here and CI is exactly the drift these pins exist to prevent.
 
 [tools]
 python = "3.14"      # matches requires-python ">=3.10,<3.15"; dev env is 3.14.x
@@ -12,7 +16,11 @@ uv = "0.11.2"        # Python env + dependency manager (pinned for reproducibili
 just = "latest"      # human-facing task runner
 rust = "1.96.0"      # provides cargo; keep in sync with rust-toolchain.toml (authoritative)
 cmake = "latest"     # needed if/when llama.cpp is vendored + built from source
-node = "latest"      # only needed later for Tauri desktop UI work (Phase: future)
+node = "22"          # websites (site/org, site/dev). Pinned, not "latest" — Amplify builds
+                     # against this, and a floating major is not reproducible. 22 is what the
+                     # dev box runs and clears Astro 7's floor (>=22.12); bumping to 24 is a
+                     # deliberate act once verified on both, not a default.
+pnpm = "10"          # package manager for the site workspaces (NOT npm)
 
 [env]
 # Nothing pinned here yet. The shared model store resolves from $KNAIF_MODELS_DIR at

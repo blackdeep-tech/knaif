@@ -143,9 +143,9 @@ struct PlanArgs {
 
 #[derive(Args)]
 struct RunArgs {
-    /// Skill to run (native `run` currently supports `ffmpeg`).
+    /// Skill to run (`ffmpeg` or `documents`).
     skill: String,
-    /// Preview the command(s) without executing (the only supported mode so far).
+    /// Preview the command(s) without executing anything.
     #[arg(long)]
     dry_run: bool,
     /// Restrict input/output paths to this directory (open/CLI mode when omitted).

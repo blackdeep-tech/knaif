@@ -430,6 +430,15 @@ into `~/.knaif/backends`.
   - Reuse `installers/smoke.sh` (finalization E1) as the job's gate — it already checks
     version-vs-`Cargo.toml`, exe-relative skill resolution from an unrelated cwd, and an offline mock
     `plan --json`, and it never downloads.
+  - **Pick up the website's download data here** _(added 2026-08-05 by
+    [website-split §6](2026-08-04-website-split.md))_. `site/data/release.json` is the committed
+    snapshot both download buttons read; it is refreshed by `just release-data` from the GitHub
+    Releases API, and today that is a manual step in `RELEASE.md` §5. A forgotten refresh advertises
+    the previous version's assets. **It cannot go in this job**, which builds a *draft*: the
+    extractor reads the latest **published** release and rejects drafts and prereleases by design.
+    It belongs on a separate `on: release: published` trigger that runs `just release-data` and
+    commits the result — so add it alongside `release.yml`, not inside it, and only once this repo
+    has a workflow that may write to `main`.
 - [ ] **C4 — Eval-parity lane** _(was F3's unbuilt half; the decision itself stays in finalization
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`

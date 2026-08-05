@@ -1,0 +1,118 @@
+---
+title: Build with knaif
+description: Put a natural-language front end on your own code, or author a skill for knaif itself. Local models, deterministic execution.
+template: splash
+# The h1 and tagline have to answer "what does this do for me?" before a developer will
+# read further. "Build with knaif" plus a statement of the architecture answered "how does
+# it work?" instead — true, but it assumes the reader already knows what they'd be building.
+#
+# Deliberately NOT "your CLI" in the heading: the CLI is the surface knaif ships today, not
+# the boundary of what it is, and a headline that names it dates the moment another surface
+# lands. "your own code" survives that. The tagline's closing example stays CLI-specific
+# because it describes what the SDK can actually do right now (nk.from_click) — swap that
+# line, not the heading, when there is a second surface to name.
+hero:
+  title: Natural language in front of your own code
+  tagline: |
+    Users say what they want instead of memorising flags. A 4B model on their own machine
+    turns it into a validated JSON plan; your functions execute it. No API key, no
+    per-request cost, and the same result every time — around twenty lines to wrap a CLI
+    you already have.
+  actions:
+    - text: Quickstart
+      link: /start/quickstart/
+      icon: right-arrow
+    - text: The SDK
+      link: /sdk/
+      icon: document
+      variant: minimal
+    - text: View on GitHub
+      link: https://github.com/blackdeep-tech/knaif
+      icon: external
+      variant: minimal
+---
+
+import { CardGrid, Card, LinkCard } from '@astrojs/starlight/components';
+
+## Two different developers land here
+
+<CardGrid>
+  <Card title="You have a CLI">
+    You want users to type sentences at it instead of memorising flags. You may never write
+    a knaif skill.
+
+    Start with the **knaif SDK** — it ships in the wheel, so `pip install knaif` is all you
+    need.
+  </Card>
+  <Card title="You want to extend knaif">
+    You are adding a capability to knaif itself — a skill that ships to its users, with its
+    own tools, eval corpus and optionally a Rust port.
+
+    Skill bundles live in the repo, so clone it first.
+  </Card>
+</CardGrid>
+
+## The idea in one paragraph
+
+A small local model reads a request and emits a JSON plan — nothing else. It cannot run a
+command, cannot write a shell string, and never owns a safety decision. Deterministic code
+validates that plan, expands it into concrete steps, asks before it writes, and executes it.
+You pay the AI cost once, while building; the shipped thing runs on a 4B model on the user's
+own machine, for free, the same way every time.
+
+## Start here
+
+<LinkCard
+  title="Quickstart"
+  description="A natural-language CLI in about twenty lines, running entirely on your machine."
+  href="/start/quickstart/"
+/>
+
+<LinkCard
+  title="Released models"
+  description="The two Qwen3 fine-tunes knaif publishes on HuggingFace — sizes, checksums, how to pull one, and the evidence behind picking a 4B."
+  href="/models/"
+/>
+
+## The five tracks
+
+<LinkCard
+  title="The knaif SDK"
+  description="Decorators, wrapping an existing click group, connecting a local model, and exactly what the model can and cannot do to your program."
+  href="/sdk/"
+/>
+
+<LinkCard
+  title="Author a skill"
+  description="The bundle, the Step/Intent contract, intent expansion, and the safety gate."
+  href="/author/"
+/>
+
+<LinkCard
+  title="Evaluate a skill"
+  description="Writing a corpus, the eval ladder, and locking an acceptance bar. This is what makes a skill finished rather than merely working."
+  href="/evaluate/"
+/>
+
+<LinkCard
+  title="Fine-tuning"
+  description="When it is worth it, why shape beats volume, and the proven dead ends worth not repeating."
+  href="/fine-tuning/"
+/>
+
+<LinkCard
+  title="Python to native"
+  description="Porting a skill to the Rust runtime, and proving the two agree rather than assuming it."
+  href="/native/"
+/>
+
+## Which knaif is which
+
+Three separate things carry the name, and a search result will not tell you which one you
+have landed on. What separates them is who runs them:
+
+| You type | What it is | Who runs it |
+|---|---|---|
+| `knaif` | The native binary, downloaded from [knaif.org](https://knaif.org) | End users |
+| `knaif-cli` | The Python console script that runs skills from a repo checkout | Skill authors and evaluators |
+| `import knaif.cli` | The library you build your own natural-language CLI with — *the knaif SDK* | Developers embedding knaif |

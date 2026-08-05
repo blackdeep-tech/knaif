@@ -1,0 +1,340 @@
+---
+import Base from "../layouts/Base.astro";
+import Terminal from "../components/Terminal.astro";
+import SkillCard from "../components/SkillCard.astro";
+import { skills } from "../lib/catalog";
+import { rel, supported, primaryAsset, mb } from "../lib/release";
+
+const stable = skills.filter((s) => s.stage === "stable");
+---
+
+<Base
+  title="knaif — say what you want, your computer does the rest"
+  description="A free AI agent that runs on your own machine and does the fiddly jobs — shrinking a video, combining PDFs, converting documents — from one plain sentence. Nothing to set up, no account, no monthly fee. Works offline."
+>
+  <section class="hero">
+    {/* The category, said plainly and up front: a cold visitor should not have to infer
+        from the demo that there is a model in here at all. `local` is doing real work in
+        that phrase — /about/ is explicit that this is not a general cloud agent. */}
+    <p class="eyebrow">a local AI agent</p>
+    <h1>Say what you want. Your computer does the rest.</h1>
+    {/* Examples must name only `stage: "stable"` skills — revisit when one is promoted. */}
+    <p class="lede">
+      knaif is a small AI that runs on your own machine and does the fiddly jobs — shrinking
+      a video for a chat app, combining a stack of scans into one PDF, converting a document
+      into the format someone asked for — from one plain sentence. Nothing to set up, no
+      account, no monthly fee. It works offline, and it shows you what it's about to do
+      before it does it.
+    </p>
+
+    <div class="cta">
+      {/* Every platform is listed on /download regardless; this is a shortcut, not a gate. */}
+      <a class="btn" data-primary href="/download/">Download</a>
+      <a class="btn ghost" href="/skills/">See what it can do</a>
+    </div>
+    <p class="cta-note">
+      <span data-note>Free and open source</span> · Apache&nbsp;2.0 · v{rel.version}
+    </p>
+  </section>
+
+  <section class="demo">
+    <Terminal />
+    <p class="note">
+      A real session. knaif chose the tool and the settings; you saw the command before it
+      ran.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">how it works</p>
+    <div class="steps">
+      <div class="step">
+        <h2>You describe the outcome</h2>
+        <p>
+          No flags to remember, no manual pages. "Compress this under 25 MB", "get it ready
+          for WhatsApp", "pull the audio out as mp3".
+        </p>
+      </div>
+      <div class="step">
+        <h2>A small AI model works out the intent</h2>
+        <p>
+          Running on your machine. It picks the operation and the values — and that is all
+          it does. It cannot run anything.
+        </p>
+      </div>
+      <div class="step">
+        <h2>Code does the work</h2>
+        <p>
+          Ordinary, tested code builds the command, shows it to you, asks before it writes,
+          and runs it. Same request, same command, every time.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">skills</p>
+    <h2 class="section-h">One blade per job.</h2>
+    <div class="grid">
+      {stable.map((skill) => <SkillCard skill={skill} />)}
+    </div>
+    <a class="more" href="/skills/">All skills →</a>
+  </section>
+
+  <section>
+    <p class="eyebrow">why local</p>
+    <div class="whys">
+      <div>
+        <h3>Nothing leaves your machine</h3>
+        <p>No account, no API key, no upload. Your files and your words stay where they are.</p>
+      </div>
+      <div>
+        <h3>Free, however often you ask</h3>
+        <p>
+          No subscription and no per-request charge. We
+          <a href="/vs/">measured it against three premium agents</a> — same results, at $0.
+        </p>
+      </div>
+      <div>
+        <h3>The same answer tomorrow</h3>
+        <p>
+          The command is built by code, not improvised. Ask the same thing next month and
+          you get the same command.
+        </p>
+      </div>
+      <div>
+        <h3>It asks before it writes</h3>
+        <p>
+          Anything that changes a file needs your confirmation, and that gate is enforced in
+          code — not left to the model's judgement.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="foot-cta">
+    <h2>Get it.</h2>
+    <div class="downloads">
+      {
+        supported.map((platform) => {
+          const asset = primaryAsset(platform);
+          return asset ? (
+            <a class="dl" href={asset.url} data-platform={platform.id}>
+              <span class="dl-name">{platform.name}</span>
+              <span class="dl-meta">{mb(asset.size_bytes)}</span>
+            </a>
+          ) : null;
+        })
+      }
+    </div>
+    <p class="note">
+      Or <a href="/download/">see all platforms, checksums and requirements</a>. Building
+      something? <a href="https://knaif.dev">knaif.dev</a>.
+    </p>
+  </section>
+</Base>
+
+<script>
+  // Point the hero button straight at the likely artifact. Never hides anything: without
+  // JS it stays a link to /download/, which lists every platform.
+  const link = document.querySelector<HTMLAnchorElement>("[data-primary]");
+  const note = document.querySelector<HTMLElement>("[data-note]");
+  if (link) {
+    const ua = navigator.userAgent;
+    const id = /Windows/i.test(ua) ? "windows-x64" : /Linux|X11/i.test(ua) ? "linux-x64" : null;
+    const card = id && document.querySelector<HTMLAnchorElement>(`.dl[data-platform="${id}"]`);
+    if (card) {
+      link.href = card.href;
+      link.textContent = `Download for ${card.querySelector(".dl-name")?.textContent}`;
+      if (note) note.textContent = card.querySelector(".dl-meta")?.textContent ?? "";
+    }
+  }
+</script>
+
+<style>
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  /* The shared .eyebrow carries a bottom margin for prose sections; the hero spaces its
+     children with flex `gap`, so keeping it would double the gap above the h1. */
+  .hero .eyebrow {
+    margin-bottom: 0;
+  }
+
+  h1 {
+    font-size: var(--step-3);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 46ch;
+    margin: 0;
+  }
+
+  .cta {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+
+  .cta-note {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--coral);
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.85rem 1.5rem;
+    border-radius: var(--radius);
+    text-decoration: none;
+  }
+
+  .btn.ghost {
+    background: none;
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .btn.ghost:hover {
+    border-color: var(--coral);
+  }
+
+  .demo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .section-h {
+    font-size: var(--step-2);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin: 0;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: var(--density-gap);
+    counter-reset: step;
+  }
+
+  .step {
+    border-top: 2px solid var(--coral);
+    padding-top: 0.9rem;
+  }
+
+  .step h2 {
+    font-size: var(--step-0);
+    margin: 0 0 0.4rem;
+    font-weight: 600;
+  }
+
+  .step p {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin: 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: var(--density-gap);
+  }
+
+  .more {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    text-decoration: none;
+  }
+
+  .more:hover {
+    text-decoration: underline;
+  }
+
+  .whys {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: var(--density-gap) 2rem;
+  }
+
+  .whys h3 {
+    font-size: var(--step-0);
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+  }
+
+  .whys p {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin: 0;
+    max-width: 40ch;
+  }
+
+  .foot-cta {
+    border-top: 1px solid var(--border);
+    padding-top: 2.5rem;
+    align-items: flex-start;
+  }
+
+  .foot-cta h2 {
+    font-size: var(--step-2);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .downloads {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .dl {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1.25rem;
+    text-decoration: none;
+    color: var(--ink);
+  }
+
+  .dl:hover {
+    border-color: var(--coral);
+  }
+
+  .dl-name {
+    font-weight: 600;
+  }
+
+  .dl-meta {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+</style>

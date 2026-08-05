@@ -1,0 +1,259 @@
+/* knaif design system — shared by knaif.org and knaif.dev.
+ *
+ * One system, two densities: both sites use these tokens, the same logo and the same type
+ * scale. .org opens light and breathes; .dev opens dark and compresses. Both support both
+ * themes — only the default differs.
+ *
+ * Canonical reference: docs/plans/2026-08-04-website-split.md §10.
+ *
+ * THEMING CONTRACT. Style components through the tokens, never inside a media query.
+ * Each site sets its own default via `data-theme` on <html>, so the OS preference is the
+ * fallback, not the authority — otherwise a dark-first .dev would render light for every
+ * visitor whose laptop is in light mode.
+ */
+
+:root {
+  /* --- Native chrome -----------------------------------------------------------
+   * `color-scheme` is the one theme decision the browser makes for us rather than the
+   * other way round: scrollbars, form controls and the default canvas are painted by
+   * the platform, and left unstated they follow the OS instead of the page. It is
+   * declared in each theme block below alongside that theme's colours, so a site that
+   * opens light on a dark desktop gets light scrollbars. Starlight says the same thing
+   * in its own reset; the values agree, so whichever wins is correct. */
+  color-scheme: light;
+
+  /* --- Brand ------------------------------------------------------------------ */
+  /* Coral ships as TWO tokens because one cannot do both jobs. #ff5757 on white is
+   * 3.11:1 — under the 4.5:1 WCAG AA needs for body text. It clears 3:1 for large type
+   * and UI borders, and reaches 5.06:1 on the dark ink. Use --coral for display, borders
+   * and buttons; --coral-text for links and anything at reading size. */
+  --coral: #ff5757;
+  --coral-text: #d32f2f;
+  --coral-wash: #fff1f1;
+
+  /* --- Neutrals ---------------------------------------------------------------
+   * Cool, biased toward the logo's ink (#1f232b reads blue) rather than toward the
+   * coral. Warm-harmonising everything would flatten the accent; the warm/cool tension
+   * is what keeps it working. */
+  --ground: #ffffff;
+  --surface: #f7f8fa;
+  --subtle: #eef0f4;
+  --border: #dce0e7;
+  --muted: #656d7b;
+  --ink: #1f232b;
+
+  /* --- Semantic (separate from the accent) ------------------------------------ */
+  --ok: #17734a;
+  --warn: #9a5b00;
+  --bad: #b42318;
+
+  /* --- Type -------------------------------------------------------------------
+   * Mono is load-bearing, not ornamental: this is a CLI product, so rendered argv,
+   * terminal casts, tool names, eyebrows and labels all live in it. Faces are
+   * self-hosted via @fontsource (see fonts.css) — never the Google CDN. */
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --step--1: clamp(0.78rem, 0.76rem + 0.1vw, 0.84rem);
+  --step-0: clamp(0.95rem, 0.92rem + 0.15vw, 1.03rem);
+  --step-1: clamp(1.15rem, 1.08rem + 0.35vw, 1.35rem);
+  --step-2: clamp(1.5rem, 1.35rem + 0.7vw, 2rem);
+  --step-3: clamp(2rem, 1.7rem + 1.5vw, 3.1rem);
+
+  /* --- Space + shape ----------------------------------------------------------
+   * .org overrides --density-gap upward; .dev leaves it. Same scale, two pacings. */
+  --density-gap: 1.5rem;
+  --radius: 4px;
+  --measure: 65ch;
+}
+
+/* Dark tokens, defined once and applied by three selectors below so that the site's own
+ * default, the OS preference, and the viewer's toggle all resolve correctly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --coral-text: #ff7a7a;
+    --coral-wash: #2a1c1e;
+    --ground: #14171c;
+    --surface: #1b1f26;
+    --subtle: #232830;
+    --border: #333a45;
+    --muted: #98a1b0;
+    --ink: #e8eaed;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #ff8a80;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --coral-text: #ff7a7a;
+  --coral-wash: #2a1c1e;
+  --ground: #14171c;
+  --surface: #1b1f26;
+  --subtle: #232830;
+  --border: #333a45;
+  --muted: #98a1b0;
+  --ink: #e8eaed;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --bad: #ff8a80;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --coral-text: #d32f2f;
+  --coral-wash: #fff1f1;
+  --ground: #ffffff;
+  --surface: #f7f8fa;
+  --subtle: #eef0f4;
+  --border: #dce0e7;
+  --muted: #656d7b;
+  --ink: #1f232b;
+  --ok: #17734a;
+  --warn: #9a5b00;
+  --bad: #b42318;
+}
+
+/* --- Base ----------------------------------------------------------------------
+ *
+ * The element-level rules below live in a named cascade layer, and everything from here
+ * to the end of the file is inside it. The tokens above stay unlayered on purpose — they
+ * are declarations the sites must be able to rely on winning.
+ *
+ * Why the layer: Starlight puts every one of its own rules in `@layer starlight.*`, and
+ * unlayered CSS outranks layered CSS whatever the specificity. Left unlayered, the bare
+ * `a { color: var(--coral-text) }` below beat Starlight's link colours everywhere on
+ * .dev — the whole sidebar rendered coral, and the current sidebar entry and the hero's
+ * primary button became coral text on a coral background. Registering `knaif.base` here
+ * makes it the FIRST layer the page sees, so Starlight's layers sort above it and its
+ * components colour themselves through the `--sl-color-*` mappings in .dev's theme.css
+ * (which point back at these same tokens). Starlight imports user CSS ahead of its own
+ * `layers.css` specifically to allow this.
+ *
+ * On .org, which has no Starlight, this is a single layer and behaves as before.
+ */
+
+@layer knaif.base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* The root carries the ground colour too, not just <body>. A browser only inherits the
+   * canvas colour from <body> once it has laid the body out; naming it on <html> gives it
+   * a colour from the first style recalc, which is what keeps a page transition from
+   * showing a frame of bare canvas. */
+  html {
+    background: var(--ground);
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  a {
+    color: var(--coral-text);
+    text-underline-offset: 0.2em;
+  }
+
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--coral);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  img,
+  svg {
+    max-width: 100%;
+  }
+
+  /* Wide content scrolls inside its own container so the page body never scrolls sideways. */
+  .scroll-x {
+    overflow-x: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* --- The bracket motif ----------------------------------------------------------
+   * Structural, not decorative. The wordmark reads kn[AI]f — the AI bracketed — and that
+   * is the product thesis, not a logo quirk: the model is fenced into the intent layer
+   * with deterministic code either side. It marks section eyebrows and the pipeline
+   * diagram. Deliberately NOT on buttons, tags or callouts, which wears thin across a
+   * docs site. */
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin: 0 0 0.9rem;
+  }
+
+  .eyebrow::before,
+  .eyebrow::after {
+    color: var(--coral);
+    font-size: 1.3em;
+    line-height: 1;
+  }
+
+  .eyebrow::before {
+    content: "[";
+  }
+
+  .eyebrow::after {
+    content: "]";
+  }
+
+  /* --- Catalog stage badge --------------------------------------------------------
+   * A skill card STATE, not a decoration. Preview skills are shown rather than hidden so
+   * the catalog stays as alive as the project is — the badge is what keeps that honest,
+   * so it has to read as a status, not as ornament. */
+
+  .stage-badge {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+    color: var(--warn);
+    white-space: nowrap;
+  }
+}

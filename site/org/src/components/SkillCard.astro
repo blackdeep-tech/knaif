@@ -1,0 +1,100 @@
+---
+import type { Skill } from "../lib/catalog";
+import { actionableExamples } from "../lib/catalog";
+
+interface Props {
+  skill: Skill;
+}
+
+const { skill } = Astro.props;
+const example = actionableExamples(skill, 1)[0];
+---
+
+<a class="card" href={`/skills/${skill.name}/`} data-category={skill.category}>
+  <header>
+    <h3>{skill.title}</h3>
+    {
+      skill.stage === "preview" && (
+        <span class="stage-badge" title="Works, but still changing">
+          in development
+        </span>
+      )
+    }
+  </header>
+
+  <p class="tagline">{skill.tagline}</p>
+
+  {
+    example && (
+      <p class="example">
+        <span class="prompt">$</span> {example.request}
+      </p>
+    )
+  }
+
+  <p class="meta">
+    {skill.tools.length} tools
+    {skill.external_tools.some((t) => t.required) && <> · needs {skill.external_tools.filter((t) => t.required).map((t) => t.name).join(", ")}</>}
+  </p>
+</a>
+
+<style>
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+    background: var(--ground);
+    transition: border-color 0.15s ease;
+  }
+
+  .card:hover {
+    border-color: var(--coral);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  h3 {
+    font-size: var(--step-1);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .tagline {
+    margin: 0;
+    flex: 1;
+  }
+
+  /* The strongest thing a skill card can show is a sentence you could actually type. */
+  .example {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .example .prompt {
+    color: var(--coral);
+    user-select: none;
+  }
+
+  .meta {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+</style>

@@ -1,6 +1,10 @@
-# Models (large binary files)
-models/
+# Models (large binary files) — the repo-root GGUF directory only.
+# Anchored with a leading slash: an unanchored `models/` matches a directory of that name at
+# ANY depth, which silently swallowed site/dev/src/content/docs/models/ (the published
+# models documentation) and is why contracts/models/ needed the negations below.
+/models/
 # ...but contracts/models/ holds the tracked source-of-truth model manifest (no GGUFs).
+# Redundant against the anchored pattern above; kept so re-widening it cannot lose them.
 !contracts/models/
 !contracts/models/*.yaml
 
@@ -71,9 +75,23 @@ evals/**/.baselines/
 evals/**/out.*
 evals/**/report.html
 
-# Web / MkDocs build artifacts
+# Web — MkDocs build artifacts (removed once the Astro sites land; see
+# docs/plans/2026-08-04-website-split.md)
 site/site/
 site/knaif-site.zip
+
+# Web — Node / pnpm. `pnpm-lock.yaml` is deliberately NOT ignored: `*.lock` above only
+# matches a `.lock` suffix, and Amplify's `pnpm install --frozen-lockfile` requires the
+# lockfile to be committed. Astro's `dist/` output is already covered by the unanchored
+# `dist/` rule in the Python section, but it is named here too so removing that rule
+# cannot silently start publishing build output.
+node_modules/
+.astro/
+site/*/dist/
+# amplify.yml points pnpm's store here (npm_config_store_dir) so the build cache can cover
+# it. That is Amplify-only, but anyone reproducing a build locally materializes a
+# multi-hundred-MB store in the working tree, and it is not ignored by anything above.
+site/.pnpm-store/
 
 # Private / non-public working documents
 docs/programs/

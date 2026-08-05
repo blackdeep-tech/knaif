@@ -2,6 +2,12 @@ name: documents
 description: "Local document toolkit for inspecting, extracting, finding, converting, combining, and compressing files."
 version: 0.1.0
 
+# End-user catalog copy for knaif.org — see the note in skills/ffmpeg/skill.yaml.
+display:
+  title: Documents
+  tagline: "Read, convert, combine, and protect documents on your own machine."
+  category: documents
+
 tools: tools.yaml
 skill_class: handlers.DocumentsSkill
 prompt: prompt.yaml

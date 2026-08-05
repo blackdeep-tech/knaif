@@ -1,0 +1,960 @@
+{
+  "generated_by": "scripts/site_data.py",
+  "models": [
+    {
+      "base_model": "Qwen/Qwen3-1.7B",
+      "default": false,
+      "file": "knaif-qwen3-1.7b-v1-q6_k.gguf",
+      "id": "knaif-qwen3-1.7b-v1",
+      "license": "Apache-2.0",
+      "size_bytes": 1417754976,
+      "skills": [
+        "ffmpeg",
+        "documents"
+      ]
+    },
+    {
+      "base_model": "Qwen/Qwen3-4B",
+      "default": true,
+      "file": "knaif-qwen3-4b-v1-q4_k_m.gguf",
+      "id": "knaif-qwen3-4b-v1",
+      "license": "Apache-2.0",
+      "size_bytes": 2497280960,
+      "skills": [
+        "ffmpeg",
+        "documents"
+      ]
+    }
+  ],
+  "platforms": {
+    "external_tools": {
+      "text": "Skills that use external programs (FFmpeg, LibreOffice, Ghostscript, Tesseract) need them installed separately. Run `knaif skills deps` to see what is missing."
+    },
+    "gpu": {
+      "default": {
+        "backends": [
+          "cpu",
+          "vulkan"
+        ],
+        "text": "Every download includes CPU and Vulkan support, and auto-selects Vulkan when a capable driver is present."
+      },
+      "optional": [
+        {
+          "approx_size": "~668 MB",
+          "id": "cuda",
+          "install_command": "knaif backend install cuda",
+          "name": "CUDA",
+          "requires": "NVIDIA driver R580 or newer",
+          "text": "On NVIDIA Blackwell cards (RTX 50xx) the Vulkan path runs at roughly CPU speed, so CUDA is what makes knaif usable there. On older NVIDIA cards it is faster and genuinely optional."
+        }
+      ]
+    },
+    "model": {
+      "text": "On first run knaif offers to download the recommended model (~2.5 GB) into ~/.knaif, verified against a pinned SHA-256. Upgrading knaif re-downloads nothing while the recommendation is unchanged."
+    },
+    "platforms": [
+      {
+        "arch": "x64",
+        "artifacts": [
+          {
+            "artifact": "knaif-<ver>-windows-x64-setup.exe",
+            "kind": "installer",
+            "notes": "Inno installer, per-user, no admin required.",
+            "recommended": true
+          },
+          {
+            "artifact": "knaif-<ver>-windows-x64.zip",
+            "kind": "portable",
+            "notes": "Unpack anywhere and run; everything it needs ships beside the binary."
+          }
+        ],
+        "id": "windows-x64",
+        "name": "Windows",
+        "requires": "Windows 10 or later",
+        "status": "supported",
+        "warnings": [
+          {
+            "id": "unsigned",
+            "text": "Binaries are unsigned, so Windows SmartScreen shows \"Windows protected your PC\". Choose More info → Run anyway. Verify the checksum first."
+          }
+        ]
+      },
+      {
+        "arch": "x64",
+        "artifacts": [
+          {
+            "artifact": "knaif-<ver>-linux-x64.tar.gz",
+            "kind": "portable",
+            "recommended": true
+          },
+          {
+            "artifact": "knaif-<ver>-linux-x86_64.AppImage",
+            "kind": "appimage",
+            "notes": "chmod +x and run. Needs FUSE2 (libfuse2t64 on Ubuntu 24.04); otherwise run with --appimage-extract-and-run."
+          }
+        ],
+        "id": "linux-x64",
+        "known_bad": [
+          {
+            "distro": "RHEL / Rocky / AlmaLinux 9",
+            "reason": "glibc is new enough, but the shipped libstdc++ is one version short of GLIBCXX_3.4.30. Bundling libstdc++ was rejected: libggml-vulkan.so dlopens a host driver built against the system copy."
+          }
+        ],
+        "known_good": [
+          "Ubuntu 22.04+",
+          "Debian 12+",
+          "Fedora 36+",
+          "Linux Mint 21+"
+        ],
+        "name": "Linux",
+        "requires": "glibc 2.34+ and libstdc++ providing GLIBCXX_3.4.30 / CXXABI_1.3.13",
+        "status": "supported"
+      },
+      {
+        "id": "macos",
+        "name": "macOS",
+        "notes": "Core is cross-platform; packaging is a fast-follow. No artifact is published.",
+        "requires": null,
+        "status": "planned"
+      }
+    ],
+    "schema_version": 1
+  },
+  "recommendations": {
+    "cli": "knaif-qwen3-4b-v1",
+    "default": "knaif-qwen3-4b-v1",
+    "desktop": "knaif-qwen3-4b-v1",
+    "mobile": "knaif-qwen3-1.7b-v1"
+  },
+  "schema_version": 1,
+  "skills": [
+    {
+      "category": "documents",
+      "description": "Local document toolkit for inspecting, extracting, finding, converting, combining, and compressing files.",
+      "examples": [
+        {
+          "request": "inspect report.pdf",
+          "tool": "inspect_document"
+        },
+        {
+          "request": "find alpha in notes.txt",
+          "tool": "find_in_document"
+        },
+        {
+          "request": "make report.pdf smaller",
+          "tool": "compress_pdf"
+        },
+        {
+          "request": "make scan.pdf searchable",
+          "tool": "ocr_document"
+        },
+        {
+          "request": "do something with a file",
+          "tool": "clarify"
+        }
+      ],
+      "external_tools": [
+        {
+          "commands": [
+            "gs",
+            "gswin64c",
+            "gswin32c"
+          ],
+          "name": "ghostscript",
+          "required": false
+        },
+        {
+          "commands": [
+            "soffice",
+            "libreoffice"
+          ],
+          "name": "libreoffice",
+          "required": false
+        },
+        {
+          "commands": [
+            "tesseract"
+          ],
+          "name": "tesseract",
+          "required": false
+        }
+      ],
+      "name": "documents",
+      "recommended_model": "knaif-qwen3-4b-v1",
+      "runtimes": {
+        "native": "supported",
+        "python": true
+      },
+      "stage": "stable",
+      "tagline": "Read, convert, combine, and protect documents on your own machine.",
+      "title": "Documents",
+      "tools": [
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "position": {
+              "enum": [
+                "top-left",
+                "top-center",
+                "top-right",
+                "center",
+                "bottom-left",
+                "bottom-center",
+                "bottom-right"
+              ],
+              "type": "enum"
+            },
+            "start_at": {
+              "min": 1,
+              "type": "integer"
+            }
+          },
+          "description": "Add page numbers to a PDF.",
+          "name": "add_page_numbers",
+          "optional_args": [
+            "position",
+            "start_at",
+            "output"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "compress_quality": {
+              "enum": [
+                "small",
+                "balanced",
+                "high"
+              ],
+              "type": "enum"
+            },
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            }
+          },
+          "description": "Compress a PDF using a deterministic inspect-compress-verify workflow.",
+          "name": "compress_pdf",
+          "optional_args": [
+            "compress_quality",
+            "output"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "to_format": {
+              "enum": [
+                "pdf",
+                "txt",
+                "md",
+                "png",
+                "jpg"
+              ],
+              "type": "enum"
+            }
+          },
+          "description": "Convert or save a document as a different format (e.g. txt→md, docx→pdf).",
+          "name": "convert_document",
+          "optional_args": [
+            "output"
+          ],
+          "required_args": [
+            "input",
+            "to_format"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "ocr": {
+              "type": "boolean"
+            },
+            "pages": {
+              "type": "string"
+            }
+          },
+          "description": "Read out the text content of a document as per-page records plus joined text. Creates no new file. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf.",
+          "name": "extract_text",
+          "optional_args": [
+            "pages",
+            "ocr"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "safe"
+        },
+        {
+          "arg_schemas": {
+            "ignore_case": {
+              "type": "boolean"
+            },
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            },
+            "regex": {
+              "type": "boolean"
+            }
+          },
+          "description": "Find a keyword or regex within one document and return page snippets.",
+          "name": "find_in_document",
+          "optional_args": [
+            "regex",
+            "ignore_case"
+          ],
+          "required_args": [
+            "input",
+            "query"
+          ],
+          "safety_category": "safe"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            }
+          },
+          "description": "Inspect a document's format, page count, size, encryption, and text-layer status.",
+          "name": "inspect_document",
+          "optional_args": [],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "safe"
+        },
+        {
+          "arg_schemas": {
+            "inputs": {
+              "items": "string",
+              "path_role": "input",
+              "type": "array"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            }
+          },
+          "description": "Merge multiple PDFs into one output PDF.",
+          "name": "merge_pdfs",
+          "optional_args": [],
+          "required_args": [
+            "inputs",
+            "output"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            }
+          },
+          "description": "Make a scanned PDF or image searchable with local Tesseract OCR.",
+          "name": "ocr_document",
+          "optional_args": [
+            "output",
+            "language"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            }
+          },
+          "description": "Password-protect a PDF.",
+          "name": "protect_pdf",
+          "optional_args": [
+            "output"
+          ],
+          "required_args": [
+            "input",
+            "password"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "pages": {
+              "type": "string"
+            }
+          },
+          "description": "Delete specific pages and save a copy without them. Use only when the user wants to remove, delete, drop, or get rid of pages — name the pages they do NOT want. If they instead name the pages to keep, use split_pdf.",
+          "name": "remove_pages",
+          "optional_args": [
+            "output"
+          ],
+          "required_args": [
+            "input",
+            "pages"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "order": {
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            }
+          },
+          "description": "Reorder PDF pages into a new order within one PDF (not into separate files).",
+          "name": "reorder_pages",
+          "optional_args": [
+            "output"
+          ],
+          "required_args": [
+            "input",
+            "order"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "degrees": {
+              "type": "integer"
+            },
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "pages": {
+              "type": "string"
+            }
+          },
+          "description": "Rotate selected PDF pages.",
+          "name": "rotate_pages",
+          "optional_args": [
+            "pages",
+            "output"
+          ],
+          "required_args": [
+            "input",
+            "degrees"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "output_dir": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "ranges": {
+              "type": "string"
+            }
+          },
+          "description": "Copy a subset of pages into a new PDF, leaving the original intact. Use whenever the user wants to keep, extract, pull out, split off, or save specific pages — name the pages they WANT. Do not convert this into a removal of the other pages.",
+          "name": "split_pdf",
+          "optional_args": [
+            "output",
+            "output_dir"
+          ],
+          "required_args": [
+            "input",
+            "ranges"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            }
+          },
+          "description": "Remove PDF password protection when the password is supplied.",
+          "name": "unlock_pdf",
+          "optional_args": [
+            "output"
+          ],
+          "required_args": [
+            "input",
+            "password"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "any_of_args": [
+            "text",
+            "image"
+          ],
+          "arg_schemas": {
+            "image": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "opacity": {
+              "max": 1,
+              "min": 0,
+              "type": "number"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "position": {
+              "enum": [
+                "top-left",
+                "top-center",
+                "top-right",
+                "center",
+                "bottom-left",
+                "bottom-center",
+                "bottom-right"
+              ],
+              "type": "enum"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "description": "Apply a text or image watermark to a PDF.",
+          "name": "watermark",
+          "optional_args": [
+            "text",
+            "image",
+            "opacity",
+            "position",
+            "output"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        }
+      ]
+    },
+    {
+      "category": "media",
+      "description": "FFmpeg-powered media workflow assistant — convert, compress, resize, extract, and prepare video/audio for platforms.",
+      "examples": [
+        {
+          "request": "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.",
+          "tool": "prepare_for_platform"
+        },
+        {
+          "request": "Compress interview.mp4 for email under 20 MB.",
+          "tool": "compress_video"
+        },
+        {
+          "request": "Extract the audio from clip.mp4 as MP3.",
+          "tool": "extract_audio"
+        },
+        {
+          "request": "Extract the audio from clip.mp4 to audio.mp3.",
+          "tool": "extract_audio"
+        },
+        {
+          "request": "Resize clip.mp4 to 1080p and keep aspect ratio.",
+          "tool": "resize_video"
+        },
+        {
+          "request": "Crop clip.mp4 to square.",
+          "tool": "resize_video"
+        },
+        {
+          "request": "Convert clip1.mp4 and clip2.mp4 to mp4.",
+          "tool": "convert_video"
+        },
+        {
+          "request": "Cut the first 30 seconds off clip.mp4.",
+          "tool": "trim_video"
+        },
+        {
+          "request": "Grab a thumbnail from clip.mp4 at 5 seconds.",
+          "tool": "create_thumbnail"
+        },
+        {
+          "request": "Prepare clip1.mp4 and clip2.mp4 for Instagram Reels.",
+          "tool": "prepare_for_platform"
+        },
+        {
+          "request": "Make clip.mp4 better.",
+          "tool": "clarify"
+        },
+        {
+          "request": "Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.",
+          "tool": "trim_video"
+        },
+        {
+          "request": "Merge clip1.mp4 and clip2.mp4, then extract the audio.",
+          "tool": "concat_video"
+        },
+        {
+          "request": "Trim clip.mp4 to 5 seconds, then resize to 720p.",
+          "tool": "trim_video"
+        },
+        {
+          "request": "Join clip1.mp4 and clip2.mp4.",
+          "tool": "concat_video"
+        },
+        {
+          "request": "Merge intro.mp4, main.mp4, and outro.mp4 together.",
+          "tool": "concat_video"
+        },
+        {
+          "request": "Reverse clip.mp4.",
+          "tool": "reverse_video"
+        },
+        {
+          "request": "Change clip.mp4 container to mkv.",
+          "tool": "convert_video"
+        },
+        {
+          "request": "Convert all mp4 files in this folder to mkv.",
+          "tool": "convert_video"
+        },
+        {
+          "request": "Re-encode clip.mp4 with libx264 at crf 18.",
+          "tool": "convert_video"
+        },
+        {
+          "request": "Make a gif from clip.mp4.",
+          "tool": "convert_video"
+        },
+        {
+          "request": "Remove the audio track from clip.mp4.",
+          "tool": "strip_audio"
+        },
+        {
+          "request": "Grab a frame from clip.mp4 at 3 seconds as a jpeg.",
+          "tool": "create_thumbnail"
+        },
+        {
+          "request": "Speed up clip.mp4 2x.",
+          "tool": "adjust_speed"
+        },
+        {
+          "request": "Make clip.mp4 louder by 6dB.",
+          "tool": "adjust_volume"
+        },
+        {
+          "request": "Rotate clip.mp4 90 degrees clockwise.",
+          "tool": "rotate_video"
+        },
+        {
+          "request": "Extract audio in lossless format.",
+          "tool": "clarify"
+        },
+        {
+          "request": "Nuke my videos folder.",
+          "tool": "reject"
+        }
+      ],
+      "external_tools": [
+        {
+          "commands": [
+            "ffmpeg",
+            "ffprobe"
+          ],
+          "name": "ffmpeg",
+          "required": true
+        }
+      ],
+      "name": "ffmpeg",
+      "recommended_model": "knaif-qwen3-4b-v1",
+      "runtimes": {
+        "native": "supported",
+        "python": true
+      },
+      "stage": "stable",
+      "tagline": "Convert, compress, and resize video without remembering a single flag.",
+      "title": "FFmpeg",
+      "tools": [
+        {
+          "description": "Change the playback speed of one or more videos by a given multiplier (e.g. 2.0 for double speed, 0.5 for half speed).",
+          "name": "adjust_speed",
+          "optional_args": [
+            "quality",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs",
+            "speed"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Increase or decrease the audio volume of one or more videos or audio files.",
+          "name": "adjust_volume",
+          "optional_args": [
+            "level",
+            "normalize",
+            "quality",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Compress one or more videos to a smaller file size, optionally targeting a delivery channel (email).",
+          "name": "compress_video",
+          "optional_args": [
+            "target",
+            "target_size_mb",
+            "quality",
+            "crf",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "any_of_args": [
+            "inputs",
+            "base",
+            "append"
+          ],
+          "description": "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided.",
+          "name": "concat_video",
+          "optional_args": [
+            "inputs",
+            "base",
+            "append",
+            "output",
+            "target_resolution",
+            "target_fps"
+          ],
+          "required_args": [],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Convert one or more videos to a different container and/or codec.",
+          "name": "convert_video",
+          "optional_args": [
+            "container",
+            "video_codec",
+            "audio_codec",
+            "quality",
+            "crf",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Create a still-image thumbnail or frame grab from a single video at a given timestamp.",
+          "name": "create_thumbnail",
+          "optional_args": [
+            "at_time",
+            "image_format",
+            "scale",
+            "output"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Extract the audio track from one or more videos into a chosen audio format.",
+          "name": "extract_audio",
+          "optional_args": [
+            "audio_format",
+            "format",
+            "container",
+            "bitrate",
+            "quality",
+            "start",
+            "end",
+            "output"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Convert one or more videos so they are suitable for a target platform (WhatsApp, YouTube, etc.).",
+          "name": "prepare_for_platform",
+          "optional_args": [
+            "quality",
+            "preview"
+          ],
+          "required_args": [
+            "inputs",
+            "platform"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Resize or crop one or more videos to a target width/height or aspect ratio.",
+          "name": "resize_video",
+          "optional_args": [
+            "width",
+            "height",
+            "keep_aspect_ratio",
+            "fit",
+            "aspect",
+            "quality",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Reverse a video (and optionally its audio) so it plays backwards. Re-encodes the full file and buffers it in RAM — keep clips short.",
+          "name": "reverse_video",
+          "optional_args": [
+            "include_audio",
+            "quality",
+            "output"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Rotate or flip one or more videos by a fixed angle or axis.",
+          "name": "rotate_video",
+          "optional_args": [
+            "angle",
+            "flip",
+            "quality",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Remove the audio track from one or more videos, producing a silent video file.",
+          "name": "strip_audio",
+          "optional_args": [
+            "quality",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "description": "Trim a single video to a time range.",
+          "name": "trim_video",
+          "optional_args": [
+            "start",
+            "end",
+            "duration",
+            "output",
+            "preview"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        }
+      ]
+    }
+  ]
+}

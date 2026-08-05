@@ -1,0 +1,151 @@
+---
+import Wordmark from "knaif-shared/Wordmark.astro";
+
+const path = Astro.url.pathname;
+const nav = [
+  { href: "/skills/", label: "Skills" },
+  { href: "/vs/", label: "Compared" },
+  { href: "/about/", label: "About" },
+  { href: "/download/", label: "Download" },
+];
+const isCurrent = (href: string) => path === href || path.startsWith(href);
+---
+
+<header>
+  <a href="/" class="brand" aria-label="knaif home">
+    <Wordmark height="1.6rem" />
+  </a>
+
+  <nav aria-label="Main">
+    {
+      nav.map((item) => (
+        <a
+          href={item.href}
+          class:list={["nav-link", { current: isCurrent(item.href) }]}
+          aria-current={isCurrent(item.href) ? "page" : undefined}
+        >
+          {item.label}
+        </a>
+      ))
+    }
+    <a class="nav-link ext" href="https://knaif.dev">Developers</a>
+  </nav>
+
+  {/* Rendered as a real button so it is keyboard-reachable; label is set by the
+      inline script below to match the current theme. */}
+  <button id="theme-toggle" type="button" aria-label="Switch theme">
+    <span aria-hidden="true" class="sun">☀</span>
+    <span aria-hidden="true" class="moon">☾</span>
+  </button>
+</header>
+
+<script is:inline>
+  (() => {
+    const root = document.documentElement;
+    const btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    const sync = () => {
+      const dark = root.dataset.theme === "dark";
+      btn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+    };
+    btn.addEventListener("click", () => {
+      const next = root.dataset.theme === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem("knaif-theme", next);
+      } catch {
+        /* storage blocked — the toggle still works for this page view */
+      }
+      sync();
+    });
+    sync();
+  })();
+</script>
+
+<style>
+  header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1rem clamp(1rem, 5vw, 2rem);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: color-mix(in srgb, var(--ground) 88%, transparent);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+
+  nav {
+    display: flex;
+    gap: 1.25rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+  }
+
+  .nav-link {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: var(--step--1);
+    padding: 0.25rem 0;
+    border-bottom: 2px solid transparent;
+  }
+
+  .nav-link:hover {
+    color: var(--ink);
+  }
+
+  .nav-link.current {
+    color: var(--ink);
+    border-bottom-color: var(--coral);
+  }
+
+  .ext::after {
+    content: "↗";
+    margin-left: 0.25em;
+    font-size: 0.85em;
+  }
+
+  #theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0.45rem 0.55rem;
+    flex-shrink: 0;
+  }
+
+  #theme-toggle:hover {
+    color: var(--ink);
+    border-color: var(--muted);
+  }
+
+  /* Show the icon for the theme you would switch TO. */
+  :global(:root[data-theme="light"]) #theme-toggle .sun,
+  :global(:root[data-theme="dark"]) #theme-toggle .moon {
+    display: none;
+  }
+
+  @media (max-width: 34rem) {
+    header {
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+    }
+
+    nav {
+      order: 3;
+      width: 100%;
+      margin-left: 0;
+      gap: 1rem;
+    }
+  }
+</style>

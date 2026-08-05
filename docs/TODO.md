@@ -373,6 +373,29 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
+- [ ] **Website split — knaif.org + knaif.dev** — plan:
+  [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
+  mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.
+  **Both sites are written and every build-side item is closed** (2026-08-05): 7 pages on `.org`,
+  24 on `.dev`, mkdocs retired, `amplify.yml` committed, and `site-check` now runs inside
+  `just check`. What is left is not code:
+  - **Operator review of both sites in full** — `just site-dev org` / `just site-dev dev`. This
+    is the launch gate; nothing publishes incrementally.
+  - **Create the two Amplify apps** (console), each with `AMPLIFY_MONOREPO_APP_ROOT` matching its
+    `appRoot`, then verify the PR previews and point the domains.
+  - **After cutover only:** repoint the PyPI `Documentation` URL to knaif.dev — doing it early
+    ships a dead link in package metadata that needs a version bump to fix — and verify
+    sitemaps/canonicals against the live domains.
+
+  Two constraints worth carrying out of the plan because they bite elsewhere: download URLs come
+  from a **published-release** snapshot, never from `Cargo.toml` (RELEASE.md bumps the version
+  before publishing, so a derived URL advertises assets that do not exist) — that is
+  `site/data/release.json` + `just release-data` + RELEASE.md §5 step 7 today. Its automation is
+  noted under **C3** in
+  [post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md), but *not* inside
+  `release.yml`: that job builds a draft, and the extractor rejects drafts by design, so the
+  refresh needs its own `on: release: published` trigger.
+
 - [ ] **Inference latency: daemon + prompt-prefix KV reuse (1.2.0, NOT 1.1.0).** Measured
   2026-08-01 on the shipped Linux CUDA payload; full budget in
   [PERFORMANCE.md §6](PERFORMANCE.md). A CUDA `run` is ~5.2 s wall of which only ~1.6 s is compute:

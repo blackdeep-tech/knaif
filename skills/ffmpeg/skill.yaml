@@ -2,6 +2,15 @@ name: ffmpeg
 description: "FFmpeg-powered media workflow assistant — convert, compress, resize, extract, and prepare video/audio for platforms."
 version: 0.1.0
 
+# End-user catalog copy for knaif.org. `description:` above is model- and
+# developer-facing; this is what a person reads on a skill card, so it is written for
+# them. Neither runtime reads this block — it exists for the website generator.
+# See docs/plans/2026-08-04-website-split.md.
+display:
+  title: FFmpeg
+  tagline: "Convert, compress, and resize video without remembering a single flag."
+  category: media
+
 tools: tools.yaml
 skill_class: handlers.FFmpegSkill
 prompt: prompt.yaml
