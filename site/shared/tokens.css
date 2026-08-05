@@ -13,6 +13,15 @@
  */
 
 :root {
+  /* --- Native chrome -----------------------------------------------------------
+   * `color-scheme` is the one theme decision the browser makes for us rather than the
+   * other way round: scrollbars, form controls and the default canvas are painted by
+   * the platform, and left unstated they follow the OS instead of the page. It is
+   * declared in each theme block below alongside that theme's colours, so a site that
+   * opens light on a dark desktop gets light scrollbars. Starlight says the same thing
+   * in its own reset; the values agree, so whichever wins is correct. */
+  color-scheme: light;
+
   /* --- Brand ------------------------------------------------------------------ */
   /* Coral ships as TWO tokens because one cannot do both jobs. #ff5757 on white is
    * 3.11:1 — under the 4.5:1 WCAG AA needs for body text. It clears 3:1 for large type
@@ -62,6 +71,7 @@
  * default, the OS preference, and the viewer's toggle all resolve correctly. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --coral-text: #ff7a7a;
     --coral-wash: #2a1c1e;
     --ground: #14171c;
@@ -77,6 +87,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --coral-text: #ff7a7a;
   --coral-wash: #2a1c1e;
   --ground: #14171c;
@@ -91,6 +102,7 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --coral-text: #d32f2f;
   --coral-wash: #fff1f1;
   --ground: #ffffff;
@@ -104,117 +116,144 @@
   --bad: #b42318;
 }
 
-/* --- Base ---------------------------------------------------------------------- */
+/* --- Base ----------------------------------------------------------------------
+ *
+ * The element-level rules below live in a named cascade layer, and everything from here
+ * to the end of the file is inside it. The tokens above stay unlayered on purpose — they
+ * are declarations the sites must be able to rely on winning.
+ *
+ * Why the layer: Starlight puts every one of its own rules in `@layer starlight.*`, and
+ * unlayered CSS outranks layered CSS whatever the specificity. Left unlayered, the bare
+ * `a { color: var(--coral-text) }` below beat Starlight's link colours everywhere on
+ * .dev — the whole sidebar rendered coral, and the current sidebar entry and the hero's
+ * primary button became coral text on a coral background. Registering `knaif.base` here
+ * makes it the FIRST layer the page sees, so Starlight's layers sort above it and its
+ * components colour themselves through the `--sl-color-*` mappings in .dev's theme.css
+ * (which point back at these same tokens). Starlight imports user CSS ahead of its own
+ * `layers.css` specifically to allow this.
+ *
+ * On .org, which has no Starlight, this is a single layer and behaves as before.
+ */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background: var(--ground);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: var(--step-0);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
-
-h1,
-h2,
-h3 {
-  text-wrap: balance;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-a {
-  color: var(--coral-text);
-  text-underline-offset: 0.2em;
-}
-
-code,
-kbd,
-pre {
-  font-family: var(--font-mono);
-}
-
-:focus-visible {
-  outline: 2px solid var(--coral);
-  outline-offset: 3px;
-  border-radius: 2px;
-}
-
-img,
-svg {
-  max-width: 100%;
-}
-
-/* Wide content scrolls inside its own container so the page body never scrolls sideways. */
-.scroll-x {
-  overflow-x: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
+@layer knaif.base {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+    box-sizing: border-box;
   }
-}
 
-/* --- The bracket motif ----------------------------------------------------------
- * Structural, not decorative. The wordmark reads kn[AI]f — the AI bracketed — and that
- * is the product thesis, not a logo quirk: the model is fenced into the intent layer
- * with deterministic code either side. It marks section eyebrows and the pipeline
- * diagram. Deliberately NOT on buttons, tags or callouts, which wears thin across a
- * docs site. */
+  /* The root carries the ground colour too, not just <body>. A browser only inherits the
+   * canvas colour from <body> once it has laid the body out; naming it on <html> gives it
+   * a colour from the first style recalc, which is what keeps a page transition from
+   * showing a frame of bare canvas. */
+  html {
+    background: var(--ground);
+  }
 
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--step--1);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin: 0 0 0.9rem;
-}
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--step-0);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
 
-.eyebrow::before,
-.eyebrow::after {
-  color: var(--coral);
-  font-size: 1.3em;
-  line-height: 1;
-}
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
 
-.eyebrow::before {
-  content: "[";
-}
+  a {
+    color: var(--coral-text);
+    text-underline-offset: 0.2em;
+  }
 
-.eyebrow::after {
-  content: "]";
-}
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono);
+  }
 
-/* --- Catalog stage badge --------------------------------------------------------
- * A skill card STATE, not a decoration. Preview skills are shown rather than hidden so
- * the catalog stays as alive as the project is — the badge is what keeps that honest,
- * so it has to read as a status, not as ornament. */
+  :focus-visible {
+    outline: 2px solid var(--coral);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
 
-.stage-badge {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 0.15em 0.5em;
-  border-radius: 3px;
-  border: 1px solid currentColor;
-  color: var(--warn);
-  white-space: nowrap;
+  img,
+  svg {
+    max-width: 100%;
+  }
+
+  /* Wide content scrolls inside its own container so the page body never scrolls sideways. */
+  .scroll-x {
+    overflow-x: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* --- The bracket motif ----------------------------------------------------------
+   * Structural, not decorative. The wordmark reads kn[AI]f — the AI bracketed — and that
+   * is the product thesis, not a logo quirk: the model is fenced into the intent layer
+   * with deterministic code either side. It marks section eyebrows and the pipeline
+   * diagram. Deliberately NOT on buttons, tags or callouts, which wears thin across a
+   * docs site. */
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin: 0 0 0.9rem;
+  }
+
+  .eyebrow::before,
+  .eyebrow::after {
+    color: var(--coral);
+    font-size: 1.3em;
+    line-height: 1;
+  }
+
+  .eyebrow::before {
+    content: "[";
+  }
+
+  .eyebrow::after {
+    content: "]";
+  }
+
+  /* --- Catalog stage badge --------------------------------------------------------
+   * A skill card STATE, not a decoration. Preview skills are shown rather than hidden so
+   * the catalog stays as alive as the project is — the badge is what keeps that honest,
+   * so it has to read as a status, not as ornament. */
+
+  .stage-badge {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+    color: var(--warn);
+    white-space: nowrap;
+  }
 }

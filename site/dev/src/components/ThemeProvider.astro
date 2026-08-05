@@ -14,6 +14,11 @@
 // picker keeps working in both directions and is never overridden. Everything else,
 // including `updatePickers`, is upstream's code verbatim — keep it that way so a
 // Starlight upgrade is a readable diff.
+//
+// `color-scheme` is deliberately NOT set here. Starlight's reset.css already derives it
+// from the `data-theme` this script writes, and knaif-shared/tokens.css declares it per
+// theme block for .org's sake — a third statement in JavaScript would only cost this file
+// its one-line diff.
 import { Icon } from "@astrojs/starlight/components";
 ---
 

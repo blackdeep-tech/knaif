@@ -43,7 +43,13 @@
 }
 
 /* Starlight renders its own link colours inside prose; keep them on the accessible token
- * rather than the display coral, which is 3.11:1 on white and fails AA at reading size. */
+ * rather than the display coral, which is 3.11:1 on white and fails AA at reading size.
+ *
+ * Prose only — deliberately unlayered so it beats @layer starlight.content. Starlight's
+ * CHROME (sidebar, hero buttons, pagination, tabs) is left alone to colour itself from
+ * the --sl-color-* mappings above; a blanket `a` rule here would repaint the sidebar
+ * coral and put coral text on the coral current-page and primary-button backgrounds.
+ * See the layering note in knaif-shared/tokens.css. */
 .sl-markdown-content a:not(:where(.not-content *)) {
   color: var(--coral-text);
 }
