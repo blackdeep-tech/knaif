@@ -19,13 +19,16 @@
 > (`scripts/site_data.py` + a 21-test guard), and the pnpm/Astro/Starlight scaffolds with
 > the §10 tokens wired into both sites. Both build green.
 >
-> **`.org` is substantially built** — `/skills`, `/skills/<name>`, `/vs`, `/about` and
-> `/download` are written and building green (7 pages, 0 broken links, 0 type errors), and
-> `release.json` is live against v1.1.0. Only the home page is outstanding there, and it
-> is blocked on the asciinema cast.
+> **Both sites are written.** `.org` has `/skills`, `/skills/<name>`, `/vs`, `/about` and
+> `/download` (7 pages); `.dev` has all five tracks and a real home page (24 pages). Every
+> internal link and anchor resolves on both, `astro check` is clean, and `release.json` is
+> live against v1.1.0.
 >
-> **What remains is mostly writing**: the five `.dev` tracks (§5), the home page, and the
-> cast — plus creating the Amplify apps. Step 6 dominates the schedule.
+> **Three things remain**, and none of them is page-writing:
+> 1. The **asciinema cast** (§10a) — the only blocker on the `.org` home page, which is
+>    still the scaffold placeholder.
+> 2. The **two Amplify apps** (§7) — console work, then PR previews.
+> 3. **Operator review** of both sites in full (§11 step 10), which is the launch gate.
 
 **Goal:** Replace the single mkdocs page at `site/` with two Astro sites — knaif.org for
 end users and knaif.dev for developers — sharing one design system and one generated
@@ -448,7 +451,35 @@ site *speaks*, not by moving code.
 - [x] **Track B**, 2026-08-05 — `/evaluate`, `/evaluate/corpus`, `/evaluate/ladder`,
       `/evaluate/snapshots`. 19 pages total, 0 broken links (cross-page anchors verified),
       0 type errors.
-- [ ] Track C · Track D
+- [x] **Track C**, 2026-08-05 — `/fine-tuning` + `data`, `methodology`, `outcomes`,
+      `promotion`.
+- [x] **Track D**, 2026-08-05 — `/native` + `parity`.
+- [x] **`.dev` home page** rewritten from the scaffold. **All five tracks written; no
+      scaffold banners remain on `.dev`.** 24 pages, every internal link *and anchor*
+      resolves, 0 type errors.
+
+Track C is the most unusual content on either site, and the reason to publish it is that
+almost nobody writes this down: the **negative results**. Weighted SFT, tiny eval-derived
+DPO, bulk synthetic distillation, single-skill scope, and planner-diversity-via-a-third-skill
+are all recorded as *run and failed*, with the numbers. The planner-diversity entry is
+flagged explicitly as "the refuted theory is persuasive and keeps re-suggesting itself",
+because that is exactly how it gets re-run.
+
+Two methodology rules carried over verbatim in spirit, both of which read as genuinely
+hard-won:
+
+- **"A slice you selected on can no longer measure what you selected."** Best-of-N
+  inflation on a 55-row slice, and re-running does not fix it. Published *with* the honest
+  admission that the promoted model's hard-slice margin has never had an independent probe.
+- **The snapshot gate answers "may I promote?", not "did I regress?"** — an experimental
+  build under a committed snapshot can be a lineage gap, and reading that as catastrophic
+  forgetting is a mistake already made here once.
+
+Track D states what "a port, not a rewrite" *forbids* rather than only what it means, and
+separates the two parity layers: golden fixtures on inline registries (so a case cannot
+start passing because someone edited ffmpeg) versus the live model-pinned diff. It also
+names the trap that parity proves the runtimes *agree*, not that either is right — two
+runtimes can agree perfectly on the wrong command.
 
 Track B was the largest gap and is now the site's densest material. Four things it makes
 public for the first time, each carrying the concrete number that makes it stick:

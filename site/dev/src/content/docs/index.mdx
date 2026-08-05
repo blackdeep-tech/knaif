@@ -1,11 +1,11 @@
 ---
 title: Build with knaif
-description: Author skills for knaif, or put a natural-language front end on your own CLI.
+description: Put a natural-language front end on your own CLI, or author a skill for knaif itself. Local models, deterministic execution.
 template: splash
 hero:
-  tagline: The model only figures out what you want. Deterministic code does the work.
+  tagline: The model works out what you want. Deterministic code does the work.
   actions:
-    - text: Start with the SDK
+    - text: Quickstart
       link: /start/quickstart/
       icon: right-arrow
     - text: View on GitHub
@@ -14,24 +14,80 @@ hero:
       variant: minimal
 ---
 
-import { CardGrid, Card } from '@astrojs/starlight/components';
+import { CardGrid, Card, LinkCard } from '@astrojs/starlight/components';
 
-:::caution[Scaffold]
-This site is a scaffold. The content tracks below are plan §5 — written before launch, not
-after. See `docs/plans/2026-08-04-website-split.md`.
-:::
-
-## Two different developers
+## Two different developers land here
 
 <CardGrid>
-  <Card title="Putting NL on your own CLI">
-    You have a CLI and want users to type sentences at it. You may never write a knaif
-    skill. Start with the **knaif SDK** — it ships in the wheel, so `pip install knaif` is
-    all you need.
+  <Card title="You have a CLI">
+    You want users to type sentences at it instead of memorising flags. You may never write
+    a knaif skill.
+
+    Start with the **knaif SDK** — it ships in the wheel, so `pip install knaif` is all you
+    need.
   </Card>
-  <Card title="Extending knaif">
-    You want a new capability inside knaif itself — a skill others can install. Start with
-    **Author a skill**, then evaluate it, then port it to native. Skill bundles live in the
-    repo, so clone it first.
+  <Card title="You want to extend knaif">
+    You are adding a capability to knaif itself — a skill that ships to its users, with its
+    own tools, eval corpus and optionally a Rust port.
+
+    Skill bundles live in the repo, so clone it first.
   </Card>
 </CardGrid>
+
+## The idea in one paragraph
+
+A small local model reads a request and emits a JSON plan — nothing else. It cannot run a
+command, cannot write a shell string, and never owns a safety decision. Deterministic code
+validates that plan, expands it into concrete steps, asks before it writes, and executes it.
+You pay the AI cost once, while building; the shipped thing runs on a 4B model on the user's
+own machine, for free, the same way every time.
+
+## Start here
+
+<LinkCard
+  title="Quickstart"
+  description="A natural-language CLI in about twenty lines, running entirely on your machine."
+  href="/start/quickstart/"
+/>
+
+## The five tracks
+
+<LinkCard
+  title="The knaif SDK"
+  description="Decorators, wrapping an existing click group, connecting a local model, and exactly what the model can and cannot do to your program."
+  href="/sdk/"
+/>
+
+<LinkCard
+  title="Author a skill"
+  description="The bundle, the Step/Intent contract, intent expansion, and the safety gate."
+  href="/author/"
+/>
+
+<LinkCard
+  title="Evaluate a skill"
+  description="Writing a corpus, the eval ladder, and locking an acceptance bar. This is what makes a skill finished rather than merely working."
+  href="/evaluate/"
+/>
+
+<LinkCard
+  title="Fine-tuning"
+  description="When it is worth it, why shape beats volume, and the proven dead ends worth not repeating."
+  href="/fine-tuning/"
+/>
+
+<LinkCard
+  title="Python to native"
+  description="Porting a skill to the Rust runtime, and proving the two agree rather than assuming it."
+  href="/native/"
+/>
+
+## Three things called "knaif cli"
+
+A search result will not tell you which one you have:
+
+| Name | What it is |
+|---|---|
+| `knaif` | The native binary end users download from [knaif.org](https://knaif.org) |
+| `knaif-cli` | The Python console script that runs skills from a checkout |
+| `knaif.cli` | The SDK — *the knaif SDK* |
