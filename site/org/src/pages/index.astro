@@ -1,0 +1,159 @@
+---
+// SCAFFOLD. Proves the pipeline end to end — shared tokens, self-hosted fonts, the
+// bracket motif, and the generated catalog with its stage badges. The real page copy is
+// plan §4 (step 5); do not treat this as the design.
+import Base from "../layouts/Base.astro";
+import siteData from "../../../data/site-data.json";
+
+const skills = siteData.skills;
+---
+
+<Base
+  title="knaif — local AI agents that don't burn tokens"
+  description="Plain-English control of complex CLI tools, running entirely on your own hardware. The model only plans; deterministic code validates and executes."
+>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">scaffold</p>
+      <h1>Local AI agents that don't burn tokens.</h1>
+      <p class="lede">
+        One small model reads what you want. Deterministic code does the work.
+      </p>
+      <div class="pipe" aria-label="your words, model, validate, expand, run">
+        <span class="pipe-node">your words</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-model"><span class="br">[</span> model <span class="br">]</span></span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-node">validate</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-node">expand</span>
+        <span class="pipe-arrow">→</span>
+        <span class="pipe-node">run</span>
+      </div>
+      <p class="note">Everything outside the brackets is deterministic code.</p>
+    </section>
+
+    <section class="skills">
+      <p class="eyebrow">skills</p>
+      <div class="grid">
+        {
+          skills.map((skill) => (
+            <article class="card">
+              <header>
+                <h2>{skill.title}</h2>
+                {skill.stage === "preview" && (
+                  <span class="stage-badge">in development</span>
+                )}
+              </header>
+              <p>{skill.tagline}</p>
+              <p class="meta">
+                {skill.tools.length} tools · {skill.category}
+              </p>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+  </main>
+</Base>
+
+<style>
+  main {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 5rem) clamp(1rem, 5vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(3rem, 7vw, 5rem);
+  }
+
+  h1 {
+    font-size: var(--step-3);
+    margin: 0 0 1rem;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 46ch;
+    margin: 0 0 2rem;
+  }
+
+  .pipe {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 0.85rem;
+    padding: 1.6rem 1.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+  }
+
+  .pipe-node {
+    color: var(--muted);
+  }
+
+  .pipe-arrow {
+    color: var(--border);
+  }
+
+  .pipe-model {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .pipe-model .br {
+    color: var(--coral);
+    font-size: 1.45em;
+    font-weight: 400;
+    vertical-align: -0.12em;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin: 0.9rem 0 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: var(--density-gap);
+  }
+
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .card header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .card h2 {
+    font-size: var(--step-1);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .card p {
+    margin: 0;
+  }
+
+  .meta {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+</style>

@@ -1,0 +1,220 @@
+/* knaif design system — shared by knaif.org and knaif.dev.
+ *
+ * One system, two densities: both sites use these tokens, the same logo and the same type
+ * scale. .org opens light and breathes; .dev opens dark and compresses. Both support both
+ * themes — only the default differs.
+ *
+ * Canonical reference: docs/plans/2026-08-04-website-split.md §10.
+ *
+ * THEMING CONTRACT. Style components through the tokens, never inside a media query.
+ * Each site sets its own default via `data-theme` on <html>, so the OS preference is the
+ * fallback, not the authority — otherwise a dark-first .dev would render light for every
+ * visitor whose laptop is in light mode.
+ */
+
+:root {
+  /* --- Brand ------------------------------------------------------------------ */
+  /* Coral ships as TWO tokens because one cannot do both jobs. #ff5757 on white is
+   * 3.11:1 — under the 4.5:1 WCAG AA needs for body text. It clears 3:1 for large type
+   * and UI borders, and reaches 5.06:1 on the dark ink. Use --coral for display, borders
+   * and buttons; --coral-text for links and anything at reading size. */
+  --coral: #ff5757;
+  --coral-text: #d32f2f;
+  --coral-wash: #fff1f1;
+
+  /* --- Neutrals ---------------------------------------------------------------
+   * Cool, biased toward the logo's ink (#1f232b reads blue) rather than toward the
+   * coral. Warm-harmonising everything would flatten the accent; the warm/cool tension
+   * is what keeps it working. */
+  --ground: #ffffff;
+  --surface: #f7f8fa;
+  --subtle: #eef0f4;
+  --border: #dce0e7;
+  --muted: #656d7b;
+  --ink: #1f232b;
+
+  /* --- Semantic (separate from the accent) ------------------------------------ */
+  --ok: #17734a;
+  --warn: #9a5b00;
+  --bad: #b42318;
+
+  /* --- Type -------------------------------------------------------------------
+   * Mono is load-bearing, not ornamental: this is a CLI product, so rendered argv,
+   * terminal casts, tool names, eyebrows and labels all live in it. Faces are
+   * self-hosted via @fontsource (see fonts.css) — never the Google CDN. */
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --step--1: clamp(0.78rem, 0.76rem + 0.1vw, 0.84rem);
+  --step-0: clamp(0.95rem, 0.92rem + 0.15vw, 1.03rem);
+  --step-1: clamp(1.15rem, 1.08rem + 0.35vw, 1.35rem);
+  --step-2: clamp(1.5rem, 1.35rem + 0.7vw, 2rem);
+  --step-3: clamp(2rem, 1.7rem + 1.5vw, 3.1rem);
+
+  /* --- Space + shape ----------------------------------------------------------
+   * .org overrides --density-gap upward; .dev leaves it. Same scale, two pacings. */
+  --density-gap: 1.5rem;
+  --radius: 4px;
+  --measure: 65ch;
+}
+
+/* Dark tokens, defined once and applied by three selectors below so that the site's own
+ * default, the OS preference, and the viewer's toggle all resolve correctly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --coral-text: #ff7a7a;
+    --coral-wash: #2a1c1e;
+    --ground: #14171c;
+    --surface: #1b1f26;
+    --subtle: #232830;
+    --border: #333a45;
+    --muted: #98a1b0;
+    --ink: #e8eaed;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #ff8a80;
+  }
+}
+
+:root[data-theme="dark"] {
+  --coral-text: #ff7a7a;
+  --coral-wash: #2a1c1e;
+  --ground: #14171c;
+  --surface: #1b1f26;
+  --subtle: #232830;
+  --border: #333a45;
+  --muted: #98a1b0;
+  --ink: #e8eaed;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --bad: #ff8a80;
+}
+
+:root[data-theme="light"] {
+  --coral-text: #d32f2f;
+  --coral-wash: #fff1f1;
+  --ground: #ffffff;
+  --surface: #f7f8fa;
+  --subtle: #eef0f4;
+  --border: #dce0e7;
+  --muted: #656d7b;
+  --ink: #1f232b;
+  --ok: #17734a;
+  --warn: #9a5b00;
+  --bad: #b42318;
+}
+
+/* --- Base ---------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--step-0);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+a {
+  color: var(--coral-text);
+  text-underline-offset: 0.2em;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}
+
+:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+/* Wide content scrolls inside its own container so the page body never scrolls sideways. */
+.scroll-x {
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- The bracket motif ----------------------------------------------------------
+ * Structural, not decorative. The wordmark reads kn[AI]f — the AI bracketed — and that
+ * is the product thesis, not a logo quirk: the model is fenced into the intent layer
+ * with deterministic code either side. It marks section eyebrows and the pipeline
+ * diagram. Deliberately NOT on buttons, tags or callouts, which wears thin across a
+ * docs site. */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0 0 0.9rem;
+}
+
+.eyebrow::before,
+.eyebrow::after {
+  color: var(--coral);
+  font-size: 1.3em;
+  line-height: 1;
+}
+
+.eyebrow::before {
+  content: "[";
+}
+
+.eyebrow::after {
+  content: "]";
+}
+
+/* --- Catalog stage badge --------------------------------------------------------
+ * A skill card STATE, not a decoration. Preview skills are shown rather than hidden so
+ * the catalog stays as alive as the project is — the badge is what keeps that honest,
+ * so it has to read as a status, not as ornament. */
+
+.stage-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.15em 0.5em;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  color: var(--warn);
+  white-space: nowrap;
+}

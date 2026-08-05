@@ -1,0 +1,49 @@
+/* Bridges Starlight's own theme variables onto the shared knaif tokens, so .dev and .org
+ * are demonstrably one design system rather than two that merely resemble each other.
+ *
+ * Starlight themes via `data-theme="dark|light"` on <html> — the same attribute
+ * knaif-shared/tokens.css keys on — so the two systems agree by construction and the
+ * built-in theme toggle drives both. .dev opens DARK (see src/pages/_dark-default or the
+ * Head override below); .org opens light. Same tokens, different default.
+ */
+
+:root {
+  /* Accent — coral, replacing Starlight's default purple. */
+  --sl-color-accent-low: var(--coral-wash);
+  --sl-color-accent: var(--coral);
+  --sl-color-accent-high: var(--coral-text);
+
+  /* Ground + text, mapped onto the shared neutrals. */
+  --sl-color-white: var(--ink);
+  --sl-color-gray-1: var(--ink);
+  --sl-color-gray-2: var(--muted);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: var(--border);
+  --sl-color-gray-5: var(--subtle);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-black: var(--ground);
+
+  --sl-color-bg: var(--ground);
+  --sl-color-bg-nav: var(--surface);
+  --sl-color-bg-sidebar: var(--ground);
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline-shade: var(--border);
+
+  --sl-color-text: var(--ink);
+  --sl-color-text-accent: var(--coral-text);
+  --sl-color-text-invert: var(--ground);
+
+  /* Type — the shared faces, so code and prose match .org exactly. */
+  --sl-font: var(--font-sans);
+  --sl-font-mono: var(--font-mono);
+
+  /* .dev is the dense half of the pair: tighter content width than Starlight's default. */
+  --sl-content-width: 45rem;
+}
+
+/* Starlight renders its own link colours inside prose; keep them on the accessible token
+ * rather than the display coral, which is 3.11:1 on white and fails AA at reading size. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--coral-text);
+}

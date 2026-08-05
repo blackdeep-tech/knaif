@@ -1,0 +1,276 @@
+---
+import Base from "../../layouts/Base.astro";
+import { skills, actionableExamples } from "../../lib/catalog";
+import type { Skill } from "../../lib/catalog";
+
+export function getStaticPaths() {
+  return skills.map((skill) => ({
+    params: { skill: skill.name },
+    props: { skill },
+  }));
+}
+
+interface Props {
+  skill: Skill;
+}
+
+const { skill } = Astro.props;
+const examples = actionableExamples(skill, 6);
+const required = skill.external_tools.filter((t) => t.required);
+const optional = skill.external_tools.filter((t) => !t.required);
+
+// A column that reads "yes" in every row is not information — it is a third of the table
+// width spent saying nothing. All 13 ffmpeg tools are `destructive` (in knaif's sense:
+// requires confirmation or dry-run before it can write), so there the fact belongs in one
+// sentence, where it reads as the reassurance it actually is. `documents` mixes 12
+// destructive with 3 read-only, so there the column earns its place.
+const categories = new Set(skill.tools.map((t) => t.safety_category));
+const uniformCategory = categories.size === 1 ? [...categories][0] : null;
+const gatedCount = skill.tools.filter((t) => t.safety_category === "destructive").length;
+---
+
+<Base
+  title={`${skill.title} — knaif`}
+  description={skill.tagline}
+>
+  <section class="head">
+    <p class="eyebrow">{skill.category}</p>
+    <div class="title-row">
+      <h1>{skill.title}</h1>
+      {skill.stage === "preview" && <span class="stage-badge">in development</span>}
+    </div>
+    <p class="lede">{skill.tagline}</p>
+  </section>
+
+  {
+    skill.stage === "preview" && (
+      <aside class="notice">
+        <strong>Still changing.</strong> This skill works, but it has no locked acceptance
+        bar yet, so its behaviour can change between releases. Worth trying; not yet
+        something to build on.
+      </aside>
+    )
+  }
+
+  <section>
+    <p class="eyebrow">what you can say</p>
+    <ul class="examples">
+      {
+        examples.map((ex) => (
+          <li>
+            <span class="prompt">$</span>
+            <span>{ex.request}</span>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="note">
+      Phrasing does not have to match. These are real utterances from the skill's own
+      corpus — the model maps what you mean onto one of the tools below.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">what it can do</p>
+    <div class="scroll-x">
+      <table>
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Does</th>
+            {!uniformCategory && <th class="center">Asks first</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {
+            skill.tools.map((tool) => (
+              <tr>
+                <td class="mono">{tool.name}</td>
+                <td>{tool.description}</td>
+                {!uniformCategory && (
+                  <td class="mono center">
+                    {tool.safety_category === "destructive" ? "yes" : "read-only"}
+                  </td>
+                )}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    {
+      uniformCategory === "destructive" ? (
+        <p class="note">
+          Every one of these asks before it writes anything, and shows you the exact
+          command it will run. That gate is enforced in code, not left to the model's
+          judgement.
+        </p>
+      ) : (
+        <p class="note">
+          {gatedCount} of these {gatedCount === 1 ? "asks" : "ask"} before writing anything,
+          and show you the exact command first. That gate is enforced in code, not left to
+          the model's judgement.
+        </p>
+      )
+    }
+  </section>
+
+  <section>
+    <p class="eyebrow">what it needs</p>
+    {
+      required.length === 0 && optional.length === 0 && (
+        <p>Nothing beyond knaif itself.</p>
+      )
+    }
+    {
+      required.length > 0 && (
+        <p>
+          <strong>Required:</strong>{" "}
+          {required.map((t) => t.name).join(", ")} — install it separately; knaif does not
+          bundle external programs.
+        </p>
+      )
+    }
+    {
+      optional.length > 0 && (
+        <p>
+          <strong>Optional:</strong> {optional.map((t) => t.name).join(", ")}. Without
+          these, only the operations that use them are unavailable — the rest of the skill
+          works.
+        </p>
+      )
+    }
+    <p class="note">Run <code>knaif skills deps</code> to see what is missing on your machine.</p>
+  </section>
+
+  <section class="cta">
+    <a class="btn" href="/download/">Download knaif</a>
+    <a class="btn ghost" href={`https://knaif.dev/author/`}>Build a skill like this</a>
+  </section>
+</Base>
+
+<style>
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  h1 {
+    font-size: var(--step-3);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 52ch;
+    margin: 0.75rem 0 0;
+  }
+
+  .notice {
+    border-left: 3px solid var(--warn);
+    background: var(--surface);
+    padding: 1rem 1.25rem;
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .examples {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .examples li {
+    display: flex;
+    gap: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.85rem;
+    overflow-wrap: anywhere;
+  }
+
+  .prompt {
+    color: var(--coral);
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 34rem;
+    font-size: var(--step--1);
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  th {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.82em;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+  }
+
+  .center {
+    text-align: center;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin: 1rem 0 0;
+  }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .cta {
+    flex-direction: row;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--coral);
+    color: #ffffff;
+    font-weight: 600;
+    font-size: var(--step-0);
+    padding: 0.8rem 1.4rem;
+    border-radius: var(--radius);
+    text-decoration: none;
+  }
+
+  .btn.ghost {
+    background: none;
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .btn.ghost:hover {
+    border-color: var(--coral);
+  }
+</style>

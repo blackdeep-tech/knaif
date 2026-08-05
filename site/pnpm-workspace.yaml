@@ -1,0 +1,7 @@
+# pnpm workspaces — NOT npm. pnpm ignores package.json's "workspaces" field and reads
+# this file instead, which is the single most common way a pnpm monorepo silently builds
+# only its root.
+packages:
+  - shared
+  - org
+  - dev

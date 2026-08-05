@@ -1,0 +1,13 @@
+/* Self-hosted webfonts via @fontsource — deliberately NOT the Google Fonts CDN.
+ *
+ * Same families, same OFL licence, served from our own origin. Faster (no third-party DNS
+ * + TLS handshake before text renders) and no GDPR exposure: a Munich court ruled in 2022
+ * that loading Google Fonts from Google's CDN without consent unlawfully transmits the
+ * visitor's IP.
+ *
+ * Variable faces, so one file per family covers every weight the sites use.
+ * Attribution: docs/PROVENANCE.md.
+ */
+
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/jetbrains-mono";

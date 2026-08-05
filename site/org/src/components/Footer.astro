@@ -1,0 +1,74 @@
+---
+const year = new Date().getFullYear();
+---
+
+<footer>
+  <div class="cols">
+    <div>
+      <p class="eyebrow">product</p>
+      <a href="/download/">Download</a>
+      <a href="/skills/">Skills</a>
+      <a href="/vs/">Compared to the big LLMs</a>
+    </div>
+    <div>
+      <p class="eyebrow">developers</p>
+      <a href="https://knaif.dev">Build a skill</a>
+      <a href="https://knaif.dev/sdk/">The knaif SDK</a>
+      <a href="https://github.com/blackdeep-tech/knaif">GitHub</a>
+    </div>
+    <div>
+      <p class="eyebrow">project</p>
+      <a href="/about/">About</a>
+      <a href="https://github.com/blackdeep-tech/knaif/releases">Releases</a>
+      <a href="https://github.com/blackdeep-tech/knaif/issues/new/choose">Report a bad plan</a>
+    </div>
+  </div>
+  <p class="fine">
+    Apache 2.0 · &copy; {year} knaif. Runs on your machine; nothing is sent anywhere.
+  </p>
+</footer>
+
+<style>
+  footer {
+    border-top: 1px solid var(--border);
+    padding: clamp(2rem, 5vw, 3rem) clamp(1rem, 5vw, 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .cols {
+    max-width: 60rem;
+    margin: 0 auto;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 2rem;
+  }
+
+  .cols div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .cols a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: var(--step--1);
+  }
+
+  .cols a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+
+  .fine {
+    max-width: 60rem;
+    margin: 0 auto;
+    width: 100%;
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+</style>

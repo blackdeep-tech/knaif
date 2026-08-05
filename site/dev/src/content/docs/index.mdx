@@ -1,0 +1,37 @@
+---
+title: Build with knaif
+description: Author skills for knaif, or put a natural-language front end on your own CLI.
+template: splash
+hero:
+  tagline: The model only figures out what you want. Deterministic code does the work.
+  actions:
+    - text: Start with the SDK
+      link: /start/quickstart/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/blackdeep-tech/knaif
+      icon: external
+      variant: minimal
+---
+
+import { CardGrid, Card } from '@astrojs/starlight/components';
+
+:::caution[Scaffold]
+This site is a scaffold. The content tracks below are plan §5 — written before launch, not
+after. See `docs/plans/2026-08-04-website-split.md`.
+:::
+
+## Two different developers
+
+<CardGrid>
+  <Card title="Putting NL on your own CLI">
+    You have a CLI and want users to type sentences at it. You may never write a knaif
+    skill. Start with the **knaif SDK** — it ships in the wheel, so `pip install knaif` is
+    all you need.
+  </Card>
+  <Card title="Extending knaif">
+    You want a new capability inside knaif itself — a skill others can install. Start with
+    **Author a skill**, then evaluate it, then port it to native. Skill bundles live in the
+    repo, so clone it first.
+  </Card>
+</CardGrid>

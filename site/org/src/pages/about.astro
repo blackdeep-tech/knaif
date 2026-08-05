@@ -1,0 +1,272 @@
+---
+import Base from "../layouts/Base.astro";
+
+const REPO = "https://github.com/blackdeep-tech/knaif";
+---
+
+<Base
+  title="About knaif"
+  description="Why knaif exists: the model should only work out what you want, not do the work. Local, deterministic, and free at runtime."
+>
+  <section>
+    <p class="eyebrow">about</p>
+    <h1>The model should work out what you want. Not do the work.</h1>
+    <p class="lede">
+      That one sentence is the whole design. A small local model reads your request and
+      emits a JSON plan. From there, ordinary code validates the plan, expands it into
+      concrete steps, asks before it writes, and runs it. The model never runs a command,
+      never writes a shell string, and never owns a safety decision.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">the name</p>
+    <p>
+      <strong>knaif</strong> is a portmanteau of <em>knife</em> and <em>AI</em> — which is
+      why the wordmark brackets the AI. Think of a Swiss Army knife: a compact tool where
+      every blade does one thing well and folds cleanly away. Each skill is a blade. You
+      carry the ones you need; the handle stays the same.
+    </p>
+    <p>
+      The brackets do double duty. In the plan pipeline, the model is the only
+      non-deterministic step — genuinely fenced in, with tested code on either side:
+    </p>
+    <div class="pipe" aria-label="your words, then model, then validate, expand, run">
+      <span class="pipe-node">your words</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-model"><span class="br">[</span> model <span class="br">]</span></span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-node">validate</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-node">expand</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-node">confirm</span>
+      <span class="pipe-arrow">→</span>
+      <span class="pipe-node">run</span>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">why not just use an agent</p>
+    <p>
+      Most agents use the model as a general-purpose brain. Every request goes through it,
+      trivial or not — "trim this video to 10 seconds" gets the same multi-thousand-token
+      treatment as "refactor my auth layer". That buys three problems:
+    </p>
+    <div class="problems">
+      <div>
+        <h3>Waste</h3>
+        <p>
+          You spend tokens, electricity and time regenerating logic that is fundamentally
+          deterministic. The 200th "compress this video" reasons from scratch like the
+          first.
+        </p>
+      </div>
+      <div>
+        <h3>Non-determinism</h3>
+        <p>
+          The same request can produce a different command tomorrow. For a wrapper around a
+          CLI, that is a bug, not a feature.
+        </p>
+      </div>
+      <div>
+        <h3>Dependency</h3>
+        <p>
+          The capability lives in someone else's data centre, behind a meter, and can be
+          repriced or withdrawn.
+        </p>
+      </div>
+    </div>
+    <p>
+      knaif inverts it. The model is a thin intent layer; the capability lives in
+      hand-written, tested code. The model picks <code>compress_video</code> and extracts
+      <code>target_size_mb: 25</code>. Code turns that into a probe → recipe → preview →
+      confirm → run workflow and renders the exact command. Same input, same output, every
+      time.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">what that costs to run</p>
+    <p>
+      Every cloud agent pays for inference <strong>per use, forever</strong> — real
+      electricity, at data-centre scale, for work that is mostly deterministic. knaif pays
+      the AI cost <strong>once, during development</strong>: you spend it building and
+      tuning a skill, and ship something whose runtime cost is one short call to a 4B model
+      on the user's own machine.
+    </p>
+    <p>
+      Our <a href="/vs/">measured comparison</a> puts a number on it: roughly
+      $0.058–0.14 every single time someone asks, against $0 and a tenth of the latency,
+      for work all four systems completed equally well. One request is pocket change. A
+      habit is not, and neither is a million people with the same habit.
+    </p>
+    <p class="pull">Write once. Run free, run local, run the same way every time.</p>
+  </section>
+
+  <section>
+    <p class="eyebrow">what it is not</p>
+    <ul class="nots">
+      <li><strong>Not a general coding agent.</strong> It will not refactor your repo.</li>
+      <li>
+        <strong>Not a shell the model drives.</strong> It cannot execute or even emit
+        commands — only a plan that code checks first.
+      </li>
+      <li><strong>Not a cloud service.</strong> No account, no key, no upload.</li>
+      <li>
+        <strong>Not magic for tiny models.</strong> Below about 4B, accuracy drops, and our
+        own evaluation says so plainly.
+      </li>
+      <li>
+        <strong>Only as capable as its skills.</strong> That is the trade, and it is
+        deliberate.
+      </li>
+    </ul>
+    <p>
+      The narrow scope is the point. knaif wins by being a sharp tool for a few
+      deterministic jobs, not a dull one for everything.
+    </p>
+  </section>
+
+  <section class="cta">
+    <a class="btn" href="/download/">Download knaif</a>
+    <a class="btn ghost" href={REPO}>Read the source</a>
+    <a class="btn ghost" href="https://knaif.dev">Build a skill</a>
+  </section>
+
+  <p class="fine">
+    Apache 2.0. Found a case where it plans the wrong thing? That is
+    <a href={`${REPO}/issues/new/choose`}>the most useful issue you can file</a>.
+  </p>
+</Base>
+
+<style>
+  h1 {
+    font-size: var(--step-3);
+    margin: 0 0 1rem;
+    font-weight: 600;
+  }
+
+  h3 {
+    font-size: var(--step-0);
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 58ch;
+    margin: 0;
+  }
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  section p {
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .pipe {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 0.85rem;
+    padding: 1.5rem 1.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+  }
+
+  .pipe-node {
+    color: var(--muted);
+  }
+
+  .pipe-arrow {
+    color: var(--border);
+  }
+
+  .pipe-model {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .pipe-model .br {
+    color: var(--coral);
+    font-size: 1.45em;
+    font-weight: 400;
+    vertical-align: -0.12em;
+  }
+
+  .problems {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--density-gap);
+  }
+
+  .problems div {
+    border-top: 2px solid var(--coral);
+    padding-top: 0.85rem;
+  }
+
+  .problems p {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+
+  .pull {
+    font-size: var(--step-1);
+    font-weight: 600;
+    border-left: 3px solid var(--coral);
+    padding-left: 1.25rem;
+  }
+
+  .nots {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: var(--measure);
+  }
+
+  .cta {
+    flex-direction: row;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-block;
+    background: var(--coral);
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.8rem 1.4rem;
+    border-radius: var(--radius);
+    text-decoration: none;
+  }
+
+  .btn.ghost {
+    background: none;
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .btn.ghost:hover {
+    border-color: var(--coral);
+  }
+
+  .fine {
+    color: var(--muted);
+    font-size: var(--step--1);
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+    margin: 0;
+  }
+</style>
