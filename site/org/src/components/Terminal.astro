@@ -1,0 +1,157 @@
+---
+// A replay of a REAL captured knaif session — not a hand-typed mock-up.
+//
+// Captured 2026-08-05 from `target/release/knaif` (built --features llama) against
+// knaif-qwen3-4b-v1-q4_k_m.gguf, on a 62 MB 1920x1080 h264/aac source. The command line
+// and the two output lines below are exactly what the binary printed; the source and
+// output sizes are the real file sizes.
+//
+// DELIBERATELY NO TIMING. The capture ran on a CPU-only build, which is not representative
+// of what a user with a GPU sees, and this project's rule is that no latency number ships
+// without naming the machine it came from. File sizes are properties of the artifact and
+// carry no such caveat, so they stay.
+
+interface Line {
+  kind: "prompt" | "run" | "ok" | "dim";
+  text: string;
+}
+
+const lines: Line[] = [
+  { kind: "prompt", text: 'knaif run ffmpeg "compress video.mp4 under 25 mb"' },
+  {
+    kind: "run",
+    text:
+      "ffmpeg -y -i video.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p " +
+      "-c:a aac -b:a 96k -movflags +faststart video_compressed.mp4",
+  },
+  { kind: "ok", text: "video_compressed.mp4" },
+  { kind: "dim", text: "62.4 MB  ->  9.3 MB" },
+];
+---
+
+<div class="term" role="img" aria-label="A knaif session: the request 'compress video.mp4 under 25 mb' produces an ffmpeg command and a compressed file.">
+  <div class="chrome" aria-hidden="true">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="titlebar">knaif</span>
+  </div>
+  <pre><code>{
+    lines.map((line, i) => (
+      <span class:list={["line", line.kind]} style={`--i:${i}`}>
+        {line.kind === "prompt" && <span class="sigil">$</span>}
+        {line.kind === "run" && <span class="sigil">→</span>}
+        {line.kind === "ok" && <span class="sigil">✓</span>}
+        {line.kind === "dim" && <span class="sigil"> </span>}
+        <span class="text">{line.text}</span>
+      </span>
+    ))
+  }</code></pre>
+</div>
+
+<style>
+  .term {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #14171c;
+    width: 100%;
+  }
+
+  .chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid #333a45;
+    background: #1b1f26;
+  }
+
+  .dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: #333a45;
+  }
+
+  .titlebar {
+    margin-left: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #98a1b0;
+  }
+
+  pre {
+    margin: 0;
+    padding: 1.1rem 1.15rem;
+    overflow-x: auto;
+    font-size: var(--step--1);
+    line-height: 1.75;
+  }
+
+  code {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .line {
+    display: grid;
+    grid-template-columns: 1.25em 1fr;
+    align-items: start;
+    color: #e8eaed;
+    /* Revealed in sequence so the causal order reads: you ask, it renders, it ran. */
+    animation: reveal 0.35s ease-out backwards;
+    animation-delay: calc(var(--i) * 0.5s + 0.2s);
+  }
+
+  .sigil {
+    user-select: none;
+  }
+
+  .line.prompt .sigil {
+    color: var(--coral);
+  }
+
+  .line.run {
+    color: #98a1b0;
+  }
+
+  .line.run .sigil {
+    color: var(--coral);
+  }
+
+  .line.run .text {
+    overflow-wrap: anywhere;
+  }
+
+  .line.ok .sigil {
+    color: #4ade80;
+  }
+
+  .line.ok .text {
+    font-weight: 600;
+  }
+
+  .line.dim {
+    color: #98a1b0;
+  }
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(0.3rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* The sequence is decoration; the content is the point. Show it all at once. */
+  @media (prefers-reduced-motion: reduce) {
+    .line {
+      animation: none;
+    }
+  }
+</style>

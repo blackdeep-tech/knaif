@@ -606,16 +606,22 @@ applications — reviewable in PRs and versioned with the code.
 
 ## 8. Migration fallout
 
-- [ ] **Move `execution-pipeline.svg` before deleting `site/docs/`** — that is its
-      *only* location in the repo, and it is the diagram `ARCHITECTURE.md` refers to.
-- [ ] **Update [PROVENANCE.md](../PROVENANCE.md)** — its "Site and documentation assets"
-      table names `site/docs/assets/` paths that will not exist.
-- [ ] Remove `web-build` / `_web-build-mkdocs` / `_web-zip` from the justfile. **Note:**
-      "drop mkdocs-material from dependencies" is a no-op — it is never declared, only
-      `uv pip install`ed inside the recipe. Deleting the recipe is the whole removal.
-- [ ] Update the PyPI `Documentation` URL in `pyproject.toml`, README website links,
-      sitemaps/canonicals for both domains.
-- [ ] Add this plan to [plans/README.md](README.md) and to TODO.md *Open / Next*.
+- [x] **Moved `execution-pipeline.svg` to `media/`** before deleting `site/docs/` — that
+      was its only location, and `ARCHITECTURE.md` refers to it.
+- [x] **Deleted `site/docs/` and `site/mkdocs.yml`**; removed `web-build` /
+      `_web-build-mkdocs` / `_web-zip`. "Drop mkdocs-material from dependencies" was
+      indeed a no-op — it was never declared, only `uv pip install`ed inside the recipe.
+- [x] **Updated [PROVENANCE.md](../PROVENANCE.md)** — asset table repointed, plus a new
+      Fonts section for the two OFL faces. Recorded that the `.woff2` files are *not
+      tracked* (they arrive via `pnpm install` from the committed lockfile), and that
+      `logo.png` is a dark-background asset.
+- [x] Added to [plans/README.md](README.md) and TODO.md *Open / Next*.
+- [ ] **PyPI `Documentation` URL — deliberately NOT changed yet.** It points at
+      `docs/SDK.md` on GitHub. Repointing it to `https://knaif.dev/sdk/` before DNS
+      resolves would ship a dead link in the next release's package metadata, which cannot
+      be corrected without a version bump. **Do this after cutover, not before.**
+- [ ] Sitemaps/canonicals verified against the live domains (both sites emit them; the
+      values are only correct once the domains exist).
 
 ---
 
@@ -627,7 +633,11 @@ applications — reviewable in PRs and versioned with the code.
       collection emits only `404.html` and exits 0 (§2) — an exit code alone would deploy
       an empty site.
 - [ ] Generated-data drift check green
-- [ ] Internal + external link check on both sites
+- [x] **Internal link + anchor check** — `just site-links`
+      (`scripts/check_site_links.py`). Verified by injection: a broken href fails the gate
+      and names the linking file. Deliberately offline; external URLs are not fetched,
+      because a gate that depends on someone else's uptime trains people to ignore it.
+- [ ] External link check (manual pass before cutover)
 - [ ] Every download URL in `release.json` returns 200
 - [ ] Responsive + a11y smoke pass (contrast, keyboard nav, reduced motion)
 - [ ] PR-preview deploys verified on both apps before DNS cutover
@@ -707,16 +717,29 @@ into the type system.
 
 ## 10a. Content dependencies — not engineering
 
-**Hero: an asciinema cast** (decided 2026-08-05) of
-`knaif run ffmpeg "compress video.mp4 under 25 mb"` — the worked example already in
-`index.md`. It shows the plan, the confirm gate, and the rendered argv, which is the
-product's actual differentiator rather than a claim about it.
+**Hero terminal — done 2026-08-05, and *not* asciinema.**
 
-- [ ] Record it against a **real run**, not a hand-typed reconstruction
-- [ ] Self-host the player — a strict-CSP-friendly, no-external-CDN embed. It is the only
-      moving asset on the site
-- [ ] Provide a static poster frame and respect `prefers-reduced-motion`
-- [ ] Any timing visible in the cast is a latency claim and inherits the §4 hardware rule
+The decision was an asciinema cast. What shipped is a real captured transcript replayed by
+a small Astro component (`site/org/src/components/Terminal.astro`). The content requirement
+— show a real run, not a reconstruction — is met; the delivery mechanism changed because
+asciinema would have meant a player bundle and a JSON cast file for four lines of output,
+where CSS does it with no dependency and no CDN question.
+
+Captured from `target/release/knaif` (built `--features llama`) against
+`knaif-qwen3-4b-v1-q4_k_m.gguf` on a real 62.4 MB 1080p source, which it compressed to
+9.3 MB. Command line and both output lines are verbatim.
+
+- [x] Recorded against a real run
+- [x] No external player, no CDN
+- [x] `prefers-reduced-motion` shows every line at once
+- [x] **No timing shown.** The capture ran on a CPU-only build (111 s wall, including a
+      `-preset slow` encode) which is not representative, and this project does not ship a
+      latency number without naming its machine. File sizes are properties of the artifact
+      and carry no such caveat, so those stay.
+
+> **Found while recording:** `knaif run --dry-run`'s help text says *"the only supported
+> mode so far"*, but the native runtime **does** execute — it produced the compressed file.
+> The help string is stale. Not a website bug; worth a separate fix.
 
 **`io` stays off the catalog** — it is `status: stale` and already hidden from discovery;
 the site must not resurface what the runtime hides. The extractor should filter on

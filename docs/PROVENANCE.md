@@ -72,13 +72,37 @@ Regenerate with `just eval-fixtures <skill>`.
 
 | Asset | Locations | Notes |
 |---|---|---|
-| `logo.png` | `media/`, `site/docs/assets/` | Identical file, committed twice |
-| `knaif-logo-rect.svg` | `media/`, `site/docs/assets/` | Identical file, committed twice; used by the README header |
-| `execution-pipeline.svg` | `site/docs/assets/` | Diagram of the pipeline in `ARCHITECTURE.md` |
+| `logo.png` | `media/` | Wordmark, white letterforms — a **dark-background asset**; unusable on light |
+| `logo-square.png` | `media/`, `site/shared/assets/mark-square.png` | The `[AI]` mark alone; favicon source |
+| `knaif-logo-rect.svg` | `media/`, `site/shared/assets/wordmark.svg` | Used by the README header |
+| `knaif.ico` | `media/`, `site/{org,dev}/public/favicon.ico` | Browser-tab icon for both sites |
+| `execution-pipeline.svg` | `media/` | Diagram of the pipeline in `ARCHITECTURE.md` |
 
-**No fonts are bundled** — no `.woff`/`.woff2`/`.ttf`/`.otf` file is tracked, and
-no SVG embeds an `@font-face` or references a `font-family`. The SVGs carry no
-editor metadata (no `dc:creator`, no Inkscape/Illustrator blocks).
+The wordmark is **also re-authored as inline SVG** in `site/shared/Wordmark.astro`. That is
+not a copy for convenience: the `.svg` file carries its own `prefers-color-scheme` block,
+which answers to the OS and cannot see the sites' `data-theme`, so as an `<img>` it renders
+invisible when a light-OS visitor toggles a site to dark. The component uses `currentColor`
+for the letterforms and the brand coral for `[AI]`. Same artwork, same paths, same
+provenance.
+
+### Fonts (added 2026-08-05)
+
+The websites bundle two typefaces, self-hosted rather than loaded from the Google Fonts CDN
+— faster first paint, and no transmission of visitor IPs to a third party.
+
+| Font | Package | Licence |
+|---|---|---|
+| DM Sans | `@fontsource-variable/dm-sans` | SIL Open Font License 1.1 |
+| JetBrains Mono | `@fontsource-variable/jetbrains-mono` | SIL Open Font License 1.1 |
+
+The `.woff2` files are **not tracked in this repository** — they arrive via `pnpm install`
+from the committed `site/pnpm-lock.yaml` and are emitted into each site's build output.
+OFL requires the licence text to travel with the fonts; `@fontsource` packages ship it, and
+it is therefore present in `site/node_modules/` and in any deployed bundle.
+
+No `.woff`/`.woff2`/`.ttf`/`.otf` file is **tracked**, and no SVG embeds an `@font-face` or
+references a `font-family`. The SVGs carry no editor metadata (no `dc:creator`, no
+Inkscape/Illustrator blocks).
 
 > **Owner confirmation required before publication:** these marks are assumed to
 > be original work commissioned or created for the project. If any was derived
@@ -87,8 +111,8 @@ editor metadata (no `dc:creator`, no Inkscape/Illustrator blocks).
 > not verified mechanically.
 
 The duplicated logo files are a known redundancy (`media/` for GitHub rendering,
-`site/docs/assets/` for the MkDocs build, which can only reference files under its
-own `docs_dir`). De-duplicating them is a cleanup task, not a provenance issue.
+`site/shared/assets/` and each site's `public/` because Astro resolves assets within its own
+project). De-duplicating them is a cleanup task, not a provenance issue.
 
 ## Code dependencies
 

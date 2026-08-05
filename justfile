@@ -603,6 +603,11 @@ site-check:
     pnpm --dir site --filter knaif-org check
     pnpm --dir site --filter knaif-dev check
 
+# Internal link + anchor check over the BUILT sites. Needs `just site-build` first —
+# Astro checks neither, so a typo'd href or a moved heading anchor is otherwise invisible.
+site-links:
+    uv run python "{{justfile_directory()}}/scripts/check_site_links.py"
+
 # Regenerate the committed catalog data both sites read (drift-guarded by a test)
 site-data:
     uv run python "{{justfile_directory()}}/scripts/site_data.py"
@@ -614,27 +619,6 @@ site-data:
 # Refresh site/data/release.json from the latest PUBLISHED GitHub release
 release-data:
     uv run python "{{justfile_directory()}}/scripts/release_data.py"
-
-# --- Legacy mkdocs site (removed once the Astro sites land) ---
-
-# Build the website and package it for Amplify manual upload
-# Usage: just web-build
-# Then drag site/knaif-site.zip into the Amplify console.
-web-build: _web-build-mkdocs _web-zip
-
-_web-build-mkdocs:
-    uv pip install mkdocs-material --quiet
-    uv run python -m mkdocs build -f site/mkdocs.yml
-
-[windows]
-_web-zip:
-    Compress-Archive -Path site/site/* -DestinationPath site/knaif-site.zip -Force
-    Write-Host "Ready: site/knaif-site.zip"
-
-[unix]
-_web-zip:
-    cd site/site && zip -r ../knaif-site.zip . -x "*.DS_Store"
-    @echo "Ready: site/knaif-site.zip"
 
 # Freeze dependencies to requirements.txt
 freeze: _freeze
