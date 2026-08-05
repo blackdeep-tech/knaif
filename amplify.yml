@@ -1,0 +1,70 @@
+# AWS Amplify build spec for the two knaif websites.
+#
+# NOT YET WIRED UP. No Amplify apps exist at the time of writing — this file is the
+# reviewable, versioned definition they should be created against. See
+# docs/plans/2026-08-04-website-split.md §7.
+#
+# TWO APPS, ONE REPO. Amplify's monorepo support is per-app: each app is created against
+# this repository with its own domain, and selects its application below by setting
+# AMPLIFY_MONOREPO_APP_ROOT. AWS requires that variable to match the `appRoot` value here,
+# so a mismatch is a build-time failure rather than a silently wrong deploy.
+#
+#   knaif.org  ->  AMPLIFY_MONOREPO_APP_ROOT = site/org
+#   knaif.dev  ->  AMPLIFY_MONOREPO_APP_ROOT = site/dev
+#
+# PNPM, NOT NPM. The workspace is defined by site/pnpm-workspace.yaml, which npm ignores
+# entirely — an npm build resolves no workspaces and silently builds only the root.
+# `corepack enable` activates the pnpm version pinned by "packageManager" in
+# site/package.json, so CI and a developer machine run the same pnpm.
+#
+# WHY THE BUILD RUNS FROM `site/` WHILE appRoot IS DEEPER: both sites are workspace members
+# of one pnpm workspace and share knaif-shared, so dependencies install once at site/ and
+# each app builds its own filter from there.
+#
+# PAGE-COUNT ASSERTION. A Starlight build with no content collection emits only 404.html
+# and still exits 0 — a silent empty site that CI would happily deploy. Exit status alone
+# cannot catch it, so each build asserts a minimum page count.
+
+version: 1
+applications:
+  # ---------------------------------------------------------------- knaif.org
+  - appRoot: site/org
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - corepack enable
+            - cd ../.. && pnpm --dir site install --frozen-lockfile
+        build:
+          commands:
+            - cd ../.. && pnpm --dir site --filter knaif-org build
+            - test "$(find dist -name '*.html' | wc -l)" -ge 7
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - ../../site/node_modules/**/*
+          - ../../site/.pnpm-store/**/*
+
+  # ---------------------------------------------------------------- knaif.dev
+  - appRoot: site/dev
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - corepack enable
+            - cd ../.. && pnpm --dir site install --frozen-lockfile
+        build:
+          commands:
+            - cd ../.. && pnpm --dir site --filter knaif-dev build
+            - test "$(find dist -name '*.html' | wc -l)" -ge 20
+      artifacts:
+        baseDirectory: dist
+        files:
+          - "**/*"
+      cache:
+        paths:
+          - ../../site/node_modules/**/*
+          - ../../site/.pnpm-store/**/*

@@ -24,11 +24,17 @@
 > internal link and anchor resolves on both, `astro check` is clean, and `release.json` is
 > live against v1.1.0.
 >
-> **Three things remain**, and none of them is page-writing:
-> 1. The **asciinema cast** (§10a) — the only blocker on the `.org` home page, which is
->    still the scaffold placeholder.
-> 2. The **two Amplify apps** (§7) — console work, then PR previews.
-> 3. **Operator review** of both sites in full (§11 step 10), which is the launch gate.
+> **All local work is done** (2026-08-05). Both sites are fully written — 7 pages on
+> `.org`, 24 on `.dev`, no scaffolds anywhere. The hero is a real captured session, mkdocs
+> is retired, `amplify.yml` is written, and `just site-links` gates internal links and
+> anchors. Full suite 1666 passing; `astro check` clean on both.
+>
+> **Everything remaining needs someone other than the build:**
+> 1. **Operator review** of both sites locally — `just site-dev org` / `just site-dev dev`.
+>    This is the launch gate (§11 step 10).
+> 2. **Create the two Amplify apps** (§7) — console work, then PR previews.
+> 3. **Post-cutover only:** repoint the PyPI `Documentation` URL to knaif.dev (§8), and
+>    verify sitemaps/canonicals against the live domains.
 
 **Goal:** Replace the single mkdocs page at `site/` with two Astro sites — knaif.org for
 end users and knaif.dev for developers — sharing one design system and one generated
@@ -596,11 +602,18 @@ per site.
 **Config lives in a committed root `amplify.yml`** (decided 2026-08-05) declaring both
 applications — reviewable in PRs and versioned with the code.
 
-- [ ] Declare for each app: exact `appRoot`, `buildPath`, artifact `baseDirectory`
-      (relative to `buildPath`), and a matching `AMPLIFY_MONOREPO_APP_ROOT` env var —
-      AWS requires `appRoot` and that variable to agree.
-- [ ] Build command is `pnpm install --frozen-lockfile` + `pnpm --filter <app> build`.
-- [ ] Create both apps, point domains, configure apex/www redirects and cross-domain nav.
+- [x] **`amplify.yml` written 2026-08-05.** Both applications declared with their
+      `appRoot`, artifact `baseDirectory`, and pnpm build commands. Each build **asserts a
+      minimum page count** rather than trusting exit status, because a Starlight build with
+      no content collection emits only `404.html` and still exits 0 (§2). Thresholds are 7
+      and 20 against actual counts of 7 and 24 — enough headroom for ordinary growth, tight
+      enough that the empty-site failure (1 page) trips it.
+- [ ] **Create the two apps.** Console work, deliberately not started — the operator is
+      reviewing locally first. Each needs `AMPLIFY_MONOREPO_APP_ROOT` set to match its
+      `appRoot` (`site/org`, `site/dev`); AWS requires them to agree.
+- [ ] Confirm the build image provides pnpm, or that `corepack enable` works there. The
+      spec calls `corepack enable` in `preBuild` on the assumption it does.
+- [ ] Point domains; configure apex/www redirects and cross-domain nav.
 
 ---
 
