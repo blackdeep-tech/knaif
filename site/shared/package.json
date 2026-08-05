@@ -7,6 +7,7 @@
     "./tokens.css": "./tokens.css",
     "./fonts.css": "./fonts.css",
     "./Wordmark.astro": "./Wordmark.astro",
+    "./FontPreload.astro": "./FontPreload.astro",
     "./assets/*": "./assets/*"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 ---
 import "knaif-shared/fonts.css";
 import "knaif-shared/tokens.css";
+import FontPreload from "knaif-shared/FontPreload.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 
@@ -27,6 +28,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <FontPreload />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <meta property="og:title" content={title} />

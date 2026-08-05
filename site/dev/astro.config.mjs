@@ -31,6 +31,8 @@ export default defineConfig({
         // light mode. A `head:` script cannot fix it — Starlight injects its provider
         // after custom head tags. See the file for the one-line diff.
         ThemeProvider: "./src/components/ThemeProvider.astro",
+        // Adds the webfont preloads to upstream's head, nothing else. See the file.
+        Head: "./src/components/Head.astro",
       },
       social: [
         {
