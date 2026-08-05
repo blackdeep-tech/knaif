@@ -750,9 +750,12 @@ Captured from `target/release/knaif` (built `--features llama`) against
       latency number without naming its machine. File sizes are properties of the artifact
       and carry no such caveat, so those stay.
 
-> **Found while recording:** `knaif run --dry-run`'s help text says *"the only supported
-> mode so far"*, but the native runtime **does** execute — it produced the compressed file.
-> The help string is stale. Not a website bug; worth a separate fix.
+> **Found while recording, and fixed on this branch:** two stale claims in `knaif run
+> --help`. `--dry-run` was documented as *"the only supported mode so far"* — but the
+> native runtime executes; it produced the compressed file. And `<SKILL>` claimed *"native
+> `run` currently supports `ffmpeg`"* — `documents` runs natively too, verified by
+> inspecting a file with it. Both were understating shipped capability on the surface a
+> user reads first.
 
 **`io` stays off the catalog** — it is `status: stale` and already hidden from discovery;
 the site must not resurface what the runtime hides. The extractor should filter on
