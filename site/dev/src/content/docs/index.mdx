@@ -1,13 +1,31 @@
 ---
 title: Build with knaif
-description: Put a natural-language front end on your own CLI, or author a skill for knaif itself. Local models, deterministic execution.
+description: Put a natural-language front end on your own code, or author a skill for knaif itself. Local models, deterministic execution.
 template: splash
+# The h1 and tagline have to answer "what does this do for me?" before a developer will
+# read further. "Build with knaif" plus a statement of the architecture answered "how does
+# it work?" instead — true, but it assumes the reader already knows what they'd be building.
+#
+# Deliberately NOT "your CLI" in the heading: the CLI is the surface knaif ships today, not
+# the boundary of what it is, and a headline that names it dates the moment another surface
+# lands. "your own code" survives that. The tagline's closing example stays CLI-specific
+# because it describes what the SDK can actually do right now (nk.from_click) — swap that
+# line, not the heading, when there is a second surface to name.
 hero:
-  tagline: The model works out what you want. Deterministic code does the work.
+  title: Natural language in front of your own code
+  tagline: |
+    Users say what they want instead of memorising flags. A 4B model on their own machine
+    turns it into a validated JSON plan; your functions execute it. No API key, no
+    per-request cost, and the same result every time — around twenty lines to wrap a CLI
+    you already have.
   actions:
     - text: Quickstart
       link: /start/quickstart/
       icon: right-arrow
+    - text: The SDK
+      link: /sdk/
+      icon: document
+      variant: minimal
     - text: View on GitHub
       link: https://github.com/blackdeep-tech/knaif
       icon: external
@@ -48,6 +66,12 @@ own machine, for free, the same way every time.
   title="Quickstart"
   description="A natural-language CLI in about twenty lines, running entirely on your machine."
   href="/start/quickstart/"
+/>
+
+<LinkCard
+  title="Released models"
+  description="The two Qwen3 fine-tunes knaif publishes on HuggingFace — sizes, checksums, how to pull one, and the evidence behind picking a 4B."
+  href="/models/"
 />
 
 ## The five tracks

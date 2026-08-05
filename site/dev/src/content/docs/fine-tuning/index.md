@@ -65,6 +65,9 @@ A keyword fix is an afternoon. A training cycle is days, and it cannot fix this.
 Skills that were not part of a training run stay on the untuned model. That is deliberate —
 a tune is only ever pointed at the skills it was trained on.
 
+Both `knaif-*` rows are published on HuggingFace and can be pulled without training
+anything — see [Released models](/models/) for sizes, checksums and what the tune bought.
+
 ## The pipeline
 
 ```bash

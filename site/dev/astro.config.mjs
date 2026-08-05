@@ -48,6 +48,10 @@ export default defineConfig({
         { label: "The knaif SDK", items: [{ autogenerate: { directory: "sdk" } }] },
         { label: "Author a skill", items: [{ autogenerate: { directory: "author" } }] },
         { label: "Evaluate a skill", items: [{ autogenerate: { directory: "evaluate" } }] },
+        // Consuming a released model is a different job from training one, and most
+        // visitors only ever want the former — so it gets its own entry above Fine-tuning
+        // rather than living inside it.
+        { label: "Models", items: [{ autogenerate: { directory: "models" } }] },
         { label: "Fine-tuning", items: [{ autogenerate: { directory: "fine-tuning" } }] },
         { label: "Python to native", items: [{ autogenerate: { directory: "native" } }] },
       ],

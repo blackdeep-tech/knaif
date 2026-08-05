@@ -1,6 +1,10 @@
-# Models (large binary files)
-models/
+# Models (large binary files) — the repo-root GGUF directory only.
+# Anchored with a leading slash: an unanchored `models/` matches a directory of that name at
+# ANY depth, which silently swallowed site/dev/src/content/docs/models/ (the published
+# models documentation) and is why contracts/models/ needed the negations below.
+/models/
 # ...but contracts/models/ holds the tracked source-of-truth model manifest (no GGUFs).
+# Redundant against the anchored pattern above; kept so re-widening it cannot lose them.
 !contracts/models/
 !contracts/models/*.yaml
 
