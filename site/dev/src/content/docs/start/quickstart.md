@@ -94,12 +94,13 @@ hang on reasoning models.
 | Know what the model can and cannot do | [The boundary contract](/sdk/boundaries/) |
 | Build a skill for knaif itself | [Author a skill](/author/) |
 
-## Three things called "knaif cli"
+## Which knaif is which
 
-Search results will not tell you which one you have:
+Three separate things carry the name, and search results will not tell you which one you
+have landed on. What separates them is who runs them:
 
-| Name | What it is |
-|---|---|
-| `knaif` | The native binary end users download from [knaif.org](https://knaif.org) |
-| `knaif-cli` | The Python console script that runs skills from a checkout |
-| `knaif.cli` | The SDK on this page — *the knaif SDK* |
+| You type | What it is | Who runs it |
+|---|---|---|
+| `knaif` | The native binary, downloaded from [knaif.org](https://knaif.org) | End users |
+| `knaif-cli` | The Python console script that runs skills from a repo checkout | Skill authors and evaluators |
+| `import knaif.cli` | The library on this page — *the knaif SDK* | Developers embedding knaif |
