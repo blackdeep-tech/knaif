@@ -12,6 +12,22 @@
 export const MEASURED = {
   date: "2026-07-02",
   fixture: "clip.mp4 — 10s, 1920×1080, h264/aac, 293 KB",
+  // The machine belongs next to the latency column, because it is the only column that
+  // moves with it — the three premium arms ran in their own data centres.
+  //
+  // ⚠️ The 2026-07-02 head-to-head was originally run on the `5080` desktop box, where a 4B
+  // plans in ~0.3 s. The latencies below are NOT those: they are ~1.0–1.9 s, which is the
+  // `3070L` (docs/PERFORMANCE.md §1 — 350 ms p50 on the `5080` against 1352 ms here, same
+  // GGUF, paired). A later re-run of scripts/agent_vs_knaif on the `3070L` overwrote the
+  // original results in place, and only that re-run reached this repo — RESULTS_*.json
+  // enters history on 2026-07-25, after the 2026-07-14 hardware move. So the label below
+  // describes the numbers, not the date. Do not "correct" it to the 5080 without also
+  // replacing the whole snapshot from the original run's files.
+  //
+  // Not reconcilable as load overhead: the harness reads knaif's figure from the CLI's
+  // `intent:` line, which brackets `agent.infer()` alone (app.py) — the GGUF is already in
+  // VRAM by then, loaded eagerly in InferenceOrchestrator.__init__.
+  hardware: "an RTX 3070 Laptop",
   arms: [
     { name: "knaif", model: "knaif-qwen3-4b-v1", note: "local 4B, llama.cpp" },
     { name: "Claude Code", model: "opus-4-8" },

@@ -197,6 +197,13 @@ const money = (c: number | "free" | undefined) =>
         2.5 GB model, amortised away when it runs warm.
       </li>
       <li>
+        knaif's column is hardware-bound in a way the cloud columns are not. On{" "}
+        {MEASURED.hardware} the model plans in ~1s; on a desktop RTX 5080 the same model and
+        prompt measure about
+        4× faster, and a machine with no usable GPU is slower. The premium agents' latency does
+        not depend on your machine at all.
+      </li>
+      <li>
         Claude ran on <code>opus-4-8</code>. A cheaper tier would lower its cost; that was
         not tested.
       </li>
@@ -227,8 +234,10 @@ just experiment-agent-vs-knaif copilot   <span class="dim"># swap the agent</spa
     Measured {MEASURED.date} against {MEASURED.arms
       .slice(1)
       .map((a) => `${a.name} (${a.model})`)
-      .join(", ")}. <strong>Not since re-verified.</strong> These products change on a
-    timescale of weeks; treat every figure above as bound to that date.
+      .join(", ")}. knaif ran locally on {MEASURED.hardware}; the three premium agents ran
+    in their own data centres, so knaif's is the only latency column that moves with the
+    hardware. <strong>Not since re-verified.</strong> These products change on a timescale
+    of weeks; treat every figure above as bound to that date.
   </p>
 </Base>
 
