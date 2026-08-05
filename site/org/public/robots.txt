@@ -1,0 +1,8 @@
+# knaif.org — the end-user product site.
+# Everything here is public and meant to be indexed. The Sitemap line is absolute by
+# protocol requirement, and names the apex because the apex is canonical (www redirects
+# to it, and every page's canonical tag points there).
+User-agent: *
+Allow: /
+
+Sitemap: https://knaif.org/sitemap-index.xml

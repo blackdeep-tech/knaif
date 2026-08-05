@@ -641,9 +641,10 @@ applications — reviewable in PRs and versioned with the code.
       overrides build settings saved in the console** — which is what makes the committed
       file authoritative rather than advisory. Still *two apps*: one file is the shared
       definition, not a single deployment.
-- [ ] **Create the two apps.** Console work, deliberately not started — the operator is
-      reviewing locally first. Each needs `AMPLIFY_MONOREPO_APP_ROOT` set to match its
-      `appRoot` (`site/org`, `site/dev`); AWS requires them to agree.
+- [x] **Created 2026-08-06.** Both apps build from `main` with `AMPLIFY_MONOREPO_APP_ROOT`
+      matching their `appRoot` (`site/org`, `site/dev`). Verified live: all 7 knaif.org
+      routes and all knaif.dev tracks return 200, so both page-count assertions passed
+      against real deploys.
 - [x] **The build image does not provide pnpm** — AWS states it outright, so the "do not
       assume" item is answered rather than deferred. `corepack enable` stays (it activates
       the exact `packageManager` pin, where AWS's `npm install -g pnpm` would float), with
@@ -662,6 +663,15 @@ applications — reviewable in PRs and versioned with the code.
         `node_modules` cache safe at all; restoring pnpm's symlink farm relinks into a
         store that may not be there.
 - [ ] Point domains; configure apex/www redirects and cross-domain nav.
+      - **The apex is canonical (decided 2026-08-06).** `knaif.org` and `knaif.dev` are the
+        real addresses; `www.` is a permanent (301) redirect to the apex, never the reverse.
+        This is what both sites already emit — `site:` in each `astro.config.mjs` is the
+        apex, so every canonical tag and both sitemaps already name it, and there is not a
+        single `www.knaif` string in the repo. Serving the apex from `www` would make every
+        published canonical point away from the served host.
+      - Consequence for DNS: an apex cannot be a `CNAME`. On Route 53 Amplify creates the
+        `ALIAS` records itself; on another registrar the zone must support `ALIAS`/`ANAME`
+        flattening, or the apex has to be hosted where it does.
 
 ---
 
@@ -681,8 +691,13 @@ applications — reviewable in PRs and versioned with the code.
       `docs/SDK.md` on GitHub. Repointing it to `https://knaif.dev/sdk/` before DNS
       resolves would ship a dead link in the next release's package metadata, which cannot
       be corrected without a version bump. **Do this after cutover, not before.**
-- [ ] Sitemaps/canonicals verified against the live domains (both sites emit them; the
-      values are only correct once the domains exist).
+- [x] Sitemaps/canonicals verified against the live domains 2026-08-06. Canonicals were
+      already apex on all four hostnames.
+      - **"Both sites emit them" was wrong.** Starlight bundles `@astrojs/sitemap`, so
+        knaif.dev had one and knaif.org — a plain Astro app — did not; `/sitemap-index.xml`
+        404'd in production. Fixed by adding the integration to `site/org/astro.config.mjs`.
+      - Neither site served a `robots.txt` either, so nothing pointed a crawler at the
+        sitemap that did exist. Both now ship one from `public/`, naming the apex sitemap.
 
 ---
 
@@ -843,12 +858,12 @@ Brand direction is settled — see §10.
 6. [x] `.dev` tracks, in order: E (quickstart) → A → B → C → D (§5)
 7. [x] `release.json` + `just release-data` + RELEASE.md step (§6)
 8. [x] Terminal capture recorded and embedded (§10a — a real transcript, not asciinema)
-9. [x] Committed `amplify.yml` + migration fallout (§7, §8). **The two Amplify apps
-   themselves are console work and are not created yet** — deliberately, so the operator
-   reviews locally first
-10. [ ] **Operator review of both sites in full** — locally now (`just site-dev org` /
-    `just site-dev dev`), then on PR previews once the apps exist
-11. [ ] DNS cutover
+9. [x] Committed `amplify.yml` + migration fallout (§7, §8), and **both Amplify apps
+   created 2026-08-06** against it
+10. [ ] **Operator review of both sites in full** — now reviewable on the live domains
+    rather than PR previews, since cutover ran ahead of this step
+11. [x] DNS cutover — 2026-08-06. Both domains resolve and serve from the apex; `www`
+    redirects to it (§7). Route 53 ALIAS records, Amplify-managed certificates.
 
 **Launch is one event, gated on operator review** (decided 2026-08-05). Every page in §4
 and every track in §5 is written and reviewed before either domain goes live — no
