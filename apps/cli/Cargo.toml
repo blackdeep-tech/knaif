@@ -3,6 +3,7 @@ name = "knaif-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
 rust-version.workspace = true
 description = "knaif native CLI — a thin wrapper over the reusable engine crates."
 

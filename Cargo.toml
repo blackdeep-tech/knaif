@@ -18,6 +18,10 @@ version = "1.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.96"
+# Same holder and address as the wheel's `authors` (python/core/pyproject.toml), so the two
+# runtimes are attributable to one party wherever they are published. Cargo takes a single
+# "Name <email>" string where PEP 621 splits the two fields.
+authors = ["Blackdeep Technologies <knaif@blackdeep.tech>"]
 
 [workspace.dependencies]
 # Internal crates (path deps; the whole graph builds from the workspace).
