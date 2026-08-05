@@ -717,12 +717,23 @@ applications — reviewable in PRs and versioned with the code.
       (`scripts/check_site_links.py`). Verified by injection: a broken href fails the gate
       and names the linking file. Deliberately offline; external URLs are not fetched,
       because a gate that depends on someone else's uptime trains people to ignore it.
-- [ ] External link check (manual pass before cutover)
+- [x] External link check — 2026-08-06, against the live sites. 14 distinct off-site URLs
+      across both builds, all resolving: 6 GitHub doc/repo links, 3 HuggingFace model pages
+      (`blackdeep/knaif` plus both Qwen3 bases), and the 5 v1.1.0 release assets. Assets
+      were range-requested (`206`, one byte each) rather than downloaded. Worth re-running
+      after any release, since the asset URLs carry a version.
 - [x] **Every URL in `release.json` returns 200** — re-checked 2026-08-05 against the live
       v1.1.0 release: four assets, `SHA256SUMS`, the tag page, and the Releases fallback.
       Re-run this after every `just release-data`; it is the check that catches the missed
       manual refresh §6 warns about, and it cannot live in the unit suite (§6).
 - [ ] Responsive + a11y smoke pass (contrast, keyboard nav, reduced motion)
+      - Static half done 2026-08-06 over all 32 built pages, clean: every page has `lang`
+        and a viewport meta, exactly one `<h1>`, no empty links, and `prefers-reduced-motion`
+        is honoured in `tokens.css` and the terminal replay. Starlight's wordmark is
+        correctly `alt=""` with an `sr-only` "knaif" beside it, so replacing the title does
+        not cost the site its accessible name; both sites ship a skip link.
+      - **Still needs a browser:** contrast measurement and keyboard-navigation order.
+        Neither is checkable from the HTML, so this item stays open.
 - [ ] PR-preview deploys verified on both apps before DNS cutover
 - [ ] **Operator sign-off on both sites in full** — the launch gate (§11 step 10)
 - [ ] Post-cutover: apex/www redirects, cross-domain nav, documented rollback
