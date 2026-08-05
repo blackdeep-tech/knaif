@@ -376,21 +376,25 @@ This **Open / Next** section is the live backlog (originally distilled from the
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
   mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.
-  **Unblocked — all design decisions settled 2026-08-05** (plan §1). Two new metadata sources
-  land first: a `display:` block in `skill.yaml` (catalog titles/taglines) and
-  `contracts/release/platforms.yaml` (the support matrix, today prose in RELEASE.md §1/§4).
-  Three prerequisites are pure housekeeping and unblocked now — `node_modules` is
-  not in `.gitignore`, `mise.toml` pins `node = "latest"`, and there are no `just site-*` recipes.
-  **Launch is one operator-gated cutover**, not incremental: five `.dev` tracks (author /
-  evaluate / fine-tune / port-to-native / SDK) plus five `.org` pages are all written and
-  reviewed before either domain goes live. The `.dev` evaluation and fine-tuning tracks are the
-  largest writing project and sit on the critical path.
-  Two constraints worth carrying out of the plan because they bite elsewhere: download URLs must
-  come from a **published-release** snapshot, never from `Cargo.toml` (RELEASE.md bumps the version
-  before publishing, so a derived URL advertises assets that do not exist), and its refresh step
-  has no CI to run it — fold that into
-  [post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s `release.yml`
-  rather than adding this repo's first workflow.
+  **Both sites are written and every build-side item is closed** (2026-08-05): 7 pages on `.org`,
+  24 on `.dev`, mkdocs retired, `amplify.yml` committed, and `site-check` now runs inside
+  `just check`. What is left is not code:
+  - **Operator review of both sites in full** — `just site-dev org` / `just site-dev dev`. This
+    is the launch gate; nothing publishes incrementally.
+  - **Create the two Amplify apps** (console), each with `AMPLIFY_MONOREPO_APP_ROOT` matching its
+    `appRoot`, then verify the PR previews and point the domains.
+  - **After cutover only:** repoint the PyPI `Documentation` URL to knaif.dev — doing it early
+    ships a dead link in package metadata that needs a version bump to fix — and verify
+    sitemaps/canonicals against the live domains.
+
+  Two constraints worth carrying out of the plan because they bite elsewhere: download URLs come
+  from a **published-release** snapshot, never from `Cargo.toml` (RELEASE.md bumps the version
+  before publishing, so a derived URL advertises assets that do not exist) — that is
+  `site/data/release.json` + `just release-data` + RELEASE.md §5 step 7 today. Its automation is
+  noted under **C3** in
+  [post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md), but *not* inside
+  `release.yml`: that job builds a draft, and the extractor rejects drafts by design, so the
+  refresh needs its own `on: release: published` trigger.
 
 - [ ] **Inference latency: daemon + prompt-prefix KV reuse (1.2.0, NOT 1.1.0).** Measured
   2026-08-01 on the shipped Linux CUDA payload; full budget in

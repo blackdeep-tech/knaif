@@ -206,8 +206,9 @@ type-check-py: type-check
 # Full Python check: lint + type + test + generated-docs check
 check-py: lint-py type-check-py test-py gen-skills-check
 
-# Full CI check: Python now, native when the Cargo workspace exists (skips cleanly)
-check: check-py check-native
+# Full CI check: Python, native, and both websites (astro check). Needs node + pnpm on
+# PATH — `just bootstrap` provisions them from mise.toml. Site recipes live at the bottom.
+check: check-py check-native site-check
 
 # Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent
 [windows]
@@ -580,8 +581,8 @@ parity skill *args:
 # Plan: docs/plans/2026-08-04-website-split.md
 #
 # pnpm workspaces, NOT npm. `just bootstrap` provisions node + pnpm from mise.toml.
-# These recipes fail until the site/ workspace scaffold lands (plan §11 step 4) —
-# that is expected, and they are deliberately NOT wired into `just check` until then.
+# `site-check` runs as part of `just check`; `site-build` + `site-links` do not — they
+# need a full production build of both sites, which belongs in the release/deploy gate.
 # ---------------------------------------------------------------------------
 
 # Install site dependencies (respects the committed lockfile, like Amplify does)
@@ -598,8 +599,11 @@ site-build:
     pnpm --dir site --filter knaif-org build
     pnpm --dir site --filter knaif-dev build
 
-# Type/content check for both sites (astro check) — the site half of `just check`
+# Type/content check for both sites (astro check) — the site half of `just check`.
+# Installs first: `astro check` on a missing node_modules reports a package resolution
+# error, which reads as a broken site rather than as an unprovisioned checkout.
 site-check:
+    pnpm --dir site install --frozen-lockfile
     pnpm --dir site --filter knaif-org check
     pnpm --dir site --filter knaif-dev check
 

@@ -1,6 +1,6 @@
 # Website split — knaif.org (product) + knaif.dev (framework)
 
-**Status:** Planning · **Created:** 2026-08-04 · **Completed:** —
+**Status:** Active · **Created:** 2026-08-04 · **Completed:** —
 **Owner:** site · **Ref:** `site/redesign`
 
 > **Status note:** Revised 2026-08-05 after an audit found one repo-breaking defect (this
@@ -28,6 +28,11 @@
 > `.org`, 24 on `.dev`, no scaffolds anywhere. The hero is a real captured session, mkdocs
 > is retired, `amplify.yml` is written, and `just site-links` gates internal links and
 > anchors. Full suite 1666 passing; `astro check` clean on both.
+>
+> **`site-check` is now part of `just check`** (2026-08-05) — the last build-side item.
+> Every remaining unchecked box in this plan is console work, a post-cutover step, or the
+> operator review itself; the checkboxes below were reconciled against the built sites at
+> the same time, since several had shipped without being ticked.
 >
 > **Everything remaining needs someone other than the build:**
 > 1. **Operator review** of both sites locally — `just site-dev org` / `just site-dev dev`.
@@ -98,7 +103,12 @@ None of these existed and all of them blocked the first `pnpm install`. **Done
       lands (§11 step 4) and are **deliberately not wired into `just check`** until then.
 - [ ] Confirm Amplify's build image provides pnpm, or enable it via `corepack` in
       `preBuild`. Do not assume.
-- [ ] Wire `site-check` into `just check` once the scaffold exists.
+- [x] **`site-check` wired into `just check`** (2026-08-05) — `check: check-py check-native
+      site-check`. It installs with `--frozen-lockfile` first, because `astro check` against a
+      missing `node_modules` reports a package-resolution error that reads as a broken site
+      rather than as an unprovisioned checkout. `site-build` and `site-links` stay out: they
+      need a full production build of both sites, which belongs in the deploy gate, not in
+      the loop a contributor runs before every commit.
 
 Verified: full suite green (1629 passed, 7 skipped), `just --list` parses.
 
@@ -281,8 +291,9 @@ locking its snapshot become the same act — neither can be forgotten independen
 Showing preview skills rather than hiding them keeps the catalog as alive as the project
 actually is while tens of skills are in flight, and the badge is what keeps that honest.
 
-- [ ] `.org` needs a **preview badge** treatment in the design system (§10) — a skill card
-      state, not a decoration
+- [x] `.org` **preview badge** — a card state, not a decoration: `SkillCard.astro` badges
+      the card, `/skills` groups preview skills into their own section rather than mixing
+      them into the grid, and `/skills/<name>` says so above the fold
 - [x] Implemented + 6 tests. Verified by injection: removing a snapshot flips `stable` →
       `preview`, `stage: hidden` drops the skill entirely, and an unknown stage exits 1
       listing the accepted values.
@@ -331,7 +342,9 @@ re-verified"* line. That line is not a disclaimer to be quietly dropped in a lat
 copy-edit — it is the entire reason a fixed-date comparison stays honest, and without it
 the page asserts a current result it does not have.
 
-- [ ] Write the as-measured line into the page template, not just the copy
+- [x] The as-measured line is in the page template, not just the copy — `/vs` renders the
+      model list and **"Not since re-verified"** from the same constants the tables use, so
+      a copy-edit cannot drop it while leaving the numbers
 
 > **Latency copy must name hardware.** v1 of this plan wrote "~1s" as generic hero copy.
 > [PERFORMANCE.md §6](../PERFORMANCE.md) measures a native CUDA `run` at **~5.2 s wall**,
@@ -347,7 +360,9 @@ the page asserts a current result it does not have.
 - [x] **`/about`** — thesis, the three problems, sustainability
 - [x] **`/download`** — from `release.json` + the platform contract, with UA detection as
       progressive enhancement (every platform stays listed with JS off)
-- [ ] `/` — the real home page *(needs the asciinema cast, §10a)*
+- [x] **`/`** — the real home page, with the captured terminal of §10a (not asciinema; see
+      there). Revised after the first read to lead with what knaif does rather than with
+      how it works
 
 **Internal link check passes**: 7 pages, 0 broken. Worth keeping as a gate — `/download`
 was linked from all six other pages before it existed, so the site was already incoherent
@@ -442,10 +457,10 @@ site *speaks*, not by moving code.
 > from PyPI alone — it should be the site's quickstart, with tracks A–D framed as "clone
 > the repo."
 
-- [ ] Add a **naming note** early in track E, since three things still read as "knaif cli"
-      in the wild: the native binary `knaif` (end user, `.org`), the Python console script
-      `knaif-cli` (`knaif.app:main`, runs skills), and the SDK module `knaif.cli`. A reader
-      arriving from a search result needs one paragraph telling them which they have.
+- [x] **Naming note** — *"Which knaif is which"* on the `.dev` home page and again in the
+      quickstart, since a reader can arrive at either from a search result. It carries a
+      **who runs it** column, which is the actual discriminator; three near-identical
+      strings in a table name the collision without resolving it.
 
 - [x] Scaffold Starlight
 - [x] **Track E + the quickstart**, 2026-08-05 — `/start/quickstart`, `/sdk`,
@@ -589,8 +604,11 @@ published names, `ASSET_MATCHERS` covers every artifact the contract declares, a
 prereleases, missing `SHA256SUMS` and renamed assets all raise rather than emitting a page
 with no buttons.
 
-- [ ] Add a note to [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
-      so `release.yml` picks this up rather than rediscovering it
+- [x] Noted in [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) under
+      **C3**, with the constraint that plan does not yet know: `release.yml` builds a
+      *draft*, and `release_data.py` rejects drafts and prereleases by design, so the
+      refresh cannot live in that job. It needs an `on: release: published` trigger beside
+      it — one that may write to `main`.
 
 ---
 
@@ -608,11 +626,41 @@ applications — reviewable in PRs and versioned with the code.
       no content collection emits only `404.html` and still exits 0 (§2). Thresholds are 7
       and 20 against actual counts of 7 and 24 — enough headroom for ordinary growth, tight
       enough that the empty-site failure (1 page) trips it.
+      - **Fixed 2026-08-05, before any app was created: the assertion could not have
+        worked.** Both phases ran `cd ../.. && pnpm …`, and Amplify executes a phase's
+        commands in one shell — so the `cd` was still in effect for the `test` that
+        followed, which counted `*.html` under the repo root, found none, and would have
+        failed every build of a perfectly good site. `pnpm --dir ../../site` takes the path
+        instead, so nothing changes cwd and `dist` means the same thing in the assertion as
+        in `baseDirectory`. Verified by running each app's exact command sequence from its
+        own `appRoot`: 7 and 24 pages, both assertions pass.
+- [x] **The one-file/two-apps shape is a documented feature, checked 2026-08-05** against
+      [AWS's monorepo build settings](https://docs.aws.amazon.com/amplify/latest/userguide/monorepo-configuration.html)
+      rather than assumed. Confirmed there: `appRoot` "must exist, and have the same value
+      as the `AMPLIFY_MONOREPO_APP_ROOT` environment variable", and **a repo `amplify.yml`
+      overrides build settings saved in the console** — which is what makes the committed
+      file authoritative rather than advisory. Still *two apps*: one file is the shared
+      definition, not a single deployment.
 - [ ] **Create the two apps.** Console work, deliberately not started — the operator is
       reviewing locally first. Each needs `AMPLIFY_MONOREPO_APP_ROOT` set to match its
       `appRoot` (`site/org`, `site/dev`); AWS requires them to agree.
-- [ ] Confirm the build image provides pnpm, or that `corepack enable` works there. The
-      spec calls `corepack enable` in `preBuild` on the assumption it does.
+- [x] **The build image does not provide pnpm** — AWS states it outright, so the "do not
+      assume" item is answered rather than deferred. `corepack enable` stays (it activates
+      the exact `packageManager` pin, where AWS's `npm install -g pnpm` would float), with
+      an `|| npm install -g pnpm@10` fallback for an image whose Node ships no corepack,
+      and a `pnpm --version` line so a missing pnpm fails there with an obvious message
+      instead of three commands later.
+- [x] **pnpm-workspace apps must link `hoisted`** on Amplify. Set via `npm_config_*` in
+      each application's `env:` block, **not** an `.npmrc`: an `.npmrc` would also apply on
+      a developer machine, where pnpm's symlinked layout is worth keeping — it is what
+      catches an undeclared dependency before a build does. Verified both sites build
+      under hoisted linking in an isolated copy (7 and 24 pages) before committing to it.
+      - Same edit fixes a **cache entry that was quietly a no-op**: pnpm's store defaults
+        to a home directory, so caching `site/.pnpm-store` cached nothing.
+        `npm_config_store_dir` puts the store where the cache path already pointed —
+        relative to `--dir`, verified, not assumed. Hoisted linking is also what makes the
+        `node_modules` cache safe at all; restoring pnpm's symlink farm relinks into a
+        store that may not be there.
 - [ ] Point domains; configure apex/www redirects and cross-domain nav.
 
 ---
@@ -640,18 +688,25 @@ applications — reviewable in PRs and versioned with the code.
 
 ## 9. Acceptance gates
 
-- [ ] `just check` green (includes `test_plan_headers.py` — the gate v1 of this plan failed)
-- [ ] Both production builds succeed from a clean checkout with `--frozen-lockfile`
-- [ ] **Assert a minimum page count, not just exit 0.** A Starlight build with no content
+- [x] `just check` green (includes `test_plan_headers.py` — the gate v1 of this plan
+      failed). 2026-08-05: **1666 passed / 5 skipped**, clippy clean, and `astro check` 0
+      errors on both sites — the site half now runs inside `just check` (§2).
+- [x] Both production builds succeed with `--frozen-lockfile`
+- [x] **Assert a minimum page count, not just exit 0.** A Starlight build with no content
       collection emits only `404.html` and exits 0 (§2) — an exit code alone would deploy
-      an empty site.
-- [ ] Generated-data drift check green
+      an empty site. Asserted in `amplify.yml`, and the assertion itself was verified by
+      running it (§7) rather than by reading it.
+- [x] Generated-data drift check green — `test_site_data.py` / `test_release_data.py` run
+      inside `just check` via `check-py → test-py`
 - [x] **Internal link + anchor check** — `just site-links`
       (`scripts/check_site_links.py`). Verified by injection: a broken href fails the gate
       and names the linking file. Deliberately offline; external URLs are not fetched,
       because a gate that depends on someone else's uptime trains people to ignore it.
 - [ ] External link check (manual pass before cutover)
-- [ ] Every download URL in `release.json` returns 200
+- [x] **Every URL in `release.json` returns 200** — re-checked 2026-08-05 against the live
+      v1.1.0 release: four assets, `SHA256SUMS`, the tag page, and the Releases fallback.
+      Re-run this after every `just release-data`; it is the check that catches the missed
+      manual refresh §6 warns about, and it cannot live in the unit suite (§6).
 - [ ] Responsive + a11y smoke pass (contrast, keyboard nav, reduced motion)
 - [ ] PR-preview deploys verified on both apps before DNS cutover
 - [ ] **Operator sign-off on both sites in full** — the launch gate (§11 step 10)
@@ -707,7 +762,8 @@ into the type system.
 - [x] Added via `@fontsource-variable/dm-sans` + `@fontsource-variable/jetbrains-mono`
       (`site/shared/fonts.css`). **Verified self-hosted**: 7 `.woff2` in the build output
       and **zero** references to `fonts.googleapis`/`fonts.gstatic` in either site.
-- [ ] Add two OFL entries to [PROVENANCE.md](../PROVENANCE.md)
+- [x] Two OFL entries added to [PROVENANCE.md](../PROVENANCE.md), recording that the
+      `.woff2` files are not tracked — they arrive via `pnpm install` from the lockfile
 
 ### Bracket motif — structural
 
@@ -720,11 +776,22 @@ into the type system.
 
 ### Logo assets
 
-- [ ] **Fix `media/logo.png`.** Its letterforms are white, so on a light background it
-      renders as a floating `[AI]`. It currently serves as *both* logo and favicon, so the
-      favicon is invisible in a light browser tab today.
-- [ ] Use the SVG (it self-adapts via `prefers-color-scheme`); generate real favicons from
-      the square `[AI]` mark.
+**The premise here was already out of date, and the fix went the other way.**
+`media/logo.png` does have white letterforms — unusable on light — but it is *not* the
+favicon: `media/knaif.ico` was generated from the square `[AI]` mark by `just gen-icon`
+when the Windows installer landed, and both sites ship that. So there was no invisible
+tab icon to fix.
+
+- [x] **Neither site uses `logo.png`.** The wordmark is inline
+      (`site/shared/Wordmark.astro`, `currentColor`) — and note that the *SVG* could not be
+      used either, for the opposite reason: its own `prefers-color-scheme` block answers to
+      the OS and cannot see our `data-theme` (§4). Self-adapting was the problem, not the
+      solution.
+- [x] **Favicon is the square `[AI]` mark** on both sites, coral on transparent, legible in
+      a light and a dark tab.
+- [x] `logo.png` is recorded in [PROVENANCE.md](../PROVENANCE.md) as a **dark-background
+      asset**, which is what it is. Repainting a source asset nothing renders would be
+      churn; labelling it stops the next person reaching for it.
 
 ---
 
@@ -767,18 +834,21 @@ Brand direction is settled — see §10.
 
 ## 11. Sequence
 
-1. **Prerequisites** (§2) — Node/pnpm, `.gitignore`, `just site-*`. Nothing else can start
-2. **New metadata**: `display:` blocks + `contracts/release/platforms.yaml` (§3)
-3. **Extractor** + `just site-data` + drift guard (§3)
-4. **Design system** (§10) as shared tokens + `@fontsource` fonts, then the Astro and
+1. [x] **Prerequisites** (§2) — Node/pnpm, `.gitignore`, `just site-*`. Nothing else can start
+2. [x] **New metadata**: `display:` blocks + `contracts/release/platforms.yaml` (§3)
+3. [x] **Extractor** + `just site-data` + drift guard (§3)
+4. [x] **Design system** (§10) as shared tokens + `@fontsource` fonts, then the Astro and
    Starlight scaffolds consuming them
-5. `.org` pages: `/`, `/download`, `/skills`, `/vs`, `/about` (§4)
-6. `.dev` tracks, in order: E (quickstart) → A → B → C → D (§5)
-7. `release.json` + `just release-data` + RELEASE.md step (§6)
-8. Asciinema cast recorded and embedded (§10)
-9. Amplify apps + committed `amplify.yml`, migration fallout (§7, §8)
-10. **Operator review of both sites in full** on PR previews
-11. DNS cutover
+5. [x] `.org` pages: `/`, `/download`, `/skills`, `/vs`, `/about` (§4)
+6. [x] `.dev` tracks, in order: E (quickstart) → A → B → C → D (§5)
+7. [x] `release.json` + `just release-data` + RELEASE.md step (§6)
+8. [x] Terminal capture recorded and embedded (§10a — a real transcript, not asciinema)
+9. [x] Committed `amplify.yml` + migration fallout (§7, §8). **The two Amplify apps
+   themselves are console work and are not created yet** — deliberately, so the operator
+   reviews locally first
+10. [ ] **Operator review of both sites in full** — locally now (`just site-dev org` /
+    `just site-dev dev`), then on PR previews once the apps exist
+11. [ ] DNS cutover
 
 **Launch is one event, gated on operator review** (decided 2026-08-05). Every page in §4
 and every track in §5 is written and reviewed before either domain goes live — no

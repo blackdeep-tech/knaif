@@ -84,6 +84,10 @@ site/knaif-site.zip
 node_modules/
 .astro/
 site/*/dist/
+# amplify.yml points pnpm's store here (npm_config_store_dir) so the build cache can cover
+# it. That is Amplify-only, but anyone reproducing a build locally materializes a
+# multi-hundred-MB store in the working tree, and it is not ignored by anything above.
+site/.pnpm-store/
 
 # Private / non-public working documents
 docs/programs/
