@@ -159,6 +159,11 @@ recommended_model: qwen3-4b  # name in models.yaml (see "Runtime models" below)
 
 status: active   # or `stale` — optional, defaults to `active` (see "Skill status")
 
+display:                          # end-user catalog copy (see "Display metadata")
+  title: My Skill
+  tagline: "What it does, in one sentence a non-developer understands."
+  category: media
+
 data:
   train: data/train.jsonl
   safety_test: data/safety_test.jsonl
@@ -181,6 +186,59 @@ validated — see [TRAINING_DATA_GENERATION.md](TRAINING_DATA_GENERATION.md).
 `arg_value_sets` gives the validator skill-specific allowed values.
 
 `safety.unsafe_phrases` is a list of strings used by mock inference to force a `reject` response when any phrase appears in the user's utterance. It is currently used for known argument names such as `file_type` and can be extended as validator support grows.
+
+### Display metadata
+
+`display:` is **end-user catalog copy**, read only by the website generator
+(`scripts/site_data.py`) to build the skill cards on knaif.org. Neither runtime reads it,
+so it can never affect behavior.
+
+| Key | Purpose |
+|---|---|
+| `title` | Human name as shown on a card — `FFmpeg`, not `ffmpeg` |
+| `tagline` | One sentence a non-developer understands |
+| `category` | Groups the skill in the catalog filter (`media`, `documents`, …) |
+| `stage` | Optional override of the derived catalog stage — see below |
+
+It exists because `description:` is written for a *different reader*. That field is
+model- and developer-facing — it feeds retrieval and the authoring docs — so reusing it on
+a landing page produces flat copy, and deriving a title from `name` produces "Ffmpeg".
+
+**A skill without `display:` fails the site build rather than rendering a degraded card.**
+A broken or missing entry in a public catalog is a worse failure than a failed build, and
+a silent fallback is exactly how a new skill would ship with placeholder copy nobody
+noticed. `display:` is optional to the *runtime* and required to *publish*.
+
+#### Catalog stage
+
+How finished a skill looks on knaif.org. **Derived by default**, because `status:` defaults
+to `active` — so without a derived stage, a half-finished skill dropped into `skills/`
+would advertise itself as production-ready and nobody would have had to make a wrong
+decision for that to happen.
+
+| Stage | Catalog | Derived when |
+|---|---|---|
+| `stable` | Full card | `data/eval_snapshot.json` exists |
+| `preview` | Shown, badged *in development* | No snapshot yet |
+| `hidden` | Not published | Only by explicit `stage: hidden` |
+
+The evidence is the **locked acceptance bar** — the same thing that makes a skill "done"
+everywhere else in this repo (see [EVAL_FRAMEWORK.md](EVAL_FRAMEWORK.md)). Advertising a
+skill and locking its snapshot are therefore the same act, and neither can be forgotten
+independently of the other.
+
+`display.stage:` overrides the derivation when it is wrong:
+
+```yaml
+display:
+  title: Archives
+  tagline: "Zip and unzip without remembering the flags."
+  category: files
+  stage: hidden        # not ready to show at all
+```
+
+A `status: stale` skill is **never** published, and `stage:` cannot override that — the
+website must not resurface what the runtime hides from `list_skills()`.
 
 `skill_class` names the `Skill` subclass and is resolved **module-relative** to the skill directory: `skill_class: handlers.MySkill` means class `MySkill` in the skill's `handlers.py`. The part before the dot selects the file (`handlers` → `handlers.py`); a bare `MySkill` (no dot) defaults to `handlers`. The loader fails fast if any class in `MySkill.tools` is not a `Step`/`Intent`, has no matching `tools.yaml` entry, or collides on `name`.
 

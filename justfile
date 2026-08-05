@@ -575,6 +575,48 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 parity skill *args:
     uv run python "{{justfile_directory()}}/scripts/parity_check.py" --skill {{skill}} --native-bin "{{justfile_directory()}}/target/debug/knaif{{EXE}}" --model-path "{{justfile_directory()}}/{{PARITY_MODEL}}" --cwd "{{justfile_directory()}}/sandbox/fixtures/{{skill}}" {{args}}
 
+# ---------------------------------------------------------------------------
+# Websites — knaif.org (site/org) and knaif.dev (site/dev).
+# Plan: docs/plans/2026-08-04-website-split.md
+#
+# pnpm workspaces, NOT npm. `just bootstrap` provisions node + pnpm from mise.toml.
+# These recipes fail until the site/ workspace scaffold lands (plan §11 step 4) —
+# that is expected, and they are deliberately NOT wired into `just check` until then.
+# ---------------------------------------------------------------------------
+
+# Install site dependencies (respects the committed lockfile, like Amplify does)
+site-install:
+    pnpm --dir site install --frozen-lockfile
+
+# Dev server for one site. Usage: just site-dev org   |   just site-dev dev
+site-dev app:
+    pnpm --dir site --filter knaif-{{app}} dev
+
+# Production build of both sites, exactly as Amplify builds them
+site-build:
+    pnpm --dir site install --frozen-lockfile
+    pnpm --dir site --filter knaif-org build
+    pnpm --dir site --filter knaif-dev build
+
+# Type/content check for both sites (astro check) — the site half of `just check`
+site-check:
+    pnpm --dir site --filter knaif-org check
+    pnpm --dir site --filter knaif-dev check
+
+# Regenerate the committed catalog data both sites read (drift-guarded by a test)
+site-data:
+    uv run python "{{justfile_directory()}}/scripts/site_data.py"
+
+# Run AFTER publishing a release (RELEASE.md §5). URLs are never derived from
+# Cargo.toml — the version bump lands before the assets exist, so a derived URL
+# would advertise a download that 404s.
+#
+# Refresh site/data/release.json from the latest PUBLISHED GitHub release
+release-data:
+    uv run python "{{justfile_directory()}}/scripts/release_data.py"
+
+# --- Legacy mkdocs site (removed once the Astro sites land) ---
+
 # Build the website and package it for Amplify manual upload
 # Usage: just web-build
 # Then drag site/knaif-site.zip into the Amplify console.

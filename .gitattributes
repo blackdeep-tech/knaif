@@ -15,6 +15,13 @@
 # `test_backend_payload_manifest.py`.
 installers/licenses/** text eol=lf
 
+# Generated website data. Both files are written with newline="\n" by scripts/site_data.py
+# and scripts/release_data.py, and their drift guards assert the committed copy is LF
+# (test_site_data.py, test_release_data.py). `* text=auto` above hands a Windows checkout
+# CRLF, so without this a fresh clone fails those tests and `just site-data` reports drift
+# against a file nobody edited.
+site/data/*.json text eol=lf
+
 # Windows-native scripts stay CRLF.
 *.ps1 text eol=crlf
 *.bat text eol=crlf

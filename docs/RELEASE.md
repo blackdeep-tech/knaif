@@ -46,6 +46,11 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 | `knaif-<ver>-linux-x86_64.AppImage` | `vulkan` | the same tree as a single file |
 | `SHA256SUMS` | — | one line per published artifact |
 
+The **support matrix** these artifacts imply — supported OSes, the measured runtime
+floors, GPU backends, and the external-tool caveats — is declared once in
+[`contracts/release/platforms.yaml`](../contracts/release/platforms.yaml) and read by the
+website. State a floor there, not in prose here, so the two cannot disagree.
+
 **`cpu` is a build kind, not a release artifact.** It exists for a box with no Vulkan SDK and is
 named `knaif-<ver>-<os>-<arch>-cpu.*` so it cannot overwrite the real one. Do not publish it: it
 offers a user nothing the default lacks, at the cost of making them choose. (Before Option 3 the
@@ -494,7 +499,16 @@ none of them.
    it takes seconds and is the last chance to catch a stale artifact. Confirm that no artifact bakes
    a GitHub org URL.
 6. **Verify** a fresh download installs and runs, independent of the build box.
-7. **Delete** the release branch.
+7. **Refresh the website's download data — `just release-data`**, then commit
+   `site/data/release.json`. The knaif.org download buttons are built from that snapshot
+   and **nothing else updates it**. Skipping this leaves the site advertising the previous
+   release; there is no CI to catch it (see
+   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md) §6, which folds
+   this into `release.yml` when that lands). The URLs are deliberately *not* derived from
+   `Cargo.toml`: step 2 bumps the version before step 5 publishes the assets, so a derived
+   link would 404 in between. `uv run pytest python/core/tests/test_release_data.py`
+   verifies the snapshot's shape offline.
+8. **Delete** the release branch.
 
 ---
 

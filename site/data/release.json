@@ -1,0 +1,36 @@
+{
+  "assets": {
+    "linux-x64": {
+      "appimage": {
+        "name": "knaif-1.1.0-linux-x86_64.AppImage",
+        "size_bytes": 26163704,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/knaif-1.1.0-linux-x86_64.AppImage"
+      },
+      "portable": {
+        "name": "knaif-1.1.0-linux-x64.tar.gz",
+        "size_bytes": 32324945,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/knaif-1.1.0-linux-x64.tar.gz"
+      }
+    },
+    "windows-x64": {
+      "installer": {
+        "name": "knaif-1.1.0-windows-x64-setup.exe",
+        "size_bytes": 12892319,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/knaif-1.1.0-windows-x64-setup.exe"
+      },
+      "portable": {
+        "name": "knaif-1.1.0-windows-x64.zip",
+        "size_bytes": 27856505,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/knaif-1.1.0-windows-x64.zip"
+      }
+    }
+  },
+  "checksums_url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/SHA256SUMS",
+  "generated_by": "scripts/release_data.py",
+  "published_at": "2026-08-02T16:31:27Z",
+  "release_page": "https://github.com/blackdeep-tech/knaif/releases/tag/v1.1.0",
+  "releases_page": "https://github.com/blackdeep-tech/knaif/releases",
+  "schema_version": 1,
+  "tag": "v1.1.0",
+  "version": "1.1.0"
+}
