@@ -381,6 +381,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `just check`. What is left is not code:
   - **Operator review of both sites in full** — `just site-dev org` / `just site-dev dev`. This
     is the launch gate; nothing publishes incrementally.
+  - **The a11y gate is closed** (2026-08-06) — `just site-a11y` drives Chromium over 32 pages
+    in both themes. Keyboard navigation passed as built (1,486 tab stops, no trap, skip link
+    first everywhere); contrast did not, and the seven defects are fixed — the primary
+    download button was 3.11:1 and the whole bracket motif failed AA on every page. Two new
+    tokens, `--on-coral` and `--focus`. See §9a of the plan.
   - **Create the two Amplify apps** (console), each with `AMPLIFY_MONOREPO_APP_ROOT` matching its
     `appRoot`, then verify the PR previews and point the domains.
   - **After cutover only:** repoint the PyPI `Documentation` URL to knaif.dev — doing it early

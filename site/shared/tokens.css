@@ -26,10 +26,35 @@
   /* Coral ships as TWO tokens because one cannot do both jobs. #ff5757 on white is
    * 3.11:1 — under the 4.5:1 WCAG AA needs for body text. It clears 3:1 for large type
    * and UI borders, and reaches 5.06:1 on the dark ink. Use --coral for display, borders
-   * and buttons; --coral-text for links and anything at reading size. */
+   * and buttons; --coral-text for links and anything at reading size.
+   *
+   * "Reading size" is stricter than it sounds, and the browser pass (scripts/
+   * check_site_a11y.py) is what pinned down where the line falls. WCAG's large-text
+   * relaxation to 3:1 starts at 24px, or 18.66px at weight 700 — so a 17.5px bracket and
+   * a 13.4px `$` sigil are both body text as far as the rule is concerned, and both were
+   * rendering in --coral. The measured rule:
+   *
+   *   --coral       fills, borders, and display type at 24px+ ON --ground (3.11:1). It
+   *                 does NOT clear even the 3:1 bar on --surface (2.93) or --subtle
+   *                 (2.73), so a coral glyph on a card is wrong at any size.
+   *   --coral-text  every coral glyph below 24px, the bracket motif included. 4.69:1 on
+   *                 --surface in light, 6.55:1 in dark.
+   */
   --coral: #ff5757;
   --coral-text: #d32f2f;
   --coral-wash: #fff1f1;
+
+  /* The ONLY label colour that clears AA on a --coral fill, and it does so in both
+   * themes because the fill is theme-independent: 5.06:1, against 3.11:1 for white. It is
+   * a fixed value rather than var(--ink) for exactly that reason — dark-theme ink
+   * (#e8eaed) on coral is 2.9:1, so inheriting the themed ink would fail one theme. */
+  --on-coral: #1f232b;
+
+  /* The focus ring is non-text UI and needs 3:1 against everything it can land on.
+   * --coral clears that on --ground and misses on --surface (2.93) and --subtle (2.73) —
+   * i.e. on cards, which is where most focusable things live. Aliased to --coral-text so
+   * it re-resolves per theme with no second set of values to keep in sync. */
+  --focus: var(--coral-text);
 
   /* --- Neutrals ---------------------------------------------------------------
    * Cool, biased toward the logo's ink (#1f232b reads blue) rather than toward the
@@ -180,7 +205,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--coral);
+    outline: 2px solid var(--focus);
     outline-offset: 3px;
     border-radius: 2px;
   }
@@ -190,9 +215,20 @@
     max-width: 100%;
   }
 
-  /* Wide content scrolls inside its own container so the page body never scrolls sideways. */
+  /* Wide content scrolls inside its own container so the page body never scrolls sideways.
+   *
+   * `overflow-x` alone did not deliver that, and /download/ pushed the body to 581px at a
+   * 360px viewport before the browser pass caught it. A scroll container still has to be
+   * TOLD how wide it is: inside `align-items: flex-start` its width resolves to
+   * `fit-content`, and an unwrapping <pre> has a min-content width equal to its longest
+   * line — so fit-content came out at the full 533px and there was nothing left to scroll.
+   * `max-width: 100%` caps it against the containing block; `min-width: 0` is the same
+   * fix for the row-flex case, where the default `min-width: auto` refuses to shrink a
+   * flex item below its content. */
   .scroll-x {
     overflow-x: auto;
+    max-width: 100%;
+    min-width: 0;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -225,9 +261,12 @@
     margin: 0 0 0.9rem;
   }
 
+  /* --coral-text, not --coral: at 1.3em of --step--1 these land around 17.5px, which is
+   * body text by WCAG's reckoning (the 3:1 relaxation starts at 24px). The eyebrows also
+   * appear on --surface, where --coral does not clear even 3:1. */
   .eyebrow::before,
   .eyebrow::after {
-    color: var(--coral);
+    color: var(--coral-text);
     font-size: 1.3em;
     line-height: 1;
   }

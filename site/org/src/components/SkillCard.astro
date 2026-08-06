@@ -86,8 +86,10 @@ const example = actionableExamples(skill, 1)[0];
     overflow-wrap: anywhere;
   }
 
+  /* Cards sit on --surface, where --coral is 2.93:1 — below even the large-text bar, and
+   * this sigil is 13.4px. --coral-text is the reading-size token (tokens.css). */
   .example .prompt {
-    color: var(--coral);
+    color: var(--coral-text);
     user-select: none;
   }
 

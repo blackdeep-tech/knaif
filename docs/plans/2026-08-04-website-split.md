@@ -40,6 +40,11 @@
 > 2. **Create the two Amplify apps** (§7) — console work, then PR previews.
 > 3. **Post-cutover only:** repoint the PyPI `Documentation` URL to knaif.dev (§8), and
 >    verify sitemaps/canonicals against the live domains.
+>
+> **The a11y gate closed 2026-08-06** — `just site-a11y` drives a real browser over both
+> sites in both themes. Keyboard navigation passed as built; contrast did not, and the
+> seven defects it found are fixed, including the primary download button (3.11:1) and the
+> whole bracket motif. Findings, fixes and the injection test: §9a.
 
 **Goal:** Replace the single mkdocs page at `site/` with two Astro sites — knaif.org for
 end users and knaif.dev for developers — sharing one design system and one generated
@@ -726,17 +731,71 @@ applications — reviewable in PRs and versioned with the code.
       v1.1.0 release: four assets, `SHA256SUMS`, the tag page, and the Releases fallback.
       Re-run this after every `just release-data`; it is the check that catches the missed
       manual refresh §6 warns about, and it cannot live in the unit suite (§6).
-- [ ] Responsive + a11y smoke pass (contrast, keyboard nav, reduced motion)
+- [x] Responsive + a11y smoke pass (contrast, keyboard nav, reduced motion)
       - Static half done 2026-08-06 over all 32 built pages, clean: every page has `lang`
         and a viewport meta, exactly one `<h1>`, no empty links, and `prefers-reduced-motion`
         is honoured in `tokens.css` and the terminal replay. Starlight's wordmark is
         correctly `alt=""` with an `sr-only` "knaif" beside it, so replacing the title does
         not cost the site its accessible name; both sites ship a skip link.
-      - **Still needs a browser:** contrast measurement and keyboard-navigation order.
-        Neither is checkable from the HTML, so this item stays open.
+      - **Browser half done 2026-08-06** — `just site-a11y`
+        (`scripts/check_site_a11y.py`), a repeatable gate rather than a one-off audit,
+        because contrast is a property of *computed* colour and tab order a property of the
+        *rendered* document; neither survives being read out of a stylesheet. It serves
+        each `dist/` on loopback and drives Chromium over **32 pages × both themes**:
+        every visible text run against its composited background at the AA threshold for
+        its size, the focus ring as non-text UI, real Tab traversal, 360px overflow, and
+        `prefers-reduced-motion` at runtime. Offline, like `site-links`. Playwright is a
+        `site-a11y` dependency group, not a default install — see §9a for what it found.
 - [ ] PR-preview deploys verified on both apps before DNS cutover
 - [ ] **Operator sign-off on both sites in full** — the launch gate (§11 step 10)
 - [ ] Post-cutover: apex/www redirects, cross-domain nav, documented rollback
+
+### 9a. What the browser pass found (2026-08-06)
+
+**Keyboard navigation was already clean and needed no change.** 1,481 tab stops across
+both sites: skip link first on every page, tab order matching document order everywhere, no
+positive `tabindex`, no trap, nothing visible and unreachable, and every stop visibly
+focused. That is the half of this item that was expected to be work and turned out not to
+be.
+
+**Contrast was not.** Seven distinct defects, all of them invisible to the static pass:
+
+| Found | Measured | Fix |
+|---|---|---|
+| Primary CTA label, white on the coral fill | 3.11:1, needs 4.5 | New `--on-coral: #1f232b` — **5.06:1**, and fixed rather than `var(--ink)` because dark-theme ink on coral is 2.9:1 |
+| Focus ring, `--coral` on `--surface` / `--subtle` | 2.93 / 2.73:1, needs 3.0 | New `--focus`, aliased to `--coral-text` |
+| The whole bracket motif (`.eyebrow::before/::after`) | 3.11:1 at 17.5px, needs 4.5 | `--coral-text` |
+| `[ model ]` brackets in the pipeline diagram | 2.93:1 at 19.5px | `--coral-text` |
+| `$` prompt sigils on skill cards | 2.93:1 at 13.4px | `--coral-text` |
+| Pipeline arrows, `--border` used as a glyph colour | **1.25:1** | `--muted` — they carry direction, so they are content, not a hairline |
+| `.dev` prose links inside Starlight asides | 3.43–4.2:1 | Asides handed back to Starlight's variant-matched accent |
+
+Plus one responsive defect: `/download/` pushed the body to **581px at a 360px viewport**.
+`.scroll-x` had `overflow-x: auto` but no width cap, and inside `align-items: flex-start`
+a scroll container's width resolves to `fit-content` — which for an unwrapping `<pre>` is
+its longest line. `max-width: 100%` is what actually makes it scroll.
+
+Three things worth carrying forward:
+
+- **The rule in §10 was right and was not being followed.** `--coral-text` was documented
+  as "not optional" for reading-size text; the sites used `--coral` for a button label, a
+  focus ring, and every bracket in the motif. Nothing here changes a design decision — it
+  applies the one already made, and `tokens.css` now states where the line falls (24px, or
+  18.66px bold) instead of leaving "reading size" to judgement.
+- **Pseudo-elements are not an edge case on this design system.** The bracket motif is
+  entirely `content: "["` on `::before`/`::after`, so a checker walking text nodes would
+  have declared both sites clean while the brand's central device failed AA on every page.
+- **The checker was verified by breaking the site**, the same way the extractor and the
+  link checker were: eight injected defects — low-contrast text, a coral glyph back on a
+  card, a weakened focus ring, no focus indicator, a positive `tabindex`, a skip link
+  pointing at nothing, an over-wide element, and a script-driven animation ignoring
+  `prefers-reduced-motion` — **8/8 caught**. The last one had to be a Web Animations API
+  animation rather than CSS: `tokens.css` clamps `animation-duration` from inside
+  `@layer knaif.base`, and a *layered* `!important` beats an unlayered one, so the site's
+  own rule defeats injected CSS. Two bugs in the checker surfaced this way, both of the
+  silently-passes-everything kind — `getTiming().duration` returns the string `"auto"` for
+  a CSS animation, and `blur()` clears focus without moving the sequential-navigation
+  starting point, so the traversal began one stop in.
 
 ---
 
@@ -753,8 +812,10 @@ bracket becomes the system's structural device rather than a logo quirk.
 
 | Token | Light | Dark | Notes |
 |---|---|---|---|
-| Coral — display | `#ff5757` | `#ff5757` | Logo, large type, borders, buttons |
-| Coral — text | `#d32f2f` | `#ff7a7a` | Links and small text. **Not optional** — see below |
+| Coral — display | `#ff5757` | `#ff5757` | Logo, borders, button **fills**, display type at 24px+ **on `--ground`** |
+| Coral — text | `#d32f2f` | `#ff7a7a` | Links and every coral glyph below 24px. **Not optional** — see below |
+| On-coral | `#1f232b` | `#1f232b` | The only label colour that clears AA on a coral fill (5.06:1). Fixed, not `--ink` (§9a) |
+| Focus | `#d32f2f` | `#ff7a7a` | The focus ring. `--coral` misses 3:1 on `--surface` and `--subtle` (§9a) |
 | Ink | `#1f232b` | `#e8eaed` | |
 | Ground | `#ffffff` | `#14171c` | |
 | Surface | `#f7f8fa` | `#1b1f26` | |
@@ -766,6 +827,14 @@ bracket becomes the system's structural device rather than a logo quirk.
 and UI borders, and reaches **5.06:1** on the dark ink. Choosing light-first for `.org`
 therefore makes `#d32f2f` (4.98:1) mandatory for links and small text there. `.dev` being
 dark-first lands on the easier side and can use the brand coral directly.
+
+**"Large type" is narrower than it reads, and "on white" is doing work.** The browser pass
+(§9a) measured both edges. WCAG's relaxation to 3:1 begins at **24px**, or 18.66px at
+weight 700 — so a 17.5px bracket and a 19.5px one are both body text by the rule, and both
+were coral. And `#ff5757` clears 3:1 only against `--ground`: on `--surface` it is 2.93 and
+on `--subtle` 2.73, so a coral glyph on a card fails at *any* size. The brand accent is
+unchanged and still fills every button, border and logo — what changed is that glyphs below
+24px take `--coral-text`, which is what this section already said.
 
 **Neutrals are cool, biased toward the ink** (`#1f232b` is measurably blue), not toward the
 coral. Warm-harmonising everything would flatten the accent; the warm/cool tension is what
