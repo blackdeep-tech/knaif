@@ -612,6 +612,20 @@ site-check:
 site-links:
     uv run python "{{justfile_directory()}}/scripts/check_site_links.py"
 
+# Contrast + keyboard-navigation pass over the BUILT sites, in a real browser. Needs
+# `just site-build` first, and a one-time `just site-a11y-install` for Chromium.
+#
+# Out of `just check` on purpose, and for a different reason than site-build: this one
+# drives a ~150 MB browser that a contributor has no other need for. It belongs to the
+# same deploy gate as site-links. Pass --site / --route to narrow it while iterating.
+site-a11y *args:
+    uv run --group site-a11y python "{{justfile_directory()}}/scripts/check_site_a11y.py" {{args}}
+
+# One-time provisioning for `just site-a11y`. Downloads Chromium into playwright's cache,
+# outside the repo.
+site-a11y-install:
+    uv run --group site-a11y playwright install chromium
+
 # Regenerate the committed catalog data both sites read (drift-guarded by a test)
 site-data:
     uv run python "{{justfile_directory()}}/scripts/site_data.py"

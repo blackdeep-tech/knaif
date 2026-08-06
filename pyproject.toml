@@ -36,6 +36,13 @@ documents-ocr = [
     # Needs the `tesseract` binary on PATH as well; see skills/documents/SPEC.md.
     "pytesseract>=0.3.13",
 ]
+# The browser-driven accessibility gate (`just site-a11y`, scripts/check_site_a11y.py).
+# Its own group because it pulls a driver whose `playwright install chromium` fetches a
+# ~150 MB browser — a cost nobody working on the Python runtime should pay, and one that
+# would otherwise land in every contributor's first `uv sync`.
+site-a11y = [
+    "playwright>=1.49",
+]
 
 [tool.black]
 line-length = 100

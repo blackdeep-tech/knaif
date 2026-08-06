@@ -49,7 +49,16 @@
  * CHROME (sidebar, hero buttons, pagination, tabs) is left alone to colour itself from
  * the --sl-color-* mappings above; a blanket `a` rule here would repaint the sidebar
  * coral and put coral text on the coral current-page and primary-button backgrounds.
- * See the layering note in knaif-shared/tokens.css. */
-.sl-markdown-content a:not(:where(.not-content *)) {
+ * See the layering note in knaif-shared/tokens.css.
+ *
+ * Asides are excluded for the same class of reason, found by measuring rather than by
+ * reading (scripts/check_site_a11y.py). Each aside variant paints its own tinted
+ * background — blue for note, orange for caution — and Starlight pairs it with a
+ * variant-matched link colour that contrasts against that tint. Forcing coral through
+ * ignored the pairing: --coral-text measured 3.43:1 on the note tint and 4.2:1 on the
+ * caution tint in light, and 4.0:1 on the caution tint in dark. Handing asides back to
+ * Starlight's own accent is the fix; a single coral that clears 4.5:1 on four different
+ * tints in two themes does not exist. */
+.sl-markdown-content a:not(:where(.not-content *, .starlight-aside__content *)) {
   color: var(--coral-text);
 }

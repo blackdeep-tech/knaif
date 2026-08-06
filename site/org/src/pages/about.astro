@@ -188,8 +188,10 @@ const REPO = "https://github.com/blackdeep-tech/knaif";
     color: var(--muted);
   }
 
+  /* --muted, not --border. The arrows carry the direction of the pipeline, so they are
+   * content, not a hairline: --border as a glyph colour measured 1.25:1 on --surface. */
   .pipe-arrow {
-    color: var(--border);
+    color: var(--muted);
   }
 
   .pipe-model {
@@ -197,8 +199,10 @@ const REPO = "https://github.com/blackdeep-tech/knaif";
     font-weight: 600;
   }
 
+  /* These brackets are the motif doing explanatory work — they fence the one
+   * non-deterministic stage — so they are content and take the reading-size token. */
   .pipe-model .br {
-    color: var(--coral);
+    color: var(--coral-text);
     font-size: 1.45em;
     font-weight: 400;
     vertical-align: -0.12em;
@@ -245,7 +249,7 @@ const REPO = "https://github.com/blackdeep-tech/knaif";
   .btn {
     display: inline-block;
     background: var(--coral);
-    color: #ffffff;
+    color: var(--on-coral);
     font-weight: 600;
     padding: 0.8rem 1.4rem;
     border-radius: var(--radius);
