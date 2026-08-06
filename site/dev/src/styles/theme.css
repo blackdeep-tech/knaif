@@ -42,6 +42,22 @@
   --sl-content-width: 45rem;
 }
 
+/* Sidebar links that leave the site carry the same ↗ marker .org uses on its "Developers"
+ * nav link, so the one entry that is not a page of this site reads as a departure. Starlight
+ * marks external sidebar links in no visible way of its own. It is `::after` content rather
+ * than a character in the label so the arrow stays out of the accessible name — the link is
+ * announced as "knaif.org — downloads", not as "north east arrow".
+ *
+ * `\2197\FE0E` is the arrow followed by VARIATION SELECTOR-15, which asks for text
+ * presentation. Without it the sidebar's font stack falls through to an emoji font and the
+ * marker renders as a blue-and-white glyph — .org's header gets the plain arrow from the
+ * same character, so this is font fallback, not a different intent. */
+#starlight__sidebar a[href^="http"]::after {
+  content: "\2197\FE0E";
+  margin-left: 0.3em;
+  font-size: 0.85em;
+}
+
 /* Starlight renders its own link colours inside prose; keep them on the accessible token
  * rather than the display coral, which is 3.11:1 on white and fails AA at reading size.
  *

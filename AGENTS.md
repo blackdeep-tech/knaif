@@ -43,6 +43,8 @@ byte-identical copy ships inside the wheel. Edit the canonical file, then run
   install per platform, GPU offload checks: `docs/INFERENCE.md`
 - Cutting a release — build/package/verify/publish per OS+kind, CUDA arch range, checksums:
   `docs/RELEASE.md`
+- Website operations — what deploys knaif.org / knaif.dev, the gates to run before merging
+  to `main`, and how to roll a bad deploy back: `docs/SITE.md`
 - Performance scorecard — hardware × runtime × backend × model, and which machine each
   latency number came from: `docs/PERFORMANCE.md` (read before quoting any speed figure)
 - Variable binding and optimizer: `docs/VARIABLE_BINDING.md`

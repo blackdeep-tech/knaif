@@ -44,6 +44,12 @@ export default defineConfig({
       // Starlight >= 0.39 removed `label` alongside `autogenerate`; a group needs an
       // `items` array wrapping the autogenerate config.
       sidebar: [
+        // The route back to the product site. Cross-domain nav was one-way until now:
+        // .org links here from its header, its footer and three pages, while .dev linked
+        // back only from inside prose — so a reader who arrived on a search result had no
+        // way to reach the download except by editing the URL. Text rather than a `social`
+        // icon, because this is a destination, not a badge; Starlight marks it external.
+        { label: "knaif.org — downloads", link: "https://knaif.org/" },
         { label: "Start here", items: [{ autogenerate: { directory: "start" } }] },
         { label: "The knaif SDK", items: [{ autogenerate: { directory: "sdk" } }] },
         { label: "Author a skill", items: [{ autogenerate: { directory: "author" } }] },
