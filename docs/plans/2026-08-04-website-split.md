@@ -320,6 +320,7 @@ End users. The model is ollama.com: the download is the point.
 | Page | Contents |
 |---|---|
 | `/` | Hero + OS-detected download CTA; what it is in three lines; terminal demo; how it works in 3 steps; skills teaser grid; why-local; footer |
+| `404` | Not-found page (added 2026-08-06). `.dev` had one from Starlight; `.org` had none, so a mistyped URL fell through to Amplify's unbranded default — no header, no nav, no route back |
 | `/download` | All platforms from `release.json`, link to the release's `SHA256SUMS`, per-OS install steps, system requirements, Vulkan/CUDA note, SmartScreen warning |
 | `/skills` | **The catalog.** Grid with filter/search, from `site-data.json`. Cards carry a **preview badge** when `stage: preview` (§3) |
 | `/skills/<name>` | Per skill: what it does, example utterances, required external tools. A preview skill says so above the fold, not in a footnote |
@@ -776,11 +777,16 @@ applications — reviewable in PRs and versioned with the code.
 - [x] Post-cutover: apex/www redirects, cross-domain nav, documented rollback — redirects
       verified (and one is wrong, below), cross-domain nav closed in §7, rollback written up
       in **[docs/SITE.md](../SITE.md)** rather than here, since it outlives this plan
-- [ ] **`www.knaif.dev` serves instead of redirecting** — console work, found 2026-08-06.
-      `www.knaif.org` answers 301 to the apex on every path; `www.knaif.dev` answers 200 and
-      serves the site, with canonicals pointing at the apex it did not redirect to. Fix in
-      Amplify's domain management for the `.dev` app, then re-check with the curl in
-      [docs/SITE.md §4](../SITE.md).
+- [x] **`www.knaif.dev` served instead of redirecting** — found and fixed 2026-08-06. The
+      `.dev` app carried `.org`'s rule verbatim (`https://www.knaif.org` → `https://knaif.org`),
+      so nothing on it ever matched `www.knaif.dev`, and both apps showed an
+      identical-looking rule list. Corrected on the app; CloudFront propagation lags the API.
+      Re-check with the curl in [docs/SITE.md §4](../SITE.md).
+- [ ] **Catch-all custom rule still points at `index.html` on both apps** — console work.
+      `/<*>` → `/index.html` (`404-200`) is Amplify's single-page-app default and neither
+      site is an SPA: a mistyped URL serves the **home page**, so the visitor sees the front
+      page with nothing saying the address was wrong. Both sites now ship a 404 page, so the
+      rule should be `/<*>` → `/404.html`, status `404`. See [docs/SITE.md §5](../SITE.md).
 
 ### 9a. What the browser pass found (2026-08-06)
 
