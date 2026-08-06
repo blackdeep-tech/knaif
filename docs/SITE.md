@@ -92,3 +92,46 @@ curl -s https://knaif.dev/sdk/ | grep -o '<link rel="canonical"[^>]*>'
 `www` returning **200 rather than 301** means that subdomain is serving the site instead of
 redirecting to the apex — duplicate content under a hostname none of the canonicals name.
 It is console state, so no repository change fixes it.
+
+## 5. Custom rules — console state that no build can set
+
+Amplify's redirect/rewrite rules live on the **app**, not in `amplify.yml`. Nothing in this
+repository can set or verify them, which is exactly why they are worth reading back:
+
+```bash
+aws amplify get-app --region eu-central-1 --app-id <id> --query 'app.customRules'
+aws amplify list-apps --region eu-central-1 --query 'apps[].{name:name,id:appId}' --output table
+```
+
+Two rules matter, and both have been wrong at least once.
+
+**The `www` redirect names a domain.** It is per-app, so copying an app's rules to its
+sibling carries the wrong hostname across and the rule silently matches nothing. That is how
+`www.knaif.dev` ended up serving the site while `www.knaif.org` redirected, with both apps
+showing an identical-looking rule list. Each app's rule must name its own domain:
+
+```
+source: https://www.knaif.dev   target: https://knaif.dev   status: 301
+```
+
+**The catch-all must point at `404.html`, not `index.html`.** Amplify's default is the
+single-page-app pattern:
+
+```
+source: /<*>   target: /index.html   status: 404-200
+```
+
+Neither site is an SPA. Under that rule a mistyped URL serves the **home page** — the
+visitor sees the front page with nothing indicating the address was wrong, and `.dev`'s
+generated `404.html` is never reached. Both sites ship a 404 page, so the rule should be:
+
+```
+source: /<*>   target: /404.html   status: 404
+```
+
+Check it the way a visitor would, looking at the body and not only the status:
+
+```bash
+curl -s -o /tmp/b.html -w '%{http_code}\n' https://knaif.org/no-such-page/
+grep -o '<title>[^<]*</title>' /tmp/b.html    # want the 404 title, not the home page's
+```

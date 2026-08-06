@@ -386,9 +386,12 @@ This **Open / Next** section is the live backlog (originally distilled from the
     first everywhere); contrast did not, and the seven defects are fixed — the primary
     download button was 3.11:1 and the whole bracket motif failed AA on every page. Two new
     tokens, `--on-coral` and `--focus`. See §9a of the plan.
-  - **`www.knaif.dev` serves instead of redirecting** (found 2026-08-06) — `www.knaif.org`
-    answers 301 to the apex, `www.knaif.dev` answers 200 and serves the site, with canonicals
-    naming the apex it did not redirect to. Amplify domain state; no repository change fixes it.
+  - **Catch-all custom rule points at `index.html` on both apps** — Amplify's SPA default
+    (`/<*>` → `/index.html`, `404-200`), so a mistyped URL serves the home page and the visitor
+    sees no sign anything was wrong. Both sites now ship a 404 page; the rule should be `/<*>`
+    → `/404.html`, status `404`. Console state, no repository change fixes it — see
+    [SITE.md §5](SITE.md). The sibling defect, `www.knaif.dev` carrying `.org`'s redirect rule
+    verbatim, was found the same way and is fixed.
   - **Done 2026-08-06:** both Amplify apps created, domains pointed and cut over, the PyPI
     `Documentation` URL repointed to knaif.dev, cross-domain nav closed, and site operations
     — deploy model, pre-merge gates, rollback — written up in [SITE.md](SITE.md).
