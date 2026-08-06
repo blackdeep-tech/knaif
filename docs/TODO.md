@@ -386,11 +386,15 @@ This **Open / Next** section is the live backlog (originally distilled from the
     first everywhere); contrast did not, and the seven defects are fixed — the primary
     download button was 3.11:1 and the whole bracket motif failed AA on every page. Two new
     tokens, `--on-coral` and `--focus`. See §9a of the plan.
-  - **Create the two Amplify apps** (console), each with `AMPLIFY_MONOREPO_APP_ROOT` matching its
-    `appRoot`, then verify the PR previews and point the domains.
-  - **After cutover only:** repoint the PyPI `Documentation` URL to knaif.dev — doing it early
-    ships a dead link in package metadata that needs a version bump to fix — and verify
-    sitemaps/canonicals against the live domains.
+  - **Catch-all custom rule points at `index.html` on both apps** — Amplify's SPA default
+    (`/<*>` → `/index.html`, `404-200`), so a mistyped URL serves the home page and the visitor
+    sees no sign anything was wrong. Both sites now ship a 404 page; the rule should be `/<*>`
+    → `/404.html`, status `404`. Console state, no repository change fixes it — see
+    [SITE.md §5](SITE.md). The sibling defect, `www.knaif.dev` carrying `.org`'s redirect rule
+    verbatim, was found the same way and is fixed.
+  - **Done 2026-08-06:** both Amplify apps created, domains pointed and cut over, the PyPI
+    `Documentation` URL repointed to knaif.dev, cross-domain nav closed, and site operations
+    — deploy model, pre-merge gates, rollback — written up in [SITE.md](SITE.md).
 
   Two constraints worth carrying out of the plan because they bite elsewhere: download URLs come
   from a **published-release** snapshot, never from `Cargo.toml` (RELEASE.md bumps the version

@@ -34,12 +34,17 @@
 > operator review itself; the checkboxes below were reconciled against the built sites at
 > the same time, since several had shipped without being ticked.
 >
-> **Everything remaining needs someone other than the build:**
-> 1. **Operator review** of both sites locally — `just site-dev org` / `just site-dev dev`.
->    This is the launch gate (§11 step 10).
-> 2. **Create the two Amplify apps** (§7) — console work, then PR previews.
-> 3. **Post-cutover only:** repoint the PyPI `Documentation` URL to knaif.dev (§8), and
->    verify sitemaps/canonicals against the live domains.
+> **Post-cutover pass done 2026-08-06.** The PyPI `Documentation` URL now points at
+> knaif.dev, `.dev` links back to `.org` from its sidebar, and site operations — deploy
+> model, pre-merge gates, rollback — are written up in **[docs/SITE.md](../SITE.md)**,
+> which outlives this plan. Three boxes were reconciled rather than worked: two had been
+> answered elsewhere and left unticked, and "PR previews before cutover" cannot be
+> satisfied because the cutover ran first.
+>
+> **Two things are genuinely left**, and both are yours:
+> 1. **Operator sign-off on both sites in full** — the launch gate (§11 step 10).
+> 2. **`www.knaif.dev` serves rather than redirecting** (§9) — Amplify domain state, no
+>    repository change fixes it. `.org` is correct; `.dev` is not.
 >
 > **The a11y gate closed 2026-08-06** — `just site-a11y` drives a real browser over both
 > sites in both themes. Keyboard navigation passed as built; contrast did not, and the
@@ -106,8 +111,11 @@ None of these existed and all of them blocked the first `pnpm install`. **Done
 - [x] **Added `just site-install` / `site-dev` / `site-build` / `site-check`**, plus
       `site-data` and `release-data` for §3 and §6. They fail until the workspace scaffold
       lands (§11 step 4) and are **deliberately not wired into `just check`** until then.
-- [ ] Confirm Amplify's build image provides pnpm, or enable it via `corepack` in
-      `preBuild`. Do not assume.
+- [x] Confirm Amplify's build image provides pnpm, or enable it via `corepack` in
+      `preBuild`. Do not assume. — **answered in §7** (2026-08-06): AWS states outright that
+      it does not, so `corepack enable` ships in `amplify.yml` with an
+      `|| npm install -g pnpm@10` fallback. This box was left unticked after the answer
+      landed elsewhere.
 - [x] **`site-check` wired into `just check`** (2026-08-05) — `check: check-py check-native
       site-check`. It installs with `--frozen-lockfile` first, because `astro check` against a
       missing `node_modules` reports a package-resolution error that reads as a broken site
@@ -312,6 +320,7 @@ End users. The model is ollama.com: the download is the point.
 | Page | Contents |
 |---|---|
 | `/` | Hero + OS-detected download CTA; what it is in three lines; terminal demo; how it works in 3 steps; skills teaser grid; why-local; footer |
+| `404` | Not-found page (added 2026-08-06). `.dev` had one from Starlight; `.org` had none, so a mistyped URL fell through to Amplify's unbranded default — no header, no nav, no route back |
 | `/download` | All platforms from `release.json`, link to the release's `SHA256SUMS`, per-OS install steps, system requirements, Vulkan/CUDA note, SmartScreen warning |
 | `/skills` | **The catalog.** Grid with filter/search, from `site-data.json`. Cards carry a **preview badge** when `stage: preview` (§3) |
 | `/skills/<name>` | Per skill: what it does, example utterances, required external tools. A preview skill says so above the fold, not in a footnote |
@@ -667,7 +676,17 @@ applications — reviewable in PRs and versioned with the code.
         relative to `--dir`, verified, not assumed. Hoisted linking is also what makes the
         `node_modules` cache safe at all; restoring pnpm's symlink farm relinks into a
         store that may not be there.
-- [ ] Point domains; configure apex/www redirects and cross-domain nav.
+- [x] Point domains; configure apex/www redirects and cross-domain nav. — domains pointed
+      at cutover (§11 step 11) and **cross-domain nav closed 2026-08-06**: `.dev`'s sidebar
+      now leads with a link back to `knaif.org`, marked as leaving the site. It was one-way
+      until then — `.org` linked to `.dev` from its header, footer and three pages, while
+      `.dev` linked back only from inside prose, so a reader who arrived on a search result
+      had no route to the download.
+      - **`www.knaif.dev` does not redirect, and should.** Verified live 2026-08-06:
+        `www.knaif.org` answers **301** to the apex on every path, `www.knaif.dev` answers
+        **200** and serves the site, with canonicals naming the apex it did not redirect to.
+        Duplicate content under a hostname none of the canonicals name. Amplify domain
+        state, not a repository change — see the open item in §9.
       - **The apex is canonical (decided 2026-08-06).** `knaif.org` and `knaif.dev` are the
         real addresses; `www.` is a permanent (301) redirect to the apex, never the reverse.
         This is what both sites already emit — `site:` in each `astro.config.mjs` is the
@@ -692,10 +711,12 @@ applications — reviewable in PRs and versioned with the code.
       tracked* (they arrive via `pnpm install` from the committed lockfile), and that
       `logo.png` is a dark-background asset.
 - [x] Added to [plans/README.md](README.md) and TODO.md *Open / Next*.
-- [ ] **PyPI `Documentation` URL — deliberately NOT changed yet.** It points at
-      `docs/SDK.md` on GitHub. Repointing it to `https://knaif.dev/sdk/` before DNS
-      resolves would ship a dead link in the next release's package metadata, which cannot
-      be corrected without a version bump. **Do this after cutover, not before.**
+- [x] **PyPI `Documentation` URL — repointed 2026-08-06**, after cutover, to
+      `https://knaif.dev/sdk/` (verified 200 live first). Doing it earlier would have
+      shipped a dead link in package metadata that no edit can correct without a version
+      bump. `Homepage` deliberately stays on GitHub: the wheel ships the SDK — skill bundles
+      are excluded — so knaif.org, which sells the native binary, is not what
+      `pip install knaif` gives you.
 - [x] Sitemaps/canonicals verified against the live domains 2026-08-06. Canonicals were
       already apex on all four hostnames.
       - **"Both sites emit them" was wrong.** Starlight bundles `@astrojs/sitemap`, so
@@ -746,9 +767,26 @@ applications — reviewable in PRs and versioned with the code.
         its size, the focus ring as non-text UI, real Tab traversal, 360px overflow, and
         `prefers-reduced-motion` at runtime. Offline, like `site-links`. Playwright is a
         `site-a11y` dependency group, not a default install — see §9a for what it found.
-- [ ] PR-preview deploys verified on both apps before DNS cutover
+- [x] ~~PR-preview deploys verified on both apps before DNS cutover~~ — **cannot be
+      satisfied as written**: the cutover ran first (§11 step 11), so "before" has passed.
+      Not silently ticked, because the guarantee it was there to give — see both sites at a
+      URL before the public does — was never obtained. It is superseded by building the
+      feature branch: plan work now assembles on `site/redesign` and is reviewed there
+      before `main`, which is the same guarantee by a different mechanism.
 - [ ] **Operator sign-off on both sites in full** — the launch gate (§11 step 10)
-- [ ] Post-cutover: apex/www redirects, cross-domain nav, documented rollback
+- [x] Post-cutover: apex/www redirects, cross-domain nav, documented rollback — redirects
+      verified (and one is wrong, below), cross-domain nav closed in §7, rollback written up
+      in **[docs/SITE.md](../SITE.md)** rather than here, since it outlives this plan
+- [x] **`www.knaif.dev` served instead of redirecting** — found and fixed 2026-08-06. The
+      `.dev` app carried `.org`'s rule verbatim (`https://www.knaif.org` → `https://knaif.org`),
+      so nothing on it ever matched `www.knaif.dev`, and both apps showed an
+      identical-looking rule list. Corrected on the app; CloudFront propagation lags the API.
+      Re-check with the curl in [docs/SITE.md §4](../SITE.md).
+- [ ] **Catch-all custom rule still points at `index.html` on both apps** — console work.
+      `/<*>` → `/index.html` (`404-200`) is Amplify's single-page-app default and neither
+      site is an SPA: a mistyped URL serves the **home page**, so the visitor sees the front
+      page with nothing saying the address was wrong. Both sites now ship a 404 page, so the
+      rule should be `/<*>` → `/404.html`, status `404`. See [docs/SITE.md §5](../SITE.md).
 
 ### 9a. What the browser pass found (2026-08-06)
 

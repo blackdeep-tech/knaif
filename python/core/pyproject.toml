@@ -44,14 +44,19 @@ dependencies = [
     "click>=8.0",
 ]
 
-# `/blob/HEAD/` resolves to whatever the published repo's default branch turns out to be.
-# Pinning `main` would be a guess — this repo's default is `dev`, and X5 of the OSS-prep
-# plan still has "default branch" as an open setting. These URLs are frozen into the
-# published artifact, so a wrong branch here could not be corrected without a version bump.
+# `/blob/HEAD/` resolves to whatever the published repo's default branch turns out to be,
+# rather than pinning a branch name that a later rename would break. These URLs are frozen
+# into the published artifact, so a wrong one cannot be corrected without a version bump —
+# which is why Documentation waited for DNS rather than being repointed on faith.
+#
+# Documentation points at knaif.dev, not knaif.org: the wheel ships the SDK (skill bundles
+# are excluded), so what a `pip install knaif` user can actually run is the developer
+# surface. Homepage stays on GitHub for the same reason — knaif.org sells the native binary,
+# which is not what this package installs.
 [project.urls]
 Homepage = "https://github.com/blackdeep-tech/knaif"
 Repository = "https://github.com/blackdeep-tech/knaif"
-Documentation = "https://github.com/blackdeep-tech/knaif/blob/HEAD/docs/SDK.md"
+Documentation = "https://knaif.dev/sdk/"
 Changelog = "https://github.com/blackdeep-tech/knaif/blob/HEAD/CHANGELOG.md"
 Issues = "https://github.com/blackdeep-tech/knaif/issues"
 
