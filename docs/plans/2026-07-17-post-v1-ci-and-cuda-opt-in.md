@@ -446,7 +446,7 @@ into `~/.knaif/backends`.
   Writing it also hardened the script — a malformed bundle originally took the whole
   enumeration down with a traceback, which would have buried the finding behind a stack
   instead of naming the skill.
-- [ ] **C3 — `release.yml`** _(was F5)_: build → package → verify → attach the **Linux** artifacts to
+- [x] **C3 — `release.yml`** _(was F5)_: build → package → verify → attach the **Linux** artifacts to
   a **draft** GH Release. Automates part of the manual cut that v1 did in finalization E2/H3.
   (Add macOS only when macOS packaging lands post-v1.)
   - **REVISED 2026-07-29 (second pass) — it is a packaging *check* that happens to upload, not a
@@ -504,6 +504,33 @@ into `~/.knaif/backends`.
     It belongs on a separate `on: release: published` trigger that runs `just release-data` and
     commits the result — so add it alongside `release.yml`, not inside it, and only once this repo
     has a workflow that may write to `main`.
+
+  **Built 2026-08-07** as `.github/workflows/release.yml`, separate from `ci.yml`.
+
+  - **`pull_request` is path-gated**, which the plan's wording did not settle. "Free" is true
+    of the *finding*, not of the minutes: a container release build is tens of them, and a
+    docs or site change cannot break packaging. It runs on `installers/`, `apps/`, `native/`,
+    `skills/`, `contracts/`, the Cargo files, `rust-toolchain.toml`, and itself.
+  - **`smoke.sh` needed no wiring** — `build-in-container.sh` already runs it against both the
+    tarball and the AppImage from inside the container. That smoke run is the job's real gate;
+    the uploaded artifacts are the evidence.
+  - **`fetch-depth: 0`** is load-bearing. Release mode checks a commit *out of* the mounted
+    repo rather than mounting the worktree, so a shallow clone has nothing to check out.
+  - **The draft step is tag-only and idempotent**: it looks before creating, so a re-run
+    cannot turn an existing draft into a release, and uploads with `--clobber` so a re-run
+    replaces its own assets instead of erroring.
+  - **RELEASE.md now says why Windows is maintainer-built** — the VC++ redistribution grant
+    riding on a licensed VS install, the CUDA toolkit a hosted image lacks, and two
+    verifications no runner can perform. With the note that the Linux path *is* fully
+    available to a fork, which is the part an outside reader needs.
+
+  - [ ] **`site/data/release.json` refresh — deliberately NOT built.** It needs its own
+    `on: release: published` trigger, and it would be **this repo's first workflow that
+    writes to `main`**. That collides with the branch protection in C5, which is about to
+    forbid direct pushes: the bot needs an explicit exemption, or the refresh needs to open a
+    PR instead of pushing. That is a decision, not an implementation detail, so it is left
+    open rather than guessed at. Until it exists, the manual `just release-data` step in
+    RELEASE.md §5 stands and the §9 URL check is what catches a missed refresh.
 - [ ] **C4 — Eval-parity lane** _(was F3's unbuilt half; the decision itself stays in finalization
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`
