@@ -396,6 +396,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
     locally); `mise.toml` pins Python 3.14 and claims the dev env is 3.14.x while the venv is
     **3.10.18**, so CI is the first thing ever to run the suite on 3.14; and `rust-toolchain.toml`
     declares `rustfmt`/`clippy` components that the provisioned toolchain does not carry.
+  - **The `ffprobe` dependency is fixed** (2026-08-07) — an autouse guard in the core conftest
+    refuses `ffmpeg`/`ffprobe`, so the core suite passes with neither installed. The seven were
+    core tests borrowing the real ffmpeg skill to test stem resolution and the NL clarify gate;
+    all preview against a zero-byte `.mp4` that ffprobe rejects regardless, so they already ran
+    on the dummy-probe path. CI keeps the install for the three skill tests that need it
+    (two tesseract, one ffprobe).
+    The other two findings are still open.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single

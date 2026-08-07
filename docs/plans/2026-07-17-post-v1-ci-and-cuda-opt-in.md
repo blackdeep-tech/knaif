@@ -57,6 +57,13 @@
 > - **Seven tests silently required `ffprobe` on PATH**, and a clean runner reported **39 skips
 >   against 5 locally** — the suite tested ~34 fewer things on a machine without the reference
 >   skills' dependencies. The baseline had only ever been measured where they happened to exist.
+>   *Fixed 2026-08-07:* all seven are **core** tests that build the real ffmpeg skill to test stem
+>   resolution and the NL clarify gate, and every one of them previews against a zero-byte `.mp4`
+>   that ffprobe rejects anyway — so the binary only ever changed which exception was raised, and
+>   `InspectMediaStep` re-raises `FFmpegNotAvailable` while stubbing everything else. An autouse
+>   guard in the core conftest refuses `ffmpeg`/`ffprobe` outright. The CI install stays: three
+>   *skill* tests legitimately skip without it (two need tesseract, one needs ffprobe), and those
+>   are declared dependencies where they live.
 > - **`mise.toml` pins Python 3.14 and claims "dev env is 3.14.x"; the dev venv is 3.10.18.** CI
 >   is the first thing ever to run this suite on 3.14, and it failed one test there. Both are
 >   inside `requires-python`, so this is a real gap rather than a CI artifact.
