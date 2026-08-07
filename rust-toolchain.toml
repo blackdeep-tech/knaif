@@ -1,5 +1,16 @@
 # Authoritative Rust pin for the workspace (mise also provisions this version).
 # Bump deliberately; keep in sync with mise.toml's rust entry.
+#
+# `components` below is honored only when RUSTUP installs the toolchain — its default
+# profile carries rustfmt and clippy, which is why a developer box that ran rustup directly
+# never sees a problem. It is NOT honored when mise provisions Rust: mise installs with
+# rustup's *minimal* profile, so the toolchain arrives as rustc + cargo + rust-std and
+# `just check-native` fails on a missing clippy before it lints anything.
+#
+# That is a real path, not a hypothetical: `just bootstrap` is mise, and CI provisions
+# through mise-action. Both add the components explicitly — bootstrap for contributors,
+# and the `native` and `hooks` jobs for CI. Keep this list anyway; it is the declaration of
+# what the workspace needs, and it is correct for anyone installing via rustup.
 [toolchain]
 channel = "1.96.0"
 components = ["rustfmt", "clippy"]

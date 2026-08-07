@@ -562,13 +562,26 @@ into `~/.knaif/backends`.
     verifications no runner can perform. With the note that the Linux path *is* fully
     available to a fork, which is the part an outside reader needs.
 
-  - [ ] **`site/data/release.json` refresh — deliberately NOT built.** It needs its own
-    `on: release: published` trigger, and it would be **this repo's first workflow that
-    writes to `main`**. That collides with the branch protection in C5, which is about to
-    forbid direct pushes: the bot needs an explicit exemption, or the refresh needs to open a
-    PR instead of pushing. That is a decision, not an implementation detail, so it is left
-    open rather than guessed at. Until it exists, the manual `just release-data` step in
-    RELEASE.md §5 stands and the §9 URL check is what catches a missed refresh.
+  - [x] **`site/data/release.json` refresh — DECIDED AND BUILT 2026-08-08** as
+    `.github/workflows/release-data.yml`. The question was whether the bot gets a push
+    exemption or the refresh opens a PR. **Neither, quite** — and the reason is worth keeping,
+    because it is not obvious and it constrains anything else that wants to automate into
+    `main`.
+    - **No bypass actor.** `main-guardrails` has none, for anyone, and adding the GitHub
+      Actions app would hand *every* workflow in the repo — including ones added later —
+      unreviewed write access to `main` to save a click a few times a year.
+    - **The bot cannot open the PR either.** A pull request created with `GITHUB_TOKEN` does
+      not trigger workflows (GitHub blocks that to stop a workflow feeding itself), so it
+      would carry **no `ci` check at all** — and C5 made `ci` a required, strict check. The
+      bot-opened PR would be permanently unmergeable. This is the trap in the obvious design.
+    - **So the workflow pushes a branch** and links the compare page from its run summary;
+      a human presses "Compare & pull request" and CI then runs normally. One click, no
+      credential, no exemption.
+    - The upgrade path, if this ever needs to be hands-off, is a **GitHub App token** whose
+      events *do* trigger workflows — not a ruleset bypass. Recorded so the cheap-looking
+      wrong answer is not rediscovered.
+    - The workflow is separate from `release.yml` on purpose: that one fires on a **tag** and
+      builds a draft, while `release_data.py` refuses drafts by design. Different moments.
 - [ ] **C4 — Eval-parity lane** _(was F3's unbuilt half; the decision itself stays in finalization
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`
@@ -618,12 +631,29 @@ into `~/.knaif/backends`.
   - a **PR-title lint**, since PRs are squash-merged and the title *is* the commit subject on
     `main`. Reuse `scripts/check_commit_msg.py` — it takes a file path, so the job writes the title
     to a temp file and calls it. One implementation, so the hook and CI cannot disagree.
-  - [ ] **Branch protection** on `main`: **require the `ci` check and nothing else** — C1
+  - [x] **Branch protection** on `main`: **require the `ci` check and nothing else** — C1
     settled which. Every other job is path-gated, and a required check that is *skipped*
     blocks a PR forever; `ci` runs on `always()`, treats skipped as success and fails on
     cancelled. Plus squash-merge only, linear history, no direct pushes. Console work, and
     protections do **not** survive an org transfer — which is why this plan runs after
     OSS-prep.
+    **Done 2026-08-08**, as a repository *ruleset* (`main-guardrails`, active, targeting
+    `~DEFAULT_BRANCH` so it follows a rename) rather than the older branch-protection UI:
+
+    | Rule | Setting |
+    |---|---|
+    | Require PR before merging | on — 0 approvals, thread resolution required |
+    | Allowed merge methods | `squash`, `rebase` — merge commit removed |
+    | Require status checks | **`ci` only**, strict (branch must be up to date) |
+    | Require linear history | on |
+    | Restrict deletions / block force pushes | on |
+    | Bypass actors | **none — including the owner** |
+
+    Sequencing held: `main` had no `ci` check until this workstream merged, so the rule was
+    added after. A separate `release-tags` ruleset makes `refs/tags/v*` immutable (no delete,
+    no move), which is what lets a published release stay reproducible. `redist-cuda-13.3` is
+    deliberately *not* covered — noted here because it pins CUDA payload assets that
+    `backend install cuda` fetches, so deleting that tag would break installs.
   - [x] **Known debt this will surface —** four notebooks carry metadata `nbstripout` strips.
     Landed as its own `chore:` commit (#43) *before* the hooks job, exactly as instructed;
     without it the first run on every later PR would have failed on unrelated churn.

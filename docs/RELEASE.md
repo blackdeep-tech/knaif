@@ -527,15 +527,22 @@ none of them.
    it takes seconds and is the last chance to catch a stale artifact. Confirm that no artifact bakes
    a GitHub org URL.
 6. **Verify** a fresh download installs and runs, independent of the build box.
-7. **Refresh the website's download data — `just release-data`**, then commit
-   `site/data/release.json`. The knaif.org download buttons are built from that snapshot
-   and **nothing else updates it**. Skipping this leaves the site advertising the previous
-   release; there is no CI to catch it (see
-   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md) §6, which folds
-   this into `release.yml` when that lands). The URLs are deliberately *not* derived from
-   `Cargo.toml`: step 2 bumps the version before step 5 publishes the assets, so a derived
-   link would 404 in between. `uv run pytest python/core/tests/test_release_data.py`
-   verifies the snapshot's shape offline.
+7. **Refresh the website's download data — now automatic.** Publishing the release fires
+   `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
+   **pushes a branch** if it changed; the run summary links straight to the compare page.
+   Open that PR and merge it. The knaif.org download buttons are built from that snapshot
+   and nothing else updates them, so skipping it leaves the site advertising the previous
+   release.
+   - **You open the PR, not the workflow.** A PR created with `GITHUB_TOKEN` does not
+     trigger workflows, so it would carry no `ci` check — and `main` requires one. Nothing
+     here writes to `main`; the ruleset has no bypass actors.
+   - If the workflow lost a race with the GitHub API, re-run it from the Actions tab
+     (`workflow_dispatch`) rather than republishing. `just release-data` still works locally
+     and is the fallback if Actions is down.
+   - The URLs are deliberately *not* derived from `Cargo.toml`: step 2 bumps the version
+     before step 5 publishes the assets, so a derived link would 404 in between.
+     `uv run pytest python/core/tests/test_release_data.py` verifies the snapshot's shape
+     offline.
 8. **Delete** the release branch.
 
 ---
