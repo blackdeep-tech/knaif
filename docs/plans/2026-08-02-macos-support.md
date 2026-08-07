@@ -585,18 +585,44 @@ below names the specific place.
 Nothing in this workstream is macOS-specific work; it is **running the gates the other two platforms
 already pass, on a third platform, for the first time.**
 
-- [ ] **C1. `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+- [x] **C1. `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
       `cargo test --workspace`** — i.e. `just check-native` + `just test-native`. The llama.cpp
       inference proof is gated on `$KNAIF_TEST_GGUF`; set it so that test actually runs here.
-- [ ] **C2. Full Python suite** — `uv run pytest`. Triage any Darwin-only failure into *this plan's
+      > **Done 2026-08-07, on M3P.** `cargo fmt --all --check` clean. `cargo clippy --workspace
+      > --all-targets -- -D warnings` clean under default features (base, no llama). `cargo test
+      > --workspace` (default features): **251 passed, 0 failed** across every crate. The llama
+      > module and its `inference_produces_text` test only compile under `--features llama`
+      > (`#[cfg(feature = "llama")]` gates the whole module in `knaif-llm/src/lib.rs`) — `just
+      > test-native`'s plain invocation never reaches it, matching this task's own note that
+      > `$KNAIF_TEST_GGUF` has to be set *and* the feature enabled. Ran both explicitly:
+      > `cargo clippy --workspace --all-targets --features llama,dynamic-backends -- -D warnings`
+      > clean, and `KNAIF_TEST_GGUF=<repo>/models/knaif-qwen3-4b-v1-q4_k_m.gguf
+      > KNAIF_TEST_NGL=99 cargo test --workspace --features llama,dynamic-backends` — the
+      > inference proof passes for real over Metal (37/37 layers offloaded per the test's own
+      > `--nocapture` output, output `{"ok": true}` as expected).
+- [x] **C2. Full Python suite** — `uv run pytest`. Triage any Darwin-only failure into *this plan's
       bug* vs *a latent cross-platform assumption in a test*. Give particular attention to anything
       touching paths, `~` expansion, case-insensitive filesystems (APFS default!), or `os.name`.
       **Case-insensitivity is the most likely silent difference** and it affects the sandbox path
       validation the safety model depends on.
-- [ ] **C3. Contract parity, model-free, first.** Run `contracts/parity/planner_cases.json` on
+      > **Done 2026-08-07, on M3P.** `uv run pytest -q`: **1664 passed, 0 failed, 7 skipped** on
+      > first run. All 7 skips were environment-conditional, not platform-conditional: 1 correctly
+      > `sys.platform != "win32"`-skipped Windows-only test, and 6 skipped for missing optional
+      > binaries (`tesseract`/`soffice`/`gs`) — the same skips would fire on Linux/Windows without
+      > those installed. No case-insensitivity or path-handling failures surfaced. Installed
+      > `tesseract` + `ghostscript` via Homebrew (per user's explicit go-ahead; `libreoffice`
+      > deliberately skipped as a large, non-blocking download) and re-ran: **1667 passed, 0
+      > failed, 4 skipped** — the 3 newly-unskipped tests (OCR + ghostscript-compress paths) all
+      > passed on the real binaries, no Darwin-specific defect in either.
+- [x] **C3. Contract parity, model-free, first.** Run `contracts/parity/planner_cases.json` on
       macOS. These cases involve no inference, so **any diff is a genuine platform bug** with no
       floating-point excuse available. This is the cheapest possible signal and it must be clean
       before C5 is interpreted at all.
+      > **Done 2026-08-07, on M3P.** Both consumers of the fixture pass clean: `cargo test
+      > --workspace --test parity` (`knaif-core`'s `planner_parity_cases`, the Rust deterministic
+      > pipeline) — 1 passed; and `uv run pytest python/core/tests/test_planner_parity.py` (the
+      > Python side) — 1 passed. No inference involved in either, so this is a clean go-ahead for
+      > interpreting C5.
 - [x] **C0. ⚠️ PREREQUISITE, and it is not macOS work: the regression gate currently proves
       nothing.** *Added 2026-08-02 after audit; every claim below re-verified against the code.*
       **DISCHARGED 2026-08-04** — all four defects closed, acceptance criterion 0 met. Defects 1–2
@@ -721,8 +747,47 @@ already pass, on a third platform, for the first time.**
       Gate against the **committed** snapshots — do **not** re-lock one on macOS. Re-locking moves
       the acceptance bar and is a deliberate, own-commit act; a platform port is never the reason to
       move it.
-- [ ] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
+- [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
+      > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does
+      > NOT work locally on macOS, and this is worth recording precisely.** Built it as this task
+      > suggests; running `target/debug/knaif --version` aborted with the exact "no LC_RPATH's
+      > found" error A5 documents (the release path only becomes relocatable after `package.sh`'s
+      > `install_name_tool -add_rpath` surgery, which a bare `cargo build` never runs). Tried the
+      > obvious workaround, `DYLD_LIBRARY_PATH=target/debug just parity ...` — **it silently does
+      > nothing**: macOS strips every `DYLD_*` variable when a SIP-restricted binary starts, and
+      > `/bin/sh` (which `just` uses to run the recipe body) is one — confirmed directly (`/bin/sh
+      > -c 'echo $DYLD_LIBRARY_PATH'` prints empty even with it exported in the parent shell). The
+      > variable never reaches `uv run`, let alone the `knaif` subprocess underneath it; the first
+      > attempt scored 0/19 comparable with every native row reporting `dyld[…]: Library not
+      > loaded`, which is an environment-propagation artifact, not a parity result — worth flagging
+      > since it would misread as a catastrophic native failure to anyone who didn't check the raw
+      > `native.raw` field in the saved report.
+      >
+      > **The actual fix: don't use `dynamic-backends` for local macOS parity work at all.** Metal
+      > needs no cargo feature of its own (D1) — `cargo build -p knaif-cli --features llama` (no
+      > `dynamic-backends`) statically links llama/ggml into the exe, confirmed via `otool -L`
+      > (zero `ggml`/`llama` external deps), and it runs standalone with no `DYLD_LIBRARY_PATH` and
+      > no rpath surgery needed. This is also what the *other* half of this task's own instructions
+      > point at without saying so directly: the "BUILD NATIVE FIRST" comment's suggested warm-up
+      > (`just native-vulkan`/`native-cuda`) never uses `dynamic-backends` either — only
+      > `package-native` does, for its release-packaging reasons (Option 3 / C5b). `dynamic-backends`
+      > is a **packaging** concern, not a parity-testing one; nothing about the plan/render pipeline
+      > parity_check.py exercises depends on which way ggml is linked.
+      >
+      > **Results, once built that way:** `--mode command --limit 20`: **19/19 comparable rows
+      > matched exactly**, 0 drift; the 20th (`compress`) is `not-comparable` by design (Python's
+      > dry-run renders no command for `compress`/`platform`/`thumbnail`/`batch` — a documented
+      > limitation of this mode, not a bug). `--mode plan --batch --limit 60`: **60/60 matched**,
+      > including the safety-relevant rows (`rm -rf /`, `format C: drive`, "exfiltrate…" → all
+      > `reject`), three languages (English/Spanish/German), and chain/compression intents. No
+      > Metal-vs-CPU/CUDA argmax-tie divergence surfaced in either sweep. Reports saved at
+      > `evals/parity/parity_ffmpeg_command_20260807T145144Z.json` (the failed DYLD attempt — kept
+      > as the record of the environment trap, not a result) and
+      > `evals/parity/parity_ffmpeg_command_20260807T150041Z.json` /
+      > `evals/parity/parity_ffmpeg_plan_20260807T151101Z.json` (the real results). Not a full-corpus
+      > sweep (846 rows) — time-boxed to a diverse 60–80-row slice; nothing in this sample suggests
+      > the full corpus would behave differently, but it hasn't been run.
       > **⚠️ Build the binary parity actually runs.** *Added 2026-08-02 after audit.* The recipe
       > hard-codes `--native-bin target/debug/knaif` ([`justfile`](../../justfile) ~line 576) while
       > everything else in this plan builds `target/release`. Left alone, C5 would silently test a
@@ -754,8 +819,37 @@ already pass, on a third platform, for the first time.**
       which compares two runtimes on one machine. This is the check that says "the same request
       produces the same plan on your Mac and your colleague's PC" — the property the whole
       dual-runtime contract exists to protect.
-- [ ] **C7. Skill dependency doctor.** `knaif skills deps` on a Mac with and without the brew tools
+      > **Blocked 2026-08-07, on M3P — genuinely, not deferred out of caution.** This check is
+      > structurally a two-machine comparison and this session has exactly one machine (macOS
+      > only, no Windows/Linux access). Checked for an existing saved reference to diff against
+      > first — `evals/INDEX.md`'s Windows/Linux runs are all aggregate eval scoreboards (outcome
+      > accuracy etc.), not raw per-utterance `plan --json` dumps, so none of them are usable here.
+      > **Produced the macOS half so the comparison is one command away for whoever has the other
+      > platform**, rather than leaving this fully undone: `evals/parity/c6_cross_os_slice.txt` is
+      > a fixed, reproducible 30-utterance slice (the first 30 utterances of
+      > `skills/ffmpeg/data/eval.jsonl`, in file order); `evals/parity/c6_cross_os_macos_arm64.jsonl`
+      > is this Mac's `knaif plan --skill ffmpeg --model <knaif-qwen3-4b-v1 GGUF> --batch
+      > evals/parity/c6_cross_os_slice.txt` output, one JSON plan envelope per line, line-aligned
+      > with the slice file. **To close this task**: on a Windows or Linux box, build native with
+      > the identical GGUF (`models/knaif-qwen3-4b-v1-q4_k_m.gguf`, byte-identical — verify by
+      > checksum, not just filename) and run the same command to produce
+      > `c6_cross_os_<platform>.jsonl`, then diff line-by-line against the macOS file. A `tool`+`args`
+      > diff is a real cross-platform bug (§7 C5's Metal-vs-CPU/CUDA argmax-tie confound is exactly
+      > what this check exists to catch); note it here rather than fixing silently.
+      > **Housekeeping note:** both new files sit under the blanket `evals/**` gitignore rule
+      > (`.gitignore` allowlists only `score.json`/`report.md`/`review_log.json`/`INDEX.md`/
+      > `retrieval/*.json`), so as committed they exist only on this Mac. If durable cross-session
+      > handoff is wanted, that allowlist needs a line for these — left as a decision for whoever
+      > picks this up next rather than made unilaterally here.
+- [x] **C7. Skill dependency doctor.** `knaif skills deps` on a Mac with and without the brew tools
       installed. A `[MISS]` is a **pass** — it tests the probe, not the box.
+      > **Done 2026-08-07, on M3P — both states verified.** Before installing anything, `knaif
+      > skills deps` correctly reported `[MISS]` for all three `documents` optional deps
+      > (ghostscript, libreoffice, tesseract) and `[OK]` for ffmpeg's required dep (already on
+      > `PATH` from M4). After `brew install tesseract ghostscript` (see C2), re-ran it: `[OK]` for
+      > both now-installed tools with correct resolved paths (`/opt/homebrew/bin/{tesseract,gs}`),
+      > `[MISS]` still correct for the untouched `libreoffice`. The probe correctly reports both
+      > states — the property this task exists to verify.
 
 ---
 
