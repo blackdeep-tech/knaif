@@ -379,15 +379,19 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `python` / `native` / `native-llama` / `loader-compat` / `site` / `packaging` / `hooks` /
   `pr-title` behind one always-run `ci` aggregate, and `release.yml` builds the Linux artifacts
   in the pinned container on every packaging PR and drafts them on a tag.
-  - **Operator-only, and in this order.** The `ci` check does not exist on `main` until this
-    work merges there, so requiring it first blocks every PR on a check that never runs.
-    Merge `feat/post-v1-ci` → `main`, then enable protection: require **`ci` and nothing else**
-    (every other job is path-gated, and a *skipped* required check blocks a PR forever),
-    squash-merge only, linear history, no direct pushes.
-  - **Decision owed:** the `site/data/release.json` refresh needs an `on: release: published`
-    workflow that would be the first thing here writing to `main` — which collides with that
-    protection. Either the bot gets a push exemption or the refresh opens a PR. Left unbuilt
-    rather than guessed; the manual `just release-data` step stands meanwhile.
+  - **Merged to `main` and protected — DONE 2026-08-08.** `feat/post-v1-ci` landed (#50), then
+    the `main-guardrails` ruleset went on: **`ci` required and nothing else** (every other job
+    is path-gated, and a *skipped* required check blocks a PR forever), strict up-to-date
+    branches, squash/rebase only, linear history, no direct pushes, **no bypass actors at all**.
+    Settings recorded in full at C5 in the plan.
+  - **`release.json` refresh — decided and built** (2026-08-08):
+    `.github/workflows/release-data.yml`. Neither of the two options on the table: **no bypass
+    actor** (adding the Actions app would give every workflow in the repo unreviewed write
+    access to `main`), and **the bot cannot open the PR either** — a PR created with
+    `GITHUB_TOKEN` does not trigger workflows, so it would carry no `ci` check and, with `ci`
+    required and strict, could never be merged. The workflow pushes a branch and links the
+    compare page; a human opens the PR and CI runs normally. Upgrade path if it ever needs to
+    be hands-off is a GitHub App token, **not** a ruleset bypass.
   - **C4 (eval-parity lane) is deferred with a design finding** recorded at the item: as the
     plan words it, the `rust-cli` lane sits a layer too low and would report a parity delta
     that means nothing. Read that note before starting it.
@@ -402,7 +406,19 @@ This **Open / Next** section is the live backlog (originally distilled from the
     all preview against a zero-byte `.mp4` that ffprobe rejects regardless, so they already ran
     on the dummy-probe path. CI keeps the install for the three skill tests that need it
     (two tesseract, one ffprobe).
-    The other two findings are still open.
+  - **The other two findings are fixed too** (2026-08-08).
+    - **Python range now tested at both ends.** The `python` job runs a matrix over **3.10 and
+      3.14**, the bounds of `requires-python`. Neither end had ever been exercised where it
+      mattered: mise provisions 3.14 and its comment claimed the dev env was 3.14.x, but the
+      maintainer's venv is 3.10.18 **and mise is not installed on that box** — so every local
+      run in this project's history was 3.10, and CI's first run was the first 3.14 execution
+      ever. `fail-fast: false`, because "3.14 only" and "both ends" are different bugs.
+    - **The Rust components gap is understood, and closed where it actually bites.** Not a
+      runner quirk: **mise provisions Rust with rustup's minimal profile**, which ignores
+      `rust-toolchain.toml`'s `components`. A developer box that installed via rustup gets them
+      from its default profile and never sees this — which is exactly why it went unnoticed. So
+      `just bootstrap` (the documented path, and mise-based) now adds them explicitly, and
+      `rust-toolchain.toml` says why its own `components` list cannot be relied on.
 
 - [ ] **Native plans worse than Python on the same model — needs its own plan.** Owner
   observation on macOS (2026-08-07): `knaif` native produced lower-quality plans than the Python

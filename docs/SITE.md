@@ -46,13 +46,14 @@ If the generated data changed, regenerate and commit it — a drift guard fails 
 
 ```bash
 just site-data       # the skill catalog both sites read
-just release-data    # after publishing a release; see RELEASE.md §5 step 7
+just release-data    # fallback only — publishing a release now does this; RELEASE.md §5 step 7
 ```
 
 **After a release, re-check the download links.** `site/data/release.json` is refreshed by
-hand today, and every URL in it carries a version. A missed refresh advertises assets that
-404, and nothing in the unit suite can catch it — the check is that every URL in the file
-returns 200 against the live release.
+`.github/workflows/release-data.yml` when a release is published — it pushes a branch and
+you open the PR. Every URL in it carries a version, so a missed refresh advertises assets
+that 404, and nothing in the unit suite can catch it — the check is that every URL in the
+file returns 200 against the live release.
 
 ## 3. Rolling back
 
