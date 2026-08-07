@@ -68,13 +68,30 @@ jobs:
 
       - uses: jdx/mise-action@v2
 
+      # The container fetches `+refs/heads/*` and `+refs/tags/*` out of the mounted repo
+      # (build-in-container.sh), and on a pull_request the checked-out HEAD is a synthetic
+      # MERGE commit that is on neither — the first run died with "reference is not a tree".
+      #
+      # Fixed here rather than in the script: `just package-linux` is release-critical and
+      # its fetch refspec is part of what makes a published artifact reproducible. Giving the
+      # commit a branch ref is CI adapting to that contract, not the other way round. It also
+      # builds the PR's own head commit, which is the one that actually gets squashed, rather
+      # than a merge commit that will never exist again.
+      - name: Put the commit under test on a branch ref the container can fetch
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          git branch --force ci-build "$SHA"
+          git --no-pager log -1 --oneline ci-build
+
       # Builds the tarball and the AppImage at the image's floor, and runs installers/smoke.sh
       # against both from inside the container — version-vs-Cargo.toml, exe-relative skill
       # resolution from an unrelated cwd, dependency detection, and an offline mock
       # `plan --json`. It never downloads. That smoke run is this job's real gate; the
       # artifacts are the evidence.
       - name: just package-linux
-        run: just package-linux
+        run: just package-linux --rev=ci-build
 
       - name: Show what was produced
         run: ls -lh dist/knaif-*-linux-* || (echo "::error::no Linux artifacts in dist/" && exit 1)
