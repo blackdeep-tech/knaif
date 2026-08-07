@@ -1,6 +1,6 @@
 # Post-v1 — CI, release automation, and the CUDA opt-in surface
 
-**Status:** Active — **Workstream U is release-blocking** · **Created:** 2026-07-17 · **Completed:** —
+**Status:** Active — **Workstream C is built except C4** · **Created:** 2026-07-17 · **Completed:** —
 **Owner:** core · **Ref:** follows [native-branch-finalization](2026-07-15-native-branch-finalization.md); runs after the OSS-prep pass
 
 > **Kept 2026-07-23** (S7 decision — **unexecuted roadmap**, and load-bearing as the named
@@ -39,6 +39,44 @@
 > ship until the org transfer is done, or an installed release depends on GitHub's org redirect
 > forever. The OSS-prep plan does that transfer before v1.0.0 publishes, so by the time this plan
 > starts the constraint is already satisfied — **write the URLs against `blackdeep-tech/knaif`.**
+
+---
+
+> **Progress 2026-08-07 — Workstream C is built, and this repo has CI for the first time.**
+> `.github/workflows/` did not exist that morning; releases gated on local green and RELEASE.md
+> said so. **C1, C2, C3 and C5 are done**; C4 is deferred with a design finding recorded at the
+> item — read it before starting, because the lane as worded would produce a parity number that
+> means nothing.
+>
+> What is running: `ci.yml` with path-gated `python` / `native` / `native-llama` /
+> `loader-compat` / `site` / `packaging` / `hooks` / `pr-title` jobs behind one always-run `ci`
+> aggregate, and `release.yml` building the Linux artifacts in the pinned container on every
+> packaging PR (12m27s) and attaching them to a **draft** on a tag.
+>
+> **What CI found on its own first runs**, none of which any local gate could have:
+> - **Seven tests silently required `ffprobe` on PATH**, and a clean runner reported **39 skips
+>   against 5 locally** — the suite tested ~34 fewer things on a machine without the reference
+>   skills' dependencies. The baseline had only ever been measured where they happened to exist.
+>   *Fixed 2026-08-07:* all seven are **core** tests that build the real ffmpeg skill to test stem
+>   resolution and the NL clarify gate, and every one of them previews against a zero-byte `.mp4`
+>   that ffprobe rejects anyway — so the binary only ever changed which exception was raised, and
+>   `InspectMediaStep` re-raises `FFmpegNotAvailable` while stubbing everything else. An autouse
+>   guard in the core conftest refuses `ffmpeg`/`ffprobe` outright. The CI install stays: three
+>   *skill* tests legitimately skip without it (two need tesseract, one needs ffprobe), and those
+>   are declared dependencies where they live.
+> - **`mise.toml` pins Python 3.14 and claims "dev env is 3.14.x"; the dev venv is 3.10.18.** CI
+>   is the first thing ever to run this suite on 3.14, and it failed one test there. Both are
+>   inside `requires-python`, so this is a real gap rather than a CI artifact.
+> - **`rust-toolchain.toml` declares `rustfmt` and `clippy`, and the toolchain arrives without
+>   them** — twice, in two different jobs.
+> - **The container build cannot check out a PR merge commit.** `build-in-container.sh` fetches
+>   `+refs/heads/*` and `+refs/tags/*`, and a merge commit is on neither.
+>
+> Still owed and **operator-only:** branch protection on `main` (require the `ci` check and
+> nothing else — see C5), and the `release.json` refresh decision recorded under C3.
+>
+> **Sequencing trap worth stating:** the `ci` check does not exist on `main` until this work
+> merges there. Requiring it before that blocks every PR on a check that never runs.
 
 ---
 
@@ -535,6 +573,42 @@ into `~/.knaif/backends`.
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`
   names — do **not** hard-code the retired lane.
+
+  **Deferred 2026-08-07, deliberately, and the reason is a design finding — read this before
+  starting.** The rest of Workstream C is built; this is the one open item.
+
+  **As worded, the lane sits a layer too low.** Everything in `eval_backends.yaml` substitutes
+  *token generation*: `llama_cpp` and `ollama` both resolve to `InferenceOrchestrator.infer()`,
+  and the Python pipeline does retrieval, prompt construction, parsing and validation around
+  it. `knaif plan --skill X --json` runs **all of that** on the Rust side. Registering it as a
+  peer of `llama_cpp` therefore claims a substitution it does not make.
+
+  It is not merely inelegant — `run_corpus` calls `_build_registry_override(agent, utterance)`
+  and passes the result to `infer()`. A `rust-cli` adapter has no honest answer there: the
+  native binary already did its own retrieval, with its own prompt. An adapter that fakes it
+  makes the two lanes measure different prompts, which is precisely what a parity number must
+  not do. **A lane built that way would report a delta and mean nothing by it.**
+
+  The shape to build instead: leave `run_corpus` to the Python side, run the corpus through
+  `knaif plan --batch` for the native side (one model load rather than one per utterance —
+  which is what `--batch` exists for), score **both** with the same verifiers, and diff the
+  aggregates at ±2%. The `eval_backends.yaml` entry then configures *which binary and which
+  GGUF*, which is what it actually is. That also matches how `scripts/parity_check.py` already
+  talks to the native runtime.
+
+  **`parity_check.py` is the complement of this, not a duplicate** — its own docstring opens
+  "deliberately NOT an eval-suite. It does not grade against baselines or compare models." It
+  diffs rendered argv per utterance; C4 compares scored aggregates. Both are wanted.
+
+  Note it cannot be a CI job either way: both lanes need a GGUF, and models are gitignored.
+  Like `just parity`, this is local tooling.
+
+  **Read the native-plan-quality item in [TODO.md](../TODO.md) before building this** (added
+  2026-08-07). Native was observed producing worse plans than Python on the same model — no
+  multi-step plan at all — which makes this lane an acceptance gate rather than a benchmark, and
+  raises its priority. It also imposes an order: the prompt is pinned by no contract today, so a
+  delta measured here cannot be attributed to a planner bug rather than to one side's prompt
+  having drifted. Pin the prompt first, then build this. That work belongs to its own plan.
 - [x] **C5 — Enforce the git conventions in CI** _(added 2026-07-25, when the conventions landed in
   CONTRIBUTING.md)_. The hooks in `.pre-commit-config.yaml` are **opt-in**, so today a contributor
   who never ran `just hooks-install` is caught only at review. Two small jobs close that:
