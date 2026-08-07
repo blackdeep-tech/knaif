@@ -1,0 +1,125 @@
+# Linux packaging — post-v1-ci C3.
+#
+# THIS IS A PACKAGING CHECK THAT HAPPENS TO UPLOAD, NOT A RELEASE. `just package-linux`
+# already builds the published Linux artifacts from a clean checkout in the pinned container
+# on the maintainer's own box, so this job cannot justify itself on capability. It justifies
+# itself on TIMING: packaging breakage found on the PR that caused it is cheap, and found on
+# release day is not. The tag-time upload is the smaller half of its value.
+#
+# IT NEVER PUBLISHES. Draft only. The tag, the public Release and the PyPI upload stay manual
+# because none of them can be undone.
+#
+# CI MUST NOT GENERATE SHA256SUMS. A checksum manifest covering only the Linux half, sitting
+# in a draft a human then adds Windows files to, is silently incomplete — one artifact set
+# with two authorities over it. SHA256SUMS is generated once, locally, over the final
+# complete set, immediately before publishing (RELEASE.md).
+#
+# LINUX ONLY, AND INSIDE THE PINNED CONTAINER. Building on an `ubuntu-latest` runner directly
+# would reintroduce the exact defect the portable-builds plan exists to remove: a runtime
+# floor inherited from whatever the builder happens to be, with nothing to warn you. The job
+# runs installers/linux/build-in-container.sh, so the floor is the image's.
+#
+# WINDOWS IS NOT IN THE MATRIX AT ALL, and that is a decision rather than an omission — see
+# RELEASE.md. A self-hosted Windows runner was considered and rejected: on a public repo it
+# is the documented worst case (a fork's PR executing on the maintainer's machine), it needs
+# that machine online at tag time, and it buys nothing `just package-*` does not already give.
+#
+# TWO CHECKS CANNOT MOVE HERE, and saying so prevents a false sense of coverage: the Windows
+# clean room needs Windows Sandbox, which exists on no runner, and the installer upgrade path
+# needs a GUI run because /VERYSILENT never builds the task tree. Both stay human steps in
+# RELEASE.md §4. A green pipeline is not a verified release.
+
+name: Package (Linux)
+
+on:
+  pull_request:
+    # Not every PR — a docs or site change cannot break packaging, and this job is measured
+    # in tens of minutes. These are the paths that can.
+    paths:
+      - "installers/**"
+      - "apps/**"
+      - "native/**"
+      - "skills/**"
+      - "contracts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/release.yml"
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: release mode inside the container checks a commit OUT of the mounted
+      # repo rather than mounting the worktree, so the commit has to be there to check out.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: jdx/mise-action@v2
+
+      # Builds the tarball and the AppImage at the image's floor, and runs installers/smoke.sh
+      # against both from inside the container — version-vs-Cargo.toml, exe-relative skill
+      # resolution from an unrelated cwd, dependency detection, and an offline mock
+      # `plan --json`. It never downloads. That smoke run is this job's real gate; the
+      # artifacts are the evidence.
+      - name: just package-linux
+        run: just package-linux
+
+      - name: Show what was produced
+        run: ls -lh dist/knaif-*-linux-* || (echo "::error::no Linux artifacts in dist/" && exit 1)
+
+      # On a PR this is the whole point: the artifacts are downloadable for inspection
+      # without anyone having to reproduce the build.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: knaif-linux-${{ github.sha }}
+          path: dist/knaif-*-linux-*
+          if-no-files-found: error
+          retention-days: 14
+
+  # Tag only. Attaches what the job above already built and smoke-tested to a DRAFT release,
+  # for the maintainer to add the Windows half to by hand before generating SHA256SUMS over
+  # the complete set and publishing.
+  draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: knaif-linux-${{ github.sha }}
+          path: dist
+
+      - name: Attach the Linux artifacts to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+
+          # --draft, never --publish. `gh release create` is idempotent here only because we
+          # check first: a second run on the same tag must not fail the job, and must not
+          # quietly turn a draft into a release.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists - uploading assets to it"
+          else
+            gh release create "$TAG" --draft --title "$TAG" \
+              --notes "Draft. Linux artifacts attached by CI; Windows artifacts are added by hand, then SHA256SUMS is generated over the complete set. See RELEASE.md."
+          fi
+
+          # --clobber so a re-run replaces its own uploads rather than erroring.
+          gh release upload "$TAG" dist/knaif-*-linux-* --clobber
