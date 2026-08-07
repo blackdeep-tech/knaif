@@ -239,6 +239,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
 
+      # Same reason as the `native` job: the toolchain arrives without the components
+      # rust-toolchain.toml declares, and one of the hooks is `cargo fmt --check`. Second
+      # job to need this, so it is the toolchain's behaviour rather than a one-off — a
+      # composite action would be the fix if a third appears.
+      - name: Ensure the toolchain has rustfmt
+        run: rustup component add rustfmt
+
       # Several hooks are `language: system` and shell out to `uv run ruff` / `uv run black`
       # so they use the versions pinned in the venv rather than a pre-commit-managed copy
       # that would drift from what `just check` runs. That only works if the venv exists.
