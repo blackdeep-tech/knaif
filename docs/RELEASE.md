@@ -121,6 +121,34 @@ copy, so uncommitted dirt cannot reach a published artifact, file modes come fro
 from a 9p mount, and `.gitattributes` line endings are correct. `--dev` mounts the worktree instead,
 for iterating on packaging; never publish what it produces.
 
+**CI builds this half too** — [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+runs the same script on every PR that touches packaging, and on a `v*.*.*` tag attaches the result
+to a **draft** release. It is a packaging *check* that happens to upload: the value is catching
+breakage on the PR that caused it rather than on release day. It never publishes, and it never
+generates `SHA256SUMS` — see §5.
+
+### Why Windows artifacts are built by hand and Linux ones are not
+
+Not an oversight, and not something a runner could be talked into. Three reasons, each
+independently sufficient:
+
+- **The VC++ redistribution grant comes with a licensed Visual Studio install.** The CRT files
+  staged into the Windows artifact are redistributable under that licence; a hosted runner image
+  is not covered by it.
+- **The CUDA toolkit a `--kind=cuda` build needs is not on a hosted Windows image**, and
+  installing it per-run costs more than the build.
+- **Two required verifications cannot run on any runner at all** — the clean room needs Windows
+  Sandbox, and the installer upgrade path needs a GUI, because `/VERYSILENT` never builds the
+  task tree. Both are in §4 and stay human steps.
+
+A **self-hosted Windows runner** was considered and rejected. On a public repo it is the
+documented worst case — a fork's PR can execute on the maintainer's machine — it additionally
+requires that machine online at tag time, and it buys nothing `just package-*` does not already
+give. Recorded here so it is not re-proposed as an obvious improvement.
+
+The asymmetry is worth stating plainly for anyone reading the workflow: **the Linux path is fully
+available to a fork**, and the Windows one is a property of this maintainer's environment.
+
 ### Linux — native build (local artifacts only)
 
 `installers/package.sh --kind=vulkan` still works natively on any distro. **The floor is then your

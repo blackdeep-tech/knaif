@@ -373,6 +373,66 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
+- [ ] **CI — Workstream C is built except C4** (2026-08-07) — plan:
+  [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
+  This repo had no CI at all; `.github/workflows/` did not exist. Now `ci.yml` runs path-gated
+  `python` / `native` / `native-llama` / `loader-compat` / `site` / `packaging` / `hooks` /
+  `pr-title` behind one always-run `ci` aggregate, and `release.yml` builds the Linux artifacts
+  in the pinned container on every packaging PR and drafts them on a tag.
+  - **Operator-only, and in this order.** The `ci` check does not exist on `main` until this
+    work merges there, so requiring it first blocks every PR on a check that never runs.
+    Merge `feat/post-v1-ci` → `main`, then enable protection: require **`ci` and nothing else**
+    (every other job is path-gated, and a *skipped* required check blocks a PR forever),
+    squash-merge only, linear history, no direct pushes.
+  - **Decision owed:** the `site/data/release.json` refresh needs an `on: release: published`
+    workflow that would be the first thing here writing to `main` — which collides with that
+    protection. Either the bot gets a push exemption or the refresh opens a PR. Left unbuilt
+    rather than guessed; the manual `just release-data` step stands meanwhile.
+  - **C4 (eval-parity lane) is deferred with a design finding** recorded at the item: as the
+    plan words it, the `rust-cli` lane sits a layer too low and would report a parity delta
+    that means nothing. Read that note before starting it.
+  - **Three findings worth carrying out of this**, none of which a local gate could have made:
+    seven tests silently required `ffprobe` on PATH (39 skips on a clean runner against 5
+    locally); `mise.toml` pins Python 3.14 and claims the dev env is 3.14.x while the venv is
+    **3.10.18**, so CI is the first thing ever to run the suite on 3.14; and `rust-toolchain.toml`
+    declares `rustfmt`/`clippy` components that the provisioned toolchain does not carry.
+  - **The `ffprobe` dependency is fixed** (2026-08-07) — an autouse guard in the core conftest
+    refuses `ffmpeg`/`ffprobe`, so the core suite passes with neither installed. The seven were
+    core tests borrowing the real ffmpeg skill to test stem resolution and the NL clarify gate;
+    all preview against a zero-byte `.mp4` that ffprobe rejects regardless, so they already ran
+    on the dummy-probe path. CI keeps the install for the three skill tests that need it
+    (two tesseract, one ffprobe).
+    The other two findings are still open.
+
+- [ ] **Native plans worse than Python on the same model — needs its own plan.** Owner
+  observation on macOS (2026-08-07): `knaif` native produced lower-quality plans than the Python
+  runtime, and **would not produce a multi-step plan at all**. Not yet reproduced from a checkout;
+  everything below is a code read, not a diagnosis.
+  - **Why this is almost certainly deterministic drift, not model quality.** Both runtimes decode
+    **greedily** — Python passes `temperature=0.0` (`orchestrator.py`), native takes the argmax
+    over logits (`knaif-llm/src/llama.rs`). Same GGUF plus an identical prompt should give
+    near-identical tokens, so a *systematic* quality gap has to come from something deterministic
+    that differs. That is good news: it is findable without a model.
+  - **First hypothesis to test, cheapest first.** Native hard-codes `max_tokens: 512`
+    (`knaif-llm/src/llama.rs`, `$KNAIF_MAX_TOKENS` overrides); the promoted Python eval config
+    uses `max_tokens: 2048`. A multi-step plan is the longest output the model ever emits, so a
+    truncated object would fail brace-balanced extraction and degrade to one step or none —
+    matching the symptom exactly. `KNAIF_MAX_TOKENS=2048` on the failing utterance settles it.
+  - **Already ruled out by reading:** `n_ctx` is 8192 on both, and `/no_think` is applied on both.
+  - **The structural gap this exposes: the prompt is pinned by nothing.**
+    `contracts/parity/planner_cases.json` covers parse → normalize → apply_defaults → validate
+    (14 cases, synthetic `demo` registry). Nothing compares what the two runtimes actually *send*
+    the model, and nothing compares their generation defaults — which is how a `512` on one side
+    and a `2048` on the other sit unnoticed.
+  - **Scope for the plan**, once the cause is known: prompt-parity and settings-parity contracts
+    (no GGUF needed, so CI can gate them every PR), plus a mock-backend check that a canned
+    *multi-step* plan renders identical argv on both runtimes — `just native-mock` already
+    provides the harness.
+  - **This changes what C4 is for.** The eval-parity lane stops being a benchmark and becomes the
+    acceptance gate that would have caught this before it shipped. It also only means something
+    once the prompt is pinned: without that, a C4 delta cannot be attributed to a planner bug
+    rather than to one side's prompt having been edited. Build the contracts first.
+
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
   mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.

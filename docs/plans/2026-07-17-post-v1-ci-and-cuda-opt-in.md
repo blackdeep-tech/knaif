@@ -1,6 +1,6 @@
 # Post-v1 — CI, release automation, and the CUDA opt-in surface
 
-**Status:** Active — **Workstream U is release-blocking** · **Created:** 2026-07-17 · **Completed:** —
+**Status:** Active — **Workstream C is built except C4** · **Created:** 2026-07-17 · **Completed:** —
 **Owner:** core · **Ref:** follows [native-branch-finalization](2026-07-15-native-branch-finalization.md); runs after the OSS-prep pass
 
 > **Kept 2026-07-23** (S7 decision — **unexecuted roadmap**, and load-bearing as the named
@@ -39,6 +39,44 @@
 > ship until the org transfer is done, or an installed release depends on GitHub's org redirect
 > forever. The OSS-prep plan does that transfer before v1.0.0 publishes, so by the time this plan
 > starts the constraint is already satisfied — **write the URLs against `blackdeep-tech/knaif`.**
+
+---
+
+> **Progress 2026-08-07 — Workstream C is built, and this repo has CI for the first time.**
+> `.github/workflows/` did not exist that morning; releases gated on local green and RELEASE.md
+> said so. **C1, C2, C3 and C5 are done**; C4 is deferred with a design finding recorded at the
+> item — read it before starting, because the lane as worded would produce a parity number that
+> means nothing.
+>
+> What is running: `ci.yml` with path-gated `python` / `native` / `native-llama` /
+> `loader-compat` / `site` / `packaging` / `hooks` / `pr-title` jobs behind one always-run `ci`
+> aggregate, and `release.yml` building the Linux artifacts in the pinned container on every
+> packaging PR (12m27s) and attaching them to a **draft** on a tag.
+>
+> **What CI found on its own first runs**, none of which any local gate could have:
+> - **Seven tests silently required `ffprobe` on PATH**, and a clean runner reported **39 skips
+>   against 5 locally** — the suite tested ~34 fewer things on a machine without the reference
+>   skills' dependencies. The baseline had only ever been measured where they happened to exist.
+>   *Fixed 2026-08-07:* all seven are **core** tests that build the real ffmpeg skill to test stem
+>   resolution and the NL clarify gate, and every one of them previews against a zero-byte `.mp4`
+>   that ffprobe rejects anyway — so the binary only ever changed which exception was raised, and
+>   `InspectMediaStep` re-raises `FFmpegNotAvailable` while stubbing everything else. An autouse
+>   guard in the core conftest refuses `ffmpeg`/`ffprobe` outright. The CI install stays: three
+>   *skill* tests legitimately skip without it (two need tesseract, one needs ffprobe), and those
+>   are declared dependencies where they live.
+> - **`mise.toml` pins Python 3.14 and claims "dev env is 3.14.x"; the dev venv is 3.10.18.** CI
+>   is the first thing ever to run this suite on 3.14, and it failed one test there. Both are
+>   inside `requires-python`, so this is a real gap rather than a CI artifact.
+> - **`rust-toolchain.toml` declares `rustfmt` and `clippy`, and the toolchain arrives without
+>   them** — twice, in two different jobs.
+> - **The container build cannot check out a PR merge commit.** `build-in-container.sh` fetches
+>   `+refs/heads/*` and `+refs/tags/*`, and a merge commit is on neither.
+>
+> Still owed and **operator-only:** branch protection on `main` (require the `ci` check and
+> nothing else — see C5), and the `release.json` refresh decision recorded under C3.
+>
+> **Sequencing trap worth stating:** the `ci` check does not exist on `main` until this work
+> merges there. Requiring it before that blocks every PR on a check that never runs.
 
 ---
 
@@ -365,23 +403,88 @@ into `~/.knaif/backends`.
 
 ## Workstream C — CI & release automation _(was finalization Workstream F)_
 
-- [ ] **C1 — Split CI jobs** _(was F1)_ in `.github/workflows/`: `python` (pytest + lint/type on
+- [x] **C1 — Split CI jobs** _(was F1)_ in `.github/workflows/`: `python` (pytest + lint/type on
   `python/core`), `native` (`cargo test`/`clippy`/`fmt`, base + `--features llama`),
   `docs`, `packaging`. Python-only PRs must not require native inference; native-only PRs
   must not run notebooks.
-  - **Baseline to encode:** the green state, **re-measured 2026-07-23** — `uv run pytest`
-    **1532 passed / 7 skipped**, `cargo test --workspace` **216 passed**, clippy clean on both
-    `--workspace --all-targets` and `-p knaif-cli --features llama`, `cargo fmt --all --check` clean.
-    CI's first run should reproduce those, not discover them. *(Finalization A1's original figures —
-    1494/38 python, 204→213 cargo — are superseded; the skip count fell because the restructure
-    resolved the conditional imports behind most of them. Re-measure again before writing the job:
-    a baseline is only useful on the day it is taken.)*
+  - ~~**Baseline to encode:** the green state, **re-measured 2026-07-23** — `uv run pytest`
+    **1532 passed / 7 skipped**, `cargo test --workspace` **216 passed**~~ — **superseded; the
+    instruction to re-measure was followed.** Measured **2026-08-07**: `uv run pytest`
+    **1666 passed / 5 skipped**, `cargo test --workspace` **251 passed / 0 ignored** across 14
+    test binaries, clippy clean on both `--workspace --all-targets` and
+    `-p knaif-cli --features llama`, `cargo fmt --all --check` clean, `black --check .` 209 files
+    unchanged. The pytest and cargo figures are encoded in `ci.yml` beside the jobs that
+    reproduce them.
   - **Note:** CI secrets/protections do **not** survive an org transfer — which is exactly why this
     plan runs *after* OSS-prep. Set them up once, in the final org.
-- [ ] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
+
+  **Built 2026-08-07** as a single `.github/workflows/ci.yml`. Five decisions in it that the
+  plan did not anticipate:
+
+  - **`docs` became `site`.** C1 named a `docs` job when `docs` meant the mkdocs site at
+    `site/`. [website-split](2026-08-04-website-split.md) deleted that and shipped two Astro
+    apps, so a literal `docs` job would have had nothing to build. Same intent — the published
+    surface does not break — against what is actually published: `just site-check`,
+    `site-build`, `site-links`.
+  - **Every job runs a `just` recipe**, never its own copy of the commands. The recipes are the
+    gate contributors already run; a CI that reimplements them is a second definition that
+    drifts, and when the two disagree nobody can tell which is right. Same principle C5 states
+    for reusing `check_commit_msg.py`.
+  - **The `ci` aggregate job is the only check branch protection should require.** Path-gated
+    jobs are *skipped*, not passed, on a PR that does not touch them — and a required check
+    that is skipped blocks the merge forever. `ci` runs on `always()`, treats skipped as fine,
+    and fails on `cancelled` so a cancelled run cannot read as green. C5's branch-protection
+    item should name this job and nothing else.
+  - **`--features llama` is its own job, clippy only.** The crate itself calls the feature a
+    heavy cmake + C++ build and keeps it off by default, so bolting it onto `native` would make
+    every ordinary Rust change wait on a build unrelated to it. No tests there: the feature
+    picks which *backend* compiles in, and exercising it needs a GGUF this workflow has no
+    business downloading. What regresses silently is the cfg'd code ceasing to compile, which
+    is exactly what clippy catches.
+  - **`skills/` routes to BOTH runtimes.** The first draft sent it to Python alone — wrong, and
+    the kind of wrong that never announces itself: `skills/<name>/native/` are Cargo workspace
+    members and the bundle's YAML is read by both loaders, so a change to a skill's Rust crate
+    would have merged without `cargo` ever building it. `contracts/` is dual for the same
+    reason.
+
+  **The path filter is guarded by a test**, `python/core/tests/test_ci_workflow.py`, which reads
+  the patterns out of the workflow rather than restating them. A filter that stops matching
+  silently stops running the job it gates, and CI still reports green — the one failure mode
+  where nothing else in the repo would notice. Verified by injection: removing `skills/` from
+  the native pattern fails four cases.
+- [x] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
   (`ffmpeg`, `documents`) load in **both** the Python loader and the Rust loader; stale `io`
   excluded unless explicitly opted in.
-- [ ] **C3 — `release.yml`** _(was F5)_: build → package → verify → attach the **Linux** artifacts to
+
+  **Built 2026-08-07** — `scripts/check_loader_compat.py`, `just loader-check`, and a
+  `loader-compat` CI job (the only one needing both toolchains).
+
+  It compares what each loader **reports**, not that each exits 0 — discovery, stale
+  filtering, `runtimes:`, and declared external tools. Both read the same `skill.yaml`, so
+  the only way this can fail is genuine parser drift or one loader rejecting a bundle the
+  other accepts, which is exactly the failure it exists for.
+
+  Deliberately *not* a parity check: `just parity <skill>` pins both runtimes to one GGUF
+  and diffs rendered commands, needing a model and minutes. This needs neither, and answers
+  a different question — not "do they agree on the answer" but "can they both read the file".
+
+  **Verified by injection, 4/4**, and one of them is a live defect worth knowing about:
+
+  | Injected | Result |
+  |---|---|
+  | `skill_class:` pointing at a missing class | Python loader named as raising; Rust still lists the skill |
+  | `required: "yes"` instead of `true` on an external tool | **Python reads `True`; the Rust loader silently drops the whole tool** |
+  | A newly `status: stale` skill (negative control) | Both hide it — check still passes, as it must |
+  | A `skill.yaml` that does not parse | Reported cleanly by name, no traceback |
+
+  The second row is the one to remember: a typo in `required:` does not fail either
+  runtime, it makes ffmpeg's *required* dependency disappear from the native doctor check
+  while Python still believes it is required. Nothing else in the repo would have caught it.
+
+  Writing it also hardened the script — a malformed bundle originally took the whole
+  enumeration down with a traceback, which would have buried the finding behind a stack
+  instead of naming the skill.
+- [x] **C3 — `release.yml`** _(was F5)_: build → package → verify → attach the **Linux** artifacts to
   a **draft** GH Release. Automates part of the manual cut that v1 did in finalization E2/H3.
   (Add macOS only when macOS packaging lands post-v1.)
   - **REVISED 2026-07-29 (second pass) — it is a packaging *check* that happens to upload, not a
@@ -439,11 +542,74 @@ into `~/.knaif/backends`.
     It belongs on a separate `on: release: published` trigger that runs `just release-data` and
     commits the result — so add it alongside `release.yml`, not inside it, and only once this repo
     has a workflow that may write to `main`.
+
+  **Built 2026-08-07** as `.github/workflows/release.yml`, separate from `ci.yml`.
+
+  - **`pull_request` is path-gated**, which the plan's wording did not settle. "Free" is true
+    of the *finding*, not of the minutes: a container release build is tens of them, and a
+    docs or site change cannot break packaging. It runs on `installers/`, `apps/`, `native/`,
+    `skills/`, `contracts/`, the Cargo files, `rust-toolchain.toml`, and itself.
+  - **`smoke.sh` needed no wiring** — `build-in-container.sh` already runs it against both the
+    tarball and the AppImage from inside the container. That smoke run is the job's real gate;
+    the uploaded artifacts are the evidence.
+  - **`fetch-depth: 0`** is load-bearing. Release mode checks a commit *out of* the mounted
+    repo rather than mounting the worktree, so a shallow clone has nothing to check out.
+  - **The draft step is tag-only and idempotent**: it looks before creating, so a re-run
+    cannot turn an existing draft into a release, and uploads with `--clobber` so a re-run
+    replaces its own assets instead of erroring.
+  - **RELEASE.md now says why Windows is maintainer-built** — the VC++ redistribution grant
+    riding on a licensed VS install, the CUDA toolkit a hosted image lacks, and two
+    verifications no runner can perform. With the note that the Linux path *is* fully
+    available to a fork, which is the part an outside reader needs.
+
+  - [ ] **`site/data/release.json` refresh — deliberately NOT built.** It needs its own
+    `on: release: published` trigger, and it would be **this repo's first workflow that
+    writes to `main`**. That collides with the branch protection in C5, which is about to
+    forbid direct pushes: the bot needs an explicit exemption, or the refresh needs to open a
+    PR instead of pushing. That is a decision, not an implementation detail, so it is left
+    open rather than guessed at. Until it exists, the manual `just release-data` step in
+    RELEASE.md §5 stands and the §9 URL check is what catches a missed refresh.
 - [ ] **C4 — Eval-parity lane** _(was F3's unbuilt half; the decision itself stays in finalization
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`
   names — do **not** hard-code the retired lane.
-- [ ] **C5 — Enforce the git conventions in CI** _(added 2026-07-25, when the conventions landed in
+
+  **Deferred 2026-08-07, deliberately, and the reason is a design finding — read this before
+  starting.** The rest of Workstream C is built; this is the one open item.
+
+  **As worded, the lane sits a layer too low.** Everything in `eval_backends.yaml` substitutes
+  *token generation*: `llama_cpp` and `ollama` both resolve to `InferenceOrchestrator.infer()`,
+  and the Python pipeline does retrieval, prompt construction, parsing and validation around
+  it. `knaif plan --skill X --json` runs **all of that** on the Rust side. Registering it as a
+  peer of `llama_cpp` therefore claims a substitution it does not make.
+
+  It is not merely inelegant — `run_corpus` calls `_build_registry_override(agent, utterance)`
+  and passes the result to `infer()`. A `rust-cli` adapter has no honest answer there: the
+  native binary already did its own retrieval, with its own prompt. An adapter that fakes it
+  makes the two lanes measure different prompts, which is precisely what a parity number must
+  not do. **A lane built that way would report a delta and mean nothing by it.**
+
+  The shape to build instead: leave `run_corpus` to the Python side, run the corpus through
+  `knaif plan --batch` for the native side (one model load rather than one per utterance —
+  which is what `--batch` exists for), score **both** with the same verifiers, and diff the
+  aggregates at ±2%. The `eval_backends.yaml` entry then configures *which binary and which
+  GGUF*, which is what it actually is. That also matches how `scripts/parity_check.py` already
+  talks to the native runtime.
+
+  **`parity_check.py` is the complement of this, not a duplicate** — its own docstring opens
+  "deliberately NOT an eval-suite. It does not grade against baselines or compare models." It
+  diffs rendered argv per utterance; C4 compares scored aggregates. Both are wanted.
+
+  Note it cannot be a CI job either way: both lanes need a GGUF, and models are gitignored.
+  Like `just parity`, this is local tooling.
+
+  **Read the native-plan-quality item in [TODO.md](../TODO.md) before building this** (added
+  2026-08-07). Native was observed producing worse plans than Python on the same model — no
+  multi-step plan at all — which makes this lane an acceptance gate rather than a benchmark, and
+  raises its priority. It also imposes an order: the prompt is pinned by no contract today, so a
+  delta measured here cannot be attributed to a planner bug rather than to one side's prompt
+  having drifted. Pin the prompt first, then build this. That work belongs to its own plan.
+- [x] **C5 — Enforce the git conventions in CI** _(added 2026-07-25, when the conventions landed in
   CONTRIBUTING.md)_. The hooks in `.pre-commit-config.yaml` are **opt-in**, so today a contributor
   who never ran `just hooks-install` is caught only at review. Two small jobs close that:
   - a `hooks` job running `pre-commit run --all-files --show-diff-on-failure` (use the
@@ -452,17 +618,38 @@ into `~/.knaif/backends`.
   - a **PR-title lint**, since PRs are squash-merged and the title *is* the commit subject on
     `main`. Reuse `scripts/check_commit_msg.py` — it takes a file path, so the job writes the title
     to a temp file and calls it. One implementation, so the hook and CI cannot disagree.
-  - **Branch protection** on `main` in the same pass: require the C1 jobs, squash-merge only,
-    linear history, no direct pushes. Like all settings here, protections do **not** survive an org
-    transfer — this is why the whole plan runs after OSS-prep.
-  - **Known debt this will surface —** four notebooks carry metadata `nbstripout` strips
-    (`notebooks/baseline_authoring.ipynb`, both under `skills/documents/notebooks/`,
-    `skills/ffmpeg/notebooks/ffmpeg_skill_tester.ipynb`). Land the strip as its own `chore:` commit
-    *before* the hooks job goes green-required, or the first CI run fails on unrelated churn.
-    - **The `black` half of this is stale** *(re-checked 2026-07-29: `uv run black --check .` →
-      198 files unchanged)*. No reformat is needed; only the metadata strip. The reason to still run
-      `black --check` in CI is unchanged — `just check` runs `ruff` but never `black`, so formatting
-      is enforced by nothing today.
+  - [ ] **Branch protection** on `main`: **require the `ci` check and nothing else** — C1
+    settled which. Every other job is path-gated, and a required check that is *skipped*
+    blocks a PR forever; `ci` runs on `always()`, treats skipped as success and fails on
+    cancelled. Plus squash-merge only, linear history, no direct pushes. Console work, and
+    protections do **not** survive an org transfer — which is why this plan runs after
+    OSS-prep.
+  - [x] **Known debt this will surface —** four notebooks carry metadata `nbstripout` strips.
+    Landed as its own `chore:` commit (#43) *before* the hooks job, exactly as instructed;
+    without it the first run on every later PR would have failed on unrelated churn.
+    - **The `black` half of this is stale** *(re-confirmed 2026-08-07: `black --check .` →
+      209 files unchanged)*. No reformat was needed; only the metadata strip. The reason to
+      run `black --check` in CI is unchanged, and the hooks job is what finally does it.
+
+  **Built 2026-08-07.** Two jobs, both **deliberately not path-gated** — the path filters
+  answer "which half of the repo did this touch", while formatting and a commit subject are
+  properties of the PR itself. Only the default (pre-commit) stage runs; the pre-push tier
+  is mypy, pytest and clippy, which the `python` and `native` jobs already cover.
+
+  Two things worth recording:
+
+  - **The PR title is passed through `env:`, never interpolated into the `run:` body.** A PR
+    title is attacker-supplied text on a public repo, and `${{ github.event.pull_request.title }}`
+    inside a shell script is the standard GitHub Actions script-injection hole. The lint was
+    checked against real titles first: valid conventional subjects pass, `Update README` and a
+    trailing period both fail with the message the hook gives.
+  - **`*.ipynb text eol=lf` in `.gitattributes`**, found by running the gate rather than
+    reasoning about it. `nbstripout` and `black` write notebooks LF while `* text=auto` hands
+    a Windows checkout CRLF, so `pre-commit run --all-files` reported the same four notebooks
+    as modified every single time, with `git diff --ignore-cr-at-eol` empty. Invisible in CI,
+    where the checkout is already LF. Same precedent as the `installers/licenses/**` and
+    `site/data/*.json` pins above, and it matters more now the hooks are a gate: one that
+    leaves a contributor's tree dirty is one they learn to ignore.
 
 ---
 

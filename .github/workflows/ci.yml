@@ -1,0 +1,355 @@
+# knaif CI — the split jobs of post-v1-ci Workstream C1.
+#
+# This repository had no CI at all until this file; releases gated on local green
+# (`just check`) and RELEASE.md says so. That is why every job here runs a `just` recipe
+# rather than its own copy of the commands: the recipes are the gate contributors already
+# run, and a CI that reimplements them is a second definition that will drift from the
+# first. When CI and local disagree, one of them is wrong and nobody can tell which.
+#
+# WHAT RUNS WHEN. The plan's requirement is that "Python-only PRs must not require native
+# inference; native-only PRs must not run notebooks", so the jobs are gated on which paths
+# a PR touches. That creates the classic branch-protection trap: a required check that is
+# *skipped* stays pending forever and blocks the merge. The `ci` job at the bottom is the
+# answer and is the ONLY check that should be marked required in branch protection (C5) —
+# it always runs, and it fails if any job it needs actually failed, while treating skipped
+# as fine.
+#
+# TOOLCHAIN COMES FROM mise.toml. Not from versions restated here. mise.toml already says
+# why: "a mismatch between the pin here and CI is exactly the drift these pins exist to
+# prevent." Rust is the one exception — rust-toolchain.toml is authoritative and rustup on
+# the runner honours it without being asked.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push supersedes the run in flight for the same ref. Release tags are not in scope
+# here (C3 owns that workflow), so cancelling is always safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Which halves of the monorepo does this change touch? Computed with plain git rather
+  # than a filter action: the rule is short enough to read, and it keeps the number of
+  # third-party actions running against a public repo down.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      native: ${{ steps.filter.outputs.native }}
+      site: ${{ steps.filter.outputs.site }}
+      packaging: ${{ steps.filter.outputs.packaging }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the base commit to diff against, not just the tip.
+          fetch-depth: 0
+
+      - id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Fetch WITHOUT --depth: a shallow fetch into the full clone above gives a
+            # merge base that does not exist, and `git diff a...b` then reports the whole
+            # tree as changed — which fails open, running everything, so it would never be
+            # noticed as a bug.
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            files=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          else
+            # A push to main runs everything. Cheap insurance against a path rule that is
+            # subtly wrong: the mistake then shows up on main, not silently never at all.
+            files=""
+          fi
+          echo "changed files:"; echo "${files:-<all — push to main>}"
+
+          match() {
+            [ -z "$files" ] && { echo "true"; return; }
+            echo "$files" | grep -qE "$1" && echo "true" || echo "false"
+          }
+
+          # The justfile and this workflow gate everything: both change what the other runs.
+          common='^(justfile|\.github/workflows/|mise\.toml)'
+
+          # `skills/` and `contracts/` deliberately appear on BOTH sides. They are the
+          # dual-runtime surface: a skill bundle carries its YAML contract at the top, read
+          # by the Python loader and the Rust one, and `skills/*/native/` are Cargo
+          # workspace members. Splitting them by subpath is the kind of clever rule that
+          # ends with a job silently not running on the change that needed it; running both
+          # costs a cached cargo build and cannot be wrong.
+          {
+            echo "python=$(match "$common|^(python/|skills/|scripts/|contracts/|pyproject\.toml|uv\.lock)")"
+            echo "native=$(match "$common|^(native/|apps/|skills/|contracts/|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
+            echo "site=$(match "$common|^site/")"
+            echo "packaging=$(match "$common|^installers/")"
+          } >> "$GITHUB_OUTPUT"
+
+  python:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Provisions every tool in mise.toml. Narrowing it to python/uv/just would be faster,
+      # but is a tuning decision worth making against real timings from the first green
+      # run rather than guessed at now.
+      - uses: jdx/mise-action@v2
+
+      # `just install` runs `uv pip install -e`, which refuses to touch a global
+      # interpreter — on a developer box the venv already exists, on a runner it does not.
+      # Creating it here rather than teaching the recipe `--system` keeps CI installing into
+      # the same layout a contributor has, which is the whole reason CI runs the recipes.
+      - name: uv venv
+        run: uv venv
+
+      # The dev dependencies are an EXTRA of python/core, not a default group, so `uv run`
+      # alone does not install pytest, ruff or mypy. `just install` is the one command that
+      # knows that.
+      - name: just install
+        run: just install
+
+      # The suite covers skills/ as well as core, and the reference skills declare system
+      # requirements (skills/ffmpeg/SPEC.md). The first CI run proved they are not optional:
+      # seven tests in test_agent.py failed with "ffprobe not found on PATH", and the run
+      # reported 39 skips against 5 locally. They pass on a developer box only because
+      # everyone who has run them already had ffmpeg installed.
+      #
+      # This matters beyond the seven: C1 asks CI to REPRODUCE the baseline rather than
+      # discover it, and a runner missing the skills' dependencies silently tests less than
+      # the machine the baseline was taken on. Provisioning what the specs already document
+      # is what makes the two numbers comparable.
+      - name: Install the reference skills' system requirements
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
+
+      - name: just install-skills
+        run: just install-skills
+
+      # `just check-py` = lint-py + type-check-py + test-py + gen-skills-check. Running the
+      # recipe rather than the four commands is the point — see the header.
+      #
+      # BASELINE, re-measured 2026-08-07 as C1 requires: 1666 passed / 5 skipped. The first
+      # green run should reproduce that, not discover it. The plan's recorded 1532/7 was
+      # from 2026-07-23 and is superseded.
+      - name: just check-py
+        run: just check-py
+
+  native:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `just` itself comes from mise.toml, so this job needs mise even though its Rust pin
+      # does not: the first run failed here with `just: command not found`. mise.toml and
+      # rust-toolchain.toml name the same 1.96.0 — the latter stays authoritative, and
+      # rustup honours it whichever cargo ends up first on PATH.
+      - uses: jdx/mise-action@v2
+
+      # rust-toolchain.toml declares `components = ["rustfmt", "clippy"]`, and the first run
+      # showed that is not enough here: the toolchain arrived with three components and no
+      # clippy, so `cargo clippy` failed before running a single lint. Asking for them
+      # explicitly is idempotent and costs seconds, and a missing component must fail as a
+      # setup error rather than as a lint that quietly never ran.
+      - name: Ensure the toolchain has the components the workspace checks with
+        run: rustup component add rustfmt clippy
+
+      - name: Show the toolchain rust-toolchain.toml selected
+        run: rustc --version && cargo --version && cargo clippy --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      # fmt + clippy --workspace --all-targets -D warnings.
+      - name: just check-native
+        run: just check-native
+
+      # BASELINE, re-measured 2026-08-07: 251 passed, 0 ignored, across 14 test binaries.
+      - name: just test-native
+        run: just test-native
+
+  # The llama.cpp feature is a cmake + C++ build of a vendored dependency, which the crate
+  # itself calls "heavy" and keeps off by default. It is split out of `native` rather than
+  # bolted onto it so that an ordinary Rust change gets its answer in a couple of minutes
+  # instead of waiting on a build that has nothing to do with it.
+  #
+  # Clippy only, no tests: the feature gates which BACKEND is compiled in, and exercising it
+  # would need a GGUF this workflow has no business downloading. What can regress silently
+  # is that the cfg'd code stops compiling, and clippy catches exactly that.
+  native-llama:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: llama
+      - name: Install the C++ build dependencies llama.cpp needs
+        run: sudo apt-get update && sudo apt-get install -y cmake libclang-dev
+      - name: clippy -p knaif-cli --features llama
+        run: cargo clippy -p knaif-cli --features llama --all-targets -- -D warnings
+
+  # C1 listed this job as `docs`, when `docs` meant the mkdocs site at site/. That site was
+  # deleted by the website-split plan and replaced by two Astro apps, so a literal `docs`
+  # job would have nothing to build. This is its successor: the same intent — the published
+  # surface does not break — against the thing that is actually published now.
+  site:
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+
+      # astro check on both, then a full production build so the link checker has a dist/
+      # to walk. `site-links` is offline by design and stays that way here.
+      - name: just site-check
+        run: just site-check
+
+      - name: just site-build
+        run: just site-build
+
+      - name: just site-links
+        run: just site-links
+
+  # C5. Deliberately NOT path-gated, unlike everything else here. The path filters answer
+  # "which half of the repo did this touch"; these two apply to every change there is —
+  # formatting and a commit subject are properties of the PR, not of the files in it.
+  #
+  # The hooks in .pre-commit-config.yaml are opt-in: a contributor who never ran
+  # `just hooks-install` is caught only at review. This makes them a gate. It also makes
+  # the FORMATTERS a gate for the first time — `just check` runs ruff but never
+  # `black --check`, so formatting was enforced by nothing.
+  #
+  # Only the default (pre-commit) stage runs. The pre-push tier is mypy, pytest and clippy,
+  # which the python and native jobs already cover; running them twice would double the
+  # slowest part of CI to learn nothing.
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+
+      # Same reason as the `native` job: the toolchain arrives without the components
+      # rust-toolchain.toml declares, and one of the hooks is `cargo fmt --check`. Second
+      # job to need this, so it is the toolchain's behaviour rather than a one-off — a
+      # composite action would be the fix if a third appears.
+      - name: Ensure the toolchain has rustfmt
+        run: rustup component add rustfmt
+
+      # Several hooks are `language: system` and shell out to `uv run ruff` / `uv run black`
+      # so they use the versions pinned in the venv rather than a pre-commit-managed copy
+      # that would drift from what `just check` runs. That only works if the venv exists.
+      - name: uv venv
+        run: uv venv
+      - name: just install
+        run: just install
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: pre-commit run --all-files
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  # PRs are squash-merged, so the PR TITLE becomes the commit subject on the target branch.
+  # Nothing checked it before: the commit-msg hook only ever sees the local commits that get
+  # squashed away.
+  #
+  # Reuses scripts/check_commit_msg.py rather than reimplementing the convention, so the
+  # hook and CI cannot disagree — the script takes a file path, so the title is written to
+  # one. No uv or venv: the script is stdlib-only, and the runner's python3 keeps this job
+  # at a few seconds.
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the PR title against the commit convention
+        # Via env, never interpolated into the script body. A PR title is attacker-supplied
+        # text on a public repo, and `${{ }}` inside `run:` would paste it straight into the
+        # shell — the standard GitHub Actions script-injection hole.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
+          python3 scripts/check_commit_msg.py "$RUNNER_TEMP/pr-title.txt"
+
+  # C2. The one job that needs BOTH toolchains, which is the whole point: it asserts that
+  # every active skill bundle loads in the Python loader and the Rust one, and that the two
+  # agree on discovery, stale filtering, `runtimes:` and declared external tools.
+  #
+  # It runs when either runtime OR a bundle changes, because a disagreement can be
+  # introduced from any of the three — and `skills/` already routes to both.
+  loader-compat:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.native == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - uses: Swatinem/rust-cache@v2
+      - name: uv venv
+        run: uv venv
+      - name: just install
+        run: just install
+      # `loader-check` builds the workspace itself, so no separate build step.
+      - name: just loader-check
+        run: just loader-check
+
+  # The static half of packaging. Building and verifying real artifacts is C3's job and
+  # runs in the pinned container; this one only asks whether the scripts that do it are
+  # well-formed — which is worth knowing on the PR that edits them, and costs seconds.
+  packaging:
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # shellcheck ships on the ubuntu runner image, so this needs no setup.
+      #
+      # `--severity=error` deliberately, not `warning`. These scripts predate any linter and
+      # have never been run through one; starting at `warning` would most likely land this
+      # PR red on findings that have nothing to do with it. Errors are the tier that means
+      # "this script is wrong", which is what a gate should assert on day one. Tightening to
+      # `warning` is a follow-up, once a green run has shown what the noise actually is.
+      - name: shellcheck the installer scripts
+        run: |
+          set -euo pipefail
+          mapfile -t scripts < <(find installers -name '*.sh' -type f | sort)
+          printf 'checking %d scripts\n' "${#scripts[@]}"
+          printf '  %s\n' "${scripts[@]}"
+          shellcheck --severity=error "${scripts[@]}"
+
+  # THE required check. Everything above is conditional, and a required check that never
+  # runs blocks a PR forever — so branch protection points here and nowhere else.
+  #
+  # `always()` makes this run even when a dependency was skipped or failed. The result
+  # check treats `skipped` as success (the path was untouched, there was nothing to say)
+  # and anything else as failure — including `cancelled`, which must not read as green.
+  ci:
+    if: always()
+    needs:
+      [changes, python, native, native-llama, loader-compat, site, packaging, hooks, pr-title]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job that ran did not succeed
+        shell: bash
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          if echo "$results" | grep -qE '"result": *"(failure|cancelled)"'; then
+            echo "::error::one or more CI jobs did not succeed"
+            exit 1
+          fi
+          echo "all jobs either succeeded or were skipped"
