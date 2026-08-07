@@ -602,6 +602,13 @@ into `~/.knaif/backends`.
 
   Note it cannot be a CI job either way: both lanes need a GGUF, and models are gitignored.
   Like `just parity`, this is local tooling.
+
+  **Read the native-plan-quality item in [TODO.md](../TODO.md) before building this** (added
+  2026-08-07). Native was observed producing worse plans than Python on the same model — no
+  multi-step plan at all — which makes this lane an acceptance gate rather than a benchmark, and
+  raises its priority. It also imposes an order: the prompt is pinned by no contract today, so a
+  delta measured here cannot be attributed to a planner bug rather than to one side's prompt
+  having drifted. Pin the prompt first, then build this. That work belongs to its own plan.
 - [x] **C5 — Enforce the git conventions in CI** _(added 2026-07-25, when the conventions landed in
   CONTRIBUTING.md)_. The hooks in `.pre-commit-config.yaml` are **opt-in**, so today a contributor
   who never ran `just hooks-install` is caught only at review. Two small jobs close that:

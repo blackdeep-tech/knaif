@@ -404,6 +404,35 @@ This **Open / Next** section is the live backlog (originally distilled from the
     (two tesseract, one ffprobe).
     The other two findings are still open.
 
+- [ ] **Native plans worse than Python on the same model — needs its own plan.** Owner
+  observation on macOS (2026-08-07): `knaif` native produced lower-quality plans than the Python
+  runtime, and **would not produce a multi-step plan at all**. Not yet reproduced from a checkout;
+  everything below is a code read, not a diagnosis.
+  - **Why this is almost certainly deterministic drift, not model quality.** Both runtimes decode
+    **greedily** — Python passes `temperature=0.0` (`orchestrator.py`), native takes the argmax
+    over logits (`knaif-llm/src/llama.rs`). Same GGUF plus an identical prompt should give
+    near-identical tokens, so a *systematic* quality gap has to come from something deterministic
+    that differs. That is good news: it is findable without a model.
+  - **First hypothesis to test, cheapest first.** Native hard-codes `max_tokens: 512`
+    (`knaif-llm/src/llama.rs`, `$KNAIF_MAX_TOKENS` overrides); the promoted Python eval config
+    uses `max_tokens: 2048`. A multi-step plan is the longest output the model ever emits, so a
+    truncated object would fail brace-balanced extraction and degrade to one step or none —
+    matching the symptom exactly. `KNAIF_MAX_TOKENS=2048` on the failing utterance settles it.
+  - **Already ruled out by reading:** `n_ctx` is 8192 on both, and `/no_think` is applied on both.
+  - **The structural gap this exposes: the prompt is pinned by nothing.**
+    `contracts/parity/planner_cases.json` covers parse → normalize → apply_defaults → validate
+    (14 cases, synthetic `demo` registry). Nothing compares what the two runtimes actually *send*
+    the model, and nothing compares their generation defaults — which is how a `512` on one side
+    and a `2048` on the other sit unnoticed.
+  - **Scope for the plan**, once the cause is known: prompt-parity and settings-parity contracts
+    (no GGUF needed, so CI can gate them every PR), plus a mock-backend check that a canned
+    *multi-step* plan renders identical argv on both runtimes — `just native-mock` already
+    provides the harness.
+  - **This changes what C4 is for.** The eval-parity lane stops being a benchmark and becomes the
+    acceptance gate that would have caught this before it shipped. It also only means something
+    once the prompt is pinned: without that, a C4 delta cannot be attributed to a planner bug
+    rather than to one side's prompt having been edited. Build the contracts first.
+
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
   mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.
