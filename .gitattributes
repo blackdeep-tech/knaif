@@ -22,6 +22,14 @@ installers/licenses/** text eol=lf
 # against a file nobody edited.
 site/data/*.json text eol=lf
 
+# Notebooks, for the same reason and found the same way. nbstripout and black both rewrite
+# a notebook with LF, while `* text=auto` hands a Windows checkout CRLF — so every
+# `pre-commit run --all-files` reported the same four notebooks as modified, forever, with
+# `git diff --ignore-cr-at-eol` empty. Harmless in CI, where the checkout is already LF,
+# but a gate that leaves a contributor's tree dirty is a gate people learn to ignore. That
+# matters now that the hooks are a required check (post-v1-ci C5).
+*.ipynb text eol=lf
+
 # Windows-native scripts stay CRLF.
 *.ps1 text eol=crlf
 *.bat text eol=crlf

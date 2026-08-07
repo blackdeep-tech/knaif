@@ -221,6 +221,63 @@ jobs:
       - name: just site-links
         run: just site-links
 
+  # C5. Deliberately NOT path-gated, unlike everything else here. The path filters answer
+  # "which half of the repo did this touch"; these two apply to every change there is —
+  # formatting and a commit subject are properties of the PR, not of the files in it.
+  #
+  # The hooks in .pre-commit-config.yaml are opt-in: a contributor who never ran
+  # `just hooks-install` is caught only at review. This makes them a gate. It also makes
+  # the FORMATTERS a gate for the first time — `just check` runs ruff but never
+  # `black --check`, so formatting was enforced by nothing.
+  #
+  # Only the default (pre-commit) stage runs. The pre-push tier is mypy, pytest and clippy,
+  # which the python and native jobs already cover; running them twice would double the
+  # slowest part of CI to learn nothing.
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+
+      # Several hooks are `language: system` and shell out to `uv run ruff` / `uv run black`
+      # so they use the versions pinned in the venv rather than a pre-commit-managed copy
+      # that would drift from what `just check` runs. That only works if the venv exists.
+      - name: uv venv
+        run: uv venv
+      - name: just install
+        run: just install
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: pre-commit run --all-files
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  # PRs are squash-merged, so the PR TITLE becomes the commit subject on the target branch.
+  # Nothing checked it before: the commit-msg hook only ever sees the local commits that get
+  # squashed away.
+  #
+  # Reuses scripts/check_commit_msg.py rather than reimplementing the convention, so the
+  # hook and CI cannot disagree — the script takes a file path, so the title is written to
+  # one. No uv or venv: the script is stdlib-only, and the runner's python3 keeps this job
+  # at a few seconds.
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the PR title against the commit convention
+        # Via env, never interpolated into the script body. A PR title is attacker-supplied
+        # text on a public repo, and `${{ }}` inside `run:` would paste it straight into the
+        # shell — the standard GitHub Actions script-injection hole.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
+          python3 scripts/check_commit_msg.py "$RUNNER_TEMP/pr-title.txt"
+
   # C2. The one job that needs BOTH toolchains, which is the whole point: it asserts that
   # every active skill bundle loads in the Python loader and the Rust one, and that the two
   # agree on discovery, stale filtering, `runtimes:` and declared external tools.
@@ -275,7 +332,8 @@ jobs:
   # and anything else as failure — including `cancelled`, which must not read as green.
   ci:
     if: always()
-    needs: [changes, python, native, native-llama, loader-compat, site, packaging]
+    needs:
+      [changes, python, native, native-llama, loader-compat, site, packaging, hooks, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job that ran did not succeed
