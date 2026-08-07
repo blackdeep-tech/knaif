@@ -116,6 +116,22 @@ jobs:
       - name: just install
         run: just install
 
+      # The suite covers skills/ as well as core, and the reference skills declare system
+      # requirements (skills/ffmpeg/SPEC.md). The first CI run proved they are not optional:
+      # seven tests in test_agent.py failed with "ffprobe not found on PATH", and the run
+      # reported 39 skips against 5 locally. They pass on a developer box only because
+      # everyone who has run them already had ffmpeg installed.
+      #
+      # This matters beyond the seven: C1 asks CI to REPRODUCE the baseline rather than
+      # discover it, and a runner missing the skills' dependencies silently tests less than
+      # the machine the baseline was taken on. Provisioning what the specs already document
+      # is what makes the two numbers comparable.
+      - name: Install the reference skills' system requirements
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
+
+      - name: just install-skills
+        run: just install-skills
+
       # `just check-py` = lint-py + type-check-py + test-py + gen-skills-check. Running the
       # recipe rather than the four commands is the point — see the header.
       #
@@ -137,6 +153,14 @@ jobs:
       # rust-toolchain.toml name the same 1.96.0 — the latter stays authoritative, and
       # rustup honours it whichever cargo ends up first on PATH.
       - uses: jdx/mise-action@v2
+
+      # rust-toolchain.toml declares `components = ["rustfmt", "clippy"]`, and the first run
+      # showed that is not enough here: the toolchain arrived with three components and no
+      # clippy, so `cargo clippy` failed before running a single lint. Asking for them
+      # explicitly is idempotent and costs seconds, and a missing component must fail as a
+      # setup error rather than as a lint that quietly never ran.
+      - name: Ensure the toolchain has the components the workspace checks with
+        run: rustup component add rustfmt clippy
 
       - name: Show the toolchain rust-toolchain.toml selected
         run: rustc --version && cargo --version && cargo clippy --version
