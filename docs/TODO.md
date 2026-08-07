@@ -373,6 +373,30 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
+- [ ] **CI — Workstream C is built except C4** (2026-08-07) — plan:
+  [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
+  This repo had no CI at all; `.github/workflows/` did not exist. Now `ci.yml` runs path-gated
+  `python` / `native` / `native-llama` / `loader-compat` / `site` / `packaging` / `hooks` /
+  `pr-title` behind one always-run `ci` aggregate, and `release.yml` builds the Linux artifacts
+  in the pinned container on every packaging PR and drafts them on a tag.
+  - **Operator-only, and in this order.** The `ci` check does not exist on `main` until this
+    work merges there, so requiring it first blocks every PR on a check that never runs.
+    Merge `feat/post-v1-ci` → `main`, then enable protection: require **`ci` and nothing else**
+    (every other job is path-gated, and a *skipped* required check blocks a PR forever),
+    squash-merge only, linear history, no direct pushes.
+  - **Decision owed:** the `site/data/release.json` refresh needs an `on: release: published`
+    workflow that would be the first thing here writing to `main` — which collides with that
+    protection. Either the bot gets a push exemption or the refresh opens a PR. Left unbuilt
+    rather than guessed; the manual `just release-data` step stands meanwhile.
+  - **C4 (eval-parity lane) is deferred with a design finding** recorded at the item: as the
+    plan words it, the `rust-cli` lane sits a layer too low and would report a parity delta
+    that means nothing. Read that note before starting it.
+  - **Three findings worth carrying out of this**, none of which a local gate could have made:
+    seven tests silently required `ffprobe` on PATH (39 skips on a clean runner against 5
+    locally); `mise.toml` pins Python 3.14 and claims the dev env is 3.14.x while the venv is
+    **3.10.18**, so CI is the first thing ever to run the suite on 3.14; and `rust-toolchain.toml`
+    declares `rustfmt`/`clippy` components that the provisioned toolchain does not carry.
+
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
   mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.
