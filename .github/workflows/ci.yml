@@ -91,10 +91,23 @@ jobs:
             echo "packaging=$(match "$common|^installers/")"
           } >> "$GITHUB_OUTPUT"
 
+  # MATRIX over both ends of requires-python (">=3.10,<3.15"), added 2026-08-08.
+  #
+  # Neither end was tested before. `mise.toml` provisions 3.14 and its comment claimed the dev
+  # env was 3.14.x; the maintainer's venv is 3.10.18, and mise is not installed on that box —
+  # so every local run this project has ever had was 3.10, and CI's first run was the first
+  # time anything executed the suite on 3.14. It failed there, on a real defect.
+  #
+  # A declared range that is exercised at one point is a range in name only. `fail-fast: false`
+  # so a break at one end still reports the other: "3.14 only" and "both" are different bugs.
   python:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
@@ -107,8 +120,14 @@ jobs:
       # interpreter — on a developer box the venv already exists, on a runner it does not.
       # Creating it here rather than teaching the recipe `--system` keeps CI installing into
       # the same layout a contributor has, which is the whole reason CI runs the recipes.
-      - name: uv venv
-        run: uv venv
+      # `--python` overrides whatever mise put on PATH; uv fetches the interpreter if the
+      # runner lacks it. Without this the matrix would be decorative — both legs would build
+      # against mise's 3.14 and report two identical runs under two different names.
+      - name: uv venv (Python ${{ matrix.python }})
+        run: uv venv --python ${{ matrix.python }}
+
+      - name: Show the interpreter actually under test
+        run: uv run python -c "import sys; print(sys.version)"
 
       # The dev dependencies are an EXTRA of python/core, not a default group, so `uv run`
       # alone does not install pytest, ruff or mypy. `just install` is the one command that

@@ -210,14 +210,20 @@ check-py: lint-py type-check-py test-py gen-skills-check
 # PATH — `just bootstrap` provisions them from mise.toml. Site recipes live at the bottom.
 check: check-py check-native site-check
 
-# Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent
+# Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent.
+#
+# The `rustup component add` is not redundant with rust-toolchain.toml. mise provisions Rust
+# with rustup's MINIMAL profile, which ignores that file's `components` — so a contributor who
+# bootstraps exactly as documented gets rustc + cargo + rust-std, and `just check-native` then
+# dies on a missing clippy before it lints anything. CI hit this in two separate jobs. It is
+# idempotent and costs seconds when the components are already there.
 [windows]
 bootstrap:
-    @if (Get-Command mise -ErrorAction SilentlyContinue) { mise install; Write-Host "Toolchain provisioned via mise." } else { Write-Host "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.14 + uv 0.11.x are on PATH, then 'just init'." }
+    @if (Get-Command mise -ErrorAction SilentlyContinue) { mise install; if (Get-Command rustup -ErrorAction SilentlyContinue) { rustup component add rustfmt clippy } ; Write-Host "Toolchain provisioned via mise." } else { Write-Host "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.10+ and uv 0.11.x are on PATH, then 'just init'." }
 
 [unix]
 bootstrap:
-    @if command -v mise >/dev/null 2>&1; then mise install && echo "Toolchain provisioned via mise."; else echo "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.14 + uv 0.11.x are on PATH, then 'just init'."; fi
+    @if command -v mise >/dev/null 2>&1; then mise install && { command -v rustup >/dev/null 2>&1 && rustup component add rustfmt clippy; } ; echo "Toolchain provisioned via mise."; else echo "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.10+ and uv 0.11.x are on PATH, then 'just init'."; fi
 
 # Native (Rust) recipes. Requires the Rust toolchain (cargo) on PATH — `just bootstrap`
 # provisions it via mise. Run arbitrary cargo commands with `just rs <args>`.

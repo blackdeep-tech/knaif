@@ -11,7 +11,12 @@
 # here and CI is exactly the drift these pins exist to prevent.
 
 [tools]
-python = "3.14"      # matches requires-python ">=3.10,<3.15"; dev env is 3.14.x
+python = "3.14"      # top of requires-python ">=3.10,<3.15". This is what mise PROVISIONS,
+                     # not a claim about what anyone runs: the maintainer's venv is 3.10.18,
+                     # and mise is not installed on that box at all. CI ran the suite on 3.14
+                     # for the first time in 2026-08 and found a real failure there, so the
+                     # `python` job now runs a MATRIX over both ends of the supported range —
+                     # 3.10 and 3.14 — rather than trusting either end untested.
 uv = "0.11.2"        # Python env + dependency manager (pinned for reproducibility)
 just = "latest"      # human-facing task runner
 rust = "1.96.0"      # provides cargo; keep in sync with rust-toolchain.toml (authoritative)
