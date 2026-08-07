@@ -365,19 +365,55 @@ into `~/.knaif/backends`.
 
 ## Workstream C — CI & release automation _(was finalization Workstream F)_
 
-- [ ] **C1 — Split CI jobs** _(was F1)_ in `.github/workflows/`: `python` (pytest + lint/type on
+- [x] **C1 — Split CI jobs** _(was F1)_ in `.github/workflows/`: `python` (pytest + lint/type on
   `python/core`), `native` (`cargo test`/`clippy`/`fmt`, base + `--features llama`),
   `docs`, `packaging`. Python-only PRs must not require native inference; native-only PRs
   must not run notebooks.
-  - **Baseline to encode:** the green state, **re-measured 2026-07-23** — `uv run pytest`
-    **1532 passed / 7 skipped**, `cargo test --workspace` **216 passed**, clippy clean on both
-    `--workspace --all-targets` and `-p knaif-cli --features llama`, `cargo fmt --all --check` clean.
-    CI's first run should reproduce those, not discover them. *(Finalization A1's original figures —
-    1494/38 python, 204→213 cargo — are superseded; the skip count fell because the restructure
-    resolved the conditional imports behind most of them. Re-measure again before writing the job:
-    a baseline is only useful on the day it is taken.)*
+  - ~~**Baseline to encode:** the green state, **re-measured 2026-07-23** — `uv run pytest`
+    **1532 passed / 7 skipped**, `cargo test --workspace` **216 passed**~~ — **superseded; the
+    instruction to re-measure was followed.** Measured **2026-08-07**: `uv run pytest`
+    **1666 passed / 5 skipped**, `cargo test --workspace` **251 passed / 0 ignored** across 14
+    test binaries, clippy clean on both `--workspace --all-targets` and
+    `-p knaif-cli --features llama`, `cargo fmt --all --check` clean, `black --check .` 209 files
+    unchanged. The pytest and cargo figures are encoded in `ci.yml` beside the jobs that
+    reproduce them.
   - **Note:** CI secrets/protections do **not** survive an org transfer — which is exactly why this
     plan runs *after* OSS-prep. Set them up once, in the final org.
+
+  **Built 2026-08-07** as a single `.github/workflows/ci.yml`. Five decisions in it that the
+  plan did not anticipate:
+
+  - **`docs` became `site`.** C1 named a `docs` job when `docs` meant the mkdocs site at
+    `site/`. [website-split](2026-08-04-website-split.md) deleted that and shipped two Astro
+    apps, so a literal `docs` job would have had nothing to build. Same intent — the published
+    surface does not break — against what is actually published: `just site-check`,
+    `site-build`, `site-links`.
+  - **Every job runs a `just` recipe**, never its own copy of the commands. The recipes are the
+    gate contributors already run; a CI that reimplements them is a second definition that
+    drifts, and when the two disagree nobody can tell which is right. Same principle C5 states
+    for reusing `check_commit_msg.py`.
+  - **The `ci` aggregate job is the only check branch protection should require.** Path-gated
+    jobs are *skipped*, not passed, on a PR that does not touch them — and a required check
+    that is skipped blocks the merge forever. `ci` runs on `always()`, treats skipped as fine,
+    and fails on `cancelled` so a cancelled run cannot read as green. C5's branch-protection
+    item should name this job and nothing else.
+  - **`--features llama` is its own job, clippy only.** The crate itself calls the feature a
+    heavy cmake + C++ build and keeps it off by default, so bolting it onto `native` would make
+    every ordinary Rust change wait on a build unrelated to it. No tests there: the feature
+    picks which *backend* compiles in, and exercising it needs a GGUF this workflow has no
+    business downloading. What regresses silently is the cfg'd code ceasing to compile, which
+    is exactly what clippy catches.
+  - **`skills/` routes to BOTH runtimes.** The first draft sent it to Python alone — wrong, and
+    the kind of wrong that never announces itself: `skills/<name>/native/` are Cargo workspace
+    members and the bundle's YAML is read by both loaders, so a change to a skill's Rust crate
+    would have merged without `cargo` ever building it. `contracts/` is dual for the same
+    reason.
+
+  **The path filter is guarded by a test**, `python/core/tests/test_ci_workflow.py`, which reads
+  the patterns out of the workflow rather than restating them. A filter that stops matching
+  silently stops running the job it gates, and CI still reports green — the one failure mode
+  where nothing else in the repo would notice. Verified by injection: removing `skills/` from
+  the native pattern fails four cases.
 - [ ] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
   (`ffmpeg`, `documents`) load in **both** the Python loader and the Rust loader; stale `io`
   excluded unless explicitly opted in.
