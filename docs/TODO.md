@@ -373,7 +373,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
-- [ ] **CI — Workstream C is built except C4** (2026-08-07) — plan:
+- [ ] **CI + CUDA opt-in — only C4 remains** (2026-08-08) — plan:
   [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
   This repo had no CI at all; `.github/workflows/` did not exist. Now `ci.yml` runs path-gated
   `python` / `native` / `native-llama` / `loader-compat` / `site` / `packaging` / `hooks` /
@@ -392,9 +392,18 @@ This **Open / Next** section is the live backlog (originally distilled from the
     required and strict, could never be merged. The workflow pushes a branch and links the
     compare page; a human opens the PR and CI runs normally. Upgrade path if it ever needs to
     be hands-off is a GitHub App token, **not** a ruleset bypass.
-  - **C4 (eval-parity lane) is deferred with a design finding** recorded at the item: as the
-    plan words it, the `rust-cli` lane sits a layer too low and would report a parity delta
-    that means nothing. Read that note before starting it.
+  - **C4 (eval-parity lane) is the only thing left**, deferred with a design finding recorded at
+    the item: as the plan words it, the `rust-cli` lane sits a layer too low and would report a
+    parity delta that means nothing. Read that note — and the native plan-quality item below,
+    which is its prerequisite — before starting it.
+  - **Workstream U is closed — U1 verified against the live assets 2026-08-08.** The uploads had
+    in fact happened for both platforms; the box had simply never been ticked, and the plan still
+    described `url: TODO` placeholders the manifest no longer had. Checked rather than assumed:
+    **16/16 files published at the declared size with matching sha256** (including the four libs
+    over 150 MB, streamed and hashed), then `backend install cuda` → `backend verify cuda` driven
+    against the real release URLs — which the earlier rehearsals never were, having run against a
+    local HTTP server. 10 files, 638 MiB installed, `verify` clean. GPU offload itself is
+    unchanged from U6's proof on hardware that has an NVIDIA card; this box does not.
   - **Three findings worth carrying out of this**, none of which a local gate could have made:
     seven tests silently required `ffprobe` on PATH (39 skips on a clean runner against 5
     locally); `mise.toml` pins Python 3.14 and claims the dev env is 3.14.x while the venv is

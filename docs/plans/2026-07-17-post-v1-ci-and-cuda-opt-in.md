@@ -1,6 +1,7 @@
 # Post-v1 — CI, release automation, and the CUDA opt-in surface
 
-**Status:** Active — **Workstream C is built except C4** · **Created:** 2026-07-17 · **Completed:** —
+**Status:** Active — **only C4 remains** (deferred with a design finding; Workstream U is closed
+and CI is live) · **Created:** 2026-07-17 · **Completed:** —
 **Owner:** core · **Ref:** follows [native-branch-finalization](2026-07-15-native-branch-finalization.md); runs after the OSS-prep pass
 
 > **Kept 2026-07-23** (S7 decision — **unexecuted roadmap**, and load-bearing as the named
@@ -72,8 +73,11 @@
 > - **The container build cannot check out a PR merge commit.** `build-in-container.sh` fetches
 >   `+refs/heads/*` and `+refs/tags/*`, and a merge commit is on neither.
 >
-> Still owed and **operator-only:** branch protection on `main` (require the `ci` check and
-> nothing else — see C5), and the `release.json` refresh decision recorded under C3.
+> **Both of those are now closed (2026-08-08).** Branch protection is live as the
+> `main-guardrails` ruleset — settings recorded at C5 — and the `release.json` refresh is built
+> as `.github/workflows/release-data.yml`, recorded at C3. The three findings above are fixed
+> too: the ffprobe guard, a `python` matrix over 3.10 **and** 3.14, and `just bootstrap` adding
+> the Rust components that mise's minimal-profile provisioning drops.
 >
 > **Sequencing trap worth stating:** the `ci` check does not exist on `main` until this work
 > merges there. Requiring it before that blocks every PR on a check that never runs.
@@ -115,6 +119,12 @@
 > Still owed: **publish the assets** (U1). **U7 is closed** — the image is pinned, the payload is
 > built and audited, and the three cases pass against it (see below); only U1's uploads remain, and
 > the manifest's `url: TODO` fields are what stand between the payload and a user.
+>
+> **Superseded 2026-08-08 — U1 is done.** The uploads happened for both platforms and the `TODO`
+> URLs are long gone; the box stayed `[~]` for weeks after the work was finished, which is its own
+> small lesson about ticking as you go. Verified end to end at the item: 16/16 files published at
+> the declared size with matching sha256, and `install` → `verify` driven against the live release
+> URLs rather than a local server.
 >
 > **Progress 2026-07-31 — the Linux payload is built, and building it found four defects.** The
 > image is pinned by digest, the payload stages at 698 MB across seven files with per-file SHA256 in
@@ -685,7 +695,34 @@ into `~/.knaif/backends`.
 
 ## Workstream U — CUDA opt-in surface _(was finalization C6 + C6a's execution)_
 
-- [~] **U1 — Publish the split payload artifacts** _(C6a's execution half)_. Per C6a, unchanged:
+- [x] **U1 — Publish the split payload artifacts** _(C6a's execution half)_.
+  **DONE, and verified against the live assets 2026-08-08** — not inferred from the manifest
+  saying `status: published`, which is what it had been saying while this box stayed `[~]`.
+
+  Every one of the **16 declared files across both platforms** returns 200 from
+  `blackdeep-tech/knaif` at exactly its declared `size_bytes`, and **all 16 sha256 values match**
+  — including the four large libs (`libggml-cuda.so` 163.0 MB, `libcublasLt.so.13` 513.4 MB,
+  `ggml-cuda.dll` 150.2 MB, `cublasLt64_13.dll` 463.7 MB), streamed and hashed rather than
+  size-checked. Both licence texts ship on both platforms with identical hashes, and the Windows
+  CRT set (`vcruntime140`, `vcruntime140_1`, `msvcp140`, `vcomp140`) is staged as U6 requires.
+
+  **The install path was then driven against those URLs**, which the U2/U6 rehearsals never were
+  — they ran against a local HTTP server with the real fragment checksums, so GitHub's own asset
+  URLs were the one link untested:
+
+  ```
+  backend list      cuda  available  ~668 MB      (manifest read, platform resolved, not installed)
+  backend install   Installed the cuda backend -> ~/.knaif/backends
+  backend verify    cuda: ok (every file matches the manifest)
+  backend list      cuda  installed  ~668 MB
+  ```
+
+  10 files, 638 MiB on disk. What that still does not prove is **offload on this machine** — this
+  box has no NVIDIA GPU, so the three cases (absent → CPU/Vulkan; present → offloads; present with
+  no usable GPU → clean silent fallback) remain as U6 recorded them, proven against the packaged
+  payload on hardware that had one.
+
+  Per C6a, unchanged:
   | Artifact | Tag | Why |
   |---|---|---|
   | `ggml-cuda` (~125 MB) | the **product release** (e.g. `v1.1.0`) | ABI-coupled to the exe's build; a tag-scoped URL structurally cannot serve a newer lib to an older exe |
