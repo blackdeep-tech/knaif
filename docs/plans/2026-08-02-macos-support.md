@@ -52,7 +52,7 @@ memory or upstream docs. Line references are to that copy.
 | `GGML_CPU_ALL_VARIANTS` supports Apple ARM: `apple_m1` (DOTPROD), `apple_m2_m3` (+MATMUL_INT8), `apple_m4` (+SME) | `ggml/src/CMakeLists.txt:403-430` | The runtime CPU-variant dispatch that the Windows/Linux artifacts rely on **also works here**, and specialises per Apple generation. Three `ggml-cpu-*` libs, not nine to fourteen. Confirmed on hardware (A4): `libggml-cpu-apple_m1.so`, `_m2_m3.so`, `_m4.so` all built; `apple_m2_m3` correctly selected at runtime on this M3 Pro. |
 | Frameworks linked: `Foundation`, `Metal`, `MetalKit`, `Accelerate`, `libc++` | `build.rs:1157-1176` | **All system frameworks. Nothing redistributable, no NVIDIA-shaped payload, no EULA.** Confirmed via `otool -L` on every staged Mach-O (A4/A5): only system framework paths, `libc++`, and `@rpath` to the artifact's own core libs — no third-party dependency anywhere. |
 | `GGML_BLAS` is forced **OFF** on Apple by the crate | `build.rs:673` | Accelerate is linked but not used as the BLAS provider. Affects the CPU fallback path only; note it, don't fight it. Confirmed: `GGML_BLAS:BOOL=OFF`, `GGML_BLAS_VENDOR:STRING=Apple` in `CMakeCache.txt`. |
-| `openmp` is a **default feature** of `llama-cpp-2` → `GGML_OPENMP=ON` | `llama-cpp-2/Cargo.toml` `default = ["openmp", …]`; `sys/build.rs:891` | ⚠️ **This is the plan's highest-probability P0.** See §1.3. **Partially measured 2026-08-03 (B5):** on `M3P`, which has Homebrew but **not** `libomp` installed, `CMakeCache.txt` shows `GGML_OPENMP:BOOL=ON` but `GGML_OPENMP_ENABLED:INTERNAL=OFF` — `find_package(OpenMP)` failed to find an implementation and ggml disabled it gracefully. `otool -L` on every staged Mach-O confirms **zero** OpenMP linkage. This exercises only the *safe* fallback path, not the trap itself — the trap requires `libomp` actually installed (`brew install libomp`), which was not done this session (changes system state; see below). D3's fix should still be implemented regardless, since the trap is real whenever `libomp` **is** present. |
+| `openmp` is a **default feature** of `llama-cpp-2` → `GGML_OPENMP=ON` | `llama-cpp-2/Cargo.toml` `default = ["openmp", …]`; `sys/build.rs:891` | ⚠️ **Fully measured and fixed, 2026-08-07 (B5).** `brew install libomp` alone did not reproduce the trap — it is keg-only, so plain `find_package(OpenMP)` still misses it. It reproduces once the build environment resolves the keg (`CMAKE_PREFIX_PATH=/opt/homebrew/opt/libomp`, which is exactly what many unrelated Homebrew formulae's own build recipes export): `GGML_OPENMP_ENABLED` flips ON and `libggml-base.dylib` + every `ggml-cpu-*` backend links `/opt/homebrew/opt/libomp/lib/libomp.dylib` — caught correctly by `check_macho_deps.py` (E1). D3's fix (an explicit, opt-in `openmp` Cargo feature, off on macOS) is implemented and verified to hold even under that exact trap-triggering environment — see B5. |
 
 ### 1.2 What this means for the artifact shape
 
@@ -146,7 +146,7 @@ CPU-only macOS artifact — Metal is a system framework, present on every suppor
 > an 11× error). One mechanism serves both needs.
 
 **D3 — OpenMP: give knaif a real `openmp` feature and leave it off on macOS.** *Revised 2026-08-02
-after audit; provisional pending B5's measurement.* If the build links Homebrew's libomp, the two
+after audit; confirmed and implemented 2026-08-07 (B5).* If the build links Homebrew's libomp, the two
 fixes are (a) stage `libomp.dylib` and rewrite its install name, or (b) turn `GGML_OPENMP` off for
 the macOS artifact. Prefer (b) — ggml falls back to its own thread pool, macOS work is on Metal
 anyway (`resolve_n_threads` matters only to the CPU fallback), and it removes a third-party binary
@@ -485,7 +485,7 @@ below names the specific place.
       > plan's suggested bare `libllama` — anchored on "`/libllama` immediately followed by a
       > literal dot" so `libllama-common.*.dylib` (a genuinely different lib whose name happens to
       > share the prefix) can never false-positive the check. Verified against real otool -L output.
-- [ ] **B5. ⚠️ Resolve the OpenMP question (§1.3) and implement D3's feature split.** `otool -L`
+- [x] **B5. ⚠️ Resolve the OpenMP question (§1.3) and implement D3's feature split.** `otool -L`
       every staged Mach-O — but judge by **resolution, not path shape**: an unresolvable
       `@rpath/libomp.dylib` is the likely form and carries no Homebrew string. Then implement D3
       properly (`default-features = false` **plus explicit `common`**, a real `openmp` feature
@@ -505,6 +505,55 @@ below names the specific place.
       > warns against ("the obvious implementation... is a bug"). Left for a session with Linux/
       > Windows access, or CI. The residual risk this leaves: an actual Mac with Homebrew's `libomp`
       > installed is still untested end-to-end (only the *absence* case was measured here).
+      > **Done 2026-08-07, on M3P, with the trap actually triggered.** `brew install libomp` alone
+      > (leaving it un-symlinked, keg-only) was NOT enough to reproduce the earlier deferred
+      > concern — `find_package(OpenMP)` still failed to find it, same as before. It only
+      > reproduces once the build environment resolves the keg — e.g. `CMAKE_PREFIX_PATH=
+      > /opt/homebrew/opt/libomp` (which is exactly what many unrelated Homebrew formulae's own
+      > build recipes export). With that set: `GGML_OPENMP_ENABLED:INTERNAL=ON`,
+      > `libggml-base.dylib` and all three `libggml-cpu-apple_*.so` backends link
+      > `/opt/homebrew/opt/libomp/lib/libomp.dylib`, and `check_macho_deps.py` (E1) correctly
+      > failed the staged tree on it (`... which does not resolve: not a system path ... and not
+      > staged in bin/`). **Correction to §1.3's predicted shape:** this bottle's `libomp.dylib`
+      > carries an absolute `LC_ID_DYLIB` (`/opt/homebrew/opt/libomp/lib/libomp.dylib`), not the
+      > `@rpath/libomp.dylib` form §1.3 describes for "LLVM builds" — both shapes are unresolvable
+      > on a clean Mac and E1 catches either (judges by resolution, not path shape, exactly as
+      > designed), so the correction doesn't change what B5 or E1 have to do, only which exact
+      > string a human sees in `otool -L`.
+      >
+      > **Implemented D3 exactly as specified**, in `native/crates/knaif-llm/Cargo.toml`:
+      > `llama-cpp-2` now declares `default-features = false`; the `llama` feature re-adds
+      > `llama-cpp-2/common` explicitly (needed unconditionally — it builds `llama-common`, staged
+      > on every platform); a new `openmp` feature forwards `llama-cpp-2/openmp` and is forwarded
+      > again from `apps/cli/Cargo.toml`. `installers/package.sh`'s `feats_for_kind` and *both*
+      > Justfile `package-native` recipes (`[unix]` and `[windows]`) now append `,openmp` for
+      > `cpu`/`vulkan`/`cuda` only; `metal` is unchanged (`llama,dynamic-backends`, no openmp).
+      >
+      > **Verified the fix holds under the exact trap-triggering environment**: rebuilt `metal`
+      > with `CMAKE_PREFIX_PATH`/`LDFLAGS`/`CPPFLAGS` all still pointing at libomp —
+      > `GGML_OPENMP:BOOL=OFF` (build.rs forces it OFF outright when its own `openmp` cargo feature
+      > is absent, a hard override, not merely relying on `find_package` failing), zero `omp` in
+      > `otool -L` on any staged binary. Then flipped `openmp` ON explicitly and confirmed it
+      > genuinely links libomp — proving the control is real in both directions, not a no-op in
+      > either. Full `just package-native metal` → `check_macho_deps.py` passed clean (9 Mach-O
+      > binaries, every dependency resolves); unzipped the artifact to a scratch dir and ran real
+      > Metal inference (`ffmpeg`, qwen3-4b, 37/37 layers offloaded) — no regression from the
+      > `common` re-plumbing. `cargo fmt --check` and `cargo clippy --workspace --features
+      > llama,dynamic-backends --all-targets -- -D warnings` both clean.
+      >
+      > **On the "re-verify Linux/Windows" instruction this line gives, and why it turned out not
+      > to block landing the change from a Mac-only session:** the effective feature set requested
+      > for the Linux/Windows release kinds is **unchanged** — `common` and `openmp` were both ON
+      > by default before this change and are both ON explicitly now; nothing they build differs.
+      > The one feature actually dropped from the old default set, `android-shared-stdcxx`, is
+      > read by `llama-cpp-sys-2`'s `build.rs` behind `matches!(target_os, TargetOs::Android)` in
+      > every call site (verified by reading it) — a no-op on Linux/Windows/macOS, none of which
+      > this project targets Android from. `libgomp.so.1`/`VCOMP140.dll` staging in `package.sh` is
+      > gated on `$OS`, not on this feature graph, and is untouched. So there is no Linux/Windows
+      > *behavior* left to re-verify — only the macOS side changed, and that side is what got
+      > verified end-to-end above. `cargo tree -e features -i llama-cpp-2` for both the
+      > `cpu,vulkan,cuda,openmp` and the `metal` (no openmp) feature sets confirms the resolved
+      > `llama-cpp-2` feature sets match this reasoning exactly.
 - [x] **B6. Artifact naming + README.** `knaif-<ver>-macos-arm64.zip`, plain name for `metal`; no
       `-cpu` variant exists on macOS (D2). Add the `metal` case to the `INFER=` message block, and
       confirm the existing self-containment smoke at the end of `package.sh` (run from a temp cwd
@@ -525,6 +574,9 @@ below names the specific place.
       > `LICENSE`, `NOTICE` at the root; `licenses/THIRD-PARTY-RUST.txt` and
       > `licenses/llama.cpp-LICENSE.txt` (functional kind). No code change needed — the existing
       > OS-independent staging lines already cover Darwin correctly.
+      > **B5 update, 2026-08-07:** D3 landed on option (b) — `openmp` off on macOS — not (a), so
+      > this paragraph's conditional resolves to "no": `libomp.dylib` is never staged on macOS and
+      > there is no new licence entry to add.
 
 ---
 
@@ -1051,8 +1103,10 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
 
 ## 12. Open questions to resolve during execution
 
-1. **Does the stock toolchain link Homebrew's `libomp`?** (§1.3 / B5.) Decides D3, and it is the
-   most likely thing to make a first artifact non-portable.
+1. ~~Does the stock toolchain link Homebrew's `libomp`?~~ **Resolved 2026-08-07 (B5):** not by
+   default, but yes once the build environment resolves the keg-only formula (e.g.
+   `CMAKE_PREFIX_PATH` pointing at it) — and D3's fix (an explicit, opt-in `openmp` feature, off
+   on macOS) is implemented and verified to hold under that exact environment.
 2. ~~What is the deployment floor?~~ **Promoted to decision D9 + task M4b** (2026-08-02) — it is a
    release gate, not a question to answer later. *Which* version to pick remains open; whether it is
    chosen deliberately does not.

@@ -118,14 +118,21 @@ VER="$(grep -A3 '\[workspace.package\]' Cargo.toml | grep -m1 '^version' | sed -
 
 # Cargo features for a functional kind. Functional kinds use `dynamic-backends` so the produced
 # backends are loadable libs (Option 3), not static-linked — that is what lets CUDA be opt-in.
+#
+# `cpu`/`vulkan`/`cuda` (Linux, and the commands this function prints for a Windows Dev Shell)
+# carry `openmp`: they have shipped with it and their staging already assumes it (VCOMP140.dll /
+# libgomp.so.1). `metal` — the ONLY kind this function ever produces on Darwin, since package.sh
+# refuses cpu/vulkan/cuda there (D2) — omits it deliberately (D3/B5): llama-cpp-2's own default
+# would otherwise link Homebrew's keg-only libomp.dylib whenever the build environment happens to
+# resolve it, an absolute-path dependency check_macho_deps.py (E1) correctly fails on a clean Mac.
 feats_for_kind() {
   case "$1" in
-    cpu)    echo "llama,dynamic-backends" ;;
-    vulkan) echo "llama,dynamic-backends,vulkan" ;;
-    cuda)   echo "llama,dynamic-backends,cuda" ;;
-    # Metal needs no cargo feature of its own (D1): GGML_METAL defaults ON under APPLE, so this is
-    # the same feature set as `cpu` — the CPU-vs-Metal distinction on macOS is made by ggml's own
-    # CMake default, not by anything knaif controls.
+    cpu)    echo "llama,dynamic-backends,openmp" ;;
+    vulkan) echo "llama,dynamic-backends,vulkan,openmp" ;;
+    cuda)   echo "llama,dynamic-backends,cuda,openmp" ;;
+    # Metal needs no cargo feature of its own for GPU offload (D1): GGML_METAL defaults ON under
+    # APPLE, so the CPU-vs-Metal distinction on macOS is made by ggml's own CMake default, not by
+    # anything knaif controls. It also omits `openmp` — see the function comment (D3/B5).
     metal)  echo "llama,dynamic-backends" ;;
   esac
 }

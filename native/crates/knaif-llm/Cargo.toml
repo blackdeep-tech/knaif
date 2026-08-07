@@ -10,7 +10,16 @@ description = "Inference backends (llama.cpp + mock) behind an LlmBackend trait.
 knaif-models = { workspace = true }
 anyhow = { workspace = true }
 num_cpus = { workspace = true }
-llama-cpp-2 = { version = "0.1.150", optional = true }
+# default-features = false: llama-cpp-2's own default pulls in `openmp` unconditionally, which
+# links Homebrew's keg-only libomp.dylib whenever the build environment happens to resolve it
+# (e.g. CMAKE_PREFIX_PATH/LDFLAGS pointing at it, as many unrelated Homebrew formulae's own build
+# recipes do) — an absolute install-name dependency that does not exist on a clean Mac. Verified
+# 2026-08-07 on real hardware: with `brew install libomp` + `CMAKE_PREFIX_PATH=/opt/homebrew/opt/
+# libomp`, GGML_OPENMP_ENABLED flips ON and libggml-base.dylib + every ggml-cpu-* backend links
+# `/opt/homebrew/opt/libomp/lib/libomp.dylib`; check_macho_deps.py (E1) correctly fails on it. See
+# D3 in docs/plans/2026-08-02-macos-support.md. `common` is re-added explicitly below because it
+# is NOT optional — it builds llama-common, staged as a core lib on every platform.
+llama-cpp-2 = { version = "0.1.150", optional = true, default-features = false }
 # Direct handle on the -sys crate purely to flip its `vulkan` (GGML_VULKAN) feature, which
 # the llama-cpp-2 wrapper does not forward at 0.1.150. Cargo unifies it with the copy
 # llama-cpp-2 already depends on, so `vulkan` compiles the Vulkan backend into that build.
@@ -20,9 +29,15 @@ llama-cpp-sys-2 = { version = "0.1.150", optional = true }
 # GPU-/C++-free. `cuda`/`vulkan` additionally compile that GPU backend (need the CUDA toolkit
 # / Vulkan SDK respectively). All backends are runtime-selectable via n_gpu_layers.
 [features]
-llama = ["dep:llama-cpp-2"]
+# `common` is unconditional (not gated behind `openmp` below): it builds llama-common, which
+# every functional kind on every platform stages as a core lib, regardless of the OpenMP choice.
+llama = ["dep:llama-cpp-2", "llama-cpp-2/common"]
 cuda = ["llama", "llama-cpp-2/cuda"]
 vulkan = ["llama", "llama-cpp-sys-2/vulkan"]
+# D3 (2026-08-02 macOS support plan): an honest, opt-in control — off unless a caller asks for
+# it — rather than inheriting llama-cpp-2's default. Enable for the Linux/Windows release kinds,
+# which already stage libgomp.so.1/VCOMP140.dll and have shipped with it; omit on macOS (B5).
+openmp = ["llama-cpp-2/openmp"]
 # Loadable ggml backends (C5/Option 3): builds llama.cpp with GGML_BACKEND_DL=ON +
 # GGML_CPU_ALL_VARIANTS=ON, so each backend (cpu/vulkan/cuda) emits its own `ggml-*` shared lib
 # that the exe `dlopen`s at runtime instead of static-linking. Lets the CUDA backend ship as an

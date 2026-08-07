@@ -367,19 +367,23 @@ package *args:
 # reject the artifact at packaging time — after the full build. See package.sh's own comment.
 [windows]
 package-native kind="cpu":
-    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,dynamic-backends,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; $env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
+    $feats=@{cpu='llama,dynamic-backends,openmp';vulkan='llama,dynamic-backends,vulkan,openmp';cuda='llama,dynamic-backends,cuda,openmp'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; $env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
 
 [unix]
 package-native kind="cpu":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{kind}}" in
-      cpu) feats=llama,dynamic-backends;;
-      vulkan) feats=llama,dynamic-backends,vulkan;;
-      cuda) feats=llama,dynamic-backends,cuda;;
+      cpu) feats=llama,dynamic-backends,openmp;;
+      vulkan) feats=llama,dynamic-backends,vulkan,openmp;;
+      cuda) feats=llama,dynamic-backends,cuda,openmp;;
       # Metal needs no cargo feature of its own (D1) — GGML_METAL defaults ON under APPLE — so
-      # this is the same feature set as `cpu`. package.sh itself refuses cpu/vulkan/cuda on
-      # Darwin and metal everywhere else (D2); this case list only has to stay in sync on names.
+      # this is the same feature set as `cpu` minus `openmp`. package.sh itself refuses
+      # cpu/vulkan/cuda on Darwin and metal everywhere else (D2); this case list only has to
+      # stay in sync on names. `openmp` is deliberately omitted here (D3/B5): llama-cpp-2's own
+      # default would otherwise link Homebrew's keg-only libomp.dylib whenever the build
+      # environment happens to resolve it — an absolute-path dependency that does not exist on a
+      # clean Mac, verified 2026-08-07 and caught by check_macho_deps.py (E1).
       metal) feats=llama,dynamic-backends;;
       *) echo "kind must be cpu|vulkan|cuda|metal" >&2; exit 1;;
     esac
