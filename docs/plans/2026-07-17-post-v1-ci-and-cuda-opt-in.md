@@ -414,9 +414,38 @@ into `~/.knaif/backends`.
   silently stops running the job it gates, and CI still reports green — the one failure mode
   where nothing else in the repo would notice. Verified by injection: removing `skills/` from
   the native pattern fails four cases.
-- [ ] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
+- [x] **C2 — Loader compatibility job** _(was F2)_: assert the active shared skill manifests
   (`ffmpeg`, `documents`) load in **both** the Python loader and the Rust loader; stale `io`
   excluded unless explicitly opted in.
+
+  **Built 2026-08-07** — `scripts/check_loader_compat.py`, `just loader-check`, and a
+  `loader-compat` CI job (the only one needing both toolchains).
+
+  It compares what each loader **reports**, not that each exits 0 — discovery, stale
+  filtering, `runtimes:`, and declared external tools. Both read the same `skill.yaml`, so
+  the only way this can fail is genuine parser drift or one loader rejecting a bundle the
+  other accepts, which is exactly the failure it exists for.
+
+  Deliberately *not* a parity check: `just parity <skill>` pins both runtimes to one GGUF
+  and diffs rendered commands, needing a model and minutes. This needs neither, and answers
+  a different question — not "do they agree on the answer" but "can they both read the file".
+
+  **Verified by injection, 4/4**, and one of them is a live defect worth knowing about:
+
+  | Injected | Result |
+  |---|---|
+  | `skill_class:` pointing at a missing class | Python loader named as raising; Rust still lists the skill |
+  | `required: "yes"` instead of `true` on an external tool | **Python reads `True`; the Rust loader silently drops the whole tool** |
+  | A newly `status: stale` skill (negative control) | Both hide it — check still passes, as it must |
+  | A `skill.yaml` that does not parse | Reported cleanly by name, no traceback |
+
+  The second row is the one to remember: a typo in `required:` does not fail either
+  runtime, it makes ffmpeg's *required* dependency disappear from the native doctor check
+  while Python still believes it is required. Nothing else in the repo would have caught it.
+
+  Writing it also hardened the script — a malformed bundle originally took the whole
+  enumeration down with a traceback, which would have buried the finding behind a stack
+  instead of naming the skill.
 - [ ] **C3 — `release.yml`** _(was F5)_: build → package → verify → attach the **Linux** artifacts to
   a **draft** GH Release. Automates part of the manual cut that v1 did in finalization E2/H3.
   (Add macOS only when macOS packaging lands post-v1.)

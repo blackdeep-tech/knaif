@@ -221,6 +221,28 @@ jobs:
       - name: just site-links
         run: just site-links
 
+  # C2. The one job that needs BOTH toolchains, which is the whole point: it asserts that
+  # every active skill bundle loads in the Python loader and the Rust one, and that the two
+  # agree on discovery, stale filtering, `runtimes:` and declared external tools.
+  #
+  # It runs when either runtime OR a bundle changes, because a disagreement can be
+  # introduced from any of the three — and `skills/` already routes to both.
+  loader-compat:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.native == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - uses: Swatinem/rust-cache@v2
+      - name: uv venv
+        run: uv venv
+      - name: just install
+        run: just install
+      # `loader-check` builds the workspace itself, so no separate build step.
+      - name: just loader-check
+        run: just loader-check
+
   # The static half of packaging. Building and verifying real artifacts is C3's job and
   # runs in the pinned container; this one only asks whether the scripts that do it are
   # well-formed — which is worth knowing on the PR that edits them, and costs seconds.
@@ -253,7 +275,7 @@ jobs:
   # and anything else as failure — including `cancelled`, which must not read as green.
   ci:
     if: always()
-    needs: [changes, python, native, native-llama, site, packaging]
+    needs: [changes, python, native, native-llama, loader-compat, site, packaging]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job that ran did not succeed

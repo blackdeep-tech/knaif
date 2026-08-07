@@ -237,6 +237,16 @@ test-native:
 build-native:
     cargo build --workspace
 
+# Assert every active skill bundle loads in BOTH runtimes (post-v1-ci C2).
+#
+# The bundle's YAML is read by two loaders in two languages, and a bundle that parses in
+# Python but not in Rust is invisible until someone runs the native binary. Compares what
+# each loader REPORTS — discovery, stale filtering, `runtimes:`, external tools — not that
+# each exits 0. Needs the debug binary; `just parity` is the heavier, model-pinned check
+# that answers a different question.
+loader-check: build-native
+    uv run python "{{justfile_directory()}}/scripts/check_loader_compat.py"
+
 # Build + run the native CLI with the MOCK backend (no llama.cpp — fast build, `--model` won't
 # work). For dev/plumbing/CI: `just native-mock -- --version`, `just native-mock -- skills list`,
 # `just native-mock -- models pull knaif-qwen3-4b-v1`. For real inference use `just native` below.
