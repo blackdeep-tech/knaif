@@ -394,9 +394,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
     be hands-off is a GitHub App token, **not** a ruleset bypass.
   - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane is now Workstream S of
     [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md),
-    where its prerequisite lives. Relocated rather than deferred: the macOS finding turned it from
-    a benchmark into an acceptance gate, and it cannot be built until the prompt is pinned by a
-    contract. The design finding travels with it.
+    where its prerequisite lives. Relocated rather than deferred: the native-planning finding
+    turned it from a benchmark into an acceptance gate, and it cannot be built until the prompt is
+    pinned by a contract. The design finding travels with it.
   - **Workstream U is closed — U1 verified against the live assets 2026-08-08.** The uploads had
     in fact happened for both platforms; the box had simply never been ticked, and the plan still
     described `url: TODO` placeholders the manifest no longer had. Checked rather than assumed:
@@ -432,23 +432,39 @@ This **Open / Next** section is the live backlog (originally distilled from the
 
 - [ ] **Native plans worse than Python on the same model** — plan:
   [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md).
-  Owner observation on macOS (2026-08-07): native produced lower-quality plans than the Python
-  runtime and **would not produce a multi-step plan at all**. **Not macOS-specific** — that is
-  where the CLI was being driven by hand, not the scope. Not yet reproduced from a checkout;
-  everything below is a code read.
+  Owner observation (2026-08-07), driving the CLI by hand: native produced lower-quality plans
+  than the Python runtime and **would not produce a multi-step plan at all**. **Not
+  platform-specific** — every divergence found is in prompt-building code that is identical on
+  every target. Diagnosis and the fix are exercised **on Windows**; the plan's commands are
+  PowerShell. Not yet reproduced from a checkout; everything below is a code read.
   - **The cause is probably already found, and it is not the model.** `retrieve_tools` is ported
     into `knaif-core` and **never called** — `registry.rs` says "ported in a later slice" — so the
-    native prompt carries the *entire* registry: **26 of 26 ffmpeg tools against Python's 5**
-    (`top_k=5`). `select_examples` is not ported either, so the few-shot block is static instead
-    of chosen per utterance. Both runtimes decode greedily on the same GGUF, so a systematic gap
-    has to be deterministic — and the shipped model is **fine-tuned on Python-shaped prompts**, for
-    which a 26-tool listing is off-distribution. Multi-step is the first thing to degrade.
-  - **Secondary:** native hard-codes `max_tokens: 512` against the eval config's `2048`.
-    Ruled out by reading: `n_ctx` 8192 both, `/no_think` both, greedy both, path normalization both.
+    native prompt carries the *entire* registry: **13 model-visible ffmpeg tools against Python's
+    5** (`top_k=5`). `select_examples` is not ported either, so the few-shot block is static
+    instead of chosen per utterance. And **wiring retrieval up is not enough**: Rust's
+    `retrieve_tools` returns a `BTreeMap`, discarding rank, and `prompt.rs` re-sorts by
+    `tools.yaml` order, while Python emits in relevance order. Both runtimes decode greedily on
+    the same GGUF, so a systematic gap has to be deterministic — and the shipped model is
+    **fine-tuned on Python-shaped prompts**, now confirmed at `build_dataset.py:132`: every
+    training row is built through `retrieve_tools` → `build_prompt`, so the training distribution
+    is five tools, ranked, with filtered examples. Native serves thirteen, in YAML order, with a
+    static block — three divergences at once. Multi-step is the first thing to degrade.
+  - **Audited 2026-08-08 before any implementation; two findings were wrong and are corrected in
+    the plan rather than quietly replaced.** The 26-of-26 count compared registry entries against
+    prompt lines — 13 of the 26 are `internal: true` and both prompt builders skip them. And the
+    `max_tokens` 512-vs-2048 gap does not exist: the promoted `knaif-qwen3-4b-v1` is **512 on both
+    sides** (`models.yaml:56`, `eval_backends.yaml:196`); the 2048 belongs to a superseded stanza
+    for a different GGUF. Both errors are what "established by reading" looks like unexecuted.
+  - **P cannot start as originally written:** `$KNAIF_DEBUG` dumps raw model output on a
+    parse/validation *failure*, never the prompt — so a prompt dump is now P0.
+  - Ruled out: `n_ctx` 8192 both, `/no_think` both, greedy both. **Path normalization is not**
+    ruled out — native rewrites every backslash, Python only path-shaped tokens.
   - **The structural lesson.** `prompt.rs` recorded its divergences as safe because "Phase 10
     eval-parity measures end quality" — that check is **C4, and it was never built**. A divergence
     accepted on the strength of a check that does not exist is an unmeasured divergence.
-  - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything.
+  - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything —
+    and it needs an adapter: `plan --batch` emits validated plans, while the executing verifiers
+    grade rendered commands and produced files.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single

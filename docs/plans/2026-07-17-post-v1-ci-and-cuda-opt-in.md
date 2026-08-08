@@ -1,9 +1,18 @@
 # Post-v1 — CI, release automation, and the CUDA opt-in surface
 
-**Status:** Active — **only C4 remains** (deferred with a design finding; Workstream U is closed
-and CI is live) · **Created:** 2026-07-17 · **Completed:** —
+**Status:** Done — **closed 2026-08-08.** Workstreams C and U are complete (CI is live on every PR
+behind the `ci` aggregate, `main` is protected by `main-guardrails`, U1 verified against the live
+release assets); **C4 was relocated, not dropped** — it is Workstream S of
+[native-python-planning-parity](2026-08-08-native-python-planning-parity.md), where its
+prerequisite lives. The one unchecked box below is the archived original C4, kept inside a
+`<details>` block for the record. · **Created:** 2026-07-17 · **Completed:** 2026-08-08
 **Owner:** core · **Ref:** follows [native-branch-finalization](2026-07-15-native-branch-finalization.md); runs after the OSS-prep pass
 
+> **All notes in this block are historical and superseded by the Status line above.** They are a
+> dated stack, oldest last; several describe the plan as unstarted, which was true when written.
+> Read them for how the work was scoped, not for what is built — the workstreams' own checkboxes
+> and the decision log are the record of that.
+>
 > **Kept 2026-07-23** (S7 decision — **unexecuted roadmap**, and load-bearing as the named
 > owner of scope two *kept* plans moved out: `native-branch-finalization` (Workstream F, and
 > C6) and `monorepo-dual-runtime` (Phase 10's CI remainder) both point here by name. Deleting
@@ -594,12 +603,13 @@ into `~/.knaif/backends`.
       builds a draft, while `release_data.py` refuses drafts by design. Different moments.
 - [x] **C4 — MOVED 2026-08-08** to
   [native-python-planning-parity](2026-08-08-native-python-planning-parity.md) as its Workstream S.
-  Not abandoned and not done — **relocated**, because the macOS finding (native producing no
-  multi-step plans) turned it from a benchmark into the acceptance gate for a real divergence, and
-  gave it a prerequisite this plan has no business owning: the prompt must be pinned by a contract
-  first, or a parity delta cannot be attributed to a planner bug rather than to one side's prompt
-  being edited. The design finding below travels with it and is restated there — read it either
-  way before building the lane. Ticked here so this plan can close; the work lives there.
+  Not abandoned and not done — **relocated**, because the native-planning finding (native
+  producing no multi-step plans) turned it from a benchmark into the acceptance gate for a real
+  divergence, and gave it a prerequisite this plan has no business owning: the prompt must be
+  pinned by a contract first, or a parity delta cannot be attributed to a planner bug rather than
+  to one side's prompt being edited. The design finding below travels with it and is restated
+  there — read it either way before building the lane. Ticked here so this plan can close; the
+  work lives there.
 
   <details><summary>Original C4 item and the design finding, kept for the record</summary>
 
