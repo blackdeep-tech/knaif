@@ -165,27 +165,57 @@ any single fix below.
 
 ## Workstream P — Diagnose before fixing
 
-- [ ] **P0 — Build the prompt dump first. There is currently no way to do P1.**
+- [x] **P0 — Build the prompt dump first. There is currently no way to do P1.** *(done 2026-08-08)*
   `$KNAIF_DEBUG` does **not** print the prompt: its only caller is the failure path, and it emits
   the raw model output plus extracted JSON on a parse/validation error (`main.rs:1084`, `1114`,
   `1129`). On a *successful* plan — which is most of the corpus, and the interesting case — it
-  prints nothing at all. Add a real prompt-dump: a `--dump-prompt` flag on `plan`, or an env gate
-  that writes `(system, user)` to stderr before inference at `main.rs:1051`. Keep it a **plain
-  read-only dump**, not a formatter — anything that reshapes the string makes the P1 diff a diff of
-  the dumper.
-  - This lands in `apps/cli` ahead of Q and stays afterwards: R1 needs a way to produce the
-    native side of a golden, and a contributor debugging parity needs the same thing.
-- [ ] **P1 — Reproduce, with both prompts captured verbatim.** A fixed utterance set including at
-  least three known-good multi-step cases from `skills/ffmpeg/data/eval.jsonl`. Dump both prompts
-  for the same utterance and diff them. **The diff is the deliverable** — every later claim rests
-  on it.
-  - Write both captures with `newline="\n"` / `eol=lf` before diffing. A PowerShell redirect gives
-    CRLF and a UTF-16 BOM, which turns every line of the diff red and hides the real one.
-  - Diff the **logical `(system, user)` messages**. Neither runtime's dump is the final token
-    sequence — see R1's scope note.
-- [ ] **P2 — Quantify.** Token counts for both prompts, tool counts, tool *order*, which examples
-  each carries. Turns "the prompts differ" into a number that can be tracked. Order is a listed
-  column, not a footnote: it is finding 3, and it is invisible in a token count.
+  prints nothing at all.
+  - **Built:** `knaif plan --skill X --dump-prompt [--batch FILE]` and its Python counterpart
+    `scripts/dump_prompt.py`, emitting the identical banner format so the two diff line by line.
+    Both are **model-free** — the prompt is a pure function of the bundle and the utterance, so
+    neither side loads a GGUF, and the capture runs in under a second.
+  - `PlanSession` was split: a new `PromptContext` holds the registry and overrides, and *both*
+    the dump and `PlanSession::plan` call its `build()`. A dump produced by a parallel code path
+    could disagree with the prompt actually sent, which would be worse than no dump.
+  - Format is banner-delimited, not JSON: JSON escaping collapses each message onto one line where
+    every difference reads as "the line changed". Both writers force LF (Rust never translates
+    newlines; the Python side opens stdout with `newline="\n"`), so a Windows redirect cannot
+    inject CRLF. Verified on the captures below — both files came out LF, no BOM.
+  - `python/core/tests/test_dump_prompt.py` is the drift guard: it **parses the format literal out
+    of `main.rs`** and asserts the Python function reproduces it, since there is no shared source
+    to generate both from. Confirmed non-vacuous against a deliberately drifted format.
+- [x] **P1 — Reproduce, with both prompts captured verbatim.** *(done 2026-08-08)* Four utterances
+  — `ffmpeg_hard_001/002/003` (the `chain3` tag, which is how multi-step rows are marked; there is
+  no `len(plan) >= 2` field to filter on) plus `ffmpeg_001` as a single-step control.
+  - **Result: the user message is byte-identical on both runtimes for all four. The entire
+    divergence is in the system message**, and it is 1.77× longer on native (13,994 vs 7,893
+    characters for `ffmpeg_hard_002`).
+  - The system header is **identical** (5,395 chars both) — so the divergence is exactly the two
+    ported-but-unwired pieces, and nothing else. That is a stronger result than "the prompts
+    differ": it rules out the header, the rules block and the user turn in one measurement.
+- [x] **P2 — Quantify.** *(done 2026-08-08)*
+
+  | per utterance | Python | Native |
+  |---|---|---|
+  | tools listed | **5**, varying per utterance, relevance order | **13**, identical every utterance, `tools.yaml` order |
+  | few-shot examples | **5**, varying per utterance | **28**, identical every utterance |
+  | system message | 7,592–7,907 chars | 13,994 chars, *identical for every utterance* |
+  | user message | — | byte-identical to Python |
+
+  Character breakdown of the gap (`ffmpeg_hard_002`): header +0, tool listing **+2,033**, examples
+  **+4,068**. Total +6,101.
+
+  - **The examples block is two-thirds of the excess — the bigger half of the divergence.** The
+    plan had retrieval (Q1) as the headline and example selection (Q2) as secondary; by volume it
+    is the other way round. Q2 is not a follow-up to Q1, and P3's factorial design is what will
+    say which one actually moves plan quality.
+  - Native's system prompt being **byte-identical across four different utterances** is the whole
+    finding in one line: no retrieval, no example selection, nothing per-utterance at all.
+  - **Token counts were not measured** — no tokenizer is installed in the venv (`transformers`,
+    `tokenizers`, `llama_cpp`, `tiktoken` all absent) and the GGUF's tokenizer is only reachable
+    through a `--features llama` build. Characters are reported instead, and they are exact.
+    Worth closing when the llama-backed binary is next built; the ratio is what matters and
+    characters track it closely for near-ASCII English.
 - [ ] **P2b — Save the pre-fix corpus run before touching anything.** S2 promises a
   before-and-after across a real gap, and Q destroys the "before". Run `knaif plan --batch` over
   the full corpus on today's binary and commit the envelopes (or archive the built binary) under
