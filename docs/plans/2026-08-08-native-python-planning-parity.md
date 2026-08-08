@@ -216,14 +216,66 @@ any single fix below.
     through a `--features llama` build. Characters are reported instead, and they are exact.
     Worth closing when the llama-backed binary is next built; the ratio is what matters and
     characters track it closely for near-ASCII English.
-- [ ] **P2b — Save the pre-fix corpus run before touching anything.** S2 promises a
-  before-and-after across a real gap, and Q destroys the "before". Run `knaif plan --batch` over
-  the full corpus on today's binary and commit the envelopes (or archive the built binary) under
-  `evals/parity/`. **This is the only irreversible step in the plan** — after Q lands, no amount of
-  care reconstructs it, and S2 degrades to a single green number that proves nothing.
-- [ ] **P3 — Attribute factorially, not one-at-a-time.** Retrieval and example selection are
-  *coupled* in Python (finding 2: the example filter only fires when a `registry_override` is
-  passed), so testing them singly cannot separate them. Run all four cells:
+- [x] **P2b — Save the pre-fix corpus run before touching anything.** *(done 2026-08-08)*
+  847 utterances (all 314 rows) through `plan --batch` on a **planner-identical** v1.1.0 binary,
+  saved to `evals/parity/2026-08-08_prefix-baseline/` with `score.json` + `report.md` committed.
+  - **No build was needed, and that is verified rather than assumed.** `git diff v1.1.0..HEAD~3`
+    shows zero `.rs` changes under `native/crates/`, two `--help` strings as the only `apps/cli`
+    delta, and `tools.yaml` / `prompt.yaml` untouched. The staged release ships `ggml-vulkan.dll`,
+    so the run took ~35 min on the 3070 instead of CPU's measured 63 s/utterance ≈ 15 hours.
+  - **`evals/**` is gitignored**, so the raw envelopes are not committed — only `score.json` and
+    `report.md`, which the ignore rules allow. **This is a real conflict with what P2b asked for.**
+    For this run the envelopes *are* the durable artefact: S2 must re-grade them with the S1b
+    adapter, which does not exist yet, and a summary cannot be re-graded. 224 KB total. Either
+    add a narrow negation (`!evals/parity/**/*.jsonl`) or accept that S2 re-runs the baseline
+    from the still-tagged v1.1.0 binary — **decide before Q lands**, because after that only the
+    tag makes it reproducible.
+- [x] **P2c — The founding symptom does not reproduce.** *(2026-08-08 — unplanned, and the most
+  important result so far)*
+
+  This plan was opened on: *native "would not produce a multi-step plan at all."* Measured across
+  the corpus, on the shipped binary and the promoted GGUF, with the full 13-tool / 28-example
+  prompt P1 characterized:
+
+  | chain-tagged utterances | result |
+  |---|---|
+  | total | 41 |
+  | produced ≥2 steps | **39 (95.1%)** |
+  | produced the full expected length | **38** |
+
+  All four repetitions of every `chain3` row chained correctly. Corpus-wide routing: outcome
+  **0.908**, expected tool present **0.861**, against the committed Python snapshot's 0.933 /
+  0.845 — *indicative only*, since that snapshot is 297 rows on a `cheap` verifier and this is
+  847 utterances scored on plan envelopes. Close, not comparable.
+
+  - **The three non-full chains are not refusals to chain.** Two are validation errors and one is
+    a correct 2-step where 3 was expected. All five error envelopes corpus-wide are **one bug**:
+    the model emitting an undeclared argument (`adjust_speed.include_audio`,
+    `convert_video.bitrate`, `convert_video.audio_format`, `adjust_volume.target_sample_rate`).
+    That is schema coverage, unrelated to retrieval or examples, and it deserves its own item —
+    "with no sound" and "500 kbps Bitrate" are reasonable requests with no argument to carry them.
+  - **What this does and does not overturn.** The prompt divergence is measured and real (P1/P2);
+    nothing here touches it. What it overturns is the *causal story* — that an off-distribution
+    prompt degrades multi-step planning specifically, which was the plan's stated mechanism and
+    its justification for urgency. On this evidence the divergence is not costing multi-step
+    capability at all.
+  - **What is still unexplained:** why the original hand-driven session saw no multi-step plans.
+    Possibilities not yet ruled out — a different skill, a different or absent `--model` (the
+    mock backend), `run` rather than `plan`, or an older binary. Worth asking the observer before
+    spending more on it, because the answer decides whether P3 is chasing anything.
+  - Recorded as its own item rather than folded into P4 because it changes what the rest of the
+    plan is *for*: R's contracts stand on their own merits, Q remains correct as a port, but
+    neither is now a fix for a quality emergency.
+- [ ] **P3 — Attribute factorially, not one-at-a-time.** **Re-scope before running: P2c removed
+  the effect this was designed to attribute.** The question is no longer "which change restores
+  multi-step planning" — nothing needs restoring — but "does the prompt divergence cost measurable
+  quality at all, in either direction". Same four cells, different success criterion: a routing
+  delta against the P2b baseline, not the presence of chains. If every cell lands inside noise,
+  that is a *result* — it says the divergence is cosmetic and Q is a tidiness port, not a fix.
+
+  Retrieval and example selection are *coupled* in Python (finding 2: the example filter only
+  fires when a `registry_override` is passed), so testing them singly cannot separate them. Run
+  all four cells:
 
   | | static examples | selected examples |
   |---|---|---|
@@ -235,7 +287,13 @@ any single fix below.
   - **Do not run the `max_tokens=2048` experiment.** Finding 4: both sides are already 512, so it
     varies nothing. If output length is ever suspected, first check whether any plan actually
     reaches the 512 cap — if none does, the cap is not in the causal path at all.
-  - If no cell restores multi-step plans, **stop and re-diagnose.** Do not proceed to Q on a hunch.
+  - **P2c already triggered the stop condition this bullet was written for.** The original wording
+    said to stop and re-diagnose if no cell restored multi-step plans; the baseline restored
+    nothing because nothing was broken. Re-diagnosis happened — that is P2c. Do not treat a null
+    P3 as a failure to find the bug; treat it as evidence there is no quality bug to find.
+  - **P3 needs a Python-side run to compare against, and that is currently blocked:**
+    `llama-cpp-python` is not installed (`just install-llama`). Until it is, native can be
+    measured but not measured *against* anything, which is the whole question.
 - [ ] **P4 — Record the outcome here**, including whichever hypothesis fails. A ruled-out cause is
   worth as much to the next reader as the confirmed one. Two are already recorded above — write
   them the same way.
