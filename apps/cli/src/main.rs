@@ -137,6 +137,12 @@ struct PlanArgs {
     /// continues, so output stays line-aligned with the input.
     #[arg(long, value_name = "FILE")]
     batch: Option<PathBuf>,
+    /// Diagnostic: print the exact `(system, user)` prompt this skill would send, then stop. No
+    /// model is selected, downloaded or loaded, so it needs no GGUF. Honours `--batch` (one block
+    /// per input line, order preserved). Output is LF-terminated and verbatim — see
+    /// `scripts/dump_prompt.py` for the Python counterpart the two are diffed against.
+    #[arg(long)]
+    dump_prompt: bool,
     /// Natural-language request (optional in this skeleton).
     utterance: Vec<String>,
 }
@@ -562,6 +568,12 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
     let root = resolve_known_skill(&args.skill)?;
     // Open/CLI mode: resolve relative paths against cwd, no sandbox boundary.
     let cwd = std::env::current_dir()?;
+
+    // `--dump-prompt` short-circuits before any model handling: the prompt is a pure function of
+    // the skill bundle and the utterance, so this path needs no GGUF and never downloads.
+    if args.dump_prompt {
+        return cmd_dump_prompt(&args, &root);
+    }
     // `--json` is accepted but JSON is currently the only output format.
     //
     // `plan` is non-prompting: it auto-selects an installed model silently, but only downloads a
@@ -594,6 +606,48 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
     } else {
         let payload = session.plan(&args.utterance.join(" "), &cwd, None)?;
         println!("{}", serde_json::to_string(&payload)?);
+    }
+    Ok(())
+}
+
+/// Render one prompt-dump block. Pure, so the format is unit-testable and so the Python
+/// counterpart (`scripts/dump_prompt.py`) has an exact spec to match rather than an approximation.
+///
+/// Banner delimiters rather than JSON, deliberately: the point of the dump is a readable
+/// line-by-line `diff` against the Python side, and JSON escaping collapses each message onto one
+/// line where every difference reads as "the line changed". The banners are chosen not to occur in
+/// a rendered prompt.
+fn dump_prompt_block(utterance: &str, system: &str, user: &str) -> String {
+    format!(
+        "===== utterance =====\n{utterance}\n\
+         ===== system =====\n{system}\n\
+         ===== user =====\n{user}\n\
+         ===== end =====\n"
+    )
+}
+
+/// `plan --dump-prompt`: print the prompt(s) the planner would send, then stop.
+///
+/// Model-free by design. `$KNAIF_DEBUG` dumps raw model output only on a parse/validation
+/// *failure*, so before this there was no way to see the prompt for an utterance that planned
+/// successfully — which is most of a corpus, and every interesting case for parity work.
+fn cmd_dump_prompt(args: &PlanArgs, root: &Path) -> anyhow::Result<()> {
+    let ctx = PromptContext::new(root, &args.skill)?;
+    let utterances: Vec<String> = match &args.batch {
+        Some(batch) => std::fs::read_to_string(batch)
+            .map_err(|e| anyhow::anyhow!("reading batch file {}: {e}", batch.display()))?
+            .lines()
+            .map(str::to_string)
+            .collect(),
+        None => vec![args.utterance.join(" ")],
+    };
+    let mut out = std::io::stdout().lock();
+    use std::io::Write;
+    for utterance in &utterances {
+        let (system, user, _) = ctx.build(utterance);
+        // Explicit `\n` (Rust never translates newlines) keeps the dump LF on every platform. A
+        // CRLF capture would make `diff` flag every line as changed and bury the real difference.
+        write!(out, "{}", dump_prompt_block(utterance, &system, &user))?;
     }
     Ok(())
 }
@@ -1005,21 +1059,21 @@ fn build_plan(
     PlanSession::new(root, skill, model, verbose)?.plan(utterance, base, sandbox)
 }
 
-/// A loaded planning session: the expensive per-run setup (skill registry, prompt overrides, and
-/// the model backend) built once and reused across utterances. The model is loaded exactly once in
-/// [`knaif_llm::backend_for`]; `plan` creates a fresh inference context per utterance (see
-/// `LlamaCppBackend::generate_plan`), so batching cannot leak state between utterances.
-struct PlanSession {
+/// The prompt-building half of a planning session: the skill registry and prompt overrides, with
+/// **no model loaded**. Split out of [`PlanSession`] so `plan --dump-prompt` can emit the exact
+/// `(system, user)` the planner would send without paying for — or even owning — a GGUF.
+///
+/// The split is deliberate rather than incidental: the dump calls [`Self::build`], and so does
+/// [`PlanSession::plan`]. A dump built by a second, parallel code path could disagree with the
+/// prompt actually sent, which would make it worse than no dump at all.
+struct PromptContext {
     registry: knaif_core::Registry,
     overrides: knaif_core::PromptOverrides,
     output_capable: std::collections::HashSet<String>,
-    backend: Box<dyn knaif_llm::LlmBackend>,
-    /// Repair only for a real model — the mock repeats its canned response, so a retry is pointless.
-    repair: bool,
 }
 
-impl PlanSession {
-    fn new(root: &Path, skill: &str, model: Option<&Path>, verbose: bool) -> anyhow::Result<Self> {
+impl PromptContext {
+    fn new(root: &Path, skill: &str) -> anyhow::Result<Self> {
         let bundle = root.join(skill);
         let mut registry = knaif_core::load_registry(&bundle.join("tools.yaml"))?;
         if let Some(core) = resolve_repo_file("contracts/runtime/core_tools.yaml") {
@@ -1027,11 +1081,43 @@ impl PlanSession {
         }
         let overrides = knaif_core::load_prompt_yaml(&bundle.join("prompt.yaml"));
         let output_capable = knaif_core::output_capable_tools(&registry);
-        let backend = knaif_llm::backend_for(model, verbose)?;
         Ok(Self {
             registry,
             overrides,
             output_capable,
+        })
+    }
+
+    /// Normalize the utterance and build `(system, user)` — the single place either caller does it.
+    ///
+    /// A model echoing a Windows path verbatim (e.g. `.\clip.mov`) would emit an illegal `\c` JSON
+    /// escape; normalize separators to forward slashes (accepted by ffmpeg + `std::path` on
+    /// Windows) before the utterance reaches the prompt so the emitted plan parses. Returns the
+    /// normalized utterance too, because the clarify gate matches against that, not the raw input.
+    fn build(&self, utterance: &str) -> (String, String, String) {
+        let utterance = normalize_path_separators(utterance);
+        let (system, user) = knaif_core::build_prompt(&utterance, &self.registry, &self.overrides);
+        (system, user, utterance)
+    }
+}
+
+/// A loaded planning session: the expensive per-run setup (skill registry, prompt overrides, and
+/// the model backend) built once and reused across utterances. The model is loaded exactly once in
+/// [`knaif_llm::backend_for`]; `plan` creates a fresh inference context per utterance (see
+/// `LlamaCppBackend::generate_plan`), so batching cannot leak state between utterances.
+struct PlanSession {
+    prompt: PromptContext,
+    backend: Box<dyn knaif_llm::LlmBackend>,
+    /// Repair only for a real model — the mock repeats its canned response, so a retry is pointless.
+    repair: bool,
+}
+
+impl PlanSession {
+    fn new(root: &Path, skill: &str, model: Option<&Path>, verbose: bool) -> anyhow::Result<Self> {
+        let prompt = PromptContext::new(root, skill)?;
+        let backend = knaif_llm::backend_for(model, verbose)?;
+        Ok(Self {
+            prompt,
             backend,
             repair: model.is_some(),
         })
@@ -1044,16 +1130,12 @@ impl PlanSession {
         base: &Path,
         sandbox: Option<&Path>,
     ) -> anyhow::Result<serde_json::Value> {
-        // A model echoing a Windows path verbatim (e.g. `.\clip.mov`) would emit an illegal `\c`
-        // JSON escape; normalize separators to forward slashes (accepted by ffmpeg + `std::path` on
-        // Windows) before the utterance reaches the prompt so the emitted plan parses.
-        let utterance = normalize_path_separators(utterance);
-        let (system, user) = knaif_core::build_prompt(&utterance, &self.registry, &self.overrides);
+        let (system, user, utterance) = self.prompt.build(utterance);
         let payload = infer_with_repair(
             self.backend.as_ref(),
             &system,
             &user,
-            &self.registry,
+            &self.prompt.registry,
             base,
             sandbox,
             self.repair,
@@ -1065,7 +1147,7 @@ impl PlanSession {
         Ok(knaif_core::apply_clarify_gate(
             payload,
             &utterance,
-            &self.output_capable,
+            &self.prompt.output_capable,
         ))
     }
 }
@@ -1842,5 +1924,44 @@ mod tests {
     #[test]
     fn debug_dump_is_none_when_disabled() {
         assert!(debug_dump(false, "RAW_OUTPUT", "EXTRACTED_JSON").is_none());
+    }
+
+    // ── prompt dump (`plan --dump-prompt`) ────────────────────────────────────────────────────
+
+    #[test]
+    fn dump_prompt_block_is_verbatim_and_lf() {
+        let block = dump_prompt_block("trim clip.mp4", "SYSTEM_MSG", "USER_MSG");
+        assert_eq!(
+            block,
+            "===== utterance =====\ntrim clip.mp4\n\
+             ===== system =====\nSYSTEM_MSG\n\
+             ===== user =====\nUSER_MSG\n\
+             ===== end =====\n"
+        );
+        // LF only: a CRLF capture makes `diff` flag every line and buries the real difference.
+        assert!(!block.contains('\r'));
+    }
+
+    #[test]
+    fn dump_prompt_block_does_not_reshape_the_messages() {
+        // The dump exists to be diffed against Python's. Trimming, re-wrapping or escaping the
+        // messages would make the diff describe the dumper rather than the prompt.
+        let system = "  leading spaces\n\nblank line above\ttab\n";
+        let user = "trailing spaces   \n\"quotes\" and \\backslashes\\";
+        let block = dump_prompt_block("u", system, user);
+        assert!(block.contains(system));
+        assert!(block.contains(user));
+    }
+
+    #[test]
+    fn dump_prompt_block_separates_empty_messages() {
+        // An empty batch line is still emitted, so output stays aligned with input the way
+        // `plan --batch` does. The banners must remain parseable when a section is empty.
+        let block = dump_prompt_block("", "", "");
+        assert_eq!(
+            block,
+            "===== utterance =====\n\n===== system =====\n\n\
+             ===== user =====\n\n===== end =====\n"
+        );
     }
 }
