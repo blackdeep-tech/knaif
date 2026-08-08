@@ -392,10 +392,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
     required and strict, could never be merged. The workflow pushes a branch and links the
     compare page; a human opens the PR and CI runs normally. Upgrade path if it ever needs to
     be hands-off is a GitHub App token, **not** a ruleset bypass.
-  - **C4 (eval-parity lane) is the only thing left**, deferred with a design finding recorded at
-    the item: as the plan words it, the `rust-cli` lane sits a layer too low and would report a
-    parity delta that means nothing. Read that note — and the native plan-quality item below,
-    which is its prerequisite — before starting it.
+  - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane is now Workstream S of
+    [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md),
+    where its prerequisite lives. Relocated rather than deferred: the macOS finding turned it from
+    a benchmark into an acceptance gate, and it cannot be built until the prompt is pinned by a
+    contract. The design finding travels with it.
   - **Workstream U is closed — U1 verified against the live assets 2026-08-08.** The uploads had
     in fact happened for both platforms; the box had simply never been ticked, and the plan still
     described `url: TODO` placeholders the manifest no longer had. Checked rather than assumed:
@@ -429,34 +430,25 @@ This **Open / Next** section is the live backlog (originally distilled from the
       `just bootstrap` (the documented path, and mise-based) now adds them explicitly, and
       `rust-toolchain.toml` says why its own `components` list cannot be relied on.
 
-- [ ] **Native plans worse than Python on the same model — needs its own plan.** Owner
-  observation on macOS (2026-08-07): `knaif` native produced lower-quality plans than the Python
-  runtime, and **would not produce a multi-step plan at all**. Not yet reproduced from a checkout;
-  everything below is a code read, not a diagnosis.
-  - **Why this is almost certainly deterministic drift, not model quality.** Both runtimes decode
-    **greedily** — Python passes `temperature=0.0` (`orchestrator.py`), native takes the argmax
-    over logits (`knaif-llm/src/llama.rs`). Same GGUF plus an identical prompt should give
-    near-identical tokens, so a *systematic* quality gap has to come from something deterministic
-    that differs. That is good news: it is findable without a model.
-  - **First hypothesis to test, cheapest first.** Native hard-codes `max_tokens: 512`
-    (`knaif-llm/src/llama.rs`, `$KNAIF_MAX_TOKENS` overrides); the promoted Python eval config
-    uses `max_tokens: 2048`. A multi-step plan is the longest output the model ever emits, so a
-    truncated object would fail brace-balanced extraction and degrade to one step or none —
-    matching the symptom exactly. `KNAIF_MAX_TOKENS=2048` on the failing utterance settles it.
-  - **Already ruled out by reading:** `n_ctx` is 8192 on both, and `/no_think` is applied on both.
-  - **The structural gap this exposes: the prompt is pinned by nothing.**
-    `contracts/parity/planner_cases.json` covers parse → normalize → apply_defaults → validate
-    (14 cases, synthetic `demo` registry). Nothing compares what the two runtimes actually *send*
-    the model, and nothing compares their generation defaults — which is how a `512` on one side
-    and a `2048` on the other sit unnoticed.
-  - **Scope for the plan**, once the cause is known: prompt-parity and settings-parity contracts
-    (no GGUF needed, so CI can gate them every PR), plus a mock-backend check that a canned
-    *multi-step* plan renders identical argv on both runtimes — `just native-mock` already
-    provides the harness.
-  - **This changes what C4 is for.** The eval-parity lane stops being a benchmark and becomes the
-    acceptance gate that would have caught this before it shipped. It also only means something
-    once the prompt is pinned: without that, a C4 delta cannot be attributed to a planner bug
-    rather than to one side's prompt having been edited. Build the contracts first.
+- [ ] **Native plans worse than Python on the same model** — plan:
+  [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md).
+  Owner observation on macOS (2026-08-07): native produced lower-quality plans than the Python
+  runtime and **would not produce a multi-step plan at all**. **Not macOS-specific** — that is
+  where the CLI was being driven by hand, not the scope. Not yet reproduced from a checkout;
+  everything below is a code read.
+  - **The cause is probably already found, and it is not the model.** `retrieve_tools` is ported
+    into `knaif-core` and **never called** — `registry.rs` says "ported in a later slice" — so the
+    native prompt carries the *entire* registry: **26 of 26 ffmpeg tools against Python's 5**
+    (`top_k=5`). `select_examples` is not ported either, so the few-shot block is static instead
+    of chosen per utterance. Both runtimes decode greedily on the same GGUF, so a systematic gap
+    has to be deterministic — and the shipped model is **fine-tuned on Python-shaped prompts**, for
+    which a 26-tool listing is off-distribution. Multi-step is the first thing to degrade.
+  - **Secondary:** native hard-codes `max_tokens: 512` against the eval config's `2048`.
+    Ruled out by reading: `n_ctx` 8192 both, `/no_think` both, greedy both, path normalization both.
+  - **The structural lesson.** `prompt.rs` recorded its divergences as safe because "Phase 10
+    eval-parity measures end quality" — that check is **C4, and it was never built**. A divergence
+    accepted on the strength of a check that does not exist is an unmeasured divergence.
+  - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
