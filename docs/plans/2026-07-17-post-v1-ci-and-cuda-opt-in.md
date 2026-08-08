@@ -592,6 +592,17 @@ into `~/.knaif/backends`.
       wrong answer is not rediscovered.
     - The workflow is separate from `release.yml` on purpose: that one fires on a **tag** and
       builds a draft, while `release_data.py` refuses drafts by design. Different moments.
+- [x] **C4 — MOVED 2026-08-08** to
+  [native-python-planning-parity](2026-08-08-native-python-planning-parity.md) as its Workstream S.
+  Not abandoned and not done — **relocated**, because the macOS finding (native producing no
+  multi-step plans) turned it from a benchmark into the acceptance gate for a real divergence, and
+  gave it a prerequisite this plan has no business owning: the prompt must be pinned by a contract
+  first, or a parity delta cannot be attributed to a planner bug rather than to one side's prompt
+  being edited. The design finding below travels with it and is restated there — read it either
+  way before building the lane. Ticked here so this plan can close; the work lives there.
+
+  <details><summary>Original C4 item and the design finding, kept for the record</summary>
+
 - [ ] **C4 — Eval-parity lane** _(was F3's unbuilt half; the decision itself stays in finalization
   F3)_: register a `rust-cli` backend shelling `knaif plan --skill X --json` in `eval_backends.yaml`
   + `just eval-parity` diffing `python-agent` vs `rust-cli` (±2%). Use the `knaif-*` / `qwen3-4b-v1`
@@ -632,6 +643,9 @@ into `~/.knaif/backends`.
   raises its priority. It also imposes an order: the prompt is pinned by no contract today, so a
   delta measured here cannot be attributed to a planner bug rather than to one side's prompt
   having drifted. Pin the prompt first, then build this. That work belongs to its own plan.
+  *(It now has one — see the move note above.)*
+
+  </details>
 - [x] **C5 — Enforce the git conventions in CI** _(added 2026-07-25, when the conventions landed in
   CONTRIBUTING.md)_. The hooks in `.pre-commit-config.yaml` are **opt-in**, so today a contributor
   who never ran `just hooks-install` is caught only at review. Two small jobs close that:
