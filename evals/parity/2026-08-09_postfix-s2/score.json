@@ -1,0 +1,66 @@
+{
+  "run": "2026-08-09_postfix-s2",
+  "date": "2026-08-09",
+  "skill": "ffmpeg",
+  "what": "S2 of the native/Python planning-parity plan: native BEFORE and AFTER Workstream Q, on identical inputs.",
+  "subset": {
+    "utterances": 60,
+    "composition": "all 41 chain-tagged utterances + 19 sampled (seed 20260809)",
+    "why_not_full_corpus": "the Vulkan build fails on this box (vulkan-shaders-gen / rc.exe RC2136), so inference is CPU-bound at ~60 s/utterance; 847 would be ~14 h"
+  },
+  "model": "models/knaif-qwen3-4b-v1-q4_k_m.gguf, pinned by path on every lane",
+  "verifier": "routing_only on plan envelopes; every lane passed through validate_plan so all fail at the same stage",
+  "lanes": {
+    "native_prefix_vulkan": {
+      "binary": "dist/staging/knaif-1.1.0-windows-x64 (v1.1.0)",
+      "backend": "vulkan",
+      "outcome_accuracy": 0.95,
+      "expected_tool_present": 0.9,
+      "invalid_plans": 2
+    },
+    "native_prefix_cpu": {
+      "binary": "dist/staging/knaif-1.1.0-windows-x64 (v1.1.0)",
+      "backend": "cpu (KNAIF_N_GPU_LAYERS=0)",
+      "outcome_accuracy": 0.95,
+      "expected_tool_present": 0.9,
+      "invalid_plans": 2
+    },
+    "native_postfix_cpu": {
+      "binary": "target/debug/knaif (feat/native-parity, Q1-Q5)",
+      "backend": "cpu",
+      "outcome_accuracy": 0.95,
+      "expected_tool_present": 0.9,
+      "invalid_plans": 2
+    },
+    "python": {
+      "entry": "CommandAgent.infer + retrieve_tools",
+      "backend": "cuda",
+      "outcome_accuracy": 0.95,
+      "expected_tool_present": 0.9,
+      "invalid_plans": 2
+    }
+  },
+  "agreement": {
+    "backend_effect_prefix_vulkan_vs_cpu": {
+      "same": 60,
+      "of": 60,
+      "rate": 1.0
+    },
+    "q_effect_prefix_cpu_vs_postfix_cpu": {
+      "same": 56,
+      "of": 60,
+      "rate": 0.9333
+    },
+    "with_python_before_q": {
+      "same": 56,
+      "of": 60,
+      "rate": 0.9333
+    },
+    "with_python_after_q": {
+      "same": 59,
+      "of": 60,
+      "rate": 0.9833
+    }
+  },
+  "conclusion": "Q moved no aggregate quality metric and raised per-row agreement with Python from 0.933 to 0.983. Backend is not a confound: Vulkan and CPU agree on 60/60."
+}

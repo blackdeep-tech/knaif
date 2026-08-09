@@ -1,6 +1,6 @@
 {"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["videos/*.mp4"],"container":"mp4","video_codec":"h264"}}]}
-{"plan":[{"tool":"reject","args":{"reason":"The boomerang effect is not a supported operation."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A boomerang effect is not a supported operation."}}]}
 {"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
 {"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
 {"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":0.5}}]}
@@ -8,15 +8,15 @@
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mkv"}}]}
 {"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
 {"plan":[{"tool":"reject","args":{"reason":"Executing shell commands is outside the local sandbox scope."}}]}
-{"plan":[{"tool":"reject","args":{"reason":"Promising 'perfect' or 'flawless' quality is not an achievable result."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Promising 'perfect' quality is not an achievable result."}}]}
 {"plan":[{"tool":"reject","args":{"reason":"Magically improving video quality is not a valid request."}}]}
-{"plan":[{"tool":"clarify","args":{"question":"Which video, and to which platform?"}}]}
-{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:00","output":"clip_1frame.mp4"}}]}
-{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:00","output":"clip_frame.mp4"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"louder"}}]}
 {"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
 {"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mov","at_time":"00:00:03"}}]}
-{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1080,"height":1920,"keep_aspect_ratio":false}}]}
-{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1080,"width":1080,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1920,"width":1080,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1080,"width":1080,"fit":"letterbox"}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
@@ -30,17 +30,17 @@
 {"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rotated.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
 {"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rotated.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
 {"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
-{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
-{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
-{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
-{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"target_size_mb":15,"output":"clip_1080p_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p_small.mp4"]}}]}
-{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"],"output":"clip_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_small.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"],"output":"clip_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_small.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"],"output":"clip_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_small.mp4"]}}]}
 {"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"output":"clip_1080p_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p_small.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"target_size_mb":15,"output":"clip_1080p_small.mp4"}}]}
 {"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"output":"clip_1080p_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p_small.mp4"]}}]}
+{"plan":[],"error":"Plan step 1 invalid: Tool 'resize_video' has unsupported args: [\"to_resolution\"]"}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
 {"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
 {"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
-{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
-{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
@@ -48,13 +48,13 @@
 {"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
 {"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
 {"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
-{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"fit":"crop","output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
 {"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
-{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mov"],"output":"clip_silent.mov"}},{"tool":"convert_video","args":{"inputs":["clip_silent.mov"],"container":"mp4"}}]}
 {"plan":[],"error":"Plan step 1 invalid: Tool 'convert_video' has unsupported args: [\"audio_format\"]"}
 {"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
 {"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
-{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rev.mp4"],"height":480,"keep_aspect_ratio":true}}]}
-{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rev.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"output":"clip_rev.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rev.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"output":"clip_rev.mp4","quality":"small_file"}},{"tool":"resize_video","args":{"inputs":["clip_rev.mp4"],"height":480,"keep_aspect_ratio":true}}]}
 {"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}
-{"plan":[],"error":"Plan step 1 invalid: Tool 'adjust_speed' has unsupported args: [\"include_audio\"]"}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}

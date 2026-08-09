@@ -534,8 +534,34 @@ nothing by it.**
     fail, or worse, half-work. Use a separate config section, or explicit lane-type dispatch
     before the orchestrator is reached. This is the same design finding C4 recorded, one level
     down: the config shape has to describe what the thing *is*.
-- [ ] **S2 — Score the saved pre-fix run and the post-fix run with the same scorer**, and record
-  both numbers. P2b is what makes this possible — without those envelopes there is no "before",
+- [x] **S2 — Score the saved pre-fix run and the post-fix run with the same scorer.**
+  *(done 2026-08-09 — `evals/parity/2026-08-09_postfix-s2/`)*
+
+  | agreement (identical tool sequence), 60-utterance subset | |
+  |---|---|
+  | backend effect alone — pre-fix Vulkan vs pre-fix CPU | **60/60 (100%)** |
+  | Q effect, backend held constant | 56/60 (93.3%) |
+  | with Python, **before** Q | 56/60 (93.3%) |
+  | with Python, **after** Q | **59/60 (98.3%)** |
+
+  Every lane — pre-fix Vulkan, pre-fix CPU, post-fix CPU, Python — scores **0.950 outcome / 0.900
+  tool / 2 invalid**. **Q moved no aggregate metric and raised per-row parity from 93.3% to 98.3%**,
+  which is exactly the shape P2c predicted: there was no quality gap left to close, only divergence.
+  - **Backend is not a confound** — Vulkan and CPU agree on 60/60. So the 847-utterance Vulkan
+    baseline stays comparable to CPU runs, and a future S run need not re-measure the "before".
+    Worth knowing before anyone spends a GPU day on it.
+  - Of the four rows Q changed, three now match Python. Q repaired one invalid plan
+    (`ffmpeg_hard_017`) and introduced another (`ffmpeg_hard_005`), so the invalid count is
+    unchanged on different rows. The single residual disagreement is a dropped third step on a
+    `chain3` row, not a routing error.
+  - **Subset, not the full corpus, and why:** the Vulkan build fails on this box
+    (`vulkan-shaders-gen` → `rc.exe RC2136`), so inference is CPU-bound at ~60 s/utterance and 847
+    would take ~14 hours. 41 chain rows + 19 sampled at a fixed seed covers what the plan is about.
+  - **Operational note:** the first pre-fix run died after 2 utterances because a `git commit` ran
+    mid-flight and pre-commit stashes unstaged files, yanking the output file from under the
+    process. Not a runtime fault. Do not commit while a background job writes into the tree.
+- [ ] **S2 (original wording) — Score the saved pre-fix run and the post-fix run with the same
+  scorer**, and record both numbers. P2b is what makes this possible — without those envelopes there is no "before",
   and a parity lane whose first run is also its first green run has proved nothing. Grade both
   sides with the adapter built in S1b, so the delta is a change in plans and not a change in how
   plans were graded.
