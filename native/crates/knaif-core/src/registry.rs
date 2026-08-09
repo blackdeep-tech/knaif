@@ -2,7 +2,8 @@
 //!
 //! Rust port of the Python `knaif.registry` (ToolDef dataclass, `load_registry`). Same
 //! shape and same skip/guard behavior so both runtimes accept the identical `tools.yaml` /
-//! `core_tools.yaml`. Retrieval (`retrieve_tools`) is ported in a later slice.
+//! `core_tools.yaml`. Retrieval lives in [`crate::retrieval`] and is wired into the planning path
+//! (`apps/cli`): the prompt carries the retrieved subset in relevance order, not this whole map.
 
 use std::collections::BTreeMap;
 use std::path::Path;

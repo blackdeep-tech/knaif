@@ -25,8 +25,10 @@ pub use planner::{
     apply_defaults, normalize_plan, optimize_plan, parse_plan, resolve_args, validate_plan,
     validate_step,
 };
-pub use prompt::{build_prompt, load_prompt_yaml, validator_feedback_prompt, PromptOverrides};
+pub use prompt::{
+    build_prompt, build_prompt_from, load_prompt_yaml, validator_feedback_prompt, PromptOverrides,
+};
 pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
-pub use retrieval::retrieve_tools;
+pub use retrieval::{retrieve_tools, RetrievedTools};
 pub use safety::{is_unsafe_request, load_unsafe_phrases};
 pub use skills::{list_skills, resolve_skills_root, SkillMeta};

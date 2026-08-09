@@ -1059,6 +1059,12 @@ fn build_plan(
     PlanSession::new(root, skill, model, verbose)?.plan(utterance, base, sandbox)
 }
 
+/// Tools retrieved per utterance. Matches Python's `retrieve_tools` defaults deliberately — a
+/// different `top_k` is a different prompt, which is the divergence this exists to close, not a
+/// knob to tune. Revisit only with a measurement, after parity (see the plan's open questions).
+const RETRIEVAL_TOP_K: usize = 5;
+const RETRIEVAL_MIN_SCORE: f64 = 0.0;
+
 /// The prompt-building half of a planning session: the skill registry and prompt overrides, with
 /// **no model loaded**. Split out of [`PlanSession`] so `plan --dump-prompt` can emit the exact
 /// `(system, user)` the planner would send without paying for — or even owning — a GGUF.
@@ -1094,9 +1100,19 @@ impl PromptContext {
     /// escape; normalize separators to forward slashes (accepted by ffmpeg + `std::path` on
     /// Windows) before the utterance reaches the prompt so the emitted plan parses. Returns the
     /// normalized utterance too, because the clarify gate matches against that, not the raw input.
+    ///
+    /// **Retrieval runs here**, matching Python's planning path: the prompt carries the top
+    /// [`RETRIEVAL_TOP_K`] tools for this utterance in relevance order, not the whole registry.
+    /// Measured on the real ffmpeg bundle that is 5 tools rather than 13.
     fn build(&self, utterance: &str) -> (String, String, String) {
         let utterance = normalize_path_separators(utterance);
-        let (system, user) = knaif_core::build_prompt(&utterance, &self.registry, &self.overrides);
+        let retrieved = knaif_core::retrieve_tools(
+            &utterance,
+            &self.registry,
+            RETRIEVAL_TOP_K,
+            RETRIEVAL_MIN_SCORE,
+        );
+        let (system, user) = knaif_core::build_prompt_from(&utterance, &retrieved, &self.overrides);
         (system, user, utterance)
     }
 }

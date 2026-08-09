@@ -31,6 +31,7 @@ fn overrides_for(doc: &Value, key: &str) -> PromptOverrides {
             .get("examples_block")
             .and_then(Value::as_str)
             .map(str::to_string),
+        examples: Vec::new(),
     }
 }
 

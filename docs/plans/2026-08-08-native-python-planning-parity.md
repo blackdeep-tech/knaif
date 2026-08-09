@@ -303,7 +303,37 @@ any single fix below.
 Only after P3 attributes the gap. Each item is a **port, not a rewrite** — same inputs, same
 outputs, per `docs/NATIVE.md`.
 
-- [ ] **Q1 — Call `retrieve_tools` in the native plan path, and make it return ranked order.**
+- [x] **Q1 — Call `retrieve_tools` in the native plan path, and make it return ranked order.**
+  *(done 2026-08-09)* `retrieve_tools` now returns `RetrievedTools`, an ordered
+  `Vec<(&str, &ToolDef)>` that preserves rank, and `build_prompt_from` lists tools in the order it
+  receives them. `PromptContext::build` in `apps/cli` retrieves with `top_k=5`, `min_score=0.0`.
+  The native ffmpeg prompt now carries **5 tools in Python's exact relevance order** instead of 13
+  in `tools.yaml` order. R2's order contract, which failed against the `BTreeMap`, is green.
+- [x] **Q2 — Port `select_examples`.** *(done 2026-08-09)* `PromptOverrides` keeps the structured
+  `examples` alongside the rendered block; `select_examples` ports the clarify/reject pair plus up
+  to 3 domain examples ranked by (retrieved-tool overlap, query/request token overlap), re-emitted
+  in declaration order. Gated on `RetrievedTools::is_filtered()` — the equivalent of Python's
+  `registry_override is not None` — so both fallbacks survive: no retrieval, or no structured
+  examples, still yields the full block.
+  - Python's `sorted(..., reverse=True)` is **stable**, so equally scored examples keep
+    declaration order. `sort_by_key(|i| Reverse(score(i)))` matches; a naive descending sort that
+    reversed ties would not, and no fixture would have caught it at this corpus size.
+- [x] **Q — VERIFIED: all 847 ffmpeg corpus prompts are byte-identical across runtimes.**
+  *(2026-08-09)* `scripts/dump_prompt.py` vs `knaif plan --dump-prompt`, same batch file, diffed:
+  **0 differing lines out of 87,241**. The progression is worth recording because it isolates each
+  fix: 384 differing lines before Q1 → 276 after Q1 (tools and order fixed, examples remaining) →
+  **0** after Q2. Both dumps are model-free, so re-verifying the whole corpus costs ~6 seconds and
+  belongs in any future parity check.
+- [x] **Q4 — Fix both stale notes in `prompt.rs`, and the one in `registry.rs`.**
+  *(done 2026-08-09)* The module header claimed two "intentional, prompt-only divergences"
+  (alphabetical listing, compact example JSON) deferred to a Phase 10 check. Both were already
+  false and the check was never built; the header now states the port is byte-for-byte, names the
+  contracts that pin it, and keeps the cautionary note about excusing a divergence with a
+  measurement nobody ran. `registry.rs` no longer says retrieval "is ported in a later slice".
+
+  <details><summary>Original Q1/Q2 wording, kept for the record</summary>
+
+- **Q1 — Call `retrieve_tools` in the native plan path, and make it return ranked order.**
   The function is already ported and tested; the wiring is not — but wiring alone is **not
   sufficient**, per finding 3. `retrieve_tools` returns a `BTreeMap<String, &ToolDef>`
   (`retrieval.rs:81`), which throws the ranking away at the return, and `prompt.rs:163` then
@@ -319,6 +349,9 @@ outputs, per `docs/NATIVE.md`.
   reject example. Note Python falls back to the full block when no retrieved subset is supplied
   **or when `prompt_examples` is empty** (`agent.py:752`) — the port must keep both fallbacks, not
   just the happy path.
+
+  </details>
+
 - [ ] **Q3 — De-duplicate the generation budget.** **Not a fix — hygiene.** Finding 4: native's
   `512` and the promoted model's `512` already agree, so nothing changes behaviourally. The defect
   is that the number lives in three places (`llama.rs:241`, `models.yaml`, `eval_backends.yaml`)

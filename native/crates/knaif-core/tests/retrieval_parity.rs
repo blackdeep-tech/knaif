@@ -44,9 +44,9 @@ fn selections() -> Vec<(String, Vec<String>, Vec<String>)> {
             case["min_score"].as_f64().unwrap(),
         );
         let ranked: Vec<String> = selected
-            .keys()
-            .filter(|k| !ALWAYS_INCLUDE.contains(&k.as_str()))
-            .cloned()
+            .names()
+            .filter(|k| !ALWAYS_INCLUDE.contains(k))
+            .map(str::to_string)
             .collect();
         let expected: Vec<String> = case["expected_ranked"]
             .as_array()
@@ -73,9 +73,11 @@ fn retrieval_parity_selects_the_same_tools() {
     }
 }
 
+/// Closed by Q1 (2026-08-09): `retrieve_tools` now returns `RetrievedTools`, which keeps rank
+/// order, and `build_prompt_from` emits tools in the order it receives them. This assertion failed
+/// with the alphabetical `BTreeMap` ordering before that change — which is the only moment a
+/// contract proves it detects the bug it exists for.
 #[test]
-#[ignore = "Q1: retrieve_tools returns a BTreeMap, so relevance ranking is lost at the return. \
-            Un-ignore when it returns an ordered result and build_prompt emits in that order."]
 fn retrieval_parity_preserves_relevance_order() {
     for (name, ranked, expected) in selections() {
         assert_eq!(

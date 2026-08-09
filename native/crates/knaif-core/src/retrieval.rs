@@ -5,7 +5,7 @@
 //! tokenization and diacritic-insensitive matching so multilingual queries retrieve the right
 //! tool. Same scoring both runtimes use.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use unicode_normalization::UnicodeNormalization;
 
@@ -15,6 +15,66 @@ use crate::registry::{Registry, ToolDef};
 const ALWAYS_INCLUDE: &[&str] = &["clarify", "reject", "done"];
 /// Longest CJK character n-gram generated for containment matching.
 const CJK_MAX_NGRAM: usize = 4;
+
+/// Tools selected for one utterance, **in relevance order**.
+///
+/// The order is the payload, not a detail. `build_prompt` lists tools in the order it receives
+/// them, and the shipped model is fine-tuned on prompts built through Python's `retrieve_tools`,
+/// which yields highest-scoring first. This function previously returned a `BTreeMap`, which
+/// re-sorted the selection alphabetically at the moment of return — the same tools, a different
+/// prompt, and off the distribution the model was trained on. Pinned by
+/// `contracts/parity/retrieval_cases.json`.
+#[derive(Debug, Clone)]
+pub struct RetrievedTools<'a> {
+    tools: Vec<(&'a str, &'a ToolDef)>,
+    filtered: bool,
+}
+
+impl<'a> RetrievedTools<'a> {
+    /// Every tool in `tools.yaml` declaration order — the no-retrieval path.
+    ///
+    /// Mirrors Python, where a caller that passes no `registry_override` gets the whole registry.
+    /// `def.order` rather than the `Registry`'s alphabetical key order: the model is sensitive to
+    /// the listing order it was trained on.
+    pub fn all(registry: &'a Registry) -> Self {
+        let mut ordered: Vec<(&str, &ToolDef)> =
+            registry.iter().map(|(n, d)| (n.as_str(), d)).collect();
+        ordered.sort_by_key(|(_, d)| d.order);
+        Self {
+            tools: ordered,
+            filtered: false,
+        }
+    }
+
+    /// Whether this came from retrieval rather than [`Self::all`].
+    ///
+    /// The equivalent of Python's `registry_override is not None`, which is what gates example
+    /// selection: filtering examples against the *whole* registry would select nothing useful,
+    /// so both runtimes fall back to the full block when no retrieval happened.
+    pub fn is_filtered(&self) -> bool {
+        self.filtered
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&'a str, &'a ToolDef)> + '_ {
+        self.tools.iter().copied()
+    }
+
+    pub fn names(&self) -> impl Iterator<Item = &'a str> + '_ {
+        self.tools.iter().map(|(n, _)| *n)
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.tools.iter().any(|(n, _)| *n == name)
+    }
+
+    pub fn len(&self) -> usize {
+        self.tools.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tools.is_empty()
+    }
+}
 
 /// Unicode combining marks (NFD output for diacritics) — the blocks Python's `category == "Mn"`
 /// filter removes in practice.
@@ -83,7 +143,7 @@ pub fn retrieve_tools<'a>(
     registry: &'a Registry,
     top_k: usize,
     min_score: f64,
-) -> BTreeMap<String, &'a ToolDef> {
+) -> RetrievedTools<'a> {
     let tokens = query_tokens(query);
 
     // Document frequency: how many (non-internal) tools claim each normalized keyword.
@@ -132,20 +192,28 @@ pub fn retrieve_tools<'a>(
     // Highest score first; name as a deterministic tiebreak (Python sorts (score, name) desc).
     scores.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
 
-    let mut selected: BTreeMap<String, &ToolDef> = BTreeMap::new();
+    // Collect in RANK order. A map keyed by name would re-sort here and lose the ranking, which
+    // is exactly the bug this port had: same tools, different prompt.
+    let mut selected: Vec<(&str, &ToolDef)> = Vec::new();
     for (score, name) in scores.into_iter().take(top_k) {
         if score >= min_score {
-            if let Some(t) = registry.get(&name) {
-                selected.insert(name, t);
+            if let Some((key, tool)) = registry.get_key_value(&name) {
+                selected.push((key.as_str(), tool));
             }
         }
     }
+    // Appended after the ranked selection, as Python does. Their relative order is not a contract
+    // — `build_prompt` filters system tools out before the model sees anything — but a fixed slice
+    // keeps it deterministic anyway.
     for name in ALWAYS_INCLUDE {
-        if let Some(t) = registry.get(*name) {
-            selected.insert((*name).to_string(), t);
+        if let Some((key, tool)) = registry.get_key_value(*name) {
+            selected.push((key.as_str(), tool));
         }
     }
-    selected
+    RetrievedTools {
+        tools: selected,
+        filtered: true,
+    }
 }
 
 #[cfg(test)]
@@ -201,9 +269,9 @@ mod tests {
         for (query, expected) in cases {
             let result = retrieve_tools(query, &r, 5, 0.0);
             assert!(
-                result.contains_key(expected),
+                result.contains(expected),
                 "expected {expected:?} in top-5 for {query:?}, got {:?}",
-                result.keys().collect::<Vec<_>>()
+                result.names().collect::<Vec<_>>()
             );
         }
     }
@@ -213,13 +281,13 @@ mod tests {
         let r = ffmpeg_with_core();
         let result = retrieve_tools("xyzzy no match at all", &r, 5, 0.0);
         for sys in ["clarify", "reject", "done"] {
-            assert!(result.contains_key(sys), "missing system tool {sys}");
+            assert!(result.contains(sys), "missing system tool {sys}");
         }
         // top_k bounds the non-system selection
         let result = retrieve_tools("video", &r, 2, 0.0);
         let non_system = result
-            .keys()
-            .filter(|k| !["clarify", "reject", "done"].contains(&k.as_str()))
+            .names()
+            .filter(|k| !["clarify", "reject", "done"].contains(k))
             .count();
         assert!(
             non_system <= 2,
