@@ -1,40 +1,55 @@
 {
   "run": "2026-08-08_prefix-baseline",
   "date": "2026-08-08",
-  "runtime": "native",
-  "binary": "dist/staging/knaif-1.1.0-windows-x64/bin/knaif.exe (v1.1.0, Vulkan)",
-  "model": "models/knaif-qwen3-4b-v1-q4_k_m.gguf",
   "skill": "ffmpeg",
+  "model": "models/knaif-qwen3-4b-v1-q4_k_m.gguf (pinned by path on both lanes)",
   "corpus": {
     "rows": 314,
     "utterances": 847
   },
-  "verifier": "routing_only (plan envelopes; NOT the cheap/success verifiers - they need rendered artifacts)",
-  "outcome_accuracy": 0.9079,
-  "expected_tool_present": 0.8607,
-  "error_envelopes": 5,
-  "step_count_histogram": {
-    "0": 5,
-    "1": 726,
-    "2": 85,
-    "3": 31
+  "verifier": "routing_only on plan envelopes; BOTH lanes validated with validate_plan so they fail at the same stage",
+  "native": {
+    "binary": "dist/staging/knaif-1.1.0-windows-x64 (v1.1.0, Vulkan)",
+    "outcome_accuracy": 0.9079,
+    "expected_tool_present": 0.8607,
+    "invalid_plans": 5,
+    "step_count_histogram": {
+      "0": 5,
+      "1": 726,
+      "2": 85,
+      "3": 31
+    },
+    "chain": {
+      "utterances": 41,
+      "multi_step_ge2": 39,
+      "full_length": 38
+    }
   },
-  "chain": {
-    "utterances": 41,
-    "multi_step_ge2": 39,
-    "full_length": 38
+  "python": {
+    "entry": "CommandAgent.infer + retrieve_tools, llama_cpp CUDA",
+    "outcome_accuracy": 0.9032,
+    "expected_tool_present": 0.8571,
+    "invalid_plans": 13,
+    "step_count_histogram": {
+      "0": 13,
+      "1": 720,
+      "2": 83,
+      "3": 31
+    },
+    "chain": {
+      "utterances": 41,
+      "multi_step_ge2": 39,
+      "full_length": 39
+    }
   },
-  "confusion": {
-    "plan->plan": 580,
-    "clarify->clarify": 160,
-    "clarify->plan": 30,
-    "reject->reject": 29,
-    "plan->clarify": 21,
-    "plan->reject": 9,
-    "clarify->reject": 8,
-    "plan->error": 4,
-    "reject->plan": 3,
-    "reject->clarify": 2,
-    "clarify->error": 1
+  "per_row_parity": {
+    "identical_tool_sequence": 783,
+    "of": 847,
+    "rate": 0.9244
+  },
+  "invalid_plan_overlap": {
+    "native_only": 3,
+    "python_only": 11,
+    "both": 2
   }
 }

@@ -73,23 +73,52 @@ a prompt/schema-coverage issue, unrelated to retrieval or example selection, and
 item — the utterances ("with no sound", "500 kbps Bitrate") are reasonable requests the schema has
 no argument for.
 
-## Comparison to Python — indicative only
+## Comparison to Python — same corpus, same GGUF, same scorer
 
-The committed `skills/ffmpeg/data/eval_snapshot.json` (Python, **cheap** verifier) records outcome
-**0.933** and tool accuracy **0.845**, against this run's 0.908 and 0.861.
+Added 2026-08-09 once `llama_cpp` was reachable (the venv already had the cu124 wheel; only the
+`os.add_dll_directory` wiring in `orchestrator.py` makes it loadable, so a bare `import llama_cpp`
+fails and is *not* evidence of a broken install). Python ran the identical 847 utterances against
+the identical GGUF **pinned by path**, emitting the same envelope shape, so one scorer grades both.
 
-**Do not read that as a parity measurement.** Three things differ: the snapshot covers 297 rows
-against today's 314/847, the `cheap` verifier grades a rendered command string while this grades a
-plan envelope, and "tool accuracy" there is not defined identically to "expected tool present"
-here. The numbers are close enough to say native is not dramatically behind, and not comparable
-enough to say anything sharper. Producing the sharp version is what Workstream S is for.
+| metric | native | python | delta |
+|---|---|---|---|
+| outcome accuracy | **0.908** | 0.903 | **+0.005** |
+| expected tool present | **0.861** | 0.857 | **+0.004** |
+| invalid plans | **5** | 13 | −8 |
+| chain full length | 38/41 | 39/41 | −1 |
+| **identical tool sequence** | **783/847 — 92.4%** | | |
 
-A same-corpus Python run is currently blocked: `llama-cpp-python` is not installed in the venv
-(`just install-llama`).
+**Native is at parity, marginally ahead, and inside noise** (0.5 pp ≈ 4 utterances). It carries a
+system prompt 1.77× longer with 13 tools and 28 examples against Python's 5 and 5, and pays
+nothing measurable for it.
+
+### The first scoring of this was wrong, in the plan's own characteristic way
+
+The initial pass showed native *behind* — 0.908 vs 0.916, 5 errors against 0. That comparison was
+invalid: **`agent.infer()` does not surface validation failures.** `agent.py:950` deliberately
+falls through on a validation error and returns the invalid plan (*"so execute_plan surfaces the
+error"*), while native's `plan --batch` validates inline and emits `{"plan":[],"error":…}`. The two
+lanes were failing at different stages, so Python's invalid plans were scored as successes.
+
+Validating both with `validate_plan` flipped the sign and showed Python producing **13** invalid
+plans to native's 5, overlapping on only 2.
+
+**That is an unrecorded runtime divergence and a user-visible one:** native reports an invalid plan
+at plan time; Python returns one that fails later during execution. Neither `parity_check.py` nor
+the contracts drafted in Workstream R would catch it — it is about *when* an error surfaces, not
+what the plan contains.
 
 ## Files
 
-`score.json` is committed. `native_plans.jsonl` (847 envelopes), `index.jsonl` (envelope → corpus
-id mapping) and `utterances.txt` are **gitignored** under `evals/**` as per-run scratch — see the
-plan's P2b note, because for this run they are arguably the durable artefact: S2 has to re-grade
-them with an adapter that does not exist yet, and a summary cannot be re-graded.
+All committed. `evals/**` previously ignored the envelopes as per-run scratch; a narrow negation
+(`!evals/parity/**/*.jsonl`, `*.txt`) now keeps cross-runtime baselines, because a summary cannot
+be re-graded — S2 must re-score these same envelopes with a verifier that does not exist yet, and
+the pre-fix side stops being reproducible the moment the runtime changes.
+
+| file | what |
+|---|---|
+| `utterances.txt` | the 847 utterances, in order, LF |
+| `index.jsonl` | envelope line → corpus `id` + `utterance_idx` |
+| `native_plans.jsonl` | native envelopes (v1.1.0, Vulkan) |
+| `python_plans.jsonl` | Python envelopes (`CommandAgent.infer` + `retrieve_tools`, CUDA) |
+| `score.json` | both lanes scored identically, plus per-row parity |

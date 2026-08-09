@@ -30,6 +30,15 @@ site/data/*.json text eol=lf
 # matters now that the hooks are a required check (post-v1-ci C5).
 *.ipynb text eol=lf
 
+# Cross-runtime parity baselines. These are evidence: the eval-parity lane re-scores the SAME
+# envelopes later, and the two lanes are diffed against each other. Both writers emit LF
+# deliberately (Rust never translates newlines; the Python side opens stdout with newline="\n"),
+# so `* text=auto` handing a Windows checkout CRLF would reintroduce the difference the writers
+# went out of their way to avoid — and a byte comparison would fail on the maintainer's box while
+# passing in CI. Same failure mode as installers/licenses/** and site/data/*.json above.
+evals/parity/**/*.jsonl text eol=lf
+evals/parity/**/*.txt   text eol=lf
+
 # Windows-native scripts stay CRLF.
 *.ps1 text eol=crlf
 *.bat text eol=crlf

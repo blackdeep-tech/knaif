@@ -1,0 +1,847 @@
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"gif"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which file should I process?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Subtitling isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","quality":"visually_good"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03","image_format":"jpeg"}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Deleting/wiping storage is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Formatting or wiping storage is out of scope."}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should I do to your video: trim, resize, extract audio, or something else?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Watermarking isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":1,"target":"email"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"email","target_size_mb":20,"preview":true}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":10,"quality":"small_file"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["*"],"platform":"instagram","preview":true}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","image_format":"jpg","output":"poster.jpg"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What specific ffmpeg settings should I apply?"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mp4","clip2.mp4"],"output":"merged.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip2.mp4","clip.mp4"],"output":"output.mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","quality":"visually_good"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","crf":22,"quality":"visually_good"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"crf":26,"quality":"visually_good"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"crf":31}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":18,"quality":"visually_good"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":1}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target":"messaging","quality":"small_file"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"quality":"visually_good"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"quality":"high_quality"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4","quality":"lossless"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"email","quality":"small_file","preview":true,"output":"clip_ctr_small.mp4"}},{"tool":"convert_video","args":{"inputs":["clip_ctr_small.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Uploading to external services is out of scope."}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"tiktok","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Subtitling isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Watermarking isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Denoising isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Color grading isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Mixing audio is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Deleting files is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Formatting or wiping storage is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Deleting original files is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Sending or transferring files to external servers is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Overwriting original source files is not allowed."}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"email"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05"}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["videos/*.mp4"],"container":"mp4","video_codec":"h264"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reject","args":{"reason":"The boomerang effect is not a supported operation."}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mp4","clip.mov"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["*.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["*.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'file1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"width":1280,"height":720}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["*"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":2160,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":2160,"width":3840,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":2160,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":2160,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"wav"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"wav"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"wav"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"wav"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:02"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:02"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:02"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:02"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Creating a poster image is outside the scope of supported operations."}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","image_format":"jpg","output":"cover.jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","image_format":"jpg"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Generating a poster from a video is out of scope."}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:00"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:06"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":0.5}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":0.5,"quality":"small_file"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":0.5}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":0.5}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":0.5}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":30}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"quality":"visually_good"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target_size_mb":20,"crf":30}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":30}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":30,"quality":"visually_good"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"video_codec":"vp9","container":"webm"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h265"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true,"quality":"visually_good"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"instagram","preview":true}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_4k.mp4"],"target":"email","target_size_mb":15}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_4k.mp4"],"target":"email"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["audio.mp3"],"audio_format":"mp3","output":"audio_lowbitrate.mp3","bitrate":"64k"}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip_no_audio.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip_no_audio.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip_no_audio.mp4"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mkv"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip_no_audio.mp4","at_time":"00:00:04"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip_4k.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mov","start":"00:00:01","end":"00:00:05"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["4K clip"],"speed":3.0}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'no-audio.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_no_audio.mp4"],"target_size_mb":15}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_no_audio.mp4"],"target_size_mb":15}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["audio.mp3"],"audio_format":"flac"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Converting audio from one format to another is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"FLAC is not a valid audio format."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Converting audio from one format to another is out of scope."}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'mp3_file.mp3' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["audio.mp3"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["mp3"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["*"],"audio_format":"mp3","output":"audio.mp3"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["mp3"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'mp3_file.mp3' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mov"],"platform":"tiktok","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mov"],"platform":"tiktok","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mov"],"platform":"tiktok","preview":true,"quality":"visually_good"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mov"],"platform":"tiktok","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mov"],"platform":"tiktok","preview":true}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"output":"clip_ctr_small.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_ctr_small.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"email","quality":"small_file","preview":true,"output":"clip_ctr_small.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_ctr_small.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"whatsapp","target_size_mb":20,"preview":true}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"whatsapp","target_size_mb":20,"preview":true}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3","start":"00:00:03","end":"00:00:05"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3","start":"00:00:03","end":"00:00:05"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"start":"00:00:03","end":"00:00:05","audio_format":"mp3"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3","start":"00:00:03","end":"00:00:05"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rev.mp4"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rev.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rev.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rev.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}
+{"plan":[],"error":"Plan step 1 invalid: Tool 'adjust_speed' has unsupported args: [\"include_audio\"]"}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"flac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"flac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"flac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"flac"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"flac"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4k_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","output":"clip.webm"}},{"tool":"resize_video","args":{"inputs":["clip.webm"],"height":720}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","output":"clip.webm"}},{"tool":"resize_video","args":{"inputs":["clip.webm"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","output":"clip.webm"}},{"tool":"resize_video","args":{"inputs":["clip.webm"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","output":"clip.webm"}},{"tool":"resize_video","args":{"inputs":["clip.webm"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"webm","output":"clip.webm"}},{"tool":"resize_video","args":{"inputs":["clip.webm"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"4K-Clip","at_time":"00:00:01","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"4K клипа","at_time":"00:00:01","image_format":"jpg"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5,"output":"clip_slow.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_slow.mp4"],"crf":25}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5,"output":"clip_slow.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_slow.mp4"],"crf":25}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":0.5,"output":"clip_slow.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_slow.mp4"],"crf":25}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip_no_audio.mp4"],"container":"mkv","output":"clip_no_audio.mkv"}},{"tool":"resize_video","args":{"inputs":["clip_no_audio.mkv"],"height":1080,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:02","output":"clip_trimmed.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_trimmed.mp4"],"platform":"instagram","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:02","output":"clip_trimmed.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_trimmed.mp4"],"platform":"instagram","preview":true}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:02","output":"clip_trimmed.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_trimmed.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:02","output":"clip_trimmed.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_trimmed.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'no-audio.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'silent_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_no_audio.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[],"error":"Plan step 2 invalid: Tool 'adjust_volume' has unsupported args: [\"target_sample_rate\"]"}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["audio_only_mp3"],"audio_format":"wav","bitrate":"22k"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["*"],"audio_format":"wav","output":"audio.wav"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'mp3_file.mp3' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mov","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mov"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mov"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mov","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mov"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mov"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mov","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mov"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mov"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mov","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mov"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mov"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mov","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mov"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mov"],"audio_format":"aac"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_4k.mp4"],"target_size_mb":10,"output":"clip_1080p.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["clip_1080p.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mov"],"audio_format":"mp3","output":"clip.mp3"}},{"tool":"adjust_volume","args":{"inputs":["clip.mp3"],"level":"128kbps"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mov"],"audio_format":"mp3","bitrate":"56kbps"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mov"],"audio_format":"mp3","bitrate":"56k"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mov"],"audio_format":"mp3","bitrate":"56kbps"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mov"],"audio_format":"mp3","bitrate":"56kbps"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mp4","output":"output.mp4"}},{"tool":"compress_video","args":{"inputs":["output.mp4"],"crf":26}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"video_codec":"h264","crf":26,"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"video_codec":"h264","crf":26}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mp4","crf":26}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv","*.mov"],"video_codec":"h264","crf":26,"container":"mp4"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:01","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"reverse_video","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:01","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"reverse_video","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:01","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"reverse_video","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:01","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"reverse_video","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:01","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"reverse_video","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Deleting files is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Formatting or wiping storage is out of scope."}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"email","preview":true}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Uploading to external URLs is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Executing shell commands is outside the local sandbox scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Running arbitrary system commands is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A nonexistent output format is not a valid request."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A nonexistent container format is not a valid request."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A nonexistent codec is not a valid request."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Promising 'perfect' or 'flawless' quality is not an achievable result."}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'source.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Magically improving video quality is not a valid request."}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should be enhanced: file size, quality, resolution, audio, or platform compatibility?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Reading system files is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Accessing files outside the sandbox is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Overwriting the original source file is not allowed."}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["input.mp4"],"output":"input.mp4"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Downloading from URLs is outside the sandbox scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Fetching from URLs is outside the local sandbox scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Processing files outside the sandbox is out of scope."}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"streaming","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should be improved: file size, quality, resolution, audio, or platform compatibility?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should be improved: file size, resolution, audio, or platform compatibility?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should be improved: file size, quality, resolution, audio, or platform compatibility?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should I do to clip.mp4: compress, resize, extract audio, or prepare for a platform?"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"all","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should I fix about clip.mp4: file size, quality, resolution, audio, or platform compatibility?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Repairing is outside the scope of supported operations."}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What operation should I perform on clip.mp4?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should I do to clip.mp4: compress, extract audio, resize, trim, or something else?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4","quality":"high_quality"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"quality":"high_quality"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which video file should I compress?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'this.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"email","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which video should I help prepare for sharing?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A CRF value of 0 is invalid."}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"lossless","crf":0}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","crf":0,"quality":"lossless"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"crf":51,"quality":"visually_good"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target_size_mb":10,"crf":51}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target_size_mb":20,"crf":51,"quality":"small_file"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:00","output":"clip_trimmed.mp4"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:00","output":"clip_1frame.mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mkv"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Negative timestamps aren't supported. Should I trim from the start instead?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:10"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A zero-size output is not a valid result."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A zero-resolution output is not a valid result."}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"gif"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"gif"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"gif"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"gif"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"gif"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":100.0}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A request to trim to a range that exceeds the file's length is invalid."}}]}
+{"plan":[{"tool":"clarify","args":{"question":"A 10-second clip doesn't have a 50-60 second segment. Is there a longer video?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["*"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"opus"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"opus"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"opus"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"opus"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"opus"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'transport.ts' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'transport.ts' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'file.ts' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip2.mp4"],"audio_format":"aac","bitrate":"500kbps"}}]}
+{"plan":[],"error":"Plan step 1 invalid: Tool 'convert_video' has unsupported args: [\"bitrate\"]"}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4","video_codec":"h265","quality":"lossless"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"quality":"lossless"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","quality":"lossless"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Creating a copy is not a supported operation."}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","quality":"lossless"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Subtitling isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Adding captions is not supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Watermarking isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Overlaying a logo isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Stabilization isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Removing camera shake isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Denoising isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Noise reduction isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"HDR↔SDR tone-mapping is not supported."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"HDR↔SDR tone-mapping is out of scope."}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4","video_codec":"h264"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target":"email"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:07"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:07"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"h264","container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"mp4"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target":"email"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:07"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:07"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":720,"width":1280,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"whatsapp","preview":true}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"av1"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"av1"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"video_codec":"av1"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"av1"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mp4"],"container":"av1"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:15"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:15"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:00","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:15"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"By how many degrees should I rotate it (90, 180, or 270)?"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":180}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Splitting into time segments isn't supported. Is there another operation I can help with?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Splitting into multiple time segments is out of scope."}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv","*.mov"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Extracting every-Nth frame is out of scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Extracting frames is outside the scope of supported operations."}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip_4k.mp4","start":"00:00:02","end":"00:00:04"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4k_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mov"]}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mov","at_time":"00:00:03"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mov","at_time":"00:00:03","image_format":"jpg"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mov"],"container":"mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip_no_audio.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A thumbnail requires video frames; an mp3 file has no frames."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"A thumbnail requires a video file, not an audio file."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Sending files to external services is outside the local sandbox scope."}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Uploading to external services is outside the local sandbox scope."}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"medium"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which file should I encode, and what target format?"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"visually_good"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"balanced"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"high_quality"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which file should I encode, and what target format?"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"high_quality"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"high_quality"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"target_size_mb":20,"quality":"high_quality"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"small_file","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["*"],"platform":"preview","preview":true,"quality":"low"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"preview","quality":"small_file"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"quality":"small_file"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target":"email"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:07"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:02","end":"00:00:07"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":720,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3","output":"audio.mp3"}},{"tool":"adjust_speed","args":{"inputs":["audio.mp3"],"speed":0.8}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mov"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mov"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mov"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["mov"],"height":480,"keep_aspect_ratio":true,"output":"mov_480p.mov"}},{"tool":"strip_audio","args":{"inputs":["mov_480p.mov"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'input.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv","*.mov"],"video_codec":"h265"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["*.mp4","*.mkv","*.mov"],"video_codec":"hevc"}}]}
+{"plan":[{"tool":"prepare_for_platform","args":{"inputs":["clip_no_audio.mp4"],"platform":"youtube","preview":true}}]}
+{"plan":[{"tool":"concat_video","args":{"base":"clip_4k.mp4","append":["clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:00","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:00"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:00","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:00","image_format":"jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":50}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":20}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":25}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":50}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["clip_ctr.mp4"],"target_size_mb":5}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip_no_audio.mp4","start":"00:00:00","end":"00:00:03"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["video.mp4"],"output":"video.mp4"}},{"tool":"prepare_for_platform","args":{"inputs":["video.mp4"],"platform":"instagram_reels","preview":true}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05","image_format":"jpg","scale":2}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05","image_format":"jpg","scale":2}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05","image_format":"jpg","output":"clip_5s.jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:05","image_format":"jpg","output":"clip_5s.jpg"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip_4k.mp4","at_time":"00:00:02","image_format":"jpg","scale":2}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip_4k.mp4","at_time":"00:00:02","image_format":"jpg"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}},{"tool":"resize_video","args":{"inputs":["combined.mp4"],"height":1080,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"target_resolution":"1080p","output":"combined.mp4"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mov","clip.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mov"}},{"tool":"concat_video","args":{"inputs":["clip_1080p.mov"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"target_resolution":"1080p","output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"target_resolution":"auto","output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"target_resolution":"1080p","output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mov","clip.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":270}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":-90}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":270}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":270}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":270}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":180}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":180}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":180}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"flip":"vertical"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"flip":"horizontal"}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"flip":"horizontal"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-3dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-3dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-3dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-3dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-3dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"0.5"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"-6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true,"level":"-6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"0.5dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"12dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"12dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"level":"2dB"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["clip.mp4","clip2.mp4","clip.mov"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["merged.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video1.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'mov_clip.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'no-audio.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'mov_file.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'movie.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'file.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'movie.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'no-audio.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'mov_clip.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'movie.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["mov","4K"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"concat_video","args":{"inputs":["*.mov","*.4k.mp4"],"output":"combined.mp4"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["*"],"target":"email","target_size_mb":20,"quality":"small_file"}}]}
+{"plan":[{"tool":"compress_video","args":{"inputs":["*"],"target_size_mb":500,"target":"email","preview":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'silent_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'movie.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '3.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4k_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["4K клипа"]}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4k_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:03","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03","output":"clip_03s.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_03s.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03","output":"clip_3s.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_3s.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03","output":"clip_03s.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_03s.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03","output":"clip_03s.mp4"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:03","output":"clip_trimmed.mp4"}},{"tool":"extract_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"level":"6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["audio.mp3"],"level":"-3dB"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What audio change should I make: normalize, boost, or reduce?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Should I normalize the audio or change it by a specific dB amount?"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"rotate_video","args":{"inputs":["clip_trimmed.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"rotate_video","args":{"inputs":["clip_trimmed.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"rotate_video","args":{"inputs":["clip_trimmed.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"rotate_video","args":{"inputs":["clip_trimmed.mp4"],"flip":"horizontal"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip_4k","at_time":"00:00:02"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_no_audio.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip_4k","start":"00:00:00","end":"00:00:02","output":"clip_4k_2s.mp4"}},{"tool":"convert_video","args":{"inputs":["clip_4k_2s.mp4"],"container":"webm","video_codec":"vp9"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip_4k","at_time":"00:00:01","image_format":"jpg"}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip_no_audio.mp4"],"output":"clip_no_audio.mp4"}},{"tool":"adjust_speed","args":{"inputs":["clip_no_audio.mp4"],"speed":2.0}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip_4k.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_file.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which mp3 file should I compress?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'audio.mp3' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["mp3"],"audio_format":"mp3","output":"mp3"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"silent_clip","at_time":"00:00:04"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"mov","start":"00:00:01","end":"00:00:05"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'movie.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'movie.mov' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'stumme_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'silent_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_clip.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"You didn't mention '4K_video.mp4' in your request — which file should I work on?"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"1:1"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"1:1"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"1:1"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"1:1"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"9:16"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"9:16"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"9:16"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"9:16"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1080,"height":1920,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1920,"width":1080,"fit":"crop"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1080,"height":1920,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1080,"width":1920,"fit":"crop"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1080,"width":1080,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1080,"width":1080,"fit":"crop","quality":"visually_good"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1080,"height":1080,"fit":"crop","quality":100}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":1080,"width":1080,"fit":"pad"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1280,"height":720,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1280,"height":720,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1280,"height":720,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"width":1280,"height":720,"keep_aspect_ratio":false}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"4:5"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"4:5"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"4:5"}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"fit":"crop","aspect":"4:5"}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720,"keep_aspect_ratio":true,"output":"clip_720p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_720p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720,"keep_aspect_ratio":true,"output":"clip_720p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_720p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720,"keep_aspect_ratio":true,"output":"clip_720p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_720p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:05","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":720,"keep_aspect_ratio":true,"output":"clip_720p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_720p.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rotated.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rotated.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rotated.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rotated.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:04","output":"clip_trimmed.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_trimmed.mp4"]}},{"tool":"strip_audio","args":{"inputs":["clip_trimmed.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"target_size_mb":15,"output":"clip_1080p_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p_small.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"output":"clip_1080p_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p_small.mp4"]}}]}
+{"plan":[{"tool":"resize_video","args":{"inputs":["clip_4k.mp4"],"height":1080,"keep_aspect_ratio":true,"output":"clip_1080p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_1080p.mp4"],"output":"clip_1080p_small.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_1080p_small.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_480p.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_fast.mp4"],"height":480,"keep_aspect_ratio":true,"output":"clip_fast_480p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_fast_480p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"resize_video","args":{"inputs":["clip.mp4"],"height":360,"keep_aspect_ratio":true,"output":"clip_360p.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_360p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
+{"plan":[{"tool":"trim_video","args":{"input":"clip.mp4","start":"00:00:00","end":"00:00:06","output":"clip_trimmed.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_trimmed.mp4"],"height":540,"keep_aspect_ratio":true,"output":"clip_540p.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_540p.mp4"]}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"extract_audio","args":{"inputs":["clip.mp4"],"audio_format":"mp3"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03","image_format":"png"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03","image_format":"png"}}]}
+{"plan":[{"tool":"create_thumbnail","args":{"input":"clip.mp4","at_time":"00:00:03","image_format":"png"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What part of clip.mp4 should I extract: audio, a frame, or a video segment?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What time range should I extract from clip.mp4?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Do you want a frame, a video clip, or an audio segment from the start of clip.mp4?"}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true,"level":"-6dB"}}]}
+{"plan":[{"tool":"adjust_volume","args":{"inputs":["clip.mp4"],"normalize":true}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4","output":"clip.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}
+{"plan":[],"error":"Plan step 1 invalid: Tool 'convert_video' has unsupported args: [\"audio_format\"]"}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
+{"plan":[{"tool":"rotate_video","args":{"inputs":["clip.mp4"],"angle":90,"output":"clip_rotated.mp4"}},{"tool":"compress_video","args":{"inputs":["clip_rotated.mp4"]}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rev.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"reverse_video","args":{"inputs":["clip.mp4"],"include_audio":true,"output":"clip_rev.mp4"}},{"tool":"resize_video","args":{"inputs":["clip_rev.mp4"],"height":480,"keep_aspect_ratio":true}}]}
+{"plan":[{"tool":"adjust_speed","args":{"inputs":["clip.mp4"],"speed":2.0,"output":"clip_fast.mp4"}},{"tool":"strip_audio","args":{"inputs":["clip_fast.mp4"]}}]}
+{"plan":[],"error":"Plan step 1 invalid: Tool 'adjust_speed' has unsupported args: [\"include_audio\"]"}

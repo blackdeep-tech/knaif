@@ -71,6 +71,13 @@ evals/**
 # (test_retrieval_no_regression_vs_baseline, run by `just check`) reads one by path and
 # errors outright if it is missing. Same role as skills/*/data/eval_snapshot.json; ~1 KB.
 !evals/retrieval/*.json
+# Cross-runtime parity baselines are durable evidence, not per-run scratch. A summary cannot
+# be re-graded: the eval-parity lane (Workstream S of the native/Python planning-parity plan)
+# has to re-score the SAME envelopes with a verifier that does not exist yet, and the "before"
+# side is unreproducible once the runtime changes. Plan envelopes only — small (~100 KB per
+# lane), text, and diffable. Generated media stays ignored by the rules above.
+!evals/parity/**/*.jsonl
+!evals/parity/**/*.txt
 evals/**/.baselines/
 evals/**/out.*
 evals/**/report.html
