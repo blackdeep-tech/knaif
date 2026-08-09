@@ -90,6 +90,55 @@ domain (accepted by ffmpeg and `std::path` on Windows). Root cause is the traini
 skills train only on bare filenames, never a slashed path, so the model has no learned
 escaping behavior and copies the utterance substring verbatim.
 
+### 4.1 Prompt parity with Python — what is pinned, and what is not
+
+The native runtime is a **port, not a rewrite**: the same utterance must produce the same prompt on
+both runtimes, because the shipped model is fine-tuned on prompts built by the Python path
+(`python/training/build_dataset.py` calls `retrieve_tools` then `build_prompt`). A native prompt
+that differs is off that distribution.
+
+**Status (2026-08-09): all 847 ffmpeg corpus utterances produce byte-identical `(system, user)`
+messages on both runtimes.** Reproduce it in about six seconds, with no GPU and no model:
+
+```bash
+uv run python scripts/dump_prompt.py --skill ffmpeg --batch <utterances.txt> > py.txt
+./target/debug/knaif plan --skill ffmpeg --dump-prompt --batch <utterances.txt> > rs.txt
+diff py.txt rs.txt
+```
+
+`--dump-prompt` prints the exact prompt the planner would send and stops. It loads no model, so it
+works on any build. Use it before reaching for an eval run — a prompt difference is cheaper to see
+here than to infer from a score.
+
+Three contracts under `contracts/parity/` gate this in CI, all deterministic and **model-free**:
+
+| contract | asserts | consumers |
+|---|---|---|
+| `prompt_cases.json` | `build_prompt` renders identically given the same utterance, registry and overrides | `test_prompt_parity.py`, `prompt_parity.rs` |
+| `retrieval_cases.json` | `retrieve_tools` selects the same tools **in the same order** | `test_retrieval_parity.py`, `retrieval_parity.rs` |
+| `generation_settings.yaml` | `max_tokens` / `n_ctx` / decoding / thinking agree across `models.yaml`, `eval_backends.yaml` and the Rust constants | `test_generation_settings_parity.py` |
+
+Expected values are generated from the Python reference, never hand-written.
+
+**What these do NOT prove.** They compare the logical `(system, user)` messages. Each runtime then
+applies the GGUF's chat template through a different llama.cpp binding, so identical messages are
+necessary for parity but are not proof of an identical final token sequence. Do not quote a green
+contract as end-to-end equivalence.
+
+**Two divergences remain, both pinned rather than fixed:**
+
+- **Built-in example blocks differ** — Python's fallback carries 9 examples, native's
+  `DEFAULT_EXAMPLES` carries 4. Latent: documents, ffmpeg and io all override it via `prompt.yaml`,
+  so no shipped skill reaches it. It is live for a newly authored skill or an SDK app without a
+  `prompt.yaml`. Held as an `#[ignore]`d test in `prompt_parity.rs`.
+- **Path-normalization rules differ.** Both runtimes normalize inside `build_prompt` now, but
+  native rewrites every backslash while Python rewrites only whitespace-delimited path-shaped
+  tokens — so Python misses a quoted path containing a space (`"C:\My Videos\clip.mov"`), which is
+  the exact case the function exists to prevent. No corpus utterance contains a backslash, so
+  nothing but the contract measures this.
+
+Both are tracked in `docs/plans/2026-08-08-native-python-planning-parity.md`.
+
 ## 5. Inference
 
 ### 5.1 Backend abstraction
