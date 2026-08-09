@@ -1,0 +1,103 @@
+"""Golden parity: Python prompt construction over contracts/parity/prompt_cases.json.
+
+The Rust side (native/crates/knaif-core/tests/prompt_parity.rs) renders the identical fixtures and
+must produce byte-identical `(system, user)` messages.
+
+**Scope.** This compares the logical messages only. Each runtime then applies the GGUF's chat
+template through a different llama.cpp binding, so identical messages here are necessary for
+parity but are not proof of an identical final token sequence. Saying so explicitly matters: the
+divergence that opened this plan was accepted on the strength of a check that was never built, and
+a green test whose limits are unstated invites the same mistake.
+
+R1 of docs/plans/2026-08-08-native-python-planning-parity.md.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from knaif.prompt import build_prompt, normalize_path_separators
+from knaif.registry import load_registry
+
+FIXTURES = Path("contracts/parity/prompt_cases.json")
+
+
+@pytest.fixture(scope="module")
+def doc() -> dict:
+    return json.loads(FIXTURES.read_text(encoding="utf-8"))
+
+
+def _render(doc: dict, case: dict, tmp_path: Path) -> tuple[str, str]:
+    reg_file = tmp_path / f"{case['name']}.yaml"
+    reg_file.write_text(doc["registries"][case["registry"]], encoding="utf-8")
+    registry = load_registry(reg_file)
+    override = doc["overrides"][case["overrides"]]
+    return build_prompt(
+        case["utterance"],
+        registry,
+        system_header=override.get("system_header"),
+        examples_block=override.get("examples_block"),
+    )
+
+
+def test_prompt_render_cases(doc: dict, tmp_path: Path) -> None:
+    assert doc["cases"], "fixture file has no render cases"
+    for case in doc["cases"]:
+        system, user = _render(doc, case, tmp_path)
+        assert system == case["expected_system"], f"{case['name']}: system message changed"
+        assert user == case["expected_user"], f"{case['name']}: user message changed"
+
+
+def test_default_block_cases(doc: dict, tmp_path: Path) -> None:
+    """Pin Python's built-in header/examples fallback.
+
+    The Rust side has the same cases as an ignored test: its `DEFAULT_EXAMPLES` carries 4 examples
+    against Python's 9. Nothing shipped hits this path — documents, ffmpeg and io all supply a
+    `prompt.yaml` examples block — but a newly authored skill or an SDK app without one does, so
+    the gap is latent rather than absent.
+    """
+    for case in doc["default_block_cases"]:
+        system, user = _render(doc, case, tmp_path)
+        assert system == case["expected_system"], f"{case['name']}: default block changed"
+        assert user == case["expected_user"], case["name"]
+
+
+def test_internal_tools_are_never_listed(doc: dict, tmp_path: Path) -> None:
+    """`hidden_tool` exists in the fixture registry purely so this cannot pass vacuously."""
+    assert "hidden_tool" in doc["registries"]["prompt_demo"]
+    for case in doc["cases"]:
+        system, _ = _render(doc, case, tmp_path)
+        assert "hidden_tool" not in system, case["name"]
+
+
+def test_path_normalization_cases(doc: dict, tmp_path: Path) -> None:
+    """Pin what Python's normalization actually does — including where it does nothing.
+
+    Two of these are not what the function's own docstring implies, and both are recorded
+    deliberately rather than fixed here (Q5 decides which rule is canonical):
+
+    * ``what does A\\B mean`` IS rewritten. The docstring says "only path-shaped tokens", but
+      ``A\\B`` matches ``_PATH_TOKEN_RE``, so a non-path backslash is rewritten anyway.
+    * ``convert "C:\\My Videos\\clip.mov" to mp4`` is NOT rewritten. The path contains a space, so
+      splitting the utterance on " " breaks it into fragments that no longer match — meaning the
+      one case the function exists to fix (a Windows path reaching the model as an illegal JSON
+      escape) survives untouched when the path has a space in it.
+    """
+    for case in doc["path_normalization_cases"]:
+        got = normalize_path_separators(case["utterance"])
+        assert got == case["python_normalized_utterance"], case["name"]
+        system, user = _render(doc, case, tmp_path)
+        assert system == case["expected_system"], case["name"]
+        assert user == case["expected_user"], case["name"]
+
+
+def test_quoted_windows_path_is_a_known_gap(doc: dict) -> None:
+    """Guard the finding above so a future fix has to update the contract consciously."""
+    case = next(c for c in doc["path_normalization_cases"] if c["name"] == "quoted_windows_path")
+    assert "\\" in case["python_normalized_utterance"], (
+        "Python now normalizes quoted Windows paths with spaces. That is almost certainly an "
+        "improvement — regenerate the fixtures and settle Q5, rather than deleting this test."
+    )

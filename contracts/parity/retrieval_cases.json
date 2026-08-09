@@ -1,0 +1,195 @@
+{
+  "_comment": "Golden parity fixtures for tool retrieval (knaif.registry.retrieve_tools / knaif_core::retrieve_tools). Consumed by BOTH python/core/tests/test_retrieval_parity.py and native/crates/knaif-core/tests/retrieval_parity.rs. `expected_ranked` is ORDER-SENSITIVE: Python emits retrieved tools in relevance order and build_prompt lists them in that order, so a set-equal but differently ordered result is a different prompt. `expected_always_include` is a SET on purpose - Python appends those by iterating a frozenset, whose order is not a guaranteed contract, and build_prompt filters them out before they reach the model anyway. Registries are inline tools.yaml text so parity does not depend on skill content. Regenerate with scripts in the parity plan; expected values come from the Python reference implementation, never hand-written.",
+  "registries": {
+    "retrieval_demo": "trim_video:\n  description: Trim a video to a time range\n  keywords: [trim, cut, shorten]\n  required_args: [input]\n  optional_args: [start, end, output]\nresize_video:\n  description: Resize a video to a target height\n  keywords: [resize, scale, downscale]\n  required_args: [inputs]\n  optional_args: [height, output]\ncompress_video:\n  description: Compress a video to reduce file size\n  keywords: [compress, smaller, shrink]\n  required_args: [inputs]\n  optional_args: [quality, output]\nconvert_video:\n  description: Convert a video container or codec\n  keywords: [convert, transcode]\n  required_args: [inputs]\n  optional_args: [container, output]\nstrip_audio:\n  description: Remove the audio track from a video\n  keywords: [mute, silent, strip]\n  required_args: [inputs]\n  optional_args: [output]\nalpha_tool:\n  description: Shared keyword tie candidate alpha\n  keywords: [tiebreak]\n  required_args: [inputs]\nbeta_tool:\n  description: Shared keyword tie candidate beta\n  keywords: [tiebreak]\n  required_args: [inputs]\ngamma_tool:\n  description: Shared keyword tie candidate gamma\n  keywords: [tiebreak]\n  required_args: [inputs]\ninternal_helper:\n  description: Never surfaced to the model\n  keywords: [trim, resize, compress]\n  required_args: [inputs]\n  internal: true\nclarify:\n  description: Ask the user a question\n  required_args: [question]\nreject:\n  description: Refuse the request\n  required_args: [reason]\ndone:\n  description: Signal completion\n  required_args: []\n"
+  },
+  "cases": [
+    {
+      "name": "chain_two_intents",
+      "registry": "retrieval_demo",
+      "query": "trim clip.mp4 then resize to 720p",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "trim_video",
+        "resize_video",
+        "compress_video",
+        "strip_audio",
+        "gamma_tool"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "tie_break_is_name_descending",
+      "registry": "retrieval_demo",
+      "query": "tiebreak",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "gamma_tool",
+        "beta_tool",
+        "alpha_tool",
+        "trim_video",
+        "strip_audio"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "smaller_top_k",
+      "registry": "retrieval_demo",
+      "query": "compress and convert",
+      "top_k": 3,
+      "min_score": 0,
+      "expected_ranked": [
+        "convert_video",
+        "compress_video",
+        "trim_video"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "no_keyword_match_still_fills_top_k",
+      "registry": "retrieval_demo",
+      "query": "completely unrelated aardvark",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "trim_video",
+        "strip_audio",
+        "resize_video",
+        "gamma_tool",
+        "convert_video"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "top_k_larger_than_registry",
+      "registry": "retrieval_demo",
+      "query": "trim",
+      "top_k": 50,
+      "min_score": 0,
+      "expected_ranked": [
+        "trim_video",
+        "strip_audio",
+        "resize_video",
+        "gamma_tool",
+        "convert_video",
+        "compress_video",
+        "beta_tool",
+        "alpha_tool"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "min_score_excludes_unmatched",
+      "registry": "retrieval_demo",
+      "query": "trim",
+      "top_k": 5,
+      "min_score": 1,
+      "expected_ranked": [
+        "trim_video"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "single_intent",
+      "registry": "retrieval_demo",
+      "query": "make clip.mp4 smaller",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "compress_video",
+        "trim_video",
+        "strip_audio",
+        "resize_video",
+        "gamma_tool"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "cjk_query",
+      "registry": "retrieval_demo",
+      "query": "把 clip.mp4 裁剪到 10 秒",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "trim_video",
+        "strip_audio",
+        "resize_video",
+        "gamma_tool",
+        "convert_video"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "diacritics_query",
+      "registry": "retrieval_demo",
+      "query": "redimensionner à 720p",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "trim_video",
+        "strip_audio",
+        "resize_video",
+        "convert_video",
+        "compress_video"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    },
+    {
+      "name": "empty_query",
+      "registry": "retrieval_demo",
+      "query": "",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_ranked": [
+        "trim_video",
+        "strip_audio",
+        "resize_video",
+        "gamma_tool",
+        "convert_video"
+      ],
+      "expected_always_include": [
+        "clarify",
+        "done",
+        "reject"
+      ]
+    }
+  ]
+}

@@ -340,9 +340,36 @@ outputs, per `docs/NATIVE.md`.
 **This is the durable half.** Q fixes today's gap; R is what stops the next one. All of it is
 deterministic and needs **no GGUF**, so unlike C4 it can gate every PR in CI.
 
-- [ ] **R1 — Prompt-parity contract.** Fixed utterances × fixed registries → both runtimes must
-  produce the **same prompt string**. Extend `contracts/parity/` in the shape
-  `planner_cases.json` already uses, consumed by a Python test and a Rust test.
+- [x] **R1 — Prompt-parity contract.** *(done 2026-08-09)* `contracts/parity/prompt_cases.json` +
+  `python/core/tests/test_prompt_parity.py` + `native/crates/knaif-core/tests/prompt_parity.rs`.
+  Expected strings are generated from the Python reference, never hand-written.
+  - **Result: the renderers agree byte-for-byte.** With the same utterance, registry and explicit
+    overrides, `knaif_core::build_prompt` reproduces `knaif.prompt.build_prompt` exactly — header,
+    tool listing, arg labels, assembly. The prompt *rendering* is a faithful port; only retrieval,
+    example selection and the built-in defaults diverge. That is a stronger result than the plan
+    assumed and narrows Q considerably.
+  - **It found a new divergence on its first run.** The built-in fallback blocks differ: Python's
+    `_EXAMPLES` carries **9** examples, native's `DEFAULT_EXAMPLES` carries **4** — missing the
+    `reject` example, both history/`completed:` examples, and the variable-binding example. The
+    system *headers* match byte-for-byte, so this is examples only.
+    - **Latent, not shipped:** documents, ffmpeg and io each provide a `prompt.yaml` examples
+      block, so no released skill reaches the default. It is live for a newly authored skill and
+      for SDK apps with no `prompt.yaml` — the case nobody would think to measure, which is why a
+      contract found it and three months of use did not.
+    - Held as an `#[ignore]`d Rust test with the reason inline, so Q has a green-able target.
+  - **It also pinned an asymmetry the plan had mislocated.** `normalize_path_separators` is
+    *library* code in Python (`knaif/prompt.py`, called inside `build_prompt`) but *CLI-private* in
+    native (`apps/cli/src/main.rs`, not exported from `knaif-core`). So the two `build_prompt`
+    functions have different contracts, and any non-CLI consumer of `knaif-core` — an embedder, a
+    GUI, the skill API — gets un-normalized input while every Python caller gets normalized input.
+  - **And it exposed two bugs in Python's normalizer**, both now pinned as fixtures:
+    - `what does A\B mean` **is** rewritten to `A/B`. The docstring claims "only path-shaped
+      tokens", but `A\B` matches `_PATH_TOKEN_RE`.
+    - `convert "C:\My Videos\clip.mov" to mp4` is **not** rewritten. The path contains a space, so
+      splitting on `" "` yields fragments that no longer match — meaning the exact case the
+      function exists to prevent (a Windows path reaching the model as an illegal JSON escape)
+      survives untouched whenever the path has a space in it. Native's replace-every-backslash
+      rule handles it. Q5 decides which is canonical; this is now evidence rather than opinion.
   - Byte-for-byte, or an explicit allow-list of divergences with a reason attached to each. **No
     third option** — "roughly the same" is what got us here.
   - **Pin every input, not just the utterance and the registry.** `build_prompt` also takes
@@ -366,13 +393,40 @@ deterministic and needs **no GGUF**, so unlike C4 it can gate every PR in CI.
     exact bug three times already in this repo — see the `installers/licenses/**`,
     `site/data/*.json` and `*.ipynb` entries and the reasons recorded above each. A contract that
     passes in CI and fails on the maintainer's box is a contract people learn to skip.
-- [ ] **R2 — Retrieval-parity contract.** Same utterance + registry → same selected tool set **and
+- [x] **R2 — Retrieval-parity contract.** *(done 2026-08-09)*
+  `contracts/parity/retrieval_cases.json` + tests on both sides, expectations generated from the
+  Python reference.
+  - **The tool *set* already agrees; the *order* does not** — confirmed by the contract, which
+    fails with `["compress_video","gamma_tool","resize_video","strip_audio","trim_video"]`
+    (alphabetical, from the `BTreeMap`) against Python's relevance order
+    `["trim_video","resize_video","compress_video","strip_audio","gamma_tool"]`. Split into two
+    tests so the set assertion passes today and the order assertion is an `#[ignore]`d target that
+    turns green the moment Q1 lands. Verified it genuinely fails rather than passing vacuously.
+  - Cases cover the `(score, name)`-**descending** tie-break, `min_score` filtering, `top_k`
+    larger than the registry, CJK and diacritic queries, the empty query, and an internal tool
+    carrying matching keywords so the exclusion cannot pass by accident.
+  - `expected_always_include` is asserted as a **set**, deliberately: Python appends those by
+    iterating a `frozenset`, whose order is not a language guarantee, and `build_prompt` filters
+    them out before the model sees anything. Pinning that order would encode an accident.
+  - Original R2 wording follows. Same utterance + registry → same selected tool set **and
   order**. Separable from R1 and worth its own cases: retrieval is scoring logic with tie-breaks,
   and it is where CJK tokenization and diacritic handling live. **Order is the load-bearing half**
   — finding 3 is precisely a case that passes a set comparison and fails a real one, so include
   cases with tied scores, where the `(score, name)`-descending tie-break is the only thing under
   test.
-- [ ] **R3 — Settings-parity contract.** Assert the two runtimes' generation defaults agree —
+- [x] **R3 — Settings-parity contract.** *(done 2026-08-09)*
+  `contracts/parity/generation_settings.yaml` declares the shipped configuration once;
+  `python/core/tests/test_generation_settings_parity.py` asserts `models.yaml`, the promoted
+  `eval_backends.yaml` stanza **and the Rust literals** all agree with it. Reading Rust source from
+  a Python test is deliberate — the alternative is trusting that whoever edits one side remembers
+  the other, which is exactly what failed when finding 4 was written from a superseded stanza.
+  Mutation-tested: injecting `max_tokens: 2048` into `llama.rs` fails the suite with the intended
+  message.
+  - **Two corrections it forced.** `$KNAIF_MAX_TOKENS` is in `knaif-llm/src/lib.rs`, **not**
+    `llama.rs` as the plan claimed. And native holds `max_tokens` **twice** — the struct default in
+    `llama.rs` and the env fallback in `lib.rs` — so the shipped cap would depend on whether the
+    variable happened to be set if they ever disagreed. Both are now asserted.
+  - Original R3 wording follows. Assert the two runtimes' generation defaults agree —
   `max_tokens`, `n_ctx`, sampling, thinking suppression — reading each from the file that actually
   holds it. Had this existed, the original finding 4 would have been impossible to write: the test
   names its sources, so nobody can compare a live value against a superseded stanza.

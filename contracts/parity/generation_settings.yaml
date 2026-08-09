@@ -1,0 +1,60 @@
+# Generation-settings parity contract (R3 of docs/plans/2026-08-08-native-python-planning-parity.md).
+#
+# The two runtimes hold these numbers in different places and different languages: native as Rust
+# literals in `knaif-llm/src/llama.rs`, Python as YAML stanzas in `models.yaml` and
+# `eval_backends.yaml`. Nothing linked them, so they could drift silently — and did, in the
+# reader's head if not in the files: this plan's original write-up claimed a 512-vs-2048 gap that
+# did not exist, because the value was read from a superseded eval stanza.
+#
+# This file is the single declaration of what the shipped configuration IS. Both runtimes' tests
+# read it and assert their own source agrees:
+#   - python/core/tests/test_generation_settings_parity.py
+#   - native/crates/knaif-llm/tests/settings_parity.rs
+#
+# Changing a number here is a deliberate act that fails both suites until both sides follow.
+
+# The model whose configuration is the shipped default. Keep in step with
+# skills/*/skill.yaml `recommended_model:` and contracts/models/model-manifest.yaml.
+model: knaif-qwen3-4b-v1
+
+settings:
+  # Maximum tokens generated for one plan. A multi-step plan is the longest output the model ever
+  # emits, so this is the value most likely to truncate a chain if the two sides disagree.
+  max_tokens: 512
+
+  # Context window. Must hold prompt + output; native also sets n_batch = n_ctx so a large planner
+  # prompt is processed in a single decode.
+  n_ctx: 8192
+
+  # Deterministic decoding. Python passes temperature 0.0; native takes the argmax over logits.
+  # Different expressions of the same thing — the contract is the BEHAVIOUR, so the test asserts
+  # each side's own spelling of it rather than a shared literal.
+  decoding: greedy
+
+  # Qwen3 thinking suppression. Both append `/no_think` to the system turn.
+  thinking_enabled: false
+
+# Where each runtime keeps its copy. The tests read these paths, so a file move breaks the test
+# rather than silently disabling the check.
+sources:
+  native:
+    # TWO files, because native holds max_tokens twice: the struct default in llama.rs and the
+    # env-fallback default in lib.rs. They must agree with each other as well as with Python —
+    # a mismatch would make the shipped cap depend on whether $KNAIF_MAX_TOKENS happened to be set.
+    struct_defaults: native/crates/knaif-llm/src/llama.rs
+    env_defaults: native/crates/knaif-llm/src/lib.rs
+    thinking_literal: '/no_think'
+  python:
+    file: models.yaml
+    stanza: knaif-qwen3-4b-v1
+  python_eval:
+    file: eval_backends.yaml
+    # The promoted eval stanza. Its key is kept stable because saved run filenames embed it;
+    # the GGUF it points at was renamed to the knaif convention.
+    stanza: qwen3-4b-sft-v3-flat-q4
+
+# Overrides that exist on purpose, so a test does not mistake them for drift.
+env_overrides:
+  KNAIF_MAX_TOKENS: native/crates/knaif-llm/src/lib.rs
+  KNAIF_N_CTX: native/crates/knaif-llm/src/llama.rs
+  KNAIF_N_GPU_LAYERS: native/crates/knaif-llm/src/lib.rs
