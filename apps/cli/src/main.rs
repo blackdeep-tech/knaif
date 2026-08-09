@@ -1237,13 +1237,7 @@ fn debug_dump(enabled: bool, raw: &str, extracted: &str) -> Option<String> {
     ))
 }
 
-/// Normalize Windows-style backslash path separators in an utterance to forward slashes. A model
-/// that echoes a path verbatim (`.\clip.mov`) would otherwise emit an illegal `\c` JSON escape;
-/// forward slashes are accepted by ffmpeg and `std::path` on Windows, so this is lossless for the
-/// file-path domain these skills operate in.
-fn normalize_path_separators(utterance: &str) -> String {
-    utterance.replace('\\', "/")
-}
+use knaif_core::normalize_path_separators;
 
 /// Extract JSON → parse → normalize → apply defaults → validate. Errors describe the first failure.
 fn try_build_payload(

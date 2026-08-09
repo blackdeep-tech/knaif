@@ -38,9 +38,10 @@ settings:
 # rather than silently disabling the check.
 sources:
   native:
-    # TWO files, because native holds max_tokens twice: the struct default in llama.rs and the
-    # env-fallback default in lib.rs. They must agree with each other as well as with Python —
-    # a mismatch would make the shipped cap depend on whether $KNAIF_MAX_TOKENS happened to be set.
+    # `max_tokens` had TWO literals — the struct default in llama.rs and the env fallback in
+    # lib.rs — so the shipped cap would have depended on whether $KNAIF_MAX_TOKENS was set if
+    # either drifted. Q3 collapsed them into one constant; both sites now reference it.
+    max_tokens_const: native/crates/knaif-llm/src/lib.rs
     struct_defaults: native/crates/knaif-llm/src/llama.rs
     env_defaults: native/crates/knaif-llm/src/lib.rs
     thinking_literal: '/no_think'

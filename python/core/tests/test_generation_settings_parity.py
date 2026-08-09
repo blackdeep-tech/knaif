@@ -80,20 +80,26 @@ def test_native_literals_match_the_contract(contract: dict) -> None:
     struct_text = (REPO_ROOT / src["struct_defaults"]).read_text(encoding="utf-8")
     env_text = (REPO_ROOT / src["env_defaults"]).read_text(encoding="utf-8")
 
-    # The struct literal: `max_tokens: 512,` in the LlamaCppBackend constructor.
-    struct_default = re.search(r"max_tokens:\s*(\d+)\s*,", struct_text)
-    assert struct_default, f"no `max_tokens: <n>` literal in {src['struct_defaults']}"
-    assert int(struct_default.group(1)) == want["max_tokens"], (
-        f"native struct max_tokens={struct_default.group(1)} but the contract declares "
+    # Q3 collapsed native's two `512` literals into one constant. Read that.
+    const_text = (REPO_ROOT / src["max_tokens_const"]).read_text(encoding="utf-8")
+    const = re.search(r"DEFAULT_MAX_TOKENS:\s*i32\s*=\s*(\d+)\s*;", const_text)
+    assert const, f"no `DEFAULT_MAX_TOKENS` constant in {src['max_tokens_const']}"
+    assert int(const.group(1)) == want["max_tokens"], (
+        f"native DEFAULT_MAX_TOKENS={const.group(1)} but the contract declares "
         f"{want['max_tokens']}; a chain is the longest output the model emits, so a smaller "
         f"value truncates multi-step plans on one runtime only"
     )
 
-    # The env fallback, applied via `.with_max_tokens(...)` — a second copy of the same number.
-    assert _env_fallback(env_text, "KNAIF_MAX_TOKENS") == want["max_tokens"], (
-        "the KNAIF_MAX_TOKENS fallback disagrees with the struct default, so the shipped cap "
-        "would depend on whether the variable happens to be set"
+    # Both former literal sites must now REFERENCE the constant rather than restate a number.
+    # If someone re-inlines a value, the shipped cap can once again depend on whether
+    # $KNAIF_MAX_TOKENS is set — the exact defect Q3 removed.
+    assert "max_tokens: crate::DEFAULT_MAX_TOKENS" in struct_text, (
+        f"{src['struct_defaults']} no longer references DEFAULT_MAX_TOKENS; a re-inlined literal "
+        f"can drift from the env fallback"
     )
+    assert (
+        "unwrap_or(DEFAULT_MAX_TOKENS)" in env_text
+    ), f"{src['env_defaults']} no longer falls back to DEFAULT_MAX_TOKENS"
 
     assert _env_fallback(struct_text, "KNAIF_N_CTX") == want["n_ctx"]
 

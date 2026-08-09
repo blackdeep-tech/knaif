@@ -238,7 +238,7 @@ impl LlamaCppBackend {
             chat_template,
             n_ctx,
             n_threads: resolve_n_threads(),
-            max_tokens: 512,
+            max_tokens: crate::DEFAULT_MAX_TOKENS,
         })
     }
 

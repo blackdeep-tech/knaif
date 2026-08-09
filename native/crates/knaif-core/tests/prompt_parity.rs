@@ -109,38 +109,51 @@ fn internal_tools_are_never_listed() {
     }
 }
 
-/// Path normalization happens at a **different layer** on each side, and this test pins that.
+/// Path normalization now happens at the **same layer** on both sides, and this pins the rule
+/// difference that remains.
 ///
-/// Python's `normalize_path_separators` lives in `knaif/prompt.py` and runs *inside* `build_prompt`.
-/// Native's lives in `apps/cli/src/main.rs`, is not exported from `knaif-core`, and runs in the CLI
-/// *before* `build_prompt`. So `knaif_core::build_prompt` returns the raw utterance where Python
-/// returns a normalized one — meaning any non-CLI consumer of this crate (an embedder, a GUI, the
-/// skill API) gets un-normalized input and Python's callers do not.
+/// Q5 (2026-08-09) moved `normalize_path_separators` out of `apps/cli` into `knaif-core`, next to
+/// `build_prompt_from`, and calls it there — matching Python, whose equivalent lives in
+/// `knaif.prompt` and runs inside `build_prompt`. Before that, the CLI normalized but every other
+/// consumer of this crate silently did not.
 ///
-/// Asserted, not ignored: the gap is real today and this records its exact shape. Q5 decides which
-/// rule is canonical; whichever wins, this test must be updated deliberately.
+/// The *rules* still differ: native rewrites every backslash, Python only whitespace-delimited
+/// tokens matching a path-shaped regex. That is not symmetric — Python's rule **misses** a quoted
+/// path containing a space, which is the exact failure the function exists to prevent. No corpus
+/// utterance has ever exercised either rule (0 backslashes in 847 eval / 404 train utterances), so
+/// this test is the only thing measuring it.
 #[test]
-fn path_normalization_happens_in_the_cli_not_the_core() {
+fn path_normalization_runs_in_the_core_and_pins_the_rule_gap() {
     let doc = fixtures();
     for case in doc["path_normalization_cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let raw = case["utterance"].as_str().unwrap();
         let (_, user) = render(&doc, case);
 
+        // Native normalizes inside the core now: no backslash survives into the prompt.
         assert!(
-            user.contains(raw),
-            "case {name}: knaif-core unexpectedly rewrote the utterance; if normalization moved \
-             into the core, update this contract and Q5 with it"
+            !user.contains('\\'),
+            "case {name}: a backslash reached the prompt; knaif-core should have normalized it"
+        );
+        assert_eq!(
+            user,
+            raw.replace('\\', "/"),
+            "case {name}: native's rule is replace-every-backslash"
         );
 
-        // Where Python's output differs from the raw input, the two runtimes' build_prompt
-        // genuinely disagree at this layer.
         let py = case["python_normalized_utterance"].as_str().unwrap();
-        if py != raw {
-            assert!(
-                !user.contains(py) || py == raw,
-                "case {name}: expected a divergence from Python here"
+        if name == "quoted_windows_path" {
+            assert_ne!(
+                user, py,
+                "case {name}: expected the runtimes to still disagree — Python's token regex \
+                 cannot match a quoted path containing a space, so it leaves the backslashes in"
             );
+            assert!(
+                py.contains('\\'),
+                "the Python side should still carry backslashes here"
+            );
+        } else {
+            assert_eq!(user, py, "case {name}: the two rules agree on this input");
         }
     }
 }

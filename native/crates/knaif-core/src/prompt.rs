@@ -64,6 +64,27 @@ fn is_system_tool(name: &str) -> bool {
     matches!(name, "clarify" | "reject" | "done" | "noop")
 }
 
+/// Rewrite Windows-style backslash path separators to forward slashes.
+///
+/// A model echoing a path verbatim (`.\clip.mov`) would otherwise emit an illegal `\c` JSON escape
+/// — the dot is lost, the path becomes drive-root-relative and resolves to `C:\clip.mov`, and the
+/// file is reported missing. Forward slashes need no escaping and are accepted by ffmpeg and
+/// `std::path` on Windows, so this is lossless for the file-path domain these skills operate in.
+///
+/// **This lives in the core, next to [`build_prompt_from`], deliberately.** It used to be a private
+/// helper in `apps/cli`, so the CLI normalized but every other consumer of this crate — an
+/// embedder, a GUI, the skill API — silently did not, while every Python caller did. Python's
+/// equivalent is in `knaif.prompt`, called inside `build_prompt`; this now matches that layering.
+///
+/// The *rule* still differs from Python's, which rewrites only whitespace-delimited tokens matching
+/// a path-shaped regex. That makes Python miss a quoted path containing a space
+/// (`"C:\My Videos\clip.mov"`) — precisely the case this function exists to prevent. No corpus
+/// utterance contains a backslash (0 of 847 eval, 0 of 404 train), so neither rule has ever been
+/// exercised by a measurement; see the plan's Q5.
+pub fn normalize_path_separators(utterance: &str) -> String {
+    utterance.replace('\\', "/")
+}
+
 /// A skill's `prompt.yaml` overrides: a system header, the rendered examples block, and the
 /// **structured** examples the block was rendered from.
 ///
@@ -316,6 +337,10 @@ pub fn build_prompt_from(
     tools: &RetrievedTools<'_>,
     overrides: &PromptOverrides,
 ) -> (String, String) {
+    // Normalize here, as Python's `build_prompt` does, so every consumer of this crate gets it —
+    // not only the CLI. Idempotent, so a caller that already normalized (to match the utterance
+    // against a clarify gate, say) loses nothing by it.
+    let utterance = &normalize_path_separators(utterance);
     let mut tool_lines = vec!["Available tools:".to_string()];
     for (name, def) in tools.iter() {
         if is_system_tool(name) || def.internal {

@@ -14,6 +14,19 @@ mod llama;
 #[cfg(feature = "llama")]
 pub use llama::LlamaCppBackend;
 
+/// Tokens generated for one plan, unless `$KNAIF_MAX_TOKENS` overrides it.
+///
+/// **One definition, used by both the backend's struct default and the env fallback.** They were
+/// two separate `512` literals in two files, so the shipped cap would have depended on whether the
+/// variable happened to be set if either drifted. The Python side keeps its own copies in
+/// `models.yaml` and `eval_backends.yaml`; nothing in the language links those to this, so
+/// `contracts/parity/generation_settings.yaml` declares the value once and
+/// `test_generation_settings_parity.py` asserts all of them against it.
+///
+/// A multi-step plan is the longest output the model ever emits, which is why a silent disagreement
+/// here would truncate chains on one runtime only.
+pub const DEFAULT_MAX_TOKENS: i32 = 512;
+
 /// A local inference backend: turn a `(system, user)` prompt into a raw plan (a JSON string the
 /// deterministic layer then parses/validates/repairs). The backend owns chat formatting because
 /// the correct framing (chat template, special tokens, think-block handling) is model-specific —
@@ -120,7 +133,7 @@ fn build_llama(path: &std::path::Path, verbose: bool) -> Result<Box<dyn LlmBacke
     let max_tokens = std::env::var("KNAIF_MAX_TOKENS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(512);
+        .unwrap_or(DEFAULT_MAX_TOKENS);
     Ok(Box::new(
         LlamaCppBackend::load(path, ngl, verbose)?.with_max_tokens(max_tokens),
     ))

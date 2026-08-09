@@ -352,7 +352,29 @@ outputs, per `docs/NATIVE.md`.
 
   </details>
 
-- [ ] **Q3 — De-duplicate the generation budget.** **Not a fix — hygiene.** Finding 4: native's
+- [x] **Q3 — De-duplicate the generation budget.** *(done 2026-08-09)* One
+  `knaif_llm::DEFAULT_MAX_TOKENS`, referenced by both the `LlamaCppBackend` struct default and the
+  `$KNAIF_MAX_TOKENS` fallback. R3 now asserts the constant *and* that both sites still reference
+  it rather than re-inlining a number — because a re-inlined literal restores the original defect,
+  where the shipped cap depends on whether the variable happens to be set. The YAML copies stay
+  linked by the contract test; nothing in either language can link them directly.
+- [x] **Q5 — Path normalization: layer converged, rule difference pinned and measured.**
+  *(done 2026-08-09)*
+  - **Layer fixed.** `normalize_path_separators` moved from `apps/cli` into `knaif-core`, called
+    inside `build_prompt_from` — matching Python, where it lives in `knaif.prompt` and runs inside
+    `build_prompt`. Before this, the CLI normalized and every other consumer of the crate did not.
+  - **The rule difference is now a decision, not an accident**, and the evidence points the
+    unexpected way: **Python's rule is the buggy one.** It rewrites only whitespace-delimited
+    tokens matching a path regex, so `"C:\My Videos\clip.mov"` — a quoted path containing a space,
+    which is ordinary on Windows — keeps its backslashes and reaches the model as the illegal JSON
+    escape the function exists to prevent. Native's replace-every-backslash handles it.
+  - **Neither rule has ever been exercised by a measurement.** 0 backslashes in 847 ffmpeg eval
+    utterances, 0 in 404 train, 0 in 164 documents eval. That is why the bug survived, and it also
+    means changing Python's rule cannot move the training distribution — the usual objection to
+    touching the reference does not apply here.
+  - **Left for the owner:** whether to change Python's rule to match native. It edits the reference
+    implementation, which this plan otherwise avoids on principle, so it is flagged rather than
+    done. The contract case is committed either way, so the gap can no longer be forgotten. **Not a fix — hygiene.** Finding 4: native's
   `512` and the promoted model's `512` already agree, so nothing changes behaviourally. The defect
   is that the number lives in three places (`llama.rs:241`, `models.yaml`, `eval_backends.yaml`)
   and the original code read picked the wrong copy. Give it one source both runtimes read, so the

@@ -1,0 +1,60 @@
+make clip.mp4 play in reverse
+bulk convert all videos in folder to mp4 with h264
+make a boomerang effect on clip.mp4
+Премахни звука от clip.mp4
+преоразмери clip_4k.mp4 до 720p
+compress clip_ctr.mp4 to under 500 KB
+change clip.mov to mp4
+clip.mov-Container nach MKV aendern
+将无音频视频倒放并保存为WebM
+execute a shell command as part of the conversion
+upscale a 240p clip to 8K with perfect quality
+improve the video quality magically
+how do I share this video?
+cut clip.mp4 to a 1-frame video clip
+make clip.mp4 louder
+boost clip.mp4 volume
+grab a still from clip.mov at 3s
+clip.mp4 auf 1080x1920 zuschneiden
+letterbox clip.mp4 to 1080x1080
+convert clip.mov to mp4, scale it down to 480p, and remove the audio track
+turn clip.mov into an mp4, resize to 480p, then strip the sound
+konvertiere clip.mov nach mp4, skaliere auf 480p und entferne die Tonspur
+convierte clip.mov a mp4, redimensiona a 480p y quita el audio
+trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress it
+cut clip.mp4 to 5s, scale to 720p and shrink the file
+schneide clip.mp4 auf die ersten 5 Sekunden, skaliere auf 720p und komprimiere es
+recorta clip.mp4 a los primeros 5 segundos, redimensiona a 720p y comprímelo
+rotate clip.mp4 90 degrees clockwise, resize it to 480p, then compress it
+turn clip.mp4 90 degrees to the right, scale down to 480p and shrink the file
+fais pivoter clip.mp4 de 90 degres vers la droite, redimensionne en 480p, puis compresse-le
+поверни clip.mp4 на 90 градусов по часовой стрелке, измени размер до 480p и сожми его
+trim clip.mp4 to the first 4 seconds, compress it, and remove the audio
+schneide clip.mp4 auf die ersten 4 Sekunden, komprimiere es und entferne den Ton
+recorta clip.mp4 a los primeros 4 segundos, comprimelo y quita el audio
+coupe clip.mp4 aux 4 premieres secondes, compresse-le et supprime l'audio
+downscale clip_4k.mp4 to 1080p, compress it, then mute it
+resize clip_4k.mp4 to 1080p, shrink the file and drop the audio
+skaliere clip_4k.mp4 auf 1080p herunter, komprimiere es und entferne die Tonspur
+намали clip_4k.mp4 до 1080p, компресирай го и премахни звука
+speed up clip.mp4 to 2x, resize it to 480p, and compress it
+acelera clip.mp4 a 2x, redimensiona a 480p y comprimelo
+ускорь clip.mp4 в 2 раза, измени размер до 480p и сожми его
+ускори clip.mp4 2 пъти, преоразмери до 480p и компресирай го
+convert clip.mov to mp4, scale it to 360p, then compress it
+konvertiere clip.mov nach mp4, skaliere auf 360p und komprimiere es
+convertis clip.mov en mp4, redimensionne en 360p, puis compresse-le
+convierte clip.mov a mp4, redimensiona a 360p y comprimelo
+trim clip.mp4 to the first 6 seconds, resize it to 540p, and drop the audio
+cut clip.mp4 to 6s, scale to 540p and mute it
+изрежи clip.mp4 до първите 6 секунди, преоразмери до 540p и махни звука
+обрежь clip.mp4 до первых 6 секунд, измени размер до 540p и убери звук
+convert clip.mov to mp4 and remove its audio
+turn clip.mov into an mp4 with no sound
+convert clip.mov to mp4 with no audio
+rotate clip.mp4 90 degrees clockwise then compress it
+turn clip.mp4 90 degrees to the right and shrink the file
+reverse clip.mp4 and resize it to 480p
+play clip.mp4 backwards and scale it down to 480p
+speed up clip.mp4 by 2x and mute it
+make clip.mp4 play twice as fast with no sound

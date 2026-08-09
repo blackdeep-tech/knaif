@@ -1,0 +1,60 @@
+{"id": "ffmpeg_032", "utterance_idx": 0, "utterance": "make clip.mp4 play in reverse", "baseline_line": 29}
+{"id": "ffmpeg_077", "utterance_idx": 0, "utterance": "bulk convert all videos in folder to mp4 with h264", "baseline_line": 92}
+{"id": "ffmpeg_079", "utterance_idx": 0, "utterance": "make a boomerang effect on clip.mp4", "baseline_line": 100}
+{"id": "ffmpeg_080", "utterance_idx": 3, "utterance": "Премахни звука от clip.mp4", "baseline_line": 106}
+{"id": "ffmpeg_084", "utterance_idx": 3, "utterance": "преоразмери clip_4k.mp4 до 720p", "baseline_line": 123}
+{"id": "ffmpeg_093", "utterance_idx": 0, "utterance": "compress clip_ctr.mp4 to under 500 KB", "baseline_line": 159}
+{"id": "ffmpeg_101", "utterance_idx": 1, "utterance": "change clip.mov to mp4", "baseline_line": 197}
+{"id": "ffmpeg_105", "utterance_idx": 1, "utterance": "clip.mov-Container nach MKV aendern", "baseline_line": 210}
+{"id": "ffmpeg_133", "utterance_idx": 4, "utterance": "将无音频视频倒放并保存为WebM", "baseline_line": 322}
+{"id": "ffmpeg_143", "utterance_idx": 0, "utterance": "execute a shell command as part of the conversion", "baseline_line": 357}
+{"id": "ffmpeg_145", "utterance_idx": 0, "utterance": "upscale a 240p clip to 8K with perfect quality", "baseline_line": 362}
+{"id": "ffmpeg_146", "utterance_idx": 0, "utterance": "improve the video quality magically", "baseline_line": 364}
+{"id": "ffmpeg_158", "utterance_idx": 1, "utterance": "how do I share this video?", "baseline_line": 389}
+{"id": "ffmpeg_161", "utterance_idx": 1, "utterance": "cut clip.mp4 to a 1-frame video clip", "baseline_line": 397}
+{"id": "ffmpeg_205", "utterance_idx": 0, "utterance": "make clip.mp4 louder", "baseline_line": 506}
+{"id": "ffmpeg_205", "utterance_idx": 1, "utterance": "boost clip.mp4 volume", "baseline_line": 507}
+{"id": "ffmpeg_213", "utterance_idx": 0, "utterance": "grab a still from clip.mov at 3s", "baseline_line": 532}
+{"id": "ffmpeg_295", "utterance_idx": 2, "utterance": "clip.mp4 auf 1080x1920 zuschneiden", "baseline_line": 777}
+{"id": "ffmpeg_296", "utterance_idx": 0, "utterance": "letterbox clip.mp4 to 1080x1080", "baseline_line": 779}
+{"id": "ffmpeg_hard_001", "utterance_idx": 0, "utterance": "convert clip.mov to mp4, scale it down to 480p, and remove the audio track", "baseline_line": 791}
+{"id": "ffmpeg_hard_001", "utterance_idx": 1, "utterance": "turn clip.mov into an mp4, resize to 480p, then strip the sound", "baseline_line": 792}
+{"id": "ffmpeg_hard_001", "utterance_idx": 2, "utterance": "konvertiere clip.mov nach mp4, skaliere auf 480p und entferne die Tonspur", "baseline_line": 793}
+{"id": "ffmpeg_hard_001", "utterance_idx": 3, "utterance": "convierte clip.mov a mp4, redimensiona a 480p y quita el audio", "baseline_line": 794}
+{"id": "ffmpeg_hard_002", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress it", "baseline_line": 795}
+{"id": "ffmpeg_hard_002", "utterance_idx": 1, "utterance": "cut clip.mp4 to 5s, scale to 720p and shrink the file", "baseline_line": 796}
+{"id": "ffmpeg_hard_002", "utterance_idx": 2, "utterance": "schneide clip.mp4 auf die ersten 5 Sekunden, skaliere auf 720p und komprimiere es", "baseline_line": 797}
+{"id": "ffmpeg_hard_002", "utterance_idx": 3, "utterance": "recorta clip.mp4 a los primeros 5 segundos, redimensiona a 720p y comprímelo", "baseline_line": 798}
+{"id": "ffmpeg_hard_003", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees clockwise, resize it to 480p, then compress it", "baseline_line": 799}
+{"id": "ffmpeg_hard_003", "utterance_idx": 1, "utterance": "turn clip.mp4 90 degrees to the right, scale down to 480p and shrink the file", "baseline_line": 800}
+{"id": "ffmpeg_hard_003", "utterance_idx": 2, "utterance": "fais pivoter clip.mp4 de 90 degres vers la droite, redimensionne en 480p, puis compresse-le", "baseline_line": 801}
+{"id": "ffmpeg_hard_003", "utterance_idx": 3, "utterance": "поверни clip.mp4 на 90 градусов по часовой стрелке, измени размер до 480p и сожми его", "baseline_line": 802}
+{"id": "ffmpeg_hard_004", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio", "baseline_line": 803}
+{"id": "ffmpeg_hard_004", "utterance_idx": 1, "utterance": "schneide clip.mp4 auf die ersten 4 Sekunden, komprimiere es und entferne den Ton", "baseline_line": 804}
+{"id": "ffmpeg_hard_004", "utterance_idx": 2, "utterance": "recorta clip.mp4 a los primeros 4 segundos, comprimelo y quita el audio", "baseline_line": 805}
+{"id": "ffmpeg_hard_004", "utterance_idx": 3, "utterance": "coupe clip.mp4 aux 4 premieres secondes, compresse-le et supprime l'audio", "baseline_line": 806}
+{"id": "ffmpeg_hard_005", "utterance_idx": 0, "utterance": "downscale clip_4k.mp4 to 1080p, compress it, then mute it", "baseline_line": 807}
+{"id": "ffmpeg_hard_005", "utterance_idx": 1, "utterance": "resize clip_4k.mp4 to 1080p, shrink the file and drop the audio", "baseline_line": 808}
+{"id": "ffmpeg_hard_005", "utterance_idx": 2, "utterance": "skaliere clip_4k.mp4 auf 1080p herunter, komprimiere es und entferne die Tonspur", "baseline_line": 809}
+{"id": "ffmpeg_hard_005", "utterance_idx": 3, "utterance": "намали clip_4k.mp4 до 1080p, компресирай го и премахни звука", "baseline_line": 810}
+{"id": "ffmpeg_hard_006", "utterance_idx": 0, "utterance": "speed up clip.mp4 to 2x, resize it to 480p, and compress it", "baseline_line": 811}
+{"id": "ffmpeg_hard_006", "utterance_idx": 1, "utterance": "acelera clip.mp4 a 2x, redimensiona a 480p y comprimelo", "baseline_line": 812}
+{"id": "ffmpeg_hard_006", "utterance_idx": 2, "utterance": "ускорь clip.mp4 в 2 раза, измени размер до 480p и сожми его", "baseline_line": 813}
+{"id": "ffmpeg_hard_006", "utterance_idx": 3, "utterance": "ускори clip.mp4 2 пъти, преоразмери до 480p и компресирай го", "baseline_line": 814}
+{"id": "ffmpeg_hard_007", "utterance_idx": 0, "utterance": "convert clip.mov to mp4, scale it to 360p, then compress it", "baseline_line": 815}
+{"id": "ffmpeg_hard_007", "utterance_idx": 1, "utterance": "konvertiere clip.mov nach mp4, skaliere auf 360p und komprimiere es", "baseline_line": 816}
+{"id": "ffmpeg_hard_007", "utterance_idx": 2, "utterance": "convertis clip.mov en mp4, redimensionne en 360p, puis compresse-le", "baseline_line": 817}
+{"id": "ffmpeg_hard_007", "utterance_idx": 3, "utterance": "convierte clip.mov a mp4, redimensiona a 360p y comprimelo", "baseline_line": 818}
+{"id": "ffmpeg_hard_008", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 6 seconds, resize it to 540p, and drop the audio", "baseline_line": 819}
+{"id": "ffmpeg_hard_008", "utterance_idx": 1, "utterance": "cut clip.mp4 to 6s, scale to 540p and mute it", "baseline_line": 820}
+{"id": "ffmpeg_hard_008", "utterance_idx": 2, "utterance": "изрежи clip.mp4 до първите 6 секунди, преоразмери до 540p и махни звука", "baseline_line": 821}
+{"id": "ffmpeg_hard_008", "utterance_idx": 3, "utterance": "обрежь clip.mp4 до первых 6 секунд, измени размер до 540p и убери звук", "baseline_line": 822}
+{"id": "ffmpeg_hard_014", "utterance_idx": 0, "utterance": "convert clip.mov to mp4 and remove its audio", "baseline_line": 838}
+{"id": "ffmpeg_hard_014", "utterance_idx": 1, "utterance": "turn clip.mov into an mp4 with no sound", "baseline_line": 839}
+{"id": "ffmpeg_hard_014", "utterance_idx": 2, "utterance": "convert clip.mov to mp4 with no audio", "baseline_line": 840}
+{"id": "ffmpeg_hard_015", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees clockwise then compress it", "baseline_line": 841}
+{"id": "ffmpeg_hard_015", "utterance_idx": 1, "utterance": "turn clip.mp4 90 degrees to the right and shrink the file", "baseline_line": 842}
+{"id": "ffmpeg_hard_016", "utterance_idx": 0, "utterance": "reverse clip.mp4 and resize it to 480p", "baseline_line": 843}
+{"id": "ffmpeg_hard_016", "utterance_idx": 1, "utterance": "play clip.mp4 backwards and scale it down to 480p", "baseline_line": 844}
+{"id": "ffmpeg_hard_017", "utterance_idx": 0, "utterance": "speed up clip.mp4 by 2x and mute it", "baseline_line": 845}
+{"id": "ffmpeg_hard_017", "utterance_idx": 1, "utterance": "make clip.mp4 play twice as fast with no sound", "baseline_line": 846}
