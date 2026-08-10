@@ -326,8 +326,26 @@ real and are fixed. But their *importance* was overstated relative to this. The 
 report was accurate; it was read as a planning failure when it was an execution failure, and the
 words used ("one ffmpeg command", not "one plan step") pointed at the right layer from the start.
 
-**Follow-on, not yet done:** a rendered-command parity contract for a multi-step chain. S1b is the
-natural home — it is the same adapter, and this is the gap it exists to close.
+**Follow-on — done 2026-08-10.** `contracts/parity/expansion_cases.json` + a Python and a Rust
+consumer pin the layer below the planner: a **fixed plan** in, the rendered ffmpeg argv out. No
+model is involved, because expansion is deterministic given a plan, so it gates every PR alongside
+the other contracts.
+
+Three assertions, and the second is the one that matters:
+
+| assertion | catches |
+|---|---|
+| rendered argv matches Python's | a divergence in flags, codecs, output naming |
+| **one command per plan step** | **the dropped-step bug** — stated as an invariant, so it survives a legitimate change to any command's flags |
+| step N's output is step N+1's input | a "chain" that is really unrelated commands run in sequence |
+
+Mutation-tested against the original defect: rendering only `steps.first()` is caught on all three
+multi-step cases (2, 3 and 2 steps rendering 1 each). Argv is canonicalized with
+`parity_check.py`'s `canon_token`, so native's relative paths and Python's sandbox-resolved
+absolutes compare equal while a genuinely different filename still diverges.
+
+**This closes the gap that let the bug through**, and it is the contract this plan should have
+started with: the layer users see, not the layer the eval harness sees.
 
 ## Workstream Q — Port what is missing
 

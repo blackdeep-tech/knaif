@@ -1,0 +1,250 @@
+{
+  "_comment": "Golden parity fixtures for intent EXPANSION and command rendering — the layer below planner_cases.json. A fixed plan in, the rendered ffmpeg argv out, so no model is involved and this runs wherever the other contracts do. Consumed by python/core/tests/test_expansion_parity.py and skills/ffmpeg/native/tests/expansion_parity.rs. Argv is canonicalized with scripts/parity_check.py's canon_token: path tokens reduce to their basename, because native renders relative paths and Python resolves them against the sandbox — the same file either way, while a genuinely different filename still diverges. WHY THIS EXISTS: plan-envelope parity is blind to this layer. Both runtimes emitted the same correct two-step plan while native's `run` rendered only the first step (steps.first(), fixed 2026-08-10). The multi-step cases below are the regression.",
+  "sandbox": "sandbox/fixtures/ffmpeg",
+  "cases": [
+    {
+      "name": "single_step_convert",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mov",
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_converted.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_trim_then_extract_audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:03",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "extract_audio",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "audio_format": "mp3"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-i",
+          "clip.mp4",
+          "-to",
+          "00:00:03",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_trimmed.mp4",
+          "-vn",
+          "-c:a",
+          "libmp3lame",
+          "-b:a",
+          "128k",
+          "clip_trimmed_audio.mp3"
+        ]
+      ]
+    },
+    {
+      "name": "three_step_trim_resize_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:05",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "height": 720,
+              "output": "clip_720p.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_720p.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-i",
+          "clip.mp4",
+          "-to",
+          "00:00:05",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_trimmed.mp4",
+          "-vf",
+          "scale=-2:720",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_720p.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_720p.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "28",
+          "-preset",
+          "slow",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "96k",
+          "-movflags",
+          "+faststart",
+          "clip_720p_compressed.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_convert_then_strip_audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ],
+              "container": "mp4",
+              "output": "clip_converted.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_converted.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mov",
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_converted.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_converted.mp4",
+          "-an",
+          "-c:v",
+          "copy",
+          "clip_converted_silent.mp4"
+        ]
+      ]
+    }
+  ]
+}
