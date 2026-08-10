@@ -1,0 +1,102 @@
+{
+  "_comment": "Golden parity fixtures for the documents skill's expansion layer — the analogue of expansion_cases.json, where the rendered artefact is the set of OUTPUT PATHS a plan produces rather than an ffmpeg argv (documents' preview returns paths). Fixed plans in, output basenames out, no model involved. Consumed by python/core/tests/test_documents_expansion_parity.py. WHY: `run` dispatches documents steps through the same loop as ffmpeg, which until 2026-08-10 executed only the first step of a plan (steps.first()). The corpus has seven multi-step documents rows, so the skill was exposed to exactly the same defect; the multi-step cases here are the regression.",
+  "sandbox": "sandbox/fixtures/documents",
+  "cases": [
+    {
+      "name": "single_step_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "compress_quality": "balanced"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample-compressed.pdf"
+      ]
+    },
+    {
+      "name": "two_step_rotate_then_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "rotate_pages",
+            "args": {
+              "input": "sample.pdf",
+              "degrees": 90,
+              "output": "sample_rot.pdf"
+            }
+          },
+          {
+            "tool": "compress_pdf",
+            "args": {
+              "input": "sample_rot.pdf",
+              "compress_quality": "balanced"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_rot.pdf",
+        "sample_rot-compressed.pdf"
+      ]
+    },
+    {
+      "name": "two_step_watermark_then_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "watermark",
+            "args": {
+              "input": "sample.pdf",
+              "text": "CONFIDENTIAL",
+              "output": "sample_wm.pdf"
+            }
+          },
+          {
+            "tool": "compress_pdf",
+            "args": {
+              "input": "sample_wm.pdf",
+              "compress_quality": "balanced"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_wm.pdf",
+        "sample_wm-compressed.pdf"
+      ]
+    },
+    {
+      "name": "two_step_remove_pages_then_numbers",
+      "plan": {
+        "plan": [
+          {
+            "tool": "remove_pages",
+            "args": {
+              "input": "sample.pdf",
+              "pages": "1",
+              "output": "sample_trimmed.pdf"
+            }
+          },
+          {
+            "tool": "add_page_numbers",
+            "args": {
+              "input": "sample_trimmed.pdf",
+              "position": "bottom-center",
+              "start_at": 1
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_trimmed.pdf",
+        "sample_trimmed-numbered.pdf"
+      ]
+    }
+  ]
+}

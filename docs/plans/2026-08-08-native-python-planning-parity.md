@@ -345,7 +345,17 @@ multi-step cases (2, 3 and 2 steps rendering 1 each). Argv is canonicalized with
 absolutes compare equal while a genuinely different filename still diverges.
 
 **This closes the gap that let the bug through**, and it is the contract this plan should have
-started with: the layer users see, not the layer the eval harness sees.
+started with: the layer users see, not the layer the eval harness sees. Widened to eight ffmpeg
+chain shapes (including a four-step chain); native's rendering matches Python's on every one, so
+the expansion layer is a faithful port once the loop is fixed.
+
+**`documents` was exposed to the same defect and is now pinned too.**
+`contracts/parity/documents_expansion_cases.json` is the analogue, where the rendered artefact is
+the set of output paths rather than an ffmpeg argv. It matters because `run` dispatches both skills
+through the *same* loop — the one that took `steps.first()` — and the documents corpus has **seven
+multi-step rows**. Nobody reported it there, which is the point: the bug was skill-agnostic and only
+one skill's symptom was noticed. Verified end to end as well: `rotate sample.pdf 90 degrees and then
+compress it` now previews both steps, threading `sample_rot.pdf` into the compress.
 
 ## Workstream Q — Port what is missing
 
