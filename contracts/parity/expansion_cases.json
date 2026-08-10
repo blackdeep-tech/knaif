@@ -245,6 +245,278 @@
           "clip_converted_silent.mp4"
         ]
       ]
+    },
+    {
+      "name": "four_step_chain",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:04",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "height": 480,
+              "output": "clip_480p.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_480p.mp4"
+              ],
+              "output": "clip_silent.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_silent.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-i",
+          "clip.mp4",
+          "-to",
+          "00:00:04",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_trimmed.mp4",
+          "-vf",
+          "scale=-2:480",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_480p.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_480p.mp4",
+          "-an",
+          "-c:v",
+          "copy",
+          "clip_silent.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_silent.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "28",
+          "-preset",
+          "slow",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "96k",
+          "-movflags",
+          "+faststart",
+          "clip_silent_compressed.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_speed_then_strip",
+      "plan": {
+        "plan": [
+          {
+            "tool": "adjust_speed",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "speed": 2.0,
+              "output": "clip_2x.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_2x.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-vf",
+          "setpts=0.5*PTS",
+          "-af",
+          "atempo=2.0",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "clip_2x.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_2x.mp4",
+          "-an",
+          "-c:v",
+          "copy",
+          "clip_2x_silent.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_rotate_then_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "rotate_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "angle": 90,
+              "output": "clip_rot.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_rot.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-vf",
+          "transpose=1",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "25",
+          "-preset",
+          "medium",
+          "-c:a",
+          "aac",
+          "clip_rot.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_rot.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "28",
+          "-preset",
+          "slow",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "96k",
+          "-movflags",
+          "+faststart",
+          "clip_rot_compressed.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "single_step_thumbnail",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "clip.mp4",
+              "at_time": "00:00:03"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:03",
+          "-vframes",
+          "1",
+          "clip_thumb.jpg"
+        ]
+      ]
     }
   ]
 }
