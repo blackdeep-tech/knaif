@@ -22,13 +22,18 @@ use crate::registry::Registry;
 const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
 
 /// Tools whose schema accepts an `output` arg — eligible chain-intermediate producers.
+///
+/// The test is `required_args | optional_args`, matching Python `_output_capable` and, more to the
+/// point, the validator's own `allowed` set: an `arg_schemas` entry describes an arg's type but
+/// does not make it accepted. Counting one as a producer writes `output` onto a tool that
+/// `validate_plan` then rejects with "unsupported args", and repoints the downstream step at a file
+/// nothing will produce.
 pub fn output_capable_tools(registry: &Registry) -> HashSet<String> {
     registry
         .iter()
         .filter(|(_, d)| {
             d.optional_args.iter().any(|a| a == "output")
                 || d.required_args.iter().any(|a| a == "output")
-                || d.arg_schemas.contains_key("output")
         })
         .map(|(n, _)| n.clone())
         .collect()
