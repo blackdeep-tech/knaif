@@ -582,7 +582,11 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 #   just parity ffmpeg --limit 20
 # Two comparison levels (pass-through --mode): `--mode command` (default) diffs the rendered
 # ffmpeg argv from `run --dry-run` — tests intent expansion + render, but python skips
-# compress/platform/thumbnail/batch/reverse and native previews only chain step 1; `--mode plan`
+# compress/platform/thumbnail/batch/reverse. It used to say "native previews only chain step 1":
+# that was not a harness quirk but a real defect — `run` took `steps.first()` and dropped the rest,
+# so a two-step chain executed one step. Fixed 2026-08-10; `--mode command` is now the level that
+# would have caught it, which `--mode plan` cannot (both runtimes emitted the same correct plan).
+# `--mode plan`
 # diffs the `plan --json` envelope (tool+args) for EVERY intent and full chains (no render),
 # treating native's materialized optional-arg defaults as equivalent. Run both for full coverage.
 # `--batch` (plan mode only) loads each model ONCE and streams all utterances via `plan --batch`

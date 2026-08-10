@@ -298,6 +298,37 @@ any single fix below.
   worth as much to the next reader as the confirmed one. Two are already recorded above — write
   them the same way.
 
+## The bug this plan did not find — and why
+
+**2026-08-10, reported by the owner, reproduced immediately:** `cut from 1st to 3rd second of
+clip.mp4 then extract the audio to mp3` produced **one** ffmpeg command on native and **two** on
+Python.
+
+**Cause:** `apps/cli/src/main.rs` took `steps.first()` and dispatched exactly one step. There was no
+loop over the plan. Every step after the first was discarded silently — in dry-run *and* in
+confirmed execution, so the audio was never extracted. Fixed 2026-08-10.
+
+**Why none of P, Q or R caught it.** Every measurement in this plan compares **plan envelopes**.
+Both runtimes emit the same correct two-step plan; the loss is entirely downstream of the plan, in
+`run`'s dispatch. Plan-level parity is blind to it *by construction* — as is
+`scripts/parity_check.py --mode plan`. `--mode command` diffs rendered argv and would have caught
+it, but the justfile recorded the symptom as an expected harness limitation
+("native previews only chain step 1"), which is how a defect stays visible and unread for months.
+
+**The lesson is the plan's own, one layer down.** This plan exists because a divergence was excused
+by a check nobody ran. The same shape repeated inside the work: the prompt layer was measured to
+byte-identity while the execution layer — where the user-visible behaviour actually lives — was
+never measured at all. Byte-identical prompts and 98.3% plan agreement were both true and both
+irrelevant to the reported symptom.
+
+**What it means for the rest of this plan.** Nothing here is retracted: the prompt divergences were
+real and are fixed. But their *importance* was overstated relative to this. The owner's original
+report was accurate; it was read as a planning failure when it was an execution failure, and the
+words used ("one ffmpeg command", not "one plan step") pointed at the right layer from the start.
+
+**Follow-on, not yet done:** a rendered-command parity contract for a multi-step chain. S1b is the
+natural home — it is the same adapter, and this is the gap it exists to close.
+
 ## Workstream Q — Port what is missing
 
 Only after P3 attributes the gap. Each item is a **port, not a rewrite** — same inputs, same

@@ -761,7 +761,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let Some(step) = steps.first() else {
+    if steps.is_empty() {
         if model.is_none() {
             let (recommended, installed) = recommended_model_status();
             println!(
@@ -775,52 +775,103 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             );
         }
         return Ok(());
-    };
+    }
 
-    let tool = step
-        .get("tool")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("");
+    // Execute EVERY step, in order.
+    //
+    // This loop used to be `steps.first()`: a two-step plan rendered and ran only its first step,
+    // and the rest were dropped without a word — so "trim clip.mp4 then extract the audio" trimmed
+    // the clip and never produced the mp3. Not a preview limitation; the work was never done, in
+    // dry-run and in confirmed execution alike. Plan-level parity is blind to it by construction
+    // (both runtimes emit the same correct two-step plan), which is why prompt-parity work never
+    // surfaced it — see docs/plans/2026-08-08-native-python-planning-parity.md.
+    //
+    // Steps carry explicit intermediate filenames by the time they get here (the chain-linking
+    // pass in `apply_clarify_gate` binds step N's `output` to step N+1's input), so running them
+    // in order is all the threading required. Sequential and fail-fast: a later step consumes an
+    // earlier step's file, so continuing past a failure would act on something that is not there.
     let empty = serde_json::Map::new();
-    let step_args = step
-        .get("args")
-        .and_then(serde_json::Value::as_object)
-        .unwrap_or(&empty);
-
-    // Core control tools short-circuit before any ffmpeg work.
-    match tool {
-        "clarify" => {
-            let q = step_args
-                .get("question")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("(no question)");
-            println!("clarify: {q}");
-            return Ok(());
-        }
-        "reject" => {
-            let r = step_args
-                .get("reason")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("(no reason)");
-            println!("reject: {r}");
-            return Ok(());
-        }
-        _ => {}
+    let (to_run, terminal) = steps_to_execute(&steps);
+    if let Some(message) = terminal {
+        println!("{message}");
+        return Ok(());
     }
+    let total = to_run.len();
+    for (n, i) in to_run.iter().enumerate() {
+        let step = &steps[*i];
+        let tool = step
+            .get("tool")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let step_args = step
+            .get("args")
+            .and_then(serde_json::Value::as_object)
+            .unwrap_or(&empty);
 
-    match args.skill.as_str() {
-        "ffmpeg" => run_ffmpeg_step(&bundle, tool, step_args, sandbox, args.dry_run, args.yes),
-        "documents" => run_documents_step(
-            &bundle,
-            tool,
-            step_args,
-            &base,
-            sandbox,
-            args.dry_run,
-            args.yes,
-        ),
-        _ => unreachable!("skill guarded above"),
+        // Number the steps once there is more than one, so a preview of three commands reads as a
+        // chain rather than as three unrelated suggestions.
+        if total > 1 {
+            println!("step {}/{}: {tool}", n + 1, total);
+        }
+
+        match args.skill.as_str() {
+            "ffmpeg" => run_ffmpeg_step(&bundle, tool, step_args, sandbox, args.dry_run, args.yes)?,
+            "documents" => run_documents_step(
+                &bundle,
+                tool,
+                step_args,
+                &base,
+                sandbox,
+                args.dry_run,
+                args.yes,
+            )?,
+            _ => unreachable!("skill guarded above"),
+        }
     }
+    Ok(())
+}
+
+/// Decide which plan steps `run` acts on, and whether a control tool ends the request first.
+///
+/// Returns `(indices to execute, Some(message))` — a `Some` means a `clarify` or `reject` answered
+/// the whole request and nothing should run. `done`/`noop` are skipped rather than terminal: they
+/// mark completion, and a plan that ends with one still has real work before it.
+///
+/// Pure, so the multi-step contract is testable without a model, a filesystem or a subprocess.
+/// That matters here specifically: this logic used to be `steps.first()`, which silently dropped
+/// every step after the first, and nothing in the suite would have noticed.
+fn steps_to_execute(steps: &[serde_json::Value]) -> (Vec<usize>, Option<String>) {
+    let mut run = Vec::new();
+    for (i, step) in steps.iter().enumerate() {
+        let tool = step
+            .get("tool")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let arg = |key: &str, fallback: &str| {
+            step.get("args")
+                .and_then(|a| a.get(key))
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(fallback)
+                .to_string()
+        };
+        match tool {
+            "clarify" => {
+                return (
+                    run,
+                    Some(format!("clarify: {}", arg("question", "(no question)"))),
+                )
+            }
+            "reject" => {
+                return (
+                    run,
+                    Some(format!("reject: {}", arg("reason", "(no reason)"))),
+                )
+            }
+            "done" | "noop" => continue,
+            _ => run.push(i),
+        }
+    }
+    (run, None)
 }
 
 /// ffmpeg dispatch: expand the intent → dry-run preview or confirmed subprocess execution.
@@ -1937,6 +1988,69 @@ mod tests {
     }
 
     // ── prompt dump (`plan --dump-prompt`) ────────────────────────────────────────────────────
+
+    // ── multi-step execution (`run` over a chain) ─────────────────────────────────────────────
+
+    fn plan(tools: &[&str]) -> Vec<serde_json::Value> {
+        tools
+            .iter()
+            .map(|t| serde_json::json!({"tool": t, "args": {}}))
+            .collect()
+    }
+
+    #[test]
+    fn every_step_of_a_chain_is_executed() {
+        // The regression this guards: `run` used to take `steps.first()`, so "trim then extract
+        // the audio" trimmed the clip and silently never produced the mp3 — in dry-run and in
+        // confirmed execution alike. Plan-level parity cannot see it: both runtimes emit the same
+        // correct two-step plan, and the loss is downstream of the plan.
+        let (run, terminal) = steps_to_execute(&plan(&["trim_video", "extract_audio"]));
+        assert_eq!(run, vec![0, 1], "both steps must run");
+        assert!(terminal.is_none());
+
+        let (run, _) = steps_to_execute(&plan(&["trim_video", "resize_video", "compress_video"]));
+        assert_eq!(run, vec![0, 1, 2], "a three-step chain must run all three");
+    }
+
+    #[test]
+    fn a_single_step_plan_still_runs() {
+        let (run, terminal) = steps_to_execute(&plan(&["convert_video"]));
+        assert_eq!(run, vec![0]);
+        assert!(terminal.is_none());
+    }
+
+    #[test]
+    fn clarify_and_reject_end_the_request() {
+        // Terminal: they answer the whole request, so nothing after them should act — and nothing
+        // before them either, since a well-formed plan puts them alone.
+        let steps = vec![
+            serde_json::json!({"tool": "clarify", "args": {"question": "Which file?"}}),
+            serde_json::json!({"tool": "trim_video", "args": {}}),
+        ];
+        let (run, terminal) = steps_to_execute(&steps);
+        assert!(run.is_empty(), "no work may run after a clarify");
+        assert_eq!(terminal.unwrap(), "clarify: Which file?");
+
+        let steps = vec![serde_json::json!({"tool": "reject", "args": {"reason": "Unsafe."}})];
+        let (_, terminal) = steps_to_execute(&steps);
+        assert_eq!(terminal.unwrap(), "reject: Unsafe.");
+    }
+
+    #[test]
+    fn done_is_skipped_without_dropping_the_real_work() {
+        // `done` marks completion; a plan ending with one still has work before it. Treating it as
+        // terminal would reintroduce the dropped-step bug by a different route.
+        let (run, terminal) = steps_to_execute(&plan(&["trim_video", "extract_audio", "done"]));
+        assert_eq!(run, vec![0, 1]);
+        assert!(terminal.is_none());
+    }
+
+    #[test]
+    fn an_empty_plan_runs_nothing() {
+        let (run, terminal) = steps_to_execute(&[]);
+        assert!(run.is_empty());
+        assert!(terminal.is_none());
+    }
 
     #[test]
     fn dump_prompt_block_is_verbatim_and_lf() {
