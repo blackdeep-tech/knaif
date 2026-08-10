@@ -139,6 +139,37 @@ contract as end-to-end equivalence.
 
 Both are tracked in `docs/plans/2026-08-08-native-python-planning-parity.md`.
 
+### 4.2 Expansion parity — the layer prompt parity cannot see
+
+Identical prompts and identical plans are **not** sufficient. On 2026-08-10 both runtimes produced
+the same correct two-step plan for *"cut from 1st to 3rd second of clip.mp4 then extract the audio
+to mp3"* and native ran **one** ffmpeg command: `run` took `steps.first()` and had no loop, so every
+step after the first was discarded — in dry-run and in confirmed execution alike. Every prompt- and
+plan-level measurement stayed green throughout.
+
+Two contracts now pin the layer below the planner. Both take a **fixed plan** rather than an
+utterance, so expansion is deterministic and **no model is involved**:
+
+| contract | artefact compared | consumers |
+|---|---|---|
+| `expansion_cases.json` | rendered ffmpeg argv, per step | `test_expansion_parity.py`, `skills/ffmpeg/native/tests/expansion_parity.rs` |
+| `documents_expansion_cases.json` | produced output paths, per step | `test_documents_expansion_parity.py` |
+
+Each asserts three things, and the middle one is the regression:
+
+1. the artefacts match the Python reference;
+2. **one artefact per plan step** — stated as an invariant, so it survives a legitimate change to
+   any individual command's flags, which a golden alone would not;
+3. step N's output is step N+1's input, distinguishing a real chain from unrelated commands that
+   merely run in sequence.
+
+`documents` is covered because `run` dispatches both skills through the same loop, and the
+documents corpus has seven multi-step rows — it was exposed to the identical defect and nobody had
+noticed, which is precisely why it is pinned rather than assumed.
+
+**Rule of thumb for future ports:** a parity check that stops at the plan envelope measures what the
+eval harness sees, not what a user sees. Check the rendered artefact too.
+
 ## 5. Inference
 
 ### 5.1 Backend abstraction

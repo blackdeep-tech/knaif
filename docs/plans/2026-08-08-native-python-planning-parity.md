@@ -1,7 +1,7 @@
 # Native/Python planning parity — the prompt gap, its contracts, and the eval-parity lane
 
-**Status:** Active — not started · **Created:** 2026-08-08 · **Revised:** 2026-08-08 (audit) ·
-**Completed:** —
+**Status:** Active — P, Q, R complete; S2 measured on a subset · **Created:** 2026-08-08 ·
+**Revised:** 2026-08-08 (audit), 2026-08-10 (execution-layer defect) · **Completed:** —
 **Owner:** core · **Ref:** absorbs **C4** from
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md); complements
 `scripts/parity_check.py`
@@ -663,6 +663,10 @@ and the repo can prove it without anyone remembering to check:
   selected examples — or every remaining difference is enumerated with a reason.
 - A PR that changes one runtime's prompt, retrieval or generation settings without the other
   **fails CI**, with no model required.
+- **The rendered artefact matches, not only the plan.** Added after the fact, and it is the
+  criterion this plan most needed: a two-step plan must render two commands on both runtimes.
+  Pinned by `contracts/parity/expansion_cases.json` and its documents analogue, deterministically
+  and without a model. Everything above this line was green while native ran one command of two.
 - **Per-row plan parity is the acceptance criterion, not an aggregate.** Two runs can score
   identically while disagreeing on half the corpus in offsetting directions, so "±2% aggregate"
   proves less than it sounds like. Grade **row by row**, reusing
