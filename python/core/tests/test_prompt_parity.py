@@ -74,17 +74,14 @@ def test_internal_tools_are_never_listed(doc: dict, tmp_path: Path) -> None:
 
 
 def test_path_normalization_cases(doc: dict, tmp_path: Path) -> None:
-    """Pin what Python's normalization actually does — including where it does nothing.
+    """Pin what normalization does, now that both runtimes use the same rule.
 
-    Two of these are not what the function's own docstring implies, and both are recorded
-    deliberately rather than fixed here (Q5 decides which rule is canonical):
-
-    * ``what does A\\B mean`` IS rewritten. The docstring says "only path-shaped tokens", but
-      ``A\\B`` matches ``_PATH_TOKEN_RE``, so a non-path backslash is rewritten anyway.
-    * ``convert "C:\\My Videos\\clip.mov" to mp4`` is NOT rewritten. The path contains a space, so
-      splitting the utterance on " " breaks it into fragments that no longer match — meaning the
-      one case the function exists to fix (a Windows path reaching the model as an illegal JSON
-      escape) survives untouched when the path has a space in it.
+    Q5 (2026-08-09) replaced Python's path-token regex with native's unconditional
+    replace-every-backslash. The old rule left ``convert "C:\\My Videos\\clip.mov" to mp4``
+    untouched, because splitting on " " breaks a quoted path into fragments that no longer match —
+    so the one failure the function exists to prevent survived whenever a Windows path had a space
+    in it. It also did not spare the non-paths it was meant to: ``what does A\\B mean`` matched the
+    regex and was rewritten anyway.
     """
     for case in doc["path_normalization_cases"]:
         got = normalize_path_separators(case["utterance"])
@@ -94,10 +91,11 @@ def test_path_normalization_cases(doc: dict, tmp_path: Path) -> None:
         assert user == case["expected_user"], case["name"]
 
 
-def test_quoted_windows_path_is_a_known_gap(doc: dict) -> None:
-    """Guard the finding above so a future fix has to update the contract consciously."""
-    case = next(c for c in doc["path_normalization_cases"] if c["name"] == "quoted_windows_path")
-    assert "\\" in case["python_normalized_utterance"], (
-        "Python now normalizes quoted Windows paths with spaces. That is almost certainly an "
-        "improvement — regenerate the fixtures and settle Q5, rather than deleting this test."
-    )
+def test_every_backslash_is_rewritten(doc: dict) -> None:
+    """The rule is unconditional; a fixture keeping a backslash means the rules diverged again."""
+    for case in doc["path_normalization_cases"]:
+        assert "\\" not in case["python_normalized_utterance"], (
+            f"{case['name']}: a backslash survived normalization. If the narrower token rule came "
+            f"back, the quoted-path case regresses — see the docstring in knaif.prompt."
+        )
+        assert case["python_normalized_utterance"] == case["utterance"].replace("\\", "/")

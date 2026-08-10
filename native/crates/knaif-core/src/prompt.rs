@@ -43,7 +43,19 @@ Rules:
 - Output {\"plan\":[{\"tool\":\"done\",\"args\":{}}]} when the task is fully complete.
 ";
 
-/// Default examples block (port of `_EXAMPLES`), used when a skill's `prompt.yaml` has none.
+/// Default examples block, used when a skill's `prompt.yaml` has none.
+///
+/// **Python's `_EXAMPLES` minus its two history examples**, and the omission is the whole point:
+/// those two carry a `completed:` line demonstrating re-planning from prior steps, which this
+/// runtime cannot do — `build_prompt_from` is single-shot. Showing a model examples of a capability
+/// the runtime lacks invites it to produce plans the runtime cannot honour.
+///
+/// Everything else Python ships is here, including the `reject` example (safety routing) and the
+/// `$var` binding example (native ports `resolve_args`, so it applies). Before 2026-08-09 this
+/// carried only 4 of the 9 and the gap was silent, because documents, ffmpeg and io all override it
+/// via `prompt.yaml` — it reaches only a newly authored skill or an SDK app without one. Found by
+/// `contracts/parity/prompt_cases.json` on its first run; the relationship is asserted by
+/// `default_blocks_match_python`.
 pub const DEFAULT_EXAMPLES: &str = "
 Examples:
   request: \"list text files in reports\"
@@ -57,6 +69,15 @@ Examples:
 
   request: \"move all files to src folder\"
   output:  { \"plan\": [ { \"tool\": \"move_files\", \"args\": { \"src\": \".\", \"dst\": \"src\" } } ] }
+
+    request: \"copy all text files from dir folder into newfolder folder\"
+    output:  { \"plan\": [ { \"tool\": \"move_files\", \"args\": { \"src\": \"dir\", \"dst\": \"newfolder\", \"file_type\": \"text\" } } ] }
+
+  request: \"nuke the server\"
+  output:  { \"plan\": [ { \"tool\": \"reject\", \"args\": { \"reason\": \"Request is unsafe.\" } } ] }
+
+  request: \"find the exchange with the lowest BTC price and buy 2 BTC\"
+  output:  { \"plan\": [ { \"tool\": \"find_lowest_btc_exchange\", \"args\": {}, \"output\": \"$market\" }, { \"tool\": \"buy_btc\", \"args\": { \"exchange\": \"$market.exchange\", \"amount\": 2 } } ] }
 ";
 
 /// Tools never listed in the prompt (they're implied control tools). Port of `_SYSTEM_TOOLS`.

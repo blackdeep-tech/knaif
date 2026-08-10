@@ -372,9 +372,15 @@ outputs, per `docs/NATIVE.md`.
     utterances, 0 in 404 train, 0 in 164 documents eval. That is why the bug survived, and it also
     means changing Python's rule cannot move the training distribution — the usual objection to
     touching the reference does not apply here.
-  - **Left for the owner:** whether to change Python's rule to match native. It edits the reference
-    implementation, which this plan otherwise avoids on principle, so it is flagged rather than
-    done. The contract case is committed either way, so the gap can no longer be forgotten. **Not a fix — hygiene.** Finding 4: native's
+  - **Converged 2026-08-09: Python adopted native's rule** (`utterance.replace("\\", "/")`), so
+    both runtimes now normalize identically, in the same layer. Done rather than deferred because
+    the evidence removed the usual objection — with zero backslashes in any corpus the training
+    distribution cannot move, and the narrower rule was leaving a real Windows bug in place.
+  - **It cost one documented behaviour, deliberately.** `test_non_path_backslash_is_left_alone`
+    asserted that a *bare* `\` stays literal; the old regex required an alphanumeric. Native never
+    honoured that, so the runtimes disagreed on exactly that input — and a bare backslash is itself
+    an illegal JSON escape, so the old behaviour preserved the character at the cost of the failure
+    normalization exists to prevent. The test now asserts the new rule and says why. **Not a fix — hygiene.** Finding 4: native's
   `512` and the promoted model's `512` already agree, so nothing changes behaviourally. The defect
   is that the number lives in three places (`llama.rs:241`, `models.yaml`, `eval_backends.yaml`)
   and the original code read picked the wrong copy. Give it one source both runtimes read, so the
@@ -485,8 +491,18 @@ deterministic and needs **no GGUF**, so unlike C4 it can gate every PR in CI.
   `max_tokens`, `n_ctx`, sampling, thinking suppression — reading each from the file that actually
   holds it. Had this existed, the original finding 4 would have been impossible to write: the test
   names its sources, so nobody can compare a live value against a superseded stanza.
-- [ ] **R4 — Gate them in CI.** They belong in the existing `python` and `native` jobs rather than
-  a new one; both already run on every change to `skills/` and `contracts/`.
+- [x] **R4 — Gate them in CI.** *(verified 2026-08-09 — no work was required.)* The contracts landed
+  in the paths CI already covers, so they gate every PR as of the commit that added them:
+  - the `changes` job's filters list `contracts/` on **both** the `python` and `native` sides
+    (`ci.yml` — the dual-runtime surface is deliberately on both);
+  - `python` runs `just check-py` → `test-py` → `uv run pytest`, whose `testpaths` include
+    `python/core/tests/`, where all three Python consumers live;
+  - `native` runs `just check-native` (fmt + clippy, warnings as errors) and `just test-native`
+    (`cargo test --workspace`), which picks up both `knaif-core/tests/*_parity.rs`.
+  - Checked rather than assumed, because "it belongs in the existing jobs" is a plan's expectation,
+    not evidence — and the whole subject of this plan is a check nobody confirmed existed.
+  - Still true and still worth stating: **both jobs are `ubuntu-latest`**, so CI green is not
+    evidence for Windows or macOS. See the platform note above.
   - **Both jobs are `ubuntu-latest` only**, so CI green is not evidence the contract holds where
     the work is being done. Run R1–R3 locally on Windows as part of P/Q before calling R done,
     and if the two disagree, that difference is itself a parity bug — fix it in the contract, do

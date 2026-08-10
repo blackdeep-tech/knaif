@@ -27,9 +27,20 @@ def test_windows_absolute_path_token_is_normalized(agent):
     assert user == "compress C:/Users/me/clip.mp4"
 
 
-def test_non_path_backslash_is_left_alone(agent):
+def test_every_backslash_is_normalized_including_a_bare_one(agent):
+    """A lone backslash is rewritten too, since Q5 converged on the native rule.
+
+    This test previously asserted the opposite — the old token regex required an alphanumeric, so
+    a bare ``\\`` stayed literal. Changed deliberately, for two reasons. Native has always rewritten
+    it, so the runtimes disagreed on exactly this input; and a bare backslash is *itself* an illegal
+    JSON escape, so the old behaviour preserved the character at the cost of the failure this
+    normalization exists to prevent.
+
+    What it costs: an utterance genuinely discussing the backslash character now reads as ``/`` to
+    the model. Acceptable for a file-path domain, and the shipped runtime already behaved this way.
+    """
     _, user = agent.build_prompt(r"replace \ with something")
-    assert user == r"replace \ with something"
+    assert user == "replace / with something"
 
 
 def test_system_contains_tool_names(agent):

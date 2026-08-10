@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import json as _json
-import re
 
 from .registry import ToolDef
 
 # ── utterance normalization ───────────────────────────────────────────────────
 
-# A token made only of path characters, with at least one alphanumeric so a bare
-# "\" stays literal. No spaces, so a quoted path containing spaces is left alone
-# (it is not a single token anyway).
-_PATH_TOKEN_RE = re.compile(r"[\w\-.:\\/]*[a-zA-Z0-9][\w\-.:\\/]*", re.ASCII)
-
 
 def normalize_path_separators(utterance: str) -> str:
-    """Rewrite Windows-style path tokens (``.\\clip.mov``) to forward slashes.
+    """Rewrite Windows-style path separators (``.\\clip.mov``) to forward slashes.
 
     A backslash inside a JSON string must be escaped, and small models get this
     wrong: given ``.\\clip.mov`` they emit ``"\\clip.mov"`` — the dot is lost and
@@ -24,17 +18,23 @@ def normalize_path_separators(utterance: str) -> str:
     the file is reported missing. Forward slashes need no escaping and work on
     every platform, so hand the model ``./clip.mov`` instead.
 
-    The native runtime already does this in ``knaif-cli``'s ``build_plan``
-    (``normalize_path_separators`` in ``apps/cli/src/main.rs``); this is
-    the Python counterpart. Native rewrites every backslash in the utterance,
-    Python only path-shaped tokens — same result on any file-path utterance.
+    Identical to the native rule in ``knaif_core::prompt`` — every backslash,
+    unconditionally. It was not always: this function used to rewrite only
+    whitespace-delimited tokens matching a path-shaped regex, on the reasoning
+    that a quoted path containing spaces "is not a single token anyway". True,
+    but it left ``convert "C:\\My Videos\\clip.mov" to mp4`` untouched, so the
+    exact failure above still reached the model whenever a Windows path had a
+    space in it — which on Windows is ordinary. The narrower rule also did not
+    spare non-paths it was supposed to: ``what does A\\B mean`` matched the
+    regex and was rewritten regardless.
+
+    Converged 2026-08-09 (Q5 of the native/Python planning-parity plan). Safe to
+    change: no corpus utterance has ever contained a backslash — 0 of 847 ffmpeg
+    eval, 0 of 404 train, 0 of 164 documents eval — so neither rule had ever been
+    exercised by a measurement, and the training distribution cannot shift.
+    Pinned by ``contracts/parity/prompt_cases.json``.
     """
-    if "\\" not in utterance:
-        return utterance
-    return " ".join(
-        token.replace("\\", "/") if "\\" in token and _PATH_TOKEN_RE.fullmatch(token) else token
-        for token in utterance.split(" ")
-    )
+    return utterance.replace("\\", "/")
 
 
 # ── example selection helpers ─────────────────────────────────────────────────

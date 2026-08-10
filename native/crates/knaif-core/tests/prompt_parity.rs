@@ -68,31 +68,59 @@ fn prompt_render_cases_match_python() {
 
 /// The built-in fallbacks each runtime uses when a skill supplies no `prompt.yaml`.
 ///
-/// The system headers agree byte-for-byte. The **example blocks do not**: Python's
-/// `knaif.prompt._EXAMPLES` carries 9 examples, native's `DEFAULT_EXAMPLES` carries 4, and the
-/// four missing ones include the `reject` example, both history/`completed:` examples and the
-/// variable-binding example.
+/// Byte-identity is the wrong contract here, and finding that out was the useful part. Python's
+/// `_EXAMPLES` carries 9 examples; **two of them are history examples**, carrying a `completed:`
+/// line that demonstrates re-planning from prior steps. This runtime is single-shot and cannot do
+/// that, so shipping those two would show the model a capability the runtime lacks.
 ///
-/// Latent rather than shipped: documents, ffmpeg and io each provide a `prompt.yaml` examples
-/// block, so no released skill reaches this path. It is live for a newly authored skill and for
-/// SDK apps without a `prompt.yaml` — which is precisely the case nobody would think to measure.
+/// So the contract is *Python's block minus its history examples* — 7 — and the assertion is
+/// written that way rather than as a string comparison, so a new Python example is inherited
+/// automatically while a new history example is still excluded.
 ///
-/// Found by this contract on its first run. Un-ignore when Q reconciles the two defaults.
+/// When this contract first ran, native had **4**: it was also missing the `reject` example
+/// (safety routing) and the `$var` binding example, neither of which has anything to do with
+/// history. Latent, because documents, ffmpeg and io all override the block via `prompt.yaml` —
+/// it reaches only a newly authored skill or an SDK app without one, which is exactly the case
+/// nobody thinks to measure. Fixed 2026-08-09.
 #[test]
-#[ignore = "Q: native DEFAULT_EXAMPLES has 4 entries against Python's 9 (missing reject, both \
-            history examples, and variable binding). Latent — every shipped skill overrides it."]
-fn default_blocks_match_python() {
+fn default_blocks_match_python_minus_history_examples() {
     let doc = fixtures();
     for case in doc["default_block_cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
-        let (system, user) = render(&doc, case);
+        let (system, _) = render(&doc, case);
+
+        let expected_system = case["expected_system"].as_str().unwrap();
+        let native_examples = examples_of(&system);
+        let python_examples: Vec<&str> = examples_of(expected_system)
+            .into_iter()
+            .filter(|e| !e.contains("completed:"))
+            .collect();
+
         assert_eq!(
-            system,
-            case["expected_system"].as_str().unwrap(),
-            "case {name}: built-in default block diverges from Python"
+            native_examples, python_examples,
+            "case {name}: the default example block diverges from Python's (history excluded)"
         );
-        assert_eq!(user, case["expected_user"].as_str().unwrap(), "case {name}");
+        assert!(
+            !system.contains("completed:"),
+            "case {name}: a history example reached a single-shot runtime's default prompt"
+        );
+        assert!(
+            system.contains("\"tool\": \"reject\""),
+            "case {name}: the reject example is missing from the default block"
+        );
     }
+}
+
+/// Split a rendered system message into its `request:`-led example blocks.
+fn examples_of(system: &str) -> Vec<&str> {
+    let Some(idx) = system.find("Examples:") else {
+        return Vec::new();
+    };
+    system[idx..]
+        .split("  request:")
+        .skip(1)
+        .map(str::trim_end)
+        .collect()
 }
 
 #[test]
@@ -117,20 +145,21 @@ fn internal_tools_are_never_listed() {
 /// `knaif.prompt` and runs inside `build_prompt`. Before that, the CLI normalized but every other
 /// consumer of this crate silently did not.
 ///
-/// The *rules* still differ: native rewrites every backslash, Python only whitespace-delimited
-/// tokens matching a path-shaped regex. That is not symmetric — Python's rule **misses** a quoted
-/// path containing a space, which is the exact failure the function exists to prevent. No corpus
-/// utterance has ever exercised either rule (0 backslashes in 847 eval / 404 train utterances), so
-/// this test is the only thing measuring it.
+/// The *rules* converged on 2026-08-09 too: Python adopted native's replace-every-backslash.
+/// Its previous rule rewrote only whitespace-delimited path-shaped tokens, which left
+/// `convert "C:\My Videos\clip.mov" to mp4` untouched — the exact failure the function exists to
+/// prevent, whenever a Windows path contains a space. No corpus utterance has ever contained a
+/// backslash (0 of 847 eval, 0 of 404 train), so this test is still the only thing measuring it.
 #[test]
-fn path_normalization_runs_in_the_core_and_pins_the_rule_gap() {
+fn path_normalization_runs_in_the_core_and_matches_python() {
     let doc = fixtures();
     for case in doc["path_normalization_cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let raw = case["utterance"].as_str().unwrap();
         let (_, user) = render(&doc, case);
 
-        // Native normalizes inside the core now: no backslash survives into the prompt.
+        // Normalization happens inside the core now, so no backslash survives into the prompt —
+        // for every consumer of this crate, not only the CLI.
         assert!(
             !user.contains('\\'),
             "case {name}: a backslash reached the prompt; knaif-core should have normalized it"
@@ -138,22 +167,12 @@ fn path_normalization_runs_in_the_core_and_pins_the_rule_gap() {
         assert_eq!(
             user,
             raw.replace('\\', "/"),
-            "case {name}: native's rule is replace-every-backslash"
+            "case {name}: the rule is replace-every-backslash"
         );
-
-        let py = case["python_normalized_utterance"].as_str().unwrap();
-        if name == "quoted_windows_path" {
-            assert_ne!(
-                user, py,
-                "case {name}: expected the runtimes to still disagree — Python's token regex \
-                 cannot match a quoted path containing a space, so it leaves the backslashes in"
-            );
-            assert!(
-                py.contains('\\'),
-                "the Python side should still carry backslashes here"
-            );
-        } else {
-            assert_eq!(user, py, "case {name}: the two rules agree on this input");
-        }
+        assert_eq!(
+            user,
+            case["python_normalized_utterance"].as_str().unwrap(),
+            "case {name}: the two runtimes' normalization rules have diverged again"
+        );
     }
 }
