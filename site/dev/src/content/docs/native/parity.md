@@ -31,6 +31,27 @@ cannot start passing because someone edited ffmpeg.
 These run in the ordinary test suites, need no model, and take milliseconds. They are the
 regression net for the contract itself.
 
+### One contract per deterministic stage
+
+The validator is not the only stage that runs the same way on both sides. Everything
+between the utterance and the executed command is deterministic, and each stage has its
+own fixtures:
+
+| contract | what it pins |
+|---|---|
+| `prompt_cases.json` | the rendered prompt, given the same utterance and registry |
+| `retrieval_cases.json` | which tools are selected, **and in what order** |
+| `generation_settings.yaml` | `max_tokens`, `n_ctx`, decoding, thinking |
+| `chain_linking_cases.json` | how a plan's intermediate files are bound together |
+| `planner_cases.json` | parse → normalize → defaults → validate |
+| `expansion_cases.json` | the rendered command, per plan step |
+
+Read that list in order and it is the pipeline itself. The gaps are what bite: a check
+that stops at the plan envelope measures what the eval harness sees, not what a user sees.
+Two real native defects — one that ran only the first step of a plan, one that fed a step
+the wrong file — left the envelopes byte-identical and were invisible until the stages
+either side of the planner were pinned too.
+
 ## Layer 2 — live diff on real utterances
 
 ```bash

@@ -167,8 +167,41 @@ Each asserts three things, and the middle one is the regression:
 documents corpus has seven multi-step rows — it was exposed to the identical defect and nobody had
 noticed, which is precisely why it is pinned rather than assumed.
 
+### 4.3 Chain-linking parity — the stage that decides which file each step reads
+
+Chain linking runs **between** inference and validation and rewrites the model's plan in place, so
+it is the last deterministic stage the two contracts above do not cover: `expansion_cases.json`
+takes a plan as given, and prompt parity stops before the model answers.
+
+Python runs **two** passes; native shipped only the first until 2026-08-10.
+
+| pass | what it does |
+|---|---|
+| claim undeclared intermediates | a later step consumes a filename no earlier step declares producing → assign it as the nearest eligible producer's `output` |
+| forward-thread reused sources | a later step reuses an earlier producer's **source** instead of its result → give the producer an intermediate `output` and repoint the later step at it |
+
+Missing the second pass, *"trim clip.mp4 to the first 4 seconds, compress it, and remove the audio"*
+built the silent video from `clip_trimmed.mp4` — the **uncompressed** trim — and discarded the
+compression entirely. The first pass structurally cannot fix it: `clip_trimmed.mp4` is already
+produced, so it is not an undeclared intermediate.
+
+`chain_linking_cases.json` pins both passes across 14 cases, model-free, on an inline registry:
+
+| assertion | why |
+|---|---|
+| the linked plan matches Python exactly | the golden |
+| the eligible-producer set matches | it gates both passes — see below |
+| every linked plan still validates | linking must never produce a plan the validator rejects |
+
+The producer set is `required_args | optional_args`, the validator's own `allowed` set. Native also
+counted an `arg_schemas` entry, which describes an arg's type without making it accepted — that
+writes `output` onto a tool `validate_plan` then rejects with *"unsupported args"*, and repoints the
+downstream step at a file nothing will produce. No shipped tool declares `output` that way today, so
+nothing was broken in practice; the contract caught it as a latent divergence on the first run.
+
 **Rule of thumb for future ports:** a parity check that stops at the plan envelope measures what the
-eval harness sees, not what a user sees. Check the rendered artefact too.
+eval harness sees, not what a user sees. Both of these defects left the envelopes byte-identical.
+Check the rendered artefact, and pin every deterministic stage that rewrites a plan.
 
 ## 5. Inference
 

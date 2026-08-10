@@ -357,6 +357,39 @@ multi-step rows**. Nobody reported it there, which is the point: the bug was ski
 one skill's symptom was noticed. Verified end to end as well: `rotate sample.pdf 90 degrees and then
 compress it` now previews both steps, threading `sample_rot.pdf` into the compress.
 
+### And then the expansion contract found a fourth divergence it could not itself catch
+
+Re-running `parity_check.py --mode command --strict` after the loop fix reported
+`chain (native 1-step): 0` — independent confirmation from a harness written before the fix — but
+`10/11` matched. `ffmpeg_hard_004`, *"trim clip.mp4 to the first 4 seconds, compress it, and remove
+the audio"*, diverged on step 3's input:
+
+| | step 3 reads |
+|---|---|
+| native | `clip_trimmed.mp4` — step **1's** output |
+| python | `clip_trimmed-chained.mp4` — step **2's** output |
+
+Native built the silent video from the **uncompressed** trim; the compression was computed and
+thrown away. Proven model-free by running Python's linker over native's exact plan and watching it
+mint the `-chained` rewrite.
+
+**Cause.** Python's `_link_chain_intermediates` runs two passes; native ported only the first.
+`_forward_thread_reused_sources` repoints a later step that reuses an earlier step's *source*
+rather than its *result*. The first pass structurally cannot fix this: `clip_trimmed.mp4` is already
+produced, so it is not an undeclared intermediate.
+
+The lesson repeats one level down. The expansion contracts take a plan **as given**, so they never
+exercise linking — the stage that decides which file each step reads. Pinned as
+`contracts/parity/chain_linking_cases.json`: 14 cases, both passes, a Python and a Rust consumer.
+It asserts the linked plan, the eligible-producer set, and that every linked plan still validates.
+
+Mutation-tested twice over. Removing native's second pass fails
+`reused_source_is_forward_threaded`; and on its very first run the contract caught a **fifth, latent
+divergence** nobody was looking for — native's producer set also counted an `arg_schemas` entry,
+which describes an arg's type without making it accepted, so linking could write `output` onto a
+tool `validate_plan` then rejects with *"unsupported args"*. No shipped tool declares `output` that
+way today, so nothing was broken in practice; it was one tool definition away from being a bug.
+
 ## Workstream Q — Port what is missing
 
 Only after P3 attributes the gap. Each item is a **port, not a rewrite** — same inputs, same
@@ -667,6 +700,10 @@ and the repo can prove it without anyone remembering to check:
   criterion this plan most needed: a two-step plan must render two commands on both runtimes.
   Pinned by `contracts/parity/expansion_cases.json` and its documents analogue, deterministically
   and without a model. Everything above this line was green while native ran one command of two.
+- **Every deterministic stage that rewrites a plan is pinned**, not only the ones at either end.
+  Chain linking sits between inference and validation and decides which file each step reads; the
+  expansion contracts take a plan as given and cannot see it. Pinned by
+  `contracts/parity/chain_linking_cases.json`.
 - **Per-row plan parity is the acceptance criterion, not an aggregate.** Two runs can score
   identically while disagreeing on half the corpus in offsetting directions, so "±2% aggregate"
   proves less than it sounds like. Grade **row by row**, reusing
