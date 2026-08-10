@@ -112,6 +112,178 @@ pub fn link_chain_intermediates(
             produced.insert(out.to_lowercase());
         }
     }
+
+    // Second pass, as Python does at the end of `_link_chain_intermediates`. The first pass only
+    // claims filenames nothing has produced yet; this one repoints a later step that reuses an
+    // earlier step's *source* rather than its result.
+    forward_thread_reused_sources(plan, output_capable);
+}
+
+/// Basename of a path-ish string, lower-cased for comparison.
+fn basename_lower(value: &str) -> String {
+    value
+        .replace('\\', "/")
+        .rsplit('/')
+        .next()
+        .unwrap_or(value)
+        .to_lowercase()
+}
+
+/// Derive a chain-intermediate filename from `src`, avoiding names already `taken`.
+///
+/// Preserves the directory prefix and extension and inserts a `-chained` marker
+/// (`report.pdf` → `report-chained.pdf`). Port of Python `_intermediate_name`, including the
+/// numbered fallback so repeated transforms of one source do not collide.
+fn intermediate_name(src: &str, taken: &HashSet<String>) -> String {
+    let norm = src.replace('\\', "/");
+    let name = norm.rsplit('/').next().unwrap_or(&norm);
+    let prefix = &src[..src.len() - name.len()];
+    let (stem, ext) = match name.rfind('.') {
+        Some(dot) if dot > 0 => (&name[..dot], &name[dot..]),
+        _ => (name, ""),
+    };
+    let mut n = 1usize;
+    loop {
+        let marker = if n == 1 {
+            "-chained".to_string()
+        } else {
+            format!("-chained{n}")
+        };
+        let candidate = format!("{prefix}{stem}{marker}{ext}");
+        if !taken.contains(&basename_lower(&candidate)) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Thread a **reused source filename** onto the transforming step's output.
+///
+/// Port of Python `_forward_thread_reused_sources`, the second pass of chain linking — and the one
+/// native was missing. The model often emits a correct-looking chain but points a later step at the
+/// ORIGINAL source rather than the file an earlier step produced from it. For
+/// "trim clip.mp4, compress it, and remove the audio" it emitted:
+///
+/// ```text
+/// trim_video     clip.mp4        -> clip_trimmed.mp4
+/// compress_video clip_trimmed.mp4                       (no output declared)
+/// strip_audio    clip_trimmed.mp4                       <- step 1's output, not step 2's
+/// ```
+///
+/// so the silent video was made from the *uncompressed* trim and the compression was discarded.
+/// The first pass cannot fix it: `clip_trimmed.mp4` is already `produced`, so it is not an
+/// undeclared intermediate. This pass gives the middle step an explicit intermediate `output` and
+/// repoints the later reference at it.
+///
+/// Only output-capable producers are eligible — a read-only tool does not transform the file, so a
+/// later reuse of its input is legitimate. A producer consuming several files (or a glob) is
+/// skipped: one `output` cannot name many deliverables.
+fn forward_thread_reused_sources(plan: &mut [Value], output_capable: &HashSet<String>) {
+    let mut produced: HashSet<String> = plan
+        .iter()
+        .filter_map(|s| s.get("args")?.get("output")?.as_str())
+        .map(basename_lower)
+        .collect();
+
+    for idx in 0..plan.len() {
+        let tool = plan[idx].get("tool").and_then(Value::as_str).unwrap_or("");
+        if TERMINAL_TOOLS.contains(&tool) || !output_capable.contains(tool) {
+            continue;
+        }
+        // Exactly one source file, or a single `output` cannot stand in for the batch.
+        let sources: Vec<String> = plan[idx]
+            .get("args")
+            .and_then(Value::as_object)
+            .map(|map| {
+                map.iter()
+                    .filter(|(k, _)| *k != "output")
+                    .flat_map(|(_, v)| string_values(v))
+                    .filter(|v| looks_like_filename(v) && !v.contains('*') && !v.contains('?'))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if sources.len() != 1 {
+            continue;
+        }
+        let src_base = basename_lower(&sources[0]);
+
+        // Later references to that same source, as (step index, arg key, list index).
+        let mut targets: Vec<(usize, String, Option<usize>)> = Vec::new();
+        for (offset, later) in plan.iter().enumerate().skip(idx + 1) {
+            let ltool = later.get("tool").and_then(Value::as_str).unwrap_or("");
+            if TERMINAL_TOOLS.contains(&ltool) {
+                continue;
+            }
+            let Some(map) = later.get("args").and_then(Value::as_object) else {
+                continue;
+            };
+            for (key, value) in map {
+                if key == "output" {
+                    continue;
+                }
+                match value {
+                    Value::String(s) if looks_like_filename(s) && basename_lower(s) == src_base => {
+                        targets.push((offset, key.clone(), None));
+                    }
+                    Value::Array(items) => {
+                        for (li, item) in items.iter().enumerate() {
+                            if item.as_str().is_some_and(|s| {
+                                looks_like_filename(s) && basename_lower(s) == src_base
+                            }) {
+                                targets.push((offset, key.clone(), Some(li)));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if targets.is_empty() {
+            continue;
+        }
+
+        // Reuse the producer's declared output, or mint an intermediate for it.
+        let existing = plan[idx]
+            .get("args")
+            .and_then(|a| a.get("output"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let out = match existing {
+            Some(o) => o,
+            None => {
+                let name = intermediate_name(&sources[0], &produced);
+                produced.insert(basename_lower(&name));
+                match plan[idx].get_mut("args").filter(|a| a.is_object()) {
+                    Some(a) => {
+                        a.as_object_mut()
+                            .unwrap()
+                            .insert("output".into(), Value::String(name.clone()));
+                    }
+                    None => plan[idx]["args"] = json!({ "output": name.clone() }),
+                }
+                name
+            }
+        };
+        for (step_idx, key, list_idx) in targets {
+            let Some(args) = plan[step_idx].get_mut("args") else {
+                continue;
+            };
+            match list_idx {
+                Some(li) => {
+                    if let Some(item) = args.get_mut(&key).and_then(|v| v.get_mut(li)) {
+                        *item = Value::String(out.clone());
+                    }
+                }
+                None => {
+                    if let Some(slot) = args.get_mut(&key) {
+                        *slot = Value::String(out.clone());
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Filename-like input values (non-`output`) that are neither in the utterance nor already
@@ -342,6 +514,66 @@ mod tests {
         assert_eq!(gate(p.clone(), "do a thing"), p);
         let np = json!({"not_a_plan": true});
         assert_eq!(gate(np.clone(), "x"), np);
+    }
+
+    /// The regression that revealed the missing second pass.
+    ///
+    /// "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio" produced a plan
+    /// whose third step consumed step *one's* output, so the silent video was built from the
+    /// uncompressed trim and the compression was thrown away. Python repairs this via
+    /// `_forward_thread_reused_sources`; native had no equivalent. Found by
+    /// `parity_check.py --mode command --strict`, which plan-envelope parity cannot detect.
+    ///
+    /// The expected values are Python's actual output for this input, including the `-chained`
+    /// intermediate name.
+    #[test]
+    fn reused_source_is_forward_threaded_onto_the_producer_output() {
+        let mut plan = vec![
+            json!({"tool": "trim_video", "args": {"input": "clip.mp4", "output": "clip_trimmed.mp4"}}),
+            json!({"tool": "compress_video", "args": {"inputs": ["clip_trimmed.mp4"]}}),
+            json!({"tool": "strip_audio", "args": {"inputs": ["clip_trimmed.mp4"]}}),
+        ];
+        let capable: HashSet<String> = ["trim_video", "compress_video", "strip_audio"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        link_chain_intermediates(
+            &mut plan,
+            "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio",
+            &capable,
+        );
+
+        assert_eq!(
+            plan[1]["args"]["output"], "clip_trimmed-chained.mp4",
+            "the middle step must declare an intermediate output"
+        );
+        assert_eq!(
+            plan[2]["args"]["inputs"][0], "clip_trimmed-chained.mp4",
+            "the last step must consume the COMPRESSED file, not the raw trim"
+        );
+    }
+
+    #[test]
+    fn intermediate_names_do_not_collide() {
+        let mut taken: HashSet<String> = HashSet::new();
+        let first = intermediate_name("clip.mp4", &taken);
+        assert_eq!(first, "clip-chained.mp4");
+        taken.insert(first.to_lowercase());
+        assert_eq!(intermediate_name("clip.mp4", &taken), "clip-chained2.mp4");
+    }
+
+    #[test]
+    fn a_read_only_reuse_is_left_alone() {
+        // `inspect_media` is not output-capable: it does not transform the file, so a later step
+        // reusing its input is legitimate and must not be repointed.
+        let mut plan = vec![
+            json!({"tool": "inspect_media", "args": {"inputs": ["clip.mp4"]}}),
+            json!({"tool": "strip_audio", "args": {"inputs": ["clip.mp4"]}}),
+        ];
+        let capable: HashSet<String> = ["strip_audio"].iter().map(|s| s.to_string()).collect();
+        link_chain_intermediates(&mut plan, "inspect clip.mp4 and remove its audio", &capable);
+        assert_eq!(plan[1]["args"]["inputs"][0], "clip.mp4");
+        assert!(plan[0]["args"].get("output").is_none());
     }
 
     #[test]
