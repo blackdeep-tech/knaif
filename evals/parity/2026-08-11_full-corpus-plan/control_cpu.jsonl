@@ -1,0 +1,37 @@
+{"id": "ffmpeg_025", "plan": [{"tool": "clarify", "args": {"question": "You didn't mention 'my_video.mp4' in your request — which file should I work on?"}}]}
+{"id": "ffmpeg_027", "plan": [{"tool": "create_thumbnail", "args": {"input": "clip.mp4", "image_format": "jpg"}}]}
+{"id": "ffmpeg_041", "plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip.mp4"], "platform": "messenger", "quality": "small_file"}}]}
+{"id": "ffmpeg_043", "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "output": "clip_high.mp4", "quality": "high_quality"}}]}
+{"id": "ffmpeg_044", "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "container": "mp4", "quality": "lossless"}}]}
+{"id": "ffmpeg_045", "plan": [{"tool": "compress_video", "args": {"inputs": ["clip_ctr.mp4"], "target": "mkv"}}]}
+{"id": "ffmpeg_061", "plan": [{"tool": "compress_video", "args": {"inputs": ["clip_ctr.mp4"], "output": "clip_ctr_small.mp4"}}, {"tool": "prepare_for_platform", "args": {"inputs": ["clip_ctr_small.mp4"], "platform": "email", "preview": true}}]}
+{"id": "ffmpeg_082", "plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mp4", "clip.mov"], "output": "combined.mp4"}}]}
+{"id": "ffmpeg_082b", "plan": [{"tool": "clarify", "args": {"question": "You didn't mention 'file1.mp4' in your request — which file should I work on?"}}]}
+{"id": "ffmpeg_086", "plan": [{"tool": "reject", "args": {"reason": "Upscaling to 4K is not a supported operation."}}]}
+{"id": "ffmpeg_102", "plan": [{"tool": "extract_audio", "args": {"inputs": ["audio.mp3"], "audio_format": "mp3", "bitrate": "64k"}}]}
+{"id": "ffmpeg_130", "plan": [{"tool": "extract_audio", "args": {"inputs": ["clip_no_audio.mp4"], "output": "clip_audio.mp3"}}, {"tool": "convert_video", "args": {"inputs": ["clip_audio.mp3"], "container": "mkv", "output": "clip_no_audio.mkv"}}, {"tool": "resize_video", "args": {"inputs": ["clip_no_audio.mkv"], "height": 1080}}]}
+{"id": "ffmpeg_134", "plan": []}
+{"id": "ffmpeg_138", "plan": [{"tool": "extract_audio", "args": {"inputs": ["clip.mov"], "audio_format": "mp3", "output": "clip.mp3"}}, {"tool": "adjust_volume", "args": {"inputs": ["clip.mp3"], "level": "-2dB"}}]}
+{"id": "ffmpeg_142", "plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip.mp4"], "platform": "email", "preview": true}}]}
+{"id": "ffmpeg_156", "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "container": "mp4", "preview": true}}]}
+{"id": "ffmpeg_157", "plan": [{"tool": "compress_video", "args": {"inputs": ["this video"], "target": "me"}}]}
+{"id": "ffmpeg_160", "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "crf": 51, "preview": true}}]}
+{"id": "ffmpeg_171", "plan": [{"tool": "clarify", "args": {"question": "You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"id": "ffmpeg_174", "plan": []}
+{"id": "ffmpeg_175", "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "container": "mp4", "video_codec": "copy", "audio_codec": "copy", "quality": "lossless"}}]}
+{"id": "ffmpeg_180", "plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip.mp4"], "platform": "ios", "preview": true}}]}
+{"id": "ffmpeg_202", "plan": [{"tool": "create_thumbnail", "args": {"input": "clip.mp4", "at_time": "00:00:25"}}]}
+{"id": "ffmpeg_205", "plan": [{"tool": "adjust_volume", "args": {"inputs": ["clip.mp4"], "level": "louder"}}]}
+{"id": "ffmpeg_206", "plan": [{"tool": "convert_video", "args": {"inputs": ["*.mp4", "*.mkv"], "container": "webm", "video_codec": "vp9"}}]}
+{"id": "ffmpeg_209", "plan": [{"tool": "trim_video", "args": {"input": "clip_4k.mp4", "start": "-00:00:02"}}]}
+{"id": "ffmpeg_215", "plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mov", "clip_no_audio.mp4"], "output": "combined.mp4"}}]}
+{"id": "ffmpeg_226", "plan": [{"tool": "extract_audio", "args": {"inputs": ["clip.mp4"], "audio_format": "mp3", "output": "clip.mp3"}}, {"tool": "adjust_speed", "args": {"inputs": ["clip.mp3"], "speed": 0.8}}]}
+{"id": "ffmpeg_231", "plan": [{"tool": "concat_video", "args": {"inputs": ["clip_4k.mp4", "clip.mp4"], "output": "combined.mp4"}}]}
+{"id": "ffmpeg_242", "plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mov", "clip.mp4"], "output": "combined.mp4"}}]}
+{"id": "ffmpeg_244", "plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mov", "clip.mp4"], "output": "combined.mp4", "target_resolution": "auto"}}]}
+{"id": "ffmpeg_252", "plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mp4", "clip2.mp4", "clip.mov"], "output": "combined.mp4"}}]}
+{"id": "ffmpeg_261", "plan": [{"tool": "clarify", "args": {"question": "You didn't mention 'video.mp4' in your request — which file should I work on?"}}]}
+{"id": "ffmpeg_271", "plan": [{"tool": "adjust_volume", "args": {"inputs": ["audio.mp3"], "level": "-6dB"}}]}
+{"id": "ffmpeg_278", "plan": [{"tool": "trim_video", "args": {"input": "clip_4k", "start": "00:00:00", "end": "00:00:02", "output": "clip_4k_trimmed.mp4"}}, {"tool": "convert_video", "args": {"inputs": ["clip_4k_trimmed.mp4"], "container": "webm", "video_codec": "vp9"}}]}
+{"id": "ffmpeg_281", "plan": [{"tool": "clarify", "args": {"question": "You didn't mention 'clip_no_audio.mp4' in your request — which file should I work on?"}}]}
+{"id": "ffmpeg_291", "plan": [{"tool": "clarify", "args": {"question": "You didn't mention 'silent_clip.mp4' in your request — which file should I work on?"}}]}
