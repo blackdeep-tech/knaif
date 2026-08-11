@@ -1,7 +1,8 @@
 # Native/Python planning parity — the prompt gap, its contracts, and the eval-parity lane
 
-**Status:** Active — P, Q, R complete; S2 measured on a subset · **Created:** 2026-08-08 ·
-**Revised:** 2026-08-08 (audit), 2026-08-10 (execution-layer defect) · **Completed:** —
+**Status:** Active — P, Q, R, T complete; **S1/S1b not built and T5 open** ·
+**Created:** 2026-08-08 · **Revised:** 2026-08-08 (audit), 2026-08-10 (execution-layer defect),
+2026-08-11 (bookkeeping) · **Completed:** —
 **Owner:** core · **Ref:** absorbs **C4** from
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md); complements
 `scripts/parity_check.py`
@@ -266,12 +267,16 @@ any single fix below.
   - Recorded as its own item rather than folded into P4 because it changes what the rest of the
     plan is *for*: R's contracts stand on their own merits, Q remains correct as a port, but
     neither is now a fix for a quality emergency.
-- [ ] **P3 — Attribute factorially, not one-at-a-time.** **Re-scope before running: P2c removed
-  the effect this was designed to attribute.** The question is no longer "which change restores
-  multi-step planning" — nothing needs restoring — but "does the prompt divergence cost measurable
-  quality at all, in either direction". Same four cells, different success criterion: a routing
-  delta against the P2b baseline, not the presence of chains. If every cell lands inside noise,
-  that is a *result* — it says the divergence is cosmetic and Q is a tidiness port, not a fix.
+- [x] **P3 — Attribute factorially, not one-at-a-time.** **Answered by S2 without running the
+  factorial** *(2026-08-09)* — see the closing note under this workstream for why that is a real
+  answer and not a skipped step.
+
+  **Re-scope before running: P2c removed the effect this was designed to attribute.** The question
+  is no longer "which change restores multi-step planning" — nothing needs restoring — but "does
+  the prompt divergence cost measurable quality at all, in either direction". Same four cells,
+  different success criterion: a routing delta against the P2b baseline, not the presence of
+  chains. If every cell lands inside noise, that is a *result* — it says the divergence is cosmetic
+  and Q is a tidiness port, not a fix.
 
   Retrieval and example selection are *coupled* in Python (finding 2: the example filter only
   fires when a `registry_override` is passed), so testing them singly cannot separate them. Run
@@ -291,14 +296,36 @@ any single fix below.
     said to stop and re-diagnose if no cell restored multi-step plans; the baseline restored
     nothing because nothing was broken. Re-diagnosis happened — that is P2c. Do not treat a null
     P3 as a failure to find the bug; treat it as evidence there is no quality bug to find.
-  - **P3 needs a Python-side run to compare against, and that is currently blocked:**
-    `llama-cpp-python` is not installed (`just install-llama`). Until it is, native can be
-    measured but not measured *against* anything, which is the whole question.
-- [ ] **P4 — Record the outcome here**, including whichever hypothesis fails. A ruled-out cause is
-  worth as much to the next reader as the confirmed one. Two are already recorded above — write
-  them the same way.
+  - ~~**P3 needs a Python-side run to compare against, and that is currently blocked:**
+    `llama-cpp-python` is not installed (`just install-llama`).~~ Unblocked 2026-08-09; the Python
+    lane ran and is what S2 compares against.
+- [x] **P4 — Record the outcome here**, including whichever hypothesis fails. A ruled-out cause is
+  worth as much to the next reader as the confirmed one. *(done — the ruled-out causes are written
+  up as findings 4 and 5 in "What is already established", P2c has its own section, and the null
+  quality result is below.)*
+
+**Closing P3: the factorial was not run, and the answer does not need it.** P3's re-scoped question
+was *"does the prompt divergence cost measurable quality at all"*. S2 measured exactly that, on the
+`top_k`/example axis the four cells were meant to separate:
+
+| | |
+|---|---|
+| aggregate, every lane (pre-fix Vulkan, pre-fix CPU, post-fix CPU, Python) | **identical** — 0.950 outcome / 0.900 tool / 2 invalid |
+| per-row agreement with Python, before Q | 93.3% |
+| per-row agreement with Python, after Q | 98.3% |
+
+The cells exist to attribute a quality delta between retrieval and example selection. **There is no
+quality delta to attribute** — Q moved no aggregate metric in any lane. It moved *agreement*, which
+is what a divergence fix should move and what the plan was actually for. Running four cells to
+partition zero would produce four numbers inside noise and one false sense of rigour.
+
+**This is P2c's shape repeating**, and it is worth naming: the plan twice specified an experiment
+against a hypothesis that a cheaper measurement had already falsified. Check whether the effect
+exists before designing the study that attributes it.
 
 ## The bug this plan did not find — and why
+
+*Narrative. The checklist it produced is **Workstream T**.*
 
 **2026-08-10, reported by the owner, reproduced immediately:** `cut from 1st to 3rd second of
 clip.mp4 then extract the audio to mp3` produced **one** ffmpeg command on native and **two** on
@@ -423,7 +450,7 @@ outputs, per `docs/NATIVE.md`.
   contracts that pin it, and keeps the cautionary note about excusing a divergence with a
   measurement nobody ran. `registry.rs` no longer says retrieval "is ported in a later slice".
 
-  <details><summary>Original Q1/Q2 wording, kept for the record</summary>
+  <details><summary>Original Q1–Q5 wording, kept for the record</summary>
 
 - **Q1 — Call `retrieve_tools` in the native plan path, and make it return ranked order.**
   The function is already ported and tested; the wiring is not — but wiring alone is **not
@@ -437,10 +464,25 @@ outputs, per `docs/NATIVE.md`.
   - Match Python's tie-break too: `scores.sort(reverse=True)` sorts `(score, name)` tuples
     descending, so equal scores order by name **descending**. That is unusual enough to get wrong
     by writing the obvious thing, and R2 is the test that catches it.
-- [ ] **Q2 — Port `select_examples`.** Ranked by retrieved-tool overlap, plus one clarify and one
+- **Q2 — Port `select_examples`.** Ranked by retrieved-tool overlap, plus one clarify and one
   reject example. Note Python falls back to the full block when no retrieved subset is supplied
   **or when `prompt_examples` is empty** (`agent.py:752`) — the port must keep both fallbacks, not
   just the happy path.
+- **Q3 — De-duplicate the generation budget. Not a fix — hygiene.** Finding 4: native's `512` and
+  the promoted model's `512` already agree, so nothing changes behaviourally. The defect is that
+  the number lives in three places (`llama.rs:241`, `models.yaml`, `eval_backends.yaml`) and the
+  original code read picked the wrong copy. Give it one source both runtimes read, so the next
+  reader cannot repeat that mistake. If the corpus's longest plan justifies a different value,
+  that is a separate, measured change.
+- **Q4 — Fix both stale notes in `prompt.rs`** — the module docstring's "alphabetical because
+  `BTreeMap`" (false: it sorts by `def.order`) *and* the `def.order` comment's claim that the
+  fine-tuned model was trained on that order (finding 5: training prompts are in relevance order).
+  State which order is canonical after Q1 and why, and re-state which divergences remain
+  intentional, if any survive Q1–Q3.
+- **Q5 — Decide `normalize_path_separators` deliberately.** Not ruled out (see above): native
+  rewrites every backslash, Python only path-shaped tokens. Converge them or write down which one
+  is canonical and why the other is acceptable — but the decision must be a line of code or a
+  contract case, not a docstring assertion. That is what got us here.
 
   </details>
 
@@ -472,21 +514,7 @@ outputs, per `docs/NATIVE.md`.
     asserted that a *bare* `\` stays literal; the old regex required an alphanumeric. Native never
     honoured that, so the runtimes disagreed on exactly that input — and a bare backslash is itself
     an illegal JSON escape, so the old behaviour preserved the character at the cost of the failure
-    normalization exists to prevent. The test now asserts the new rule and says why. **Not a fix — hygiene.** Finding 4: native's
-  `512` and the promoted model's `512` already agree, so nothing changes behaviourally. The defect
-  is that the number lives in three places (`llama.rs:241`, `models.yaml`, `eval_backends.yaml`)
-  and the original code read picked the wrong copy. Give it one source both runtimes read, so the
-  next reader cannot repeat that mistake. If the corpus's longest plan justifies a different value,
-  that is a separate, measured change.
-- [ ] **Q4 — Fix both stale notes in `prompt.rs`** — the module docstring's "alphabetical because
-  `BTreeMap`" (false: it sorts by `def.order`) *and* the `def.order` comment's claim that the
-  fine-tuned model was trained on that order (finding 5: training prompts are in relevance order).
-  State which order is canonical after Q1 and why, and re-state which divergences remain
-  intentional, if any survive Q1–Q3.
-- [ ] **Q5 — Decide `normalize_path_separators` deliberately.** Not ruled out (see above): native
-  rewrites every backslash, Python only path-shaped tokens. Converge them or write down which one
-  is canonical and why the other is acceptable — but the decision must be a line of code or a
-  contract case, not a docstring assertion. That is what got us here.
+    normalization exists to prevent. The test now asserts the new rule and says why.
 
 ## Workstream R — Contracts, so it cannot drift silently again
 
@@ -668,14 +696,29 @@ nothing by it.**
   - **Operational note:** the first pre-fix run died after 2 utterances because a `git commit` ran
     mid-flight and pre-commit stashes unstaged files, yanking the output file from under the
     process. Not a runtime fault. Do not commit while a background job writes into the tree.
-- [ ] **S2 (original wording) — Score the saved pre-fix run and the post-fix run with the same
-  scorer**, and record both numbers. P2b is what makes this possible — without those envelopes there is no "before",
-  and a parity lane whose first run is also its first green run has proved nothing. Grade both
-  sides with the adapter built in S1b, so the delta is a change in plans and not a change in how
-  plans were graded.
-- [ ] **S3 — Sequencing is not optional.** R must land first. Until the prompt is pinned, a delta
-  here cannot be attributed to a planner bug rather than to one side's prompt having been edited —
-  which is the same unmeasured-divergence trap that produced this plan.
+
+  <details><summary>Original S2 wording, kept for the record</summary>
+
+- **S2 — Score the saved pre-fix run and the post-fix run with the same scorer**, and record both
+  numbers. P2b is what makes this possible — without those envelopes there is no "before", and a
+  parity lane whose first run is also its first green run has proved nothing. Grade both sides with
+  the adapter built in S1b, so the delta is a change in plans and not a change in how plans were
+  graded.
+
+  </details>
+
+  **Deviation from that wording, and it is the reason S2 could land before S1b:** the two runs were
+  scored by `scripts/parity_check.py`, not by the eval suite through the unbuilt adapter. That
+  satisfies "the same scorer on both runs" — which is what makes a delta attributable — while
+  leaving "the same scorer as the eval suite" for S1b. Both lanes were validated *identically*
+  before scoring, which is not a detail: the first attempt showed native behind purely because
+  `agent.infer()` swallows validation failures (`agent.py:950` falls through deliberately) while
+  `plan --batch` emits an error envelope. Validating both lanes the same way flipped the result.
+- [x] **S3 — Sequencing is not optional.** *(satisfied 2026-08-09)* R must land first. Until the
+  prompt is pinned, a delta here cannot be attributed to a planner bug rather than to one side's
+  prompt having been edited — which is the same unmeasured-divergence trap that produced this plan.
+  R1–R4 landed on 2026-08-09, before S2 ran; this is a constraint on ordering, not a task, and it
+  held.
 
 **It cannot run in CI**, either lane: both need a GGUF and `models/` is gitignored. Local tooling,
 like `just parity` — and it runs on the operator's Windows box, so follow that recipe's shape:
@@ -684,6 +727,46 @@ resolve the binary through `{{EXE}}` and pass absolute paths, never a bare `knai
 **`scripts/parity_check.py` is the complement, not a duplicate** — its own docstring opens
 "deliberately NOT an eval-suite". It diffs rendered argv per utterance; this compares scored
 aggregates. Both are wanted.
+
+## Workstream T — The execution layer (unplanned; added 2026-08-10)
+
+Not in the original plan. Added because the reported symptom lived here the whole time, and P–S
+would all have gone green without touching it. The narrative is in *The bug this plan did not find
+— and why*; this is the checklist.
+
+- [x] **T1 — Run every step of a plan.** *(done 2026-08-10)* `run` in `apps/cli/src/main.rs` took
+  `steps.first()` with no loop, so every step after the first was discarded — in dry-run and in
+  confirmed execution alike. Replaced with `steps_to_execute`, a pure function returning the
+  indices to run plus an optional decline, so terminal tools short-circuit and `done`/`noop` are
+  skipped without the loop body knowing about them.
+- [x] **T2 — Contract the expansion layer.** *(done 2026-08-10)*
+  `contracts/parity/expansion_cases.json` (8 ffmpeg chain shapes, rendered argv) and
+  `documents_expansion_cases.json` (4 shapes, produced output paths). Fixed plans in, artefacts
+  out, no model. The middle assertion — **one artefact per plan step** — is the regression; it is
+  stated as an invariant so it survives a legitimate change to any command's flags.
+- [x] **T3 — Port the second chain-linking pass.** *(done 2026-08-10)* Found by
+  `parity_check.py --mode command --strict`, which the plan-envelope lanes could not see: native
+  had only the undeclared-intermediate pass, so a later step reusing an earlier step's *source*
+  read the wrong file. `forward_thread_reused_sources` ported into `clarify_gate.rs`.
+- [x] **T4 — Contract chain linking.** *(done 2026-08-11)*
+  `contracts/parity/chain_linking_cases.json` — 14 model-free cases on an inline registry, both
+  passes, a Python and a Rust consumer. Asserts the linked plan, the eligible-producer set, and
+  that every linked plan still validates. Mutation-tested: removing native's second pass fails
+  exactly one case, the one it was written for.
+  - **It caught a fifth divergence on its first run.** Native's producer set also counted an
+    `arg_schemas` entry, which describes an arg's type without making it accepted — the validator's
+    `allowed` set is `required_args | optional_args` on both sides. Linking could therefore write
+    an `output` that the same runtime's validator then rejects with "unsupported args", and repoint
+    the downstream step at a file nothing would produce. No shipped tool declares `output` that way
+    today, so nothing was broken in practice; it was one tool definition away from being a bug.
+- [ ] **T5 — Give the `documents` expansion contract a Rust consumer.** `expansion_cases.json` has
+  one (`skills/ffmpeg/native/tests/expansion_parity.rs`); the documents analogue is Python-only, so
+  that skill's native expansion is pinned on one side only. Same shape as the ffmpeg consumer.
+
+**Why this workstream exists at all** is the plan's most transferable finding, and it is recorded
+in `docs/NATIVE.md` §4.2–4.3 rather than only here: a parity check that stops at the plan envelope
+measures what the eval harness sees, not what a user sees. Three of the five divergences this plan
+found left the envelopes byte-identical.
 
 ---
 
@@ -715,7 +798,15 @@ and the repo can prove it without anyone remembering to check:
     (e.g. "within 2 points of `eval_snapshot.json`"), because that is a quality check against the
     committed bar — a different question from parity, and worth not conflating with it.
 - `docs/NATIVE.md` states the parity contract, what the eval lane does and does not cover
-  (S1b: native planner, Python execution), and how to run both.
+  (S1b: native planner, Python execution), and how to run both. **Partially met:** §4.1–4.3 state
+  the contracts and how to check them; the eval-lane half waits on S1b, which does not exist.
+
+**Where this stands, 2026-08-11.** Four of the six criteria are met and provable in CI without a
+model. The two that are not are the same gap — **Workstream S** — and both are honest about it
+rather than approximated: per-row parity is measured on 60 corpus rows plus 12 chain rows, not 847
+(the Vulkan build fails on the operator's box, so CPU inference puts the full corpus at ~14 hours),
+and the eval lane does not exist to be documented. See *Should S still be built?* under Open
+questions.
 
 ## Explicitly out of scope
 
@@ -733,6 +824,13 @@ and the repo can prove it without anyone remembering to check:
 - **Does macOS need its own contract run?** Nothing in R exercises it (R4). The two cases with any
   platform surface — path normalization and line endings — have no macOS-specific behaviour, so
   the honest status is *unexercised*, not *passing*. Revisit if macOS packaging lands.
+- **Should S still be built?** Its value fell sharply after T. S1b was going to approximate the
+  execution layer with a labelled *native-planner-plus-Python-execution* lane; T2 and T4 now cover
+  that layer deterministically, on both runtimes, in CI, with no model. What S would still add is
+  **scored per-row parity over the full 847-row corpus** rather than a 60-row subset — a real
+  criterion, and the only one the contracts cannot give, since they compare fixed inputs rather
+  than what the model actually emits. Decide it as a question about corpus coverage, not about the
+  execution layer, and note the blocker is hardware (the Vulkan build) rather than design.
 
 ### Answered, moved out of this section
 
@@ -747,7 +845,9 @@ and the repo can prove it without anyone remembering to check:
 
 ## Recommended sequence
 
-The dependencies are not obvious from the workstream letters, and two of them are one-way doors:
+**As planned on 2026-08-08.** Kept unedited because the gap between it and what happened is the
+useful part — see *What actually happened* below. The dependencies are not obvious from the
+workstream letters, and two of them are one-way doors:
 
 1. **P0** — prompt diagnostics. Nothing in P1–P3 is possible without it.
 2. **P2b** — save the pre-fix corpus. *Irreversible if skipped;* Q destroys the baseline.
@@ -761,3 +861,18 @@ The dependencies are not obvious from the workstream letters, and two of them ar
 6. **S1b** — the native-plan scoring adapter.
 7. **S2** — score the saved pre-fix run and the current one with that same adapter.
 8. **R4 / done** — gate in CI, apply the per-row acceptance criterion.
+
+### What actually happened
+
+Steps 1–5 ran as written. From there it diverged, twice, and both divergences were improvements:
+
+| planned | actual |
+|---|---|
+| P3 attributes the gap factorially, then Q ports | **P2c** found there was no gap to attribute; Q became a divergence fix, and P3's question was later answered by S2 without the factorial |
+| S1b's adapter, then S2 scores through it | **S2 ran first**, scored by `parity_check.py` — the same scorer on both runs, which is what makes a delta attributable. S1b was never needed for it |
+| S closes the plan | **T** — an unplanned workstream — found the defect the owner originally reported, in a layer no step above touches |
+
+**The transferable lesson is the ordering of cheap checks against expensive ones.** Twice the plan
+specified a study to attribute an effect that a cheaper measurement showed did not exist (P2c, then
+S2 closing P3). And the single most valuable step — running the shipped binary end to end and
+reading its output — was not in the plan at all; it is what T came from.

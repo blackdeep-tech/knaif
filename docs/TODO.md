@@ -437,6 +437,23 @@ This **Open / Next** section is the live backlog (originally distilled from the
   platform-specific** — every divergence found is in prompt-building code that is identical on
   every target. Diagnosis and the fix are exercised **on Windows**; the plan's commands are
   PowerShell. Not yet reproduced from a checkout; everything below is a code read.
+
+  **Status 2026-08-11 — most of this is done, and the diagnosis below was wrong.** Workstreams P,
+  Q, R and T are complete; **S1/S1b (the eval-parity lane) and T5 are the only open items.** Five
+  divergences were found and fixed. Everything under this line is the pre-execution code read,
+  kept because two of its conclusions were refuted by measurement and that is the useful part —
+  read the plan's *What actually happened* for the corrected account.
+  - **Refuted (P2c, 2026-08-08): the founding symptom does not reproduce.** Native chains
+    correctly — 39/41 corpus chain rows, 39/39 hand-written probes, 38/39 even on the 1.7B. The
+    prompt divergences below were real and are fixed, but they were **not** costing plan quality:
+    every scored lane, before and after, lands on the same 0.950 outcome / 0.900 tool. What the
+    fix moved was per-row *agreement* with Python, 93.3% → 98.3%.
+  - **The real defect was in the execution layer, not the planner** (2026-08-10). `run` took
+    `steps.first()` with no loop, so every step after the first was discarded — which is exactly
+    the "will not produce a multi-step plan" symptom, one layer below where it was looked for.
+    Then a second: native had only the first of Python's two chain-linking passes, so a later step
+    could read the wrong file. Both were invisible to every plan-envelope measurement. Now pinned
+    by `contracts/parity/expansion_cases.json` and `chain_linking_cases.json`.
   - **The cause is probably already found, and it is not the model.** `retrieve_tools` is ported
     into `knaif-core` and **never called** — `registry.rs` says "ported in a later slice" — so the
     native prompt carries the *entire* registry: **13 model-visible ffmpeg tools against Python's
@@ -465,6 +482,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything —
     and it needs an adapter: `plan --batch` emits validated plans, while the executing verifiers
     grade rendered commands and produced files.
+    - **Still the only open workstream, and worth less than when it was written.** S1b was going
+      to approximate the execution layer with a labelled native-planner-plus-Python-execution
+      lane; the expansion and chain-linking contracts now cover that layer deterministically, on
+      both runtimes, in CI, without a model. What S would still add is scored per-row parity over
+      the full 847-row corpus instead of the 60-row subset S2 measured — and that is blocked by
+      hardware, not design: the Vulkan build fails on this box (`vulkan-shaders-gen` →
+      `rc.exe RC2136`), putting CPU inference for 847 rows at ~14 hours.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
