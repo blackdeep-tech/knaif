@@ -153,7 +153,7 @@ utterance, so expansion is deterministic and **no model is involved**:
 | contract | artefact compared | consumers |
 |---|---|---|
 | `expansion_cases.json` | rendered ffmpeg argv, per step | `test_expansion_parity.py`, `skills/ffmpeg/native/tests/expansion_parity.rs` |
-| `documents_expansion_cases.json` | produced output paths, per step | `test_documents_expansion_parity.py` |
+| `documents_expansion_cases.json` | produced output paths, per step | `test_documents_expansion_parity.py`, `skills/documents/native/tests/expansion_parity.rs` |
 
 Each asserts three things, and the middle one is the regression:
 
@@ -165,7 +165,9 @@ Each asserts three things, and the middle one is the regression:
 
 `documents` is covered because `run` dispatches both skills through the same loop, and the
 documents corpus has seven multi-step rows — it was exposed to the identical defect and nobody had
-noticed, which is precisely why it is pinned rather than assumed.
+noticed, which is precisely why it is pinned rather than assumed. Its comparable surface differs:
+documents ops run **in-process**, so `preview` derives output paths where ffmpeg builds an argv,
+and the contract compares those paths.
 
 ### 4.3 Chain-linking parity — the stage that decides which file each step reads
 

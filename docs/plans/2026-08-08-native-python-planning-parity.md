@@ -1,6 +1,6 @@
 # Native/Python planning parity — the prompt gap, its contracts, and the eval-parity lane
 
-**Status:** Active — P, Q, R, T complete; **S1/S1b not built and T5 open** ·
+**Status:** Active — P, Q, R, T complete; **S1/S1b is the only open workstream** ·
 **Created:** 2026-08-08 · **Revised:** 2026-08-08 (audit), 2026-08-10 (execution-layer defect),
 2026-08-11 (bookkeeping) · **Completed:** —
 **Owner:** core · **Ref:** absorbs **C4** from
@@ -759,9 +759,13 @@ would all have gone green without touching it. The narrative is in *The bug this
     an `output` that the same runtime's validator then rejects with "unsupported args", and repoint
     the downstream step at a file nothing would produce. No shipped tool declares `output` that way
     today, so nothing was broken in practice; it was one tool definition away from being a bug.
-- [ ] **T5 — Give the `documents` expansion contract a Rust consumer.** `expansion_cases.json` has
-  one (`skills/ffmpeg/native/tests/expansion_parity.rs`); the documents analogue is Python-only, so
-  that skill's native expansion is pinned on one side only. Same shape as the ffmpeg consumer.
+- [x] **T5 — Give the `documents` expansion contract a Rust consumer.** *(done 2026-08-11)*
+  `skills/documents/native/tests/expansion_parity.rs`, the same three assertions as the ffmpeg
+  consumer. The comparable surface differs because documents ops run in-process: `preview` derives
+  output paths where ffmpeg builds an argv. **Native matched Python on all four cases at the first
+  run** — including the derived names (`sample-compressed.pdf`, `sample_rot-compressed.pdf`), which
+  is the part a port is most likely to get subtly wrong. Mutation-tested by rendering only the
+  first step: both the golden and the one-artefact-per-step invariant fail, as they should.
 
 **Why this workstream exists at all** is the plan's most transferable finding, and it is recorded
 in `docs/NATIVE.md` §4.2–4.3 rather than only here: a parity check that stops at the plan envelope

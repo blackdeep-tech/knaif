@@ -439,7 +439,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   PowerShell. Not yet reproduced from a checkout; everything below is a code read.
 
   **Status 2026-08-11 — most of this is done, and the diagnosis below was wrong.** Workstreams P,
-  Q, R and T are complete; **S1/S1b (the eval-parity lane) and T5 are the only open items.** Five
+  Q, R and T are complete; **S1/S1b (the eval-parity lane) is the only open item.** Five
   divergences were found and fixed. Everything under this line is the pre-execution code read,
   kept because two of its conclusions were refuted by measurement and that is the useful part —
   read the plan's *What actually happened* for the corrected account.
