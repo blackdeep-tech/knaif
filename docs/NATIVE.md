@@ -125,6 +125,24 @@ applies the GGUF's chat template through a different llama.cpp binding, so ident
 necessary for parity but are not proof of an identical final token sequence. Do not quote a green
 contract as end-to-end equivalence.
 
+**That gap was measured on 2026-08-11 and is closed as a divergence — the tokens match.**
+`scripts/token_parity.py` renders one utterance both ways and diffs the prompt *and* the token IDs:
+
+| lane | how the template is applied |
+|---|---|
+| native | llama.cpp's C++ `llama_chat_apply_template`, then `str_to_token(AddBos::Never)` |
+| python | llama-cpp-python's **Jinja2** rendering, inside `create_chat_completion` |
+
+Both are reachable from Python, so the script calls the very C function native calls — removing the
+build, the backend and the CLI from the comparison and leaving only the template and the tokenizer.
+On `knaif-qwen3-4b-v1` the prompts are byte-identical and the token sequences match exactly (1993
+tokens for a single-intent utterance, 2184 for a chain), with no BOS discrepancy — Qwen sets no
+`add_bos_token`, and native's `AddBos::Never` agrees with what llama-cpp-python emits.
+
+It **needs a GGUF**, so unlike everything in `contracts/parity/` it cannot run in CI. Local tooling,
+like `just parity`. Keep the caveat above: this rules out the template layer for *this* model, and a
+model whose GGUF carries a different template should be re-checked rather than assumed.
+
 **Two divergences remain, both pinned rather than fixed:**
 
 - **Built-in example blocks differ** — Python's fallback carries 9 examples, native's

@@ -67,9 +67,14 @@ utterances, **only** the backend changed.
 | native Vulkan == native CPU | **32/37** |
 | changed under backend alone | 5/37 |
 
-So the divergence is **mostly deterministic** — which makes it findable rather than noise. Worth
-noting why S2's control missed this: it measured Vulkan-vs-CPU at 60/60, but on the chain-heavy
-subset, i.e. exactly the population that would not show the effect.
+Native is **self-consistent** across two of its own backends, so its side of the divergence is
+deterministic. Worth noting why S2's control missed the 5: it measured Vulkan-vs-CPU at 60/60, but
+on the chain-heavy subset — exactly the population that would not show the effect.
+
+**This control is narrower than it first looks, and the first reading of it here was too strong.**
+It compares native against native. Python runs on **CUDA**, a third backend neither lane of this
+control exercises. So it establishes that native does not wobble; it does **not** establish that
+the native-vs-Python difference is a code difference rather than backend arithmetic.
 
 ## Sampling is ruled out
 
@@ -81,6 +86,56 @@ subset, i.e. exactly the population that would not show the effect.
 
 Both are greedy on unmodified logits. Identical prompts + greedy decode should give identical
 tokens, so the remaining suspect is what gets *tokenized*.
+
+## Tokenization is ruled out too — the runtimes feed the model the same integers
+
+`scripts/token_parity.py` renders one utterance both ways and diffs the prompt *and* the token IDs.
+The trick is that **both paths are reachable from Python**, so lane B calls the very C function
+native calls, removing the build, the backend and the CLI from the comparison:
+
+| | |
+|---|---|
+| prompt strings after templating | **identical** (7511 chars single-intent, 8043 chain) |
+| token IDs | **identical** (1993 / 2184) |
+| BOS | no discrepancy — Qwen sets no `add_bos_token`, matching `AddBos::Never` |
+
+So llama.cpp's C++ `apply_chat_template` and llama-cpp-python's Jinja2 rendering agree exactly.
+This closes the gap `docs/NATIVE.md` §4.1 had flagged as necessary-but-not-sufficient, as a
+**ruled-out** cause.
+
+## What the backend actually accounted for
+
+With tokens and sampling both eliminated, the only remaining variable was the arithmetic. Re-running
+the **Python lane on CPU** and comparing against native's CPU envelopes — same backend family, on
+the 37 rows that had disagreed with Python-on-CUDA:
+
+| | exact | tool-sequence |
+|---|---|---|
+| native CPU vs python **CUDA** (the original run) | 0/37 | 0/37 |
+| native CPU vs python **CPU** | **23/37** | **33/37** |
+
+**23 of 37 divergences vanish by holding the backend fixed.** Final attribution of the 37:
+
+| | count |
+|---|---|
+| agree once the backend matches | **23** |
+| differ only by a materialized default (the `concat_video` artifact) | 5 |
+| genuinely different plans | **9** |
+
+Two of the 9 are the model emitting an invalid plan twice — `adjust_volume` with an unsupported
+`target_level`, and a hallucinated `adjust_video` tool. Native's `plan --batch` surfaces those as
+`{"plan": [], "error": …}`. **This is not a missing retry**: native ported the validator-feedback
+repair (`main.rs:1241`, one retry, same as Python's `repair_invalid_plans`). The model simply failed
+both attempts on that side.
+
+**The residual 9 are not proven to be port defects, and should not be quoted as such.** Native
+vendors its own llama.cpp through `llama-cpp-sys-2`; Python uses llama-cpp-python 0.3.23's
+separately built copy. Two independent llama.cpp builds with different CPU kernel dispatch, so
+bit-identical logits were never guaranteed even with the backend family held fixed. A CPU-vs-CPU
+comparison narrows the variable; it does not eliminate it.
+
+**Extrapolated true agreement: ~96%** (9 genuine differences per 37 sampled divergences, over 49
+total ⇒ roughly 12 of 314 rows). No systematic port defect was found beyond the four already fixed.
 
 ## Leading hypothesis — the chat template, not the planner
 

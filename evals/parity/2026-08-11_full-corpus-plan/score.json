@@ -27,7 +27,8 @@
     "decline_divergence": 5,
     "not_comparable": 0,
     "chain_native_1step": 0,
-    "elapsed_s": 1672
+    "elapsed_s": 1672,
+    "extrapolated_true_agreement": "~96% (9 genuine differences per 37 sampled divergences over 49 total, i.e. roughly 12 of 314 rows)"
   },
   "no_regression": {
     "claim": "The 84.4% is a STRICTER BAR, not a regression.",
@@ -46,12 +47,29 @@
       "changed": "5/37",
       "finding": "The divergence is mostly DETERMINISTIC, so it is findable. S2's 60/60 Vulkan-vs-CPU control was run on a chain-heavy subset where the model is confident — the population least likely to show this effect."
     },
-    "sampling_ruled_out": "Native takes pure argmax over raw logits (llama.rs:335, `.max_by(|a,b| a.logit().total_cmp(&b.logit()))`). Python passes temperature=0.0, and llama-cpp-python's _init_sampler takes `elif temp == 0.0: sampler.add_greedy()`; add_penalties runs first but is neutral (repeat=1.0, freq=0.0, present=0.0). Both are greedy on unmodified logits."
+    "sampling_ruled_out": "Native takes pure argmax over raw logits (llama.rs:335, `.max_by(|a,b| a.logit().total_cmp(&b.logit()))`). Python passes temperature=0.0, and llama-cpp-python's _init_sampler takes `elif temp == 0.0: sampler.add_greedy()`; add_penalties runs first but is neutral (repeat=1.0, freq=0.0, present=0.0). Both are greedy on unmodified logits.",
+    "tokenization_ruled_out": {
+      "tool": "scripts/token_parity.py",
+      "finding": "Prompts and token IDs are IDENTICAL between llama.cpp's C++ apply_chat_template (native) and llama-cpp-python's Jinja2 rendering (python) — 1993 tokens single-intent, 2184 chain, no BOS discrepancy. Closes the gap docs/NATIVE.md 4.1 flagged as necessary-but-not-sufficient.",
+      "why_it_works": "Both paths are reachable from Python, so lane B calls the very C function native calls — the build, backend and CLI drop out of the comparison."
+    },
+    "backend_is_the_dominant_cause": {
+      "test": "Re-ran the PYTHON lane on CPU and compared against native's CPU envelopes, on the 37 rows that disagreed with python-on-CUDA.",
+      "native_cpu_vs_python_cuda": "0/37 exact",
+      "native_cpu_vs_python_cpu": "23/37 exact, 33/37 tool-sequence",
+      "final_attribution_of_37": {
+        "resolved_by_matching_backend": 23,
+        "materialized_default_artifact": 5,
+        "genuinely_different": 9
+      },
+      "of_the_9": "2 are the model emitting an invalid plan twice (unsupported adjust_volume.target_level; hallucinated adjust_video). NOT a missing retry — native ported the validator-feedback repair (main.rs:1241).",
+      "caveat": "The residual 9 are NOT proven port defects. Native vendors llama.cpp via llama-cpp-sys-2; Python uses llama-cpp-python 0.3.23's separately built copy. Two independent llama.cpp builds, different CPU kernel dispatch — bit-identical logits were never guaranteed even with the backend family fixed."
+    }
   },
   "leading_hypothesis": {
-    "claim": "The remaining divergence is in the CHAT TEMPLATE / TOKENIZATION layer, not the planner.",
-    "why": "Prompt parity proves the (system, user) STRINGS are byte-identical for all 847 utterances. It does not prove the templated, tokenized sequence is. Python calls create_chat_completion(messages=[system, user]), so llama-cpp-python applies the GGUF's chat template itself; native applies its own. The plan already lists this as pinned only at the prompt-string level — this run is the first evidence that it matters.",
-    "next_test": "Dump the post-template token IDs from both runtimes for the same utterance and diff them. Cheap and decisive; no scoring involved."
+    "status": "REFUTED 2026-08-11",
+    "was": "chat template / tokenization",
+    "outcome": "tokens identical; backend arithmetic accounts for 23 of 37, harness artifact for 5"
   },
   "mismatch_rate_by_tag": {
     "concat_video": "7/12 = 58% — 4 of the 7 are the default-materialization artifact above",

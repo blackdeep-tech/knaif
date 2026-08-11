@@ -119,6 +119,26 @@ number — see *Why the prompt is the prime suspect*.
 `n_ctx` is 8192 on both. `/no_think` is applied on both. Both decode **greedily** — Python passes
 `temperature=0.0`, native takes the argmax over logits. *(all read, not measured.)*
 
+**Greedy decode is now measured, not read** *(2026-08-11)*. Native is pure argmax over raw logits
+(`llama.rs:335`, `.max_by(|a, b| a.logit().total_cmp(&b.logit()))`). Python's `temperature=0.0`
+reaches llama-cpp-python's `_init_sampler`, which takes `elif temp == 0.0: sampler.add_greedy()`;
+`add_penalties` runs first but is neutral (`repeat=1.0`, `freq=0.0`, `present=0.0`). And
+`/no_think` is applied **identically** — `format!("{system}\n\n/no_think")` in `llama.rs` against
+`f"{system}\n\n/no_think"` in `orchestrator._apply_thinking`.
+
+**Tokenization is ruled out too, and this one closes a gap the plan had left open** *(2026-08-11)*.
+`docs/NATIVE.md` §4.1 warned that identical `(system, user)` strings are "necessary for parity but
+not proof of an identical final token sequence", because each runtime applies the GGUF's chat
+template through a different binding — native via llama.cpp's C++ `llama_chat_apply_template`,
+Python via llama-cpp-python's **Jinja2** rendering. Two implementations of one template string can
+disagree on whitespace or a BOS, invisibly.
+
+`scripts/token_parity.py` measures it, and the trick is that **both paths are reachable from
+Python** — lane B calls the very C function native calls, so the build, the backend and the CLI
+drop out of the comparison. Result: prompts byte-identical, **token IDs identical** (1993 for a
+single-intent utterance, 2184 for a chain), no BOS discrepancy. Both runtimes feed the model the
+same integers. Needs a GGUF, so it is local tooling rather than a CI contract.
+
 **`normalize_path_separators` is not ruled out** — it was listed here in error. Both runtimes have
 one, and they do different things: native replaces **every** backslash in the utterance
 (`main.rs:1142`), Python only backslash-bearing tokens that match `_PATH_TOKEN_RE`
