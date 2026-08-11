@@ -487,8 +487,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
       lane; the expansion and chain-linking contracts now cover that layer deterministically, on
       both runtimes, in CI, without a model. What S would still add is scored per-row parity over
       the full 847-row corpus instead of the 60-row subset S2 measured — and that is blocked by
-      hardware, not design: the Vulkan build fails on this box (`vulkan-shaders-gen` →
-      `rc.exe RC2136`), putting CPU inference for 847 rows at ~14 hours.
+      hardware, not design. ~~The Vulkan build fails on this box, putting CPU inference for the
+      full corpus at ~14 hours.~~ **Unblocked 2026-08-11:** the failure was `CMAKE_OBJECT_PATH_MAX`,
+      not the `rc.exe RC2136` it was filed as — a short `CARGO_TARGET_DIR` fixes it. With Vulkan
+      offload and `plan --batch` (one model load, not one per utterance), the measured rate is
+      **2.86 s/utterance**, so the native lane over the full corpus is ~40 min.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single

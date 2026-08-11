@@ -305,9 +305,15 @@ native-cuda skill *args:
 # because llama.cpp's shader-gen step wants it either way. If a prior Vulkan build failed under the
 # VS generator, clear its stale config first: `just clean-vulkan-build`. First-build caveat as
 # native-cuda (lighter compile).
+#
+# WINDOWS ALSO NEEDS A SHORT CARGO_TARGET_DIR (this recipe sets one). `vulkan-shaders-gen` is a
+# nested ExternalProject; under the repo's own target/ its try-compile scratch path hits 235 of
+# CMake's 250-char CMAKE_OBJECT_PATH_MAX, and the build dies in rc.exe with a misleading
+# `RC2136 : missing '=' in EXSTYLE=<flags>`. That is path length, NOT a CMake/SDK incompatibility —
+# see docs/NATIVE.md §10. Override KNAIF_VULKAN_TARGET_DIR if C:\kt is taken.
 [windows]
 native-vulkan skill *args:
-    cd "{{invocation_directory()}}"; $env:CMAKE_GENERATOR = "Ninja"; cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,vulkan,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    cd "{{invocation_directory()}}"; $env:CMAKE_GENERATOR = "Ninja"; if (-not $env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR = $(if ($env:KNAIF_VULKAN_TARGET_DIR) { $env:KNAIF_VULKAN_TARGET_DIR } else { "C:\kt" }) }; cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,vulkan,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
 
 [unix]
 native-vulkan skill *args:

@@ -690,9 +690,27 @@ nothing by it.**
     (`ffmpeg_hard_017`) and introduced another (`ffmpeg_hard_005`), so the invalid count is
     unchanged on different rows. The single residual disagreement is a dropped third step on a
     `chain3` row, not a routing error.
-  - **Subset, not the full corpus, and why:** the Vulkan build fails on this box
-    (`vulkan-shaders-gen` → `rc.exe RC2136`), so inference is CPU-bound at ~60 s/utterance and 847
-    would take ~14 hours. 41 chain rows + 19 sampled at a fixed seed covers what the plan is about.
+  - **Subset, not the full corpus, and why:** the Vulkan build failed on this box, so inference was
+    CPU-bound at ~60 s/utterance and the full corpus would have taken ~14 hours. 41 chain rows + 19
+    sampled at a fixed seed covers what the plan is about.
+    - **~~Blocked.~~ Fixed 2026-08-11, and the recorded diagnosis was wrong.** It was filed as
+      `vulkan-shaders-gen` → `rc.exe RC2136`, which is the symptom. The cause is one line earlier in
+      the log: `CMAKE_OBJECT_PATH_MAX`. `vulkan-shaders-gen` is a nested ExternalProject, so its
+      try-compile scratch path reaches **235 characters** under the repo's own `target/`, against a
+      250 limit; CMake's "can this compiler build a trivial program" probe then fails, and RC2136 is
+      how that surfaces. Isolated by running the failing `cmake` configure verbatim and changing
+      **only** the build directory: 235-char path → *compiler is broken*; `C:/Work/vsg1` →
+      *Configuring done (3.4s)*. Same CMake 4.3.1, MSVC, rc.exe and Ninja in both.
+      **Fix: a short `CARGO_TARGET_DIR`** (`C:\Work\kt`). Release build, Vulkan, 5m29s.
+    - **The 14-hour figure is dead, and it was wrong on two counts.** Measured 2026-08-11 on 40
+      sampled corpus utterances through `plan --batch` on Vulkan: **2.86 s/utterance**, ~21× faster.
+      GPU offload is one cause; the other is that `--batch` loads the model **once** instead of per
+      utterance, which the original estimate did not account for. Full corpus ≈ 40 min for the
+      native lane.
+    - **Backend was verified, not assumed** — `docs/PERFORMANCE.md` warns that this box exposes an
+      AMD iGPU as Vulkan device 0. All 36 layers report `dev = Vulkan1`, the RTX 3070 Laptop. On
+      Ampere, Vulkan is within 3% of CUDA on generation, so CUDA is not worth its heavier build
+      here; on Blackwell the same choice would be a ~14× mistake.
   - **Operational note:** the first pre-fix run died after 2 utterances because a `git commit` ran
     mid-flight and pre-commit stashes unstaged files, yanking the output file from under the
     process. Not a runtime fault. Do not commit while a background job writes into the tree.

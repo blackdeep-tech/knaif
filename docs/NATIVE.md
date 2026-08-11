@@ -569,6 +569,27 @@ VCEnd`. Ninja drives `cl.exe` directly, so run it from a **Developer PowerShell 
 supplies both the VS-bundled Ninja and the MSVC `INCLUDE`/`LIB` env). `just native-vulkan` forces
 this for you.
 
+**Vulkan also requires a SHORT `CARGO_TARGET_DIR` on Windows** — e.g. `CARGO_TARGET_DIR=C:\kt`.
+`vulkan-shaders-gen` is a *nested* ExternalProject, so its try-compile scratch path stacks up:
+
+```text
+<target>/debug/build/llama-cpp-sys-2-<hash>/out/build/ggml/src/ggml-vulkan/
+  vulkan-shaders-gen-prefix/src/vulkan-shaders-gen-build/CMakeFiles/CMakeScratch/TryCompile-XXXXXX/
+```
+
+Under a repo path like `C:\Work\Knaif\knaif-public\target` that reaches **235 characters** against
+CMake's 250-character `CMAKE_OBJECT_PATH_MAX`. CMake warns, then its "can this compiler build a
+trivial program" probe fails, and the build dies as:
+
+```text
+CMakeFiles\cmTC_XXXXX.dir/manifest.rc(3) : error RC2136 : missing '=' in EXSTYLE=<flags>
+```
+
+**Do not read that as a CMake/Windows-SDK incompatibility** — it was filed that way once and cost a
+workstream. It is purely path length: the identical configure that fails in the nested path
+succeeds verbatim in a short one, on the same CMake, MSVC, `rc.exe` and Ninja. The outer llama.cpp
+build is unaffected, which is why only the Vulkan feature trips it.
+
 **CUDA arch list: use `CUDAARCHS`, and never `native`.** CMake initialises
 `CMAKE_CUDA_ARCHITECTURES` from the **`CUDAARCHS`** environment variable — setting
 `CMAKE_CUDA_ARCHITECTURES` in the environment does nothing, and `llama-cpp-sys-2`'s build script
