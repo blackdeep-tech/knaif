@@ -68,10 +68,17 @@ def _mock_ffprobe(probe_data: dict):
 def _mock_output(
     artifact: str | None = "ffmpeg -y -i in.mp4 -c:v libx264 -c:a aac out.mp4",
     artifact_path: Path | None = None,
+    artifact_commands: list[str] | None = None,
 ) -> MagicMock:
     m = MagicMock()
     m.artifact = artifact
     m.artifact_path = artifact_path
+    # Mirrors the runner: the full chain in plan order, `artifact` being its last entry.
+    # Set explicitly (not left as a MagicMock attribute) so the command-text checks read a
+    # real list.
+    m.artifact_commands = (
+        artifact_commands if artifact_commands is not None else ([artifact] if artifact else [])
+    )
     m.outcome = "plan"
     return m
 
@@ -495,3 +502,38 @@ def test_grade_outputs_prefixes_results_by_index(tmp_path: Path):
         result = grade_outputs([video, audio], spec, tmp_path)
     assert any(m.startswith("out0:") for m in result.matched)
     assert any(m.startswith("out1:") for m in result.matched)
+
+
+# ── chain rows: command-text criteria must see EVERY step, not just the last ───────────────
+#
+# Fix review, pre-existing finding: for ffmpeg_273 (rotate → compress) the model's plan was
+# correct, but `transpose` lives in the FIRST command while `artifact` is the last one, so
+# the row scored 0.667 with `filter:transpose not in command` — under-measuring a correct
+# plan. `artifact_commands` carries the whole chain for these substring checks.
+
+
+def test_success_filter_from_an_earlier_chain_step_is_found(tmp_path: Path):
+    out = _mock_output(
+        artifact="ffmpeg -y -i clip_rotated.mp4 -c:v libx264 clip_out.mp4",
+        artifact_commands=[
+            "ffmpeg -y -i clip.mp4 -vf transpose=1 clip_rotated.mp4",
+            "ffmpeg -y -i clip_rotated.mp4 -c:v libx264 clip_out.mp4",
+        ],
+    )
+    result = success(out, {"filters": ["transpose"]}, tmp_path)
+    assert result.score == pytest.approx(1.0), result.failed
+    assert any("filter:transpose" in m for m in result.matched)
+
+
+def test_success_filter_absent_from_the_whole_chain_still_fails(tmp_path: Path):
+    """The chain-aware search must not become a blanket pass: a filter in NO step fails."""
+    out = _mock_output(
+        artifact="ffmpeg -y -i clip_x.mp4 -c:v libx264 clip_out.mp4",
+        artifact_commands=[
+            "ffmpeg -y -i clip.mp4 -c:a aac clip_x.mp4",
+            "ffmpeg -y -i clip_x.mp4 -c:v libx264 clip_out.mp4",
+        ],
+    )
+    result = success(out, {"filters": ["transpose"]}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert any("transpose" in f for f in result.failed)

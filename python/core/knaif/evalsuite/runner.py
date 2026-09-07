@@ -31,6 +31,11 @@ class AgentOutput:
     # All produced output files, in plan order. Single-output rows hold one entry
     # (mirroring artifact_path); multi-output rows hold one per deliverable.
     artifact_paths: list[Path] = field(default_factory=list)
+    # Every rendered command in plan order (one per intent). `artifact` stays the command
+    # that produced the deliverable — the last one — so its meaning is unchanged; this
+    # carries the rest, which command-text criteria (filters/flags/encoder) need when a
+    # filter is applied in an EARLIER step of a chain, e.g. rotate → compress.
+    artifact_commands: list[str] = field(default_factory=list)
     utterance_idx: int = 0
 
 
@@ -197,6 +202,9 @@ def run_corpus(
             artifact_path: Path | None = None
             artifact_paths: list[Path] = []
             row_outputs = getattr(row, "outputs", None)
+            # Every rendered command, in plan order. Recorded whether or not we execute, so
+            # command-text criteria see a chain's earlier steps even on a non-executing run.
+            artifact_commands = _extract_artifacts(exec_results) if exec_results else []
             if (
                 execute
                 and artifact
@@ -208,10 +216,16 @@ def run_corpus(
                 if _fp.exists():
                     row_dir = sandbox / f"{row.id}__{utt_idx}"
                     row_dir.mkdir(parents=True, exist_ok=True)
-                    if row_outputs:
-                        # Multi-output: run the plan's batch commands as a chain so
-                        # each intent's intermediate output materializes for the next.
-                        commands = _extract_artifacts(exec_results)
+                    # Chain whenever the plan rendered MORE THAN ONE command — not only when
+                    # the row declares multiple `outputs`. A two-intent plan with a single
+                    # final deliverable (rotate → compress) otherwise fell to the branch
+                    # below, which runs only the last command and rewires its input back to
+                    # the original fixture: the rotation never happened and the row was
+                    # scored as a model failure. See the 2026-09-07 fix review.
+                    if row_outputs or len(artifact_commands) > 1:
+                        # Run the plan's batch commands as a chain so each intent's
+                        # intermediate output materializes as the next one's input.
+                        commands = artifact_commands
                         chain = run_command_chain(commands, fixture_dir, row_dir)
                         artifact_paths = [
                             Path(r["output"]) for r in chain if Path(r["output"]).exists()
@@ -237,6 +251,7 @@ def run_corpus(
                 execution_results=exec_results,
                 artifact_path=artifact_path,
                 artifact_paths=artifact_paths,
+                artifact_commands=artifact_commands or ([artifact] if artifact else []),
                 utterance_idx=utt_idx,
             )
             outputs.append(output)

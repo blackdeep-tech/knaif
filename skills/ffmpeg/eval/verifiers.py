@@ -249,6 +249,22 @@ def output_diff(
     return VerifyResult(score=score, matched=matched, failed=failed, verifier_kind="output")
 
 
+def _command_text(output: Any) -> str:
+    """Every rendered command as one searchable text.
+
+    Command-text criteria (filters/flags/encoder) must see EVERY step of a chain: a
+    rotate → compress plan applies `transpose` in the FIRST command, while ``artifact`` is
+    the last one (the command that produced the deliverable). Grading only ``artifact``
+    scored such rows as model failures when the plan was correct — see the 2026-09-07 fix
+    review. Falls back to ``artifact`` for single-command rows and for any caller that
+    doesn't populate ``artifact_commands``.
+    """
+    commands = getattr(output, "artifact_commands", None)
+    if isinstance(commands, list) and commands:
+        return "\n".join(str(c) for c in commands if c)
+    return getattr(output, "artifact", None) or ""
+
+
 def cheap(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResult:
     """Text-only verifier: checks the command string.
 
@@ -264,15 +280,16 @@ def cheap(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResult:
 
     matched: list[str] = ["ffmpeg_command_produced"]
     failed: list[str] = []
+    command_text = _command_text(output)  # the whole chain, not just the final command
 
     for flag in criteria.get("flags") or []:
-        if flag in artifact:
+        if flag in command_text:
             matched.append(f"flag:{flag}")
         else:
             failed.append(f"flag:{flag} not in command")
 
     for filt in criteria.get("filters") or []:
-        if filt in artifact:
+        if filt in command_text:
             matched.append(f"filter:{filt}")
         else:
             failed.append(f"filter:{filt} not in command")
@@ -344,23 +361,26 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
 
     matched: list[str] = []
     failed: list[str] = []
-    artifact: str | None = getattr(output, "artifact", None)
+    # The whole chain: a filter/flag/encoder applied in an earlier step is still the plan
+    # doing what was asked, even though `artifact` is only the final command. An absent
+    # artifact yields "", so every command-text criterion fails, as before.
+    command_text = _command_text(output)
 
     # ── command-text checks ──────────────────────────────────────────────────
     for flag in criteria.get("flags") or []:
-        if artifact and flag in artifact:
+        if flag in command_text:
             matched.append(f"flag:{flag}")
         else:
             failed.append(f"flag:{flag} not in command")
 
     for filt in criteria.get("filters") or []:
-        if artifact and filt in artifact:
+        if filt in command_text:
             matched.append(f"filter:{filt}")
         else:
             failed.append(f"filter:{filt} not in command")
 
     for enc in ([criteria["encoder"]] if "encoder" in criteria else []):
-        if artifact and enc in artifact:
+        if enc in command_text:
             matched.append(f"encoder:{enc}")
         else:
             failed.append(f"encoder:{enc} not in command")

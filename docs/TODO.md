@@ -491,6 +491,45 @@ This **Open / Next** section is the live backlog (originally distilled from the
     **F11 — `knaif-skill-api`'s `HandlerContext`/`Step`/`Intent` are still an empty
     skeleton** (F1–F5's dual-implementation risk traces back to this; the crate's
     `sandbox` module is no longer part of the gap — see F3/F4 above).
+  - [x] **Two pre-existing harness/validation defects the fix review surfaced, fixed.**
+    Neither is an audit finding or a regression from these commits; both were
+    under-measuring or mis-reporting real behavior.
+    - **Single-final-output chains were not executed.** Only rows *declaring* multiple
+      `outputs` took the chain branch; a two-intent plan with one deliverable
+      (`ffmpeg_273`: rotate → compress) fell to the single-artifact path, which runs only
+      the LAST command and rewires its input back to the original fixture — so the rotation
+      never happened and the recorded command had no `transpose`. Verified from the saved
+      run: the model's plan was **correct** on all four utterances, yet each scored 0.667
+      with `filter:transpose not in command`. Fixed on both halves: the runner now chains
+      whenever the plan rendered more than one command (not just when `outputs` is
+      declared), and records every rendered command as `AgentOutput.artifact_commands`, so
+      the `cheap`/`success` command-text criteria (filters/flags/encoder) see a filter
+      applied in an earlier step. `artifact` keeps its meaning — the command that produced
+      the deliverable — so `output_diff`, `honest`, and the scoreboard are untouched.
+      Re-scoring ffmpeg_273's real chain through the fixed verifier: **0.667 → 1.0**.
+      ⚠️ This legitimately *changes measured scores* for chain rows (it stops
+      under-measuring correct plans), so comparisons against pre-fix runs are not
+      like-for-like and a re-run/re-lock is the separate deliberate step already tracked
+      as F9. Tests: three in `test_evalsuite_runner_execute.py` (chains every command,
+      records the chain, and a guard that single-command plans still use the artifact
+      runner) + two verifier tests, including one pinning that a filter in *no* step still
+      fails, so the chain-aware search can't become a blanket pass.
+    - **`create_thumbnail.scale` had no type, so a model-leaked number crashed the engine.**
+      The 4B emits `scale: 2` / `scale: 1` for "4K thumbnail" (five saved errors across
+      `ffmpeg_236`/`ffmpeg_237`); `_parse_scale` then raised
+      `AttributeError: 'int' object has no attribute 'strip'` — a crash, not a usable
+      validation result. Fixed declaratively plus defensively: `scale` now declares
+      `type: string` in `tools.yaml`, so `normalize_plan` coerces the number before the
+      handler sees it, and `_parse_scale` takes `Any` and stringifies so a direct
+      `execute_plan` call can't crash either. A bare number is **not** coerced into a
+      scale — `2` has no defensible reading, and inventing one would fabricate a 2-pixel
+      thumbnail that still satisfies a `filters: [scale]` check — so it takes the existing
+      unrecognised-value path. Both runtimes now report the identical error from the one
+      shared schema (native ports the same `string`-typed numeric coercion), verified
+      through the rebuilt native CLI. No `help:` text on the schema: that renders into
+      every prompt and pushed the ffmpeg prompt past its 14,000-char ceiling
+      (`test_prompt_audit`); the type alone is what fixes the crash. `just site-data`
+      regenerated for the schema change.
   - [x] **F12 — training dataset builders referenced the pre-move `src/skills/...` path,
     fixed.** `build_dataset.py`, `build_ffmpeg_distill.py`, and `build_preference_dataset.py`
     all still computed `ROOT = Path(__file__).resolve().parent.parent` (correctly `<repo>/
