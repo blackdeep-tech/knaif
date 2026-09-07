@@ -338,17 +338,24 @@ This **Open / Next** section is the live backlog (originally distilled from the
     as a failure instead of silently passing. `justfile`'s `eval-regression` recipe now takes
     a required `current` scoreboard-path argument. Tests:
     `python/core/tests/test_evalsuite_regression_cmd.py`.
-  - [ ] **F1 (critical) + F2 — same root cause, fix together.** No trusted/untrusted
+  - [x] **F1 (critical) + F2 — same root cause, fixed together.** No trusted/untrusted
     boundary: `internal: true` FFmpeg steps (`run_preview`/`run_batch`/`run_concat`, all
-    `safety_category: safe`) are hidden from the prompt but still accepted by
-    `validate_step` from raw model output, and `run_ffmpeg()`/`subprocess.run` executes
-    whatever argv arrives — model output can pick the executable. Separately, the
-    destructive-intent check in `agent.py` only looks at the *expanded leaf's*
+    `safety_category: safe`) were hidden from the prompt but still accepted by
+    `validate_step` from raw model output, and `run_ffmpeg()`/`subprocess.run` executed
+    whatever argv arrived — model output could pick the executable. Separately, the
+    destructive-intent check in `agent.py` only looked at the *expanded leaf's*
     `safety_category`, never the original intent's, so a `destructive` intent (e.g.
-    `strip_audio`) that expands into `safe` leaves runs with `confirmed=False`. Fix: split
-    the registry into model-proposable vs. expansion-only tool sets, and carry the
-    originating intent's safety requirement through expansion. Negative tests through
-    `infer()` → `execute_plan`, not just prompt-hiding tests.
+    `strip_audio`) that expanded into `safe` leaves ran with `confirmed=False`. Fixed:
+    `validate_step`/`validate_plan` gained `allow_internal` (default False — rejects a
+    plan naming an internal tool directly; the one legitimate caller, the post-expansion
+    re-validation of `Intent.expand()`'s own trusted output, opts in explicitly).
+    `_execute_steps` now carries the originating intent's tool/safety_category through
+    expansion (`intent_destructive`), so a destructive intent blocks before its first
+    leaf runs even when every leaf is individually `safe`; direct destructive leaves
+    (no intent wrapper) keep their existing check too. Tests:
+    `python/core/tests/test_tool_trust_boundary.py` (registry-only) +
+    `skills/ffmpeg/python/tests/test_trust_boundary_ffmpeg.py` (the audit's two literal
+    reproductions, executed for real — both now raise before any subprocess/file write).
   - [ ] **F7 — parity `canon_token` collapses meaningful differences.** Any `/`-containing
     token is reduced to its basename, so `a/clip.mp4`/`b/clip.mp4` compare equal and FFmpeg
     filter expressions with `/` (e.g. `pad=...(ow-iw)/2`) collapse to `'2'`. Normalize paths
