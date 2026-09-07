@@ -10,32 +10,36 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
+# This file's own package pillar (<repo>/python) — used only for DEFAULT_OUT, which lives
+# beside it.
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+# <repo> — skills/ and evals/ live here, not under python/. `knaif` itself needs no sys.path
+# hack: the repo-root pyproject.toml's [tool.uv.workspace] already makes python/core (and so
+# `knaif`) importable under `uv run` from anywhere in the tree.
+REPO_ROOT = ROOT.parent
 
 from knaif import CommandAgent  # noqa: E402
 from knaif.registry import retrieve_tools  # noqa: E402
 
 DEFAULT_PARENT = (
-    ROOT
+    REPO_ROOT
     / "evals/runs/2026-07-01_sft-v3-flat_success"
     / "ffmpeg_qwen3-1.7b-sft-v3-flat-q6_success.json"
 )
 DEFAULT_CANDIDATES = [
-    ROOT
+    REPO_ROOT
     / "evals/runs/2026-07-01_sft-v3-gentle2_success"
     / "ffmpeg_qwen3-1.7b-sft-v3-gentle2-q6_success.json",
-    ROOT
+    REPO_ROOT
     / "evals/runs/2026-07-01_sft-v3-hard3_success"
     / "ffmpeg_qwen3-1.7b-sft-v3-hard3-q6_success.json",
-    ROOT
+    REPO_ROOT
     / "evals/runs/2026-07-01_sft-v3-low-lr_success"
     / "ffmpeg_qwen3-1.7b-sft-v3-low-lr-q6_success.json",
-    ROOT
+    REPO_ROOT
     / "evals/runs/2026-07-01_sft-v3-ffmpeg-flat_success"
     / "ffmpeg_qwen3-1.7b-sft-v3-ffmpeg-flat-q6_success.json",
 ]
@@ -84,7 +88,7 @@ def main() -> None:
     if not candidate_rows:
         raise SystemExit("No candidate eval files found")
 
-    agent = CommandAgent.from_skill(f"src/skills/{args.skill}", sandbox="./sandbox")
+    agent = CommandAgent.from_skill(REPO_ROOT / f"skills/{args.skill}", sandbox="./sandbox")
     pairs: list[dict[str, Any]] = []
     provider_counts: dict[str, int] = {}
 

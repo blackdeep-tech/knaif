@@ -435,11 +435,42 @@ This **Open / Next** section is the live backlog (originally distilled from the
     gate that would consume the re-lock is fail-closed. Do this deliberately, in its own
     commit, per AGENTS.md.
   - [ ] **F10 — runtime output verification doesn't check requested properties**,
-    **F11 — `knaif-skill-api` is still an empty skeleton** (native has no generic
-    `HandlerContext`/`Step`/`Intent`; F1–F5's dual-implementation risk traces back to this),
-    **F12 — `python/training/build_dataset.py` (+ preference/distill builders) still
-    reference the pre-move `src/skills/...` path** and fail before writing a dataset; fix
-    before the next training experiment.
+    **F11 — `knaif-skill-api`'s `HandlerContext`/`Step`/`Intent` are still an empty
+    skeleton** (F1–F5's dual-implementation risk traces back to this; the crate's
+    `sandbox` module is no longer part of the gap — see F3/F4 above).
+  - [x] **F12 — training dataset builders referenced the pre-move `src/skills/...` path,
+    fixed.** `build_dataset.py`, `build_ffmpeg_distill.py`, and `build_preference_dataset.py`
+    all still computed `ROOT = Path(__file__).resolve().parent.parent` (correctly `<repo>/
+    python`, these scripts' own pillar — used for each script's own output path, which is
+    fine) but then built `skills/`/`evals/`/`sandbox/` paths as `ROOT / "src/skills/..."` —
+    both the stale `src/` prefix (the package moved to `python/core/knaif`; skills were
+    never under `src/` at the current layout) and the wrong root (those three directories
+    live at `<repo>`, one level above `ROOT`, not under `python/`). Every script also carried
+    a `sys.path.insert(0, str(ROOT / "src"))` that both pointed at a directory that doesn't
+    exist and was unnecessary regardless — the repo-root `pyproject.toml`'s
+    `[tool.uv.workspace]` already makes `python/core` (and so `knaif`) importable under
+    `uv run` with no manual sys.path hack. Fixed: added `REPO_ROOT = ROOT.parent` to each
+    script, removed the stale `sys.path.insert`, and repointed every `skills/`/`evals/`/
+    `sandbox/` reference at `REPO_ROOT` instead of the bare/`ROOT`-prefixed `src/...` form.
+    Verified live (not just source-reviewed), matching `docs/FINE_TUNING.md`'s documented
+    command exactly: `uv run python python/training/build_dataset.py --skills
+    ffmpeg,documents --out <path>` now writes **738 rows** (404 ffmpeg + 334 documents —
+    exactly matching this audit's own independently-reported "current training files
+    contain 404 FFmpeg and 334 documents examples" figure);
+    `build_ffmpeg_distill.py` now writes **45 accepted rows**, matching the historical
+    `evals/INDEX.md` `sft-v3-distill-v1` entry's "45 accepted synthetic ffmpeg rows"
+    exactly; `build_preference_dataset.py` now runs to completion against real files
+    (confirmed with `--parent`/`--candidate` pointed at an existing scoreboard) instead of
+    raising `FileNotFoundError` on `src/skills/ffmpeg/skill.yaml` — its *default* args still
+    reference specific 2026-07-01 eval scoreboards that are legitimately absent from this
+    checkout (generated `evals/runs/` artifacts, not committed), which is a real data-
+    availability gap, not a code bug; it now fails on the *correct* (repo-root) path for
+    that reason instead of the wrong (`python/`-prefixed, `src/`-stale) one.
+    `docs/FINE_TUNING.md`'s documented invocation already matched the current file location
+    and needed no change. No permanent pytest coverage added for these training scripts —
+    consistent with the existing convention for `python/training/*.py` (none of its sibling
+    scripts have any either); the audit's own ask was to "test the real builder entry point
+    on a small temporary output," which the runs above do.
   - Also produced (documentation-only, already applied): the audit's ffmpeg evaluation row
     (was "Pending completion") and a `evals/INDEX.md` row for the RTX 5080 re-baseline —
     quality held across both hardware moves (ffmpeg outcome 0.902 vs. the 5080's prior 0.903
