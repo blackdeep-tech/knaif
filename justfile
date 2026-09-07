@@ -547,9 +547,13 @@ eval-backends skill *args:
 eval-snapshot skill *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier output_diff --snapshot --save evals/runs/snapshot_{{skill}}_output_diff {{args}}
 
-# Regression check against saved snapshot (e.g.: just eval-regression ffmpeg)
-eval-regression skill:
-    uv run python -m knaif.evalsuite regression --skill {{skill}}
+# Regression check against saved snapshot. `current` is a scoreboard JSON from a real run
+# (e.g.: just eval-success ffmpeg --save evals/runs/2026-01-01_check --verifier <snapshot's verifier>,
+# then: just eval-regression ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_<verifier>.json).
+# No `current` used to silently compare the snapshot to itself and always print "OK" — fixed
+# per docs/audits/2026-09-07-core-principles-and-rtx5080.md (F6); now `current` is required.
+eval-regression skill current:
+    uv run python -m knaif.evalsuite regression --skill {{skill}} --current {{current}}
 
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:

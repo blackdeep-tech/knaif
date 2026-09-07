@@ -324,6 +324,63 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
+- [~] **2026-09-07 core-principles audit follow-ups** —
+  `docs/audits/2026-09-07-core-principles-and-rtx5080.md`, 12 findings (F1 critical, F2–F7
+  high, F8–F12 medium), reproduced/source-reviewed on the RTX 5080 box. Suggested order in
+  the audit's own "Suggested order of follow-up work". Status:
+  - [x] **F6 — regression gate was fail-open, FIXED.** `just eval-regression <skill>`
+    silently compared the snapshot to itself when no `--current` was given (always printed
+    "No regressions ... OK"); `diff_snapshots` was also fail-open on a verifier/population
+    mismatch and on a metric `current` dropped entirely. Now `cmd_regression` requires
+    `--current` to point at an existing file, and `diff_snapshots` raises `ValueError` on a
+    verifier mismatch, a `total` (population) mismatch, or a metric present in baseline but
+    absent from current — `cmd_regression` and `cmd_regression_all_skills` both surface that
+    as a failure instead of silently passing. `justfile`'s `eval-regression` recipe now takes
+    a required `current` scoreboard-path argument. Tests:
+    `python/core/tests/test_evalsuite_regression_cmd.py`.
+  - [ ] **F1 (critical) + F2 — same root cause, fix together.** No trusted/untrusted
+    boundary: `internal: true` FFmpeg steps (`run_preview`/`run_batch`/`run_concat`, all
+    `safety_category: safe`) are hidden from the prompt but still accepted by
+    `validate_step` from raw model output, and `run_ffmpeg()`/`subprocess.run` executes
+    whatever argv arrives — model output can pick the executable. Separately, the
+    destructive-intent check in `agent.py` only looks at the *expanded leaf's*
+    `safety_category`, never the original intent's, so a `destructive` intent (e.g.
+    `strip_audio`) that expands into `safe` leaves runs with `confirmed=False`. Fix: split
+    the registry into model-proposable vs. expansion-only tool sets, and carry the
+    originating intent's safety requirement through expansion. Negative tests through
+    `infer()` → `execute_plan`, not just prompt-hiding tests.
+  - [ ] **F7 — parity `canon_token` collapses meaningful differences.** Any `/`-containing
+    token is reduced to its basename, so `a/clip.mp4`/`b/clip.mp4` compare equal and FFmpeg
+    filter expressions with `/` (e.g. `pad=...(ow-iw)/2`) collapse to `'2'`. Normalize paths
+    only in known argv positions; keep filter strings verbatim or parse them semantically.
+  - [ ] **F3/F4 — native path resolution / sandbox containment.** Native FFmpeg probes
+    `inputs` directly against the process cwd (bypasses sandbox resolution entirely); native
+    sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) are lexical-only and don't
+    resolve symlinks/junctions, so a junction inside the sandbox reads outside it (reproduced
+    on Windows; Python's `_resolve_path` already rejects the same case).
+  - [ ] **F5 — native `run` silently drops every plan step after the first.** `main.rs` only
+    dispatches `steps.first()`; a valid multi-step plan (e.g. strip-audio → resize) previews
+    only step one and exits 0. Either implement full ordered dispatch or explicitly reject
+    multi-step plans instead of reporting success on a truncated one.
+  - [ ] **F9 — re-lock acceptance snapshots after F6.** FFmpeg's snapshot uses `verifier:
+    cheap` (forbidden as an acceptance bar per `docs/EVAL_FRAMEWORK.md`) and both snapshots'
+    stored population is behind the current corpus — this is the pre-existing re-lock item
+    above (*"Re-lock the ffmpeg snapshot with `output_diff`"*), now unblocked now that the
+    gate that would consume the re-lock is fail-closed. Do this deliberately, in its own
+    commit, per AGENTS.md.
+  - [ ] **F10 — runtime output verification doesn't check requested properties**,
+    **F11 — `knaif-skill-api` is still an empty skeleton** (native has no generic
+    `HandlerContext`/`Step`/`Intent`; F1–F5's dual-implementation risk traces back to this),
+    **F12 — `python/training/build_dataset.py` (+ preference/distill builders) still
+    reference the pre-move `src/skills/...` path** and fail before writing a dataset; fix
+    before the next training experiment.
+  - Also produced (documentation-only, already applied): the audit's ffmpeg evaluation row
+    (was "Pending completion") and a `evals/INDEX.md` row for the RTX 5080 re-baseline —
+    quality held across both hardware moves (ffmpeg outcome 0.902 vs. the 5080's prior 0.903
+    on record in `docs/PERFORMANCE.md` §1; documents 0.976). The audit's "Documentation
+    corrections to queue" table (native skill contract description, `AGENTS.md`'s stale
+    `list_skills()`/architecture-diagram claims, `docs/PERFORMANCE.md`'s hardware-invariance
+    wording, etc.) is still open.
 - [x] **1.1.0 release — verification COMPLETE 2026-08-02. Every gate below has now been re-run
   against the rebuilt artifacts; what remains is publishing (tag the current tip of `main`, publish
   the draft, `twine upload python/core/dist/*`), not verifying.** Naming a commit here would be

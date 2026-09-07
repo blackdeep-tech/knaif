@@ -279,7 +279,7 @@ just eval-fixtures <skill>    # regenerate fixtures (idempotent) — do this fir
 just eval <skill>             # cheap verifier — fast routing gate, no external binaries
 just eval-output-diff <skill> # executes the real tool, diffs against baseline commands
 just eval-success <skill>     # honest metric — real execution + success_criteria grading
-just eval-regression <skill>  # gate against the committed snapshot
+just eval-regression <skill> <current>  # gate a saved run's scoreboard against the committed snapshot
 ```
 
 Verifiers run cheapest-first: `cheap` → `output_diff` → `success`. Use `cheap` while

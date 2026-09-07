@@ -284,7 +284,7 @@ just eval-snapshot <skill>
 # 5. native parity, if the skill ships natively
 just parity <skill>
 
-just eval-regression <skill>        # gate a run against the committed snapshot
+just eval-regression <skill> <current>   # gate a saved run's scoreboard against the committed snapshot
 ```
 
 **`cheap` is an iteration instrument, never an acceptance bar.** Quote an executing
