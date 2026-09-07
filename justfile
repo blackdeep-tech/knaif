@@ -586,7 +586,9 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 #   just parity ffmpeg --limit 20
 # Two comparison levels (pass-through --mode): `--mode command` (default) diffs the rendered
 # ffmpeg argv from `run --dry-run` — tests intent expansion + render, but python skips
-# compress/platform/thumbnail/batch/reverse and native previews only chain step 1; `--mode plan`
+# compress/platform/thumbnail/batch/reverse and native REFUSES multi-step chains outright
+# (it executes one intent per invocation — audit F5 — so a chain row's native outcome is a
+# `reject`, which compares as a mismatch rather than a rendered command); `--mode plan`
 # diffs the `plan --json` envelope (tool+args) for EVERY intent and full chains (no render),
 # treating native's materialized optional-arg defaults as equivalent. Run both for full coverage.
 # `--batch` (plan mode only) loads each model ONCE and streams all utterances via `plan --batch`

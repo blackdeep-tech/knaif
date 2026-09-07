@@ -327,7 +327,15 @@ This **Open / Next** section is the live backlog (originally distilled from the
 - [~] **2026-09-07 core-principles audit follow-ups** —
   `docs/audits/2026-09-07-core-principles-and-rtx5080.md`, 12 findings (F1 critical, F2–F7
   high, F8–F12 medium), reproduced/source-reviewed on the RTX 5080 box. Suggested order in
-  the audit's own "Suggested order of follow-up work". Status:
+  the audit's own "Suggested order of follow-up work".
+  **A follow-up review of the fixes** (`docs/audits/2026-09-07-fix-review.md`) found five
+  counterexamples, R1–R5 — every one independently reproduced here before fixing, and every
+  one now closed; each is recorded against its parent finding below. The review's own
+  documentation corrections are applied too: the `evals/INDEX.md` row no longer claims
+  hardware invariance (aggregate similarity across different verifiers/row sets cannot
+  establish it), the audit's ffmpeg category paragraph no longer links clarify routing
+  scores to F2, and `justfile`'s parity comment no longer says native previews chain step 1.
+  Status:
   - [x] **F6 — regression gate was fail-open, FIXED.** `just eval-regression <skill>`
     silently compared the snapshot to itself when no `--current` was given (always printed
     "No regressions ... OK"); `diff_snapshots` was also fail-open on a verifier/population
@@ -338,6 +346,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
     as a failure instead of silently passing. `justfile`'s `eval-regression` recipe now takes
     a required `current` scoreboard-path argument. Tests:
     `python/core/tests/test_evalsuite_regression_cmd.py`.
+    **R3 follow-up (fixed):** the identity guard was itself fail-open — it only compared
+    `verifier`/`total` when *both* sides declared them, so a current scoreboard that simply
+    omitted them skipped the check entirely and could still certify. Now, when the baseline
+    declares one, the current run must declare it too (missing → actionable error), tested
+    separately from the explicitly-unequal case.
   - [x] **F1 (critical) + F2 — same root cause, fixed together.** No trusted/untrusted
     boundary: `internal: true` FFmpeg steps (`run_preview`/`run_batch`/`run_concat`, all
     `safety_category: safe`) were hidden from the prompt but still accepted by
@@ -356,6 +369,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `python/core/tests/test_tool_trust_boundary.py` (registry-only) +
     `skills/ffmpeg/python/tests/test_trust_boundary_ffmpeg.py` (the audit's two literal
     reproductions, executed for real — both now raise before any subprocess/file write).
+    **R5 follow-up (fixed):** the inherited destructive gate also blocked a destructive
+    intent's *own terminal clarify* — `prepare_for_platform` with an unknown platform expands
+    deterministically to `clarify`, and the new check turned that recoverable question into a
+    hard error. Terminal tools (`clarify`/`reject`/`done`) are now exempt: they perform no
+    action and already `should_stop` the loop, so nothing destructive can follow one in the
+    same sub-plan regardless of step order — the exemption cannot reopen F2, and a test pins
+    that a real (non-terminal) expansion is still blocked.
   - [x] **F7 — parity `canon_token` collapses meaningful differences, fixed.** Any
     `/`-containing token was reduced to its basename, so `a/clip.mp4`/`b/clip.mp4`
     compared equal and FFmpeg filter expressions with `/` (e.g. `pad=...(ow-iw)/2`)
@@ -370,6 +390,15 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `scripts/parity_check.py`'s `--self-test` reproducing both audit examples
     (RED confirmed pre-fix — the filter pair literally collapsed to `'2'` — GREEN
     post-fix).
+    **R4 follow-up (fixed):** only *command* mode was repaired; **plan** mode still ignored
+    `cwd` and routed every string through basename normalization, so `a/report.pdf` and
+    `b/report.pdf` compared equal and aspect values `4/3` / `16/3` both collapsed to `3`.
+    Plan mode now normalizes by argument contract: a new `_PLAN_PATH_ARG_KEYS` (mirroring
+    `planner._PATH_ARG_KEYS` + outputs, and now the single definition `_SIGNIFICANT_ARG_KEYS`
+    aliases so the two can't drift) marks which keys hold paths; those resolve against the
+    shared cwd, every other string compares verbatim. `plan_equiv_modulo_defaults` takes the
+    same treatment so a benign abs/rel difference on a shared path key isn't reported as
+    divergence. Self-test now covers plan comparisons, not just rendered commands.
   - [x] **F3/F4 — native path resolution / sandbox containment, fixed.** Native FFmpeg
     probed `inputs` directly against the process cwd, bypassing sandbox resolution
     entirely; native sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) were each
@@ -406,6 +435,30 @@ This **Open / Next** section is the live backlog (originally distilled from the
       test pre-fix, GREEN post-fix. Full workspace (`cargo test --workspace`): 260
       passed, 0 failed; `cargo fmt --all -- --check` and
       `cargo clippy --workspace --all-targets -- -D warnings` both clean.
+    - **R1 follow-up (fixed).** The F3 check validated the *resolved* input but still probed
+      and rendered the *raw* string, so with a working directory different from the sandbox,
+      `clip.mp4` cleared `<sandbox>/clip.mp4` while ffprobe/ffmpeg opened `<cwd>/clip.mp4` —
+      a different file. Validating one representation while reading another is not a
+      boundary. `resolve_input_in_sandbox` now *returns* the checked path and both `expand`
+      and `expand_concat` probe and render it (concat's whole input list included); open/CLI
+      mode still returns the raw string, so cwd-relative behavior there is unchanged.
+      Verified end-to-end through the rebuilt CLI with real ffmpeg: from `cwd=outside` with
+      same-named 32×32 (sandbox) and 16×16 (outside) clips, the artifact is now **32×32** —
+      it was consuming the outside file before. Test:
+      `run::tests::relative_input_renders_the_sandbox_file_not_the_cwd_one`.
+    - **R2 follow-up (fixed).** `resolve_real` lexically collapsed `..` *before* canonicalizing,
+      which is not what a filesystem does: on POSIX, `..` after a symlink resolves relative to
+      the link's **target**, so cancelling `link/..` textually erases the link and yields a
+      path the real I/O never uses — the guard would clear a read that lands outside. The raw
+      path (with `..` intact) now goes to the OS: the longest existing prefix is canonicalized
+      and only a not-yet-created tail is applied lexically, so each platform gets its own
+      semantics, matching Python's `Path.resolve()` on both. Measured on this box that Windows
+      resolves `junction\..` **lexically** (stays inside), so both behaviors are now pinned:
+      `assert_in_sandbox_rejects_a_symlink_followed_by_parent` (`#[cfg(unix)]`, the escape) and
+      `junction_followed_by_parent_matches_windows_semantics` (`#[cfg(windows)]`, the
+      in-sandbox result). Also added: `canonicalize`'s Windows `\\?\` verbatim prefix is
+      stripped for plain drive paths, so resolved inputs render as ordinary `C:\…` and still
+      line up with Python's paths in cross-runtime comparison.
   - [x] **F5 — native `run` silently drops every plan step after the first, fixed (interim,
     per the audit's own recommendation).** `main.rs` only dispatched `steps.first()`; a valid
     multi-step plan (e.g. strip_audio → resize_video) previewed/executed only step one and

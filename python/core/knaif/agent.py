@@ -694,7 +694,19 @@ class CommandAgent:
 
             tool_def = self.registry.get(tool)
             step_destructive = bool(tool_def and tool_def.safety_category == "destructive")
-            if (intent_destructive or step_destructive) and not dry_run and not confirmed:
+            # A destructive intent's inherited requirement (see intent_destructive above) must
+            # not block its own terminal clarify/reject: a destructive intent can deterministically
+            # decide it cannot proceed (e.g. prepare_for_platform given an unknown platform) and
+            # expand to a clarify leaf instead of a real side effect. clarify/reject perform no
+            # action and always `should_stop` the loop immediately below, so nothing destructive
+            # can follow one in the same sub_plan regardless of step order — exempting them here
+            # cannot reopen the hole this check exists for.
+            if (
+                tool not in _TERMINAL_TOOLS
+                and (intent_destructive or step_destructive)
+                and not dry_run
+                and not confirmed
+            ):
                 if intent_destructive and not step_destructive:
                     raise ValueError(
                         f"{intent_tool!r} is a destructive intent; requires "

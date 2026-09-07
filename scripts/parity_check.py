@@ -165,8 +165,23 @@ def _canon_argv(argv: list[str], cwd: str | None) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _canon_scalar(v: object) -> str:
-    """Canonicalize a plan-arg scalar so 720 == "720", 2.0 == "2.0", and paths → basename."""
+# Arg keys whose values are paths — mirrors `knaif.planner._PATH_ARG_KEYS` plus the output side.
+# ONLY these get path canonicalization in plan mode. Every other string compares verbatim, so a
+# non-path value that merely contains `/` (an aspect ratio like `4/3`) is never mangled — the
+# plan-mode twin of the argv-position rule in `_canon_argv` (audit F7; review R4).
+_PLAN_PATH_ARG_KEYS = frozenset(
+    {"inputs", "input", "files", "src", "dst", "path", "base", "append", "output", "outputs"}
+)
+
+
+def _canon_scalar(v: object, *, is_path: bool = False, cwd: str | None = None) -> str:
+    """Canonicalize a plan-arg scalar so 720 == "720" and 2.0 == "2.0".
+
+    A value under a path-contract arg key (*is_path*) is resolved against the shared *cwd* so a
+    relative token (native) and an absolute one (python) naming the same file compare equal while
+    two different directories do not; with no *cwd* it falls back to basename canonicalization.
+    Every other string is compared verbatim.
+    """
     if isinstance(v, bool):
         return f"bool:{v}"
     if isinstance(v, (int, float)):
@@ -178,23 +193,38 @@ def _canon_scalar(v: object) -> str:
             f = float(s)
             return f"num:{int(f) if f.is_integer() else f}"
         except ValueError:
-            return f"str:{canon_token(s.replace(chr(92), '/'))}"
+            if not is_path:
+                return f"str:{s}"
+            p = s.replace(chr(92), "/")
+            return f"str:{_resolve_against(cwd, p) if cwd is not None else canon_token(p)}"
     return f"other:{v!r}"
 
 
-def _canon_val(v: object):
-    """Hashable canonical form of a plan-arg value (scalars coerced, paths → basename)."""
+def _canon_val(v: object, *, is_path: bool = False, cwd: str | None = None):
+    """Hashable canonical form of a plan-arg value (scalars coerced; path args normalized)."""
     if isinstance(v, list):
-        return tuple(_canon_val(x) for x in v)
+        return tuple(_canon_val(x, is_path=is_path, cwd=cwd) for x in v)
     if isinstance(v, dict):
-        return tuple(sorted((k, _canon_val(x)) for k, x in v.items()))
-    return _canon_scalar(v)
+        return tuple(
+            sorted(
+                (k, _canon_val(x, is_path=k in _PLAN_PATH_ARG_KEYS, cwd=cwd)) for k, x in v.items()
+            )
+        )
+    return _canon_scalar(v, is_path=is_path, cwd=cwd)
 
 
-def canon_plan_step(step: dict) -> tuple:
+def canon_plan_step(step: dict, cwd: str | None = None) -> tuple:
     """Canonical (tool, sorted-args) for a plan step — order-insensitive on arg keys."""
     args = step.get("args") or {}
-    return (step.get("tool"), tuple(sorted((k, _canon_val(v)) for k, v in args.items())))
+    return (
+        step.get("tool"),
+        tuple(
+            sorted(
+                (k, _canon_val(v, is_path=k in _PLAN_PATH_ARG_KEYS, cwd=cwd))
+                for k, v in args.items()
+            )
+        ),
+    )
 
 
 @dataclass
@@ -220,7 +250,7 @@ class Outcome:
         if self.kind == "commands":
             return ("commands", tuple(_canon_argv(c, cwd) for c in self.commands))
         if self.kind == "plan":
-            return ("plan", tuple(canon_plan_step(s) for s in self.plan))
+            return ("plan", tuple(canon_plan_step(s, cwd) for s in self.plan))
         return (self.kind,)
 
 
@@ -594,13 +624,14 @@ def _resolve_python_model_path(python_model: str) -> Path | None:
 
 
 # Args that name files/inputs — a difference in one of these is a real divergence, never a
-# benign "materialized default" (mirrors planner._PATH_ARG_KEYS + outputs).
-_SIGNIFICANT_ARG_KEYS = frozenset(
-    {"inputs", "input", "files", "src", "dst", "path", "base", "append", "output", "outputs"}
-)
+# benign "materialized default". Same contract as the path-canonicalization set above; aliased
+# rather than restated so the two can't drift.
+_SIGNIFICANT_ARG_KEYS = _PLAN_PATH_ARG_KEYS
 
 
-def plan_equiv_modulo_defaults(a_steps: list[dict], b_steps: list[dict]) -> str | None:
+def plan_equiv_modulo_defaults(
+    a_steps: list[dict], b_steps: list[dict], cwd: str | None = None
+) -> str | None:
     """If two plans differ ONLY because one side materialized optional-arg defaults the other
 
     left implicit (same tool sequence, all shared arg keys equal, and the key sets are nested),
@@ -616,7 +647,11 @@ def plan_equiv_modulo_defaults(a_steps: list[dict], b_steps: list[dict]) -> str 
         if a.get("tool") != b.get("tool"):
             return None
         aa, ba = a.get("args") or {}, b.get("args") or {}
-        if any(_canon_val(aa[k]) != _canon_val(ba[k]) for k in set(aa) & set(ba)):
+        if any(
+            _canon_val(aa[k], is_path=k in _PLAN_PATH_ARG_KEYS, cwd=cwd)
+            != _canon_val(ba[k], is_path=k in _PLAN_PATH_ARG_KEYS, cwd=cwd)
+            for k in set(aa) & set(ba)
+        ):
             return None  # a shared key disagrees → real divergence
         only_a, only_b = set(aa) - set(ba), set(ba) - set(aa)
         if only_a and only_b:
@@ -652,7 +687,7 @@ def compare(
         )
     # Plan mode: accept plans that differ only by materialized optional-arg defaults.
     if plan_mode and native.kind == "plan" and py.kind == "plan" and native.key(cwd) != py.key(cwd):
-        eq = plan_equiv_modulo_defaults(native.plan, py.plan)
+        eq = plan_equiv_modulo_defaults(native.plan, py.plan, cwd)
         if eq is not None:
             return "match", eq
         return "mismatch", "plan tools/args differ"
@@ -1041,6 +1076,38 @@ def _self_test() -> int:
     assert (
         np.key() == pp.key()
     ), f"plan key should be order/type/path invariant:\n{np.key()}\n{pp.key()}"
+    # R4: plan mode must honor the shared cwd and argument contracts too, not just command mode.
+    # Two DIFFERENT source directories sharing a basename must not compare equal...
+    pa = parse_plan_json(
+        '{"plan":[{"tool":"inspect_document","args":{"input":"a/report.pdf"}}]}\n', ""
+    )
+    pb = parse_plan_json(
+        '{"plan":[{"tool":"inspect_document","args":{"input":"b/report.pdf"}}]}\n', ""
+    )
+    assert pa.key(cwd="/work") != pb.key(
+        cwd="/work"
+    ), "plan mode: different source directories sharing a basename must not compare equal"
+    # ...while native-relative vs python-absolute of the SAME file under that cwd still must.
+    prel = parse_plan_json(
+        '{"plan":[{"tool":"inspect_document","args":{"input":"report.pdf"}}]}\n', ""
+    )
+    pabs2 = parse_plan_json(
+        '{"plan":[{"tool":"inspect_document","args":{"input":"/work/report.pdf"}}]}\n', ""
+    )
+    assert prel.key(cwd="/work") == pabs2.key(
+        cwd="/work"
+    ), "plan mode: relative vs absolute of the SAME file under the shared cwd must match"
+    # A non-path arg that merely contains '/' (an aspect ratio) must survive verbatim — only
+    # path-contract args are path-normalized.
+    ar43 = parse_plan_json(
+        '{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"aspect":"4/3"}}]}\n', ""
+    )
+    ar163 = parse_plan_json(
+        '{"plan":[{"tool":"resize_video","args":{"inputs":["clip.mp4"],"aspect":"16/3"}}]}\n', ""
+    )
+    assert ar43.key(cwd="/work") != ar163.key(
+        cwd="/work"
+    ), "plan mode: different aspect values must not both collapse to their last '/' segment"
     # A chain plan compares end-to-end in plan mode (no single-step leniency).
     chain = parse_plan_json(
         '{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}},{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}\n',

@@ -179,3 +179,88 @@ def test_direct_destructive_leaf_still_blocked(tmp_path):
     payload = {"plan": [{"tool": "wipe", "args": {"token": "x"}}]}
     with pytest.raises(ValueError, match="confirmed"):
         agent.execute_plan(payload, dry_run=False, confirmed=False)
+
+
+# ── R5: the inherited gate must not block a destructive intent's own terminal clarify ──────
+
+
+def _write_clarifying_skill(skill_dir: Path) -> None:
+    """A destructive intent that deterministically decides it cannot proceed and expands to a
+    terminal `clarify` instead of any real side effect — the shape of ffmpeg's
+    `prepare_for_platform` given an unknown platform."""
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "skill.yaml").write_text(
+        textwrap.dedent("""\
+            name: asker
+            description: "Destructive intent that can expand to a terminal clarify."
+            tools: tools.yaml
+            skill_class: handlers.AskerSkill
+            """),
+        encoding="utf-8",
+    )
+    (skill_dir / "tools.yaml").write_text(
+        textwrap.dedent("""\
+            risky_op:
+              description: "Destructive intent; clarifies when it cannot resolve its target."
+              required_args: [target]
+              safety_category: destructive
+            worker:
+              description: "Internal worker step."
+              required_args: [token]
+              internal: true
+            """),
+        encoding="utf-8",
+    )
+    (skill_dir / "handlers.py").write_text(
+        textwrap.dedent("""\
+            from knaif.skill_base import Skill
+            from knaif.tool import Intent, Step
+
+            class WorkerStep(Step):
+                name = "worker"
+                def handle(self, args, ctx):
+                    return {"echo": args["token"]}
+
+            class RiskyOpIntent(Intent):
+                name = "risky_op"
+                def expand(self, args):
+                    if args["target"] == "unknown":
+                        return [{"tool": "clarify", "args": {"question": "Which target?"}}]
+                    return [{"tool": "worker", "args": {"token": args["target"]}}]
+
+            class AskerSkill(Skill):
+                tools = [WorkerStep, RiskyOpIntent]
+            """),
+        encoding="utf-8",
+    )
+
+
+def test_destructive_intent_expanding_to_clarify_is_not_blocked(tmp_path):
+    """A clarify performs no action and stops the sub-plan, so the inherited destructive
+    requirement must not turn a recoverable question into a hard error."""
+    skill_dir = tmp_path / "asker_skill"
+    _write_clarifying_skill(skill_dir)
+    agent = CommandAgent.from_skill(skill_dir, sandbox=tmp_path, root=tmp_path)
+
+    results = agent.execute_plan(
+        {"plan": [{"tool": "risky_op", "args": {"target": "unknown"}}]},
+        dry_run=False,
+        confirmed=False,
+    )
+    assert [r["tool"] for r in results] == ["clarify"]
+    assert results[-1]["result"]["status"] == "clarification_needed"
+
+
+def test_destructive_intent_expanding_to_real_work_is_still_blocked(tmp_path):
+    """The same skill, resolving to an actual side effect, must still require confirmation —
+    the terminal-tool exemption above must not reopen F2."""
+    skill_dir = tmp_path / "asker_skill"
+    _write_clarifying_skill(skill_dir)
+    agent = CommandAgent.from_skill(skill_dir, sandbox=tmp_path, root=tmp_path)
+
+    with pytest.raises(ValueError, match="confirmed"):
+        agent.execute_plan(
+            {"plan": [{"tool": "risky_op", "args": {"target": "real"}}]},
+            dry_run=False,
+            confirmed=False,
+        )

@@ -8,7 +8,6 @@
 //! already rejects that case — this module closes the native gap so both runtimes enforce
 //! the same boundary. See docs/audits/2026-09-07-core-principles-and-rtx5080.md, F4.
 
-use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
 
 /// Collapse `.`/`..` segments lexically (no filesystem access), so a path that doesn't exist
@@ -28,42 +27,83 @@ pub fn lexical_normalize(p: &Path) -> PathBuf {
     out
 }
 
-/// Resolve `p` to its real, filesystem-canonical absolute form: every existing ancestor is
-/// canonicalized — following symlinks and, on Windows, directory junctions/reparse points —
-/// and any trailing components that don't exist yet (e.g. an output file about to be created)
-/// are appended lexically on top of the deepest existing, resolved ancestor. Falls back to
-/// pure lexical normalization if nothing in `p` exists at all — still boundary-checkable,
-/// just not link-aware (there is nothing on disk to follow).
+/// Drop Windows' `\\?\` verbatim prefix when the remainder is a plain drive path (`C:\…`).
+///
+/// `canonicalize` always returns the verbatim form on Windows. That prefix is correct but leaks
+/// into rendered ffmpeg commands and into cross-runtime comparisons, where Python emits an
+/// ordinary `C:\…` path — so a resolved-path check would render `\\?\C:\…` and no longer line up
+/// with the other runtime. UNC verbatim paths (`\\?\UNC\…`) are left alone: stripping those
+/// changes their meaning. Very long paths keep the prefix, which is the reason it exists.
+fn simplify_verbatim(p: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        const VERBATIM: &str = r"\\?\";
+        let s = p.to_string_lossy();
+        if let Some(rest) = s.strip_prefix(VERBATIM) {
+            let drive_path = {
+                let b = rest.as_bytes();
+                b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\'
+            };
+            if drive_path && rest.len() < 260 {
+                return PathBuf::from(rest.to_string());
+            }
+        }
+    }
+    p
+}
+
+/// Resolve `p` to its real, filesystem-canonical absolute form: the longest existing prefix is
+/// canonicalized by the OS — following symlinks and, on Windows, directory junctions/reparse
+/// points — and any trailing components that don't exist yet (e.g. an output file about to be
+/// created) are applied lexically on top of that resolved prefix. Falls back to pure lexical
+/// normalization if nothing in `p` exists at all — still boundary-checkable, just not link-aware
+/// (there is nothing on disk to follow).
 ///
 /// `p` is made absolute against `base` first when relative; an absolute `p` ignores `base`.
+///
+/// **The raw path is handed to the OS with its `..` components intact — never lexically
+/// collapsed first.** Collapsing them up front is not equivalent: on POSIX, `..` after a symlink
+/// resolves relative to the link's *target*, so textually cancelling `link/..` erases the link
+/// before the kernel can follow it and yields a path the real I/O will never use — the guard
+/// would then clear a read that actually lands outside the sandbox. Letting `canonicalize`
+/// see the whole path gives each platform its own semantics (POSIX target-relative; Windows
+/// collapses `junction\..` lexically), which is exactly what a containment check must mirror,
+/// and matches Python's `Path.resolve()` on both. See the 2026-09-07 fix review, R2.
 pub fn resolve_real(p: &Path, base: &Path) -> PathBuf {
     let abs = if p.is_absolute() {
         p.to_path_buf()
     } else {
         base.join(p)
     };
-    let normalized = lexical_normalize(&abs);
 
-    let mut existing = normalized.clone();
-    let mut tail: Vec<OsString> = Vec::new();
-    loop {
-        if let Ok(real) = existing.canonicalize() {
-            let mut out = real;
-            for part in tail.iter().rev() {
-                out.push(part);
+    let comps: Vec<Component> = abs.components().collect();
+    // Longest prefix first: the whole path when it exists, so the OS resolves every link and
+    // `..` itself; then progressively shorter prefixes for a not-yet-created tail.
+    for cut in (0..=comps.len()).rev() {
+        let mut prefix = PathBuf::new();
+        for c in &comps[..cut] {
+            prefix.push(c.as_os_str());
+        }
+        if prefix.as_os_str().is_empty() {
+            break;
+        }
+        if let Ok(real) = prefix.canonicalize() {
+            let mut out = simplify_verbatim(real);
+            // The tail doesn't exist, so there is no link left to follow: `.`/`..` in it are
+            // unambiguous and apply lexically on top of the resolved prefix.
+            for c in &comps[cut..] {
+                match c {
+                    Component::ParentDir => {
+                        out.pop();
+                    }
+                    Component::CurDir => {}
+                    other => out.push(other.as_os_str()),
+                }
             }
             return out;
         }
-        match existing.file_name() {
-            Some(name) => {
-                tail.push(name.to_os_string());
-                if !existing.pop() {
-                    return normalized;
-                }
-            }
-            None => return normalized, // exhausted the path; nothing on it exists
-        }
     }
+    lexical_normalize(&abs)
 }
 
 /// Raise if `p` is not inside `sandbox`. Both are resolved filesystem-real via
@@ -98,7 +138,7 @@ mod tests {
         let resolved = resolve_real(Path::new("sub/../escape/x.txt"), &tmp);
         assert_eq!(
             resolved,
-            tmp.canonicalize().unwrap().join("escape").join("x.txt")
+            resolve_real(&tmp, &tmp).join("escape").join("x.txt")
         );
         std::fs::remove_dir_all(&tmp).ok();
     }
@@ -112,10 +152,10 @@ mod tests {
         ));
         std::fs::create_dir_all(&tmp).unwrap();
         let resolved = resolve_real(Path::new("not-yet-created.txt"), &tmp);
-        // The existing ancestor (tmp) must be canonicalized (e.g. drive letter case, UNC
-        // prefix normalized); the not-yet-existing tail is appended lexically on top of it.
+        // The existing ancestor (tmp) must be resolved by the OS (drive-letter case, links);
+        // the not-yet-existing tail is appended lexically on top of it.
         assert_eq!(resolved.file_name().unwrap(), "not-yet-created.txt");
-        assert!(resolved.starts_with(tmp.canonicalize().unwrap()));
+        assert!(resolved.starts_with(resolve_real(&tmp, &tmp)));
         std::fs::remove_dir_all(&tmp).ok();
     }
 
@@ -176,6 +216,80 @@ mod tests {
         let escaped = link.join("secret.txt");
         let err = assert_in_sandbox(&escaped, &sandbox).unwrap_err();
         assert!(err.to_string().contains("outside the sandbox"), "{err}");
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn assert_in_sandbox_rejects_a_symlink_followed_by_parent() {
+        // Review R2: on POSIX, `..` after a symlink resolves relative to the link's TARGET, so
+        // `sandbox/link/../secret.txt` really opens `outside/secret.txt`. Collapsing `..`
+        // lexically before touching the filesystem erases the link component and yields
+        // `sandbox/secret.txt` — a path the real I/O never uses — so the guard would accept an
+        // escape. (Windows resolves the same shape lexically; see the companion test below.)
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-sandbox-test-{}-{}",
+            std::process::id(),
+            "symlink-parent"
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(outside.join("deep")).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"outside").unwrap();
+        std::fs::write(sandbox.join("secret.txt"), b"inside").unwrap();
+
+        std::os::unix::fs::symlink(outside.join("deep"), sandbox.join("link")).unwrap();
+
+        let escaped = sandbox.join("link").join("..").join("secret.txt");
+        let err = assert_in_sandbox(&escaped, &sandbox).unwrap_err();
+        assert!(err.to_string().contains("outside the sandbox"), "{err}");
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn junction_followed_by_parent_matches_windows_semantics() {
+        // The companion to the Unix test above. Windows resolves `junction\..` *lexically* —
+        // measured: `Path.resolve()` on `sandbox\link\..\secret.txt` yields
+        // `sandbox\secret.txt`, and reading it returns the INSIDE file. So the containment
+        // check must accept it here: it must mirror what the real I/O does on this platform,
+        // not impose the POSIX rule. Both tests exist so neither platform's behavior can
+        // regress into the other's.
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-sandbox-test-{}-{}",
+            std::process::id(),
+            "junction-parent"
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(outside.join("deep")).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"outside").unwrap();
+        std::fs::write(sandbox.join("secret.txt"), b"inside").unwrap();
+
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &sandbox.join("link").display().to_string(),
+                &outside.join("deep").display().to_string(),
+            ])
+            .status()
+            .expect("mklink must run on Windows");
+        assert!(
+            status.success(),
+            "junction creation must succeed (no admin needed)"
+        );
+
+        let via_link = sandbox.join("link").join("..").join("secret.txt");
+        assert!(
+            assert_in_sandbox(&via_link, &sandbox).is_ok(),
+            "Windows resolves junction\\.. lexically, so this really is the in-sandbox file"
+        );
 
         std::fs::remove_dir_all(&tmp).ok();
     }

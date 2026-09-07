@@ -64,27 +64,40 @@ def diff_snapshots(
             return f"{key[0]}.{key[1]}"
         return str(key)
 
+    # Comparison identity: when the baseline declares one of these, the current scoreboard must
+    # declare it too and it must match. Requiring only "if both declare, they must agree" was
+    # itself fail-open — a current scoreboard that simply omits `verifier`/`total` skipped the
+    # guard entirely and could still be certified against a baseline that declares them.
     baseline_verifier = baseline.get("verifier")
     current_verifier = current.get("verifier")
-    if (
-        baseline_verifier is not None
-        and current_verifier is not None
-        and baseline_verifier != current_verifier
-    ):
-        raise ValueError(
-            f"Verifier mismatch: baseline was scored with {baseline_verifier!r}, "
-            f"current is {current_verifier!r}. Compare scoreboards produced by the "
-            "same verifier."
-        )
+    if baseline_verifier is not None:
+        if current_verifier is None:
+            raise ValueError(
+                f"current scoreboard does not declare a verifier; baseline was scored with "
+                f"{baseline_verifier!r}. Cannot certify no regression against an unidentified run."
+            )
+        if baseline_verifier != current_verifier:
+            raise ValueError(
+                f"Verifier mismatch: baseline was scored with {baseline_verifier!r}, "
+                f"current is {current_verifier!r}. Compare scoreboards produced by the "
+                "same verifier."
+            )
 
     baseline_total = baseline.get("total")
     current_total = current.get("total")
-    if baseline_total is not None and current_total is not None and baseline_total != current_total:
-        raise ValueError(
-            f"Population mismatch: baseline total={baseline_total}, "
-            f"current total={current_total}. Compare scoreboards over the same "
-            "evaluation population (regenerate fixtures/current before diffing)."
-        )
+    if baseline_total is not None:
+        if current_total is None:
+            raise ValueError(
+                f"current scoreboard does not declare a population (`total`); baseline "
+                f"declares total={baseline_total}. Cannot certify no regression against an "
+                "unidentified population."
+            )
+        if baseline_total != current_total:
+            raise ValueError(
+                f"Population mismatch: baseline total={baseline_total}, "
+                f"current total={current_total}. Compare scoreboards over the same "
+                "evaluation population (regenerate fixtures/current before diffing)."
+            )
 
     regressions: list[dict[str, Any]] = []
     improvements: list[dict[str, Any]] = []

@@ -146,6 +146,40 @@ def test_diff_snapshots_raises_when_current_drops_a_metric():
         diff_snapshots(baseline, {})
 
 
+# ── R3: a current scoreboard that simply OMITS identity must not slip past the guard ─────────
+#
+# Checking only "if both declare, they must agree" was itself fail-open: a current scoreboard
+# with no `verifier`/`total` at all skipped the compatibility check entirely and could be
+# certified against a baseline that declares them.
+
+
+def test_diff_snapshots_raises_when_current_omits_verifier():
+    baseline = _snapshot(total=847, verifier="success")
+    current = {"total": 847, "outcome_accuracy": 0.9, "avg_knaif_score": 0.9}
+    current["intent_metrics"] = {"tool_accuracy": 0.9, "schema_validity": 1.0}
+    with pytest.raises(ValueError, match="verifier"):
+        diff_snapshots(baseline, current)
+
+
+def test_diff_snapshots_raises_when_current_omits_total():
+    baseline = _snapshot(total=847, verifier="success")
+    current = {"verifier": "success", "outcome_accuracy": 0.9, "avg_knaif_score": 0.9}
+    current["intent_metrics"] = {"tool_accuracy": 0.9, "schema_validity": 1.0}
+    with pytest.raises(ValueError, match="population|total"):
+        diff_snapshots(baseline, current)
+
+
+def test_regression_current_without_identity_fails(monkeypatch, tmp_path):
+    """The same hole through the CLI: an unidentified current run must not certify."""
+    _patch_snapshot(monkeypatch, tmp_path, _snapshot(total=847, verifier="success"))
+    current_path = tmp_path / "current.json"
+    _write(current_path, {"outcome_accuracy": 1.0, "avg_knaif_score": 1.0})
+
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_regression(_reg_args(current=str(current_path)))
+    assert exc.value.code != 0
+
+
 def test_diff_snapshots_still_works_when_compatible():
     baseline = _snapshot(outcome=0.90)
     current = _snapshot(outcome=0.50)
