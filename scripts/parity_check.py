@@ -83,14 +83,80 @@ def _is_pathlike(tok: str) -> bool:
 
 
 def canon_token(tok: str) -> str:
-    """Comparison form of a token: path-like ones reduce to their basename.
+    """Comparison form of a *value already known to be a path*: reduce to its basename.
 
     Native emits relative paths (`clip.mp4`); Python resolves inputs to absolute
     (`C:/…/clip.mp4`). Both point to the same file under the shared cwd, so comparing by
     basename treats that representation difference as equal while a genuinely different
     filename/extension/output still diverges.
+
+    Used for plan-mode arg values (``_canon_scalar``, always typed as a path/string arg)
+    and as the ``cwd=None`` fallback for raw argv positions below. NOT used to decide
+    whether an arbitrary argv *token* is a path in the first place — ``_canon_argv``
+    does that positionally; see its docstring for why (audit F7).
     """
     return tok.rsplit("/", 1)[-1] if _is_pathlike(tok) else tok
+
+
+_DRIVE_ABS = re.compile(r"^[A-Za-z]:/")
+
+
+def _is_absolute_posixish(tok: str) -> bool:
+    """True for a forward-slashed POSIX (`/a/b`) or Windows-drive (`C:/a/b`) absolute path."""
+    return tok.startswith("/") or bool(_DRIVE_ABS.match(tok))
+
+
+def _resolve_against(cwd: str, tok: str) -> str:
+    """Lexically resolve *tok* against *cwd* (both forward-slashed) into a normalized
+    absolute form — pure text, no filesystem access. This compares two claimed argv
+    paths for equality under the shared working directory both runtimes ran under, not
+    their real targets, so it must not stat/resolve symlinks."""
+    joined = tok if _is_absolute_posixish(tok) else f"{cwd.rstrip('/')}/{tok}"
+    parts: list[str] = []
+    for part in joined.split("/"):
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if parts and parts[-1] != "..":
+                parts.pop()
+            else:
+                parts.append(part)
+        else:
+            parts.append(part)
+    prefix = "/" if joined.startswith("/") else ""
+    return prefix + "/".join(parts)
+
+
+def _canon_argv(argv: list[str], cwd: str | None) -> tuple[str, ...]:
+    """Canonicalize one ffmpeg argv *positionally* for parity comparison.
+
+    Only path-bearing argv positions are normalized: the value immediately after each
+    `-i` (repeatable, for concat), and the trailing output token. Every other token —
+    flags, codec settings, filter-graph expressions — is compared verbatim.
+
+    The old heuristic (``canon_token``: any token containing `/`) is right for a value
+    *already known* to be a path but wrong for a raw argv list: an ffmpeg filter
+    expression can contain `/` as arithmetic (e.g. `pad=1280:720:(ow-iw)/2:(oh-ih)/2`),
+    and blindly reducing that collapsed two different filters to the literal token `'2'`.
+    It also compared two path-position tokens by basename alone, so `a/clip.mp4` and
+    `b/clip.mp4` — genuinely different files in different directories — registered as
+    equal. Resolving against the shared *cwd* fixes both: a relative token (native) and
+    an absolute token (python) naming the same file resolve to the same absolute path,
+    while two different directories do not. See docs/audits/2026-09-07-core-principles-
+    and-rtx5080.md, F7.
+    """
+    out: list[str] = []
+    last = len(argv) - 1
+    for i, tok in enumerate(argv):
+        prev = argv[i - 1] if i > 0 else None
+        path_position = prev == "-i" or (i == last and i > 0 and not tok.startswith("-"))
+        if not path_position:
+            out.append(tok)
+        elif cwd is not None:
+            out.append(_resolve_against(cwd, tok))
+        else:
+            out.append(canon_token(tok))
+    return tuple(out)
 
 
 def _canon_scalar(v: object) -> str:
@@ -135,10 +201,18 @@ class Outcome:
     text: str = ""  # clarify/reject message or error detail
     raw: str = ""  # raw stdout+stderr, for the report on mismatch
 
-    def key(self) -> tuple:
-        """Comparison key: commands/plan canonicalized (paths → basename); else just kind."""
+    def key(self, cwd: str | None = None) -> tuple:
+        """Comparison key: commands/plan canonicalized; else just kind.
+
+        *cwd* (forward-slashed, from the shared ``--cwd`` both runtimes ran under)
+        resolves argv path-positions to absolute so a relative token (native) and an
+        absolute token (python) compare equal only when they name the SAME file — see
+        ``_canon_argv``. Omitting it falls back to basename-only canonicalization,
+        which conflates same-named files in different directories; every real caller
+        should pass it.
+        """
         if self.kind == "commands":
-            return ("commands", tuple(tuple(canon_token(t) for t in c) for c in self.commands))
+            return ("commands", tuple(_canon_argv(c, cwd) for c in self.commands))
         if self.kind == "plan":
             return ("plan", tuple(canon_plan_step(s) for s in self.plan))
         return (self.kind,)
@@ -548,10 +622,21 @@ def plan_equiv_modulo_defaults(a_steps: list[dict], b_steps: list[dict]) -> str 
 
 
 def compare(
-    row: Row, native: Outcome, py: Outcome, strict: bool, plan_mode: bool = False
+    row: Row,
+    native: Outcome,
+    py: Outcome,
+    strict: bool,
+    plan_mode: bool = False,
+    cwd: str | None = None,
 ) -> tuple[str, str]:
     """Return (status, note). status ∈ {match, mismatch, decline-divergence,
-    not-comparable, chain-native-single-step}."""
+    not-comparable, chain-native-single-step}.
+
+    *cwd*: forward-slashed shared working directory both runtimes ran under — passed
+    through to ``Outcome.key()`` for command-mode argv path canonicalization (F7). The
+    real caller (``main``) always has one; self-test's synthetic assertions that don't
+    need it (plan mode, rendered-none) may omit it.
+    """
     # One side planned but its dry-run renders no command (python compress/platform/thumbnail/
     # batch) — can't command-compare, so exclude rather than score as drift.
     if "rendered-none" in (native.kind, py.kind):
@@ -560,7 +645,7 @@ def compare(
             "python dry-run emits no command for this intent (compress/platform/thumbnail/batch)",
         )
     # Plan mode: accept plans that differ only by materialized optional-arg defaults.
-    if plan_mode and native.kind == "plan" and py.kind == "plan" and native.key() != py.key():
+    if plan_mode and native.kind == "plan" and py.kind == "plan" and native.key(cwd) != py.key(cwd):
         eq = plan_equiv_modulo_defaults(native.plan, py.plan)
         if eq is not None:
             return "match", eq
@@ -579,7 +664,7 @@ def compare(
         if native.commands and py.commands and native.commands[0] == py.commands[0]:
             return "chain-native-single-step", "native step-1 command matches python step-1"
         return "chain-native-single-step", "native single-step; first command differs (inspect)"
-    if native.key() == py.key():
+    if native.key(cwd) == py.key(cwd):
         # Equal actions, but flag when they only match after path normalization (native
         # emits relative paths, python absolute) so the representation gap stays visible.
         if native.kind == "commands" and native.commands != py.commands:
@@ -688,6 +773,7 @@ def main() -> int:
         )
 
     cwd = (args.cwd or REPO_ROOT).resolve()
+    cwd_posix = cwd.as_posix()  # for Outcome.key()'s argv path-position resolution (F7)
     tags_filter = {t.strip() for t in args.tags.split(",") if t.strip()} or None
     rows = load_rows(args.skill, tags_filter)
     if args.skip_chains:
@@ -720,7 +806,7 @@ def main() -> int:
     }
 
     def handle(idx: int, row: Row, native: Outcome, py: Outcome) -> None:
-        status, note = compare(row, native, py, args.strict, plan_mode=plan_mode)
+        status, note = compare(row, native, py, args.strict, plan_mode=plan_mode, cwd=cwd_posix)
         counts[status] = counts.get(status, 0) + 1
         icon = {
             "match": "✓",
@@ -889,6 +975,38 @@ def _self_test() -> int:
     # A different OUTPUT filename (not just abs/rel) must still mismatch.
     other = parse_python("  $ ffmpeg -y -i clip.mp4 -c copy renamed.mkv\n", "")
     assert nrel.key() != other.key(), "different basename must mismatch"
+    # F7: only `-i`'s value and the trailing output token are path positions — a filter
+    # expression containing '/' as arithmetic (pad's centering) must never be touched, so
+    # two DIFFERENT filters must still mismatch instead of both collapsing to the same key.
+    f720 = parse_native(
+        "ffmpeg -y -i clip.mp4 -vf "
+        "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2 "
+        "out.mp4\n",
+        "",
+    )
+    f360 = parse_native(
+        "ffmpeg -y -i clip.mp4 -vf "
+        "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2 "
+        "out.mp4\n",
+        "",
+    )
+    assert f720.key() != f360.key(), (
+        f"different filter expressions must not collapse to the same key:\n"
+        f"{f720.key()}\n{f360.key()}"
+    )
+    # F7: two DIFFERENT source directories that happen to share a basename must not be
+    # conflated when resolved against the shared cwd both runtimes ran under — only a
+    # native-relative token and a python-absolute token naming the SAME file should match.
+    a_dir = parse_native("ffmpeg -y -i a/clip.mp4 out.mp4\n", "")
+    b_dir = parse_native("ffmpeg -y -i b/clip.mp4 out.mp4\n", "")
+    assert a_dir.key(cwd="/work/fixtures") != b_dir.key(
+        cwd="/work/fixtures"
+    ), "different source directories sharing a basename must not canonicalize equal"
+    py_abs_same = parse_python("  $ ffmpeg -y -i /work/fixtures/clip.mp4 out.mp4\n", "")
+    nat_rel_same = parse_native("ffmpeg -y -i clip.mp4 out.mp4\n", "")
+    assert nat_rel_same.key(cwd="/work/fixtures") == py_abs_same.key(
+        cwd="/work/fixtures"
+    ), "native-relative vs python-absolute of the SAME file under the shared cwd must match"
     # Python compress/platform dry-run: a plan summary + "(nothing to execute)" → rendered-none,
     # and comparing against native commands must be not-comparable, not a mismatch.
     rn = parse_python(

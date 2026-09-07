@@ -356,10 +356,20 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `python/core/tests/test_tool_trust_boundary.py` (registry-only) +
     `skills/ffmpeg/python/tests/test_trust_boundary_ffmpeg.py` (the audit's two literal
     reproductions, executed for real — both now raise before any subprocess/file write).
-  - [ ] **F7 — parity `canon_token` collapses meaningful differences.** Any `/`-containing
-    token is reduced to its basename, so `a/clip.mp4`/`b/clip.mp4` compare equal and FFmpeg
-    filter expressions with `/` (e.g. `pad=...(ow-iw)/2`) collapse to `'2'`. Normalize paths
-    only in known argv positions; keep filter strings verbatim or parse them semantically.
+  - [x] **F7 — parity `canon_token` collapses meaningful differences, fixed.** Any
+    `/`-containing token was reduced to its basename, so `a/clip.mp4`/`b/clip.mp4`
+    compared equal and FFmpeg filter expressions with `/` (e.g. `pad=...(ow-iw)/2`)
+    collapsed to `'2'`. Fixed: `Outcome.key()` now canonicalizes argv *positionally*
+    (`_canon_argv`) — only the value after each `-i` and the trailing output token,
+    never a filter/codec argument — and resolves those path positions lexically
+    against the shared `--cwd` (`_resolve_against`, text-only, no filesystem access)
+    instead of basename alone, so `a/clip.mp4` and `b/clip.mp4` correctly stay
+    different while native-relative and python-absolute of the *same* file still
+    match. `compare()`/`main()` thread `cwd` through; `key(cwd=None)` keeps the old
+    basename fallback for callers with no shared cwd. Tests: new assertions in
+    `scripts/parity_check.py`'s `--self-test` reproducing both audit examples
+    (RED confirmed pre-fix — the filter pair literally collapsed to `'2'` — GREEN
+    post-fix).
   - [ ] **F3/F4 — native path resolution / sandbox containment.** Native FFmpeg probes
     `inputs` directly against the process cwd (bypasses sandbox resolution entirely); native
     sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) are lexical-only and don't
