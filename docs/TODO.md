@@ -406,10 +406,28 @@ This **Open / Next** section is the live backlog (originally distilled from the
       test pre-fix, GREEN post-fix. Full workspace (`cargo test --workspace`): 260
       passed, 0 failed; `cargo fmt --all -- --check` and
       `cargo clippy --workspace --all-targets -- -D warnings` both clean.
-  - [ ] **F5 — native `run` silently drops every plan step after the first.** `main.rs` only
-    dispatches `steps.first()`; a valid multi-step plan (e.g. strip-audio → resize) previews
-    only step one and exits 0. Either implement full ordered dispatch or explicitly reject
-    multi-step plans instead of reporting success on a truncated one.
+  - [x] **F5 — native `run` silently drops every plan step after the first, fixed (interim,
+    per the audit's own recommendation).** `main.rs` only dispatched `steps.first()`; a valid
+    multi-step plan (e.g. strip_audio → resize_video) previewed/executed only step one and
+    still exited 0 — reporting full success for partial completion, and for a destructive
+    plan, silently skipping a real side effect the request asked for. A full ordered
+    multi-step executor (variable binding, per-intent confirmation, chain execution) is a
+    substantially larger feature than this bug fix — the audit explicitly OKs the interim:
+    "explicitly reject unsupported multi-step execution instead of reporting success for
+    only the first step." Fixed: new `decide_steps`/`StepDecision` (`Empty` / `Single(idx)` /
+    `Unsupported { total }`) — a plan with more than one step now prints
+    `reject: this request needs N steps, ...` (no partial dispatch of step 1 at all) and
+    returns, using the same `reject:`-prefixed convention `cmd_run` already uses for a real
+    `reject` plan step, so `scripts/parity_check.py`'s `parse_native` picks it up as
+    `kind="reject"` for free — no parity-tooling code change needed, only its now-stale
+    "previews only step 1" docstring/comment (updated: a chain row's native outcome is now
+    `reject`, so it correctly falls through to `mismatch` against python's multi-command
+    outcome rather than the old lenient `chain-native-single-step` bucket, which is kept for
+    its narrower original trigger — both sides still rendering `commands` — not deleted).
+    Tests: `decide_steps_empty_plan_is_empty` / `_single_step_is_ok` /
+    `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
+    needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
+    260); fmt + clippy clean.
   - [ ] **F9 — re-lock acceptance snapshots after F6.** FFmpeg's snapshot uses `verifier:
     cheap` (forbidden as an acceptance bar per `docs/EVAL_FRAMEWORK.md`) and both snapshots'
     stored population is behind the current corpus — this is the pre-existing re-lock item

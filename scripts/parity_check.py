@@ -16,9 +16,15 @@ normalized to a token list so cosmetic quoting/spacing differences don't registe
 *type* (commands / clarify / reject / none) is compared first; argv only when both produced
 commands.
 
-Known scope limit: native `run` currently previews only the FIRST plan step (main.rs), so
-multi-intent chains (e.g. convert→strip) can't be command-compared yet. Such rows are
-reported as `chain-native-single-step`, not as a mismatch, unless --strict is given.
+Known scope limit: native `run` (main.rs) executes exactly one intent per invocation — there
+is no ordered multi-step executor yet (variable binding, per-intent confirmation, chain
+execution). It used to silently preview/execute only the FIRST plan step and drop the rest;
+per docs/audits/2026-09-07-core-principles-and-rtx5080.md (F5), it now explicitly rejects a
+multi-step plan instead (`reject: this request needs N steps, ...`), so a chain row's native
+outcome is `reject`, not `commands`, and correctly compares as a `mismatch` against python's
+multi-command outcome rather than being scored `chain-native-single-step`. That bucket is
+kept for its original narrower trigger (both sides render `commands`, e.g. a same-intent
+multi-input row) but no longer fires for genuinely multi-intent chains.
 
 Usage (normally via `just parity ffmpeg`, which builds native first):
     uv run python scripts/parity_check.py --skill ffmpeg \
@@ -650,8 +656,13 @@ def compare(
         if eq is not None:
             return "match", eq
         return "mismatch", "plan tools/args differ"
-    # Chain leniency applies ONLY in command mode, where native `run` previews just step 1. In
-    # plan mode native `plan --json` emits the full plan, so chains compare end-to-end.
+    # Narrower than it looks: since F5 (native `run` rejects a multi-step plan outright rather
+    # than silently previewing step 1 — see the module docstring), a genuinely multi-intent
+    # chain's native outcome is `reject`, so it never satisfies `native.kind == "commands"`
+    # here and falls through to the generic mismatch below. This branch's only remaining
+    # trigger is the narrower case both sides still render `commands` for a chain-tagged row
+    # (e.g. a same-intent multi-input step). In plan mode native `plan --json` emits the full
+    # plan, so chains compare end-to-end regardless.
     if (
         not plan_mode
         and row.is_chain
@@ -659,8 +670,7 @@ def compare(
         and py.kind == "commands"
         and not strict
     ):
-        # Native previews only step 1; a prefix match on the first command is the best we
-        # can assert until native `run` chains. Flag it rather than fail it.
+        # A prefix match on the first command is the best we can assert here.
         if native.commands and py.commands and native.commands[0] == py.commands[0]:
             return "chain-native-single-step", "native step-1 command matches python step-1"
         return "chain-native-single-step", "native single-step; first command differs (inspect)"
