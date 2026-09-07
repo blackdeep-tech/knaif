@@ -370,11 +370,42 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `scripts/parity_check.py`'s `--self-test` reproducing both audit examples
     (RED confirmed pre-fix — the filter pair literally collapsed to `'2'` — GREEN
     post-fix).
-  - [ ] **F3/F4 — native path resolution / sandbox containment.** Native FFmpeg probes
-    `inputs` directly against the process cwd (bypasses sandbox resolution entirely); native
-    sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) are lexical-only and don't
-    resolve symlinks/junctions, so a junction inside the sandbox reads outside it (reproduced
-    on Windows; Python's `_resolve_path` already rejects the same case).
+  - [x] **F3/F4 — native path resolution / sandbox containment, fixed.** Native FFmpeg
+    probed `inputs` directly against the process cwd, bypassing sandbox resolution
+    entirely; native sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) were each
+    their own lexical-only `.`/`..` collapse and didn't resolve symlinks/junctions, so a
+    junction inside the sandbox read outside it (reproduced on Windows; Python's
+    `_resolve_path` already rejected the same case, since `Path.resolve()` calls into the
+    OS). Fixed:
+    - **F4 (shared primitive):** new `knaif-core::sandbox` module —
+      `resolve_real(p, base)` canonicalizes every *existing* ancestor (following
+      symlinks/junctions) and appends any not-yet-created tail lexically on top, falling
+      back to pure lexical normalization only when nothing on the path exists at all;
+      `assert_in_sandbox` uses it for the boundary check. Re-exported from
+      `knaif-skill-api::sandbox` (both `ffmpeg`-native and `documents`-native already
+      depend on that crate) — that's a real module now, not the "skeleton only" stub F11
+      also flags. `knaif-core::planner::resolve_path`'s sandboxed branch, ffmpeg
+      `engine.rs`'s `assert_in_sandbox`, and documents `run.rs`'s `assert_in_sandbox` all
+      now delegate to the shared primitive instead of their own local
+      `lexical_abs`/`lexical_normalize` copies (removed as dead code).
+    - **F3 (missing input check):** `expand`/`expand_concat` in ffmpeg `run.rs` now call
+      a new `assert_input_in_sandbox` — port of Python's `ResolveInputs` step (relative
+      paths resolve against the sandbox, not cwd) — on every `inputs` entry *before*
+      `probe_input` reads it. Only the derived *output* path was ever checked before;
+      that doesn't protect a read (an absolute input outside the sandbox with an
+      explicit in-sandbox output reached `ffprobe`/render with no rejection). The
+      raw/possibly-relative input string still flows into `probe_input`/`render_command`
+      unchanged — this only gates the read, it doesn't change what gets rendered.
+    - Tests: `knaif-core::sandbox` unit tests (including a real Windows junction via
+      `mklink /J`, no admin needed, plus a parallel Unix symlink test) +
+      `planner::tests::sandbox_boundary_rejects_a_junction_escape` (through the real
+      `validate_step` entry point) + `engine::tests::assert_in_sandbox_rejects_a_
+      junction_escape` (ffmpeg) + `run::tests::sandbox_junction_escape_rejected`
+      (documents) + `run::tests::sandbox_input_escape_with_in_sandbox_output_is_rejected`
+      (ffmpeg, F3's exact repro shape). RED confirmed on every junction/input-escape
+      test pre-fix, GREEN post-fix. Full workspace (`cargo test --workspace`): 260
+      passed, 0 failed; `cargo fmt --all -- --check` and
+      `cargo clippy --workspace --all-targets -- -D warnings` both clean.
   - [ ] **F5 — native `run` silently drops every plan step after the first.** `main.rs` only
     dispatches `steps.first()`; a valid multi-step plan (e.g. strip-audio → resize) previews
     only step one and exits 0. Either implement full ordered dispatch or explicitly reject

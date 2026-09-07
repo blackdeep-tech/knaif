@@ -111,6 +111,7 @@ pub fn expand(
     };
     let mut commands = Vec::with_capacity(resolved.inputs.len());
     for input in &resolved.inputs {
+        assert_input_in_sandbox(input, sandbox)?;
         let probe = probe_input(Path::new(input), data, mode)?;
         let recipe = build_one_recipe(
             &probe,
@@ -145,6 +146,7 @@ fn expand_concat(
 
     let mut infos = Vec::with_capacity(inputs.len());
     for input in &inputs {
+        assert_input_in_sandbox(input, sandbox)?;
         let probe = probe_input(Path::new(input), data, mode)?;
         infos.push(crate::concat::ConcatInfo::from_probe(&probe));
     }
@@ -175,6 +177,28 @@ fn assemble_concat_inputs(args: &serde_json::Map<String, Value>) -> anyhow::Resu
     } else {
         coerce_inputs(args.get("inputs"))
     }
+}
+
+/// Validate one `inputs` entry against the sandbox *before* it is probed/read — port of
+/// Python's `ResolveInputs` step (a relative path resolves against the sandbox, not cwd; both
+/// it and the sandbox are then resolved filesystem-real, so a symlink/junction inside the
+/// sandbox pointing outside it is caught the same way Python's `Path.resolve()` already
+/// catches it). No-op when `sandbox` is `None` (open / CLI mode).
+///
+/// Previously `expand`/`expand_concat` probed `inputs` directly with no resolution or
+/// containment check at all — only the *derived output* path was ever checked, which
+/// doesn't protect a read: an absolute input outside the sandbox reached `ffprobe` (and the
+/// rendered command) as long as its own derived/explicit output happened to land inside the
+/// sandbox. This gates the read itself, independent of the output. It does not change what
+/// gets probed or rendered — the raw `raw` string still flows into `probe_input`/
+/// `render_command` unchanged, preserving native's existing relative-path convention there.
+/// See docs/audits/2026-09-07-core-principles-and-rtx5080.md, F3.
+fn assert_input_in_sandbox(raw: &str, sandbox: Option<&Path>) -> anyhow::Result<()> {
+    let Some(sb) = sandbox else {
+        return Ok(());
+    };
+    let resolved = knaif_skill_api::sandbox::resolve_real(Path::new(raw), sb);
+    knaif_skill_api::sandbox::assert_in_sandbox(&resolved, sb)
 }
 
 /// Resolve a (possibly relative) output path against the sandbox, else cwd (open mode).
@@ -942,5 +966,42 @@ mod tests {
             Some(sandbox),
         );
         assert!(err.is_err(), "output outside the sandbox must be rejected");
+    }
+
+    #[test]
+    fn sandbox_input_escape_with_in_sandbox_output_is_rejected() {
+        // F3's precise gap: `sandbox_escape_is_rejected` above passes, but only because the
+        // DERIVED output (from the out-of-sandbox input's own directory) also lands outside
+        // the sandbox — the output-side check catches it by accident. Here the explicit
+        // output is genuinely inside the sandbox, so the output check alone would pass; this
+        // only fails if `inputs` is itself resolved + boundary-checked before being probed
+        // (the audit's literal repro: an absolute input outside the sandbox with an explicit
+        // output inside it reached `ffprobe`/render with no rejection).
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-ffmpeg-run-test-{}-input-escape",
+            std::process::id()
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let outside_input = outside.join("secret.mp4");
+        let in_sandbox_output = sandbox.join("escaped-read.mp4");
+
+        let result = expand_dry_run(
+            "strip_audio",
+            &args(serde_json::json!({
+                "inputs": outside_input.to_string_lossy(),
+                "output": in_sandbox_output.to_string_lossy(),
+            })),
+            &data(),
+            Some(&sandbox),
+        );
+        assert!(
+            result.is_err(),
+            "an out-of-sandbox input must be rejected even with an in-sandbox explicit output"
+        );
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }

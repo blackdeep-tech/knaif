@@ -9,3 +9,4 @@ description = "Handler context, Step/Intent traits, sandbox helpers — the cont
 
 [dependencies]
 knaif-core = { workspace = true }
+anyhow = { workspace = true }
