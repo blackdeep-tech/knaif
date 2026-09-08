@@ -767,6 +767,16 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
 
+        # Stamp backend identity into the scoreboard. The eval backend key
+        # (`backend_name`) is deliberately stable — it is the join key for run
+        # history — but it is cryptic (`qwen3-4b-sft-v3-flat-q4`). When the config
+        # declares a `public_name`, carry the shipped model name too so the report
+        # can label the arm by it (e.g. `knaif-qwen3-4b-v1`). INDEX.md notes that
+        # scoreboards otherwise record no backend at all.
+        scoreboard["backend"] = backend_name
+        if backend_cfg and backend_cfg.get("public_name"):
+            scoreboard["backend_public_name"] = backend_cfg["public_name"]
+
         results[backend_name] = scoreboard
 
         # Persist BEFORE rendering. Rendering is cosmetic; the run behind it can be an hour of

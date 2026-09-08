@@ -1,8 +1,9 @@
 # evals — run history
 
-Per-skill scoreboard JSONs carry **no embedded metadata** (no date, git SHA, backend, or
-corpus hash — backend is only in the filename, mode is the `verifier` field). This index is
-the source of truth for *what each run was against*. **Add a row here whenever you save a run.**
+Per-skill scoreboard JSONs carry **almost no embedded metadata** (no date, git SHA, or
+corpus hash — mode is the `verifier` field, and `run` stamps `backend` plus, for a promoted
+model, `backend_public_name`). This index is the source of truth for *what each run was
+against*. **Add a row here whenever you save a run.**
 
 **Exception — all-skills sweeps.** `run --all-skills` also writes a `matrix.json` carrying a
 `meta` block (`label`, `date`, `git_sha`, `git_branch`, `backends`) plus a per-skill ×
