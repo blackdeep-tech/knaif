@@ -539,8 +539,13 @@ eval-stage skill stage *args:
 eval-backends skill *args:
     uv run python -m knaif.evalsuite compare --skill {{skill}} --config eval_backends.yaml --verifier cheap {{args}}
 
-# Writes the bar to skills/<skill>/data/eval_snapshot.json — do it deliberately, in its own
-# commit, and only when adopting a measured improvement. Run artifacts go under evals/ like every
+# Writes the bar to skills/<skill>/data/eval_snapshot.json — do it deliberately and in its own
+# commit. Two legitimate reasons, and say which one applies: (1) adopting a MEASURED IMPROVEMENT
+# — prove it with a per-row join at the same verifier and population, not an aggregate; or
+# (2) a COVERAGE re-lock, when the stored population or verifier can no longer evaluate the
+# current corpus at all, so the gate raises rather than judging. The 2026-09-08 re-lock was one
+# of each: ffmpeg an improvement, documents pure coverage. Never re-lock to make a red gate go
+# green. Run artifacts go under evals/ like every
 # other run; .gitignore keeps only the durable summaries (score.json, report.md), so commit the
 # run and add a row to evals/INDEX.md rather than pruning by hand.
 # The verifier is an argument, not a constant. It used to be hardcoded `output_diff`, which

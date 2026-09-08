@@ -481,7 +481,17 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
     needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
     260); fmt + clippy clean.
-  - [x] **F9 — acceptance snapshots RE-LOCKED (2026-09-08), in their own PR.** Both skills now
+  - [~] **F9 — acceptance snapshots RE-LOCKED (2026-09-08). HALF DONE — the identity half is
+    outstanding.** The audit asked for two things: adopt compatible full-corpus executing
+    snapshots, *and* "store corpus hash/row IDs, model checksum/config, and code identity" in
+    them. The first is done (below). The second is **not**: the re-locked snapshots carry
+    metrics plus `backend`/`backend_public_name` (a side effect of the report-labelling
+    change) but no corpus hash, no row IDs, no model sha256, no git SHA. Until that lands the
+    gate still cannot distinguish "behavior changed" from "someone edited the corpus" — the
+    exact conflation the audit flagged, and the one that makes an aggregate verdict
+    unreadable after a corpus edit. Do not mark F9 closed on the strength of the re-lock
+    alone.
+    What IS done — both skills now
     hold a full-corpus **`success`** bar: ffmpeg `cheap`/297 → **`success`/847** (outcome
     0.902 / knaif 0.9738 / tool 0.891 / schema 0.985), documents `success`/129 →
     **`success`/164** (0.976 / 1.000 / 0.976 / 0.9939). Runs:
