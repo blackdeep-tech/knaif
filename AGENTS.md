@@ -80,13 +80,14 @@ Skill-hosting (operator / eval path):
 ```python
 from knaif import create_agent, list_skills
 
-list_skills()                                    # ["documents", "ffmpeg", "io"]
-agent = create_agent("io", sandbox="./sandbox")  # fully wired CommandAgent
+list_skills()                                        # ["documents", "ffmpeg"]
+                                                     # `io` is status: stale, hidden from discovery
+agent = create_agent("ffmpeg", sandbox="./sandbox")  # fully wired CommandAgent
 
 from knaif import CommandAgent
 
-agent = CommandAgent.from_skill("skills/io", sandbox="./sandbox")
-agent = CommandAgent("skills/io/tools.yaml", sandbox="./sandbox")
+agent = CommandAgent.from_skill("skills/ffmpeg", sandbox="./sandbox")
+agent = CommandAgent("skills/ffmpeg/tools.yaml", sandbox="./sandbox")
 ```
 
 Developer SDK (embedding NL in your own CLI — see `docs/SDK.md`):
@@ -141,11 +142,13 @@ User input
   -> build_prompt()
   -> model or mock inference
   -> parse_plan()
-  -> validate_plan()
-  -> [optional] summarize_plan() → plan_display callback   (StepA, show_plan=True)
-  -> [optional] plan_confirmer approval gate               (StepB, require_approval=True)
+  -> validate_plan()                                        (model output; internal tools rejected)
   -> Intent.expand()
+  -> validate expanded plan                                 (trusted; allow_internal=True)
   -> optimize_plan()
+  -> preflight()                                            (skipped if dry_run)
+  -> [optional] summarize_plan() → plan_display callback    (StepA, show_plan=True)
+  -> [optional] plan_confirmer approval gate                (StepB, require_approval=True)
   -> resolve_args()
   -> Step.handle() with HandlerContext   (via tool_map)
 ```
@@ -312,8 +315,11 @@ Training code is in `python/training/`.
 ### 3. Native port
 
 `skills/<name>/native/` is a workspace member in the root `Cargo.toml`, consuming
-`knaif-skill-api` (the Rust `HandlerContext` / `Step` / `Intent` equivalents). `skill.yaml`
-declares which runtimes implement the skill:
+`knaif-skill-api` — which today provides the shared `sandbox` helpers only. The Rust
+`HandlerContext` / `Step` / `Intent` equivalents **do not exist yet**: native skills are
+dispatched by per-domain branches in `apps/cli`, so porting a skill means wiring it there
+too, not implementing a generic trait (audit F11). `skill.yaml` declares which runtimes
+implement the skill:
 
 ```yaml
 runtimes:

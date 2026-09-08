@@ -1,15 +1,20 @@
-//! Native intent expansion → dry-run command rendering (Phase 7 execution layer, first slice).
+//! Native intent expansion → command rendering and execution.
 //!
-//! [`expand_dry_run`] is the native equivalent of a Python ffmpeg `Intent.expand` followed by
-//! the deterministic `build_recipes` → `render_batch_commands` steps, collapsed into one pass
+//! [`expand`] is the native equivalent of a Python ffmpeg `Intent.expand` followed by the
+//! deterministic `build_recipes` → `render_batch_commands` steps, collapsed into one pass
 //! because the native `run` verb owns the whole workflow (no intermediate model-visible steps).
-//! Given a validated intent step (`tool` + `args`) it maps the args to engine [`Options`], probes
-//! each input with the deterministic [`dummy_probe`], and renders the full `ffmpeg` argv per input
-//! via `build_one_recipe → build_flags → render_command`. No subprocess, no file access — the
-//! execution + confirmation gates land in the next slice.
+//! Given a validated intent step (`tool` + `args`) it maps the args to engine [`Options`],
+//! resolves and sandbox-checks every input via [`resolve_input_in_sandbox`], probes it, and
+//! renders the full `ffmpeg` argv per input via
+//! `build_one_recipe → build_flags → render_command`.
 //!
-//! Scope: the single-recipe intents (one `ffmpeg` command per input). `join_videos` (concat /
-//! `-filter_complex`) is deferred with real execution.
+//! Two probe modes: [`expand_dry_run`] uses the deterministic [`dummy_probe`] (no file access),
+//! while [`expand_execute`] runs real `ffprobe` against the resolved input — so this module
+//! *does* touch the filesystem and spawn subprocesses on the execute path. `join_videos`
+//! (concat / `-filter_complex`) is implemented in [`expand_concat`].
+//!
+//! Sandbox note: inputs are validated *and read* through the resolved path (audit F3/R1) —
+//! never validate one representation and open another.
 
 use std::path::Path;
 

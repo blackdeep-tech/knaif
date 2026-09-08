@@ -481,16 +481,71 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
     needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
     260); fmt + clippy clean.
-  - [ ] **F9 — re-lock acceptance snapshots after F6.** FFmpeg's snapshot uses `verifier:
-    cheap` (forbidden as an acceptance bar per `docs/EVAL_FRAMEWORK.md`) and both snapshots'
-    stored population is behind the current corpus — this is the pre-existing re-lock item
-    above (*"Re-lock the ffmpeg snapshot with `output_diff`"*), now unblocked now that the
-    gate that would consume the re-lock is fail-closed. Do this deliberately, in its own
-    commit, per AGENTS.md.
-  - [ ] **F10 — runtime output verification doesn't check requested properties**,
-    **F11 — `knaif-skill-api`'s `HandlerContext`/`Step`/`Intent` are still an empty
-    skeleton** (F1–F5's dual-implementation risk traces back to this; the crate's
-    `sandbox` module is no longer part of the gap — see F3/F4 above).
+  - [x] **F9 — acceptance snapshots RE-LOCKED (2026-09-08), in their own PR.** Both skills now
+    hold a full-corpus **`success`** bar: ffmpeg `cheap`/297 → **`success`/847** (outcome
+    0.902 / knaif 0.9738 / tool 0.891 / schema 0.985), documents `success`/129 →
+    **`success`/164** (0.976 / 1.000 / 0.976 / 0.9939). Runs:
+    `evals/runs/2026-09-08_f9-relock_success`.
+    **Two different justifications, deliberately.** ffmpeg is a *measured improvement* —
+    joined per row against the pre-fix run at the same verifier and population: 0 outcome
+    flips, 0 score drops, 4 gains, all `ffmpeg_273` at 0.667 → 1.000, precisely the rows the
+    chain-execution fix targeted. documents is a *coverage* re-lock, **not** an improvement:
+    behavior is bit-identical (0 flips over 163 joined utterances) and the aggregate move is
+    entirely the population (129 → 164, adding the harder strata). AGENTS.md's "only when
+    adopting a measured improvement" is about not hiding regressions; a bar that the
+    now-fail-closed gate *cannot evaluate* (population mismatch → raises) is the other
+    legitimate reason to re-lock, and the audit prescribes it.
+    ⚠️ **Verifier is `success`, not `output_diff`** — reversing what this entry and
+    `just eval-snapshot` previously assumed. The corpus-level counts (218 baselines vs 145
+    `success_criteria`) predict the wrong winner; measured head-to-head on the real runs,
+    `success` grades **574** plan rows (91.2%) to output_diff's **527** (86.0%), and
+    output_diff's extra misses are encoder-level diffs against the baseline command's output
+    (`pix_fmt`, `size` ±20%) rather than artifact correctness. `just eval-snapshot` now takes
+    the verifier as an argument (default `success`) instead of hardcoding `output_diff`, and
+    the SOP records how to choose. Gate verified **both ways** — exit 0 on the real run, exit
+    1 on an injected −0.05 regression.
+  - [x] **Harness defect found while doing F9: scoreboard rows had no per-utterance key.**
+    `score_corpus` (used by `cheap` **and** `success` — i.e. both committed bars) omitted
+    `utterance_idx`, which `score_corpus_output_diff` always emitted. A corpus row expands to
+    many utterances sharing one `id`, so the only available join key was `id`, which keeps the
+    last utterance per row and silently discards the rest — ffmpeg's 847 entries collapse to
+    313, **63% of the regression evidence gone**, while still printing a confident
+    regressed/improved list built from mismatched utterance pairs. Doing exactly that during
+    this re-lock produced a plausible "9 regressed / 21 improved"; the correct key gave **0
+    and 0**. Fixed in `scoring.py` (tests:
+    `test_rows_carry_utterance_idx`, `test_rows_utterance_idx_distinguishes_utterances_of_one_row`),
+    and `docs/EVAL_VERIFICATION_SOP.md`'s documented join snippet — which keyed on `id` alone
+    and so carried the same defect — now keys on `(id, utterance)` text, with a note on why
+    `utterance_idx` is unsafe across pre-2026-09-08 runs.
+  - [ ] **F8 — Python and native feed the model different planning prompts.** Python retrieves
+    (5 of 13 public ffmpeg tools for the audit's probe, retrieval-ordered, retrieved examples);
+    native passes the full registry, filters internal tools, orders by YAML, and uses the static
+    examples block. Generation budget is **512 on both** — do not revive the corrected "2048 in
+    Python" claim. **Impact: Python eval scores do not establish shipped native planning
+    quality.** Known since 2026-08-08, not worsened by this branch. Do the controlled prompt
+    comparison in `docs/plans/2026-08-08-native-python-planning-parity.md` *before* attributing
+    any remaining model failure to the model, then measure the shipped native runtime with
+    executing criteria. Tracked follow-up; not blocking.
+  - [ ] **F10 — runtime output verification doesn't check requested properties.**
+    `VerifyOutputsStep` records a probe summary and marks a successfully-probed file verified
+    without asserting the requested duration/dimensions/codec; batch expansion supplies no
+    expected properties; core `_step_failed` looks at subprocess return codes, not
+    `verified: false`. So a zero-exit command producing the *wrong* artifact still looks
+    successful to the application. Note the asymmetry: the executing **eval** verifier is
+    stronger than this production check, so eval success does not imply equivalent runtime
+    verification exists. Fix = carry deterministic expected properties from the recipe into
+    verification and surface failures through the generic handler-result contract. Independent
+    feature; keep it distinct from model-routing work.
+  - [ ] **F11 — build (or formally retire) the generic native skill API.** `knaif-skill-api`
+    now ships the shared `sandbox` module (F3/F4), but `HandlerContext` and the `Step`/`Intent`
+    equivalents are still undefined; native skills are dispatched by per-domain branches in
+    `apps/cli`, and native confirmation is selected by those branches rather than by a generic
+    executor reading `ToolDef.safety_category`. F1–F5's dual-implementation risk traces back to
+    this. Python also still carries the legacy IO list/find/delete/move handlers in core
+    `executor.py` — move them into the bundle when the stale `io` skill is rebuilt. **The
+    documentation half is done** (`AGENTS.md` and `docs/NATIVE.md` no longer describe those
+    interfaces as available); what remains is either implementing the API or deciding to keep
+    the specialized host permanently. Large; sequence it with the io-skill rebuild.
   - [x] **Two pre-existing harness/validation defects the fix review surfaced, fixed.**
     Neither is an audit finding or a regression from these commits; both were
     under-measuring or mis-reporting real behavior.
@@ -566,10 +621,26 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - Also produced (documentation-only, already applied): the audit's ffmpeg evaluation row
     (was "Pending completion") and a `evals/INDEX.md` row for the RTX 5080 re-baseline —
     quality held across both hardware moves (ffmpeg outcome 0.902 vs. the 5080's prior 0.903
-    on record in `docs/PERFORMANCE.md` §1; documents 0.976). The audit's "Documentation
-    corrections to queue" table (native skill contract description, `AGENTS.md`'s stale
-    `list_skills()`/architecture-diagram claims, `docs/PERFORMANCE.md`'s hardware-invariance
-    wording, etc.) is still open.
+    on record in `docs/PERFORMANCE.md` §1; documents 0.976).
+  - [x] **The audit's "Documentation corrections to queue" table — all 11 rows applied.**
+    `docs/REQUIREMENTS.md` scope (the native CLI is the shipped interface; Python is the
+    authoring/eval/training runtime) and its refusal-routing caveat (that guarantee rests on
+    the deterministic layer, which *had* real holes — F1–F4 — so it is a property of tested
+    code, not an axiom); `AGENTS.md` `list_skills()` (actually `['documents', 'ffmpeg']`;
+    examples no longer use the stale `io`) and its architecture diagram (expand → validate →
+    optimize → preflight *before* the optional approval gate — `docs/ARCHITECTURE.md` was
+    already correct, only the AGENTS.md abbreviation was wrong); `AGENTS.md` + `docs/NATIVE.md`
+    native skill contract (see F11); `docs/PERFORMANCE.md` (states the observed 99.4%/98.7%
+    paired sample result instead of asserting universal hardware invariance);
+    `eval_backends.yaml` (availability is now a **live command**, not a hardcoded July machine
+    state — all 37 stanza GGUFs are in fact present on this box, the old comment claimed 2);
+    `just eval-regression` semantics (already corrected with F6);
+    `native/crates/knaif-llm/src/lib.rs` (llama.cpp is implemented behind the `llama` cargo
+    feature, not a future spike); `skills/ffmpeg/native/src/run.rs` (it does probe files, spawn
+    subprocesses, and support concat); `scripts/parity_check.py` (describes the real asymmetric
+    model selection — native raw path, Python a `models.yaml` *name* so per-model options
+    survive — and the same-weights identity guard). Historical plan docs under `docs/plans/`
+    were deliberately left alone: they record what the commands were at the time.
 - [x] **1.1.0 release — verification COMPLETE 2026-08-02. Every gate below has now been re-run
   against the rebuilt artifacts; what remains is publishing (tag the current tip of `main`, publish
   the draft, `twine upload python/core/dist/*`), not verifying.** Naming a commit here would be

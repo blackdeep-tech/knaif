@@ -20,7 +20,11 @@ The current library ships with two active built-in skills (plus `io`, which is
 - `ffmpeg`: media workflow intent tools expanded into deterministic FFmpeg workflows
 - `io`: sandboxed file listing, finding, moving, and deletion (**stale** — under rebuild)
 
-Primary interface is the Python library API. A CLI may be added later on top of `create_agent()` and `CommandAgent`.
+Two runtimes ship, with different roles. The **native Rust CLI** (`apps/cli`, the `knaif`
+binary) is the shipped end-user interface. The **Python library API**
+(`create_agent()` / `CommandAgent`) is the authoring, evaluation, and training runtime —
+it is where skills are written and where every acceptance measurement is taken. Both read
+the same YAML contracts and skill bundles; see [NATIVE.md](NATIVE.md).
 
 ## Out Of Scope
 
@@ -71,6 +75,18 @@ A small model routes many safety-sensitive requests to `clarify` rather than `re
 not executing those requests, it is asking a question, and every listed requirement
 above is enforced by deterministic sandbox-path validation and handler preflight
 regardless of which label the model picked.
+
+**This claim is only as good as the deterministic layer under it, and that layer has had
+real holes.** The 2026-09-07 audit reproduced four: model output could name an `internal:
+true` tool and pick the executed program (F1), a `destructive` intent expanding into
+`safe` leaves ran unconfirmed (F2), native FFmpeg read `inputs` with no containment check
+(F3), and every native sandbox check was lexical-only, blind to symlinks and Windows
+junctions (F4). All four are fixed
+([audit](audits/2026-09-07-core-principles-and-rtx5080.md),
+[fix review](audits/2026-09-07-fix-review.md)). Treat the sentence above as a statement
+about the enforcement code that exists *and is tested*, not as an axiom — when the
+deterministic layer changes, re-establish it with negative execution tests rather than
+assuming it still holds.
 
 So do not treat low refusal-routing accuracy as a security regression, and do not chase
 it with prompt tuning: the failing patterns are highly varied (FTP upload, shell exec,

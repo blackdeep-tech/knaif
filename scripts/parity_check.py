@@ -6,10 +6,17 @@ models. It verifies that the *ported deterministic pipeline* — prompt build �
 JSON extract → parse → normalize → defaults → validate → intent expand → command render —
 produces the SAME rendered ffmpeg command(s) on both runtimes for the same input.
 
-To make the comparison meaningful it pins BOTH runtimes to the *identical* GGUF file (via
-each CLI's raw-path escape hatch) and relies on both decoding greedily (native = argmax,
-Python = temperature 0), so the only expected source of divergence is a genuine sync gap
-in the port — or occasional floating-point argmax ties across different GPU backends.
+To make the comparison meaningful it pins BOTH runtimes to the *identical* GGUF, but they
+are selected differently and that difference is deliberate: native takes the raw path
+(`--model <path>`, the ground-truth weights), while Python takes a **models.yaml entry
+name** (`--python-model`), because a bare path would drop that entry's per-model options
+(`json_mode`, `thinking_enabled`, `n_ctx`, `max_tokens`) and silently compare two different
+configurations of the same weights. A pre-run identity guard resolves the name through
+models.yaml and errors if it does not point at the same GGUF as `--model-path` (warns, and
+proceeds, only when the name is absent from models.yaml). Both decode greedily (native =
+argmax, Python = temperature 0), so the only expected source of divergence is a genuine
+sync gap in the port — or occasional floating-point argmax ties across different GPU
+backends.
 
 What is compared: the final rendered ffmpeg argv from `run --dry-run` on each side, shlex-
 normalized to a token list so cosmetic quoting/spacing differences don't register. Outcome

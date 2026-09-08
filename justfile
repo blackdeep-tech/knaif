@@ -543,9 +543,14 @@ eval-backends skill *args:
 # commit, and only when adopting a measured improvement. Run artifacts go under evals/ like every
 # other run; .gitignore keeps only the durable summaries (score.json, report.md), so commit the
 # run and add a row to evals/INDEX.md rather than pruning by hand.
-# RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg)
-eval-snapshot skill *args:
-    uv run python -m knaif.evalsuite run --skill {{skill}} --verifier output_diff --snapshot --save evals/runs/snapshot_{{skill}}_output_diff {{args}}
+# The verifier is an argument, not a constant. It used to be hardcoded `output_diff`, which
+# silently disagreed with both committed bars: documents was always `success`, and measuring
+# ffmpeg both ways (2026-09-08) showed `success` grades 574 plan rows to output_diff's 527 —
+# so per EVAL_FRAMEWORK's "success, or output_diff where coverage is better", success wins.
+# Override only with evidence that output_diff covers more of the skill.
+# RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg [output_diff])
+eval-snapshot skill verifier="success" *args:
+    uv run python -m knaif.evalsuite run --skill {{skill}} --verifier {{verifier}} --snapshot --save evals/runs/snapshot_{{skill}}_{{verifier}} {{args}}
 
 # Regression check against saved snapshot. `current` is a scoreboard JSON from a real run
 # (e.g.: just eval-success ffmpeg --save evals/runs/2026-01-01_check --verifier <snapshot's verifier>,

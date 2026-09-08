@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -361,6 +362,39 @@ def test_rows_contain_expected_keys(tmp_path: Path):
         "baseline_score",
     ):
         assert key in row_entry, f"Missing key: {key}"
+
+
+def test_rows_carry_utterance_idx(tmp_path: Path):
+    """Every scoreboard row must identify WHICH utterance of its row it is.
+
+    Without it, the only per-row join key is `id`, which is not unique: a corpus
+    row expands to several utterances, so joining two runs on `id` alone silently
+    keeps one utterance per row and drops the rest (846 ffmpeg rows collapse to
+    313). `score_corpus_output_diff` always emitted this; `score_corpus` — used by
+    the `cheap` and `success` verifiers, i.e. both committed acceptance bars — did
+    not, so regression evidence taken from a `success` run was quietly lossy.
+    """
+    sb = score_corpus([_output()], [_row()], {"cheap": _perfect}, "cheap", tmp_path)
+    assert "utterance_idx" in sb["rows"][0]
+
+
+def test_rows_utterance_idx_distinguishes_utterances_of_one_row(tmp_path: Path):
+    """Two utterances of the same corpus row must be separately addressable."""
+    row = CorpusRow(
+        id="r001",
+        utterances=["convert to mp4", "make it an mp4"],
+        expected_outcome="plan",
+        expected_tool="convert_video",
+        tags=["convert"],
+    )
+    base = _output()
+    outputs = [
+        replace(base, utterance="convert to mp4", utterance_idx=0),
+        replace(base, utterance="make it an mp4", utterance_idx=1),
+    ]
+    sb = score_corpus(outputs, [row], {"cheap": _perfect}, "cheap", tmp_path)
+    keys = {(r["id"], r["utterance_idx"]) for r in sb["rows"]}
+    assert len(keys) == 2, f"utterances collapsed to {keys}"
 
 
 # ── time-to-artifact aggregates ───────────────────────────────────────────
