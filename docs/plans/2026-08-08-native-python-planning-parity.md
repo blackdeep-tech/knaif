@@ -1,10 +1,16 @@
 # Native/Python planning parity — the prompt gap, its contracts, and the eval-parity lane
 
-**Status:** Active — not started · **Created:** 2026-08-08 · **Revised:** 2026-08-08 (audit) ·
-**Completed:** —
+**Status:** Active — not started · **Created:** 2026-08-08 ·
+**Revised:** 2026-08-08 (audit), 2026-09-09 (decisions) · **Completed:** —
 **Owner:** core · **Ref:** absorbs **C4** from
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md); complements
 `scripts/parity_check.py`
+
+> **Status note:** Still not started — no code has moved. What changed on 2026-09-09 is that the
+> eight decisions left open inside the workstreams are **taken**, so P0 can start without stopping
+> to settle them mid-flight. They are collected in *Decisions taken* below and inlined at the item
+> each one governs. Two questions remain open, both deliberately deferred: `top_k` for larger
+> skills (answer after parity) and macOS contract coverage (unexercised, not passing).
 
 **Goal:** Make the native runtime plan identically to Python on the same model, and pin that with
 contracts CI can enforce without a GGUF — then measure what remains with an eval-parity lane.
@@ -125,7 +131,8 @@ one, and they do different things: native replaces **every** backslash in the ut
 any file-path utterance" — which is a claim about the corpus, not about the function, and it is
 **exactly** the shape of accepted-but-unmeasured divergence this plan exists to close. It is also
 the one most likely to surface on Windows, where utterances carry backslashes. R1 must cover it:
-quoted Windows paths, and backslashes that are not paths.
+quoted Windows paths, and backslashes that are not paths. **Decided 2026-09-09 — native adopts
+Python's rule; see Q5.**
 
 ### Why the prompt is the prime suspect
 
@@ -163,9 +170,44 @@ any single fix below.
 
 ---
 
+## Decisions taken (2026-09-09)
+
+Eight decisions were left open inside the workstreams — some flagged as such, some only visible as
+a "decide" verb in a bullet. They are settled here so no one has to stop mid-workstream to make
+them, and each is repeated at the item it governs, with the alternatives that were rejected.
+
+| Item | Decision |
+|---|---|
+| **Q5** | Path normalization: **native adopts Python's `_PATH_TOKEN_RE` rule** |
+| **R1** | Prompt-parity contract is **byte-for-byte, with no allow-list** |
+| **R4** | **Ubuntu in CI, Windows run locally**; matrix not widened; macOS stays a stated gap |
+| **P2b** | Baseline is the **committed `plan --batch` envelopes**, not an archived binary |
+| **Q3** | `max_tokens` canonical copy lives in **`contracts/runtime/`** |
+| **S1b** | Native lane gets a **separate top-level config section**, never under `backends:` |
+| **DoD** | Secondary aggregate tolerance: **within 2 points of `eval_snapshot.json`** |
+| **Q1** | `retrieve_tools` returns **`Vec<(String, &'a ToolDef)>`** |
+
+**Two of these are coupled, and the coupling is now load-bearing.** R1 byte-for-byte with no
+allow-list means Q5 is a *prerequisite* rather than cleanup: there is no way to record the
+path-normalization divergence as permitted, so R1 cannot go green until it is converged. That is
+the intended shape — it removes the option that produced this plan — but it also means a
+divergence found in P1 that resists convergence reopens R1 rather than slipping into a list.
+
+**Q3 changes R3's job** rather than merely relocating a constant; see R3.
+
+Still open, deliberately: `top_k` for larger skills, and macOS contract coverage. Both are in
+*Open questions* with the reason each is deferred.
+
 ## Workstream P — Diagnose before fixing
 
-- [ ] **P0 — Build the prompt dump first. There is currently no way to do P1.**
+- [x] **P0 — Build the prompt dump first. There is currently no way to do P1.** **Done
+  2026-09-09** — `$KNAIF_DUMP_PROMPT` (an env gate, not a `--dump-prompt` flag: the prompt is
+  built inside `PlanSession::plan`, which `plan`, `plan --batch` and `run` all share, so one gate
+  covers every path including the batch capture R1 needs). Writes the framed `(system, user)` to
+  **stderr**, leaving stdout's JSON envelope machine-readable. `prompt_dump` is pure with the gate
+  as a parameter, mirroring the existing `debug_dump`; three tests, one of which asserts both
+  messages survive **byte for byte** through trailing spaces, blank lines, a lone CR, tabs and
+  non-ASCII — the property P1 and R1 depend on.
   `$KNAIF_DEBUG` does **not** print the prompt: its only caller is the failure path, and it emits
   the raw model output plus extracted JSON on a parse/validation error (`main.rs:1084`, `1114`,
   `1129`). On a *successful* plan — which is most of the corpus, and the interesting case — it
@@ -175,7 +217,8 @@ any single fix below.
   the dumper.
   - This lands in `apps/cli` ahead of Q and stays afterwards: R1 needs a way to produce the
     native side of a golden, and a contributor debugging parity needs the same thing.
-- [ ] **P1 — Reproduce, with both prompts captured verbatim.** A fixed utterance set including at
+- [x] **P1 — Reproduce, with both prompts captured verbatim.** **Done 2026-09-09** — see
+  *P1/P2 outcome* below. The diff is two hunks and nothing else. A fixed utterance set including at
   least three known-good multi-step cases from `skills/ffmpeg/data/eval.jsonl`. Dump both prompts
   for the same utterance and diff them. **The diff is the deliverable** — every later claim rests
   on it.
@@ -183,14 +226,66 @@ any single fix below.
     CRLF and a UTF-16 BOM, which turns every line of the diff red and hides the real one.
   - Diff the **logical `(system, user)` messages**. Neither runtime's dump is the final token
     sequence — see R1's scope note.
-- [ ] **P2 — Quantify.** Token counts for both prompts, tool counts, tool *order*, which examples
-  each carries. Turns "the prompts differ" into a number that can be tracked. Order is a listed
-  column, not a footnote: it is finding 3, and it is invisible in a token count.
+- [x] **P2 — Quantify.** **Done 2026-09-09** — numbers in *P1/P2 outcome* below. Reported as
+  characters and whitespace tokens, **not BPE tokens**: `transformers` is not in the default env
+  and an exact count needs the GGUF tokenizer. The ratio is what matters here and both proxies
+  agree on it (1.7–1.8x chars, 1.6x whitespace tokens); take a real token count before quoting
+  one against `n_ctx`.
 - [ ] **P2b — Save the pre-fix corpus run before touching anything.** S2 promises a
   before-and-after across a real gap, and Q destroys the "before". Run `knaif plan --batch` over
-  the full corpus on today's binary and commit the envelopes (or archive the built binary) under
-  `evals/parity/`. **This is the only irreversible step in the plan** — after Q lands, no amount of
-  care reconstructs it, and S2 degrades to a single green number that proves nothing.
+  the full corpus on today's binary and commit the envelopes under `evals/parity/`.
+  **This is the only irreversible step in the plan** — after Q lands, no amount of care
+  reconstructs it, and S2 degrades to a single green number that proves nothing.
+  - **Decided 2026-09-09 — commit the envelopes, do not archive the binary.** The JSONL is
+    diffable, reviewable in a PR, survives a toolchain or driver change, and is exactly what S2
+    re-scores. Archiving the built binary would keep the ability to re-run *arbitrary* future
+    utterances, but it rots against llama.cpp and driver changes and cannot be read in review — a
+    baseline nobody can inspect is not a baseline.
+### P1/P2 outcome (2026-09-09) — measured, on this box
+
+Four utterances: three `chain3` rows from `skills/ffmpeg/data/eval.jsonl` (`ffmpeg_hard_001`,
+`_002`, `_005` — the multi-step cases the symptom is about) plus one single-step control. Native
+captured through P0's dump on the **mock** backend (the prompt is built before inference, so no
+GGUF is needed to compare prompts); Python through
+`agent.build_prompt(utt, registry_override=retrieve_tools(utt, agent.registry))`, the call the
+eval runner makes at `evalsuite/runner.py:110`.
+
+| | Python | Native |
+|---|---|---|
+| tool **definitions** in the prompt | **5** | **13** |
+| `TOOL SCOPE` header names | 13 | 13 |
+| example plans | **6** | **29** |
+| system-message chars | 7 831 – 8 105 | **13 994 (constant)** |
+| whitespace tokens | 1 123 – 1 149 | 1 806 – 1 816 |
+| system prompt varies by utterance | **yes** (4 distinct hashes) | **no** (1 hash, all four) |
+| user message | — | **identical to Python's** |
+
+**The hypothesis is confirmed, and the divergence is narrower than feared.** The user message is
+byte-identical on both sides; *every* difference is in the system message, and it is **exactly two
+diff hunks** — the `Available tools:` block and the examples block. Those are precisely the two
+ported-but-unwired features (Q1, Q2). No third divergence appeared.
+
+**Two corrections to this plan's own framing, both from executing the read:**
+
+1. **"13 model-visible tools against Python's 5" is the wrong unit.** The static `TOOL SCOPE`
+   header from `prompt.yaml` enumerates **all 13 tool names on both runtimes**, retrieval or not.
+   What retrieval changes is which tools carry a **definition** (description + arg list): 5 vs 13.
+   So the model always sees 13 *names*; Python shows it 5 *schemas*. The gap is real and still
+   2.6x — quote it as definitions, not visibility.
+2. **The examples gap is bigger than the tool gap and was never quantified: 6 vs 29 example
+   plans.** Finding 2 called it "static instead of chosen per utterance" without a number. Native
+   carries ~5x the examples, and that hunk is the same size as the tool hunk (+43 vs +42 lines).
+   Q2 is not the junior partner of Q1.
+
+**A third fact, not previously stated anywhere:** native's system prompt is **byte-identical
+across all four utterances** (one md5). It is not merely unranked — it is utterance-invariant.
+Whatever the model is asked, it gets the same 13 schemas and the same 29 examples, while the model
+was fine-tuned on a prompt that changes with every utterance.
+
+**Not yet established:** that any of this *causes* the multi-step failure. That is P3, and it
+needs the GGUF. Captures, diffs and `p2_quantified.json` are reproducible with the P0 gate; the
+capture harness is scratch tooling, not committed.
+
 - [ ] **P3 — Attribute factorially, not one-at-a-time.** Retrieval and example selection are
   *coupled* in Python (finding 2: the example filter only fires when a `registry_override` is
   passed), so testing them singly cannot separate them. Run all four cells:
@@ -219,9 +314,12 @@ outputs, per `docs/NATIVE.md`.
   The function is already ported and tested; the wiring is not — but wiring alone is **not
   sufficient**, per finding 3. `retrieve_tools` returns a `BTreeMap<String, &ToolDef>`
   (`retrieval.rs:81`), which throws the ranking away at the return, and `prompt.rs:163` then
-  re-sorts by `def.order`. Change the return to an ordered type (`Vec<(String, &ToolDef)>`, or a
-  `Vec` of names alongside the map) and have `build_prompt` emit in that order when a retrieved
-  subset is supplied.
+  re-sorts by `def.order`. Change the return to an ordered type and have `build_prompt` emit in
+  that order when a retrieved subset is supplied.
+  - **Decided 2026-09-09 — return `Vec<(String, &'a ToolDef)>`**, mirroring Python's
+    insertion-ordered dict directly. The alternative was a `Vec` of names alongside the existing
+    map, which keeps two structures a later edit can desynchronize — the same class of defect as a
+    rank discarded at a return.
   - Match Python's defaults (`top_k=5`, `min_score=0`) rather than choosing new ones — a different
     `top_k` is a different prompt, which is the bug being fixed.
   - Match Python's tie-break too: `scores.sort(reverse=True)` sorts `(score, name)` tuples
@@ -237,15 +335,31 @@ outputs, per `docs/NATIVE.md`.
   and the original code read picked the wrong copy. Give it one source both runtimes read, so the
   next reader cannot repeat that mistake. If the corpus's longest plan justifies a different value,
   that is a separate, measured change.
+  - **Decided 2026-09-09 — the canonical copy lives in `contracts/runtime/`**, read by both
+    runtimes, synced by `just sync-runtime` and held by a drift-guard test, exactly as
+    `core_tools.yaml` already is. Making `models.yaml` canonical was the alternative: rejected
+    because it couples a *runtime* default to model resolution and still leaves
+    `eval_backends.yaml` holding its own copy. This changes what R3 asserts — see there.
 - [ ] **Q4 — Fix both stale notes in `prompt.rs`** — the module docstring's "alphabetical because
   `BTreeMap`" (false: it sorts by `def.order`) *and* the `def.order` comment's claim that the
   fine-tuned model was trained on that order (finding 5: training prompts are in relevance order).
   State which order is canonical after Q1 and why, and re-state which divergences remain
   intentional, if any survive Q1–Q3.
-- [ ] **Q5 — Decide `normalize_path_separators` deliberately.** Not ruled out (see above): native
-  rewrites every backslash, Python only path-shaped tokens. Converge them or write down which one
-  is canonical and why the other is acceptable — but the decision must be a line of code or a
-  contract case, not a docstring assertion. That is what got us here.
+- [ ] **Q5 — Converge `normalize_path_separators` on Python's rule. Decided 2026-09-09.**
+  Not ruled out (see above): native rewrites every backslash, Python only path-shaped tokens.
+  **Native adopts Python's rule** — port `_PATH_TOKEN_RE` (`prompt.py:27`) to Rust and rewrite only
+  tokens that match it, replacing the blanket replace at `main.rs:1142`.
+  - **Why this direction.** It is the rule the plan already commits to (*Explicitly out of scope*:
+    match native to Python, never the reverse), and the shipped model is fine-tuned on
+    Python-shaped prompts — so a backslash native rewrites and Python would have left alone is
+    off-distribution input to the model.
+  - **Rejected:** moving Python to the blanket replace (changes the trained-on prompt and
+    invalidates the current eval bars), and keeping both behind a documented divergence (exactly
+    the accepted-but-unmeasured shape this plan exists to close).
+  - **This is now a prerequisite for R1, not cleanup** — R1 is byte-for-byte with no allow-list,
+    so there is nowhere to record this divergence as permitted.
+  - The decision is a line of code **and** a contract case (R1), not a docstring assertion —
+    which is what got us here.
 
 ## Workstream R — Contracts, so it cannot drift silently again
 
@@ -255,8 +369,13 @@ deterministic and needs **no GGUF**, so unlike C4 it can gate every PR in CI.
 - [ ] **R1 — Prompt-parity contract.** Fixed utterances × fixed registries → both runtimes must
   produce the **same prompt string**. Extend `contracts/parity/` in the shape
   `planner_cases.json` already uses, consumed by a Python test and a Rust test.
-  - Byte-for-byte, or an explicit allow-list of divergences with a reason attached to each. **No
-    third option** — "roughly the same" is what got us here.
+  - **Byte-for-byte, with no allow-list. Decided 2026-09-09.** The allow-list variant was the
+    alternative and is deliberately not taken: entries in such a list grow quietly, and without one
+    a divergence either fails CI or does not exist. **This makes Q5 a prerequisite rather than
+    cleanup** — with no escape hatch, R1 cannot go green until path normalization converges.
+  - **If P1's diff surfaces a divergence that resists convergence, that reopens this decision**
+    rather than being waved through: the escape hatch has been spent, so re-deciding in the open
+    is the only honest move. Record the outcome here if it happens.
   - **Pin every input, not just the utterance and the registry.** `build_prompt` also takes
     `system_header` and `examples_block`, both of which come from the skill's `prompt.yaml` and
     both of which Q2 makes utterance-dependent. A case that fixes only `(utterance, registry)`
@@ -285,16 +404,29 @@ deterministic and needs **no GGUF**, so unlike C4 it can gate every PR in CI.
   cases with tied scores, where the `(score, name)`-descending tie-break is the only thing under
   test.
 - [ ] **R3 — Settings-parity contract.** Assert the two runtimes' generation defaults agree —
-  `max_tokens`, `n_ctx`, sampling, thinking suppression — reading each from the file that actually
-  holds it. Had this existed, the original finding 4 would have been impossible to write: the test
-  names its sources, so nobody can compare a live value against a superseded stanza.
+  `max_tokens`, `n_ctx`, sampling, thinking suppression. Had this existed, the original finding 4
+  would have been impossible to write: the test names its sources, so nobody can compare a live
+  value against a superseded stanza.
+  - **Q3's decision changes what this test does.** With one canonical copy in `contracts/runtime/`
+    there are no longer three values to compare, so R3 becomes *"both runtimes read the canonical
+    file"* — a weaker assertion over a stronger invariant. **Write it that way deliberately;**
+    porting the three-way comparison onto a single source yields a test that can only ever pass.
+  - Keep at least one case that reads each runtime's *effective* value at the point of use
+    (`llama.rs`'s default, the Python orchestrator's), so a hard-coded fallback shadowing the
+    contract file still fails the gate.
 - [ ] **R4 — Gate them in CI.** They belong in the existing `python` and `native` jobs rather than
   a new one; both already run on every change to `skills/` and `contracts/`.
   - **Both jobs are `ubuntu-latest` only**, so CI green is not evidence the contract holds where
     the work is being done. Run R1–R3 locally on Windows as part of P/Q before calling R done,
     and if the two disagree, that difference is itself a parity bug — fix it in the contract, do
-    not skip the case. Widening the CI matrix to Windows is a bigger call than this plan should
-    make; note the outcome in `docs/TODO.md` if it turns out to be warranted.
+    not skip the case.
+  - **Decided 2026-09-09 — Ubuntu in CI, Windows exercised locally, matrix not widened.** Adding
+    Windows runners was the alternative and is not taken: it changes two existing jobs and buys
+    runner minutes for cases the operator already runs by hand on the box where the work happens.
+    **The load-bearing condition is that R4 is not done until R1–R3 have actually been run on
+    Windows** — this decision rests entirely on that discipline, so skipping the local run makes
+    the coverage claim false rather than merely thin. Revisit, and note it in `docs/TODO.md`, if a
+    Windows-only divergence ever reaches a release.
   - **Say what is actually exercised: Ubuntu in CI, Windows locally, and macOS not at all.** The
     path-normalization and line-ending cases are the ones with any platform surface, and neither
     is macOS-specific. Claiming three-platform coverage would be the same unmeasured assertion
@@ -334,9 +466,14 @@ nothing by it.**
   - **Do not register the native lane under `backends:`.** `_make_agent` hands any entry there
     straight to `InferenceOrchestrator(backend=cfg["backend"], …)` (`evalsuite/cli.py:130`), so a
     `rust-cli` key is not inert — it is a token-generation backend that will be constructed and
-    fail, or worse, half-work. Use a separate config section, or explicit lane-type dispatch
-    before the orchestrator is reached. This is the same design finding C4 recorded, one level
-    down: the config shape has to describe what the thing *is*.
+    fail, or worse, half-work. This is the same design finding C4 recorded, one level down: the
+    config shape has to describe what the thing *is*.
+  - **Decided 2026-09-09 — a separate top-level config section** (e.g. `lanes:`), not a `type:`
+    discriminator inside the existing list. A distinct key states at the config level that this is
+    a whole-pipeline binary rather than a token-generation backend; a discriminator still lets a
+    mistyped entry reach code that assumes a backend, which is the failure being designed out.
+    Keeping the lane out of the eval config entirely was considered and rejected — it forfeits the
+    shared `--save` / `evals/INDEX.md` plumbing.
 - [ ] **S2 — Score the saved pre-fix run and the post-fix run with the same scorer**, and record
   both numbers. P2b is what makes this possible — without those envelopes there is no "before",
   and a parity lane whose first run is also its first green run has proved nothing. Grade both
@@ -372,9 +509,12 @@ and the repo can prove it without anyone remembering to check:
   encodes the distinction this needs, treating native's materialized optional defaults as benign
   while keeping any difference in `_SIGNIFICANT_ARG_KEYS` (inputs, paths, outputs) a real
   divergence. Report the count of non-equivalent rows and enumerate them.
-  - The aggregate score stays as a **secondary** number, with a tolerance stated as an absolute
-    (e.g. "within 2 points of `eval_snapshot.json`"), because that is a quality check against the
-    committed bar — a different question from parity, and worth not conflating with it.
+  - The aggregate score stays as a **secondary** number, because that is a quality check against
+    the committed bar — a different question from parity, and worth not conflating with it.
+    **Decided 2026-09-09: within 2 points of `eval_snapshot.json`**, stated as an absolute. That
+    sits inside the noise floor of the re-locked `success` bars (ffmpeg 0.902 outcome, documents
+    0.976). A 1-point bound was rejected as tight enough to turn benign variation into a blocker
+    on a number that is explicitly *not* the acceptance criterion.
 - `docs/NATIVE.md` states the parity contract, what the eval lane does and does not cover
   (S1b: native planner, Python execution), and how to run both.
 

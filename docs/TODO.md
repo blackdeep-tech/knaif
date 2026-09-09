@@ -792,6 +792,17 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything —
     and it needs an adapter: `plan --batch` emits validated plans, while the executing verifiers
     grade rendered commands and produced files.
+  - **The plan's eight open decisions are settled (2026-09-09)** — collected in its *Decisions
+    taken* section and inlined at each item. Load-bearing ones: **native adopts Python's
+    `_PATH_TOKEN_RE`** rather than rewriting every backslash; **R1 is byte-for-byte with no
+    allow-list**, which makes that convergence a prerequisite rather than cleanup and means a
+    divergence found in P1 that resists convergence *reopens R1* instead of being listed;
+    **Ubuntu CI with Windows run locally** (so R4 is not done until R1–R3 have actually been run
+    there — the coverage claim rests on that, not on CI); the pre-fix baseline is the **committed
+    `plan --batch` envelopes**, not an archived binary; `contracts/runtime/` owns `max_tokens`,
+    which turns R3 from a three-way comparison into "both runtimes read the canonical file"; the
+    native eval lane gets its **own config section**, never `backends:`. Still open by choice:
+    `top_k` for larger skills (answer after parity) and macOS contract coverage (unexercised).
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single

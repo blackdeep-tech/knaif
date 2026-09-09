@@ -1088,6 +1088,7 @@ impl PlanSession {
         // Windows) before the utterance reaches the prompt so the emitted plan parses.
         let utterance = normalize_path_separators(utterance);
         let (system, user) = knaif_core::build_prompt(&utterance, &self.registry, &self.overrides);
+        emit_prompt_dump(prompt_dump_enabled(), &system, &user);
         let payload = infer_with_repair(
             self.backend.as_ref(),
             &system,
@@ -1175,6 +1176,50 @@ fn debug_dump(enabled: bool, raw: &str, extracted: &str) -> Option<String> {
          --- raw model output ---\n{raw}\n\
          --- extracted JSON ---\n{extracted}\n\
          ------------------------"
+    ))
+}
+
+/// Frame marker for [`prompt_dump`]. Both halves of the prompt are wrapped in `BEGIN`/`END` lines
+/// carrying this prefix so a capture can cut them back out exactly; the marker is deliberately
+/// unlikely to occur inside a prompt.
+const PROMPT_DUMP_MARKER: &str = "===KNAIF-PROMPT-";
+
+/// Whether to dump the built prompt before inference (`$KNAIF_DUMP_PROMPT` non-empty).
+///
+/// An env gate rather than a `--dump-prompt` flag on `plan`: the prompt is built inside
+/// [`PlanSession::plan`], which `plan`, `plan --batch` and `run` all share, so a gate here covers
+/// every path — including the batch path a corpus-wide capture needs — without threading a flag
+/// through three commands. Mirrors [`debug_enabled`].
+fn prompt_dump_enabled() -> bool {
+    std::env::var("KNAIF_DUMP_PROMPT")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
+/// Print the prompt dump to stderr when enabled (thin wrapper over [`prompt_dump`]).
+///
+/// stderr, not stdout: `plan --json` and `plan --batch` put their envelopes on stdout, so a
+/// capture can redirect the two streams to separate files and keep both machine-readable.
+fn emit_prompt_dump(enabled: bool, system: &str, user: &str) {
+    if let Some(msg) = prompt_dump(enabled, system, user) {
+        eprintln!("{msg}");
+    }
+}
+
+/// Frame the `(system, user)` messages for capture, or `None` when disabled. Kept pure (the enable
+/// gate is a parameter) so it is testable without mutating process env, as [`debug_dump`] is.
+///
+/// **This is a dump, not a formatter.** Each message is written between its markers byte for byte
+/// — no trimming, wrapping, escaping or re-encoding. Workstream P1 diffs this output against
+/// Python's prompt for the same utterance, and R1 uses it to produce the native side of a golden;
+/// any reshaping here would make that diff a diff of this function instead of of the prompts.
+fn prompt_dump(enabled: bool, system: &str, user: &str) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{PROMPT_DUMP_MARKER}BEGIN system\n{system}\n{PROMPT_DUMP_MARKER}END system\n\
+         {PROMPT_DUMP_MARKER}BEGIN user\n{user}\n{PROMPT_DUMP_MARKER}END user"
     ))
 }
 
@@ -1881,6 +1926,57 @@ mod tests {
     #[test]
     fn debug_dump_is_none_when_disabled() {
         assert!(debug_dump(false, "RAW_OUTPUT", "EXTRACTED_JSON").is_none());
+    }
+
+    // ── P0: the prompt dump (native/Python planning parity, Workstream P) ───────────────────
+    //
+    // `$KNAIF_DEBUG` only fires on a parse/validation *failure* and prints model output, never
+    // the prompt — so on a successful plan (most of the corpus, and the interesting case) there
+    // was no way to see what the model was asked. P1 diffs this dump against Python's, and R1
+    // later uses it to produce the native side of a golden, so the one property that matters is
+    // that it reproduces `(system, user)` **verbatim**: a dump that reshapes the string turns the
+    // P1 diff into a diff of the dumper.
+
+    #[test]
+    fn prompt_dump_is_none_when_disabled() {
+        assert!(prompt_dump(false, "SYSTEM", "USER").is_none());
+    }
+
+    #[test]
+    fn prompt_dump_carries_system_and_user_when_enabled() {
+        let msg = prompt_dump(true, "SYSTEM_TEXT", "USER_TEXT").expect("enabled → Some");
+        assert!(msg.contains("SYSTEM_TEXT"));
+        assert!(msg.contains("USER_TEXT"));
+    }
+
+    #[test]
+    fn prompt_dump_reproduces_both_messages_byte_for_byte() {
+        // Deliberately nasty: trailing spaces, a blank line, a lone CR, tabs and a non-ASCII
+        // char — all things a "helpful" formatter would trim, join or re-encode.
+        let system = "line one  \n\n\tindented\r\nsuffix — ünicode ";
+        let user = "  leading and trailing  ";
+        let msg = prompt_dump(true, system, user).expect("enabled → Some");
+
+        assert_eq!(
+            extract_dump_section(&msg, "system"),
+            system,
+            "system message must survive the dump unaltered"
+        );
+        assert_eq!(
+            extract_dump_section(&msg, "user"),
+            user,
+            "user message must survive the dump unaltered"
+        );
+    }
+
+    /// Pull one framed section back out of a dump, so the tests assert on the payload rather
+    /// than on the framing. Mirrors what the P1 capture script does.
+    fn extract_dump_section(dump: &str, name: &str) -> String {
+        let begin = format!("{PROMPT_DUMP_MARKER}BEGIN {name}\n");
+        let end = format!("\n{PROMPT_DUMP_MARKER}END {name}");
+        let start = dump.find(&begin).expect("begin marker present") + begin.len();
+        let stop = dump[start..].find(&end).expect("end marker present") + start;
+        dump[start..stop].to_string()
     }
 
     // ── F5: a multi-step plan must be recognized as unsupported, not silently truncated ──────
