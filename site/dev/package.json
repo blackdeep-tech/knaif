@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.6",
-    "astro": "^7.1.6",
+    "astro": "^7.2.8",
     "knaif-shared": "workspace:*"
   },
   "devDependencies": {
