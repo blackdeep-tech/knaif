@@ -261,6 +261,16 @@ def load_arm_entries(
             arm_name = stem[len(skill) + 1 :]
         if verifier and arm_name.endswith(f"_{verifier}"):
             arm_name = arm_name[: -len(verifier) - 1]
+        # `run` may stamp the shipped model name into the scoreboard. Prefer it for
+        # display — swapping just the backend segment so a foreign-skill prefix
+        # (e.g. "documents_" in an --skill ffmpeg report) survives.
+        public_name = data.get("backend_public_name")
+        if public_name:
+            backend_key = data.get("backend")
+            if backend_key and backend_key in arm_name:
+                arm_name = arm_name.replace(backend_key, public_name)
+            else:
+                arm_name = public_name
 
     # Prefer the local-shaped "rows" list — the local runner always has it, and
     # score-external now emits it too (richer than "entries": it also carries

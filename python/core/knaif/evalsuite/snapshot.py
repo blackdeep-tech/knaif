@@ -34,6 +34,14 @@ def diff_snapshots(
 
     Returns a dict with regressions and improvements.
     A regression is a metric that dropped by more than *threshold*.
+
+    Raises ``ValueError`` — instead of silently reporting "no regressions" — when the
+    two scoreboards aren't a valid comparison: a declared verifier or population
+    (``total``) mismatch, or a metric present in *baseline* that *current* doesn't
+    report at all. (Audit finding F6: a `success`/847-row baseline previously diffed
+    clean against an unrelated `cheap`/1-row current, and a baseline vs. `{}` also
+    passed, because missing values were silently skipped rather than treated as
+    unknown/regressed.)
     """
     _MetricKey = str | tuple[str, str]
     metrics: list[_MetricKey] = [
@@ -56,13 +64,52 @@ def diff_snapshots(
             return f"{key[0]}.{key[1]}"
         return str(key)
 
+    # Comparison identity: when the baseline declares one of these, the current scoreboard must
+    # declare it too and it must match. Requiring only "if both declare, they must agree" was
+    # itself fail-open — a current scoreboard that simply omits `verifier`/`total` skipped the
+    # guard entirely and could still be certified against a baseline that declares them.
+    baseline_verifier = baseline.get("verifier")
+    current_verifier = current.get("verifier")
+    if baseline_verifier is not None:
+        if current_verifier is None:
+            raise ValueError(
+                f"current scoreboard does not declare a verifier; baseline was scored with "
+                f"{baseline_verifier!r}. Cannot certify no regression against an unidentified run."
+            )
+        if baseline_verifier != current_verifier:
+            raise ValueError(
+                f"Verifier mismatch: baseline was scored with {baseline_verifier!r}, "
+                f"current is {current_verifier!r}. Compare scoreboards produced by the "
+                "same verifier."
+            )
+
+    baseline_total = baseline.get("total")
+    current_total = current.get("total")
+    if baseline_total is not None:
+        if current_total is None:
+            raise ValueError(
+                f"current scoreboard does not declare a population (`total`); baseline "
+                f"declares total={baseline_total}. Cannot certify no regression against an "
+                "unidentified population."
+            )
+        if baseline_total != current_total:
+            raise ValueError(
+                f"Population mismatch: baseline total={baseline_total}, "
+                f"current total={current_total}. Compare scoreboards over the same "
+                "evaluation population (regenerate fixtures/current before diffing)."
+            )
+
     regressions: list[dict[str, Any]] = []
     improvements: list[dict[str, Any]] = []
+    dropped: list[str] = []
 
     for key in metrics:
         b_val = _get(baseline, key)
         c_val = _get(current, key)
-        if b_val is None or c_val is None:
+        if b_val is None:
+            continue  # baseline never reported this metric — nothing to regress against
+        if c_val is None:
+            dropped.append(_label(key))
             continue
         delta = c_val - b_val
         entry = {
@@ -75,6 +122,13 @@ def diff_snapshots(
             regressions.append(entry)
         elif delta > threshold:
             improvements.append(entry)
+
+    if dropped:
+        raise ValueError(
+            "current scoreboard is missing metric(s) baseline reported: "
+            + ", ".join(dropped)
+            + ". Cannot certify no regression without them."
+        )
 
     return {
         "regressions": regressions,

@@ -598,6 +598,34 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// What `cmd_run` should do with a parsed plan's step list, before dispatching to a skill.
+///
+/// Native `run` executes exactly one intent per invocation — there is no ordered multi-step
+/// executor yet (variable binding between steps, per-intent confirmation, chain execution).
+/// [`decide_steps`] makes that limit an explicit, deterministic decision instead of a silent
+/// truncation: previously `cmd_run` took `steps.first()` and discarded every later step without
+/// a word, so a valid multi-step plan (e.g. strip_audio -> resize_video) rendered/executed only
+/// the first command and still exited 0 — reporting full success for partial completion, and
+/// for a destructive plan, silently skipping a real side effect the request asked for. See
+/// docs/audits/2026-09-07-core-principles-and-rtx5080.md, F5.
+#[derive(Debug, PartialEq, Eq)]
+enum StepDecision {
+    /// No steps at all.
+    Empty,
+    /// Exactly one step, at this index (always 0) — the shape the rest of `cmd_run` handles.
+    Single(usize),
+    /// More than one step: unsupported. Reject the whole plan rather than run only the first.
+    Unsupported { total: usize },
+}
+
+fn decide_steps(steps: &[serde_json::Value]) -> StepDecision {
+    match steps.len() {
+        0 => StepDecision::Empty,
+        1 => StepDecision::Single(0),
+        total => StepDecision::Unsupported { total },
+    }
+}
+
 fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if !matches!(args.skill.as_str(), "ffmpeg" | "documents") {
         anyhow::bail!(
@@ -707,20 +735,31 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let Some(step) = steps.first() else {
-        if model.is_none() {
-            let (recommended, installed) = recommended_model_status();
-            println!(
-                "{}",
-                first_run_model_message(&args.skill, recommended.as_deref(), installed)
-            );
-        } else {
-            println!(
-                "No plan produced: the model returned no usable plan for this request. Try \
-                 rephrasing it, or a different --model."
-            );
+    let step = match decide_steps(&steps) {
+        StepDecision::Empty => {
+            if model.is_none() {
+                let (recommended, installed) = recommended_model_status();
+                println!(
+                    "{}",
+                    first_run_model_message(&args.skill, recommended.as_deref(), installed)
+                );
+            } else {
+                println!(
+                    "No plan produced: the model returned no usable plan for this request. Try \
+                     rephrasing it, or a different --model."
+                );
+            }
+            return Ok(());
         }
-        return Ok(());
+        StepDecision::Unsupported { total } => {
+            println!(
+                "reject: this request needs {total} steps, but the native runtime executes \
+                 one step at a time (multi-step chains aren't supported yet). Try rephrasing \
+                 it as separate requests, one at a time."
+            );
+            return Ok(());
+        }
+        StepDecision::Single(idx) => &steps[idx],
     };
 
     let tool = step
@@ -1842,5 +1881,43 @@ mod tests {
     #[test]
     fn debug_dump_is_none_when_disabled() {
         assert!(debug_dump(false, "RAW_OUTPUT", "EXTRACTED_JSON").is_none());
+    }
+
+    // ── F5: a multi-step plan must be recognized as unsupported, not silently truncated ──────
+    //
+    // `cmd_run` dispatches exactly one step per invocation (no ordered multi-intent executor,
+    // variable binding, or per-intent confirmation yet). It previously took `steps.first()` and
+    // discarded the rest without a word, so a valid 2-step plan (e.g. strip_audio -> resize)
+    // rendered/executed only the first command and still exited 0 — reporting full success for
+    // partial completion. `decide_steps` is deterministic (no model/GPU/subprocess needed) so
+    // this guarantee is tested directly, per the audit's own recommendation.
+
+    #[test]
+    fn decide_steps_empty_plan_is_empty() {
+        assert!(matches!(decide_steps(&[]), StepDecision::Empty));
+    }
+
+    #[test]
+    fn decide_steps_single_step_is_ok() {
+        let steps = vec![serde_json::json!({"tool": "strip_audio", "args": {}})];
+        assert!(matches!(decide_steps(&steps), StepDecision::Single(0)));
+    }
+
+    #[test]
+    fn decide_steps_multi_step_is_unsupported() {
+        let steps = vec![
+            serde_json::json!({
+                "tool": "strip_audio",
+                "args": {"inputs": "clip.mp4", "output": "silent.mp4"}
+            }),
+            serde_json::json!({
+                "tool": "resize_video",
+                "args": {"inputs": "silent.mp4", "height": 720}
+            }),
+        ];
+        match decide_steps(&steps) {
+            StepDecision::Unsupported { total } => assert_eq!(total, 2),
+            other => panic!("expected Unsupported, got {other:?}"),
+        }
     }
 }

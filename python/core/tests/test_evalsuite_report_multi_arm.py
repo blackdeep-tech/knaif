@@ -215,6 +215,94 @@ def test_report_discovers_flat_local_runner_files(tmp_path: Path):
     assert "gemma3-4b" in md
 
 
+def _local_runner_json_named(
+    directory: Path,
+    name: str,
+    rows: list[dict],
+    *,
+    backend: str | None = None,
+    public_name: str | None = None,
+) -> Path:
+    data: dict = {"verifier": "success", "total": len(rows), "rows": rows}
+    if backend is not None:
+        data["backend"] = backend
+    if public_name is not None:
+        data["backend_public_name"] = public_name
+    p = directory / name
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return p
+
+
+def test_arm_name_uses_backend_public_name_when_scoreboard_declares_it(tmp_path: Path):
+    """A scoreboard that declares `backend_public_name` is named by the public model
+    name in the report, not the cryptic-but-stable eval backend key."""
+    from knaif.evalsuite.report import load_arm_entries
+
+    p = _local_runner_json_named(
+        tmp_path,
+        "ffmpeg_qwen3-4b-sft-v3-flat-q4_success.json",
+        [_lr_row("r001")],
+        backend="qwen3-4b-sft-v3-flat-q4",
+        public_name="knaif-qwen3-4b-v1",
+    )
+    arm_name, _ = load_arm_entries(p, [], skill="ffmpeg")
+    assert arm_name == "knaif-qwen3-4b-v1"
+
+
+def test_arm_name_public_name_preserves_foreign_skill_prefix(tmp_path: Path):
+    """Report run with --skill ffmpeg over a documents scoreboard: keep the
+    ``documents_`` prefix, swap only the backend segment for the public name."""
+    from knaif.evalsuite.report import load_arm_entries
+
+    p = _local_runner_json_named(
+        tmp_path,
+        "documents_qwen3-4b-sft-v3-flat-q4_success.json",
+        [_lr_row("r001")],
+        backend="qwen3-4b-sft-v3-flat-q4",
+        public_name="knaif-qwen3-4b-v1",
+    )
+    arm_name, _ = load_arm_entries(p, [], skill="ffmpeg")
+    assert arm_name == "documents_knaif-qwen3-4b-v1"
+
+
+def test_arm_name_falls_back_to_filename_without_public_name(tmp_path: Path):
+    """No `backend_public_name` declared → arm name is still derived from the filename."""
+    from knaif.evalsuite.report import load_arm_entries
+
+    p = _local_runner_json_named(
+        tmp_path, "ffmpeg_qwen3-4b_success.json", [_lr_row("r001")], backend="qwen3-4b"
+    )
+    arm_name, _ = load_arm_entries(p, [], skill="ffmpeg")
+    assert arm_name == "qwen3-4b"
+
+
+def test_report_md_shows_public_name_not_eval_key(tmp_path: Path):
+    results_dir = tmp_path / "run"
+    results_dir.mkdir()
+    corpus_path = _corpus(tmp_path)
+    _local_runner_json_named(
+        results_dir,
+        "ffmpeg_qwen3-4b-sft-v3-flat-q4_success.json",
+        [_lr_row("r001"), _lr_row("r002")],
+        backend="qwen3-4b-sft-v3-flat-q4",
+        public_name="knaif-qwen3-4b-v1",
+    )
+    _run(
+        [
+            "report",
+            "--skill",
+            "ffmpeg",
+            "--results-dir",
+            str(results_dir),
+            "--corpus",
+            str(corpus_path),
+        ]
+    )
+    md = (results_dir / "report.md").read_text(encoding="utf-8")
+    assert "knaif-qwen3-4b-v1" in md
+    assert "sft-v3-flat" not in md
+
+
 def test_report_cross_run_collision_uses_subdir_prefix(tmp_path: Path):
     """When two run subdirs contain the same backend, both arms must appear with
     distinct 'rundir/backend' names — not merged and not one silently dropped."""

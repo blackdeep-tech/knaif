@@ -299,9 +299,17 @@ class CommandAgent:
         """Parse *json_text* and return a plan payload dict."""
         return parse_plan(json_text)
 
-    def validate_plan(self, payload: dict[str, Any]) -> None:
-        """Validate every step in *payload['plan']*; raises ValueError on failure."""
-        validate_plan(payload, self.registry, self.root, self.sandbox)
+    def validate_plan(self, payload: dict[str, Any], *, allow_internal: bool = False) -> None:
+        """Validate every step in *payload['plan']*; raises ValueError on failure.
+
+        *allow_internal* must stay False for anything taken from the model or an
+        outside caller — pass True only for an already-expanded sub-plan (see
+        ``planner.validate_step`` and docs/audits/2026-09-07-core-principles-and-
+        rtx5080.md, F1).
+        """
+        validate_plan(
+            payload, self.registry, self.root, self.sandbox, allow_internal=allow_internal
+        )
 
     def execute_plan(
         self,
@@ -454,10 +462,13 @@ class CommandAgent:
             intent_blocks.append((intent_step, sub_plan))
 
         # Re-validate the union of expanded steps so structural errors surface
-        # before any user-facing prompt.
+        # before any user-facing prompt. allow_internal=True: these steps came
+        # from Intent.expand() (trusted, deterministic), not from the model.
         any_expanded = any(block != [orig] for orig, block in intent_blocks)
         if any_expanded:
-            self.validate_plan({"plan": [s for _, b in intent_blocks for s in b]})
+            self.validate_plan(
+                {"plan": [s for _, b in intent_blocks for s in b]}, allow_internal=True
+            )
 
         # Optimize each intent's sub-plan independently. Optimizing across
         # intent boundaries strips readonly summary steps (e.g. generate_report)
@@ -569,6 +580,18 @@ class CommandAgent:
 
         for orig_intent, sub_plan in intent_blocks:
             is_terminal = orig_intent.get("tool") in _TERMINAL_TOOLS
+            intent_tool_name = orig_intent.get("tool")
+            orig_tool_def = (
+                self.registry.get(intent_tool_name) if isinstance(intent_tool_name, str) else None
+            )
+            # The destructive check below must key off the *originating intent's*
+            # safety_category, not just each expanded leaf's — a destructive intent
+            # (e.g. strip_audio) can expand entirely into `safe` leaves (its internal
+            # run/verify steps), and that must not erase the requirement to confirm.
+            # See docs/audits/2026-09-07-core-principles-and-rtx5080.md, F2.
+            intent_destructive = bool(
+                orig_tool_def and orig_tool_def.safety_category == "destructive"
+            )
 
             if not is_terminal and (_show or _approve):
                 clause = step_summaries[summary_idx] if summary_idx < len(step_summaries) else ""
@@ -589,7 +612,13 @@ class CommandAgent:
                         break  # decline this intent → stop, keep prior results
 
             sub_results, should_stop = self._execute_steps(
-                sub_plan, context, dry_run, confirmed, skip_execution
+                sub_plan,
+                context,
+                dry_run,
+                confirmed,
+                skip_execution,
+                intent_tool=intent_tool_name,
+                intent_destructive=intent_destructive,
             )
             results.extend(sub_results)
 
@@ -614,8 +643,15 @@ class CommandAgent:
         dry_run: bool,
         confirmed: bool,
         skip_execution: bool,
+        *,
+        intent_tool: str | None = None,
+        intent_destructive: bool = False,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute *sub_plan* sequentially against the shared *context*.
+
+        *intent_tool* / *intent_destructive* carry the originating intent's identity
+        and safety_category through expansion, so a destructive intent that expands
+        into safe leaves still requires confirmation (F2).
 
         Returns ``(results, should_stop)`` where ``should_stop`` is True if a
         terminal/declined step was encountered, signalling that no further
@@ -657,9 +693,27 @@ class CommandAgent:
                 raise ValueError(f"No handler registered for tool: {tool!r}")
 
             tool_def = self.registry.get(tool)
-            if tool_def and tool_def.safety_category == "destructive":
-                if not dry_run and not confirmed:
-                    raise ValueError(f"{tool!r} requires confirmed=True when dry_run=False.")
+            step_destructive = bool(tool_def and tool_def.safety_category == "destructive")
+            # A destructive intent's inherited requirement (see intent_destructive above) must
+            # not block its own terminal clarify/reject: a destructive intent can deterministically
+            # decide it cannot proceed (e.g. prepare_for_platform given an unknown platform) and
+            # expand to a clarify leaf instead of a real side effect. clarify/reject perform no
+            # action and always `should_stop` the loop immediately below, so nothing destructive
+            # can follow one in the same sub_plan regardless of step order — exempting them here
+            # cannot reopen the hole this check exists for.
+            if (
+                tool not in _TERMINAL_TOOLS
+                and (intent_destructive or step_destructive)
+                and not dry_run
+                and not confirmed
+            ):
+                if intent_destructive and not step_destructive:
+                    raise ValueError(
+                        f"{intent_tool!r} is a destructive intent; requires "
+                        f"confirmed=True when dry_run=False (blocked before "
+                        f"executing {tool!r})."
+                    )
+                raise ValueError(f"{tool!r} requires confirmed=True when dry_run=False.")
 
             ctx = HandlerContext(
                 root=self.root,

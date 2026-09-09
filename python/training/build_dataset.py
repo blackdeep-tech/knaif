@@ -6,18 +6,21 @@ model trains on the same (system, user) it will see at eval time. The target is
 the literal {"plan": [...]} JSON. Writes a static training/union_chat.jsonl that
 the isolated train venv consumes without importing knaif.
 
-    uv run python training/build_dataset.py
+    uv run --frozen python python/training/build_dataset.py
 """
 
 from __future__ import annotations
 
 import json
-import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+# This file's own package pillar (<repo>/python) — used only for OUT, which lives beside it.
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+# <repo> — skills/ (and evals/) live here, not under python/. `knaif` itself needs no sys.path
+# hack: the repo-root pyproject.toml's [tool.uv.workspace] already makes python/core (and so
+# `knaif`) importable under `uv run` from anywhere in the tree.
+REPO_ROOT = ROOT.parent
 
 from knaif import CommandAgent  # noqa: E402
 from knaif.registry import retrieve_tools  # noqa: E402
@@ -114,12 +117,12 @@ def main() -> None:
     source_by_tag: Counter[str] = Counter()
     expanded_by_tag: Counter[str] = Counter()
     for skill in skills:
-        agent = CommandAgent.from_skill(f"src/skills/{skill}", sandbox="./sandbox")
-        paths = [ROOT / f"src/skills/{skill}/data/train.jsonl", *extra_jsonl.get(skill, [])]
+        agent = CommandAgent.from_skill(REPO_ROOT / f"skills/{skill}", sandbox="./sandbox")
+        paths = [REPO_ROOT / f"skills/{skill}/data/train.jsonl", *extra_jsonl.get(skill, [])]
         n = 0
         expanded = 0
         for path in paths:
-            path = path if path.is_absolute() else ROOT / path
+            path = path if path.is_absolute() else REPO_ROOT / path
             file_n = 0
             file_expanded = 0
             for line in path.read_text(encoding="utf-8").splitlines():

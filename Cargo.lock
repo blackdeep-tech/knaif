@@ -1307,6 +1307,7 @@ dependencies = [
 name = "knaif-skill-api"
 version = "1.1.0"
 dependencies = [
+ "anyhow",
  "knaif-core",
 ]
 

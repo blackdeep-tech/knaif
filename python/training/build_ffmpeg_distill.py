@@ -10,17 +10,20 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
+# This file's own package pillar (<repo>/python) — used only for OUT, which lives beside it.
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "src"))
+# <repo> — skills/ and sandbox/ live here, not under python/. `knaif` itself needs no sys.path
+# hack: the repo-root pyproject.toml's [tool.uv.workspace] already makes python/core (and so
+# `knaif`) importable under `uv run` from anywhere in the tree.
+REPO_ROOT = ROOT.parent
 
 from knaif import CommandAgent  # noqa: E402
 
 OUT = ROOT / "training" / "ffmpeg_distill_v1.jsonl"
-FIXTURE_SANDBOX = ROOT / "sandbox" / "fixtures" / "ffmpeg"
+FIXTURE_SANDBOX = REPO_ROOT / "sandbox" / "fixtures" / "ffmpeg"
 
 
 def norm(text: str) -> str:
@@ -50,8 +53,8 @@ def step(tool: str, **args: Any) -> dict[str, Any]:
 def existing_utterances() -> set[str]:
     seen: set[str] = set()
     for path in [
-        ROOT / "src/skills/ffmpeg/data/train.jsonl",
-        ROOT / "src/skills/ffmpeg/data/eval.jsonl",
+        REPO_ROOT / "skills/ffmpeg/data/train.jsonl",
+        REPO_ROOT / "skills/ffmpeg/data/eval.jsonl",
     ]:
         for line in path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
@@ -281,7 +284,7 @@ def candidates() -> list[dict[str, Any]]:
 
 def validate_rows(rows: list[dict[str, Any]], *, strict_execute: bool) -> list[dict[str, Any]]:
     seen = existing_utterances()
-    agent = CommandAgent.from_skill("src/skills/ffmpeg", sandbox=str(FIXTURE_SANDBOX))
+    agent = CommandAgent.from_skill(REPO_ROOT / "skills/ffmpeg", sandbox=str(FIXTURE_SANDBOX))
     accepted: list[dict[str, Any]] = []
     errors: list[str] = []
     for rec in rows:

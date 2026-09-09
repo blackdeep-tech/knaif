@@ -836,6 +836,11 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "scale": {
+              "type": "string"
+            }
+          },
           "description": "Create a still-image thumbnail or frame grab from a single video at a given timestamp.",
           "name": "create_thumbnail",
           "optional_args": [

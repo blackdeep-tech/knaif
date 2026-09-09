@@ -7,7 +7,7 @@
 //! [`build_one_recipe`] (probe + profiles + options → [`Recipe`]) → [`build_flags`] →
 //! [`render_command`] (full `ffmpeg` argv).
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use crate::{PlatformProfile, QualityProfile, Vocab};
 
@@ -633,42 +633,18 @@ pub fn derive_output_path(
     }
 }
 
-/// Lexically absolutize a path (relative to cwd) and collapse `.`/`..` — no filesystem access, so
-/// it works on not-yet-created outputs (mirrors the knaif-core sandbox resolution).
-fn lexical_abs(p: &Path) -> PathBuf {
-    let base = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir().unwrap_or_default().join(p)
-    };
-    let mut out = PathBuf::new();
-    for comp in base.components() {
-        match comp {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            c => out.push(c.as_os_str()),
-        }
-    }
-    out
-}
-
-/// Raise if `p` is not inside `sandbox` (both lexically resolved). No-op when `sandbox` is `None`
-/// (open / CLI mode). Port of `_assert_in_sandbox`.
+/// Raise if `p` is not inside `sandbox`. No-op when `sandbox` is `None` (open / CLI mode).
+/// Port of `_assert_in_sandbox`, delegating to the shared `knaif-skill-api` primitive
+/// (filesystem-real: existing ancestors are canonicalized, following symlinks/junctions,
+/// not just lexically normalized) so this applies the identical containment rule as
+/// documents and core. A purely lexical check here previously let a Windows junction placed
+/// inside the sandbox reach a file outside it — see docs/audits/2026-09-07-core-principles-
+/// and-rtx5080.md, F4.
 pub fn assert_in_sandbox(p: &Path, sandbox: Option<&Path>) -> anyhow::Result<()> {
     let Some(sandbox) = sandbox else {
         return Ok(());
     };
-    let (rp, rs) = (lexical_abs(p), lexical_abs(sandbox));
-    if !rp.starts_with(&rs) {
-        anyhow::bail!(
-            "Path {:?} is outside the sandbox {:?}",
-            p.display().to_string(),
-            rs.display().to_string()
-        );
-    }
-    Ok(())
+    knaif_skill_api::sandbox::assert_in_sandbox(p, sandbox)
 }
 
 /// Build a fully-resolved [`Recipe`] from a probe + optional platform/quality profiles + options.
@@ -1361,6 +1337,44 @@ mod tests {
         };
         let err = build_one_recipe(&video_probe(), None, None, &opts, &v, Some(&cwd)).unwrap_err();
         assert!(err.to_string().contains("outside the sandbox"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn assert_in_sandbox_rejects_a_junction_escape() {
+        // The audit's F4 repro, on ffmpeg's own copy of the check: a junction inside the
+        // sandbox pointing outside it. The old lexical-only `assert_in_sandbox` accepted the
+        // junction's own (in-sandbox) path text without ever touching the filesystem.
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-ffmpeg-engine-test-{}-junction",
+            std::process::id()
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.mp4"), b"secret").unwrap();
+
+        let link = sandbox.join("escape_link");
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &link.display().to_string(),
+                &outside.display().to_string(),
+            ])
+            .status()
+            .expect("mklink must run on Windows");
+        assert!(
+            status.success(),
+            "junction creation must succeed (no admin needed)"
+        );
+
+        let err = assert_in_sandbox(&link.join("secret.mp4"), Some(&sandbox)).unwrap_err();
+        assert!(err.to_string().contains("outside the sandbox"), "{err}");
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]

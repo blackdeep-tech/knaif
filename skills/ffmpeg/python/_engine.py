@@ -222,17 +222,26 @@ _SCALE_PRESETS: dict[str, str] = dict(_VOCAB["scale_presets"])
 _WxH_RE = re.compile(r"^(\d+)[x:](\d+)$")
 
 
-def _parse_scale(scale: str | None) -> str | None:
+def _parse_scale(scale: Any) -> str | None:
     """Resolve a scale shorthand or WxH/W:H literal to a 'W:H' string.
 
     Returns None when *scale* is None. Raises ValueError for unrecognised values.
+
+    Takes ``Any``, not ``str``, because the model leaks non-strings into this slot (the 4B
+    emits ``scale: 2`` for "4K thumbnail" requests). ``create_thumbnail.scale`` is typed in
+    tools.yaml so normalize_plan coerces those before they arrive; stringifying here too
+    keeps a direct ``execute_plan`` call — which skips nothing but is not obliged to
+    normalize — from crashing on ``.strip()``. A bare number has no defensible reading as a
+    scale, so it takes the normal unrecognised-value path rather than being coerced into a
+    2-pixel thumbnail that would still satisfy a "has a scale filter" check.
     """
     if scale is None:
         return None
-    key = scale.strip().lower()
+    text = str(scale)
+    key = text.strip().lower()
     if key in _SCALE_PRESETS:
         return _SCALE_PRESETS[key]
-    m = _WxH_RE.match(scale.strip())
+    m = _WxH_RE.match(text.strip())
     if m:
         return f"{m.group(1)}:{m.group(2)}"
     raise ValueError(

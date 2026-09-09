@@ -3,9 +3,10 @@
 //! The trait keeps the runtime backend-agnostic. `MockBackend` (deterministic, no model) is
 //! used by tests and offline dev. `LlamaCppBackend` (via `llama-cpp-2`, one build bundling
 //! CPU + Vulkan + CUDA / Metal with runtime device selection) is the shipped backend — it is
-//! a heavy build (cmake + C++ + GPU SDKs) and lands in a follow-on spike; the trait and the
-//! `KNAIF_LLM_BACKEND` switch accommodate it now. **No Ollama backend** — Ollama is confined
-//! to the Python dev/eval path. Depends on `knaif-models` to locate model files.
+//! **implemented**, behind the `llama` cargo feature, because it is a heavy build (cmake +
+//! C++ + GPU SDKs) that the default feature set leaves out; select it at runtime with
+//! `KNAIF_LLM_BACKEND`. **No Ollama backend** — Ollama is confined to the Python dev/eval
+//! path. Depends on `knaif-models` to locate model files.
 
 use anyhow::Result;
 

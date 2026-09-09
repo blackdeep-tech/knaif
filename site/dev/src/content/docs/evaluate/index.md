@@ -67,8 +67,8 @@ just eval-success <skill>
 # 4. lock the bar, in its own commit
 just eval-snapshot <skill>
 
-# 5. gate future runs against it
-just eval-regression <skill>
+# 5. gate future runs against it (current = a saved scoreboard from step 3, matching the snapshot's verifier)
+just eval-regression <skill> <current>
 ```
 
 Live in phases 1–2 while building. Cross 3–5 once to finish the skill, then re-run 3–5 on

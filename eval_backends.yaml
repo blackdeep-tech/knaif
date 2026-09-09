@@ -4,13 +4,22 @@
 # Omit --backends to run all backends sequentially.
 # An unknown name in --backends is a hard error, not a silent fallback.
 #
-# ⚠️ MODEL AVAILABILITY (2026-07-14). Most stanzas below are FINE-TUNING STUDY ARTIFACTS whose
-# GGUFs lived on the old RTX 5080 box and are NOT on the current machine. Their saved scoreboards
-# in evals/ remain the record; the stanzas are kept so a run is reproducible if the GGUF is
-# rebuilt or re-downloaded. A stanza whose GGUF is missing fails LOUDLY (the orchestrator prints
-# "Model file not found", then every row raises "llama.cpp backend not initialized" and scores as
-# `error` → outcome ~0.0). It will not silently mock. A run of ~0.0 across the board means the
-# model file is absent, not that the model is bad.
+# ⚠️ MODEL AVAILABILITY — CHECK IT, DO NOT READ IT HERE. Most stanzas below are FINE-TUNING
+# STUDY ARTIFACTS. Which GGUFs exist is per-machine and changes whenever models are copied,
+# rebuilt, or pruned, so no comment in this file can stay true. Ask the filesystem:
+#
+#   uv run python -c "import yaml,pathlib; b=yaml.safe_load(open('eval_backends.yaml'))['backends']; \
+#   [print('OK  ' if pathlib.Path(c['options']['path']).exists() else 'MISS', n) \
+#    for n,c in sorted(b.items()) if (c or {}).get('options',{}).get('path')]"
+#
+# A stanza whose GGUF is missing fails LOUDLY (the orchestrator prints "Model file not found",
+# then every row raises "llama.cpp backend not initialized" and scores as `error` → outcome
+# ~0.0). It will not silently mock. A run of ~0.0 across the board means the model file is
+# absent, not that the model is bad.
+#
+# Historical note (2026-07-14): the study GGUFs lived on the old RTX 5080 box and were absent
+# for a period; the saved scoreboards in evals/ are the record of those runs regardless, and
+# the stanzas are kept so a run is reproducible whenever the GGUF is present again.
 #
 # NAMING: GGUF files on disk use the PUBLIC `knaif-*` names — identical to the artifacts in the
 # HuggingFace repo (blackdeep/knaif) and to `file:` in contracts/models/model-manifest.yaml. One name
@@ -19,13 +28,20 @@
 # renaming a key would break the join with its own history. Key = experiment identity, file =
 # artifact identity; the `path:` is what maps one to the other.
 #
-# Present on this machine:
+# The two promoted (shipped) models, whatever else is present:
 #   models/knaif-qwen3-4b-v1-q4_k_m.gguf   (public knaif-qwen3-4b-v1  — FT cycle sft-v3-flat, Q4_K_M)
 #   models/knaif-qwen3-1.7b-v1-q6_k.gguf   (public knaif-qwen3-1.7b-v1 — FT cycle sft-v3-flat, Q6_K)
 #
 # Backend types:
 #   backend: llama_cpp — requires GGUF file at options.path (relative to repo root)
 #   backend: ollama    — requires ollama running locally (ollama serve)
+#
+# Stanza-level keys (siblings of `backend:` / `options:`):
+#   public_name       The shipped model name (contracts/models/model-manifest.yaml /
+#                     models.yaml / HuggingFace). `run` stamps it into the saved
+#                     scoreboard as `backend_public_name`, and the report labels the
+#                     arm with it instead of this stanza's cryptic-but-stable key.
+#                     Set it only on a promoted model; omit for experiment stanzas.
 #
 # Options (llama_cpp):
 #   path              GGUF model file (relative to repo root or absolute)
@@ -195,6 +211,7 @@ backends:
     options: {path: models/qwen3-4b-sft-v3-flat-f16.gguf, description: "Qwen3 4B SFT v3 flat union, f16", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
   qwen3-4b-sft-v3-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
+    public_name: knaif-qwen3-4b-v1   # shipped name — reports label the arm with this, not the eval key
     options: {path: models/knaif-qwen3-4b-v1-q4_k_m.gguf, description: "Qwen3 4B SFT v3 flat union, Q4_K_M (public: knaif-qwen3-4b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
   # matched-config re-eval of the untuned 4B default + old v1 4B-ft, for a clean 4B-v3 comparison on the 845 corpus
   qwen3-4b-base-q4-mt512:
@@ -282,6 +299,7 @@ backends:
   # --- ffmpeg-v3 hard-targeted SFT grid (2026-07-01) ---
   qwen3-1.7b-sft-v3-flat-q6:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
+    public_name: knaif-qwen3-1.7b-v1   # shipped name — reports label the arm with this, not the eval key
     options: {path: models/knaif-qwen3-1.7b-v1-q6_k.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q6_K (public: knaif-qwen3-1.7b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
   # pass-3 Task 5 planner-diversity: control (ffmpeg+documents) vs +io, new keywords, same recipe
   qwen3-1.7b-v3b-control-q6:

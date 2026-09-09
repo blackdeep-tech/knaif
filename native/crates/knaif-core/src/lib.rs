@@ -13,6 +13,7 @@ pub mod prompt;
 pub mod registry;
 pub mod retrieval;
 pub mod safety;
+pub mod sandbox;
 pub mod skills;
 
 pub use clarify_gate::{apply_clarify_gate, hallucinated_filename, output_capable_tools};
@@ -29,4 +30,5 @@ pub use prompt::{build_prompt, load_prompt_yaml, validator_feedback_prompt, Prom
 pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
 pub use retrieval::retrieve_tools;
 pub use safety::{is_unsafe_request, load_unsafe_phrases};
+pub use sandbox::{assert_in_sandbox, lexical_normalize, resolve_real};
 pub use skills::{list_skills, resolve_skills_root, SkillMeta};

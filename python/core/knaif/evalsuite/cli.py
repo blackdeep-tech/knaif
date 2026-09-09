@@ -767,6 +767,16 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
 
+        # Stamp backend identity into the scoreboard. The eval backend key
+        # (`backend_name`) is deliberately stable — it is the join key for run
+        # history — but it is cryptic (`qwen3-4b-sft-v3-flat-q4`). When the config
+        # declares a `public_name`, carry the shipped model name too so the report
+        # can label the arm by it (e.g. `knaif-qwen3-4b-v1`). INDEX.md notes that
+        # scoreboards otherwise record no backend at all.
+        scoreboard["backend"] = backend_name
+        if backend_cfg and backend_cfg.get("public_name"):
+            scoreboard["backend_public_name"] = backend_cfg["public_name"]
+
         results[backend_name] = scoreboard
 
         # Persist BEFORE rendering. Rendering is cosmetic; the run behind it can be an hour of
@@ -1074,13 +1084,27 @@ def cmd_regression(args: argparse.Namespace) -> None:
 
     baseline = load_snapshot(snap_path)
 
-    current: dict[str, Any] = baseline  # default: compare snapshot to itself (no-op)
+    # Fail closed, not open: a missing/absent --current used to silently fall back to
+    # comparing the snapshot to itself (always "no regressions"). See audit F6.
     current_path = Path(args.current) if getattr(args, "current", None) else None
-    if current_path and current_path.exists():
-        with current_path.open(encoding="utf-8") as fh:
-            current = json.load(fh)
+    if current_path is None:
+        sys.exit(
+            "regression requires --current FILE, pointing at a freshly produced "
+            "scoreboard (e.g. `run --skill "
+            f"{args.skill} --save DIR ...`, then pass its "
+            f"{args.skill}_<backend>_<verifier>.json). Comparing the snapshot to "
+            "itself proves nothing."
+        )
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
 
-    diff = diff_snapshots(baseline, current, threshold=args.threshold)
+    with current_path.open(encoding="utf-8") as fh:
+        current: dict[str, Any] = json.load(fh)
+
+    try:
+        diff = diff_snapshots(baseline, current, threshold=args.threshold)
+    except ValueError as exc:
+        sys.exit(str(exc))
 
     if diff["regressions"]:
         print(f"\nREGRESSIONS (threshold={diff['threshold']}):")
@@ -1161,7 +1185,12 @@ def cmd_regression_all_skills(args: argparse.Namespace) -> None:
             backend = _backend_from_scoreboard_name(cur_path.name, skill, verifier)
             with cur_path.open(encoding="utf-8") as fh:
                 current = json.load(fh)
-            diff = diff_snapshots(baseline, current, threshold=threshold)
+            try:
+                diff = diff_snapshots(baseline, current, threshold=threshold)
+            except ValueError as exc:
+                failed = True
+                rows.append((skill, backend, f"INCOMPATIBLE: {exc}", []))
+                continue
             if diff["regressions"]:
                 failed = True
                 rows.append((skill, backend, "REGRESSED", diff["regressions"]))

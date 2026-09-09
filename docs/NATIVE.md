@@ -50,7 +50,7 @@ A Cargo workspace of reusable engine crates plus the CLI app:
 | `native/crates/knaif-core` | Deterministic contract: plan parse/normalize/validate, registry, prompt build, retrieval, safety gates, clarify gate, JSON extraction, skill discovery, deps doctor. **No inference deps.** |
 | `native/crates/knaif-models` | Shared model store + manifest (`ModelStore`, `Manifest`, `HttpFetcher`). **No inference deps** — a model-management UI can embed it without linking llama.cpp. |
 | `native/crates/knaif-llm` | Inference backends behind the `LlmBackend` trait: `MockBackend` and `LlamaCppBackend`. Depends on `knaif-models` to locate files. No Ollama. |
-| `native/crates/knaif-skill-api` | The native skill contract (`HandlerContext`, `Step`/`Intent` equivalents, sandbox helpers) — mirrors Python `handler_api` / `tool`. |
+| `native/crates/knaif-skill-api` | **Partial.** Ships the shared `sandbox` helpers (re-exported from `knaif-core`) that both native skill crates use. `HandlerContext` and the `Step`/`Intent` equivalents are **not defined yet** — native skills are wired as per-domain branches in `apps/cli`, not through a generic contract. See audit F11. |
 | `skills/ffmpeg/native` | Native ffmpeg skill (expand → dry-run preview / subprocess execution). |
 | `skills/documents/native` | Native documents skill (PDF/Office read + structural write ops). |
 | `apps/cli` | The `knaif` binary — arg parsing + output formatting only; all logic lives in the engine crates. |

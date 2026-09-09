@@ -277,3 +277,120 @@ def test_run_corpus_execute_no_fixture_skips_execute(tmp_path: Path):
 
     mock_exec.assert_not_called()
     assert outputs[0].artifact_path is None
+
+
+# ── single-final-output chains must execute every command, not just the last ──────────────
+#
+# Fix review, pre-existing finding: only rows DECLARING multiple `outputs` took the chain
+# branch. A two-intent plan with one final deliverable (ffmpeg_273: rotate → compress) fell
+# to the single-artifact path, which runs only the LAST command and rewrites its input back
+# to the original fixture — so the rotation never happened, the materialized file was
+# unrotated, and `filter:transpose` was missing from the recorded command. The model's plan
+# was correct; the harness under-measured it.
+
+
+def _chain_agent(commands: list[str]) -> MagicMock:
+    """An agent whose plan expands to one run_batch result per intent, in order."""
+    agent = MagicMock()
+    agent.infer.return_value = {
+        "plan": [
+            {"tool": "rotate_video", "args": {"inputs": ["clip.mp4"], "angle": 90}},
+            {"tool": "compress_video", "args": {"inputs": ["clip_rotated.mp4"]}},
+        ]
+    }
+    agent.execute_plan.return_value = [
+        {"tool": "run_batch", "result": {"command": c.split()}} for c in commands
+    ]
+    agent.artifact_runner = _execute_against_fixture
+    return agent
+
+
+def test_single_output_chain_runs_every_command(tmp_path: Path):
+    """A multi-command plan with no declared `outputs` must still run as a chain."""
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "clip.mp4").write_bytes(b"fixture")
+    sandbox = tmp_path / "backend"
+    sandbox.mkdir()
+
+    commands = [
+        "ffmpeg -y -i clip.mp4 -vf transpose=1 clip_rotated.mp4",
+        "ffmpeg -y -i clip_rotated.mp4 -c:v libx264 clip_out.mp4",
+    ]
+    agent = _chain_agent(commands)
+
+    with patch("knaif.evalsuite.runner.run_command_chain") as chained:
+        chained.return_value = [
+            {"command": commands[0], "returncode": 0, "stderr": "", "output": "clip_rotated.mp4"},
+            {"command": commands[1], "returncode": 0, "stderr": "", "output": "clip_out.mp4"},
+        ]
+        run_corpus(
+            agent,
+            [_row()],
+            execute=True,
+            sandbox=sandbox,
+            fixture_dir=fixture_dir,
+        )
+
+    assert chained.called, "a multi-command plan must go through run_command_chain"
+    passed_commands = chained.call_args[0][0]
+    assert passed_commands == commands, f"every command must be chained, got {passed_commands}"
+
+
+def test_chain_records_every_command_for_text_criteria(tmp_path: Path):
+    """`artifact_commands` carries the whole chain so command-text criteria (filters/flags)
+    can see a filter applied in an EARLIER step, not only the final command."""
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "clip.mp4").write_bytes(b"fixture")
+    sandbox = tmp_path / "backend"
+    sandbox.mkdir()
+
+    commands = [
+        "ffmpeg -y -i clip.mp4 -vf transpose=1 clip_rotated.mp4",
+        "ffmpeg -y -i clip_rotated.mp4 -c:v libx264 clip_out.mp4",
+    ]
+    agent = _chain_agent(commands)
+
+    with patch("knaif.evalsuite.runner.run_command_chain") as chained:
+        chained.return_value = [
+            {"command": commands[0], "returncode": 0, "stderr": "", "output": "clip_rotated.mp4"},
+            {"command": commands[1], "returncode": 0, "stderr": "", "output": "clip_out.mp4"},
+        ]
+        outputs = run_corpus(
+            agent,
+            [_row()],
+            execute=True,
+            sandbox=sandbox,
+            fixture_dir=fixture_dir,
+        )
+
+    assert outputs[0].artifact_commands == commands
+    # The single-command `artifact` keeps its meaning: the command producing the deliverable.
+    assert outputs[0].artifact == commands[-1]
+
+
+def test_single_command_plan_still_uses_the_artifact_runner(tmp_path: Path):
+    """Regression guard: one-command plans must keep the existing artifact_runner path."""
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "clip.mp4").write_bytes(b"fixture")
+    sandbox = tmp_path / "backend"
+    sandbox.mkdir()
+
+    agent = _agent()
+    mock_exec = MagicMock(return_value=None)
+    agent.artifact_runner = mock_exec
+
+    with patch("knaif.evalsuite.runner.run_command_chain") as chained:
+        outputs = run_corpus(
+            agent,
+            [_row()],
+            execute=True,
+            sandbox=sandbox,
+            fixture_dir=fixture_dir,
+        )
+
+    assert not chained.called, "a single-command plan must not take the chain path"
+    mock_exec.assert_called_once()
+    assert outputs[0].artifact_commands == [outputs[0].artifact]

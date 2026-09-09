@@ -157,6 +157,12 @@ def score_corpus(
             {
                 "id": output.id,
                 "utterance": output.utterance,
+                # `id` alone is NOT a per-row key — a corpus row expands to several
+                # utterances. Without this, joining two runs on id silently keeps one
+                # utterance per row and drops the rest (846 ffmpeg rows -> 313), so
+                # regression evidence taken from a cheap/success run was lossy.
+                # score_corpus_output_diff always emitted it; this path did not.
+                "utterance_idx": output.utterance_idx,
                 "expected_outcome": row.expected_outcome,
                 "actual_outcome": output.outcome,
                 "outcome_correct": outcome_correct,

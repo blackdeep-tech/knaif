@@ -32,7 +32,8 @@ bar to make your change pass.
 ## Gating
 
 ```bash
-just eval-regression <skill>   # exits non-zero if any metric dropped past threshold
+just eval-regression <skill> <current>   # exits non-zero if any metric dropped past threshold; `current` must be
+                                          # a freshly saved scoreboard with the snapshot's verifier and row count
 ```
 
 This is what protects every *other* skill from your change. One shared fine-tuned model

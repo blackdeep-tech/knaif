@@ -414,8 +414,21 @@ def validate_step(
     registry: dict[str, ToolDef],
     root: Path,
     sandbox: Path | None = None,
+    *,
+    allow_internal: bool = False,
 ) -> None:
-    """Raise ValueError if *step* is structurally invalid."""
+    """Raise ValueError if *step* is structurally invalid.
+
+    *allow_internal* gates ``ToolDef.internal`` steps (deterministic-expansion-only
+    tools a skill uses internally, some of which run arbitrary argv or perform
+    side effects). ``internal: true`` only hides a tool from the model's prompt — it does not
+    stop this function from accepting it — so the default (False) rejects an
+    internal tool named directly, because this validates a plan as *proposed*
+    (by the model, or by any caller handing knaif a plan from outside), and
+    internal tools must only ever be reached through ``Intent.expand()``'s
+    deterministic output. Pass True only when validating an already-expanded
+    sub-plan. See docs/audits/2026-09-07-core-principles-and-rtx5080.md, F1.
+    """
     if not isinstance(step, dict):
         raise ValueError("Each plan step must be an object.")
 
@@ -428,6 +441,11 @@ def validate_step(
         raise ValueError("Each step must contain an 'args' object.")
 
     tool_def = registry[tool_name]
+    if tool_def.internal and not allow_internal:
+        raise ValueError(
+            f"Tool {tool_name!r} is internal and cannot be proposed directly; "
+            "it is only reachable through an intent's expansion."
+        )
     allowed = set(tool_def.required_args) | set(tool_def.optional_args)
 
     missing = [k for k in tool_def.required_args if k not in args]
@@ -530,15 +548,21 @@ def validate_plan(
     registry: dict[str, ToolDef],
     root: Path,
     sandbox: Path | None = None,
+    *,
+    allow_internal: bool = False,
 ) -> None:
-    """Validate every step in *payload['plan']*; raises ValueError on first failure."""
+    """Validate every step in *payload['plan']*; raises ValueError on first failure.
+
+    *allow_internal*: see ``validate_step`` — pass True only for an already-expanded
+    sub-plan, never for a plan taken directly from the model or an outside caller.
+    """
     plan = payload["plan"]
     multi_step = len(plan) > 1
     assigned: set[str] = set()
 
     for i, step in enumerate(plan, start=1):
         try:
-            validate_step(step, registry, root, sandbox)
+            validate_step(step, registry, root, sandbox, allow_internal=allow_internal)
         except ValueError as exc:
             raise ValueError(f"Plan step {i} invalid: {exc}") from exc
 

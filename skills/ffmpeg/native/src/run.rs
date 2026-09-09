@@ -1,15 +1,20 @@
-//! Native intent expansion → dry-run command rendering (Phase 7 execution layer, first slice).
+//! Native intent expansion → command rendering and execution.
 //!
-//! [`expand_dry_run`] is the native equivalent of a Python ffmpeg `Intent.expand` followed by
-//! the deterministic `build_recipes` → `render_batch_commands` steps, collapsed into one pass
+//! [`expand`] is the native equivalent of a Python ffmpeg `Intent.expand` followed by the
+//! deterministic `build_recipes` → `render_batch_commands` steps, collapsed into one pass
 //! because the native `run` verb owns the whole workflow (no intermediate model-visible steps).
-//! Given a validated intent step (`tool` + `args`) it maps the args to engine [`Options`], probes
-//! each input with the deterministic [`dummy_probe`], and renders the full `ffmpeg` argv per input
-//! via `build_one_recipe → build_flags → render_command`. No subprocess, no file access — the
-//! execution + confirmation gates land in the next slice.
+//! Given a validated intent step (`tool` + `args`) it maps the args to engine [`Options`],
+//! resolves and sandbox-checks every input via [`resolve_input_in_sandbox`], probes it, and
+//! renders the full `ffmpeg` argv per input via
+//! `build_one_recipe → build_flags → render_command`.
 //!
-//! Scope: the single-recipe intents (one `ffmpeg` command per input). `join_videos` (concat /
-//! `-filter_complex`) is deferred with real execution.
+//! Two probe modes: [`expand_dry_run`] uses the deterministic [`dummy_probe`] (no file access),
+//! while [`expand_execute`] runs real `ffprobe` against the resolved input — so this module
+//! *does* touch the filesystem and spawn subprocesses on the execute path. `join_videos`
+//! (concat / `-filter_complex`) is implemented in [`expand_concat`].
+//!
+//! Sandbox note: inputs are validated *and read* through the resolved path (audit F3/R1) —
+//! never validate one representation and open another.
 
 use std::path::Path;
 
@@ -111,7 +116,10 @@ pub fn expand(
     };
     let mut commands = Vec::with_capacity(resolved.inputs.len());
     for input in &resolved.inputs {
-        let probe = probe_input(Path::new(input), data, mode)?;
+        // Probe and render the RESOLVED path — checking one representation and reading another
+        // is not a boundary (see resolve_input_in_sandbox; fix review R1).
+        let input_path = resolve_input_in_sandbox(input, sandbox)?;
+        let probe = probe_input(&input_path, data, mode)?;
         let recipe = build_one_recipe(
             &probe,
             resolved.platform.as_ref(),
@@ -143,13 +151,18 @@ fn expand_concat(
     let out_path = resolve_output(&output, sandbox)?;
     crate::engine::assert_in_sandbox(&out_path, sandbox)?;
 
+    // Resolve + boundary-check every concat input, then probe AND render the resolved paths —
+    // the raw list must not reach the rendered command (see resolve_input_in_sandbox; R1).
     let mut infos = Vec::with_capacity(inputs.len());
+    let mut resolved_inputs = Vec::with_capacity(inputs.len());
     for input in &inputs {
-        let probe = probe_input(Path::new(input), data, mode)?;
+        let input_path = resolve_input_in_sandbox(input, sandbox)?;
+        let probe = probe_input(&input_path, data, mode)?;
         infos.push(crate::concat::ConcatInfo::from_probe(&probe));
+        resolved_inputs.push(input_path.to_string_lossy().into_owned());
     }
     let cmd = crate::concat::build_concat_command(
-        &inputs,
+        &resolved_inputs,
         &infos,
         str_arg(args, "target_resolution").as_deref(),
         str_arg(args, "target_fps").as_deref(),
@@ -175,6 +188,34 @@ fn assemble_concat_inputs(args: &serde_json::Map<String, Value>) -> anyhow::Resu
     } else {
         coerce_inputs(args.get("inputs"))
     }
+}
+
+/// Resolve one `inputs` entry against the sandbox, boundary-check it, and return **the path the
+/// caller must then probe and render** — port of Python's `ResolveInputs` step (a relative path
+/// resolves against the sandbox, not cwd; both it and the sandbox are then resolved
+/// filesystem-real, so a symlink/junction inside the sandbox pointing outside it is caught the
+/// same way Python's `Path.resolve()` already catches it).
+///
+/// `expand`/`expand_concat` originally probed `inputs` with no resolution or containment check
+/// at all — only the *derived output* path was ever checked, which doesn't protect a read
+/// (audit F3). Returning the resolved path, rather than merely validating the raw string,
+/// closes the second half of that gap: validating one representation while reading another is
+/// not a boundary. With a working directory different from the sandbox, `clip.mp4` checks
+/// `<sandbox>/clip.mp4` while ffprobe/ffmpeg open `<cwd>/clip.mp4` — a different file (2026-09-07
+/// fix review, R1). In open/CLI mode (`sandbox` is `None`) there is no boundary to enforce and
+/// nothing to re-base, so the raw string is returned unchanged.
+fn resolve_input_in_sandbox(
+    raw: &str,
+    sandbox: Option<&Path>,
+) -> anyhow::Result<std::path::PathBuf> {
+    let Some(sb) = sandbox else {
+        // Open/CLI mode: no boundary to enforce and nothing to re-base — keep the raw string so
+        // cwd-relative behavior is unchanged.
+        return Ok(std::path::PathBuf::from(raw));
+    };
+    let resolved = knaif_skill_api::sandbox::resolve_real(Path::new(raw), sb);
+    knaif_skill_api::sandbox::assert_in_sandbox(&resolved, sb)?;
+    Ok(resolved)
 }
 
 /// Resolve a (possibly relative) output path against the sandbox, else cwd (open mode).
@@ -942,5 +983,87 @@ mod tests {
             Some(sandbox),
         );
         assert!(err.is_err(), "output outside the sandbox must be rejected");
+    }
+
+    #[test]
+    fn sandbox_input_escape_with_in_sandbox_output_is_rejected() {
+        // F3's precise gap: `sandbox_escape_is_rejected` above passes, but only because the
+        // DERIVED output (from the out-of-sandbox input's own directory) also lands outside
+        // the sandbox — the output-side check catches it by accident. Here the explicit
+        // output is genuinely inside the sandbox, so the output check alone would pass; this
+        // only fails if `inputs` is itself resolved + boundary-checked before being probed
+        // (the audit's literal repro: an absolute input outside the sandbox with an explicit
+        // output inside it reached `ffprobe`/render with no rejection).
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-ffmpeg-run-test-{}-input-escape",
+            std::process::id()
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let outside_input = outside.join("secret.mp4");
+        let in_sandbox_output = sandbox.join("escaped-read.mp4");
+
+        let result = expand_dry_run(
+            "strip_audio",
+            &args(serde_json::json!({
+                "inputs": outside_input.to_string_lossy(),
+                "output": in_sandbox_output.to_string_lossy(),
+            })),
+            &data(),
+            Some(&sandbox),
+        );
+        assert!(
+            result.is_err(),
+            "an out-of-sandbox input must be rejected even with an in-sandbox explicit output"
+        );
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn relative_input_renders_the_sandbox_file_not_the_cwd_one() {
+        // Fix review R1: validating one representation while probing/rendering another is not a
+        // boundary. With a working directory that is NOT the sandbox and a same-named file in
+        // each, checking `<sandbox>/clip.mp4` while ffprobe/ffmpeg open `<cwd>/clip.mp4` reads a
+        // different file than the one cleared. The rendered command must name the resolved,
+        // checked path — this test fails if the raw relative string is rendered instead.
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-ffmpeg-run-test-{}-cwd-vs-sandbox",
+            std::process::id()
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        // Same basename in both; only the sandbox one is legitimately reachable.
+        std::fs::write(sandbox.join("clip.mp4"), b"sandbox").unwrap();
+        std::fs::write(outside.join("clip.mp4"), b"outside").unwrap();
+
+        let exp = expand_dry_run(
+            "strip_audio",
+            &args(serde_json::json!({"inputs": "clip.mp4"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        let commands = match exp {
+            Expansion::Commands(c) => c,
+            Expansion::Clarify(q) => panic!("expected commands, got clarify: {q}"),
+        };
+        let rendered = commands[0].join(" ").replace('\\', "/");
+        let sandbox_str = sandbox.to_string_lossy().replace('\\', "/");
+        let outside_str = outside.to_string_lossy().replace('\\', "/");
+        assert!(
+            rendered.contains(sandbox_str.trim_start_matches("//?/")),
+            "rendered command must name the resolved sandbox input: {rendered}"
+        );
+        assert!(
+            !rendered.contains(&outside_str),
+            "rendered command must never name the cwd/outside file: {rendered}"
+        );
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }

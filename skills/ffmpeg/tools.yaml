@@ -65,6 +65,14 @@ create_thumbnail:
   required_args: [input]
   optional_args: [at_time, image_format, scale, output]
   safety_category: destructive
+  arg_schemas:
+    # Typed so a model-leaked number (the 4B emits `scale: 2` for "4K thumbnail") is coerced
+    # to a string by normalize_plan and then reported as an unrecognised *scale value* by the
+    # engine, instead of crashing it with `'int' object has no attribute 'strip'`.
+    # Deliberately no `help:` — that text renders into every prompt, and the ffmpeg prompt is
+    # held under a size ceiling (test_prompt_audit); the type alone is what fixes the crash.
+    scale:
+      type: string
   mock_args:
     input: "{utterance_after:from}"
 

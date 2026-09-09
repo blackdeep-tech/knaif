@@ -61,8 +61,13 @@ which carries the paired per-utterance comparison. The run directory itself is g
 is not in the repository — `.gitignore` excludes `evals/**` bar the durable summaries, so INDEX.md is
 the committed record for this and most other runs. Link to the row, never to a run directory.
 
-> **Quality never moves with hardware — only speed does.** Every accuracy number in this repo
-> survived the machine change. Greedy decoding on the same GGUF makes the same plan.
+> **Observed: hardware moved speed a lot and routing very little — on this sample.** In the
+> paired study above, the same GGUF under greedy decoding produced identical decisions on
+> **99.4%** (4B) and **98.7%** (1.7B) of utterances, and outcome accuracy did not drop
+> (4B: 0.903 → 0.914). That is a measured sample result on one corpus and two machines, **not**
+> a guarantee that quality cannot move with hardware — the table's own numbers show it moving
+> on a handful of rows, and GPU float nondeterminism can flip tokens even at temperature 0.
+> Treat a hardware change as speed-only *after* a paired per-utterance check, not before it.
 
 ---
 

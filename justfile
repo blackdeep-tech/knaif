@@ -539,17 +539,31 @@ eval-stage skill stage *args:
 eval-backends skill *args:
     uv run python -m knaif.evalsuite compare --skill {{skill}} --config eval_backends.yaml --verifier cheap {{args}}
 
-# Writes the bar to skills/<skill>/data/eval_snapshot.json — do it deliberately, in its own
-# commit, and only when adopting a measured improvement. Run artifacts go under evals/ like every
+# Writes the bar to skills/<skill>/data/eval_snapshot.json — do it deliberately and in its own
+# commit. Two legitimate reasons, and say which one applies: (1) adopting a MEASURED IMPROVEMENT
+# — prove it with a per-row join at the same verifier and population, not an aggregate; or
+# (2) a COVERAGE re-lock, when the stored population or verifier can no longer evaluate the
+# current corpus at all, so the gate raises rather than judging. The 2026-09-08 re-lock was one
+# of each: ffmpeg an improvement, documents pure coverage. Never re-lock to make a red gate go
+# green. Run artifacts go under evals/ like every
 # other run; .gitignore keeps only the durable summaries (score.json, report.md), so commit the
 # run and add a row to evals/INDEX.md rather than pruning by hand.
-# RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg)
-eval-snapshot skill *args:
-    uv run python -m knaif.evalsuite run --skill {{skill}} --verifier output_diff --snapshot --save evals/runs/snapshot_{{skill}}_output_diff {{args}}
+# The verifier is an argument, not a constant. It used to be hardcoded `output_diff`, which
+# silently disagreed with both committed bars: documents was always `success`, and measuring
+# ffmpeg both ways (2026-09-08) showed `success` grades 574 plan rows to output_diff's 527 —
+# so per EVAL_FRAMEWORK's "success, or output_diff where coverage is better", success wins.
+# Override only with evidence that output_diff covers more of the skill.
+# RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg [output_diff])
+eval-snapshot skill verifier="success" *args:
+    uv run python -m knaif.evalsuite run --skill {{skill}} --verifier {{verifier}} --snapshot --save evals/runs/snapshot_{{skill}}_{{verifier}} {{args}}
 
-# Regression check against saved snapshot (e.g.: just eval-regression ffmpeg)
-eval-regression skill:
-    uv run python -m knaif.evalsuite regression --skill {{skill}}
+# Regression check against saved snapshot. `current` is a scoreboard JSON from a real run
+# (e.g.: just eval-success ffmpeg --save evals/runs/2026-01-01_check --verifier <snapshot's verifier>,
+# then: just eval-regression ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_<verifier>.json).
+# No `current` used to silently compare the snapshot to itself and always print "OK" — fixed
+# per docs/audits/2026-09-07-core-principles-and-rtx5080.md (F6); now `current` is required.
+eval-regression skill current:
+    uv run python -m knaif.evalsuite regression --skill {{skill}} --current {{current}}
 
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:
@@ -582,7 +596,9 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 #   just parity ffmpeg --limit 20
 # Two comparison levels (pass-through --mode): `--mode command` (default) diffs the rendered
 # ffmpeg argv from `run --dry-run` — tests intent expansion + render, but python skips
-# compress/platform/thumbnail/batch/reverse and native previews only chain step 1; `--mode plan`
+# compress/platform/thumbnail/batch/reverse and native REFUSES multi-step chains outright
+# (it executes one intent per invocation — audit F5 — so a chain row's native outcome is a
+# `reject`, which compares as a mismatch rather than a rendered command); `--mode plan`
 # diffs the `plan --json` envelope (tool+args) for EVERY intent and full chains (no render),
 # treating native's materialized optional-arg defaults as equivalent. Run both for full coverage.
 # `--batch` (plan mode only) loads each model ONCE and streams all utterances via `plan --batch`

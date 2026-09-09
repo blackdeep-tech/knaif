@@ -7,7 +7,7 @@
 //! wired; the overlay tools (watermark/add_page_numbers) and rasterizing tools (compress/convert/
 //! ocr) are not yet here.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -591,35 +591,17 @@ fn write(doc: &mut lopdf::Document, path: &Path) -> anyhow::Result<()> {
     pdf::save(doc, path)
 }
 
-/// Lexically absolutize + collapse `.`/`..` (no filesystem access — works on not-yet-created files).
-fn lexical_abs(p: &Path) -> PathBuf {
-    let base = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir().unwrap_or_default().join(p)
-    };
-    let mut out = PathBuf::new();
-    for comp in base.components() {
-        match comp {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            c => out.push(c.as_os_str()),
-        }
-    }
-    out
-}
-
-/// Raise if `p` is outside `sandbox` (both lexically resolved). No-op when `sandbox` is `None`.
+/// Raise if `p` is outside `sandbox`. No-op when `sandbox` is `None`. Delegates to the
+/// shared `knaif-skill-api` primitive (filesystem-real: existing ancestors are
+/// canonicalized, following symlinks/junctions, not just lexically normalized) so this
+/// applies the identical containment rule as ffmpeg and core. A purely lexical check here
+/// previously let a Windows junction placed inside the sandbox read a file outside it — see
+/// docs/audits/2026-09-07-core-principles-and-rtx5080.md, F4.
 fn assert_in_sandbox(p: &Path, sandbox: Option<&Path>) -> anyhow::Result<()> {
     let Some(sandbox) = sandbox else {
         return Ok(());
     };
-    if !lexical_abs(p).starts_with(lexical_abs(sandbox)) {
-        anyhow::bail!("Path {:?} is outside the sandbox", p.display().to_string());
-    }
-    Ok(())
+    knaif_skill_api::sandbox::assert_in_sandbox(p, sandbox)
 }
 
 #[cfg(test)]
@@ -713,6 +695,53 @@ mod tests {
         let dir = tmpdir();
         let a = args(serde_json::json!({"input": "../escape.pdf", "degrees": 90}));
         assert!(preview("rotate_pages", &a, &dir, Some(&dir), &docs_bundle()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn sandbox_junction_escape_rejected() {
+        // The audit's literal F4 repro: `run documents "Inspect junction/example.pdf"
+        // --sandbox <sandbox> --dry-run` read a file outside the sandbox through a junction
+        // placed inside it, because the old `assert_in_sandbox` was lexical-only. It must
+        // now be rejected the same way `sandbox_escape_rejected` above already is.
+        let dir = tmpdir();
+        let sandbox = dir.join("sandbox");
+        let outside = dir.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("example.pdf"), make_pdf(1)).unwrap();
+
+        let link = sandbox.join("junction");
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &link.display().to_string(),
+                &outside.display().to_string(),
+            ])
+            .status()
+            .expect("mklink must run on Windows");
+        assert!(
+            status.success(),
+            "junction creation must succeed (no admin needed)"
+        );
+
+        let a = args(serde_json::json!({"input": "junction/example.pdf"}));
+        let result = preview(
+            "inspect_document",
+            &a,
+            &sandbox,
+            Some(&sandbox),
+            &docs_bundle(),
+        );
+        let err = match result {
+            Ok(_) => panic!("junction escape must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("outside the sandbox"), "{err}");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -324,6 +324,333 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
+- [~] **2026-09-07 core-principles audit follow-ups** —
+  `docs/audits/2026-09-07-core-principles-and-rtx5080.md`, 12 findings (F1 critical, F2–F7
+  high, F8–F12 medium), reproduced/source-reviewed on the RTX 5080 box. Suggested order in
+  the audit's own "Suggested order of follow-up work".
+  **A follow-up review of the fixes** (`docs/audits/2026-09-07-fix-review.md`) found five
+  counterexamples, R1–R5 — every one independently reproduced here before fixing, and every
+  one now closed; each is recorded against its parent finding below. The review's own
+  documentation corrections are applied too: the `evals/INDEX.md` row no longer claims
+  hardware invariance (aggregate similarity across different verifiers/row sets cannot
+  establish it), the audit's ffmpeg category paragraph no longer links clarify routing
+  scores to F2, and `justfile`'s parity comment no longer says native previews chain step 1.
+  Status:
+  - [x] **F6 — regression gate was fail-open, FIXED.** `just eval-regression <skill>`
+    silently compared the snapshot to itself when no `--current` was given (always printed
+    "No regressions ... OK"); `diff_snapshots` was also fail-open on a verifier/population
+    mismatch and on a metric `current` dropped entirely. Now `cmd_regression` requires
+    `--current` to point at an existing file, and `diff_snapshots` raises `ValueError` on a
+    verifier mismatch, a `total` (population) mismatch, or a metric present in baseline but
+    absent from current — `cmd_regression` and `cmd_regression_all_skills` both surface that
+    as a failure instead of silently passing. `justfile`'s `eval-regression` recipe now takes
+    a required `current` scoreboard-path argument. Tests:
+    `python/core/tests/test_evalsuite_regression_cmd.py`.
+    **R3 follow-up (fixed):** the identity guard was itself fail-open — it only compared
+    `verifier`/`total` when *both* sides declared them, so a current scoreboard that simply
+    omitted them skipped the check entirely and could still certify. Now, when the baseline
+    declares one, the current run must declare it too (missing → actionable error), tested
+    separately from the explicitly-unequal case.
+  - [x] **F1 (critical) + F2 — same root cause, fixed together.** No trusted/untrusted
+    boundary: `internal: true` FFmpeg steps (`run_preview`/`run_batch`/`run_concat`, all
+    `safety_category: safe`) were hidden from the prompt but still accepted by
+    `validate_step` from raw model output, and `run_ffmpeg()`/`subprocess.run` executed
+    whatever argv arrived — model output could pick the executable. Separately, the
+    destructive-intent check in `agent.py` only looked at the *expanded leaf's*
+    `safety_category`, never the original intent's, so a `destructive` intent (e.g.
+    `strip_audio`) that expanded into `safe` leaves ran with `confirmed=False`. Fixed:
+    `validate_step`/`validate_plan` gained `allow_internal` (default False — rejects a
+    plan naming an internal tool directly; the one legitimate caller, the post-expansion
+    re-validation of `Intent.expand()`'s own trusted output, opts in explicitly).
+    `_execute_steps` now carries the originating intent's tool/safety_category through
+    expansion (`intent_destructive`), so a destructive intent blocks before its first
+    leaf runs even when every leaf is individually `safe`; direct destructive leaves
+    (no intent wrapper) keep their existing check too. Tests:
+    `python/core/tests/test_tool_trust_boundary.py` (registry-only) +
+    `skills/ffmpeg/python/tests/test_trust_boundary_ffmpeg.py` (the audit's two literal
+    reproductions, executed for real — both now raise before any subprocess/file write).
+    **R5 follow-up (fixed):** the inherited destructive gate also blocked a destructive
+    intent's *own terminal clarify* — `prepare_for_platform` with an unknown platform expands
+    deterministically to `clarify`, and the new check turned that recoverable question into a
+    hard error. Terminal tools (`clarify`/`reject`/`done`) are now exempt: they perform no
+    action and already `should_stop` the loop, so nothing destructive can follow one in the
+    same sub-plan regardless of step order — the exemption cannot reopen F2, and a test pins
+    that a real (non-terminal) expansion is still blocked.
+  - [x] **F7 — parity `canon_token` collapses meaningful differences, fixed.** Any
+    `/`-containing token was reduced to its basename, so `a/clip.mp4`/`b/clip.mp4`
+    compared equal and FFmpeg filter expressions with `/` (e.g. `pad=...(ow-iw)/2`)
+    collapsed to `'2'`. Fixed: `Outcome.key()` now canonicalizes argv *positionally*
+    (`_canon_argv`) — only the value after each `-i` and the trailing output token,
+    never a filter/codec argument — and resolves those path positions lexically
+    against the shared `--cwd` (`_resolve_against`, text-only, no filesystem access)
+    instead of basename alone, so `a/clip.mp4` and `b/clip.mp4` correctly stay
+    different while native-relative and python-absolute of the *same* file still
+    match. `compare()`/`main()` thread `cwd` through; `key(cwd=None)` keeps the old
+    basename fallback for callers with no shared cwd. Tests: new assertions in
+    `scripts/parity_check.py`'s `--self-test` reproducing both audit examples
+    (RED confirmed pre-fix — the filter pair literally collapsed to `'2'` — GREEN
+    post-fix).
+    **R4 follow-up (fixed):** only *command* mode was repaired; **plan** mode still ignored
+    `cwd` and routed every string through basename normalization, so `a/report.pdf` and
+    `b/report.pdf` compared equal and aspect values `4/3` / `16/3` both collapsed to `3`.
+    Plan mode now normalizes by argument contract: a new `_PLAN_PATH_ARG_KEYS` (mirroring
+    `planner._PATH_ARG_KEYS` + outputs, and now the single definition `_SIGNIFICANT_ARG_KEYS`
+    aliases so the two can't drift) marks which keys hold paths; those resolve against the
+    shared cwd, every other string compares verbatim. `plan_equiv_modulo_defaults` takes the
+    same treatment so a benign abs/rel difference on a shared path key isn't reported as
+    divergence. Self-test now covers plan comparisons, not just rendered commands.
+  - [x] **F3/F4 — native path resolution / sandbox containment, fixed.** Native FFmpeg
+    probed `inputs` directly against the process cwd, bypassing sandbox resolution
+    entirely; native sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) were each
+    their own lexical-only `.`/`..` collapse and didn't resolve symlinks/junctions, so a
+    junction inside the sandbox read outside it (reproduced on Windows; Python's
+    `_resolve_path` already rejected the same case, since `Path.resolve()` calls into the
+    OS). Fixed:
+    - **F4 (shared primitive):** new `knaif-core::sandbox` module —
+      `resolve_real(p, base)` canonicalizes every *existing* ancestor (following
+      symlinks/junctions) and appends any not-yet-created tail lexically on top, falling
+      back to pure lexical normalization only when nothing on the path exists at all;
+      `assert_in_sandbox` uses it for the boundary check. Re-exported from
+      `knaif-skill-api::sandbox` (both `ffmpeg`-native and `documents`-native already
+      depend on that crate) — that's a real module now, not the "skeleton only" stub F11
+      also flags. `knaif-core::planner::resolve_path`'s sandboxed branch, ffmpeg
+      `engine.rs`'s `assert_in_sandbox`, and documents `run.rs`'s `assert_in_sandbox` all
+      now delegate to the shared primitive instead of their own local
+      `lexical_abs`/`lexical_normalize` copies (removed as dead code).
+    - **F3 (missing input check):** `expand`/`expand_concat` in ffmpeg `run.rs` now call
+      a new `assert_input_in_sandbox` — port of Python's `ResolveInputs` step (relative
+      paths resolve against the sandbox, not cwd) — on every `inputs` entry *before*
+      `probe_input` reads it. Only the derived *output* path was ever checked before;
+      that doesn't protect a read (an absolute input outside the sandbox with an
+      explicit in-sandbox output reached `ffprobe`/render with no rejection). The
+      raw/possibly-relative input string still flows into `probe_input`/`render_command`
+      unchanged — this only gates the read, it doesn't change what gets rendered.
+    - Tests: `knaif-core::sandbox` unit tests (including a real Windows junction via
+      `mklink /J`, no admin needed, plus a parallel Unix symlink test) +
+      `planner::tests::sandbox_boundary_rejects_a_junction_escape` (through the real
+      `validate_step` entry point) + `engine::tests::assert_in_sandbox_rejects_a_
+      junction_escape` (ffmpeg) + `run::tests::sandbox_junction_escape_rejected`
+      (documents) + `run::tests::sandbox_input_escape_with_in_sandbox_output_is_rejected`
+      (ffmpeg, F3's exact repro shape). RED confirmed on every junction/input-escape
+      test pre-fix, GREEN post-fix. Full workspace (`cargo test --workspace`): 260
+      passed, 0 failed; `cargo fmt --all -- --check` and
+      `cargo clippy --workspace --all-targets -- -D warnings` both clean.
+    - **R1 follow-up (fixed).** The F3 check validated the *resolved* input but still probed
+      and rendered the *raw* string, so with a working directory different from the sandbox,
+      `clip.mp4` cleared `<sandbox>/clip.mp4` while ffprobe/ffmpeg opened `<cwd>/clip.mp4` —
+      a different file. Validating one representation while reading another is not a
+      boundary. `resolve_input_in_sandbox` now *returns* the checked path and both `expand`
+      and `expand_concat` probe and render it (concat's whole input list included); open/CLI
+      mode still returns the raw string, so cwd-relative behavior there is unchanged.
+      Verified end-to-end through the rebuilt CLI with real ffmpeg: from `cwd=outside` with
+      same-named 32×32 (sandbox) and 16×16 (outside) clips, the artifact is now **32×32** —
+      it was consuming the outside file before. Test:
+      `run::tests::relative_input_renders_the_sandbox_file_not_the_cwd_one`.
+    - **R2 follow-up (fixed).** `resolve_real` lexically collapsed `..` *before* canonicalizing,
+      which is not what a filesystem does: on POSIX, `..` after a symlink resolves relative to
+      the link's **target**, so cancelling `link/..` textually erases the link and yields a
+      path the real I/O never uses — the guard would clear a read that lands outside. The raw
+      path (with `..` intact) now goes to the OS: the longest existing prefix is canonicalized
+      and only a not-yet-created tail is applied lexically, so each platform gets its own
+      semantics, matching Python's `Path.resolve()` on both. Measured on this box that Windows
+      resolves `junction\..` **lexically** (stays inside), so both behaviors are now pinned:
+      `assert_in_sandbox_rejects_a_symlink_followed_by_parent` (`#[cfg(unix)]`, the escape) and
+      `junction_followed_by_parent_matches_windows_semantics` (`#[cfg(windows)]`, the
+      in-sandbox result). Also added: `canonicalize`'s Windows `\\?\` verbatim prefix is
+      stripped for plain drive paths, so resolved inputs render as ordinary `C:\…` and still
+      line up with Python's paths in cross-runtime comparison.
+  - [x] **F5 — native `run` silently drops every plan step after the first, fixed (interim,
+    per the audit's own recommendation).** `main.rs` only dispatched `steps.first()`; a valid
+    multi-step plan (e.g. strip_audio → resize_video) previewed/executed only step one and
+    still exited 0 — reporting full success for partial completion, and for a destructive
+    plan, silently skipping a real side effect the request asked for. A full ordered
+    multi-step executor (variable binding, per-intent confirmation, chain execution) is a
+    substantially larger feature than this bug fix — the audit explicitly OKs the interim:
+    "explicitly reject unsupported multi-step execution instead of reporting success for
+    only the first step." Fixed: new `decide_steps`/`StepDecision` (`Empty` / `Single(idx)` /
+    `Unsupported { total }`) — a plan with more than one step now prints
+    `reject: this request needs N steps, ...` (no partial dispatch of step 1 at all) and
+    returns, using the same `reject:`-prefixed convention `cmd_run` already uses for a real
+    `reject` plan step, so `scripts/parity_check.py`'s `parse_native` picks it up as
+    `kind="reject"` for free — no parity-tooling code change needed, only its now-stale
+    "previews only step 1" docstring/comment (updated: a chain row's native outcome is now
+    `reject`, so it correctly falls through to `mismatch` against python's multi-command
+    outcome rather than the old lenient `chain-native-single-step` bucket, which is kept for
+    its narrower original trigger — both sides still rendering `commands` — not deleted).
+    Tests: `decide_steps_empty_plan_is_empty` / `_single_step_is_ok` /
+    `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
+    needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
+    260); fmt + clippy clean.
+  - [~] **F9 — acceptance snapshots RE-LOCKED (2026-09-08). HALF DONE — the identity half is
+    outstanding.** The audit asked for two things: adopt compatible full-corpus executing
+    snapshots, *and* "store corpus hash/row IDs, model checksum/config, and code identity" in
+    them. The first is done (below). The second is **not**: the re-locked snapshots carry
+    metrics plus `backend`/`backend_public_name` (a side effect of the report-labelling
+    change) but no corpus hash, no row IDs, no model sha256, no git SHA. Until that lands the
+    gate still cannot distinguish "behavior changed" from "someone edited the corpus" — the
+    exact conflation the audit flagged, and the one that makes an aggregate verdict
+    unreadable after a corpus edit. Do not mark F9 closed on the strength of the re-lock
+    alone.
+    What IS done — both skills now
+    hold a full-corpus **`success`** bar: ffmpeg `cheap`/297 → **`success`/847** (outcome
+    0.902 / knaif 0.9738 / tool 0.891 / schema 0.985), documents `success`/129 →
+    **`success`/164** (0.976 / 1.000 / 0.976 / 0.9939). Runs:
+    `evals/runs/2026-09-08_f9-relock_success`.
+    **Two different justifications, deliberately.** ffmpeg is a *measured improvement* —
+    joined per row against the pre-fix run at the same verifier and population: 0 outcome
+    flips, 0 score drops, 4 gains, all `ffmpeg_273` at 0.667 → 1.000, precisely the rows the
+    chain-execution fix targeted. documents is a *coverage* re-lock, **not** an improvement:
+    behavior is bit-identical (0 flips over 163 joined utterances) and the aggregate move is
+    entirely the population (129 → 164, adding the harder strata). AGENTS.md's "only when
+    adopting a measured improvement" is about not hiding regressions; a bar that the
+    now-fail-closed gate *cannot evaluate* (population mismatch → raises) is the other
+    legitimate reason to re-lock, and the audit prescribes it.
+    ⚠️ **Verifier is `success`, not `output_diff`** — reversing what this entry and
+    `just eval-snapshot` previously assumed. The corpus-level counts (218 baselines vs 145
+    `success_criteria`) predict the wrong winner; measured head-to-head on the real runs,
+    `success` grades **574** plan rows (91.2%) to output_diff's **527** (86.0%), and
+    output_diff's extra misses are encoder-level diffs against the baseline command's output
+    (`pix_fmt`, `size` ±20%) rather than artifact correctness. `just eval-snapshot` now takes
+    the verifier as an argument (default `success`) instead of hardcoding `output_diff`, and
+    the SOP records how to choose. Gate verified **both ways** — exit 0 on the real run, exit
+    1 on an injected −0.05 regression.
+  - [x] **Harness defect found while doing F9: scoreboard rows had no per-utterance key.**
+    `score_corpus` (used by `cheap` **and** `success` — i.e. both committed bars) omitted
+    `utterance_idx`, which `score_corpus_output_diff` always emitted. A corpus row expands to
+    many utterances sharing one `id`, so the only available join key was `id`, which keeps the
+    last utterance per row and silently discards the rest — ffmpeg's 847 entries collapse to
+    313, **63% of the regression evidence gone**, while still printing a confident
+    regressed/improved list built from mismatched utterance pairs. Doing exactly that during
+    this re-lock produced a plausible "9 regressed / 21 improved"; the correct key gave **0
+    and 0**. Fixed in `scoring.py` (tests:
+    `test_rows_carry_utterance_idx`, `test_rows_utterance_idx_distinguishes_utterances_of_one_row`),
+    and `docs/EVAL_VERIFICATION_SOP.md`'s documented join snippet — which keyed on `id` alone
+    and so carried the same defect — now keys on `(id, utterance)` text, with a note on why
+    `utterance_idx` is unsafe across pre-2026-09-08 runs.
+  - [ ] **F8 — Python and native feed the model different planning prompts.** Python retrieves
+    (5 of 13 public ffmpeg tools for the audit's probe, retrieval-ordered, retrieved examples);
+    native passes the full registry, filters internal tools, orders by YAML, and uses the static
+    examples block. Generation budget is **512 on both** — do not revive the corrected "2048 in
+    Python" claim. **Impact: Python eval scores do not establish shipped native planning
+    quality.** Known since 2026-08-08, not worsened by this branch. Do the controlled prompt
+    comparison in `docs/plans/2026-08-08-native-python-planning-parity.md` *before* attributing
+    any remaining model failure to the model, then measure the shipped native runtime with
+    executing criteria. Tracked follow-up; not blocking.
+  - [ ] **F10 — runtime output verification doesn't check requested properties.**
+    `VerifyOutputsStep` records a probe summary and marks a successfully-probed file verified
+    without asserting the requested duration/dimensions/codec; batch expansion supplies no
+    expected properties; core `_step_failed` looks at subprocess return codes, not
+    `verified: false`. So a zero-exit command producing the *wrong* artifact still looks
+    successful to the application. Note the asymmetry: the executing **eval** verifier is
+    stronger than this production check, so eval success does not imply equivalent runtime
+    verification exists. Fix = carry deterministic expected properties from the recipe into
+    verification and surface failures through the generic handler-result contract. Independent
+    feature; keep it distinct from model-routing work.
+  - [ ] **F11 — build (or formally retire) the generic native skill API.** `knaif-skill-api`
+    now ships the shared `sandbox` module (F3/F4), but `HandlerContext` and the `Step`/`Intent`
+    equivalents are still undefined; native skills are dispatched by per-domain branches in
+    `apps/cli`, and native confirmation is selected by those branches rather than by a generic
+    executor reading `ToolDef.safety_category`. F1–F5's dual-implementation risk traces back to
+    this. Python also still carries the legacy IO list/find/delete/move handlers in core
+    `executor.py` — move them into the bundle when the stale `io` skill is rebuilt. **The
+    documentation half is done** (`AGENTS.md` and `docs/NATIVE.md` no longer describe those
+    interfaces as available); what remains is either implementing the API or deciding to keep
+    the specialized host permanently. Large; sequence it with the io-skill rebuild.
+  - [x] **Two pre-existing harness/validation defects the fix review surfaced, fixed.**
+    Neither is an audit finding or a regression from these commits; both were
+    under-measuring or mis-reporting real behavior.
+    - **Single-final-output chains were not executed.** Only rows *declaring* multiple
+      `outputs` took the chain branch; a two-intent plan with one deliverable
+      (`ffmpeg_273`: rotate → compress) fell to the single-artifact path, which runs only
+      the LAST command and rewires its input back to the original fixture — so the rotation
+      never happened and the recorded command had no `transpose`. Verified from the saved
+      run: the model's plan was **correct** on all four utterances, yet each scored 0.667
+      with `filter:transpose not in command`. Fixed on both halves: the runner now chains
+      whenever the plan rendered more than one command (not just when `outputs` is
+      declared), and records every rendered command as `AgentOutput.artifact_commands`, so
+      the `cheap`/`success` command-text criteria (filters/flags/encoder) see a filter
+      applied in an earlier step. `artifact` keeps its meaning — the command that produced
+      the deliverable — so `output_diff`, `honest`, and the scoreboard are untouched.
+      Re-scoring ffmpeg_273's real chain through the fixed verifier: **0.667 → 1.0**.
+      ⚠️ This legitimately *changes measured scores* for chain rows (it stops
+      under-measuring correct plans), so comparisons against pre-fix runs are not
+      like-for-like and a re-run/re-lock is the separate deliberate step already tracked
+      as F9. Tests: three in `test_evalsuite_runner_execute.py` (chains every command,
+      records the chain, and a guard that single-command plans still use the artifact
+      runner) + two verifier tests, including one pinning that a filter in *no* step still
+      fails, so the chain-aware search can't become a blanket pass.
+    - **`create_thumbnail.scale` had no type, so a model-leaked number crashed the engine.**
+      The 4B emits `scale: 2` / `scale: 1` for "4K thumbnail" (five saved errors across
+      `ffmpeg_236`/`ffmpeg_237`); `_parse_scale` then raised
+      `AttributeError: 'int' object has no attribute 'strip'` — a crash, not a usable
+      validation result. Fixed declaratively plus defensively: `scale` now declares
+      `type: string` in `tools.yaml`, so `normalize_plan` coerces the number before the
+      handler sees it, and `_parse_scale` takes `Any` and stringifies so a direct
+      `execute_plan` call can't crash either. A bare number is **not** coerced into a
+      scale — `2` has no defensible reading, and inventing one would fabricate a 2-pixel
+      thumbnail that still satisfies a `filters: [scale]` check — so it takes the existing
+      unrecognised-value path. Both runtimes now report the identical error from the one
+      shared schema (native ports the same `string`-typed numeric coercion), verified
+      through the rebuilt native CLI. No `help:` text on the schema: that renders into
+      every prompt and pushed the ffmpeg prompt past its 14,000-char ceiling
+      (`test_prompt_audit`); the type alone is what fixes the crash. `just site-data`
+      regenerated for the schema change.
+  - [x] **F12 — training dataset builders referenced the pre-move `src/skills/...` path,
+    fixed.** `build_dataset.py`, `build_ffmpeg_distill.py`, and `build_preference_dataset.py`
+    all still computed `ROOT = Path(__file__).resolve().parent.parent` (correctly `<repo>/
+    python`, these scripts' own pillar — used for each script's own output path, which is
+    fine) but then built `skills/`/`evals/`/`sandbox/` paths as `ROOT / "src/skills/..."` —
+    both the stale `src/` prefix (the package moved to `python/core/knaif`; skills were
+    never under `src/` at the current layout) and the wrong root (those three directories
+    live at `<repo>`, one level above `ROOT`, not under `python/`). Every script also carried
+    a `sys.path.insert(0, str(ROOT / "src"))` that both pointed at a directory that doesn't
+    exist and was unnecessary regardless — the repo-root `pyproject.toml`'s
+    `[tool.uv.workspace]` already makes `python/core` (and so `knaif`) importable under
+    `uv run` with no manual sys.path hack. Fixed: added `REPO_ROOT = ROOT.parent` to each
+    script, removed the stale `sys.path.insert`, and repointed every `skills/`/`evals/`/
+    `sandbox/` reference at `REPO_ROOT` instead of the bare/`ROOT`-prefixed `src/...` form.
+    Verified live (not just source-reviewed), matching `docs/FINE_TUNING.md`'s documented
+    command exactly: `uv run python python/training/build_dataset.py --skills
+    ffmpeg,documents --out <path>` now writes **738 rows** (404 ffmpeg + 334 documents —
+    exactly matching this audit's own independently-reported "current training files
+    contain 404 FFmpeg and 334 documents examples" figure);
+    `build_ffmpeg_distill.py` now writes **45 accepted rows**, matching the historical
+    `evals/INDEX.md` `sft-v3-distill-v1` entry's "45 accepted synthetic ffmpeg rows"
+    exactly; `build_preference_dataset.py` now runs to completion against real files
+    (confirmed with `--parent`/`--candidate` pointed at an existing scoreboard) instead of
+    raising `FileNotFoundError` on `src/skills/ffmpeg/skill.yaml` — its *default* args still
+    reference specific 2026-07-01 eval scoreboards that are legitimately absent from this
+    checkout (generated `evals/runs/` artifacts, not committed), which is a real data-
+    availability gap, not a code bug; it now fails on the *correct* (repo-root) path for
+    that reason instead of the wrong (`python/`-prefixed, `src/`-stale) one.
+    `docs/FINE_TUNING.md`'s documented invocation already matched the current file location
+    and needed no change. No permanent pytest coverage added for these training scripts —
+    consistent with the existing convention for `python/training/*.py` (none of its sibling
+    scripts have any either); the audit's own ask was to "test the real builder entry point
+    on a small temporary output," which the runs above do.
+  - Also produced (documentation-only, already applied): the audit's ffmpeg evaluation row
+    (was "Pending completion") and a `evals/INDEX.md` row for the RTX 5080 re-baseline —
+    quality held across both hardware moves (ffmpeg outcome 0.902 vs. the 5080's prior 0.903
+    on record in `docs/PERFORMANCE.md` §1; documents 0.976).
+  - [x] **The audit's "Documentation corrections to queue" table — all 11 rows applied.**
+    `docs/REQUIREMENTS.md` scope (the native CLI is the shipped interface; Python is the
+    authoring/eval/training runtime) and its refusal-routing caveat (that guarantee rests on
+    the deterministic layer, which *had* real holes — F1–F4 — so it is a property of tested
+    code, not an axiom); `AGENTS.md` `list_skills()` (actually `['documents', 'ffmpeg']`;
+    examples no longer use the stale `io`) and its architecture diagram (expand → validate →
+    optimize → preflight *before* the optional approval gate — `docs/ARCHITECTURE.md` was
+    already correct, only the AGENTS.md abbreviation was wrong); `AGENTS.md` + `docs/NATIVE.md`
+    native skill contract (see F11); `docs/PERFORMANCE.md` (states the observed 99.4%/98.7%
+    paired sample result instead of asserting universal hardware invariance);
+    `eval_backends.yaml` (availability is now a **live command**, not a hardcoded July machine
+    state — all 37 stanza GGUFs are in fact present on this box, the old comment claimed 2);
+    `just eval-regression` semantics (already corrected with F6);
+    `native/crates/knaif-llm/src/lib.rs` (llama.cpp is implemented behind the `llama` cargo
+    feature, not a future spike); `skills/ffmpeg/native/src/run.rs` (it does probe files, spawn
+    subprocesses, and support concat); `scripts/parity_check.py` (describes the real asymmetric
+    model selection — native raw path, Python a `models.yaml` *name* so per-model options
+    survive — and the same-weights identity guard). Historical plan docs under `docs/plans/`
+    were deliberately left alone: they record what the commands were at the time.
 - [x] **1.1.0 release — verification COMPLETE 2026-08-02. Every gate below has now been re-run
   against the rebuilt artifacts; what remains is publishing (tag the current tip of `main`, publish
   the draft, `twine upload python/core/dist/*`), not verifying.** Naming a commit here would be

@@ -57,25 +57,30 @@ fn to_abs_lexical(p: &Path, base: &Path) -> PathBuf {
 /// Resolve a path, enforcing the sandbox boundary when one is given. Mirrors Python
 /// `_resolve_path`: relative paths resolve against sandbox (or `root` in open mode); in
 /// sandbox mode the result must stay inside the sandbox.
+///
+/// The sandboxed branch resolves filesystem-real (`crate::sandbox::resolve_real`) rather
+/// than lexically: a purely lexical check accepts a path that reads as "inside" the sandbox
+/// while actually being a symlink/junction pointing outside it — Python's `Path.resolve()`
+/// already rejects that case, so this mirrors it (audit F4). The open-mode branch stays
+/// lexical: no boundary is enforced there, so there is nothing security-relevant to gain
+/// from touching the filesystem.
 fn resolve_path(raw: &str, root: &Path, sandbox: Option<&Path>) -> Result<PathBuf> {
     let p = Path::new(raw);
     match sandbox {
         Some(sb) => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            let sb_abs = to_abs_lexical(sb, &cwd);
-            let path_abs = if p.is_absolute() {
-                lexical_normalize(p)
-            } else {
-                to_abs_lexical(p, &sb_abs)
-            };
-            if !path_abs.starts_with(&sb_abs) {
+            let sb_real = crate::sandbox::resolve_real(sb, &cwd);
+            // A relative `raw` resolves against the sandbox itself, not cwd; an absolute
+            // `raw` ignores the base — resolve_real handles both from a single call.
+            let path_real = crate::sandbox::resolve_real(p, sb);
+            if !path_real.starts_with(&sb_real) {
                 bail!(
                     "Path '{}' is outside sandbox '{}'. Use a sandbox-relative path.",
-                    path_abs.display(),
+                    path_real.display(),
                     sb.display()
                 );
             }
-            Ok(path_abs)
+            Ok(path_real)
         }
         None => Ok(to_abs_lexical(p, root)),
     }
@@ -1041,5 +1046,53 @@ convert:
         .unwrap_err()
         .to_string();
         assert!(err.contains("outside sandbox"), "{err}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn sandbox_boundary_rejects_a_junction_escape() {
+        // The audit's literal F4 repro, exercised through the real entry point
+        // (validate_step -> resolve_path), not just the sandbox module directly: a junction
+        // placed INSIDE the sandbox, pointing to a directory OUTSIDE it, must be rejected —
+        // the previous lexical-only check accepted it because the junction's own path reads
+        // as "inside" without ever touching the filesystem.
+        let r = reg();
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-core-planner-test-{}-junction",
+            std::process::id()
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"secret").unwrap();
+
+        let link = sandbox.join("escape_link");
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &link.display().to_string(),
+                &outside.display().to_string(),
+            ])
+            .status()
+            .expect("mklink must run on Windows");
+        assert!(
+            status.success(),
+            "junction creation must succeed (no admin needed)"
+        );
+
+        let err = validate_step(
+            &json!({"tool": "find_files", "args": {"path": "escape_link/secret.txt"}}),
+            &r,
+            Path::new("."),
+            Some(&sandbox),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("outside sandbox"), "{err}");
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }
