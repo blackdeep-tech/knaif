@@ -100,14 +100,22 @@ def _extract_artifacts(results: list[dict[str, Any]]) -> list[str]:
     return cmds
 
 
-def _build_registry_override(agent: Any, utterance: str) -> dict[str, ToolDef] | None:
-    """Return a retrieved registry subset for *utterance*, or None if unavailable."""
+def _build_registry_override(
+    agent: Any, utterance: str, top_k: int | None = None
+) -> dict[str, ToolDef] | None:
+    """Return a retrieved registry subset for *utterance*, or None if unavailable.
+
+    *top_k* overrides how many tools retrieval surfaces. Left None it takes
+    `retrieve_tools`' own default, so the eval path measures what the product does.
+    """
     registry = getattr(agent, "registry", None)
     if not isinstance(registry, dict):
         return None
-    from knaif.registry import retrieve_tools
+    import knaif.registry as _registry
 
-    return retrieve_tools(utterance, registry)
+    if top_k is None:
+        return _registry.retrieve_tools(utterance, registry)
+    return _registry.retrieve_tools(utterance, registry, top_k=top_k)
 
 
 def run_corpus(
@@ -121,12 +129,15 @@ def run_corpus(
     sandbox: Path | None = None,
     fixture_dir: Path | None = None,
     apply_retrieval: bool = True,
+    top_k: int | None = None,
 ) -> list[AgentOutput]:
     """Run each corpus row through the agent pipeline, returning AgentOutput objects.
 
     When execute=True, iterates all utterances per row, runs the agent in dry_run
     mode to get the command string, then executes it against the row's fixture file.
     sandbox and fixture_dir are required when execute=True.
+
+    top_k overrides how many tools retrieval surfaces (None = the shipped default).
 
     apply_retrieval controls whether retrieve_tools() is called per utterance and
     the result passed as registry_override to infer().  Defaults to True so the
@@ -149,7 +160,7 @@ def run_corpus(
             error: str | None = None
 
             registry_override = (
-                _build_registry_override(agent, utterance) if apply_retrieval else None
+                _build_registry_override(agent, utterance, top_k) if apply_retrieval else None
             )
 
             parse_error: str | None = None

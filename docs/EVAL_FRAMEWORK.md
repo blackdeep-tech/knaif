@@ -521,6 +521,38 @@ Pass `--no-retrieval` to disable both per-utterance retrieval and example
 filtering. This measures the full unfiltered prompt and is intended for
 diagnostic A/B comparison only.
 
+### Varying the prompt deliberately
+
+Two settings change what the model is shown, and both are exposed on `run` (and on
+`safety`, since what a model is shown changes what it refuses):
+
+| flag | levels | what it varies |
+|---|---|---|
+| `--top-k N` | default `5` (`registry.DEFAULT_TOP_K`) | how many tools retrieval surfaces |
+| `--examples` | `selected` (default) \| `static` | whether `select_examples` filters the block per utterance, or the fixed `prompt.yaml` block is used as-is — the latter is the native runtime's behavior |
+
+Every scoreboard records what it resolved, as `prompt_config`. This is not decoration:
+two runs that resolved these differently measure **different systems**, so `diff_snapshots`
+refuses to compare them, exactly as it refuses two verifiers or two scoring policies. An
+experimental cell is not a regression against the baseline it was varied from.
+
+### The prompt factorial (S3g)
+
+`scripts/s3g_factorial.py` runs `examples × top_k` across both skills, grading every cell
+with an executing verifier on real artifacts, reporting per required slice from each
+skill's `acceptance.yaml`, and pairing each cell against the shipped configuration row by
+row (McNemar's exact test — two independent percentages throw away the pairing that makes
+a small real difference detectable at this corpus size).
+
+```bash
+uv run python scripts/s3g_factorial.py --out evals/runs/<date>_s3g-factorial_success
+uv run python scripts/s3g_factorial.py --out <dir> --analyze-only    # re-report, no GPU
+```
+
+It writes `summary.json` and `summary.md` (both committed; the per-cell scoreboards behind
+them are not). Adopting a winner is a separate, deliberate act: re-lock the snapshot in its
+own commit with the new `prompt_config` recorded in it.
+
 ## CLI usage
 
 ```bash

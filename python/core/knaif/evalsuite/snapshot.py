@@ -101,6 +101,23 @@ def diff_snapshots(
                 "same commit that changed them."
             )
 
+    # And once more for the prompt settings. `top_k` and example selection change what
+    # the model is shown, so two runs that resolved them differently measure different
+    # systems — an S3g cell is not a regression against the baseline it was varied from.
+    baseline_prompt = baseline.get("prompt_config")
+    current_prompt = current.get("prompt_config")
+    if baseline_prompt is not None:
+        if current_prompt is None:
+            raise ValueError(
+                "current scoreboard declares no prompt_config; baseline was run with "
+                f"{baseline_prompt}. Cannot certify no regression against an unknown prompt."
+            )
+        if baseline_prompt != current_prompt:
+            raise ValueError(
+                f"Prompt-config mismatch: baseline {baseline_prompt}, current "
+                f"{current_prompt}. These are different systems, not two points in a trend."
+            )
+
     baseline_total = baseline.get("total")
     current_total = current.get("total")
     if baseline_total is not None:

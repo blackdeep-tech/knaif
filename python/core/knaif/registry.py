@@ -159,10 +159,16 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
     return registry
 
 
+#: How many tools retrieval surfaces to the model by default. Named rather than inlined
+#: because the eval path has to be able to record the value a run actually used, and a
+#: default nobody can reference gets copied into three places and drifts.
+DEFAULT_TOP_K = 5
+
+
 def retrieve_tools(
     query: str,
     registry: dict[str, ToolDef],
-    top_k: int = 5,
+    top_k: int = DEFAULT_TOP_K,
     min_score: int = 0,
 ) -> dict[str, ToolDef]:
     """Return the top_k most relevant tools for *query* plus system tools.
