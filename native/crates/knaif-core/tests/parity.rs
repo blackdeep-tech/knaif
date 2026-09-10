@@ -126,3 +126,124 @@ fn clarify_gate_parity_cases() {
         );
     }
 }
+
+/// L1e: the example-selection parity contract. Given the same `(examples, retrieved tools,
+/// query)` both runtimes must select the same examples, in the same order, and render the
+/// same block.
+///
+/// Authored red: native had no example selection at all — `load_prompt_yaml` rendered
+/// `prompt.yaml`'s whole block once and every utterance got all of it, where the reference
+/// sends five of ffmpeg's twenty-eight. This is the second half of the prompt divergence V1
+/// closed for the tool listing, and the S3g factorial settled the direction: Python keeps
+/// `select_examples`, Rust gains it.
+///
+/// See docs/plans/2026-09-10-skill-quality-lifecycle.md (V2, L1e).
+#[test]
+fn example_selection_parity_cases() {
+    let fixtures =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../contracts/parity/example_cases.json");
+    let doc: Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixtures).expect("read fixtures")).unwrap();
+    let sets = doc["example_sets"].as_object().unwrap();
+    let max_tool_examples = doc["max_tool_examples"].as_u64().unwrap() as usize;
+
+    for case in doc["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let why = case["why"].as_str().unwrap_or("");
+        let examples: Vec<knaif_core::PromptExample> =
+            serde_json::from_value(sets[case["example_set"].as_str().unwrap()].clone()).unwrap();
+        let retrieved: std::collections::HashSet<String> = case["retrieved"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+
+        let selected = knaif_core::select_examples(
+            &examples,
+            &retrieved,
+            case["query"].as_str().unwrap(),
+            max_tool_examples,
+        );
+        let got: Vec<&str> = selected.iter().map(|e| e.request.as_str()).collect();
+        let want: Vec<&str> = case["expected_requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(got, want, "case {name}: {why}");
+
+        // Rule 2: the stage is selection *and* rendering — the block is what reaches the model.
+        let block = (!selected.is_empty()).then(|| knaif_core::render_examples_block(&selected));
+        let want_block = case["expected_block"].as_str().map(str::to_string);
+        assert_eq!(block, want_block, "case {name}: rendered block differs");
+    }
+}
+
+/// The same contract's golden over the real skill bundles: real `prompt.yaml` examples, real
+/// retrieval, real utterance — the block the shipped binary actually sends.
+#[test]
+fn example_selection_matches_the_shipped_bundles() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixtures = repo.join("contracts/parity/example_cases.json");
+    let doc: Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixtures).expect("read fixtures")).unwrap();
+
+    for row in doc["shipped"].as_array().unwrap() {
+        let skill = row["skill"].as_str().unwrap();
+        let utterance = row["utterance"].as_str().unwrap();
+        let bundle = repo.join("skills").join(skill);
+
+        let overrides = knaif_core::load_prompt_yaml(&bundle.join("prompt.yaml"));
+        assert_eq!(
+            overrides.examples.len(),
+            row["corpus_size"].as_u64().unwrap() as usize,
+            "{skill}: prompt.yaml example count moved; regenerate the contract"
+        );
+
+        let mut registry = knaif_core::load_registry(&bundle.join("tools.yaml")).unwrap();
+        registry.extend(
+            knaif_core::load_registry(&repo.join("contracts/runtime/core_tools.yaml")).unwrap(),
+        );
+        let retrieved =
+            knaif_core::retrieve_tools(utterance, &registry, knaif_core::DEFAULT_TOP_K, 0.0);
+        let mut names: Vec<String> = retrieved
+            .iter()
+            .filter(|(_, d)| !d.internal)
+            .map(|(n, _)| n.clone())
+            .collect();
+        names.sort();
+        let want_names: Vec<String> = row["retrieved"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            names, want_names,
+            "{skill}/{utterance}: retrieved set differs"
+        );
+
+        let set: std::collections::HashSet<String> = names.into_iter().collect();
+        let selected = knaif_core::select_examples(
+            &overrides.examples,
+            &set,
+            utterance,
+            knaif_core::MAX_TOOL_EXAMPLES,
+        );
+        let got: Vec<&str> = selected.iter().map(|e| e.request.as_str()).collect();
+        let want: Vec<&str> = row["expected_requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(got, want, "{skill}/{utterance}: selection differs");
+        assert_eq!(
+            knaif_core::render_examples_block(&selected),
+            row["expected_block"].as_str().unwrap(),
+            "{skill}/{utterance}: rendered block differs"
+        );
+    }
+}

@@ -1090,6 +1090,38 @@ impl PlanSession {
         })
     }
 
+    /// The skill's prompt overrides with the examples block filtered for *this* utterance.
+    ///
+    /// Mirrors `CommandAgent.build_prompt`, including its fallback: when the corpus has no
+    /// examples, or selection returns nothing, the unfiltered block stands. Cloning the header per
+    /// utterance is deliberate — it keeps the loaded overrides immutable, and it is a rounding
+    /// error next to the inference it precedes.
+    fn examples_for(
+        &self,
+        utterance: &str,
+        retrieved: &knaif_core::RetrievedTools<'_>,
+    ) -> knaif_core::PromptOverrides {
+        let names: std::collections::HashSet<String> = retrieved
+            .iter()
+            .filter(|(_, d)| !d.internal)
+            .map(|(n, _)| n.clone())
+            .collect();
+        let selected = knaif_core::select_examples(
+            &self.overrides.examples,
+            &names,
+            utterance,
+            knaif_core::MAX_TOOL_EXAMPLES,
+        );
+        let block = (!selected.is_empty())
+            .then(|| knaif_core::render_examples_block(&selected))
+            .or_else(|| self.overrides.examples_block.clone());
+        knaif_core::PromptOverrides {
+            system_header: self.overrides.system_header.clone(),
+            examples_block: block,
+            examples: Vec::new(),
+        }
+    }
+
     /// Plan a single utterance: prompt → infer (+repair) → chain-link + hallucinated-filename gate.
     fn plan(
         &self,
@@ -1109,7 +1141,13 @@ impl PlanSession {
         let retrieved =
             knaif_core::retrieve_tools(&utterance, &self.registry, knaif_core::DEFAULT_TOP_K, 0.0);
         let tools: Vec<&knaif_core::ToolDef> = retrieved.iter().map(|(_, d)| *d).collect();
-        let (system, user) = knaif_core::build_prompt_ordered(&utterance, &tools, &self.overrides);
+        // Example selection (V2): the other half of the same divergence. `prompt.yaml`'s whole
+        // block went to the model on every utterance — 28 examples for ffmpeg where the reference
+        // sends 5, chosen against the tools retrieval just picked. The S3g factorial settled the
+        // direction: static examples win the ffmpeg *aggregate* but push `concat_video` below its
+        // acceptance floor, so Python keeps `select_examples` and native gains it.
+        let overrides = self.examples_for(&utterance, &retrieved);
+        let (system, user) = knaif_core::build_prompt_ordered(&utterance, &tools, &overrides);
         emit_prompt_dump(prompt_dump_enabled(), &system, &user);
         let payload = infer_with_repair(
             self.backend.as_ref(),
@@ -2108,6 +2146,9 @@ mod tests {
             let overrides = knaif_core::PromptOverrides {
                 system_header: Some(ov["system_header"].as_str().unwrap().to_string()),
                 examples_block: Some(ov["examples_block"].as_str().unwrap().to_string()),
+                // L1a pins the *rendering* of a given block; the per-utterance selection that
+                // chooses which examples go into it is L1e's contract.
+                examples: Vec::new(),
             };
 
             let utterance = normalize_path_separators(case["utterance"].as_str().unwrap());

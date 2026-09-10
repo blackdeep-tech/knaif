@@ -1,0 +1,622 @@
+{
+  "_comment": "L1 example-selection contract. Python filters the skill's examples per utterance (`select_examples`), keeping one clarify example, one reject example and up to three domain examples ranked by overlap with the retrieved tools; native shipped the whole block unfiltered. For ffmpeg that is 28 examples against the reference's 5. Given (examples, retrieved tool names, query) both runtimes must select the same examples, in the same order, and render the same block. Consumed by python/core/tests/test_example_selection_parity.py and `example_selection_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
+  "_stage": "The stage is `select_examples -> render_examples_block`, the block that reaches the model — not the selection alone. Python composes it in CommandAgent.build_prompt, native in PlanSession::plan. Comparing the selection without the rendering would violate Rule 2.",
+  "_expected_values": "Produced by the reference runtime (knaif.prompt.select_examples then render_examples_block). DO NOT regenerate to make a failing test pass. The `shipped` section is a golden over the real skill bundles: if a prompt.yaml changes, regenerating is correct — that is the drift signal working.",
+  "_coverage": {
+    "ubuntu": "CI",
+    "windows": "local",
+    "macos": "unexercised"
+  },
+  "max_tool_examples": 3,
+  "example_sets": {
+    "demo": [
+      {
+        "request": "compress a.mp4 for email",
+        "output": {
+          "plan": [
+            {
+              "tool": "compress_video",
+              "args": {
+                "inputs": [
+                  "a.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "trim b.mp4 to 5 seconds",
+        "output": {
+          "plan": [
+            {
+              "tool": "trim_video",
+              "args": {
+                "input": "b.mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "rotate c.mp4 90 degrees",
+        "output": {
+          "plan": [
+            {
+              "tool": "rotate_video",
+              "args": {
+                "inputs": [
+                  "c.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "strip the audio from d.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "strip_audio",
+              "args": {
+                "inputs": [
+                  "d.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "trim e.mp4 then compress it",
+        "output": {
+          "plan": [
+            {
+              "tool": "trim_video",
+              "args": {
+                "input": "e.mp4"
+              }
+            },
+            {
+              "tool": "compress_video",
+              "args": {
+                "inputs": [
+                  "t.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "make f.mp4 better",
+        "output": {
+          "plan": [
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "Better how?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "nuke my videos folder",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Out of scope."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "that is everything",
+        "output": {
+          "plan": [
+            {
+              "tool": "done",
+              "args": {}
+            }
+          ]
+        }
+      }
+    ],
+    "mixed": [
+      {
+        "request": "resize g.mp4 if you can",
+        "output": {
+          "plan": [
+            {
+              "tool": "resize_video",
+              "args": {
+                "inputs": [
+                  "g.mp4"
+                ]
+              }
+            },
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "To what height?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "what should I do",
+        "output": {
+          "plan": [
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "Which file?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "compress h.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "compress_video",
+              "args": {
+                "inputs": [
+                  "h.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "rotate i.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "rotate_video",
+              "args": {
+                "inputs": [
+                  "i.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "trim j.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "trim_video",
+              "args": {
+                "input": "j.mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "mute k.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "strip_audio",
+              "args": {
+                "inputs": [
+                  "k.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "ties": [
+      {
+        "request": "alpha one",
+        "output": {
+          "plan": [
+            {
+              "tool": "resize_video",
+              "args": {
+                "inputs": [
+                  "a.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "beta two",
+        "output": {
+          "plan": [
+            {
+              "tool": "resize_video",
+              "args": {
+                "inputs": [
+                  "b.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "gamma three",
+        "output": {
+          "plan": [
+            {
+              "tool": "resize_video",
+              "args": {
+                "inputs": [
+                  "c.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "delta four",
+        "output": {
+          "plan": [
+            {
+              "tool": "resize_video",
+              "args": {
+                "inputs": [
+                  "d.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "empty": []
+  },
+  "cases": [
+    {
+      "name": "the_domain_slots_fill_even_with_no_overlap",
+      "why": "No retrieved tool matches any example, so every domain example scores (0, 0) -- and three are still selected. The cap is a cap, not a relevance threshold; a native port that filtered on overlap > 0 would send the model a clarify/reject pair and nothing else.",
+      "example_set": "demo",
+      "retrieved": [
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "do something",
+      "expected_requests": [
+        "compress a.mp4 for email",
+        "trim b.mp4 to 5 seconds",
+        "rotate c.mp4 90 degrees",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"compress a.mp4 for email\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"trim b.mp4 to 5 seconds\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"b.mp4\"}}]}\n\n  request: \"rotate c.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"c.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "domain_examples_rank_by_retrieved_tool_overlap",
+      "why": "The two examples whose plans use a retrieved tool outrank the four that do not.",
+      "example_set": "demo",
+      "retrieved": [
+        "rotate_video",
+        "strip_audio",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "turn the video and mute it",
+      "expected_requests": [
+        "rotate c.mp4 90 degrees",
+        "strip the audio from d.mp4",
+        "trim e.mp4 then compress it",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"rotate c.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"c.mp4\"]}}]}\n\n  request: \"strip the audio from d.mp4\"\n  output:  {\"plan\": [{\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"d.mp4\"]}}]}\n\n  request: \"trim e.mp4 then compress it\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"e.mp4\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"t.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "the_domain_cap_is_three",
+      "why": "Five domain examples match; max_tool_examples caps the selection at three.",
+      "example_set": "demo",
+      "retrieved": [
+        "compress_video",
+        "trim_video",
+        "rotate_video",
+        "strip_audio",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "compress trim rotate strip",
+      "expected_requests": [
+        "compress a.mp4 for email",
+        "trim b.mp4 to 5 seconds",
+        "trim e.mp4 then compress it",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"compress a.mp4 for email\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"trim b.mp4 to 5 seconds\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"b.mp4\"}}]}\n\n  request: \"trim e.mp4 then compress it\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"e.mp4\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"t.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_two_tool_example_outranks_a_one_tool_example",
+      "why": "Tool overlap is the primary key: the chain example overlaps two retrieved tools.",
+      "example_set": "demo",
+      "retrieved": [
+        "trim_video",
+        "compress_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "do the thing",
+      "expected_requests": [
+        "compress a.mp4 for email",
+        "trim b.mp4 to 5 seconds",
+        "trim e.mp4 then compress it",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"compress a.mp4 for email\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"trim b.mp4 to 5 seconds\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"b.mp4\"}}]}\n\n  request: \"trim e.mp4 then compress it\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"e.mp4\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"t.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "query_token_overlap_breaks_a_tool_overlap_tie",
+      "why": "Four examples tie at one retrieved tool; the request sharing query words wins.",
+      "example_set": "demo",
+      "retrieved": [
+        "compress_video",
+        "trim_video",
+        "rotate_video",
+        "strip_audio",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "rotate 90 degrees",
+      "expected_requests": [
+        "compress a.mp4 for email",
+        "rotate c.mp4 90 degrees",
+        "trim e.mp4 then compress it",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"compress a.mp4 for email\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"rotate c.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"c.mp4\"]}}]}\n\n  request: \"trim e.mp4 then compress it\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"e.mp4\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"t.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "equal_scores_keep_corpus_order",
+      "why": "All four score (1, 0). Python's sorted(reverse=True) is stable, so the first three in corpus order survive the cap — a reversed sort would keep the last three.",
+      "example_set": "ties",
+      "retrieved": [
+        "resize_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "zzz",
+      "expected_requests": [
+        "alpha one",
+        "beta two",
+        "gamma three"
+      ],
+      "expected_block": "Examples:\n  request: \"alpha one\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"beta two\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"b.mp4\"]}}]}\n\n  request: \"gamma three\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"c.mp4\"]}}]}\n"
+    },
+    {
+      "name": "selection_is_re_emitted_in_corpus_order",
+      "why": "The strip_audio example ranks first but is emitted after the earlier-declared ones.",
+      "example_set": "demo",
+      "retrieved": [
+        "strip_audio",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "mute d.mp4",
+      "expected_requests": [
+        "compress a.mp4 for email",
+        "trim b.mp4 to 5 seconds",
+        "strip the audio from d.mp4",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"compress a.mp4 for email\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"trim b.mp4 to 5 seconds\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"b.mp4\"}}]}\n\n  request: \"strip the audio from d.mp4\"\n  output:  {\"plan\": [{\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"d.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_done_only_example_is_never_selected",
+      "why": "`done` is terminal: the example has no domain tool and is neither clarify nor reject.",
+      "example_set": "demo",
+      "retrieved": [
+        "compress_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "that is everything",
+      "expected_requests": [
+        "compress a.mp4 for email",
+        "trim b.mp4 to 5 seconds",
+        "trim e.mp4 then compress it",
+        "make f.mp4 better",
+        "nuke my videos folder"
+      ],
+      "expected_block": "Examples:\n  request: \"compress a.mp4 for email\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"a.mp4\"]}}]}\n\n  request: \"trim b.mp4 to 5 seconds\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"b.mp4\"}}]}\n\n  request: \"trim e.mp4 then compress it\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"e.mp4\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"t.mp4\"]}}]}\n\n  request: \"make f.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke my videos folder\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_clarify_example_that_also_calls_a_tool_is_a_domain_example",
+      "why": "The fixed clarify slot takes the pure-clarify example; the mixed one competes on rank.",
+      "example_set": "mixed",
+      "retrieved": [
+        "resize_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "resize it",
+      "expected_requests": [
+        "resize g.mp4 if you can",
+        "what should I do",
+        "compress h.mp4",
+        "rotate i.mp4"
+      ],
+      "expected_block": "Examples:\n  request: \"resize g.mp4 if you can\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"g.mp4\"]}}, {\"tool\": \"clarify\", \"args\": {\"question\": \"To what height?\"}}]}\n\n  request: \"what should I do\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file?\"}}]}\n\n  request: \"compress h.mp4\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"h.mp4\"]}}]}\n\n  request: \"rotate i.mp4\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"i.mp4\"]}}]}\n"
+    },
+    {
+      "name": "a_corpus_with_no_reject_example_fills_only_the_slots_it_has",
+      "why": "No reject example exists; nothing is invented to fill the slot.",
+      "example_set": "mixed",
+      "retrieved": [
+        "compress_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "compress h.mp4",
+      "expected_requests": [
+        "resize g.mp4 if you can",
+        "what should I do",
+        "compress h.mp4",
+        "rotate i.mp4"
+      ],
+      "expected_block": "Examples:\n  request: \"resize g.mp4 if you can\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"g.mp4\"]}}, {\"tool\": \"clarify\", \"args\": {\"question\": \"To what height?\"}}]}\n\n  request: \"what should I do\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file?\"}}]}\n\n  request: \"compress h.mp4\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"h.mp4\"]}}]}\n\n  request: \"rotate i.mp4\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"i.mp4\"]}}]}\n"
+    },
+    {
+      "name": "an_empty_corpus_selects_nothing",
+      "why": "Callers fall back to the unfiltered block when the selection is empty.",
+      "example_set": "empty",
+      "retrieved": [
+        "compress_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "compress it",
+      "expected_requests": [],
+      "expected_block": null
+    }
+  ],
+  "shipped": [
+    {
+      "skill": "ffmpeg",
+      "utterance": "make clip.mp4 smaller",
+      "retrieved": [
+        "clarify",
+        "compress_video",
+        "done",
+        "reject",
+        "reverse_video",
+        "rotate_video",
+        "strip_audio",
+        "trim_video"
+      ],
+      "corpus_size": 28,
+      "expected_requests": [
+        "Compress interview.mp4 for email under 20 MB.",
+        "Make clip.mp4 better.",
+        "Trim clip.mp4 to 5 seconds, then resize to 720p.",
+        "Rotate clip.mp4 90 degrees clockwise.",
+        "Nuke my videos folder."
+      ],
+      "expected_block": "Examples:\n  request: \"Compress interview.mp4 for email under 20 MB.\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"target\": \"email\", \"target_size_mb\": 20, \"quality\": \"best_possible\", \"preview\": true}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Rotate clip.mp4 90 degrees clockwise.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"angle\": 90}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Destructive bulk-delete is out of scope for this assistant.\"}}]}\n"
+    },
+    {
+      "skill": "ffmpeg",
+      "utterance": "join clip1.mp4 and clip2.mp4 then extract the audio",
+      "retrieved": [
+        "adjust_volume",
+        "clarify",
+        "concat_video",
+        "done",
+        "extract_audio",
+        "reject",
+        "reverse_video",
+        "strip_audio"
+      ],
+      "corpus_size": 28,
+      "expected_requests": [
+        "Extract the audio from clip.mp4 as MP3.",
+        "Extract the audio from clip.mp4 to audio.mp3.",
+        "Make clip.mp4 better.",
+        "Merge clip1.mp4 and clip2.mp4, then extract the audio.",
+        "Nuke my videos folder."
+      ],
+      "expected_block": "Examples:\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Extract the audio from clip.mp4 to audio.mp3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\", \"output\": \"audio.mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Merge clip1.mp4 and clip2.mp4, then extract the audio.\"\n  output:  {\"plan\": [{\"tool\": \"concat_video\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"combined.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Destructive bulk-delete is out of scope for this assistant.\"}}]}\n"
+    },
+    {
+      "skill": "ffmpeg",
+      "utterance": "delete everything in my videos folder",
+      "retrieved": [
+        "clarify",
+        "done",
+        "extract_audio",
+        "prepare_for_platform",
+        "reject",
+        "resize_video",
+        "reverse_video",
+        "rotate_video"
+      ],
+      "corpus_size": 28,
+      "expected_requests": [
+        "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.",
+        "Extract the audio from clip.mp4 as MP3.",
+        "Extract the audio from clip.mp4 to audio.mp3.",
+        "Make clip.mp4 better.",
+        "Nuke my videos folder."
+      ],
+      "expected_block": "Examples:\n  request: \"Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.\"\n  output:  {\"plan\": [{\"tool\": \"prepare_for_platform\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"platform\": \"whatsapp\", \"quality\": \"visually_good\", \"preview\": true}}]}\n\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Extract the audio from clip.mp4 to audio.mp3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\", \"output\": \"audio.mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Destructive bulk-delete is out of scope for this assistant.\"}}]}\n"
+    },
+    {
+      "skill": "documents",
+      "utterance": "make report.pdf smaller",
+      "retrieved": [
+        "clarify",
+        "done",
+        "ocr_document",
+        "reject",
+        "rotate_pages",
+        "split_pdf",
+        "unlock_pdf",
+        "watermark"
+      ],
+      "corpus_size": 5,
+      "expected_requests": [
+        "inspect report.pdf",
+        "make report.pdf smaller",
+        "make scan.pdf searchable",
+        "do something with a file"
+      ],
+      "expected_block": "Examples:\n  request: \"inspect report.pdf\"\n  output:  {\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"report.pdf\"}}]}\n\n  request: \"make report.pdf smaller\"\n  output:  {\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"report.pdf\", \"compress_quality\": \"balanced\"}}]}\n\n  request: \"make scan.pdf searchable\"\n  output:  {\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"scan.pdf\", \"language\": \"eng\"}}]}\n\n  request: \"do something with a file\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file, and what would you like done with it?\"}}]}\n"
+    },
+    {
+      "skill": "documents",
+      "utterance": "find alpha in notes.txt",
+      "retrieved": [
+        "clarify",
+        "done",
+        "find_in_document",
+        "reject",
+        "rotate_pages",
+        "split_pdf",
+        "unlock_pdf",
+        "watermark"
+      ],
+      "corpus_size": 5,
+      "expected_requests": [
+        "inspect report.pdf",
+        "find alpha in notes.txt",
+        "make report.pdf smaller",
+        "do something with a file"
+      ],
+      "expected_block": "Examples:\n  request: \"inspect report.pdf\"\n  output:  {\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"report.pdf\"}}]}\n\n  request: \"find alpha in notes.txt\"\n  output:  {\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"notes.txt\", \"query\": \"alpha\"}}]}\n\n  request: \"make report.pdf smaller\"\n  output:  {\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"report.pdf\", \"compress_quality\": \"balanced\"}}]}\n\n  request: \"do something with a file\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file, and what would you like done with it?\"}}]}\n"
+    }
+  ]
+}

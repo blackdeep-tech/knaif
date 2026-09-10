@@ -1,17 +1,36 @@
 //! Model-facing prompt construction — port of `prompt.py` `build_prompt` (single-shot; history/
 //! chain re-prompting is a later slice) plus the skill `prompt.yaml` loader (`system_header` +
-//! rendered `examples`).
+//! `examples`), including the per-utterance example selection ([`select_examples`]).
 //!
-//! Two intentional, prompt-only divergences from Python (not graded byte-for-byte; Phase 10
-//! eval-parity measures end quality): the tool listing is **alphabetical** because [`Registry`] is a
-//! `BTreeMap` (Python uses tools.yaml insertion order), and rendered example JSON is compact.
+//! **There are no intentional divergences from the reference left here.** The prompt this module
+//! builds for a retrieved tool subset is byte-identical to Python's for the same inputs, and the
+//! L1a/L1b/L1e contracts under `contracts/parity/` hold it there. That is a change of position:
+//! the two divergences this note used to record — an alphabetical tool listing and compact example
+//! JSON — were both real, both wrong, and both fixed. Alphabetical order came from [`Registry`]
+//! being a `BTreeMap`; [`build_prompt`] now sorts by `ToolDef::order` and [`build_prompt_ordered`]
+//! preserves retrieval's ranking (V1). Compact JSON came from serde_json's default; [`to_py_json`]
+//! now reproduces Python's spaced separators.
+//!
+//! The reason none of it was "prompt-only" cosmetics: the fine-tune was trained on prompts built
+//! by this exact pipeline in Python — `retrieve_tools` → `build_prompt` with a retrieved subset
+//! and a selected examples block (`python/training/build_dataset.py`). A prompt shaped differently
+//! is out of distribution for the model that has to answer it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
 
 use serde::Deserialize;
 
 use crate::registry::{Registry, ToolDef};
+
+/// Tools that end a plan rather than doing work. An example whose plan contains only these is a
+/// control example, not a domain one. Port of Python `_TERMINAL_TOOLS` — note it does **not**
+/// include `noop`, unlike [`is_system_tool`]'s prompt-listing filter.
+const TERMINAL_TOOLS: &[&str] = &["clarify", "reject", "done"];
+
+/// How many domain examples the per-utterance selection keeps, on top of the fixed clarify and
+/// reject slots. Mirrors Python `select_examples`'s `max_tool_examples` default.
+pub const MAX_TOOL_EXAMPLES: usize = 3;
 
 /// Default system header (port of `_SYSTEM_HEADER`), used when a skill's `prompt.yaml` has none.
 pub const DEFAULT_SYSTEM_HEADER: &str = "\
@@ -50,11 +69,18 @@ fn is_system_tool(name: &str) -> bool {
     matches!(name, "clarify" | "reject" | "done" | "noop")
 }
 
-/// A skill's `prompt.yaml` overrides: a system header and a rendered examples block.
+/// A skill's `prompt.yaml` overrides: a system header, the whole rendered examples block, and the
+/// examples still structured.
+///
+/// `examples_block` is the unfiltered rendering — the fallback, and what a caller with no
+/// retrieved subset sends. `examples` is kept alongside it because selection is *per utterance*
+/// (see [`select_examples`]): rendering at load time and throwing the structure away is exactly
+/// what made native send all 28 of ffmpeg's examples where the reference sends 5.
 #[derive(Debug, Clone, Default)]
 pub struct PromptOverrides {
     pub system_header: Option<String>,
     pub examples_block: Option<String>,
+    pub examples: Vec<PromptExample>,
 }
 
 #[derive(Deserialize)]
@@ -62,15 +88,16 @@ struct RawPrompt {
     #[serde(default)]
     system_header: Option<String>,
     #[serde(default)]
-    examples: Vec<RawExample>,
+    examples: Vec<PromptExample>,
 }
 
-#[derive(Deserialize)]
-struct RawExample {
+/// One `prompt.yaml` example: the request and the plan the reference answers it with.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PromptExample {
     #[serde(default)]
-    request: String,
+    pub request: String,
     #[serde(default)]
-    output: Option<serde_json::Value>,
+    pub output: Option<serde_json::Value>,
 }
 
 /// Load a skill's `prompt.yaml`. Missing file / non-mapping → empty overrides (the defaults apply),
@@ -85,6 +112,7 @@ pub fn load_prompt_yaml(path: &Path) -> PromptOverrides {
     PromptOverrides {
         system_header: raw.system_header,
         examples_block: render_examples(&raw.examples),
+        examples: raw.examples,
     }
 }
 
@@ -133,13 +161,10 @@ fn to_py_json(value: &serde_json::Value) -> String {
     String::from_utf8(buf).unwrap_or_default()
 }
 
-/// Render `prompt.yaml` examples into the text block (port of `_render_examples` +
-/// `render_examples_block`): `None` when empty, else `Examples:` then `  request: "…"` /
-/// `  output:  <json>` per example, the JSON matching Python's `json.dumps(sep=(', ', ': '))`.
-fn render_examples(examples: &[RawExample]) -> Option<String> {
-    if examples.is_empty() {
-        return None;
-    }
+/// Render examples into the text block (port of `render_examples_block`): `Examples:` then
+/// `  request: "…"` / `  output:  <json>` per example, the JSON matching Python's
+/// `json.dumps(sep=(', ', ': '))`.
+pub fn render_examples_block(examples: &[&PromptExample]) -> String {
     let mut lines = vec!["Examples:".to_string()];
     for ex in examples {
         lines.push(format!("  request: \"{}\"", ex.request));
@@ -148,7 +173,116 @@ fn render_examples(examples: &[RawExample]) -> Option<String> {
         }
         lines.push(String::new());
     }
-    Some(lines.join("\n"))
+    lines.join("\n")
+}
+
+/// The whole, unfiltered block (port of `_render_examples`): `None` when there are no examples.
+fn render_examples(examples: &[PromptExample]) -> Option<String> {
+    if examples.is_empty() {
+        return None;
+    }
+    let refs: Vec<&PromptExample> = examples.iter().collect();
+    Some(render_examples_block(&refs))
+}
+
+/// The non-terminal tools an example's plan uses. Empty for a pure clarify/reject/done example.
+/// Port of Python `_example_tool_set`.
+fn example_tool_set(example: &PromptExample) -> HashSet<&str> {
+    plan_tools(example)
+        .into_iter()
+        .filter(|t| !TERMINAL_TOOLS.contains(t))
+        .collect()
+}
+
+/// Every tool named in the example's plan, terminal ones included.
+fn plan_tools(example: &PromptExample) -> Vec<&str> {
+    example
+        .output
+        .as_ref()
+        .and_then(|o| o.get("plan"))
+        .and_then(serde_json::Value::as_array)
+        .map(|steps| {
+            steps
+                .iter()
+                .filter_map(|s| s.get("tool").and_then(serde_json::Value::as_str))
+                .filter(|t| !t.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// An example whose plan is *only* a `control` step (`clarify` or `reject`) — the shapes that
+/// hold the two fixed slots. Port of `_is_clarify_example` / `_is_reject_example`.
+fn is_control_example(example: &PromptExample, control: &str) -> bool {
+    let tools = plan_tools(example);
+    !tools.is_empty() && tools.contains(&control) && example_tool_set(example).is_empty()
+}
+
+/// Whitespace-split lowercase tokens, matching Python's `set(text.lower().split())`.
+fn word_set(text: &str) -> HashSet<String> {
+    text.to_lowercase()
+        .split_whitespace()
+        .map(str::to_string)
+        .collect()
+}
+
+/// Select the examples most relevant to `query` given the retrieved tool set. Port of Python
+/// `select_examples`.
+///
+/// Always includes the first clarify example and the first reject example, when the corpus has
+/// them, then fills up to `max_tool_examples` domain examples ranked by how many retrieved tools
+/// the example's plan uses (primary) and how many query words its request shares (tiebreaker),
+/// and re-emits the whole selection in corpus order.
+///
+/// Two things a re-derivation gets wrong, both pinned by `contracts/parity/example_cases.json`:
+/// the cap is a **cap, not a relevance threshold** — three domain examples are kept even when
+/// every one of them scores zero — and the ranking sort must be **stable**, because Python's
+/// `sorted(..., reverse=True)` leaves equal-scoring examples in corpus order. Sorting ascending
+/// and reversing would keep the *last* three of a tied group instead of the first three.
+pub fn select_examples<'a>(
+    examples: &'a [PromptExample],
+    retrieved_tool_names: &HashSet<String>,
+    query: &str,
+    max_tool_examples: usize,
+) -> Vec<&'a PromptExample> {
+    let query_tokens = word_set(query);
+
+    let mut keep: Vec<bool> = vec![false; examples.len()];
+    for control in ["clarify", "reject"] {
+        if let Some(i) = examples.iter().position(|e| is_control_example(e, control)) {
+            keep[i] = true;
+        }
+    }
+
+    let mut domain: Vec<(usize, (usize, usize))> = examples
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| !example_tool_set(e).is_empty())
+        .map(|(i, e)| {
+            let tool_overlap = example_tool_set(e)
+                .iter()
+                .filter(|t| retrieved_tool_names.contains(**t))
+                .count();
+            let word_overlap = word_set(&e.request)
+                .iter()
+                .filter(|w| query_tokens.contains(*w))
+                .count();
+            (i, (tool_overlap, word_overlap))
+        })
+        .collect();
+    // Stable, descending by score: ties keep corpus order, as Python's stable reverse sort does.
+    // `sort_by_key` + `Reverse` rather than `sort_by(|a, b| b.cmp(a))` only because clippy asks;
+    // both are stable, which is the property that matters — `sort` then `reverse` is not.
+    domain.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
+    for (i, _) in domain.into_iter().take(max_tool_examples) {
+        keep[i] = true;
+    }
+
+    examples
+        .iter()
+        .zip(keep)
+        .filter_map(|(e, k)| k.then_some(e))
+        .collect()
 }
 
 /// Build `(system_message, user_message)` for a single-shot chat completion. Port of `build_prompt`
@@ -295,6 +429,7 @@ run_batch:
         let overrides = PromptOverrides {
             system_header: Some("CUSTOM HEADER\n".to_string()),
             examples_block: Some("\nMY EXAMPLES".to_string()),
+            ..Default::default()
         };
         let (system, _) = build_prompt("x", &registry(), &overrides);
         assert!(system.starts_with("CUSTOM HEADER\n"));
@@ -304,7 +439,7 @@ run_batch:
 
     #[test]
     fn render_examples_matches_python_shape() {
-        let examples = vec![RawExample {
+        let examples = vec![PromptExample {
             request: "compress a.mp4".into(),
             output: Some(
                 serde_json::json!({"plan": [{"tool": "compress_video", "args": {"inputs": ["a.mp4"]}}]}),
