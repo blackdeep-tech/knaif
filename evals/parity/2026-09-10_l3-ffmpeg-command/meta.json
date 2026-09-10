@@ -1,0 +1,40 @@
+{
+  "purpose": "L3a — first gated behavioral parity run after V1/V2 (prompt convergence) and Workstream E (executor)",
+  "captured": "2026-09-10",
+  "git_sha": "14f7f7bef3e6384af8d490696acd7b99f63ffac9",
+  "git_branch": "feat/skill-quality-lifecycle",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills\\ffmpeg\\data\\eval.jsonl",
+    "rows_compared": 314,
+    "sha256": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469"
+  },
+  "model": {
+    "path": "C:\\Work\\Knaif\\knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "sha256": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe",
+    "sha256": "c9e5de85ccc0f74a86a34a61b1c8ecafd3b0375385435e111590eeac9821ae1d"
+  },
+  "backend": "cuda",
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement.",
+  "entry_points": {
+    "native": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe run S --dry-run --model knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "python": "uv run knaif-cli run --dry-run --backend llama-cpp --model knaif-qwen3-4b-v1",
+    "stage": "rendered command argv (shipped dry-run path)"
+  },
+  "result": {
+    "counts": {
+      "match": 236,
+      "mismatch": 47,
+      "decline-divergence": 5,
+      "not-comparable": 26,
+      "native-not-implemented": 0
+    },
+    "equivalence_rate": 0.819444,
+    "threshold": 1.0,
+    "passed": false
+  }
+}

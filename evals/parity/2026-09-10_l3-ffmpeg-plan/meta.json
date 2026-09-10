@@ -1,0 +1,41 @@
+{
+  "purpose": "L3a — plan-mode companion to the command-mode run: rows that agree here but differ there are renderer divergences, not generation differences",
+  "captured": "2026-09-10",
+  "git_sha": "14f7f7bef3e6384af8d490696acd7b99f63ffac9",
+  "git_branch": "feat/skill-quality-lifecycle",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills\\ffmpeg\\data\\eval.jsonl",
+    "rows_compared": 314,
+    "sha256": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469"
+  },
+  "model": {
+    "path": "C:\\Work\\Knaif\\knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "sha256": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe",
+    "sha256": "c9e5de85ccc0f74a86a34a61b1c8ecafd3b0375385435e111590eeac9821ae1d"
+  },
+  "backend": "cuda",
+  "native_n_gpu_layers": null,
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs llama-cpp-python), so this is a standing property of the comparison, not a misconfiguration — see `backend_attribution.json` next to this file.",
+  "entry_points": {
+    "native": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe plan --skill S --json --model knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "python": "uv run knaif-cli plan --backend llama-cpp --model knaif-qwen3-4b-v1",
+    "stage": "validated plan envelope (planner output)"
+  },
+  "result": {
+    "counts": {
+      "match": 253,
+      "mismatch": 57,
+      "decline-divergence": 4,
+      "not-comparable": 0,
+      "native-not-implemented": 0
+    },
+    "equivalence_rate": 0.805732,
+    "threshold": 1.0,
+    "passed": false
+  }
+}

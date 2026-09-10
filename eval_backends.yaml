@@ -57,6 +57,31 @@
 #                     (e.g. "using device CUDA0"). Default false. Set true
 #                     once when diagnosing why CUDA isn't being used.
 
+# ── lanes ─────────────────────────────────────────────────────────────────────
+#
+# A LANE IS NOT A BACKEND, and this is a separate top-level section for that reason
+# (docs/plans/2026-09-10-skill-quality-lifecycle.md, L4c). Everything under `backends:` is
+# handed to `InferenceOrchestrator(backend=...)` by `_make_agent`, so a lane key placed there
+# would not be inert — it would be constructed as a token-generation backend and fail, or
+# half-work, which is a confusing way to learn about a config mistake.
+#
+# A backend answers "which model generates the tokens". A lane answers "which runtime is under
+# test, end to end". The native lane runs the shipped binary for real — `knaif run`, no
+# --dry-run — and is graded on the files it writes to disk (L4a):
+#
+#   uv run -m knaif.evalsuite native --skill ffmpeg --lane native-cli \
+#       --verifier success --save evals/runs/<date>_<label>_success
+#
+# `binary` must be a build with the llama feature (`cargo build --release -p knaif-cli
+# --features llama,cuda,pdfium`); a mock-only build plans nothing and every row scores 0.
+lanes:
+  native-cli:
+    kind: native_cli
+    binary: target/release/knaif.exe
+    model_path: models/knaif-qwen3-4b-v1-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v1
+    timeout_s: 180
+
 backends:
   # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".
   # Substitutes ONLY token generation: the mock planner picks the top retrieval hit

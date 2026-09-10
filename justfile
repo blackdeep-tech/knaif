@@ -495,6 +495,14 @@ eval-output-diff skill *args:
 eval-success skill *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier success {{args}}
 
+# L4 — grade the SHIPPED native binary on the files it really produces (executes for real).
+# Needs a native build with the llama feature and the external binaries the skill uses.
+# Regenerate fixtures first: `just eval-fixtures <skill>` — a missing fixture scores a correct
+# plan ~0, so an empty sandbox reports a catastrophe that did not happen.
+# e.g.: just eval-native ffmpeg --save evals/runs/2026-09-11_l4-native_success
+eval-native skill *args:
+    uv run python -m knaif.evalsuite native --skill {{skill}} --lane native-cli --verifier success {{args}}
+
 # Score an external agent's results directory (e.g.: just eval-score-external ffmpeg results/claude-code/)
 eval-score-external skill results_dir *args:
     uv run python -m knaif.evalsuite score-external --skill {{skill}} --results-dir {{results_dir}} {{args}}

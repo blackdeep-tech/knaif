@@ -17,6 +17,7 @@ from knaif import list_skills
 from knaif._console import enable_utf8_console
 from knaif.registry import DEFAULT_TOP_K
 
+from .acceptance import EXECUTING_VERIFIERS
 from .runner import run_corpus
 
 
@@ -850,6 +851,104 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     return results
 
 
+def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
+    """L4a: grade the shipped native binary on the artifacts it really produces.
+
+    This is the acceptance layer. Everything else in the eval suite measures the Python
+    runtime, or measures a plan; this runs `knaif run` — no `--dry-run` — and grades the files
+    that appear on disk with the skill's executing verifier.
+    """
+    from .corpus import load_corpus
+    from .native_lane import load_lane, run_native_corpus
+    from .report import print_scoreboard, save_scoreboard_json
+    from .scoring import score_corpus
+
+    if args.verifier not in EXECUTING_VERIFIERS:
+        sys.exit(
+            f"ERROR: --verifier {args.verifier!r} is not an executing verifier. L4 grades real "
+            f"artifacts, so it needs one of: {', '.join(EXECUTING_VERIFIERS)}. `cheap` is an "
+            "iteration instrument and never an acceptance bar."
+        )
+
+    corpus_path = Path(args.corpus) if getattr(args, "corpus", None) else _corpus_path(args.skill)
+    if not corpus_path.exists():
+        sys.exit(f"Corpus not found: {corpus_path}")
+    corpus = load_corpus(corpus_path)
+    verifiers, _ = _load_skill_verifiers(args.skill)
+
+    sandbox = Path(args.sandbox) if args.sandbox else Path("sandbox")
+    fixture_dir = (
+        Path(args.fixture_dir)
+        if getattr(args, "fixture_dir", None)
+        else _default_fixture_dir(sandbox, args.skill)
+    )
+    # AGENTS.md's ladder is explicit that missing fixtures score correct plans ~0. An L4 run
+    # against an empty sandbox reports a catastrophe that isn't real, which is worse than not
+    # running it at all — so refuse rather than produce the number.
+    if not fixture_dir.is_dir() or not any(p.is_file() for p in fixture_dir.iterdir()):
+        sys.exit(
+            f"ERROR: no fixtures in {fixture_dir}. Regenerate them first:\n"
+            f"  just eval-fixtures {args.skill}\n"
+            "Without fixtures every correct plan grades ~0 and the run reports a failure that "
+            "did not happen."
+        )
+
+    lane = load_lane(Path(args.config), args.lane, Path.cwd())
+    lane_sandbox = sandbox / f"lane-{lane.name}"
+    lane_sandbox.mkdir(parents=True, exist_ok=True)
+
+    print(f"\nLane: {lane.name}  (kind: native_cli)")
+    print(f"  entry point : {lane.entry_point}")
+    print(f"  binary      : {lane.binary}")
+    print(f"  model       : {lane.model_path}")
+    print(f"  fixtures    : {fixture_dir}")
+    print(f"  sandbox     : {lane_sandbox}\n", flush=True)
+
+    outputs = run_native_corpus(
+        lane,
+        args.skill,
+        corpus,
+        fixture_dir=fixture_dir,
+        sandbox=lane_sandbox,
+        limit=args.limit,
+        verbose=args.verbose,
+    )
+    scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, lane_sandbox)
+
+    scoreboard["lane"] = lane.name
+    scoreboard["lane_kind"] = "native_cli"
+    scoreboard["lane_entry_point"] = lane.entry_point
+    scoreboard["backend"] = lane.name
+    if lane.public_name:
+        scoreboard["backend_public_name"] = lane.public_name
+
+    if args.save:
+        out_path = Path(args.save) / f"{args.skill}_{lane.name}_{args.verifier}.json"
+        save_scoreboard_json(scoreboard, out_path)
+
+    # L4e: coverage and score are reported together, or neither is reported. A shipped-path
+    # score computed over "rows that ran" silently excludes whatever the runtime could not
+    # attempt — which is exactly the hardest stratum — and reads healthier than the product is.
+    coverage = scoreboard.get("coverage")
+    unattempted = scoreboard.get("unattempted")
+    print(f"\n  coverage    : {coverage:.4f}  ({unattempted} row(s) unattempted)")
+    if coverage is not None and coverage < args.min_coverage:
+        print(
+            f"  SCORE WITHHELD: coverage {coverage:.4f} < --min-coverage {args.min_coverage:.4f}.\n"
+            "  A score over this population would describe the rows the runtime happened to "
+            "manage, not the corpus. Fix the coverage gap, or lower the bar deliberately and "
+            "say so."
+        )
+        if args.save:
+            print(f"  Saved to {out_path} (raw rows kept; the aggregate is not an L4 result)")
+        return scoreboard
+
+    print_scoreboard(scoreboard, backend=lane.name, verbose=args.verbose)
+    if args.save:
+        print(f"  Saved to {out_path}")
+    return scoreboard
+
+
 def _matrix_row(scoreboard: dict[str, Any]) -> dict[str, Any]:
     """Pull the four headline metrics from a scoreboard into a flat matrix cell."""
     intent = scoreboard.get("intent_metrics") or {}
@@ -1591,6 +1690,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_saf.add_argument("--top-k", type=int, default=None, dest="top_k")
     p_saf.add_argument("--examples", choices=("selected", "static"), default="selected")
 
+    # native — L4a, the shipped path
+    p_nat = sub.add_parser(
+        "native",
+        help="L4: grade the shipped native binary on real artifacts (executes for real)",
+        description=(
+            "Drive `knaif run <skill>` per utterance against a fixture sandbox — NOT --dry-run "
+            "— and grade the produced files with the skill's executing verifier. This is the "
+            "only lane that measures the binary a user installs doing the thing a user asked. "
+            "The lane is configured under `lanes:` in the eval config, never `backends:`."
+        ),
+    )
+    p_nat.add_argument("--skill", required=True)
+    p_nat.add_argument("--lane", required=True, help="Lane name from the config's `lanes:` map")
+    p_nat.add_argument("--config", default="eval_backends.yaml")
+    p_nat.add_argument(
+        "--verifier",
+        default="success",
+        help="Executing verifier only (success | output_diff). `cheap` is refused.",
+    )
+    p_nat.add_argument("--corpus", default=None)
+    p_nat.add_argument("--sandbox", default=None)
+    p_nat.add_argument("--fixture-dir", default=None, dest="fixture_dir")
+    p_nat.add_argument("--limit", type=int, default=None)
+    p_nat.add_argument("--save", default=None, metavar="DIR")
+    p_nat.add_argument("--verbose", action="store_true")
+    p_nat.add_argument(
+        "--min-coverage",
+        type=float,
+        default=0.95,
+        dest="min_coverage",
+        help="Below this fraction of attempted rows the run reports coverage and WITHHOLDS the "
+        "score (L4e): an aggregate over the rows the runtime happened to manage is not a "
+        "result about the corpus.",
+    )
+
     # regression
     p_reg = sub.add_parser("regression", help="Check current results against snapshot")
     p_reg.add_argument("--skill", default=None)
@@ -1744,6 +1878,7 @@ def main() -> None:
         "retrieval": cmd_retrieval,
         "accept": cmd_accept,
         "safety": cmd_safety,
+        "native": cmd_native,
     }
     dispatch[args.command](args)
 

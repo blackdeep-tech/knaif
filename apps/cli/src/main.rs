@@ -1274,11 +1274,9 @@ impl PlanSession {
         // `_link_chain_intermediates` + `_hallucinated_filename`): bind undeclared chain outputs,
         // then downgrade to a clarify when the model invented an input file the utterance never
         // named. Applied here so both `run` and `plan` inherit it, matching Python's `infer`.
-        Ok(knaif_core::apply_clarify_gate(
-            payload,
-            &utterance,
-            &self.output_capable,
-        ))
+        let gated = knaif_core::apply_clarify_gate(payload, &utterance, &self.output_capable);
+        emit_plan_dump(plan_dump_enabled(), &gated);
+        Ok(gated)
     }
 }
 
@@ -1348,6 +1346,43 @@ fn debug_dump(enabled: bool, raw: &str, extracted: &str) -> Option<String> {
          --- raw model output ---\n{raw}\n\
          --- extracted JSON ---\n{extracted}\n\
          ------------------------"
+    ))
+}
+
+/// Frame marker for [`plan_dump`]: the validated, post-gate plan `run` is about to execute.
+///
+/// L4 grades the **shipped** path — `run`, with real execution — but a scoreboard also carries
+/// tool/argument metrics, which need the plan. Without this the L4 lane would have to either run
+/// inference twice (once for `plan --json`, once for `run`, with no guarantee the two agree) or
+/// report `predicted_tool = None` for every row, which scores as 0% tool accuracy and invents a
+/// catastrophe. An env gate on the shared `PlanSession::plan` costs nothing when unset and covers
+/// `run`, `plan` and `plan --batch` alike — same reasoning as [`PROMPT_DUMP_MARKER`].
+const PLAN_DUMP_MARKER: &str = "===KNAIF-PLAN===";
+
+fn plan_dump_enabled() -> bool {
+    std::env::var("KNAIF_DUMP_PLAN")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
+/// Print the plan dump to stderr when enabled. stderr, not stdout: `run`'s stdout is the user-
+/// facing preview/result, and a capture has to be able to keep the two apart.
+fn emit_plan_dump(enabled: bool, payload: &serde_json::Value) {
+    if let Some(msg) = plan_dump(enabled, payload) {
+        eprintln!("{msg}");
+    }
+}
+
+/// One line: the marker, then the plan envelope as compact JSON. Single-line by design — a
+/// consumer scans stderr for the marker and parses the remainder, with no multi-line framing to
+/// get wrong. Kept pure (the gate is a parameter) so it is testable without mutating process env.
+fn plan_dump(enabled: bool, payload: &serde_json::Value) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{PLAN_DUMP_MARKER}{}",
+        serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string())
     ))
 }
 
@@ -2160,6 +2195,27 @@ mod tests {
     #[test]
     fn prompt_dump_is_none_when_disabled() {
         assert!(prompt_dump(false, "SYSTEM", "USER").is_none());
+    }
+
+    #[test]
+    fn plan_dump_is_none_when_disabled() {
+        assert!(plan_dump(false, &serde_json::json!({"plan": []})).is_none());
+    }
+
+    #[test]
+    fn plan_dump_is_one_parseable_line() {
+        // The consumer (the L4 lane) scans stderr for the marker and parses the rest of that
+        // line, so the envelope must survive round-tripping and must not wrap.
+        let payload = serde_json::json!({
+            "plan": [{"tool": "strip_audio", "args": {"inputs": ["a b.mp4"], "output": "o.mp4"}}]
+        });
+        let msg = plan_dump(true, &payload).expect("enabled → Some");
+        assert!(!msg.contains('\n'), "the dump must be a single line: {msg}");
+        let rest = msg.strip_prefix(PLAN_DUMP_MARKER).expect("marker prefix");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(rest).expect("parses"),
+            payload
+        );
     }
 
     #[test]
