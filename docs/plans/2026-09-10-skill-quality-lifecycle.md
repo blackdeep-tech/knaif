@@ -356,13 +356,18 @@ The durable half, and the only layer CI can run on every change.
   before calling this done, and state the real coverage in the contract file — **Ubuntu in CI,
   Windows locally, macOS unexercised**. Claiming three-platform coverage would be the same
   unmeasured assertion this plan exists to end.
-  - **macOS: bind the gap to the platform matrix rather than leaving it a note (decided
-    2026-09-10).** `contracts/release/platforms.yaml` carries macOS as `status: planned` and no
-    workflow builds it, so contract coverage today would test a target that does not exist. But a
-    prose caveat decays: the moment someone flips that status the gap reopens silently. **Assert
-    it instead** — a test that fails if a platform is `supported` in `platforms.yaml` while L1's
-    contract coverage does not include it. Same effort as writing the note, and it closes itself
-    when macOS ships instead of relying on memory.
+  - **macOS: this plan closes *without* macOS coverage, and ships the guard that forces the
+    macOS work to add it (decided 2026-09-10).** Two separable things, and only the first is a
+    deliverable here:
+    - **In scope — the guard.** A test that fails if any platform is `supported` in
+      `contracts/release/platforms.yaml` while the layers' recorded coverage excludes it. See G2.
+    - **Out of scope — macOS coverage itself.** macOS is `status: planned`, no workflow builds
+      it, and the support work lands *after* this plan. Contract coverage for a target that does
+      not exist would test nothing, and waiting for it would block this plan on unrelated work.
+    **This is a tripwire for a known-incoming change, not a theoretical safeguard** — macOS
+    support is already in flight (`feat/macos-support`, `docs/macos-support-plan`). The guard is
+    expected to **fail that branch on day one**, which is the point: it converts "remember to
+    extend parity coverage" from a note someone must find into a build error they cannot miss.
 
 ## Workstream L2 — Deterministic pipeline (no model, every PR)
 
@@ -568,9 +573,20 @@ Without this the layers are a checklist nobody is obliged to run.
     - **Keep the acceptance record of a released artifact as historical evidence**, marked as
       applying to that artifact. It stops being a claim about `main` without becoming a lie about
       what shipped — which is what release support needs to answer "what was true for 1.1.0?".
-  - **Name the platform/backend combinations** that must be exercised. Today L1/L2 run on
-    `ubuntu-latest` only and L4 needs a GPU; state honestly which OS × backend the acceptance
-    covers and which are unexercised, rather than implying all three platforms.
+  - **Name the platform/backend combinations** that must be exercised, and **assert them against
+    the platform matrix**. Today L1/L2 run on `ubuntu-latest` only and L4 needs a GPU; the record
+    states honestly which OS × backend the acceptance covers and which are unexercised, rather
+    than implying all three platforms.
+    - **The rule: a platform may not be `supported` in `contracts/release/platforms.yaml` unless
+      the recorded coverage includes it** — L1/L2 running there, and an L3/L4 acceptance run
+      recorded from that platform. Promoting a platform without that fails the check.
+    - **What this asks of a future platform port**, stated here so it is not a surprise: L1/L2 are
+      cheap (add the OS to the existing CI jobs), but **L3/L4 need real hardware** — that OS, a
+      GGUF, and a GPU or the patience for CPU inference. A platform port therefore inherits this
+      plan's process rather than only its build work, and should budget for it.
+    - This plan closes with **Ubuntu covered in CI, Windows covered locally, and macOS
+      unexercised and `planned`** — an honest, complete statement of what was verified. The guard
+      is what makes that statement stay true.
 - [ ] **G3 — Add the gate to the skill lifecycle in `AGENTS.md`.** The bundle already documents
   four concerns (handlers, eval, training, native port); the native-port section should name
   **L1–L4** as its exit criteria — L4 included, since it is the only one that establishes the
@@ -639,6 +655,11 @@ Without this the layers are a checklist nobody is obliged to run.
   blockers*. This plan only decides how L3 behaves until it lands.
 - **Porting `history`-based re-planning to native.** Single-shot planning is what the corpus and
   the shipped path exercise.
+- **macOS parity and acceptance coverage.** macOS is `status: planned` and its support work lands
+  after this plan; extending L1–L4 to it belongs to that work, which inherits this process through
+  the platform-coverage guard (L1d, G2). **This plan closes with macOS unexercised — deliberately,
+  not as an unfinished item**, and a macOS release is what must satisfy the plan, not the other
+  way round.
 
 ## Open questions
 
@@ -653,6 +674,7 @@ Without this the layers are a checklist nobody is obliged to run.
   inseparable; that objection does not apply to a *factorial*, which exists to separate them, and
   the harness, model load and GPU time are already paid for. It also gets documents its answer
   (15 public tools, 5 shown) in the same run rather than a later one. See S3g.
-- **macOS — the gap is recorded *and bound to the platform matrix*.** `contracts/release/platforms.yaml`
-  lists macOS as `status: planned` and no release workflow builds it, so contract coverage for a
-  target that does not ship would test nothing. See L1d.
+- **macOS — settled as a scope boundary, not a gap.** This plan closes with macOS unexercised;
+  the platform-coverage guard it ships (L1d, G2) is what obliges the *later* macOS support work to
+  extend L1–L4 before that platform can be marked `supported`. Sequencing is deliberate: this plan
+  first, macOS after, macOS subject to this plan.
