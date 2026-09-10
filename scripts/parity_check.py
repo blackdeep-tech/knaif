@@ -408,6 +408,19 @@ def native_llama_error(native_bin: Path, skill: str) -> str | None:
     )
 
 
+def _native_env() -> dict[str, str]:
+    """Environment for a native invocation.
+
+    `$KNAIF_N_GPU_LAYERS` is passed through from the harness's own environment (see
+    `--native-ngl`) because the compute backend is not a performance detail here: it moves the
+    greedy argmax. Measured 2026-09-10 on `encode clip.mp4 at crf 22`, with the prompt verified
+    byte-identical on both sides — native on CUDA renders `-crf 23`, native on CPU renders
+    `-crf 22`, and Python renders `-crf 22`. Same weights, same prompt, greedy on both sides;
+    only the accumulation differs.
+    """
+    return dict(os.environ)
+
+
 def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Path) -> Outcome:
     argv = [
         str(native_bin),
@@ -419,7 +432,13 @@ def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Pa
         *utt.split(),
     ]
     proc = subprocess.run(
-        argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        argv,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=_native_env(),
     )
     return parse_native(proc.stdout, proc.stderr)
 
@@ -649,37 +668,169 @@ def _resolve_python_model_path(python_model: str) -> Path | None:
 _SIGNIFICANT_ARG_KEYS = _PLAN_PATH_ARG_KEYS
 
 
-def plan_equiv_modulo_defaults(
-    a_steps: list[dict], b_steps: list[dict], cwd: str | None = None
-) -> str | None:
-    """If two plans differ ONLY because one side materialized optional-arg defaults the other
+def load_tool_defaults(skill: str) -> dict[str, dict]:
+    """`{tool: declared defaults}` from the skill's `tools.yaml` plus the core control tools.
 
-    left implicit (same tool sequence, all shared arg keys equal, and the key sets are nested),
-    return a note describing the extra keys; else None. Native's apply_defaults fills args like
-    preview/quality/include_audio that python omits — benign. But a differing input/path key
-    (_SIGNIFICANT_ARG_KEYS) is a real divergence (e.g. one side hallucinated an `inputs`), never
-    a default, so it is never normalized away.
+    The **declared** defaults, from the same contract both runtimes' `apply_defaults` reads.
+    This is what makes the plan relation sound: without it there is no way to tell an argument
+    one side filled from the contract from one it simply chose differently.
+    """
+    from knaif.registry import load_registry
+
+    registry = load_registry(REPO_ROOT / "skills" / skill / "tools.yaml")
+    registry.update(load_registry(REPO_ROOT / "contracts" / "runtime" / "core_tools.yaml"))
+    return {name: dict(td.defaults) for name, td in registry.items()}
+
+
+def _with_defaults(args: dict, defaults: dict) -> dict:
+    """`args` with every absent declared default filled in — what `apply_defaults` does."""
+    filled = dict(args)
+    for key, value in defaults.items():
+        filled.setdefault(key, value)
+    return filled
+
+
+def plan_equiv_modulo_defaults(
+    a_steps: list[dict],
+    b_steps: list[dict],
+    tool_defaults: dict[str, dict],
+    cwd: str | None = None,
+) -> str | None:
+    """If two plans agree once each side's **declared** defaults are filled in, return a note;
+    else None.
+
+    **This function used to be unsound, and the name was the trap** (plan 2026-09-10, L3a).
+    Despite "modulo defaults" it never consulted a default: it accepted any nesting of arg-key
+    sets where the shared keys agreed and the extra keys were not paths. So native emitting
+    `quality: "low"` where python omitted `quality` scored *equivalent* — although the two
+    render different commands. An omitted argument and an explicitly different setting are not
+    the same thing, and an acceptance relation that conflates them cannot gate anything.
+
+    The relation now is: fill both sides from `tool_defaults` (the registry's declared
+    defaults, the same map `apply_defaults` uses in both runtimes), then compare the full arg
+    maps. An extra key survives only when its value **is** the declared default.
+
+    Worth knowing before reading a result: ffmpeg declares defaults on exactly **one** tool
+    (`concat_video.output`). Every other extra key it produces is now a divergence — which is
+    the correction, not a side effect. The old docstring's examples (preview / quality /
+    include_audio "filled by apply_defaults") describe defaults that **do not exist** in
+    `tools.yaml`; whatever was producing those keys, it was not the contract.
     """
     if len(a_steps) != len(b_steps):
         return None
-    extras: list[str] = []
+    notes: list[str] = []
     for a, b in zip(a_steps, b_steps, strict=True):
-        if a.get("tool") != b.get("tool"):
+        tool = a.get("tool")
+        if tool != b.get("tool"):
             return None
-        aa, ba = a.get("args") or {}, b.get("args") or {}
+        defaults = tool_defaults.get(tool or "", {})
+        aa = _with_defaults(a.get("args") or {}, defaults)
+        ba = _with_defaults(b.get("args") or {}, defaults)
+        if set(aa) != set(ba):
+            return None  # a key one side has and the contract does not explain
         if any(
             _canon_val(aa[k], is_path=k in _PLAN_PATH_ARG_KEYS, cwd=cwd)
             != _canon_val(ba[k], is_path=k in _PLAN_PATH_ARG_KEYS, cwd=cwd)
-            for k in set(aa) & set(ba)
+            for k in aa
         ):
-            return None  # a shared key disagrees → real divergence
-        only_a, only_b = set(aa) - set(ba), set(ba) - set(aa)
-        if only_a and only_b:
-            return None  # each side has unique keys → not a simple nesting
-        if (only_a | only_b) & _SIGNIFICANT_ARG_KEYS:
-            return None  # a differing input/path key is a real divergence, not a default
-        extras += [f"native+{k}" for k in sorted(only_a)] + [f"python+{k}" for k in sorted(only_b)]
-    return "equivalent modulo default args: " + ", ".join(extras) if extras else "equivalent"
+            return None  # a value disagrees → real divergence
+        filled = sorted(set(defaults) - (set(a.get("args") or {}) & set(b.get("args") or {})))
+        notes += [f"{tool}+{k}" for k in filled]
+    return (
+        "equivalent (declared defaults filled: " + ", ".join(notes) + ")" if notes else "equivalent"
+    )
+
+
+#: Buckets that count against the equivalence rate. `not-comparable` is excluded from the
+#: DENOMINATOR — python renders no command for those intents, so there is nothing to compare —
+#: and reported separately, because a rate whose excluded rows are invisible is the shape of
+#: every misleading eval number this plan exists to prevent.
+_GATED_BUCKETS = ("match", "mismatch", "decline-divergence", "native-not-implemented")
+
+
+def equivalence_rate(counts: dict[str, int]) -> tuple[int, float]:
+    """`(gated rows, equivalence rate)`. A run with nothing to compare scores 0.0, not 1.0."""
+    gated = sum(counts.get(k, 0) for k in _GATED_BUCKETS)
+    return gated, (counts.get("match", 0) / gated if gated else 0.0)
+
+
+def _sha256(path: Path) -> str | None:
+    """Content hash of a file, or None if it isn't there."""
+    import hashlib
+
+    if not path.is_file():
+        return None
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _git(*cmd: str) -> str:
+    try:
+        return subprocess.run(
+            ["git", *cmd], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+def build_meta(args, rows: list[Row], entry_points: dict[str, str], counts, rate) -> dict:
+    """The provenance record for a saved run (L3b).
+
+    Everything here answers "could this run be told apart from a different one?". The
+    **backend** field is not bookkeeping: greedy argmax over different FP accumulation can flip
+    a near-tie, so a CPU→CUDA change between two runs is indistinguishable from the change
+    being measured unless both runs say which backend produced them. Nothing in the harness can
+    detect that from the outside, so it is recorded from `$KNAIF_PARITY_BACKEND` and left
+    explicitly `null` when the runner did not say — an unanswered question, not a guess.
+
+    `entry_points` satisfies rule 2 (L3d): the record states which command was run on each
+    side, so a later reader can check the two halves were the same stage.
+    """
+    corpus = REPO_ROOT / "skills" / args.skill / "data" / "eval.jsonl"
+    return {
+        "purpose": args.purpose or f"L3 behavioral parity — {args.skill} ({args.mode} mode)",
+        "captured": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "git_sha": _git("rev-parse", "HEAD"),
+        "git_branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
+        "git_dirty": bool(_git("status", "--porcelain")),
+        "corpus": {
+            "path": str(corpus.relative_to(REPO_ROOT)),
+            "rows_compared": len(rows),
+            "sha256": _sha256(corpus),
+        },
+        "model": {
+            "path": str(args.model_path),
+            "sha256": _sha256(args.model_path),
+            "bytes": args.model_path.stat().st_size if args.model_path.is_file() else None,
+        },
+        "binary": {
+            "path": str(args.native_bin),
+            "sha256": _sha256(args.native_bin) if args.native_bin else None,
+        },
+        # See the docstring: an honest null beats a plausible default.
+        "backend": os.environ.get("KNAIF_PARITY_BACKEND") or None,
+        "native_n_gpu_layers": os.environ.get("KNAIF_N_GPU_LAYERS"),
+        "backend_note": (
+            "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend "
+            "change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable "
+            "from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with "
+            "the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` "
+            "rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from "
+            "Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs "
+            "llama-cpp-python), so this is a standing property of the comparison, not a "
+            "misconfiguration — see `backend_attribution.json` next to this file."
+        ),
+        "entry_points": entry_points,
+        "result": {
+            "counts": dict(counts),
+            "equivalence_rate": round(rate, 6),
+            "threshold": args.threshold,
+            "passed": rate >= args.threshold,
+        },
+    }
 
 
 def compare(
@@ -689,6 +840,7 @@ def compare(
     strict: bool,
     plan_mode: bool = False,
     cwd: str | None = None,
+    tool_defaults: dict[str, dict] | None = None,
 ) -> tuple[str, str]:
     """Return (status, note). status ∈ {match, mismatch, decline-divergence,
     not-comparable, native-not-implemented}.
@@ -711,9 +863,14 @@ def compare(
             "not-comparable",
             "python dry-run emits no command for this intent (compress/platform/thumbnail/batch)",
         )
-    # Plan mode: accept plans that differ only by materialized optional-arg defaults.
+    # Plan mode: accept plans that differ only by *declared* defaults one side materialized.
+    # `tool_defaults` is required here rather than optional-with-a-fallback: without the
+    # contract the relation cannot be evaluated, and quietly answering "mismatch" (or worse,
+    # "match") would be the comparator deciding an acceptance question by accident.
     if plan_mode and native.kind == "plan" and py.kind == "plan" and native.key(cwd) != py.key(cwd):
-        eq = plan_equiv_modulo_defaults(native.plan, py.plan, cwd)
+        if tool_defaults is None:
+            raise ValueError("plan-mode comparison needs tool_defaults (see load_tool_defaults)")
+        eq = plan_equiv_modulo_defaults(native.plan, py.plan, tool_defaults, cwd)
         if eq is not None:
             return "match", eq
         return "mismatch", "plan tools/args differ"
@@ -782,10 +939,43 @@ def main() -> int:
     ap.add_argument(
         "--strict",
         action="store_true",
-        help="Treat chain rows as normal (no single-step leniency).",
+        help="Accepted and ignored. The chain leniency it disabled is gone (2026-09-10, "
+        "Workstream E) — chain rows are always compared in full now, so this is what the "
+        "harness always does. Kept so existing invocations and scripts do not break.",
+    )
+    ap.add_argument(
+        "--native-ngl",
+        default=None,
+        dest="native_ngl",
+        metavar="N",
+        help="Force native's GPU layer count ($KNAIF_N_GPU_LAYERS) for this run. Use 0 to put "
+        "native on the CPU. THIS CHANGES THE RESULT: the compute backend moves the greedy "
+        "argmax, so a native-CUDA vs Python-CPU comparison measures the two llama.cpp builds "
+        "as much as it measures the port. Recorded in meta.json.",
+    )
+    ap.add_argument(
+        "--threshold",
+        type=float,
+        default=1.0,
+        help="Minimum equivalence rate over gated rows (default 1.0 = every comparable row "
+        "must agree). Lower it only for a run that deliberately crosses inference backends, "
+        "where greedy argmax over different FP accumulation can flip a near-tie; the plan's "
+        "L3 release bar is 0.99.",
     )
     ap.add_argument(
         "--out", type=Path, help="Write the JSON report here (default: evals/parity/…)."
+    )
+    ap.add_argument(
+        "--label",
+        default="",
+        help="Short name for this run. With it the report is written to a run DIRECTORY "
+        "(evals/parity/<date>_<label>/) carrying report.json + meta.json, which is the form "
+        "L3b requires for anything quoted as evidence.",
+    )
+    ap.add_argument(
+        "--purpose",
+        default="",
+        help="One line recorded in meta.json saying what this run was for.",
     )
     ap.add_argument(
         "--self-test", action="store_true", help="Run internal parser assertions and exit."
@@ -813,6 +1003,15 @@ def main() -> int:
         )
     if not args.model_path.exists():
         ap.error(f"model not found: {args.model_path}")
+    # Absolutize BEFORE handing either path to a subprocess. Both CLIs run with `cwd` set to the
+    # fixture directory, so a relative `--model-path` (valid from the repo root, where the check
+    # above passed) resolves to nothing there — and native answers a missing model by printing
+    # first-run guidance and exiting 0, which the harness classifies as `none` and scores as a
+    # mismatch. The result is a run that reports 0% parity and looks like catastrophic drift when
+    # nothing was ever compared. `just parity` passes absolute paths and never hit this; a
+    # hand-written invocation does.
+    args.native_bin = args.native_bin.resolve()
+    args.model_path = args.model_path.resolve()
     if (msg := native_llama_error(args.native_bin, args.skill)) is not None:
         ap.error(msg)
 
@@ -842,17 +1041,43 @@ def main() -> int:
         rows = rows[: args.limit]
 
     plan_mode = args.mode == "plan"
+    # Applied to this process's environment so every native subprocess inherits it (see
+    # `_native_env`). Set before the header prints so the run states what it actually used.
+    if args.native_ngl is not None:
+        os.environ["KNAIF_N_GPU_LAYERS"] = str(args.native_ngl)
+    # The declared defaults both runtimes' `apply_defaults` reads. Loaded once, up front, so a
+    # broken bundle fails before any inference is spent.
+    tool_defaults = load_tool_defaults(args.skill)
     batch = args.batch
     if batch and not plan_mode:
         ap.error("--batch is only supported with --mode plan")
     print(f"parity[{args.mode}{'/batch' if batch else ''}]: {args.skill} — {len(rows)} row(s)")
-    sub = "plan --skill S --json" if plan_mode else "run S --dry-run"
-    print(f"  native : {args.native_bin}  {sub} --model {args.model_path.name}")
-    print(
-        f"  python : uv run knaif-cli {'plan' if plan_mode else 'run --dry-run'} "
-        f"--backend llama-cpp --model {args.python_model}"
-    )
+    # L3d / rule 2: name the entry point on each side, in the output *and* in the saved record.
+    # "Compare the same stage on both sides" is unverifiable if the record does not say which
+    # stage each side ran.
+    entry_points = {
+        "native": (
+            f"{args.native_bin} "
+            f"{'plan --skill S --json' if plan_mode else 'run S --dry-run'} "
+            f"--model {args.model_path.name}"
+        ),
+        "python": (
+            f"uv run knaif-cli {'plan' if plan_mode else 'run --dry-run'} "
+            f"--backend llama-cpp --model {args.python_model}"
+        ),
+        "stage": (
+            "validated plan envelope (planner output)"
+            if plan_mode
+            else "rendered command argv (shipped dry-run path)"
+        ),
+    }
+    print(f"  native : {entry_points['native']}")
+    print(f"  python : {entry_points['python']}")
+    print(f"  stage  : {entry_points['stage']}")
     print(f"  weights: {args.model_path}  (both runtimes, identity verified)")
+    print(
+        f"  backend: {os.environ.get('KNAIF_PARITY_BACKEND') or 'UNRECORDED ($KNAIF_PARITY_BACKEND)'}"
+    )
     print(f"  cwd    : {cwd}\n")
 
     t0 = time.perf_counter()
@@ -866,7 +1091,15 @@ def main() -> int:
     }
 
     def handle(idx: int, row: Row, native: Outcome, py: Outcome) -> None:
-        status, note = compare(row, native, py, args.strict, plan_mode=plan_mode, cwd=cwd_posix)
+        status, note = compare(
+            row,
+            native,
+            py,
+            args.strict,
+            plan_mode=plan_mode,
+            cwd=cwd_posix,
+            tool_defaults=tool_defaults,
+        )
         counts[status] = counts.get(status, 0) + 1
         icon = {
             "match": "✓",
@@ -932,9 +1165,9 @@ def main() -> int:
 
     elapsed = time.perf_counter() - t0
     total = len(rows)
-    comparable = counts["match"] + counts["mismatch"]
+    gated, rate = equivalence_rate(counts)
     print("\n── summary ─────────────────────────────────────────")
-    print(f"  matched                 : {counts['match']}/{comparable} comparable")
+    print(f"  equivalent              : {counts['match']}/{gated} gated rows = {rate:.4f}")
     print(f"  mismatched (cmd drift)  : {counts['mismatch']}")
     print(f"  decline-divergence      : {counts['decline-divergence']}  (reject vs clarify)")
     print(f"  not-comparable          : {counts['not-comparable']}  (python renders no cmd)")
@@ -944,12 +1177,32 @@ def main() -> int:
     )
     print(f"  total rows / time       : {total} / {elapsed:.0f}s")
 
-    out = args.out or (
-        REPO_ROOT
-        / "evals"
-        / "parity"
-        / f"parity_{args.skill}_{args.mode}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json"
-    )
+    # Enumerate, don't just count. An aggregate can hide offsetting changes in both
+    # directions, and a rate with no list of what failed is not something anyone can act on.
+    divergent = [r for r in results if r["status"] not in ("match", "not-comparable")]
+    if divergent:
+        print(f"\n── {len(divergent)} non-equivalent row(s) ──────────────────────")
+        for r in divergent:
+            print(f"  {r['status']:<24} {r['id']:<18} {r['utterance'][:44]}")
+            print(f"    {r['note']}")
+
+    # With --label the run gets a DIRECTORY holding report.json + meta.json (L3b's shape,
+    # matching evals/parity/2026-09-09_p2b-prefix-baseline/). Without one it stays a loose
+    # JSON file — fine for an exploratory run, not enough to quote as evidence.
+    run_dir: Path | None = None
+    if args.label and not args.out:
+        run_dir = (
+            REPO_ROOT / "evals" / "parity" / f"{datetime.now(timezone.utc):%Y-%m-%d}_{args.label}"
+        )
+        run_dir.mkdir(parents=True, exist_ok=True)
+        out = run_dir / "report.json"
+    else:
+        out = args.out or (
+            REPO_ROOT
+            / "evals"
+            / "parity"
+            / f"parity_{args.skill}_{args.mode}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json"
+        )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
@@ -968,16 +1221,34 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"  report                  : {out}")
-    # Non-zero on real divergence: command drift, reject/clarify disagreement, or a
-    # capability native has not built. The chain single-step class is a known native
-    # limitation, not a failure, so it doesn't gate. `native-not-implemented` does gate —
-    # it is exactly what used to land in `mismatch` before the marker existed, and demoting
-    # it to a non-gating bucket would quietly turn the executor gap into a passing result.
-    return (
-        1
-        if (counts["mismatch"] or counts["decline-divergence"] or counts["native-not-implemented"])
-        else 0
+    if run_dir is not None:
+        meta = build_meta(args, rows, entry_points, counts, rate)
+        (run_dir / "meta.json").write_text(
+            json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        print(f"  meta                    : {run_dir / 'meta.json'}")
+        if meta["backend"] is None:
+            print(
+                "  WARNING: backend unrecorded — set $KNAIF_PARITY_BACKEND before quoting this run"
+            )
+        if meta["git_dirty"]:
+            print("  WARNING: working tree dirty — the git SHA does not describe what ran")
+        print(f"  NEXT                    : add a row to evals/INDEX.md for {run_dir.name}")
+
+    # L3a's threshold. **The default is 1.0, not the plan's 0.99, and that is deliberate.**
+    # The plan recorded that this harness "reports; it does not gate" — that was already out of
+    # date: any divergent row returned 1, i.e. it gated at 100%. Adopting 0.99 as the default
+    # would therefore have *loosened* a working gate, which is the opposite of the intent, so
+    # the bar stays where it is and `--threshold` makes a lower one available for the case that
+    # justified it: greedy argmax over different FP accumulation can flip a near-tie, so a run
+    # that crosses inference backends can legitimately expect a row or two of noise. Choosing
+    # that allowance is a decision to make per run, out loud, not a default to inherit.
+    ok = rate >= args.threshold
+    print(
+        f"  gate                    : {'PASS' if ok else 'FAIL'} "
+        f"({rate:.4f} {'>=' if ok else '<'} {args.threshold:.4f} required)"
     )
+    return 0 if ok else 1
 
 
 def _fmt_cmds(o: Outcome) -> str:
@@ -1153,7 +1424,18 @@ def _self_test() -> int:
         '{"plan":[{"tool":"convert_video","args":{"inputs":["clip.mov"],"container":"mp4"}},{"tool":"strip_audio","args":{"inputs":["clip.mp4"]}}]}\n',
         "",
     )
-    st, _ = compare(Row("c", "convert+strip", [], True), chain, chain, strict=False, plan_mode=True)
+    # The real contract, loaded from the real bundle: the plan relation is only meaningful
+    # against declared defaults, so the self-test uses them rather than a convenient fiction.
+    ffmpeg_defaults = load_tool_defaults("ffmpeg")
+    assert ffmpeg_defaults["concat_video"] == {"output": "combined.mp4"}
+    st, _ = compare(
+        Row("c", "convert+strip", [], True),
+        chain,
+        chain,
+        strict=False,
+        plan_mode=True,
+        tool_defaults=ffmpeg_defaults,
+    )
     assert st == "match", f"identical chain plan must match in plan mode: {st}"
     # Different tool → mismatch.
     other = parse_plan_json(
@@ -1163,33 +1445,66 @@ def _self_test() -> int:
     # clarify plan classifies as clarify (feeds decline-divergence).
     cl = parse_plan_json('{"plan":[{"tool":"clarify","args":{"question":"which file?"}}]}\n', "")
     assert cl.kind == "clarify", cl
-    # Native materialized a default (preview) python omitted → equivalent-modulo-defaults match.
-    nd = parse_plan_json(
-        '{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":18,"preview":true}}]}\n',
-        "",
+
+    def plan_cmp(a: str, b: str) -> tuple[str, str]:
+        return compare(
+            Row("d", "u", [], False),
+            parse_plan_json(a + "\n", ""),
+            parse_plan_json(b + "\n", ""),
+            strict=False,
+            plan_mode=True,
+            tool_defaults=ffmpeg_defaults,
+        )
+
+    # L3a — THE REGRESSION THIS RELATION WAS REWRITTEN FOR. `preview` has no declared default
+    # in ffmpeg's tools.yaml, so one side emitting it and the other omitting it is a real
+    # divergence: the two render different commands. The old relation scored this "equivalent
+    # modulo default args" purely because `preview` is not a path key.
+    st, note = plan_cmp(
+        '{"plan":[{"tool":"compress_video","args":{"inputs":["a.mp4"],"crf":18,"preview":true}}]}',
+        '{"plan":[{"tool":"compress_video","args":{"inputs":["a.mp4"],"crf":18}}]}',
     )
-    pd = parse_plan_json(
-        '{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":18}}]}\n', ""
+    assert st == "mismatch", (st, note)
+    # The same shape with a value that IS the declared default is benign — and it is the only
+    # thing that may be. `concat_video.output` defaults to `combined.mp4`, so python omitting it
+    # and native materializing it are the same plan.
+    st, note = plan_cmp(
+        '{"plan":[{"tool":"concat_video","args":{"inputs":["a.mp4"],"output":"combined.mp4"}}]}',
+        '{"plan":[{"tool":"concat_video","args":{"inputs":["a.mp4"]}}]}',
     )
-    st, note = compare(Row("d", "compress", [], False), nd, pd, strict=False, plan_mode=True)
-    assert st == "match" and "native+preview" in note, (st, note)
-    # But a disagreeing SHARED arg value is a real mismatch, not a default.
-    pd2 = parse_plan_json(
-        '{"plan":[{"tool":"compress_video","args":{"inputs":["clip.mp4"],"crf":28}}]}\n', ""
+    assert st == "match" and "concat_video+output" in note, (st, note)
+    # ...and the same key carrying a value that is NOT the default is a divergence, which is
+    # exactly the distinction the old relation could not make.
+    st, note = plan_cmp(
+        '{"plan":[{"tool":"concat_video","args":{"inputs":["a.mp4"],"output":"other.mp4"}}]}',
+        '{"plan":[{"tool":"concat_video","args":{"inputs":["a.mp4"]}}]}',
     )
-    st2, _ = compare(Row("d", "compress", [], False), nd, pd2, strict=False, plan_mode=True)
-    assert st2 == "mismatch", st2
-    # A differing INPUT/path key is a real divergence, never a benign default (regression guard:
-    # native hallucinated `inputs` while python omitted it must NOT normalize to a match).
-    hi = parse_plan_json(
-        '{"plan":[{"tool":"resize_video","args":{"inputs":["video.mp4"],"keep_aspect_ratio":true}}]}\n',
-        "",
+    assert st == "mismatch", (st, note)
+    # A disagreeing SHARED arg value is a real mismatch.
+    st, _ = plan_cmp(
+        '{"plan":[{"tool":"compress_video","args":{"inputs":["a.mp4"],"crf":18}}]}',
+        '{"plan":[{"tool":"compress_video","args":{"inputs":["a.mp4"],"crf":28}}]}',
     )
-    lo = parse_plan_json(
-        '{"plan":[{"tool":"resize_video","args":{"keep_aspect_ratio":true}}]}\n', ""
+    assert st == "mismatch", st
+    # A differing INPUT/path key is a real divergence (regression guard: native hallucinated
+    # `inputs` while python omitted it must NOT normalize to a match).
+    st, _ = plan_cmp(
+        '{"plan":[{"tool":"resize_video","args":{"inputs":["v.mp4"],"keep_aspect_ratio":true}}]}',
+        '{"plan":[{"tool":"resize_video","args":{"keep_aspect_ratio":true}}]}',
     )
-    st3, _ = compare(Row("r", "resize the video", [], False), hi, lo, strict=False, plan_mode=True)
-    assert st3 == "mismatch", st3
+    assert st == "mismatch", st
+    # Plan mode must not answer an acceptance question without the contract in hand.
+    try:
+        compare(
+            Row("d", "u", [], False),
+            parse_plan_json('{"plan":[{"tool":"compress_video","args":{"crf":18}}]}\n', ""),
+            parse_plan_json('{"plan":[{"tool":"compress_video","args":{"crf":28}}]}\n', ""),
+            strict=False,
+            plan_mode=True,
+        )
+        raise AssertionError("plan mode must refuse to compare without tool_defaults")
+    except ValueError:
+        pass
     # Batch parsing: one plan envelope per line, in order; non-JSON noise lines ignored.
     batch_out = _parse_batch_outcomes(
         "ggml log to stdout\n"
