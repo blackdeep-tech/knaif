@@ -5,7 +5,7 @@
 //! tokenization and diacritic-insensitive matching so multilingual queries retrieve the right
 //! tool. Same scoring both runtimes use.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use unicode_normalization::UnicodeNormalization;
 
@@ -13,6 +13,10 @@ use crate::registry::{Registry, ToolDef};
 
 /// Always surfaced to the model regardless of score.
 const ALWAYS_INCLUDE: &[&str] = &["clarify", "reject", "done"];
+
+/// How many tools retrieval surfaces by default. Mirrors Python's `registry.DEFAULT_TOP_K`;
+/// the L1c settings contract is where the two are held together.
+pub const DEFAULT_TOP_K: usize = 5;
 /// Longest CJK character n-gram generated for containment matching.
 const CJK_MAX_NGRAM: usize = 4;
 
@@ -78,12 +82,21 @@ fn query_tokens(text: &str) -> HashSet<String> {
 /// Return the top-`top_k` tools for `query` (score ≥ `min_score`) plus the always-included
 /// system tools. Keyword match = 3/df points; description/name/arg word match = 1 point.
 /// Internal tools are never surfaced. Mirrors Python `retrieve_tools`.
+/// The tools retrieval selected, **in relevance order**.
+///
+/// A `BTreeMap` cannot be the return type here, and that is not a detail: it sorts by name, so
+/// it silently discards the ranking this function exists to compute. The model reads the tool
+/// listing in the order it is given, and the fine-tune's prompts were relevance-ordered, so the
+/// order is part of the output, not presentation. The L1b contract
+/// (`contracts/parity/retrieval_cases.json`) pins it against the reference runtime.
+pub type RetrievedTools<'a> = Vec<(String, &'a ToolDef)>;
+
 pub fn retrieve_tools<'a>(
     query: &str,
     registry: &'a Registry,
     top_k: usize,
     min_score: f64,
-) -> BTreeMap<String, &'a ToolDef> {
+) -> RetrievedTools<'a> {
     let tokens = query_tokens(query);
 
     // Document frequency: how many (non-internal) tools claim each normalized keyword.
@@ -132,17 +145,19 @@ pub fn retrieve_tools<'a>(
     // Highest score first; name as a deterministic tiebreak (Python sorts (score, name) desc).
     scores.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
 
-    let mut selected: BTreeMap<String, &ToolDef> = BTreeMap::new();
+    // Ranked selection first, then the always-included control tools appended in their
+    // declared order — both halves mirror Python, which builds a dict in exactly this order.
+    let mut selected: RetrievedTools<'a> = Vec::new();
     for (score, name) in scores.into_iter().take(top_k) {
         if score >= min_score {
             if let Some(t) = registry.get(&name) {
-                selected.insert(name, t);
+                selected.push((name, t));
             }
         }
     }
     for name in ALWAYS_INCLUDE {
         if let Some(t) = registry.get(*name) {
-            selected.insert((*name).to_string(), t);
+            selected.push(((*name).to_string(), t));
         }
     }
     selected
@@ -153,6 +168,27 @@ mod tests {
     use super::*;
     use crate::registry::load_registry;
     use std::path::Path;
+
+    fn names(result: &RetrievedTools<'_>) -> Vec<String> {
+        result.iter().map(|(n, _)| n.clone()).collect()
+    }
+
+    #[test]
+    fn retrieval_returns_relevance_order_not_alphabetical() {
+        // The reason the return type is a Vec: a map would sort these by name and throw the
+        // ranking away. `contracts/parity/retrieval_cases.json` pins the exact order against
+        // the reference; this is the local guard that the type still carries one.
+        let r = ffmpeg_with_core();
+        let got = names(&retrieve_tools("compress this video", &r, 3, 0.0));
+        let ranked: Vec<&String> = got
+            .iter()
+            .filter(|n| !["clarify", "reject", "done"].contains(&n.as_str()))
+            .collect();
+        assert_eq!(ranked.first().map(|n| n.as_str()), Some("compress_video"));
+        let mut alphabetical = ranked.clone();
+        alphabetical.sort();
+        assert_ne!(ranked, alphabetical, "ranking must not be alphabetical");
+    }
 
     #[test]
     fn normalize_strips_diacritics_and_lowercases() {
@@ -201,9 +237,9 @@ mod tests {
         for (query, expected) in cases {
             let result = retrieve_tools(query, &r, 5, 0.0);
             assert!(
-                result.contains_key(expected),
+                result.iter().any(|(n, _)| n == expected),
                 "expected {expected:?} in top-5 for {query:?}, got {:?}",
-                result.keys().collect::<Vec<_>>()
+                names(&result)
             );
         }
     }
@@ -213,13 +249,16 @@ mod tests {
         let r = ffmpeg_with_core();
         let result = retrieve_tools("xyzzy no match at all", &r, 5, 0.0);
         for sys in ["clarify", "reject", "done"] {
-            assert!(result.contains_key(sys), "missing system tool {sys}");
+            assert!(
+                result.iter().any(|(n, _)| n == sys),
+                "missing system tool {sys}"
+            );
         }
         // top_k bounds the non-system selection
         let result = retrieve_tools("video", &r, 2, 0.0);
         let non_system = result
-            .keys()
-            .filter(|k| !["clarify", "reject", "done"].contains(&k.as_str()))
+            .iter()
+            .filter(|(k, _)| !["clarify", "reject", "done"].contains(&k.as_str()))
             .count();
         assert!(
             non_system <= 2,

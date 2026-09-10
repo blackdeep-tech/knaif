@@ -285,13 +285,22 @@ an experiment (S3g), not a decision.
 | example selection | Python selects 6, Rust sends 29 static | **undecided — run S3g first** | static wins 16/1, p ≤ 0.001, but on a proxy metric that grades neither arguments nor artifacts |
 | path normalization | Rust rewrites every backslash, Python only path-shaped tokens | **Rust adopts Python** | no quality data; Python's rule is narrower and is what the model was trained on |
 
-- [ ] **V1 — Port `retrieve_tools` into the native plan path, preserving rank.** The function is
-  ported and tested in `knaif-core` but **never called**; `registry.rs` says "ported in a later
-  slice". Wiring alone is insufficient: it returns a `BTreeMap` (`retrieval.rs:86`), discarding
-  rank at the return, and `prompt.rs` re-sorts by `def.order`. Return
-  `Vec<(String, &'a ToolDef)>` and emit in that order. Match Python's `top_k=5`, `min_score=0`,
-  and its unusual tie-break (`scores.sort(reverse=True)` on `(score, name)` → equal scores order
-  by name **descending**).
+- [x] **V1 — DONE 2026-09-10: `retrieve_tools` is wired into the native plan path, rank intact.**
+  All three defects the plan predicted were real. The function was ported and tested in
+  `knaif-core` but **never called**; it returned a `BTreeMap`, discarding the ranking at the
+  return; and `prompt.rs` re-sorted by `def.order`, which would have discarded it again.
+  - `RetrievedTools<'a> = Vec<(String, &'a ToolDef)>` replaces the map, and
+    `build_prompt_ordered` renders a given sequence as given. The whole-registry
+    `build_prompt` still sorts by `order`, which is what the reference produces for a full
+    registry — so L1a's expectations were unaffected.
+  - The **scoring was already faithful**, tie-break included; only the return type threw the
+    answer away. That is why L1b went green on a type change alone.
+  - Effect on the shipped prompt, measured with `$KNAIF_DUMP_PROMPT`: native listed all 13
+    ffmpeg tools in `tools.yaml` order; it now lists **5 in relevance order**, identical to
+    Python's selection for the same utterance (`compress_video, trim_video, strip_audio,
+    rotate_video, reverse_video` for *"make clip.mp4 smaller"*). This was the single largest
+    prompt divergence between the runtimes.
+  - `DEFAULT_TOP_K` is now a named constant on both sides, and L1c pins them equal.
 - [x] **V2 — SETTLED 2026-09-10 by the S3g factorial: `select_examples` stays, and Rust gains it.**
   The 2026-09-09 factorial favoured deleting it (static wins 16/1 and 14/1, p ≤ 0.001) but graded
   first-tool choice and step count — not arguments, not artifacts — and discounted the one slice
@@ -323,7 +332,10 @@ an experiment (S3g), not a decision.
   ordering alone does not. On documents, the skill the question was actually asked about (15
   public tools, 5 shown), **there is no effect on outcome accuracy at all** and `top_k=99`
   *lowers* artifact quality (1.000 → 0.987). No evidence to move it.
-- [ ] **V3 — Converge `normalize_path_separators` on Python's `_PATH_TOKEN_RE`** (`prompt.py:27`),
+- [x] **V3 — Converge `normalize_path_separators` on Python's `_PATH_TOKEN_RE`** *(2026-09-10.
+  Ported as a character-class test rather than a regex dependency — it is one predicate and the
+  CLI has no other use for `regex`. The existing Rust tests were extended, not deleted, with the
+  two shapes the blanket replace got wrong. **L1a went green on this change** and is un-skipped.)* (`prompt.py:27`),
   replacing the blanket `replace('\\', "/")` at `main.rs:1185`. Existing Rust tests at
   `main.rs:1853-1869` already cover the cases and must be updated, not deleted.
 - [ ] **V4 — One source of truth for generation settings.** `max_tokens` lives in `llama.rs:241`,

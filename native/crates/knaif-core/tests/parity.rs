@@ -49,18 +49,14 @@ fn planner_parity_cases() {
 /// L1b: the retrieval-parity contract. Same utterance + registry -> the same tools in the
 /// same order as the reference runtime produced them.
 ///
-/// `#[ignore]` because it **cannot pass today**, and that is deliberate: the contract is
-/// authored before the convergence work so the moment it goes green is the moment the port
-/// is proven correct. Two things stand in the way, both V1's job:
+/// **Green since V1 (2026-09-10).** Authored red and verified red first: `retrieve_tools`
+/// returned a `BTreeMap<String, &ToolDef>`, sorted by name, so it could not represent a
+/// relevance ranking at all — the failure read `["clarify", "compress_video", "convert_video",
+/// "done", ...]` against the reference's relevance order. The scoring itself was already a
+/// faithful port; only the return type threw the answer away.
 ///
-/// 1. `retrieve_tools` returns a `BTreeMap<String, &ToolDef>` — sorted by *name*, so it
-///    cannot represent a relevance ranking at all. The signature has to change.
-/// 2. Nothing calls it. `apps/cli` builds every prompt from the full registry, which is
-///    why native's prompt lists all 13 ffmpeg tools where Python lists 5.
-///
-/// Un-skip in V1's PR. See docs/plans/2026-09-10-skill-quality-lifecycle.md (L1b, V1).
+/// See docs/plans/2026-09-10-skill-quality-lifecycle.md (L1b, V1).
 #[test]
-#[ignore = "red until V1 wires retrieval into the CLI and gives it an ordered return type"]
 fn retrieval_parity_cases() {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../contracts/parity/retrieval_cases.json");
@@ -84,7 +80,7 @@ fn retrieval_parity_cases() {
             top_k,
             min_score,
         );
-        let got: Vec<&str> = selected.keys().map(String::as_str).collect();
+        let got: Vec<&str> = selected.iter().map(|(n, _)| n.as_str()).collect();
         let want: Vec<&str> = case["expected_order"]
             .as_array()
             .unwrap()

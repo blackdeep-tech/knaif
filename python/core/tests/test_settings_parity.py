@@ -107,3 +107,19 @@ def test_the_eval_backend_is_the_shipped_configuration(field: str) -> None:
     """An eval run that measures a different configuration from the shipped one is not
     evidence about the product."""
     assert _eval_options()[field] == _python_options()[field]
+
+
+def test_retrieval_top_k_agrees_across_runtimes() -> None:
+    """`top_k` decides how much of the registry the model is shown.
+
+    A disagreement here is not a settings nit: it is a different prompt, and it was real
+    until V1 — native showed all 13 ffmpeg tools because retrieval was never called.
+    """
+    from knaif.registry import DEFAULT_TOP_K
+
+    src = (REPO_ROOT / "native" / "crates" / "knaif-core" / "src" / "retrieval.rs").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"pub const DEFAULT_TOP_K: usize = (\d+);", src)
+    assert match, "knaif-core no longer declares DEFAULT_TOP_K — update this contract"
+    assert int(match.group(1)) == DEFAULT_TOP_K

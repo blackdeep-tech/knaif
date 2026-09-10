@@ -159,12 +159,27 @@ pub fn build_prompt(
     registry: &Registry,
     overrides: &PromptOverrides,
 ) -> (String, String) {
-    let mut tool_lines = vec!["Available tools:".to_string()];
-    // Sort by tools.yaml insertion order (not the Registry's alphabetical key order): the
-    // fine-tuned model was trained on prompts in that order and is sensitive to it.
+    // Whole-registry prompt: tools.yaml insertion order (not the `Registry`'s alphabetical key
+    // order), which is what Python's dict iteration yields for a full registry.
     let mut ordered: Vec<&ToolDef> = registry.values().collect();
     ordered.sort_by_key(|d| d.order);
-    for def in ordered {
+    build_prompt_ordered(utterance, &ordered, overrides)
+}
+
+/// `build_prompt` over an explicit tool sequence, rendered **in the order given**.
+///
+/// This is the entry point for a retrieved subset, where the order carries meaning: retrieval
+/// ranks by relevance and the fine-tune's prompts were relevance-ordered, so re-sorting the
+/// listing by `tools.yaml` position would discard the ranking on the way to the model. The
+/// whole-registry path above still sorts by `order`, which is the same thing the reference
+/// produces for a full registry.
+pub fn build_prompt_ordered(
+    utterance: &str,
+    tools: &[&ToolDef],
+    overrides: &PromptOverrides,
+) -> (String, String) {
+    let mut tool_lines = vec!["Available tools:".to_string()];
+    for def in tools.iter().copied() {
         let name = def.name.as_str();
         if is_system_tool(name) || def.internal {
             continue;
