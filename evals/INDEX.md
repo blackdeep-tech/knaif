@@ -47,6 +47,19 @@ evals/
 | `baselines/2026-06-24_documents-baseline_success` | 2026-06-24 | success | qwen3-4b, gemma3-4b | documents (86 rows) | Phase A complete + Phase C fixes (arg coercion, keyword retrieval, safety hardening) + runner artifact fix + documents `success` verifier + reorder padded-order salvage (041) | **First documents baseline** (Phase B anchor). qwen outcome **0.988** / knaif **1.00** / tool 0.977; gemma outcome **0.907** / knaif **0.981** / tool 0.930. Real-execution grading via `success` (honest dry-run can't grade `output_exists`). Lone qwen miss: `082` multi-step (rotate→compress) errors in dry-run chaining but routes correctly + works in real execution. |
 | `baselines/2026-06-16_pre-geometry_v2corpus_success` | 2026-06-16 | success | qwen3-4b, gemma3-4b | v2 (~274 rows, 769 utterances) | **before** geometry-crop + extract_frame→create_thumbnail merge | The "previous version" to diff the post-geometry run against. Per-row comparison only on shared ids (corpus grew to 296). |
 
+## Parity runs
+
+Cross-runtime comparisons, not eval-suite runs — they carry no verifier and are not graded against
+a snapshot. See [../docs/plans/2026-09-10-runtime-parity-process.md](../docs/plans/2026-09-10-runtime-parity-process.md).
+Each folder holds its own `meta.json` pinning git SHA, corpus/model/binary sha256 **and the
+inference backend** (greedy argmax over different FP accumulation can flip a near-tie, so a
+backend change between two runs is indistinguishable from the change being measured).
+
+| Folder | Date | What | Model | Notes |
+|---|---|---|---|---|
+| `parity/2026-09-09_p2b-prefix-baseline` | 2026-09-09 | native `plan --batch`, full ffmpeg corpus (314 rows / 847 utterances) | knaif-qwen3-4b-v1 (Q4_K_M, CUDA) | **Pre-change native baseline**, captured on a clean tree at `2f81e380`. Also the run that **disproved the prompt-parity plan's premise**: multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step, first tool correct 39/41, corpus-wide first-tool 92.0%. The 2 chain misses are the known terse-"with no audio" training gap. What the owner reported as "no multi-step plan" is the **executor** (`decide_steps`) refusing chains, not the planner. |
+| `parity/2026-09-09_p3-prompt-factorial` | 2026-09-09 | 4 prompt shapes × 847 utterances (3 388 inferences), Python-side, prompt shape the only variable | knaif-qwen3-4b-v1 (Q4_K_M, CUDA) | Cells A and D are **hash-identical to the real native and Python prompts**. Native vs Python **11/5, p = 0.21 (ns)**; retrieval helps (8/1, p = 0.039); example selection **hurts** (16/1 and 14/1, p ≤ 0.001). ⚠️ Its `outcome acc` is a crude local classifier, **not** the suite's `outcome` metric — not comparable to any snapshot, valid only cell-vs-cell. |
+
 ## Runs
 
 | Folder | Date | Verifier | Backends | Corpus | Code state | Notes |

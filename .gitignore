@@ -71,6 +71,17 @@ evals/**
 # (test_retrieval_no_regression_vs_baseline, run by `just check`) reads one by path and
 # errors outright if it is missing. Same role as skills/*/data/eval_snapshot.json; ~1 KB.
 !evals/retrieval/*.json
+# Parity baselines are durable comparison artifacts, not scratch — same rationale as the
+# retrieval baselines above. A pre-fix run under evals/parity/ is the "before" half of a
+# before/after the code change itself destroys: once the fix lands, no amount of care
+# reconstructs it. Small and diffable (a corpus run is ~600 KB of JSONL), and each folder
+# carries a meta.json pinning git SHA, corpus/model/binary sha256 and the inference backend,
+# so a later comparison can prove it is comparing like with like.
+# See docs/plans/2026-08-08-native-python-planning-parity.md (P2b).
+!evals/parity/**/*.json
+!evals/parity/**/*.jsonl
+!evals/parity/**/*.txt
+!evals/parity/**/*.md
 evals/**/.baselines/
 evals/**/out.*
 evals/**/report.html

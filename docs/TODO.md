@@ -527,15 +527,23 @@ This **Open / Next** section is the live backlog (originally distilled from the
     and `docs/EVAL_VERIFICATION_SOP.md`'s documented join snippet — which keyed on `id` alone
     and so carried the same defect — now keys on `(id, utterance)` text, with a note on why
     `utterance_idx` is unsafe across pre-2026-09-08 runs.
-  - [ ] **F8 — Python and native feed the model different planning prompts.** Python retrieves
-    (5 of 13 public ffmpeg tools for the audit's probe, retrieval-ordered, retrieved examples);
-    native passes the full registry, filters internal tools, orders by YAML, and uses the static
-    examples block. Generation budget is **512 on both** — do not revive the corrected "2048 in
-    Python" claim. **Impact: Python eval scores do not establish shipped native planning
-    quality.** Known since 2026-08-08, not worsened by this branch. Do the controlled prompt
-    comparison in `docs/plans/2026-08-08-native-python-planning-parity.md` *before* attributing
-    any remaining model failure to the model, then measure the shipped native runtime with
-    executing criteria. Tracked follow-up; not blocking.
+  - [x] **F8 — Python and native feed the model different planning prompts. MEASURED 2026-09-09;
+    the divergence is confirmed, its predicted impact is not.** The description was accurate —
+    Python retrieves 5 of 13, retrieval-ordered, with retrieved examples; native passes the full
+    registry in YAML order with the static examples block; generation budget 512 on both.
+    **What the controlled comparison found is that this does not cost planning quality:** native
+    vs Python is **11/5 wins on 847 paired utterances, p = 0.21**, and with the prompt held
+    identical the two planners agree on **99.6%** (3/847). Per axis the two halves cancel —
+    retrieval helps (8/1, p = 0.039), example selection hurts (16/1, p ≤ 0.001), and native lacks
+    the first while having the better second.
+    **So F8's stated impact — "Python eval scores do not establish shipped native planning
+    quality" — is now answered rather than open: for ffmpeg on `knaif-qwen3-4b-v1` they do,
+    within noise.** That is a measurement on one skill and one model, not a general licence; the
+    durable fix is the four-layer process in
+    [plans/2026-09-10-runtime-parity-process.md](plans/2026-09-10-runtime-parity-process.md),
+    which makes the number a gate instead of a one-off. Evidence:
+    `evals/parity/2026-09-09_p2b-prefix-baseline/` and `.../2026-09-09_p3-prompt-factorial/`;
+    method and caveats in the superseded plan's *P3 full corpus* section.
   - [ ] **F10 — runtime output verification doesn't check requested properties.**
     `VerifyOutputsStep` records a probe summary and marks a successfully-probed file verified
     without asserting the requested duration/dimensions/codec; batch expansion supplies no
@@ -719,11 +727,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
     required and strict, could never be merged. The workflow pushes a branch and links the
     compare page; a human opens the PR and CI runs normally. Upgrade path if it ever needs to
     be hands-off is a GitHub App token, **not** a ruleset bypass.
-  - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane is now Workstream S of
-    [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md),
-    where its prerequisite lives. Relocated rather than deferred: the native-planning finding
-    turned it from a benchmark into an acceptance gate, and it cannot be built until the prompt is
-    pinned by a contract. The design finding travels with it.
+  - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane went to the
+    prompt-parity plan as its Workstream S; when that plan was superseded on 2026-09-10 it moved
+    again, and now lives as **Workstream L4** of
+    [plans/2026-09-10-runtime-parity-process.md](plans/2026-09-10-runtime-parity-process.md).
+    Relocated rather than deferred, twice for the same reason: it cannot be built until the prompt
+    is pinned by a contract (now L1), and its design finding — a whole-pipeline binary must not be
+    registered under `backends:` — travels with it.
   - **Workstream U is closed — U1 verified against the live assets 2026-08-08.** The uploads had
     in fact happened for both platforms; the box had simply never been ticked, and the plan still
     described `url: TODO` placeholders the manifest no longer had. Checked rather than assumed:
@@ -757,52 +767,72 @@ This **Open / Next** section is the live backlog (originally distilled from the
       `just bootstrap` (the documented path, and mise-based) now adds them explicitly, and
       `rust-toolchain.toml` says why its own `components` list cannot be relied on.
 
-- [ ] **Native plans worse than Python on the same model** — plan:
+- [ ] **Runtime parity process — Python/Rust must agree, measurably** — plan:
+  [plans/2026-09-10-runtime-parity-process.md](plans/2026-09-10-runtime-parity-process.md).
+  **Replaces** the prompt-parity plan
+  ([2026-08-08](plans/2026-08-08-native-python-planning-parity.md), now Superseded but **kept** —
+  it holds the measurements this rests on).
+  - **The old premise was measured false (2026-09-09).** "Native plans worse than Python" is not
+    supported: 847 paired utterances, native vs Python **11/5 wins, p = 0.21**. Holding the prompt
+    identical the two planners agree on **99.6%** (3/847). What the owner saw on 2026-08-07 was
+    almost certainly the **executor** — native `run` refuses every multi-step plan — not the
+    planner, which emits correct chains on 39/41 chain utterances.
+  - **The prompt divergence is real but not costly, and its two halves cancel.** Retrieval helps
+    (8/1, p = 0.039); example selection *hurts* (16/1 and 14/1, p ≤ 0.001). Native lacks the first
+    and has the better second, which is why the totals wash out.
+  - **So the work is a process, not a fix.** Four layers with per-layer thresholds: **L1 contract**
+    and **L2 deterministic** (no GGUF, every PR, **100%** — a mismatch there is a bug, never
+    noise), **L3 behavioral** (≥99% per row, and `scripts/parity_check.py` already does most of
+    it — it needs a threshold, a saved record and a trigger), **L4 quality** (within 2 pts of the
+    snapshot). A single blended "99%" is rejected: it would let a deterministic port bug hide
+    inside model noise, which is how the prompt divergence survived a year.
+  - **Two rules.** *Python is the reference; Rust moves* — with a written, measured exception, and
+    V2 is that exception (the evidence says **delete `select_examples` from Python** rather than
+    port it to Rust). And *compare the same stage on both sides*: an ad-hoc comparison that broke
+    this rule reported 18.2% disagreement, of which 150/154 were Rust's clarify gate running
+    against a Python path that had none. The true figure was 3/847.
+  - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
+    L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
+    gate the layers are a checklist nobody must run, which is the failure mode being fixed.
+  - **Blocked on chains** by the native multi-step executor gap (next item). L3 either waits for it
+    or launches with chains explicitly excluded and the hole recorded — not silently skipped.
+  - **Evidence is committed**, not just described: `evals/parity/2026-09-09_p2b-prefix-baseline/`
+    (847 pre-fix envelopes, with git/corpus/model/binary sha256 and the inference backend pinned)
+    and `evals/parity/2026-09-09_p3-prompt-factorial/` (3 388 inferences, four prompt shapes).
+
+- [ ] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
+  2026-09-09 while diagnosing the parity plan's P1/P3). `decide_steps` returns
+  `StepDecision::Unsupported` for any plan with more than one step, and `cmd_run` turns that into
+  *"this request needs 3 steps, but the native runtime executes one step at a time (multi-step
+  chains aren't supported yet)"*. That is **by design** (audit F5 made the truncation explicit
+  rather than silent, which was the right call), but it is now the binding limit on native: the
+  planner is not the problem. Measured the same day, `plan --batch` over the full 847-utterance
+  ffmpeg corpus emits multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step,
+  first tool correct on 39/41 — so every one of those correct chains is refused at execution.
+  **This is very likely what the 2026-08-07 "native won't produce a multi-step plan" observation
+  actually was**, which matters because that observation is the premise of
   [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md).
-  Owner observation (2026-08-07), driving the CLI by hand: native produced lower-quality plans
-  than the Python runtime and **would not produce a multi-step plan at all**. **Not
-  platform-specific** — every divergence found is in prompt-building code that is identical on
-  every target. Diagnosis and the fix are exercised **on Windows**; the plan's commands are
-  PowerShell. Not yet reproduced from a checkout; everything below is a code read.
-  - **The cause is probably already found, and it is not the model.** `retrieve_tools` is ported
-    into `knaif-core` and **never called** — `registry.rs` says "ported in a later slice" — so the
-    native prompt carries the *entire* registry: **13 model-visible ffmpeg tools against Python's
-    5** (`top_k=5`). `select_examples` is not ported either, so the few-shot block is static
-    instead of chosen per utterance. And **wiring retrieval up is not enough**: Rust's
-    `retrieve_tools` returns a `BTreeMap`, discarding rank, and `prompt.rs` re-sorts by
-    `tools.yaml` order, while Python emits in relevance order. Both runtimes decode greedily on
-    the same GGUF, so a systematic gap has to be deterministic — and the shipped model is
-    **fine-tuned on Python-shaped prompts**, now confirmed at `build_dataset.py:132`: every
-    training row is built through `retrieve_tools` → `build_prompt`, so the training distribution
-    is five tools, ranked, with filtered examples. Native serves thirteen, in YAML order, with a
-    static block — three divergences at once. Multi-step is the first thing to degrade.
-  - **Audited 2026-08-08 before any implementation; two findings were wrong and are corrected in
-    the plan rather than quietly replaced.** The 26-of-26 count compared registry entries against
-    prompt lines — 13 of the 26 are `internal: true` and both prompt builders skip them. And the
-    `max_tokens` 512-vs-2048 gap does not exist: the promoted `knaif-qwen3-4b-v1` is **512 on both
-    sides** (`models.yaml:56`, `eval_backends.yaml:196`); the 2048 belongs to a superseded stanza
-    for a different GGUF. Both errors are what "established by reading" looks like unexecuted.
-  - **P cannot start as originally written:** `$KNAIF_DEBUG` dumps raw model output on a
-    parse/validation *failure*, never the prompt — so a prompt dump is now P0.
-  - Ruled out: `n_ctx` 8192 both, `/no_think` both, greedy both. **Path normalization is not**
-    ruled out — native rewrites every backslash, Python only path-shaped tokens.
-  - **The structural lesson.** `prompt.rs` recorded its divergences as safe because "Phase 10
-    eval-parity measures end quality" — that check is **C4, and it was never built**. A divergence
-    accepted on the strength of a check that does not exist is an unmeasured divergence.
-  - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything —
-    and it needs an adapter: `plan --batch` emits validated plans, while the executing verifiers
-    grade rendered commands and produced files.
-  - **The plan's eight open decisions are settled (2026-09-09)** — collected in its *Decisions
-    taken* section and inlined at each item. Load-bearing ones: **native adopts Python's
-    `_PATH_TOKEN_RE`** rather than rewriting every backslash; **R1 is byte-for-byte with no
-    allow-list**, which makes that convergence a prerequisite rather than cleanup and means a
-    divergence found in P1 that resists convergence *reopens R1* instead of being listed;
-    **Ubuntu CI with Windows run locally** (so R4 is not done until R1–R3 have actually been run
-    there — the coverage claim rests on that, not on CI); the pre-fix baseline is the **committed
-    `plan --batch` envelopes**, not an archived binary; `contracts/runtime/` owns `max_tokens`,
-    which turns R3 from a three-way comparison into "both runtimes read the canonical file"; the
-    native eval lane gets its **own config section**, never `backends:`. Still open by choice:
-    `top_k` for larger skills (answer after parity) and macOS contract coverage (unexercised).
+  Needs an ordered multi-step executor: chain-intermediate binding already exists in
+  `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
+  and partial-failure semantics do not. Sized as its own plan, not a TODO fix.
+
+- [ ] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). Running a
+  `--features llama,cuda,pdfium` binary on the RTX 5080 still prints *"the bundled Vulkan backend
+  runs at roughly CPU speed on this GPU generation. Install the CUDA backend for usable
+  performance: knaif backend install cuda"*. The nudge (U3, keyed on compute capability — correct
+  for the payload case) does not check **which backend the running binary actually has**, so a
+  correctly-configured CUDA user is told to go fix something that is not broken, and the advice it
+  gives is already true. Small, self-contained: gate the warning on the active backend as well as
+  the compute capability.
+
+- [ ] **Building for a corpus run: pick the CUDA feature set on Blackwell** (measured 2026-09-09).
+  `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only and plans **~1
+  utterance / 30 s** on this box — a 847-utterance corpus run is ~7 hours. With
+  `CMAKE_CUDA_ARCHITECTURES=120 --features "llama,cuda,pdfium"` the same corpus takes **~8 min**
+  (111 utt/min, measured). Vulkan is *not* the fallback on this generation:
+  [PERFORMANCE.md](PERFORMANCE.md) §2 records it collapsing to roughly CPU speed on Blackwell.
+  Worth a line wherever corpus/parity runs are documented, because the default feature set is the
+  slow one and the failure mode is silent — it just looks like the run is taking a long time.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single

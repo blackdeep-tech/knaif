@@ -1,0 +1,28 @@
+{
+  "purpose": "P2b \u2014 pre-fix native planning baseline (native/Python planning parity plan)",
+  "captured": "2026-09-09",
+  "git_sha": "2f81e3807f1c62241e7933356c87eb8cbecfdc4b",
+  "git_branch": "feat/parity-p0-prompt-dump",
+  "git_dirty": false,
+  "corpus": {
+    "path": "skills/ffmpeg/data/eval.jsonl",
+    "rows": 314,
+    "utterances": 847,
+    "sha256": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469"
+  },
+  "model": {
+    "path": "C:\\Users\\statu\\.knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "sha256": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe",
+    "sha256": "43ebaae1cd1c1ba818d72bd72b2c2d4f7263ad6c1449adfa2edb335a40c7cc33",
+    "features": "llama,cuda,pdfium",
+    "profile": "release",
+    "cmake_cuda_architectures": "120",
+    "backend_note": "CUDA build, not CPU and not Vulkan. On this Blackwell box a CPU build plans ~1 utterance / 30s (a ~7h corpus run) and PERFORMANCE.md 2 records Vulkan collapsing to CPU speed on Blackwell. S2's post-fix run MUST use the same backend: greedy argmax over different FP accumulation can flip a near-tie, so a backend change would be indistinguishable from the prompt change being measured."
+  },
+  "command": "target/release/knaif.exe plan --skill ffmpeg --model knaif-qwen3-4b-v1 --batch evals/parity/2026-09-09_p2b-prefix-baseline/utterances.txt",
+  "join_key": "(id, utterance) \u2014 utterance_idx is safe here because index.jsonl is emitted with the envelopes; see EVAL_VERIFICATION_SOP.md on pre-2026-09-08 runs"
+}

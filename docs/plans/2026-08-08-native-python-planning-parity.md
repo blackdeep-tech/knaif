@@ -1,12 +1,40 @@
 # Native/Python planning parity — the prompt gap, its contracts, and the eval-parity lane
 
-**Status:** Active — not started · **Created:** 2026-08-08 ·
-**Revised:** 2026-08-08 (audit), 2026-09-09 (decisions) · **Completed:** —
+**Status:** Superseded · **Created:** 2026-08-08 ·
+**Revised:** 2026-08-08 (audit), 2026-09-09 (decisions + measurement) ·
+**Completed:** 2026-09-10
 **Owner:** core · **Ref:** absorbs **C4** from
 [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md); complements
 `scripts/parity_check.py`
 
-> **Status note:** Still not started — no code has moved. What changed on 2026-09-09 is that the
+> **SUPERSEDED 2026-09-10 by
+> [runtime-parity-process](2026-09-10-runtime-parity-process.md).** **Kept, and worth reading** —
+> Workstream P is the measurement this project's parity work now rests on, and it is not repeated
+> in the successor: the prompt diff, the 847-utterance baseline, the 3 388-inference factorial,
+> and the paired significance tests all live here. What is *not* carried forward is the framing.
+> This plan asked "why is native worse?"; the answer turned out to be "it is not", so the
+> successor asks the durable question instead — how do we keep both runtimes in agreement, and
+> prove it on every change. Its convergence directions (V1–V3) are decided by the numbers below.
+> **Do not implement Q, R or S from this file; they are re-scoped there.**
+>
+> ⚠️ **PREMISE CORRECTION (2026-09-09, measured).** **The reported symptom does not
+> reproduce.** On the RTX 5080 box, current `main` + P0, `knaif-qwen3-4b-v1`, CUDA build:
+> `plan --batch` over the **full 847-utterance ffmpeg corpus** produces multi-step plans on
+> **39/41 chain utterances (95.1%)**, 31 of them 3-step, first tool correct on 39/41. The two
+> misses are the known terse-"with no audio" training gap, not parity. **What the owner saw is
+> almost certainly `run`, not `plan`** — `cmd_run`/`decide_steps` refuses any plan with more than
+> one step by design (audit F5), printing *"this request needs 3 steps, but the native runtime
+> executes one step at a time"*. Reproduced verbatim on a chain utterance. So the planner emits
+> the chain and the **executor** rejects it. And **P3 finds the retrieval divergence has zero
+> measured effect**: 0/41 utterances change between the full and retrieved registries. This does
+> not make the prompt divergence unreal — P1/P2 measured it — but it does mean this plan's
+> stated cause is not established, and Q1's priority rests on a hypothesis the data does not
+> support. **The full 847 × 4 run (below) then went further:** native and Python do **not**
+> differ significantly (11/5, p = 0.21), retrieval helps only weakly, and example selection —
+> the largest significant effect — makes outcome accuracy *worse*. Full parity as scoped would
+> not improve quality. **Decide what this plan becomes before implementing Q.**
+>
+> **Status note:** Still not started — no code has moved beyond P0. What changed on 2026-09-09 is that the
 > eight decisions left open inside the workstreams are **taken**, so P0 can start without stopping
 > to settle them mid-flight. They are collected in *Decisions taken* below and inlined at the item
 > each one governs. Two questions remain open, both deliberately deferred: `top_k` for larger
@@ -286,7 +314,8 @@ was fine-tuned on a prompt that changes with every utterance.
 needs the GGUF. Captures, diffs and `p2_quantified.json` are reproducible with the P0 gate; the
 capture harness is scratch tooling, not committed.
 
-- [ ] **P3 — Attribute factorially, not one-at-a-time.** Retrieval and example selection are
+- [x] **P3 — Attribute factorially, not one-at-a-time.** **Done 2026-09-09** — all four cells
+  run; see *P3/P4 outcome* below. The registry axis moves nothing. Retrieval and example selection are
   *coupled* in Python (finding 2: the example filter only fires when a `registry_override` is
   passed), so testing them singly cannot separate them. Run all four cells:
 
@@ -301,9 +330,115 @@ capture harness is scratch tooling, not committed.
     varies nothing. If output length is ever suspected, first check whether any plan actually
     reaches the 512 cap — if none does, the cap is not in the causal path at all.
   - If no cell restores multi-step plans, **stop and re-diagnose.** Do not proceed to Q on a hunch.
-- [ ] **P4 — Record the outcome here**, including whichever hypothesis fails. A ruled-out cause is
-  worth as much to the next reader as the confirmed one. Two are already recorded above — write
-  them the same way.
+- [x] **P4 — Record the outcome here**, including whichever hypothesis fails. **Done
+  2026-09-09** — the central hypothesis is the one that failed; it is written up below at the same
+  length it would have got had it held.
+
+### P3/P4 outcome (2026-09-09) — the prompt hypothesis does not survive contact
+
+**Setup.** Same GGUF (`knaif-qwen3-4b-v1`, sha `6dd7779b…`), greedy, `max_tokens=512`, 41 chain
+utterances + 10 single-step controls, 204 inferences. Run **Python-side**, deliberately: native
+cannot build a retrieved prompt at all (that is Q1, unbuilt), and driving both runtimes would add
+a second llama.cpp binding as a confound. **The instrument was validated first** — cell A's system
+prompt is md5-identical to the real native prompt captured in P1, and cell D's to the real Python
+prompt. The cells are not approximations of the two runtimes; they are byte-for-byte those two
+prompts.
+
+| cell | mean steps | ≥2 steps | ≥3 steps | 1st tool | singles |
+|---|---|---|---|---|---|
+| **A** full + static *(= native)* | 2.68 | 93% | 76% | 100% | 100% |
+| **B** full + selected | 2.76 | 98% | 78% | 98% | 100% |
+| **C** retrieved + static | 2.68 | 93% | 76% | 100% | 100% |
+| **D** retrieved + selected *(= Python)* | 2.76 | 98% | 78% | 100% | 100% |
+
+**Per-utterance, the axes separate completely:**
+
+- **Registry axis (A vs C, B vs D): 0/41 utterances differ.** Serving 5 retrieved tool definitions
+  instead of all 13 changed **nothing on any utterance** — not the step count, not the tool choice.
+- **Examples axis (A vs B, C vs D): 3/41 utterances differ**, all in the same direction (selected
+  examples → more steps): `ffmpeg_hard_005#1` (2→3), `_014#1` (1→2), `_017#1` (1→2).
+- 38/41 utterances are identical across all four cells.
+
+**So the plan's central claim is inverted.** Q1 (port retrieval, with ranked order) was the
+centrepiece and the hardest item; it has **no measured effect on planning quality**. Q2 (example
+selection) was the junior partner; it holds the entire, small effect. If any Q work is done for
+quality reasons, Q2 is the one with evidence behind it.
+
+**What survives, and it is not nothing.** The divergence P1/P2 measured is real: native sends
+1.77× the prompt, is utterance-invariant, and is off the distribution the model was fine-tuned on.
+None of that is refuted — it simply does not show up in planning outcomes at this sample size, on
+this skill, with this model. The honest reading is **"unmeasured divergence with no demonstrated
+cost"**, not "harmless".
+
+**⚠️ The full-corpus run WAS then done, and it corrects the paragraph above.** Keep both: the
+chain-only result is not wrong, it is *unrepresentative*, and the way it misleads is worth seeing.
+
+### P3 full corpus (2026-09-09) — 847 × 4 cells, 3 388 inferences, 20.3 min
+
+| cell | outcome acc | 1st tool (614 plan rows) | chain ≥2 | chain ≥3 |
+|---|---|---|---|---|
+| **A** full + static *(= native)* | **79.0%** | **95.8%** | 92.7% | 75.6% |
+| **B** full + selected | 77.2% | 94.8% | 97.6% | 78.0% |
+| **C** retrieved + static | **79.8%** | **96.1%** | 92.7% | 75.6% |
+| **D** retrieved + selected *(= Python)* | 78.3% | 95.0% | 97.6% | 78.0% |
+
+Aggregates this close hide offsetting changes — the trap this plan's own *Definition of done*
+warns about — so the cells are compared **paired, per utterance**, with an exact McNemar test on
+outcome correctness:
+
+| comparison | wins / losses | p | |
+|---|---|---|---|
+| examples axis, full registry (A vs B) | 16 / 1 | 0.0003 | *** **static examples win** |
+| examples axis, retrieved registry (C vs D) | 14 / 1 | 0.0010 | *** **static examples win** |
+| registry axis, static examples (A vs C) | 1 / 8 | 0.039 | * retrieval wins, weakly |
+| registry axis, selected examples (B vs D) | 6 / 15 | 0.078 | ns (same direction) |
+| **native vs Python (A vs D)** | **11 / 5** | **0.21** | **ns — no difference** |
+
+**Three conclusions, and they do not favour this plan's goal.**
+
+1. **Example selection is a net *harm* on the full corpus** — the largest and only clearly
+   significant effect, and it points the opposite way from the chain-only sample. Selected
+   examples help multi-step chains (+2 utterances, and only chains) while costing 13–15 utterances
+   of outcome accuracy elsewhere. **Q2 is not a quality win; it is a trade.**
+2. **Retrieval helps modestly** (+7 to +9 utterances), significant only in the static-examples
+   condition. **Q1's benefit is real but small** — and note it is invisible on chain rows, where
+   the axis is exactly flat (0 disagreements, both conditions).
+3. **Native and Python do not differ significantly overall** (11/5, p = 0.21). The two divergences
+   partially cancel: native loses retrieval and gains static examples. So *"native plans worse than
+   Python"* is **not supported** — on outcome accuracy and first-tool choice native is nominally
+   ahead, within noise either way.
+
+**Therefore full parity, as scoped, is not a quality improvement.** Porting both Q1 and Q2 moves
+native onto Python's shape, which measures 11/5 *behind* native's own — not significantly, but
+certainly not ahead. Parity remains defensible as *engineering* (one prompt, one training
+distribution, no silent drift, R's contracts to keep it that way); it is **no longer defensible as
+a fix for a quality bug**, because the quality bug is not there.
+
+**Correcting the chain-only result above.** That sample reported the registry axis as flat at 0/41
+and the examples axis as the whole effect, in the *helpful* direction. Both readings came from
+looking only at chain rows — 41 of 847, and the only stratum where selected examples pay off. On
+the full corpus the registry axis moves 19–39 utterances (not 0) and the examples axis is net
+negative. **A subset chosen because it exhibits the symptom will over-represent whatever helps the
+symptom.**
+
+**Caveats that remain.** `outcome acc` here is a crude local classifier — first step's tool class
+against `expected_outcome` — **not** the eval suite's `outcome` metric, so 79% is not comparable
+to the snapshot's 0.902 and none of these figures is an acceptance bar. They are valid only for
+comparing cells to each other, which is what P3 asks. Arg-level correctness is not scored at all;
+a cell could pick the right tool with worse arguments and look identical here. Single model
+(`knaif-qwen3-4b-v1`), single skill (ffmpeg), greedy decode.
+
+**Two incidental findings, both worth their own line:**
+
+1. **`run` rejects every multi-step plan** (`decide_steps`, audit F5) with *"this request needs 3
+   steps, but the native runtime executes one step at a time"*. That is the shipped user
+   experience for any chained request — and the most likely thing the 2026-08-07 observation
+   actually was. It is a genuine gap, but it is an **executor** gap, not a planner or prompt gap.
+2. **The Vulkan performance warning fires on a CUDA build.** Running the `llama,cuda,pdfium`
+   binary on the 5080 still prints *"the bundled Vulkan backend runs at roughly CPU speed on this
+   GPU generation — install the CUDA backend"*. The nudge keys on compute capability without
+   checking which backend is actually compiled in, so it tells a correctly-configured user to fix
+   something that is not broken.
 
 ## Workstream Q — Port what is missing
 
