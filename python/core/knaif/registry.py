@@ -10,7 +10,12 @@ from typing import Any
 
 import yaml
 
-_ALWAYS_INCLUDE = frozenset({"clarify", "reject", "done"})
+# A tuple, not a set: these are appended to the retrieval result in this order, and a set's
+# iteration order depends on PYTHONHASHSEED — the same query returned a different tool order
+# in different processes. Harmless inside Python (the prompt listing skips control tools) but
+# it makes the order unportable: a runtime cannot be held to a ranking the reference does not
+# reproduce. Native declares the same fixed order (`ALWAYS_INCLUDE` in knaif-core/retrieval.rs).
+_ALWAYS_INCLUDE = ("clarify", "reject", "done")
 
 # Maximal runs of non-space-delimited script (CJK ideographs + kana + Hangul).
 # Whitespace tokenization can't split these, so a query like "将clip压缩" is one

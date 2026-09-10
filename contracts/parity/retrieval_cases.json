@@ -1,0 +1,121 @@
+{
+  "_comment": "L1b retrieval-parity contract. Same utterance + registry -> the same selected tools IN THE SAME ORDER. Order is the load-bearing half: retrieval is scoring logic with tie-breaks, and the model sees the list in the order retrieval returns it. Consumed by python/core/tests/test_retrieval_parity.py and the `retrieval_parity_cases` test in native/crates/knaif-core/tests/parity.rs.",
+  "_expected_values": "Produced by the reference runtime (Python knaif.registry.retrieve_tools). DO NOT regenerate to make a failing test pass.",
+  "_ordering": "Python sorts (score, name) descending - so ties break on name DESCENDING - then appends the always-included control tools (clarify/reject/done) at the end. Both halves are part of the contract.",
+  "_coverage": {
+    "ubuntu": "CI",
+    "windows": "local",
+    "macos": "unexercised"
+  },
+  "registries": {
+    "demo": "convert_video:\n  description: \"Convert a video to a different container or codec.\"\n  keywords: [convert, transcode, mp4, webm, convertir, 转换]\n  required_args: [inputs]\n  optional_args: [container, output]\n  arg_schemas:\n    container: {type: enum, enum: [mp4, webm, mkv], help: \"target container\"}\ncompress_video:\n  description: \"Compress a video to a smaller file size.\"\n  keywords: [compress, smaller, shrink, comprimir, 压缩]\n  required_args: [inputs]\n  optional_args: [quality]\n  arg_schemas:\n    quality: {type: enum, enum: [low, high]}\ntrim_video:\n  description: \"Trim a video to a time range.\"\n  keywords: [trim, cut, shorten]\n  required_args: [inputs, start]\n  optional_args: [end]\nlist_formats:\n  description: \"List the container formats this skill supports.\"\n  keywords: [formats, list]\nrun_batch:\n  description: \"Internal batch executor.\"\n  internal: true\n  required_args: [commands]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
+  },
+  "cases": [
+    {
+      "name": "keyword_hit_convert",
+      "registry": "demo",
+      "query": "convert clip.mp4 to webm",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "convert_video",
+        "trim_video",
+        "compress_video",
+        "list_formats",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "keyword_hit_compress",
+      "registry": "demo",
+      "query": "make this smaller",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "compress_video",
+        "list_formats",
+        "trim_video",
+        "convert_video",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "top_k_truncates",
+      "registry": "demo",
+      "query": "convert or compress or trim this",
+      "top_k": 2,
+      "min_score": 0,
+      "expected_order": [
+        "convert_video",
+        "trim_video",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "diacritics_insensitive",
+      "registry": "demo",
+      "query": "comprimír el vídeo",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "compress_video",
+        "trim_video",
+        "convert_video",
+        "list_formats",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "cjk_ngram_containment",
+      "registry": "demo",
+      "query": "把视频压缩一下",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "compress_video",
+        "trim_video",
+        "list_formats",
+        "convert_video",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "no_signal_keeps_order",
+      "registry": "demo",
+      "query": "hello there",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "trim_video",
+        "list_formats",
+        "convert_video",
+        "compress_video",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "min_score_filters",
+      "registry": "demo",
+      "query": "hello there",
+      "top_k": 5,
+      "min_score": 1,
+      "expected_order": [
+        "clarify",
+        "reject",
+        "done"
+      ]
+    }
+  ]
+}

@@ -2013,6 +2013,63 @@ mod tests {
         assert!(matches!(decide_steps(&steps), StepDecision::Single(0)));
     }
 
+    /// L1a: the prompt-parity contract. Fixed utterance x fixed registry x fixed prompt
+    /// overrides -> the exact `(system, user)` pair the reference runtime produces, compared
+    /// byte for byte with no allow-list.
+    ///
+    /// It lives here rather than in `knaif-core` because the stage under test is
+    /// *normalize -> build*, and `normalize_path_separators` is a binary-crate function: a
+    /// core test could only compare half the pipeline, which is the mistake Rule 2 exists to
+    /// prevent (an earlier ad-hoc comparison broke that rule and reported 18.2% disagreement,
+    /// of which 150/154 were an artifact of comparing different stages).
+    ///
+    /// `#[ignore]` because it **cannot pass today** — that is the point. Native rewrites every
+    /// backslash in the utterance; Python rewrites only path-shaped tokens, so a quoted Windows
+    /// path and a lone backslash diverge. Un-skip in V3's PR, which is the only moment the
+    /// contract is proven to detect the bug it was written for.
+    ///
+    /// See docs/plans/2026-09-10-skill-quality-lifecycle.md (L1a, V3).
+    #[test]
+    #[ignore = "red until V3 converges normalize_path_separators on Python's _PATH_TOKEN_RE"]
+    fn prompt_parity_cases() {
+        let fixtures =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/parity/prompt_cases.json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&fixtures).expect("read fixtures"))
+                .unwrap();
+        let registries = doc["registries"].as_object().unwrap();
+        let overrides_by_name = doc["prompt_overrides"].as_object().unwrap();
+
+        for case in doc["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let reg_yaml = registries[case["registry"].as_str().unwrap()]
+                .as_str()
+                .unwrap();
+            let registry = knaif_core::registry::load_registry_str(reg_yaml)
+                .unwrap_or_else(|e| panic!("{name}: registry {e}"));
+
+            let ov = &overrides_by_name[case["prompt_overrides"].as_str().unwrap()];
+            let overrides = knaif_core::PromptOverrides {
+                system_header: Some(ov["system_header"].as_str().unwrap().to_string()),
+                examples_block: Some(ov["examples_block"].as_str().unwrap().to_string()),
+            };
+
+            let utterance = normalize_path_separators(case["utterance"].as_str().unwrap());
+            let (system, user) = knaif_core::build_prompt(&utterance, &registry, &overrides);
+
+            assert_eq!(
+                system,
+                case["expected_system"].as_str().unwrap(),
+                "case {name}: system message differs"
+            );
+            assert_eq!(
+                user,
+                case["expected_user"].as_str().unwrap(),
+                "case {name}: user message differs"
+            );
+        }
+    }
+
     #[test]
     fn capability_refusal_is_marked_not_implemented_not_reject() {
         // A capability the runtime has not built and a request it deliberately refuses are
