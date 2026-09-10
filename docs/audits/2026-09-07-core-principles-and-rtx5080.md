@@ -145,7 +145,9 @@ scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)
 
 **Live Python measurement plus native source review; previously documented, not fixed.**
 
-Sources: [main.rs](../../apps/cli/src/main.rs), line 1051; [native prompt.rs](../../native/crates/knaif-core/src/prompt.rs); [agent.py](../../python/core/knaif/agent.py), `build_prompt`; [build_dataset.py](../../python/training/build_dataset.py). Prior analysis: [native/Python planning parity plan](../plans/2026-08-08-native-python-planning-parity.md).
+Sources: [main.rs](../../apps/cli/src/main.rs), line 1051; [native prompt.rs](../../native/crates/knaif-core/src/prompt.rs); [agent.py](../../python/core/knaif/agent.py), `build_prompt`; [build_dataset.py](../../python/training/build_dataset.py). Prior analysis: the native/Python planning-parity plan, retired 2026-09-10 after its premise was
+measured false — superseded by [skill-quality-lifecycle](../plans/2026-09-10-skill-quality-lifecycle.md),
+which carries the measurements (native and Python do not differ significantly, p = 0.21).
 
 For `trim clip.mp4 to 5 seconds then resize to 720p`, Python retrieval selected these five public tools in order: `resize_video, trim_video, convert_video, compress_video, strip_audio`. The live registry has 13 public FFmpeg tools. Native passes the full registry into `build_prompt`, filters internal tools, and orders public tools by YAML order. Python's retrieved path also selects examples, whereas native uses the static examples block. The dataset-builder code uses Python retrieval, consistent with the documented training pipeline; its current entry point is broken, as recorded in F12.
 

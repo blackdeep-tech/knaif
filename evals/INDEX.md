@@ -50,7 +50,7 @@ evals/
 ## Parity runs
 
 Cross-runtime comparisons, not eval-suite runs — they carry no verifier and are not graded against
-a snapshot. See [../docs/plans/2026-09-10-runtime-parity-process.md](../docs/plans/2026-09-10-runtime-parity-process.md).
+a snapshot. See [../docs/plans/2026-09-10-skill-quality-lifecycle.md](../docs/plans/2026-09-10-skill-quality-lifecycle.md).
 Each folder holds its own `meta.json` pinning git SHA, corpus/model/binary sha256 **and the
 inference backend** (greedy argmax over different FP accumulation can flip a near-tie, so a
 backend change between two runs is indistinguishable from the change being measured).

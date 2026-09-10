@@ -540,7 +540,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
     quality" — is now answered rather than open: for ffmpeg on `knaif-qwen3-4b-v1` they do,
     within noise.** That is a measurement on one skill and one model, not a general licence; the
     durable fix is the four-layer process in
-    [plans/2026-09-10-runtime-parity-process.md](plans/2026-09-10-runtime-parity-process.md),
+    [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md),
     which makes the number a gate instead of a one-off. Evidence:
     `evals/parity/2026-09-09_p2b-prefix-baseline/` and `.../2026-09-09_p3-prompt-factorial/`;
     method and caveats in the superseded plan's *P3 full corpus* section.
@@ -730,7 +730,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane went to the
     prompt-parity plan as its Workstream S; when that plan was superseded on 2026-09-10 it moved
     again, and now lives as **Workstream L4** of
-    [plans/2026-09-10-runtime-parity-process.md](plans/2026-09-10-runtime-parity-process.md).
+    [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
     Relocated rather than deferred, twice for the same reason: it cannot be built until the prompt
     is pinned by a contract (now L1), and its design finding — a whole-pipeline binary must not be
     registered under `backends:` — travels with it.
@@ -768,10 +768,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
       `rust-toolchain.toml` says why its own `components` list cannot be relied on.
 
 - [ ] **Runtime parity process — Python/Rust must agree, measurably** — plan:
-  [plans/2026-09-10-runtime-parity-process.md](plans/2026-09-10-runtime-parity-process.md).
-  **Replaces** the prompt-parity plan
-  ([2026-08-08](plans/2026-08-08-native-python-planning-parity.md), now Superseded but **kept** —
-  it holds the measurements this rests on).
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+  **Replaces** the 2026-08-08 prompt-parity plan, retired 2026-09-10 once its measurements were
+  carried into the successor (they are reproduced there in full; the file is in git history).
   - **The old premise was measured false (2026-09-09).** "Native plans worse than Python" is not
     supported: 847 paired utterances, native vs Python **11/5 wins, p = 0.21**. Holding the prompt
     identical the two planners agree on **99.6%** (3/847). What the owner saw on 2026-08-07 was
@@ -783,8 +782,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **So the work is a process, not a fix.** Four layers with per-layer thresholds: **L1 contract**
     and **L2 deterministic** (no GGUF, every PR, **100%** — a mismatch there is a bug, never
     noise), **L3 behavioral** (≥99% per row, and `scripts/parity_check.py` already does most of
-    it — it needs a threshold, a saved record and a trigger), **L4 quality** (within 2 pts of the
-    snapshot). A single blended "99%" is rejected: it would let a deterministic port bug hide
+    it — it needs a threshold, a saved record and a trigger), **L4 shipped path** (the native
+    binary executing for real, graded on the artifacts it produces, within 2 pts of the
+    Python-locked bar — the only layer that measures what a user actually gets). A single blended "99%" is rejected: it would let a deterministic port bug hide
     inside model noise, which is how the prompt divergence survived a year.
   - **Two rules.** *Python is the reference; Rust moves* — with a written, measured exception, and
     V2 is that exception (the evidence says **delete `select_examples` from Python** rather than
@@ -810,8 +810,8 @@ This **Open / Next** section is the live backlog (originally distilled from the
   ffmpeg corpus emits multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step,
   first tool correct on 39/41 — so every one of those correct chains is refused at execution.
   **This is very likely what the 2026-08-07 "native won't produce a multi-step plan" observation
-  actually was**, which matters because that observation is the premise of
-  [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md).
+  actually was** — which is why the plan built on that observation was retired (2026-09-10) and
+  replaced by [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
   Needs an ordered multi-step executor: chain-intermediate binding already exists in
   `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
   and partial-failure semantics do not. Sized as its own plan, not a TODO fix.
