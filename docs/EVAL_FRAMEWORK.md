@@ -323,6 +323,27 @@ building a skill, cross 3–5 once to finish it, then re-run 3–5 on meaningful
 | **3. Honest** | `just eval-fixtures <skill>` **first**, then `just eval-success <skill>` | model + external binaries | slow | Is the produced artifact actually right? |
 | **4. Lock** | `just eval-snapshot <skill>` | model + binaries | slow, rare | Commit the acceptance bar (own commit) |
 | **5. Parity** | `just parity <skill>` | model + native build | slow | Does the native runtime render what Python renders? |
+| **6. Shipped path** | `uv run -m knaif.evalsuite native --skill <name> --lane native-cli --verifier success` | model + native build + external binaries | slowest | Does the **binary a user installs** produce the right files? |
+
+**Phase 6 exists because every phase above it stops short of the product.** Phases 1–4 grade
+the Python runtime. Phase 5 compares *renderings* from `--dry-run`. Phase 6 runs `knaif run`
+for real — dependency preflight, sandbox enforcement, the confirmation gate, the subprocess —
+and grades the files that land on disk. Each of those stages is a place a correct plan still
+fails a user, and none of them is visible to a planner-only lane.
+
+Three rules it carries:
+
+- **A lane is not a backend.** It is configured under `lanes:` in `eval_backends.yaml`, never
+  `backends:` — anything under `backends:` is passed to `InferenceOrchestrator(backend=…)` and
+  would be constructed as a token-generation backend.
+- **Coverage and score are reported together, or neither is.** A shipped-path score computed
+  over "the rows that ran" silently excludes whatever the runtime could not attempt — the
+  hardest stratum — and reads healthier than the product is. Below `--min-coverage` the run
+  prints coverage and **withholds** the score.
+- **Executing native plans through *Python* is a diagnostic, never the gate.** It is useful for
+  locating a failure (planner vs executor) and nothing else; any output from it must be labelled
+  *"native planner, Python execution — not the shipped path"*, because it grades a pipeline no
+  user runs.
 
 > **Phase 3 prerequisite — generate fixtures first, always.** An executing verifier with
 > missing fixtures does not error; it *silently scores near-zero on correct plans*. A

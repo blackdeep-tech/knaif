@@ -509,9 +509,48 @@ runtimes to the identical GGUF, guards against comparing two configs of the same
 outcome type first and rendered argv second, and shlex-normalizes so quoting differences do not
 register. What it lacks is a threshold, a record, and a trigger.
 
-- [ ] **L3a — Give it a pass/fail threshold, and fix the comparator first.** Today it reports; it
-  does not gate. Adopt **≥99% per-row equivalence**, reporting the count of non-equivalent rows
-  **and enumerating them** — an aggregate can hide offsetting changes in both directions.
+- [x] **L3a — DONE 2026-09-10, with one deliberate deviation and one finding that changes how
+  this layer must be read.**
+  - **The comparator was unsound and is fixed.** `plan_equiv_modulo_defaults` never consulted a
+    declared default despite its name. It now fills both sides from the registry's declared
+    defaults and compares full arg maps; an extra key survives only when its value **is** the
+    declared default. Consequence worth knowing: **ffmpeg declares defaults on exactly one tool**
+    (`concat_video.output`). The old docstring's examples — `preview` / `quality` /
+    `include_audio`, "filled by `apply_defaults`" — describe defaults that **do not exist**, so
+    every one of them is now a divergence. Plan mode also refuses to compare without the contract
+    rather than quietly answering.
+  - **The threshold default is 1.0, not 0.99 — deliberately, against this plan's letter.** The
+    premise above ("it reports; it does not gate") was already out of date: any divergent row
+    returned exit 1. Adopting 0.99 would have *loosened* a working gate. `--threshold` makes a
+    lower bar available for the run that justified it, as an explicit per-run choice.
+  - **Non-equivalent rows are enumerated**, not just counted, and `not-comparable` rows are
+    excluded from the denominator *and* reported separately.
+  - **Fixed a trap by falling into it:** a relative `--model-path` passed the existence check at
+    the repo root, then resolved to nothing under the fixture cwd — and native answers a missing
+    model by printing guidance and exiting 0. The first run reported **0/5, 0% parity**, which
+    looked like catastrophic drift and was nothing at all. Paths are absolutized before any
+    subprocess sees them.
+  - **⚠️ THE NUMBER IS NOT A NATIVE SCORE.** ffmpeg command mode scores **0.8194** (236/288).
+    The metric is *symmetric disagreement*: it says nothing about which side is right, and on
+    several rows **native is the better answer** — it honors `crf 18` where Python falls back to
+    `quality: "visually_good"`. Anyone quoting this as "native is 82% correct" has misread it.
+  - **⚠️ A ≥99% bar may be unreachable by construction, and that is a design problem with this
+    layer rather than a number to tune.** The two runtimes link **different llama.cpp builds**
+    (`llama-cpp-2` vs `llama-cpp-python`). With the prompt verified byte-identical and both sides
+    self-deterministic, they still choose different tokens on near-ties. Measured, not assumed:
+    all 52 divergent rows were re-run with native forced onto CPU and **1 of 52** flipped, so
+    native's own backend is ruled out — the gap is between the libraries, and no flag equalises
+    it. **Rule 2 needs a sibling: compare the same stage *and* the same inference stack.** Owner
+    decision needed on whether L3 keeps a rate bar at all, or gates only on the renderer class
+    below.
+  - **THE MODE DISTINCTION IS THE WHOLE INSTRUMENT, and running both modes is what makes an L3
+    result actionable.** Cross-tabbing the two runs over the same corpus splits the divergences
+    into classes that call for completely different work
+    (`evals/parity/2026-09-10_l3-ffmpeg-command/divergence_classes.json`):
+    - **10 renderer defects** — plans agree, rendered commands differ. Real port bugs, listed
+      under *Native defects found by L3* below.
+    - **42 generation differences** — plans differ. The library gap above; not port defects.
+    - **19 plan-only** — plans differ but render identically. Not defects.
   - **State the mode. L3 compares *rendered commands* (`run --dry-run`), not plans.** The
     distinction is not cosmetic: `plan_equiv_modulo_defaults` is reached **only in plan mode**
     (`parity_check.py:696`), and command mode compares normalized argv, which catches value
@@ -527,8 +566,13 @@ register. What it lacks is a threshold, a record, and a trigger.
     benign only when its value **equals the declared default**; anything else is a divergence.
     That makes the relation sound in plan mode too, and removes the trap where a stricter future
     L3 silently loosens by switching mode.
-- [ ] **L3b — Save every run under `evals/parity/`** with a `meta.json` pinning git SHA, corpus
-  sha256, model sha256, **and the inference backend** — the last because greedy argmax over
+- [x] **L3b — DONE 2026-09-10.** `--label` writes a run directory with `report.json` +
+  `meta.json`; both runs are indexed in `evals/INDEX.md`. The backend is read from
+  `$KNAIF_PARITY_BACKEND` and left explicitly `null` with a warning when unset — an unanswered
+  question, not a guess — and `--native-ngl` records the layer count too, because the backend
+  turned out to matter enough to pin rather than merely note. A dirty working tree warns that the
+  git SHA does not describe what ran. *(Original text: save every run under `evals/parity/` with
+  a `meta.json` pinning git SHA, corpus sha256, model sha256, **and the inference backend*** — the last because greedy argmax over
   different FP accumulation can flip a near-tie, so a CPU→CUDA change between two runs is
   indistinguishable from the change being measured. `2026-09-09_p2b-prefix-baseline/meta.json` is
   the template. Add a row to `evals/INDEX.md`.
@@ -540,7 +584,43 @@ register. What it lacks is a threshold, a record, and a trigger.
     **every** chain row on its first command alone — hiding precisely the step-2..n divergence the
     executor newly makes possible. It is deleted; chains fall through to the same comparison as
     every other row. This is a down payment on L3a, not a substitute for it.
-- [ ] **L3d — Document the entry point on each side** in the harness output, per rule 2.
+- [x] **L3d — DONE 2026-09-10.** The header prints the exact command run on each side plus the
+  **stage** each one represents, and all three go into `meta.json` — a record that does not say
+  which stage each side ran cannot be checked against rule 2 afterwards.
+
+## Native defects found by L3 — 2026-09-10
+
+**This is the layer earning its place.** Ten rows agree on the plan and disagree on the rendered
+command, so the model is not involved and every one is a port defect. Evidence:
+`evals/parity/2026-09-10_l3-ffmpeg-command/divergence_classes.json`. **None is fixed here** —
+they are skill-renderer changes needing their own corpus verification, and Phase 5 is the layer
+that finds them, not the one that repairs them.
+
+- [ ] **N1 — Native does not expand globs** (`ffmpeg_029`, `076`, `139`, `214`, `229` — 5 rows,
+  the largest class). Both sides plan `inputs: ["*.mp4"]`. Python expands it against the sandbox
+  and emits one command per file; native passes the literal token to ffmpeg, **which does not
+  glob**, and renders the output as `*_converted.mp4`. "Convert all mp4 files in this folder"
+  does nothing useful on the shipped runtime. User-facing.
+- [ ] **N2 — Native does not resolve bare stems, so it never clarifies** (`ffmpeg_288`, `289`).
+  Plans carry `input: "silent_clip"` / `"mov"`, with no extension. Python resolves stems against
+  the sandbox and asks *"Which silent_clip did you mean?"*; native renders `-i silent_clip`
+  verbatim, producing a command that fails at runtime. Native is **less safe** here: it acts on
+  an ambiguous reference instead of asking.
+- [ ] **N3 — `target_size_mb` does not drive a downscale natively** (`ffmpeg_020`). For
+  "under 1 MB" Python adds `-vf scale=854:480`; native re-encodes at source resolution and will
+  miss the target the user named.
+- [ ] **N4 — Aspect-crop renders a filter ffmpeg REJECTS — on BOTH runtimes** (`ffmpeg_293`, and
+  the same construction is behind the `294`/`296`/`298` cluster). Native emits
+  `crop=min(iw//,ih*1/1):min(ih//,iw*1/1)`, Python `crop=min(iw/,ih*1/1):min(ih/,iw*1/1)`. Both
+  have a missing operand, and both leave the comma inside `min(…)` unescaped inside a
+  filtergraph. **Verified by running ffmpeg**: `No such filter: 'ih*1/1):min(ih//'`, output file
+  never created. So "crop clip.mp4 to a square" is broken for users on **both** runtimes — a
+  cross-runtime product bug that a parity check comparing only "do they agree" would have missed
+  entirely, since they nearly agree on being wrong.
+- [ ] **N5 — Not a native defect: Python's `run --dry-run` renders only the first step of some
+  chains** (`ffmpeg_118`). Native renders both steps of compress → prepare_for_platform; Python
+  renders one. This surfaced only because Workstream E made native render whole chains. Recorded
+  so it is not mistaken for a port gap and "fixed" in the wrong runtime.
 
 ## Workstream L4 — The shipped path (needs a GGUF + real execution; release)
 
@@ -555,8 +635,26 @@ missing), **sandbox resolution and boundary enforcement** (`main.rs:673`), the *
 gate**, command rendering, the **subprocess itself**, and output verification. Every one of those
 is a place a correct plan still fails a user, and every one is invisible to a planner-only lane.
 
-- [ ] **L4a — Grade real artifacts produced by the native binary.** Drive `knaif run <skill>` per
-  utterance — **not `--dry-run`** — against a fixture sandbox, then grade the **produced files**
+- [x] **L4a — BUILT 2026-09-10: `knaif.evalsuite native` (`just eval-native`).** Drives
+  `knaif run <skill> --yes` per utterance, each in its own directory holding copies of only the
+  fixtures that utterance names, and grades the files that appear with the skill's executing
+  verifier. Smoke-verified end to end (3/3, real files on disk). A full corpus run is the
+  remaining step and needs a rebuilt binary — see below.
+  - **It required one native addition.** `run` had no way to report the plan it executed, so
+    tool metrics would have scored `predicted_tool = None` on **every** row — a fabricated 0%
+    tool accuracy, not a visible failure. `$KNAIF_DUMP_PLAN` mirrors `$KNAIF_DUMP_PROMPT` and
+    emits the post-gate envelope from the **same invocation that executed it**, so the metrics
+    describe the plan that actually produced the artifact rather than a second inference that
+    might disagree.
+  - **Refuses to run against an empty fixture directory**, naming `just eval-fixtures <skill>`.
+    A missing fixture scores a correct plan ~0, so the alternative is a run that reports a
+    catastrophe which did not happen.
+  - **One honest limit on "the shipped path":** the lane passes `--yes`, so the confirmation gate
+    executes but is auto-answered; the interactive branch is not what this measures. Python's
+    executing verifiers make the same choice, so the two stay comparable. A gap in coverage of
+    the claim, not a difference between the runtimes.
+  - *(Original text: drive `knaif run <skill>` per utterance — **not `--dry-run`** — against a
+    fixture sandbox, then grade the **produced files***
   with the skill's existing executing verifier (`success`, or `output_diff`), the same one that
   locks the Python snapshot. `scripts/parity_check.py` already drives `run --dry-run` per utterance
   and can be extended rather than replaced; a native batch-execute (`run --batch`) would be faster
@@ -573,7 +671,11 @@ is a place a correct plan still fails a user, and every one is invisible to a pl
   output it produces carries the label *"native planner, Python execution — not the shipped
   path"*. The original design made this the acceptance instrument; that was wrong, because it
   grades a pipeline no user runs.
-- [ ] **L4c — If a lane is registered in the eval config, do not put it under `backends:`.**
+- [x] **L4c — DONE 2026-09-10.** `lanes:` is a separate top-level section in
+  `eval_backends.yaml`, and a lane found under `backends:` is a **hard error** that names why
+  rather than a fallback — the failure it would otherwise cause (constructed as a
+  token-generation backend) is confusing enough to be worth catching precisely. Tested.
+  *(Original text: if a lane is registered in the eval config, do not put it under `backends:`.*
   `_make_agent` hands any entry there straight to `InferenceOrchestrator(backend=…)`
   (`evalsuite/cli.py:130`), so a `rust-cli` key is not inert — it is a token-generation backend
   that will be constructed and fail, or half-work. Use a **separate top-level section** (e.g.
@@ -648,8 +750,12 @@ is a place a correct plan still fails a user, and every one is invisible to a pl
     plans instead of rejecting is a release blocker at any aggregate score.
   - **Same corpus, verifier and model as the S5-frozen baseline**, or the comparison answers a
     different question.
-- [ ] **L4e — Report coverage, not just score.** State how many corpus rows the shipped path could
-  even attempt. While the multi-step executor is missing, every chain row is refused at execution,
+- [x] **L4e — DONE 2026-09-10.** Coverage prints beside the score on every lane run, and below
+  `--min-coverage` the score is **withheld** rather than reported over a partial population.
+  Note the original rationale below is now moot in its specifics — Workstream E landed, so chain
+  rows are no longer refused at execution — but the rule stands on its own and is what keeps
+  L4d's exclusion of unattempted rows honest. *(Original text: state how many corpus rows the
+  shipped path could even attempt.* While the multi-step executor is missing, every chain row is refused at execution,
   so an L4 number computed over "rows that ran" would silently exclude the hardest stratum and read
   as healthier than the product is. **Coverage and score are reported together or neither is
   reported.**
