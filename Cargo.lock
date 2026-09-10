@@ -1290,6 +1290,7 @@ dependencies = [
  "llama-cpp-2",
  "llama-cpp-sys-2",
  "num_cpus",
+ "serde_yaml",
 ]
 
 [[package]]

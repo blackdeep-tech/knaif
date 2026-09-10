@@ -2,20 +2,23 @@
 
 Both runtimes must agree on the generation settings they actually use — `max_tokens`,
 `n_ctx`, sampling, thinking suppression. They agree today at 512 / 8192 / greedy /
-suppressed, but in **three** separate places: a Rust literal in `knaif-llm`, the promoted
-stanza in `models.yaml`, and the eval backend in `eval_backends.yaml`. Nothing makes them
-agree; they simply do, and that duplication has already produced one wrong finding (a
-superseded stanza read as live).
+suppressed, but they are declared in **three** separate places: the `knaif-llm` constants,
+the promoted stanza in `models.yaml`, and the eval backend in `eval_backends.yaml`. No
+mechanism makes them agree; they simply do, and that duplication has already produced one
+wrong finding (a superseded stanza read as live).
 
-Written deliberately as a *three-way* comparison, not "both read the canonical file".
-V4 will create the canonical copy, and at that point this test should be rewritten to
-assert each runtime reads it — but a test ported naively onto a single source becomes one
-that can only ever pass. Until then, the point is that a change to any one of the three
-fails here.
+**V4 landed, and this stayed a three-way comparison on purpose.**
+`contracts/runtime/generation.yaml` is now canonical, but *nothing reads it at runtime* —
+it is enforced by comparison, so rewriting this file as "both runtimes read the canonical
+file" would produce a test that can only ever pass. The contract-versus-consumers direction
+lives in `test_generation_settings.py`; what stays here is the direction that survives it:
+native's effective values against Python's, with the contract not involved.
 
-The values are read at their **point of use** — the Rust literal is parsed out of the
-source that constructs the loader, not from a doc comment — so a hard-coded fallback
-shadowing a config file still fails.
+What did change is how the native value is reached. `max_tokens` and `n_ctx` are no longer
+literals at the point of use — they resolve through `knaif_llm::MAX_TOKENS` / `N_CTX` — so
+this reads the constant *and* asserts the points of use still reference it. A literal
+reintroduced at the point of use would shadow the constant while leaving it correct, and
+that is precisely the failure this test exists to catch.
 
 See `docs/plans/2026-09-10-skill-quality-lifecycle.md` (L1c, V4).
 """
@@ -30,6 +33,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LLAMA_RS = REPO_ROOT / "native" / "crates" / "knaif-llm" / "src" / "llama.rs"
+LLM_LIB_RS = REPO_ROOT / "native" / "crates" / "knaif-llm" / "src" / "lib.rs"
 MODELS_YAML = REPO_ROOT / "models.yaml"
 EVAL_BACKENDS = REPO_ROOT / "eval_backends.yaml"
 
@@ -43,19 +47,33 @@ def _rust_source() -> str:
     return LLAMA_RS.read_text(encoding="utf-8")
 
 
-def _rust_int(field: str) -> int:
-    """Read a struct-literal default out of the Rust loader, at its point of use."""
-    src = _rust_source()
-    match = re.search(rf"^\s*{field}:\s*(\d+),\s*$", src, re.MULTILINE)
-    assert match, f"{LLAMA_RS.name} no longer sets `{field}` as a literal — update this contract"
+def _rust_const(name: str) -> int:
+    """Read a `knaif-llm` generation constant — the value native actually generates with."""
+    src = LLM_LIB_RS.read_text(encoding="utf-8")
+    match = re.search(rf"pub const {name}: \w+ = (\d+);", src)
+    assert match, f"knaif-llm no longer declares {name} — update this contract"
     return int(match.group(1))
+
+
+def _rust_max_tokens() -> int:
+    # The point of use must reference the constant, not restate it. `unwrap_or(512)` here would
+    # keep MAX_TOKENS correct and still generate with the wrong budget.
+    assert "max_tokens: crate::MAX_TOKENS" in _rust_source(), (
+        "llama.rs no longer defaults max_tokens from knaif_llm::MAX_TOKENS — a literal there "
+        "shadows the constant this test reads"
+    )
+    assert "unwrap_or(MAX_TOKENS)" in LLM_LIB_RS.read_text(
+        encoding="utf-8"
+    ), "the $KNAIF_MAX_TOKENS fallback no longer resolves to MAX_TOKENS"
+    return _rust_const("MAX_TOKENS")
 
 
 def _rust_n_ctx_default() -> int:
-    src = _rust_source()
-    match = re.search(r'KNAIF_N_CTX"\s*\)(?:.|\n)*?unwrap_or\((\d+)\)', src)
-    assert match, "could not find the n_ctx default in llama.rs — update this contract"
-    return int(match.group(1))
+    assert re.search(r'KNAIF_N_CTX"\s*\)(?:.|\n)*?unwrap_or\(crate::N_CTX\)', _rust_source()), (
+        "llama.rs no longer defaults n_ctx from knaif_llm::N_CTX — a literal there shadows "
+        "the constant this test reads"
+    )
+    return _rust_const("N_CTX")
 
 
 def _python_options() -> dict:
@@ -70,9 +88,7 @@ def _eval_options() -> dict:
 
 
 def test_max_tokens_agrees_across_all_three_places() -> None:
-    assert (
-        _rust_int("max_tokens") == _python_options()["max_tokens"] == _eval_options()["max_tokens"]
-    )
+    assert _rust_max_tokens() == _python_options()["max_tokens"] == _eval_options()["max_tokens"]
 
 
 def test_n_ctx_agrees_across_all_three_places() -> None:

@@ -27,8 +27,8 @@ pub use planner::{
     validate_step,
 };
 pub use prompt::{
-    build_prompt, build_prompt_ordered, load_prompt_yaml, validator_feedback_prompt,
-    PromptOverrides,
+    build_prompt, build_prompt_ordered, load_prompt_yaml, render_examples_block, select_examples,
+    validator_feedback_prompt, PromptExample, PromptOverrides, MAX_TOOL_EXAMPLES,
 };
 pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
 pub use retrieval::{retrieve_tools, RetrievedTools, DEFAULT_TOP_K};

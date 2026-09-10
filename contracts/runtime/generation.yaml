@@ -1,0 +1,77 @@
+# generation.yaml — canonical generation settings for the shipped planning path.
+#
+# WHY THIS FILE EXISTS
+#
+# These numbers were declared in four places that no check held together: the native
+# defaults (`knaif-llm/src/llama.rs` and `lib.rs`), `models.yaml`, and `eval_backends.yaml`.
+# They all agreed, so this is hygiene rather than a fix — but the duplication had already
+# produced one wrong finding, when a superseded `eval_backends.yaml` stanza was read as the
+# live configuration. A setting that appears in four files is a setting nobody can quote
+# with confidence.
+#
+# WHAT BELONGS HERE
+#
+# Only settings that can change **what the model emits**. Performance knobs are deliberately
+# excluded, because pinning them would make the guard fail on differences that cannot change
+# a plan, and a guard that cries wolf gets deleted:
+#
+#   n_gpu_layers   native 999, the YAMLs 99 — both mean "offload everything"; llama.cpp
+#                  clamps to the layer count. Output-identical.
+#   n_threads      scheduling only.
+#   verbose        logging only.
+#
+# HOW IT IS ENFORCED
+#
+# This file is canonical and **nothing is copied from it** — unlike `core_tools.yaml`, whose
+# consumers are loaders, these consumers are hand-annotated config files and Rust constants.
+# Overwriting either from a generator would destroy commentary that is worth more than the
+# duplication costs. So the contract is enforced by two drift guards that read this file and
+# compare, rather than by `just sync-runtime`:
+#
+#   python/core/tests/test_generation_settings.py    models.yaml + eval_backends.yaml
+#   native/crates/knaif-llm/tests/generation.rs      the native defaults
+#
+# When a value here changes deliberately, both guards fail and name the files to update.
+#
+# SCOPE: the promoted models only (`shipped_models` below). Experiment stanzas in
+# `eval_backends.yaml` are study artifacts and set whatever their experiment needed — that is
+# what an experiment is for. Pinning them would freeze the history.
+#
+# See docs/plans/2026-09-10-skill-quality-lifecycle.md (V4).
+
+version: 1
+
+settings:
+  # Generation budget per call. 512 is comfortably above the longest plan the corpora
+  # contain; a plan that hits the cap is truncated JSON and scores as a parse error.
+  max_tokens: 512
+
+  # Context window. Must hold the whole prompt plus the output: the planner prompt carries
+  # the tool listing and the selected examples, and `n_batch` is set equal to it natively so
+  # the prompt decodes in one pass.
+  n_ctx: 8192
+
+  # Greedy decoding. Python passes `temperature=0.0`; native takes the argmax candidate
+  # directly, which is the same thing by a different route. Planning is not a task where
+  # sampling diversity helps, and a deterministic decode is what makes the eval ladder's
+  # paired comparisons meaningful.
+  temperature: 0.0
+
+  # GBNF JSON constraint, off. Eval-validated for Qwen3: the fine-tune's template emits a
+  # `<think>` block before the JSON object, and constraining the grammar from the first token
+  # fights it. `knaif-core::extract_json` strips the block instead.
+  json_mode: false
+
+  # Qwen3 thinking, off — `/no_think` is appended to the system turn. Native applies this
+  # unconditionally and has no way to express `true`; if a shipped model ever needs thinking
+  # enabled, that is a native code change, not a config change.
+  thinking_enabled: false
+
+# The stanzas the settings above are asserted against. Keys are the stanza names in each
+# file; both must exist and must carry every setting.
+shipped_models:
+  models.yaml:
+    - knaif-qwen3-4b-v1
+  eval_backends.yaml:
+    - qwen3-4b-sft-v3-flat-q4
+    - qwen3-1.7b-sft-v3-flat-q6
