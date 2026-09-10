@@ -69,13 +69,23 @@ request
   -> extract_json -> parse_plan -> normalize_plan -> apply_defaults -> validate_plan
   -> [repair] on parse/validate failure, retry once with validator feedback (real model only)
   -> apply_clarify_gate (chain-intermediate linking + hallucinated-filename downgrade)
-  -> core control tools short-circuit (clarify / reject)
-  -> skill dispatch: dry-run preview OR confirmed execution
+  -> execute_plan: for each step, in plan order
+       -> core control tools short-circuit (clarify / reject / done)  ends the WHOLE plan
+       -> skill dispatch: dry-run preview OR confirmed execution
+       -> stop at the first failure, naming the step and what did/didn't run
 ```
 
 - `--dry-run` previews commands/output paths with no side effects (stubs missing
-  inputs). Execution requires explicit consent (`--yes`, or an interactive `y`);
-  non-interactive execution without `--yes` errors with the preview.
+  inputs) — **every step of a chain, not just the first**. Execution requires explicit consent
+  (`--yes`, or an interactive `y`); non-interactive execution without `--yes` errors with the
+  preview. Consent is **per step**: a destructive step in the middle of a chain is confirmed as
+  one, so an N-step chain asks N times without `--yes`.
+- **Chains are mediated by files, not variables.** `skills/<name>/prompt.yaml` instructs the model
+  to give an earlier step an explicit `output` filename and reuse that same name as the later
+  step's input, and never to chain with `$variable` references; `apply_clarify_gate` binds
+  intermediates the model left undeclared. Plan order is therefore the dependency mechanism, which
+  is why the executor runs steps strictly in order and the L2 contract pins the order rather than
+  just the count.
 - `plan --skill <name> [--json] [--batch FILE]` emits the validated plan envelope only.
   `--batch` loads the model once and streams one plan per input line (avoids per-line
   model reload).
@@ -519,6 +529,19 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
   revisit after llama.cpp updates.
 - **Execution breadth** — native `run` supports ffmpeg + documents, including image watermark
   (documents; image-XObject with soft-mask alpha, covered by `overlay.rs` tests).
+- **Chain failure handling is stop-and-report, nothing more** — deliberately, and worth stating
+  plainly because the boundary is easy to mistake for a bug. When a step of a chain fails, the
+  runtime stops, exits non-zero, and names which step failed, which had already completed, and
+  which were not run. It does **not**:
+  - **recover** — there is no attempt to continue past a failed step or substitute an alternative;
+  - **roll back** — files written by earlier steps stay written. A three-step chain that fails at
+    step 2 leaves step 1's output on disk, which is why the report says so explicitly;
+  - **resume** — there is no way to restart a half-run chain from where it stopped. Re-running the
+    request re-runs it from step 1.
+
+  These are deferred rather than missing (2026-09-10 plan, E4). Rollback in particular is not a
+  small addition: ffmpeg steps write through subprocesses to paths the user chose, so "undo" means
+  deciding what may be deleted, which is a safety question, not a plumbing one.
 - **Logging facility** — diagnostics are currently ad-hoc `eprintln!` gated by env vars
   (`KNAIF_TIMING`, `KNAIF_DEBUG`). Establishing a first-class logging system (and routing
   timing through it) is deferred to its own plan.

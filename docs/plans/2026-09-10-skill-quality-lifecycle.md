@@ -532,11 +532,14 @@ register. What it lacks is a threshold, a record, and a trigger.
   different FP accumulation can flip a near-tie, so a CPU→CUDA change between two runs is
   indistinguishable from the change being measured. `2026-09-09_p2b-prefix-baseline/meta.json` is
   the template. Add a row to `evals/INDEX.md`.
-- [ ] **L3c — Resolve the chain blocker.** Native `run` rejects every multi-step plan
-  (`decide_steps`, audit F5), so all 41 ffmpeg chain utterances compare as mismatches and L3
-  cannot reach 99% on chains by construction. Either the executor lands first, or L3 launches
-  with chains **explicitly excluded and the exclusion recorded as a known hole** — not silently
-  skipped. See *Known blockers*.
+- [x] **L3c — RESOLVED 2026-09-10 by Workstream E, the first of the two options.** The executor
+  landed, so chains are comparable and no exclusion is needed; the "known hole" branch is moot.
+  - **The comparator needed a change with it, and it tightens rather than loosens.**
+    `parity_check.py` carried a lenient `chain-native-single-step` bucket that prefix-matched the
+    first command, because step 1 was all native could produce. Left in place it would now pass
+    **every** chain row on its first command alone — hiding precisely the step-2..n divergence the
+    executor newly makes possible. It is deleted; chains fall through to the same comparison as
+    every other row. This is a down payment on L3a, not a substitute for it.
 - [ ] **L3d — Document the entry point on each side** in the harness output, per rule 2.
 
 ## Workstream L4 — The shipped path (needs a GGUF + real execution; release)
@@ -670,29 +673,42 @@ step an explicit `output` filename and reusing that same filename as the later s
 variable binding, and `apply_clarify_gate` already links undeclared chain intermediates. What
 remains is a loop.
 
-- [ ] **E1 — Extract the per-step body.** Everything after `decide_steps` in `cmd_run`
-  (`main.rs:738` onward) already handles exactly one step end to end: tool/args extraction, the
-  control-tool short-circuit, dispatch, confirmation, execution. Lift it into a function taking a
-  single step plus the shared context, with **no behavior change** — a pure refactor, landed and
-  reviewed on its own so the executor diff that follows is small and readable.
-- [ ] **E2 — Replace `StepDecision::Unsupported` with ordered execution.** Loop the steps in plan
-  order through E1's function. `decide_steps` keeps `Empty`; `Unsupported` disappears, and its
-  tests (`main.rs:2015`) become tests that a 2-step plan *executes two steps*.
-- [ ] **E3 — Define the semantics, and keep them narrow.**
-  - **Control tools short-circuit the whole plan.** A `clarify`, `reject` or `done` at any position
-    ends execution — it is a statement about the request, not a step to run past.
-  - **Stop on first failure**, and report which steps completed and which did not. A chain that
-    fails at step 2 of 3 must not read as total success or total failure.
-  - **Confirmation is per step**, using the gate that already exists. A destructive step mid-chain
-    is still a destructive step.
-  - **Dependency preflight stays once, up front** — it already runs for the whole invocation
-    (`main.rs:658`) and nothing about chaining changes which binaries are needed.
-  - **`--dry-run` previews every step**, not just the first. This is also what L3's command-mode
-    comparison needs in order to compare chains at all.
-- [ ] **E4 — Deliberately deferred, and recorded as limitations rather than silently absent:**
-  partial-failure **recovery**, **rollback** of steps already executed, and **resumption** of a
-  half-run chain. Nothing in L4 needs them; folding them in turns a tractable workstream into a
-  second plan. Say so in `docs/NATIVE.md` so the gap is a documented boundary, not a surprise.
+- [x] **E1 — DONE 2026-09-10: `run_step` + `StepContext`.** A pure lift of the inline single-step
+  body, verified behavior-neutral (the CLI suite passed unchanged before E2 touched anything).
+  `StepContext` deliberately excludes dependency preflight and model resolution: those run once
+  per invocation, and putting them behind a per-step boundary would have invited running them
+  per step.
+- [x] **E2 — DONE 2026-09-10: `execute_plan` loops the steps in order.** `StepDecision` is now
+  `Empty | Run { total }`; `Unsupported` is deleted and its test asserts a 2-step plan is
+  `Run { total: 2 }`, with the end-to-end proof in `executor_semantics.rs`.
+  - **This is the plan's one user-facing fix.** Native planned chains correctly on 39/41 ffmpeg
+    chain utterances and then refused to run them; it now runs them.
+- [x] **E3 — DONE 2026-09-10. All five semantics implemented as specified**, each with a test:
+  - **Control tools short-circuit the whole plan** — `clarify`, `reject` *or* `done` at any
+    position. `done` was the one that leaked: it reached the skill dispatch, where the only
+    possible answer was "unknown tool" — a control tool surfacing as an error. Mutation-tested.
+  - **Stop on first failure**, naming the step, what had already completed, and what was not run.
+    Kept in a pure `chain_failure_context` so the wording is unit-testable, including the case
+    that reads badly if written carelessly (a failure at the *last* step must not claim
+    "steps 4-3 were not run").
+  - **Confirmation is per step** — unchanged, each dispatch already runs its own gate. Documented
+    in `docs/NATIVE.md`: an N-step chain asks N times without `--yes`.
+  - **Dependency preflight stays once, up front** — unchanged, and `StepContext` excludes it by
+    construction.
+  - **`--dry-run` previews every step.** A per-step `step N of M:` preamble prints only for real
+    chains; a test pins that a one-step plan reads exactly as it did before the executor existed.
+  - **One contract case had a wrong premise, and the fixture was corrected rather than the
+    assertion.** `a_failing_step_stops_the_chain_and_says_which_steps_ran` used
+    `"height": "not-a-number"` as its failing step. That does not fail: `resize_video` declares
+    no `arg_schema` for `height`, so **both** runtimes accept the step and drop the argument —
+    checked against Python's `validate_plan`, which accepts it too. Parity-correct, and not a
+    failing step, so the case could never have observed what it was written to observe. Switched
+    to an invalid `aspect`, which *is* validated at expansion. Flagged separately below.
+- [x] **E4 — DONE 2026-09-10: recorded in `docs/NATIVE.md` §12** as three named non-behaviors —
+  no **recovery**, no **rollback**, no **resumption** — each said plainly rather than implied.
+  Rollback carries the reason it is not a small addition: ffmpeg steps write through subprocesses
+  to paths the user chose, so "undo" is a safety decision about what may be deleted, not
+  plumbing. The pipeline diagram and the per-step confirmation behavior are documented there too.
 - [x] **E5 — Sequencing: E lands *after* the L2 contracts exist.** *(Cases authored 2026-09-10:
   `apps/cli/tests/executor_semantics.rs`, four `#[ignore]`d tests driven by
   `KNAIF_LLM_MOCK_RESPONSE` so they pin execution with no model. Verified genuinely red — all four
@@ -777,7 +793,12 @@ Without this the layers are a checklist nobody is obliged to run.
 
 ## Known blockers
 
-- **Native has no multi-step executor.** `decide_steps` returns `Unsupported` for any plan with
+- ~~**Native has no multi-step executor.**~~ **CLEARED 2026-09-10 by Workstream E.** Kept below
+  as written, because the shape of the blocker is what justified pulling E into this plan and the
+  reasoning should not vanish with the fix. What changed: `decide_steps` no longer has an
+  `Unsupported` variant, `execute_plan` runs the steps in order, and L4 no longer has to be
+  reported as partial *for this reason* (L4e still reports coverage for its own reasons).
+  ~~`decide_steps` returns `Unsupported` for any plan with
   more than one step; `cmd_run` rejects it with *"this request needs N steps, but the native
   runtime executes one step at a time"*. Measured 2026-09-09: the native **planner** emits correct
   multi-step plans on **39/41 chain utterances (95.1%)**, so every one of those is refused at
@@ -792,7 +813,7 @@ Without this the layers are a checklist nobody is obliged to run.
   and "works except for every chained request" is a materially different claim. Both active skills
   have chain rows, so leaving E out would make `supported` unreachable for every skill.
   Until E lands, **L4 is reported as partial with its coverage stated (L4e), and no skill claims
-  full shipped-path acceptance.**
+  full shipped-path acceptance.**~~
 - **No generic native skill API.** `knaif-skill-api` ships shared `sandbox` helpers only;
   `HandlerContext` / `Step` / `Intent` equivalents do not exist, and native skills are dispatched
   by per-domain branches in `apps/cli` (audit F11). Every new native skill therefore re-implements
@@ -843,7 +864,8 @@ Without this the layers are a checklist nobody is obliged to run.
 
 ## Open questions
 
-**All three are decided (2026-09-10).** What remains is execution, not deliberation.
+**The three original questions are decided (2026-09-10).** What remains of them is execution, not
+deliberation. One new question was opened by the work itself and is listed last.
 
 - **V2 (example selection) — ANSWERED 2026-09-10. Python keeps `select_examples`; Rust gains
   it.** The experiment ran. Static wins the ffmpeg aggregate significantly (p = 0.0226) and
@@ -855,6 +877,18 @@ Without this the layers are a checklist nobody is obliged to run.
   inseparable; that objection does not apply to a *factorial*, which exists to separate them, and
   the harness, model load and GPU time are already paid for. It also gets documents its answer
   (15 public tools, 5 shown) in the same run rather than a later one. See S3g.
+- **Unschema'd args are silently dropped — FOUND 2026-09-10, NOT FIXED HERE, needs an owner
+  decision.** `resize_video` declares `height` in `optional_args` but gives it no `arg_schema`, so
+  `"height": "not-a-number"` passes validation on **both** runtimes and is then discarded during
+  expansion: the user gets a re-encode at the source resolution and an exit code of 0. Surfaced by
+  an executor contract case whose premise depended on that step failing (see E3).
+  - It is **parity-correct** — Python's `validate_plan` accepts it too — so no layer of this plan
+    catches it, and it is not a native defect.
+  - The fix is a schema question, not a code one: either every arg gets a schema (and a validator
+    test asserts that), or the validator rejects an arg it cannot type. The first is more work and
+    catches more; the second is cheap and could be wrong for genuinely free-form args.
+  - Deliberately out of scope here: it touches skill authoring contracts (`docs/TOOL_SCHEMA.md`)
+    and both runtimes' validators, which is a different plan from this one.
 - **macOS — settled as a scope boundary, not a gap.** This plan closes with macOS unexercised;
   the platform-coverage guard it ships (L1d, G2) is what obliges the *later* macOS support work to
   extend L1–L4 before that platform can be marked `supported`. Sequencing is deliberate: this plan

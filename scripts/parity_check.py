@@ -23,16 +23,18 @@ normalized to a token list so cosmetic quoting/spacing differences don't registe
 *type* (commands / clarify / reject / none) is compared first; argv only when both produced
 commands.
 
-Known scope limit: native `run` (main.rs) executes exactly one intent per invocation — there
-is no ordered multi-step executor yet (chain execution, per-intent confirmation). It used to
-silently preview/execute only the FIRST plan step and drop the rest; per
-docs/audits/2026-09-07-core-principles-and-rtx5080.md (F5) it now refuses a multi-step plan
-outright, printing `not_implemented: this request needs N steps, ...`. That marker matters:
-a capability the port has not built and a request the runtime deliberately declined are
-opposite facts about the product — a coverage gap versus the safety model working — so they
-are counted apart, as `native-not-implemented` rather than `mismatch`. Both still gate.
-`chain-native-single-step` is kept for its original narrower trigger (both sides render
-`commands`, e.g. a same-intent multi-input row) and does not fire for multi-intent chains.
+Chain rows compare end to end (since 2026-09-10, Workstream E). Native `run` used to execute
+exactly one intent per invocation: first it silently previewed step 1 and dropped the rest
+(docs/audits/2026-09-07-core-principles-and-rtx5080.md, F5), then it refused multi-step plans
+outright with `not_implemented: this request needs N steps, ...`. It now runs them in order, so
+the `chain-native-single-step` bucket — which could only prefix-match the first command — is
+gone rather than left to pass every chain row on step 1 alone.
+
+`not_implemented:` is still parsed and still counted apart from `reject:`, as
+`native-not-implemented` rather than `mismatch`: a capability the port has not built and a
+request the runtime deliberately declined are opposite facts about the product — a coverage gap
+versus the safety model working. Both gate. The marker now fires for an unimplemented skill
+tool rather than for chains.
 
 Usage (normally via `just parity ffmpeg`, which builds native first):
     uv run python scripts/parity_check.py --skill ffmpeg \
@@ -689,7 +691,7 @@ def compare(
     cwd: str | None = None,
 ) -> tuple[str, str]:
     """Return (status, note). status ∈ {match, mismatch, decline-divergence,
-    not-comparable, chain-native-single-step, native-not-implemented}.
+    not-comparable, native-not-implemented}.
 
     *cwd*: forward-slashed shared working directory both runtimes ran under — passed
     through to ``Outcome.key()`` for command-mode argv path canonicalization (F7). The
@@ -715,24 +717,13 @@ def compare(
         if eq is not None:
             return "match", eq
         return "mismatch", "plan tools/args differ"
-    # Narrower than it looks: since F5 (native `run` rejects a multi-step plan outright rather
-    # than silently previewing step 1 — see the module docstring), a genuinely multi-intent
-    # chain's native outcome is `reject`, so it never satisfies `native.kind == "commands"`
-    # here and falls through to the generic mismatch below. This branch's only remaining
-    # trigger is the narrower case both sides still render `commands` for a chain-tagged row
-    # (e.g. a same-intent multi-input step). In plan mode native `plan --json` emits the full
-    # plan, so chains compare end-to-end regardless.
-    if (
-        not plan_mode
-        and row.is_chain
-        and native.kind == "commands"
-        and py.kind == "commands"
-        and not strict
-    ):
-        # A prefix match on the first command is the best we can assert here.
-        if native.commands and py.commands and native.commands[0] == py.commands[0]:
-            return "chain-native-single-step", "native step-1 command matches python step-1"
-        return "chain-native-single-step", "native single-step; first command differs (inspect)"
+    # NOTE: the `chain-native-single-step` bucket that used to sit here is **gone** (2026-09-10,
+    # Workstream E). It existed because native could only ever render step 1 of a chain, so the
+    # most that could be asserted was a prefix match on the first command. Native now executes
+    # chains in order, and leaving a lenient branch in place would have been worse than the
+    # limitation it was written for: every chain row would pass on its first command alone, and a
+    # divergence in steps 2..n — precisely what the executor newly makes possible — would be
+    # invisible. Chains now fall through to the same comparison as everything else.
     if native.key(cwd) == py.key(cwd):
         # Equal actions, but flag when they only match after path normalization (native
         # emits relative paths, python absolute) so the representation gap stays visible.
@@ -871,7 +862,6 @@ def main() -> int:
         "mismatch": 0,
         "decline-divergence": 0,
         "not-comparable": 0,
-        "chain-native-single-step": 0,
         "native-not-implemented": 0,
     }
 
@@ -883,7 +873,6 @@ def main() -> int:
             "mismatch": "✗",
             "decline-divergence": "!",
             "not-comparable": "–",
-            "chain-native-single-step": "≈",
             "native-not-implemented": "∅",
         }[status]
         print(f"[{idx:>3}/{len(rows)}] {icon} {row.id:<16} {row.utterance[:52]}")
@@ -949,7 +938,6 @@ def main() -> int:
     print(f"  mismatched (cmd drift)  : {counts['mismatch']}")
     print(f"  decline-divergence      : {counts['decline-divergence']}  (reject vs clarify)")
     print(f"  not-comparable          : {counts['not-comparable']}  (python renders no cmd)")
-    print(f"  chain (native 1-step)   : {counts['chain-native-single-step']}")
     print(
         f"  native not-implemented  : {counts['native-not-implemented']}"
         "  (capability gap, not drift)"

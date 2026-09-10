@@ -477,15 +477,25 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `reject`, so it correctly falls through to `mismatch` against python's multi-command
     outcome rather than the old lenient `chain-native-single-step` bucket, which is kept for
     its narrower original trigger — both sides still rendering `commands` — not deleted).
-    **Superseded 2026-09-10:** the refusal is still there but no longer says `reject:` — it
-    prints `not_implemented: this request needs N steps, ...`, because a capability the port
-    has not built and a request the runtime declined are opposite facts about the product and
-    coverage cannot be computed while they share a label. `parity_check.py` counts it as
-    `native-not-implemented` (still gating). The refusal itself goes away with Workstream E.
+    **Superseded 2026-09-10 (a):** the refusal stopped saying `reject:` and started printing
+    `not_implemented: this request needs N steps, ...`, because a capability the port has not
+    built and a request the runtime declined are opposite facts about the product and coverage
+    cannot be computed while they share a label.
+    **CLOSED 2026-09-10 (b) — the refusal is gone, replaced by the executor** (Workstream E of
+    `docs/plans/2026-09-10-skill-quality-lifecycle.md`). Native runs a plan's steps in order:
+    control tools end the whole plan, execution stops at the first failure and names which
+    steps ran, and `--dry-run` previews every step. `StepDecision` keeps only `Empty` and
+    `Run { total }`; `Unsupported` is deleted. This is what the audit actually recommended —
+    the refusal was the interim it explicitly OK'd.
+    Two consequences worth recording: `parity_check.py`'s lenient `chain-native-single-step`
+    bucket is **deleted**, because a branch that prefix-matched the first command would now
+    pass every chain row on step 1 alone and hide exactly the step-2..n divergence the executor
+    makes possible; and `not_implemented:` still exists, now produced by an unimplemented skill
+    tool rather than by chains.
     Tests: `decide_steps_empty_plan_is_empty` / `_single_step_is_ok` /
-    `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
-    needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
-    260); fmt + clippy clean.
+    `_multi_step_runs_every_step` / `chain_failure_context_accounts_for_every_step` in
+    `apps/cli/src/main.rs`, plus six end-to-end cases in `apps/cli/tests/executor_semantics.rs`
+    — all deterministic, no model/GPU needed, per the audit's own ask.
   - [~] **F9 — acceptance snapshots RE-LOCKED (2026-09-08). HALF DONE — the identity half is
     outstanding.** The audit asked for two things: adopt compatible full-corpus executing
     snapshots, *and* "store corpus hash/row IDs, model checksum/config, and code identity" in
