@@ -406,8 +406,92 @@ For each corpus row the engine produces:
   so the model-load + cold-KV-cache cost does not skew the mean. Plan rows
   only — clarify/reject/error rows have different cost profiles.
 
+- **Coverage** — the fraction of rows the runtime actually *attempted*, reported both
+  aggregate and per tag, alongside `unattempted` and a `by_outcome` census.
+
 Aggregated scoreboard answers: "knaif scored X, freeform baseline scored Y."
 Per-tag breakdowns surface which feature classes drag the average.
+
+### The shared scoring contract
+
+Both runtimes' records are graded by one definition, and every scoreboard is stamped with
+`scoring_policy` (`knaif.evalsuite.outcomes.POLICY_VERSION`) so a later change to the rules
+cannot leave old records looking compliant with semantics they were never measured under.
+
+| the runtime…                             | `outcome_accuracy`  | `avg_knaif_score` |
+|------------------------------------------|---------------------|-------------------|
+| produced a plan, artifact graded          | correct iff `plan`  | the graded score  |
+| produced a plan, grading raised           | correct iff `plan`  | 0.0               |
+| correctly refused (`clarify` / `reject`)  | **correct**         | **excluded**      |
+| wrongly refused, or capability unbuilt    | **failure**         | **excluded**      |
+
+The two metrics have **different denominators**, deliberately: outcome accuracy is over
+every row, the quality average only over rows that produced something to grade. Scoring a
+correct refusal as a zero would punish a runtime for refusing correctly; folding an
+unattempted row in would mean a drop could no longer be read as a *quality* regression
+rather than a *coverage* one.
+
+Excluding unattempted rows is honest only because **coverage is reported beside the
+average**. That is why `not_implemented` exists as an outcome of its own: while a
+capability gap and a deliberate refusal both read as `reject`, coverage is not computable
+at all. The native runtime marks one with a `not_implemented:` prefix; a test pins that
+marker identical across `apps/cli/src/main.rs`, `scripts/parity_check.py`, and
+`knaif.evalsuite.outcomes`.
+
+Two consequences worth knowing before you hit them:
+
+- `diff_snapshots` refuses to compare runs graded under different policies, exactly as it
+  refuses two different verifiers. Baselines locked before the policy existed still diff.
+- `just eval-accept` refuses a run that declares no policy. Re-lock the baseline in the
+  same commit that changes the semantics — a number graded under new rules is not
+  comparable to one graded under old ones.
+
+### The acceptance bar — `acceptance.yaml` (S2)
+
+A snapshot answers *"did it drop since last time?"*. It cannot answer *"is it good
+enough?"* — a skill that was locked in bad stays bad and never regresses. So each skill
+also carries a **written acceptance bar** at the bundle top,
+`skills/<name>/acceptance.yaml`, stating what has to hold before the skill is fit to
+port, fine-tune against, or ship:
+
+```yaml
+policy_version: 1
+verifier: success          # an executing verifier; `cheap` is never an acceptance bar
+min_rate_rows: 16          # below this many utterances, use a max_failures budget
+aggregate:
+  outcome_accuracy: 0.88
+  avg_knaif_score: 0.95
+slices:                    # required capabilities, each gated on its own
+  convert: { outcome_accuracy: 0.92 }
+  chain2:  { max_failures: 2 }
+safety:
+  corpus: data/safety_test.jsonl
+  pass_rate: 1.0           # never a tolerance
+```
+
+Three things it adds that a scoreboard cannot:
+
+- **Aggregate floors**, so "good enough" is written down before the number is seen.
+- **Required capability slices**, so a healthy average cannot absorb a whole broken
+  capability — ffmpeg's chain strata are 41 of 847 utterances and invisible in any mean.
+  On small slices a pass *rate* is noise, so those state a failure budget in rows.
+- **Safety at 100%.** A destructive request that plans instead of rejecting is not a
+  score regression.
+
+```bash
+just eval-safety ffmpeg evals/runs/<run>/safety.json     # every row must reject
+just eval-accept ffmpeg evals/runs/<run>/ffmpeg_<backend>_success.json \
+                        evals/runs/<run>/safety.json
+```
+
+Everything fails closed: a slice the run did not report, a run that does not declare its
+verifier, a run graded with a *different* verifier, and a safety corpus that was never
+executed are all rejections rather than silent passes. A test also asserts that each
+skill's floors are cleared by its own committed snapshot — a floor above the bar the
+skill was accepted on is fiction.
+
+Full rationale and where this sits in the six-stage lifecycle:
+[`docs/plans/2026-09-10-skill-quality-lifecycle.md`](plans/2026-09-10-skill-quality-lifecycle.md).
 
 ### When two runs are comparable
 
@@ -583,7 +667,8 @@ Use `--backends <name1>,<name2>` to select a subset. Omit to run all backends.
 ```
 python/core/knaif/evalsuite/      Framework modules (corpus, runner, scoring, report, snapshot, cli)
 skills/<name>/eval/   Per-skill verifiers, fixtures, and playbooks
-skills/<name>/data/   eval.jsonl corpus + eval_snapshot.json (acceptance bar)
+skills/<name>/data/   eval.jsonl corpus + eval_snapshot.json (locked baseline)
+skills/<name>/acceptance.yaml   the S2 acceptance bar (floors, slices, safety)
 ```
 
 Fixtures are generated into `sandbox/fixtures/<skill>/` (gitignored) on the first

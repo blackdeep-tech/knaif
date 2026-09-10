@@ -83,6 +83,24 @@ def diff_snapshots(
                 "same verifier."
             )
 
+    # Same argument as the verifier guard, one level up: two runs graded under different
+    # scoring semantics are not a trend. Only enforced once the baseline declares a policy
+    # — snapshots locked before it exists compare as they always did.
+    baseline_policy = baseline.get("scoring_policy")
+    current_policy = current.get("scoring_policy")
+    if baseline_policy is not None:
+        if current_policy is None:
+            raise ValueError(
+                f"current scoreboard declares no scoring_policy; baseline was graded under "
+                f"v{baseline_policy}. Cannot certify no regression against unknown semantics."
+            )
+        if baseline_policy != current_policy:
+            raise ValueError(
+                f"Scoring-policy mismatch: baseline v{baseline_policy}, current "
+                f"v{current_policy}. Re-lock the baseline under the new semantics in the "
+                "same commit that changed them."
+            )
+
     baseline_total = baseline.get("total")
     current_total = current.get("total")
     if baseline_total is not None:

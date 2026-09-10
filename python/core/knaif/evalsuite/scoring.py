@@ -1,4 +1,28 @@
-"""Dispatch to per-skill verifiers; aggregate intent + outcome scores into a scoreboard."""
+"""Dispatch to per-skill verifiers; aggregate intent + outcome scores into a scoreboard.
+
+**The shared scoring contract.** Both runtimes' records are graded by one definition,
+stamped with `scoring_policy` (see `outcomes.POLICY_VERSION`) so a later change to the
+rules cannot leave old records looking compliant:
+
+| the runtime...                          | outcome_accuracy    | avg_knaif_score |
+|-----------------------------------------|---------------------|-----------------|
+| produced a plan, artifact graded        | correct iff `plan`  | the graded score|
+| produced a plan, grading raised         | correct iff `plan`  | 0.0             |
+| correctly refused (`clarify`/`reject`)  | **correct**         | **excluded**    |
+| wrongly refused, or capability unbuilt  | **failure**         | **excluded**    |
+
+The two metrics therefore have **different denominators**, deliberately: outcome accuracy
+is over every row, the quality average only over rows that produced something to grade.
+Folding refusals into the average as zeros would punish a runtime for refusing correctly,
+and folding unattempted rows in would mean a score drop could no longer be read as a
+quality regression rather than a coverage one.
+
+Excluding unattempted rows is only honest because **coverage is reported beside the
+average**, aggregate and per slice. If that reporting is ever dropped, this decision has
+to be reopened — on its own, exclusion flatters a partial port.
+
+See `docs/plans/2026-09-10-skill-quality-lifecycle.md` (L4d).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +32,7 @@ from typing import Any
 from knaif.evaluator import compute_metrics
 
 from .corpus import CorpusRow
+from .outcomes import POLICY_VERSION, is_capability_gap
 from .protocols import Verifier, VerifyResult
 from .runner import AgentOutput
 
@@ -19,6 +44,27 @@ __all__ = ["VerifyResult", "score_corpus", "score_corpus_output_diff"]
 # verifier (cheap), an `outputs` row falls back to the plan-level verifier instead of
 # scoring 0.0 against artifacts that were never produced.
 _EXECUTING_VERIFIERS = frozenset({"success", "honest", "output_diff"})
+
+
+def _outcome_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """How many rows landed in each outcome bucket, for the acceptance record."""
+    counts: dict[str, int] = {}
+    for r in rows:
+        key = r.get("actual_outcome") or "unknown"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _coverage_aggregate(rows: list[dict[str, Any]]) -> tuple[float, int]:
+    """Return (coverage, unattempted) over scored rows.
+
+    A deliberate refusal counts as attempted — the runtime did its job. Only a capability
+    it does not have reduces coverage.
+    """
+    if not rows:
+        return 0.0, 0
+    unattempted = sum(1 for r in rows if is_capability_gap(r.get("actual_outcome") or ""))
+    return (len(rows) - unattempted) / len(rows), unattempted
 
 
 def _latency_aggregate(
@@ -219,20 +265,31 @@ def score_corpus(
     for tag, data in by_tag.items():
         ks = data["knaif_scores"]
         bs = data["baseline_scores"]
+        tag_coverage, tag_unattempted = _coverage_aggregate(data["rows"])
         tag_summary[tag] = {
             "total": data["total"],
             "outcome_accuracy": data["outcome_correct"] / data["total"],
             "avg_knaif_score": sum(ks) / len(ks) if ks else None,
             "avg_baseline_score": sum(bs) / len(bs) if bs else None,
+            "coverage": tag_coverage,
+            "unattempted": tag_unattempted,
             "time_to_artifact_ms": _latency_aggregate(data["rows"]),
         }
 
+    run_coverage, unattempted = _coverage_aggregate(scored_rows)
+
     return {
         "verifier": verifier_name,
+        "scoring_policy": POLICY_VERSION,
         "total": n,
         "outcome_accuracy": outcome_acc,
         "avg_knaif_score": avg_knaif,
         "avg_baseline_score": avg_baseline,
+        # Reported beside the average, never folded into it: excluding unattempted rows
+        # from a quality score is only honest while the coverage gap is visible.
+        "coverage": run_coverage,
+        "unattempted": unattempted,
+        "by_outcome": _outcome_counts(scored_rows),
         "time_to_artifact_ms": _latency_aggregate(scored_rows),
         "intent_metrics": compute_metrics(intent_rows) if intent_rows else {},
         "by_tag": tag_summary,
@@ -325,17 +382,25 @@ def score_corpus_output_diff(
             "avg_knaif_score": (
                 sum(d["knaif_scores"]) / len(d["knaif_scores"]) if d["knaif_scores"] else None
             ),
+            "coverage": _coverage_aggregate(d["rows"])[0],
+            "unattempted": _coverage_aggregate(d["rows"])[1],
             "time_to_artifact_ms": _latency_aggregate(d["rows"]),
         }
         for tag, d in by_tag.items()
     }
 
+    run_coverage, unattempted = _coverage_aggregate(scored_rows)
+
     return {
         "verifier": "output_diff",
+        "scoring_policy": POLICY_VERSION,
         "total": n,
         "outcome_accuracy": outcome_acc,
         "avg_knaif_score": avg_knaif,
         "avg_baseline_score": None,
+        "coverage": run_coverage,
+        "unattempted": unattempted,
+        "by_outcome": _outcome_counts(scored_rows),
         "time_to_artifact_ms": _latency_aggregate(scored_rows),
         "intent_metrics": compute_metrics(intent_rows) if intent_rows else {},
         "by_tag": tag_summary,
