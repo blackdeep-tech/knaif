@@ -10,6 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use clap::{Args, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 use knaif_models::{BackendState, BackendStore, CudaOffer, HttpFetcher, ModelStore, VerifyOutcome};
@@ -600,22 +601,21 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
 
 /// What `cmd_run` should do with a parsed plan's step list, before dispatching to a skill.
 ///
-/// Native `run` executes exactly one intent per invocation — there is no ordered multi-step
-/// executor yet (variable binding between steps, per-intent confirmation, chain execution).
-/// [`decide_steps`] makes that limit an explicit, deterministic decision instead of a silent
-/// truncation: previously `cmd_run` took `steps.first()` and discarded every later step without
-/// a word, so a valid multi-step plan (e.g. strip_audio -> resize_video) rendered/executed only
-/// the first command and still exited 0 — reporting full success for partial completion, and
-/// for a destructive plan, silently skipping a real side effect the request asked for. See
-/// docs/audits/2026-09-07-core-principles-and-rtx5080.md, F5.
+/// **History, because the variant that is gone matters.** `cmd_run` originally took
+/// `steps.first()` and discarded every later step in silence: a valid two-step plan executed one
+/// command and still exited 0, reporting full success for partial completion — and for a
+/// destructive plan, silently skipping a side effect the request asked for
+/// (docs/audits/2026-09-07-core-principles-and-rtx5080.md, F5). `Unsupported` replaced that with
+/// an honest refusal, which was right while there was no executor.
+///
+/// E2 removed it: native now runs the steps in order, so a chain is executed rather than
+/// declined. What remains is the one case that still needs a decision — a plan with no steps.
 #[derive(Debug, PartialEq, Eq)]
 enum StepDecision {
     /// No steps at all.
     Empty,
-    /// Exactly one step, at this index (always 0) — the shape the rest of `cmd_run` handles.
-    Single(usize),
-    /// More than one step: unsupported. Reject the whole plan rather than run only the first.
-    Unsupported { total: usize },
+    /// `total` steps to run, in plan order.
+    Run { total: usize },
 }
 
 /// Marks output the runtime produced because a capability is **not built**, as opposed to a
@@ -632,8 +632,7 @@ fn not_implemented_message(reason: &str) -> String {
 fn decide_steps(steps: &[serde_json::Value]) -> StepDecision {
     match steps.len() {
         0 => StepDecision::Empty,
-        1 => StepDecision::Single(0),
-        total => StepDecision::Unsupported { total },
+        total => StepDecision::Run { total },
     }
 }
 
@@ -746,7 +745,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let step = match decide_steps(&steps) {
+    let total = match decide_steps(&steps) {
         StepDecision::Empty => {
             if model.is_none() {
                 let (recommended, installed) = recommended_model_status();
@@ -762,20 +761,112 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        StepDecision::Unsupported { total } => {
-            println!(
-                "{}",
-                not_implemented_message(&format!(
-                    "this request needs {total} steps, but the native runtime executes one \
-                     step at a time (multi-step chains aren't supported yet). Try rephrasing \
-                     it as separate requests, one at a time."
-                ))
-            );
-            return Ok(());
-        }
-        StepDecision::Single(idx) => &steps[idx],
+        StepDecision::Run { total } => total,
     };
 
+    let ctx = StepContext {
+        skill: &args.skill,
+        bundle: &bundle,
+        base: &base,
+        sandbox,
+        dry_run: args.dry_run,
+        yes: args.yes,
+    };
+    execute_plan(&steps, total, &ctx)
+}
+
+/// Run a plan's steps in order (E2/E3).
+///
+/// The semantics are deliberately narrow:
+///
+/// - **A control tool ends the whole plan**, wherever it sits. `clarify`/`reject`/`done` are
+///   statements about the *request*, not work to run past.
+/// - **Stop at the first failure**, and say which steps ran. A chain that fails at step 2 of 3 is
+///   neither a success nor a clean failure: step 1 already wrote a file to the user's disk, and a
+///   bare error would leave the user guessing what is on it.
+/// - **Confirmation stays per step** — each dispatch runs its own gate, so a destructive step in
+///   the middle of a chain is still confirmed as one.
+///
+/// Chains are file-mediated, not variable-bound: `skills/ffmpeg/prompt.yaml` instructs the model
+/// to give an earlier step an explicit `output` filename and reuse it as the later step's input
+/// ("Never chain steps with `$variable` references"), and `apply_clarify_gate` binds intermediates
+/// the model left undeclared. So ordering *is* the dependency mechanism — which is why the L2
+/// cases pin the order and not just the count.
+///
+/// Recovery, rollback and resumption of a half-run chain are deliberately **not** here; see E4 and
+/// the limitations section of `docs/NATIVE.md`.
+/// The context line attached to a failing step: which step failed, what had already run, and what
+/// did not.
+///
+/// A bare "ffmpeg exited 1" after a chain leaves the user guessing whether anything reached their
+/// disk. Kept pure so the wording is unit-testable without executing anything.
+fn chain_failure_context(idx: usize, total: usize) -> String {
+    let ordinal = idx + 1;
+    if total == 1 {
+        return String::from("the step failed");
+    }
+    let completed = match idx {
+        0 => "nothing had run yet".to_string(),
+        1 => "step 1 had already completed".to_string(),
+        _ => format!("steps 1-{idx} had already completed"),
+    };
+    let skipped = match total - ordinal {
+        0 => "it was the last step".to_string(),
+        1 => format!("step {total} was not run"),
+        _ => format!("steps {}-{total} were not run", ordinal + 1),
+    };
+    format!("step {ordinal} of {total} failed; {completed}, and {skipped}")
+}
+
+fn execute_plan(
+    steps: &[serde_json::Value],
+    total: usize,
+    ctx: &StepContext,
+) -> anyhow::Result<()> {
+    for (idx, step) in steps.iter().enumerate() {
+        let ordinal = idx + 1;
+        // Announce the position only for a real chain: a one-step plan reads better without a
+        // "step 1 of 1" preamble, and every existing single-step test asserts that output.
+        if total > 1 {
+            println!("step {ordinal} of {total}:");
+        }
+        match run_step(step, ctx).with_context(|| chain_failure_context(idx, total))? {
+            StepOutcome::Continue => {}
+            StepOutcome::ShortCircuit => return Ok(()),
+        }
+    }
+    Ok(())
+}
+
+/// Everything one step needs that does not vary between the steps of a plan.
+///
+/// Extracted in E1 so the ordered executor (E2) is a loop over [`run_step`] rather than a second
+/// copy of the dispatch. Dependency preflight and model resolution are deliberately *not* here:
+/// they run once per invocation, before any step, and nothing about chaining changes them.
+struct StepContext<'a> {
+    skill: &'a str,
+    bundle: &'a Path,
+    base: &'a Path,
+    sandbox: Option<&'a Path>,
+    dry_run: bool,
+    yes: bool,
+}
+
+/// What one step means for the steps after it.
+#[derive(Debug, PartialEq, Eq)]
+enum StepOutcome {
+    /// The step ran (or previewed). Carry on with the next one.
+    Continue,
+    /// A core control tool answered the *request*, not this position in it — so nothing after it
+    /// is meaningful. See E3: `clarify` / `reject` / `done` end the plan wherever they appear.
+    ShortCircuit,
+}
+
+/// Run (or preview) exactly one step: control-tool short-circuit, then skill dispatch.
+///
+/// A pure lift of what `cmd_run` did inline for its single step (E1) — no behavior change beyond
+/// reporting *why* it stopped, which E2 needs and a single-step caller can ignore.
+fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepOutcome> {
     let tool = step
         .get("tool")
         .and_then(serde_json::Value::as_str)
@@ -794,7 +885,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("(no question)");
             println!("clarify: {q}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
         }
         "reject" => {
             let r = step_args
@@ -802,24 +893,39 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("(no reason)");
             println!("reject: {r}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
+        }
+        // `done` says the request is already satisfied. It reached a skill dispatch before E3,
+        // where it could only ever produce "unknown tool" — a control tool leaking out as an
+        // error. It is now what it always meant: nothing to do, and nothing after it to do.
+        "done" => {
+            println!("Nothing to do.");
+            return Ok(StepOutcome::ShortCircuit);
         }
         _ => {}
     }
 
-    match args.skill.as_str() {
-        "ffmpeg" => run_ffmpeg_step(&bundle, tool, step_args, sandbox, args.dry_run, args.yes),
-        "documents" => run_documents_step(
-            &bundle,
+    match ctx.skill {
+        "ffmpeg" => run_ffmpeg_step(
+            ctx.bundle,
             tool,
             step_args,
-            &base,
-            sandbox,
-            args.dry_run,
-            args.yes,
+            ctx.sandbox,
+            ctx.dry_run,
+            ctx.yes,
+        ),
+        "documents" => run_documents_step(
+            ctx.bundle,
+            tool,
+            step_args,
+            ctx.base,
+            ctx.sandbox,
+            ctx.dry_run,
+            ctx.yes,
         ),
         _ => unreachable!("skill guarded above"),
-    }
+    }?;
+    Ok(StepOutcome::Continue)
 }
 
 /// ffmpeg dispatch: expand the intent → dry-run preview or confirmed subprocess execution.
@@ -909,9 +1015,15 @@ fn run_documents_step(
     use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
 
     if !is_supported(tool) {
-        anyhow::bail!(
-            "documents tool {tool:?} is not implemented natively yet (image watermark is deferred)"
-        );
+        // The `not_implemented:` prefix, not a bare error: this is a capability the native
+        // runtime does not have, which is a different fact from a `reject:` and has to stay
+        // countable in the machine-readable output (see [`NOT_IMPLEMENTED_PREFIX`]).
+        // The "(image watermark is deferred)" this message used to carry was stale — `watermark`
+        // has been in `is_supported` for a while. Naming no example is better than naming a
+        // wrong one; `is_supported` is the list.
+        anyhow::bail!(not_implemented_message(&format!(
+            "the documents tool {tool:?} is not built into the native runtime yet"
+        )));
     }
 
     match preview(tool, step_args, base, sandbox, bundle)? {
@@ -2087,14 +2199,15 @@ mod tests {
         dump[start..stop].to_string()
     }
 
-    // ── F5: a multi-step plan must be recognized as unsupported, not silently truncated ──────
+    // ── F5: a multi-step plan must never be silently truncated ───────────────────────────────
     //
-    // `cmd_run` dispatches exactly one step per invocation (no ordered multi-intent executor,
-    // variable binding, or per-intent confirmation yet). It previously took `steps.first()` and
-    // discarded the rest without a word, so a valid 2-step plan (e.g. strip_audio -> resize)
-    // rendered/executed only the first command and still exited 0 — reporting full success for
-    // partial completion. `decide_steps` is deterministic (no model/GPU/subprocess needed) so
-    // this guarantee is tested directly, per the audit's own recommendation.
+    // `cmd_run` originally took `steps.first()` and discarded the rest without a word, so a valid
+    // 2-step plan (e.g. strip_audio -> resize) executed only the first command and still exited 0
+    // — reporting full success for partial completion. The first fix made that an explicit
+    // refusal; E2 replaced the refusal with an ordered executor, which is what the audit actually
+    // recommended. `decide_steps` stays deterministic (no model/GPU/subprocess), so the shape of
+    // the decision is tested here and the execution semantics in
+    // `apps/cli/tests/executor_semantics.rs`.
 
     #[test]
     fn decide_steps_empty_plan_is_empty() {
@@ -2104,7 +2217,10 @@ mod tests {
     #[test]
     fn decide_steps_single_step_is_ok() {
         let steps = vec![serde_json::json!({"tool": "strip_audio", "args": {}})];
-        assert!(matches!(decide_steps(&steps), StepDecision::Single(0)));
+        assert!(matches!(
+            decide_steps(&steps),
+            StepDecision::Run { total: 1 }
+        ));
     }
 
     /// L1a: the prompt-parity contract. Fixed utterance x fixed registry x fixed prompt
@@ -2173,14 +2289,23 @@ mod tests {
         // both a refusal to the user, but they are opposite facts about the product: one is
         // a coverage gap, the other is the safety model working. Recorded under the same
         // `reject:` prefix they are indistinguishable, and coverage becomes uncomputable.
-        let msg = not_implemented_message("this request needs 2 steps");
+        //
+        // The example moved with E2: multi-step chains used to be the marker's main producer,
+        // and are now executed. What still produces it is a skill tool the native runtime has
+        // not built (`is_supported` in the documents crate).
+        let msg = not_implemented_message("the documents tool \"redact\" is not built");
         assert!(msg.starts_with(NOT_IMPLEMENTED_PREFIX));
         assert!(!msg.starts_with("reject:"));
-        assert!(msg.contains("this request needs 2 steps"));
+        assert!(msg.contains("is not built"));
     }
 
+    /// E2: a chain is work to do, not a plan to decline. This asserted `Unsupported { total: 2 }`
+    /// until the executor existed; the behavior it used to pin — running one step of two and
+    /// exiting 0 — is what `Unsupported` was introduced to stop, and what the executor now
+    /// actually handles. The end-to-end proof that both steps run is
+    /// `apps/cli/tests/executor_semantics.rs`.
     #[test]
-    fn decide_steps_multi_step_is_unsupported() {
+    fn decide_steps_multi_step_runs_every_step() {
         let steps = vec![
             serde_json::json!({
                 "tool": "strip_audio",
@@ -2192,8 +2317,38 @@ mod tests {
             }),
         ];
         match decide_steps(&steps) {
-            StepDecision::Unsupported { total } => assert_eq!(total, 2),
-            other => panic!("expected Unsupported, got {other:?}"),
+            StepDecision::Run { total } => assert_eq!(total, 2),
+            other => panic!("expected Run, got {other:?}"),
         }
+    }
+
+    /// E3: the failure report has to name the step and account for the ones around it — a bare
+    /// "ffmpeg exited 1" after a chain leaves the user guessing what reached their disk.
+    #[test]
+    fn chain_failure_context_accounts_for_every_step() {
+        assert_eq!(chain_failure_context(0, 1), "the step failed");
+
+        let first_of_three = chain_failure_context(0, 3);
+        assert!(first_of_three.contains("step 1 of 3"), "{first_of_three}");
+        assert!(
+            first_of_three.contains("nothing had run yet"),
+            "{first_of_three}"
+        );
+        assert!(
+            first_of_three.contains("steps 2-3 were not run"),
+            "{first_of_three}"
+        );
+
+        let middle = chain_failure_context(1, 3);
+        assert!(middle.contains("step 2 of 3"), "{middle}");
+        assert!(middle.contains("step 1 had already completed"), "{middle}");
+        assert!(middle.contains("step 3 was not run"), "{middle}");
+
+        // The last step of a chain has nothing after it — "steps 4-3 were not run" would be
+        // worse than saying nothing.
+        let last = chain_failure_context(2, 3);
+        assert!(last.contains("steps 1-2 had already completed"), "{last}");
+        assert!(last.contains("it was the last step"), "{last}");
+        assert!(!last.contains("4-3"), "{last}");
     }
 }
