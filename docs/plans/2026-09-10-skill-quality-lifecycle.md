@@ -178,7 +178,10 @@ stated as a **precondition for porting**, with a written definition of "satisfac
     destructive request that plans instead of rejecting is not a score regression.
 - [ ] **S3 — Improve until the thresholds are met**, on the eval ladder (routing with `cheap`
   while iterating; `eval-fixtures` then `eval-success` before any claim).
-- [ ] **S3g — Prompt/pipeline improvement experiments belong here, including V2.** Any change to
+- [x] **S3g — Prompt/pipeline improvement experiments belong here, including V2.** *(Run
+  2026-09-10: 12 cells, both skills, executing verifier on real artifacts, per required slice,
+  paired McNemar. Verdict in V2 below — `select_examples` stays and `top_k` stays at 5.
+  `evals/runs/2026-09-10_s3g-factorial_success/summary.md`.)* Any change to
   Python's own planning behavior is a stage-2/3 experiment and must clear this bar before it can
   become the reference the port targets:
   - graded with an **executing** verifier on **artifacts**, not plan-shape proxies;
@@ -289,16 +292,37 @@ an experiment (S3g), not a decision.
   `Vec<(String, &'a ToolDef)>` and emit in that order. Match Python's `top_k=5`, `min_score=0`,
   and its unusual tie-break (`scores.sort(reverse=True)` on `(score, name)` → equal scores order
   by name **descending**).
-- [ ] **V2 — Run the example-selection question as a Python experiment (S3g), then port the
-  winner.** The 2026-09-09 factorial favours deleting `select_examples` (static examples win 16/1
-  and 14/1, p ≤ 0.001), but **that measurement cannot settle it**: it graded first-tool choice and
-  step count, explicitly not argument correctness or executed artifacts, and the one slice that
-  disagreed — chains — was discounted partly because *native* cannot execute them, which is a
-  limitation of the port and must not shape Python's target behavior. Nor was the effect on the
-  documents skill checked, though both share the prompt path and the model. **Re-run it under
-  S3g** — executing verifier, artifacts, per-slice, cross-skill, accepted in its own commit — and
-  only then converge. If it does not clear that bar, leave `select_examples` in place and port it
-  to Rust.
+- [x] **V2 — SETTLED 2026-09-10 by the S3g factorial: `select_examples` stays, and Rust gains it.**
+  The 2026-09-09 factorial favoured deleting it (static wins 16/1 and 14/1, p ≤ 0.001) but graded
+  first-tool choice and step count — not arguments, not artifacts — and discounted the one slice
+  that disagreed because *native* cannot execute chains. Re-run properly (executing verifier, real
+  artifacts, per required slice, both skills, 847 + 164 utterances, paired McNemar), the result
+  **reverses**:
+  - Static **does** win the ffmpeg aggregate, and significantly at `top_k=8`: outcome accuracy
+    0.916 vs the shipped 0.902, **30 wins to 14, p = 0.0226**. Taken alone that is the earlier
+    finding confirmed on better evidence.
+  - **The slices say otherwise.** The same cell drops `concat_video` 0.800 → **0.733, below its
+    0.750 floor**, and `chain2` 0.889 → 0.778 (3 failures against a budget of 2). `multilingual`
+    slips 1.000 → 0.984, `trim` and `adjust_speed` each lose ground. The aggregate gain is
+    partly *paid for* by specific capabilities — exactly what required slices exist to catch,
+    and invisible in any average.
+  - **On documents it does nothing at all**: every cell sits at 0.976, the largest difference
+    anywhere is 2 discordant rows (p = 0.5). The cross-skill check the earlier measurement
+    skipped finds no effect to port.
+  - **So the bar is not cleared, and Rule 1's exception is not triggered.** A change that pushes
+    a required capability under its floor is not "measurably better"; it is a trade, and S2 does
+    not permit trading a capability for an average. Adjusting the floor to fit would be choosing
+    the number after seeing the result — the thing S2 exists to forbid.
+  - **Direction reversed:** Python keeps `select_examples`, and the convergence work is now
+    **Rust gaining it**, not Python dropping it. Evidence:
+    `evals/runs/2026-09-10_s3g-factorial_success/summary.md`.
+- [x] **V1's `top_k` question — SETTLED 2026-09-10: leave it at 5.** The same factorial varied
+  `top_k` ∈ {5, 8, 99} (99 = every public tool, i.e. ranking without filtering). 8 edges 5 on
+  ffmpeg in both example modes (0.907 vs 0.902 selected; 0.916 vs 0.914 static) but never
+  significantly (p = 0.19), and 99 is worse than both — so filtering earns its place and the
+  ordering alone does not. On documents, the skill the question was actually asked about (15
+  public tools, 5 shown), **there is no effect on outcome accuracy at all** and `top_k=99`
+  *lowers* artifact quality (1.000 → 0.987). No evidence to move it.
 - [ ] **V3 — Converge `normalize_path_separators` on Python's `_PATH_TOKEN_RE`** (`prompt.py:27`),
   replacing the blanket `replace('\\', "/")` at `main.rs:1185`. Existing Rust tests at
   `main.rs:1853-1869` already cover the cases and must be updated, not deleted.
@@ -722,12 +746,13 @@ Without this the layers are a checklist nobody is obliged to run.
 
 **All three are decided (2026-09-10).** What remains is execution, not deliberation.
 
-- **V2 (example selection) — run the S3g experiment before converging.** The factorial favouring
-  Rust's static block graded neither arguments nor artifacts, so it licenses an experiment and not
-  a decision. Whichever side wins becomes the reference and the other runtime moves. **L1a is
-  blocked until it runs.** See S3g and V2.
-- **`top_k=5` — folded into the same S3g experiment as a third factor**, rather than deferred
-  until after parity. The plan's original objection was that two simultaneous changes become
+- **V2 (example selection) — ANSWERED 2026-09-10. Python keeps `select_examples`; Rust gains
+  it.** The experiment ran. Static wins the ffmpeg aggregate significantly (p = 0.0226) and
+  simultaneously pushes `concat_video` under its floor and busts `chain2`'s budget, while doing
+  nothing whatsoever on documents. An average bought with a capability is not an improvement.
+  L1a is unblocked and its target is Python's behavior. See V2.
+- **`top_k=5` — ANSWERED 2026-09-10: it stays at 5.** Folded into the same S3g experiment as a
+  third factor rather than deferred until after parity. The plan's original objection was that two simultaneous changes become
   inseparable; that objection does not apply to a *factorial*, which exists to separate them, and
   the harness, model load and GPU time are already paid for. It also gets documents its answer
   (15 public tools, 5 shown) in the same run rather than a later one. See S3g.
