@@ -1,0 +1,354 @@
+{
+  "_comment": "L2 clarify-gate contract. The gate is deterministic (no model), it fires on ~17% of the ffmpeg corpus in the native runtime, and nothing previously proved Python's equivalent fires on the same rows. Given (utterance, plan, registry) both runtimes must produce the same post-gate payload: the plan with chain intermediates bound to their producer, or a single clarify step. Consumed by python/core/tests/test_clarify_gate_parity.py and `clarify_gate_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
+  "_stage": "The stage is `link_chain_intermediates -> hallucinated-filename guard`, in that order. Python composes it in CommandAgent.infer; native in knaif_core::apply_clarify_gate. Comparing either half alone would violate Rule 2.",
+  "_expected_values": "Produced by the reference runtime (Python CommandAgent._link_chain_intermediates then ._hallucinated_filename). DO NOT regenerate to make a failing test pass.",
+  "_coverage": {
+    "ubuntu": "CI",
+    "windows": "local",
+    "macos": "unexercised"
+  },
+  "registries": {
+    "demo": "resize_video:\n  description: \"Resize a video.\"\n  required_args: [inputs]\n  optional_args: [height, output]\nstrip_audio:\n  description: \"Remove the audio track.\"\n  required_args: [inputs]\n  optional_args: [output]\nconcat_video:\n  description: \"Join several videos.\"\n  required_args: [inputs]\n  optional_args: [output]\ninspect_video:\n  description: \"Report a video's properties.\"\n  required_args: [inputs]\nwatermark_video:\n  description: \"Stamp a watermark on a video.\"\n  required_args: [inputs]\n  arg_schemas:\n    output: {type: string, help: \"where to write it\"}\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
+  },
+  "cases": [
+    {
+      "name": "single_step_named_file_untouched",
+      "registry": "demo",
+      "utterance": "resize clip.mp4 to 720p",
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "chain_intermediate_is_linked_to_its_producer",
+      "registry": "demo",
+      "utterance": "strip the audio from clip.mp4 and resize it to 720p",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_silent.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "clip_silent.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_silent.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "hallucinated_input_downgrades_to_clarify",
+      "registry": "demo",
+      "utterance": "resize the video to 720p",
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "holiday.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'holiday.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "invented_output_name_is_allowed",
+      "registry": "demo",
+      "utterance": "resize clip.mp4 to 720p",
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 720,
+              "output": "whatever.mp4"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 720,
+              "output": "whatever.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "second_intermediate_has_no_producer_left",
+      "registry": "demo",
+      "utterance": "strip the audio from clip.mp4 then resize it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "mine.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "other.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'other.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "producer_that_fans_out_is_not_a_single_producer",
+      "registry": "demo",
+      "utterance": "join a.mp4 and b.mp4 then resize",
+      "plan": {
+        "plan": [
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "a.mp4",
+                "b.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "joined.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'joined.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_step_with_no_output_arg_cannot_be_the_producer",
+      "registry": "demo",
+      "utterance": "inspect clip.mp4 then resize it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "inspect_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "inspected.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'inspected.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "output_capable_only_via_arg_schemas",
+      "registry": "demo",
+      "utterance": "watermark clip.mp4 then resize it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "watermark_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "stamped.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'stamped.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "terminal_step_is_left_alone",
+      "registry": "demo",
+      "utterance": "do something with the file",
+      "plan": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which file?"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which file?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "bare_stem_is_flagged_here_stems_resolve_later",
+      "registry": "demo",
+      "utterance": "resize clip to 720p",
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'clip.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -231,6 +231,21 @@ pub fn validate_step(
     root: &Path,
     sandbox: Option<&Path>,
 ) -> Result<()> {
+    validate_step_with(step, registry, root, sandbox, false)
+}
+
+/// `validate_step`, with the internal-tool gate made explicit.
+///
+/// `allow_internal` must be **false** for anything the model produced, and is true only for
+/// an already-expanded sub-plan, which the deterministic expander built rather than the
+/// model. Port of Python `validate_step(..., allow_internal=...)`.
+pub fn validate_step_with(
+    step: &Value,
+    registry: &Registry,
+    root: &Path,
+    sandbox: Option<&Path>,
+    allow_internal: bool,
+) -> Result<()> {
     let obj = step
         .as_object()
         .ok_or_else(|| anyhow::anyhow!("Each plan step must be an object."))?;
@@ -248,6 +263,20 @@ pub fn validate_step(
         .get("args")
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow::anyhow!("Each step must contain an 'args' object."))?;
+
+    // Internal tools are reachable only through an intent's expansion. The prompt never
+    // lists them, but "the model was not shown it" is obscurity, not validation: an internal
+    // tool is typically the one that runs a command with the args it is handed, so accepting
+    // a model-proposed one would skip intent expansion entirely. This check was missing
+    // here while Python had it — found by the L2 verdict contract.
+    if tool.internal && !allow_internal {
+        // Single quotes and this exact wording mirror Python's message: the parity contract
+        // compares the error *class* by substring, so the two must agree on the phrasing.
+        bail!(
+            "Tool '{}' is internal and cannot be proposed directly; it is only reachable through an intent's expansion.",
+            tool.name
+        );
+    }
 
     let missing: Vec<&str> = tool
         .required_args
@@ -345,6 +374,17 @@ pub fn validate_plan(
     root: &Path,
     sandbox: Option<&Path>,
 ) -> Result<()> {
+    validate_plan_with(payload, registry, root, sandbox, false)
+}
+
+/// `validate_plan`, with the internal-tool gate made explicit. See [`validate_step_with`].
+pub fn validate_plan_with(
+    payload: &Value,
+    registry: &Registry,
+    root: &Path,
+    sandbox: Option<&Path>,
+    allow_internal: bool,
+) -> Result<()> {
     let plan = payload
         .get("plan")
         .and_then(Value::as_array)
@@ -354,7 +394,7 @@ pub fn validate_plan(
 
     for (i, step) in plan.iter().enumerate() {
         let n = i + 1;
-        validate_step(step, registry, root, sandbox)
+        validate_step_with(step, registry, root, sandbox, allow_internal)
             .map_err(|e| anyhow::anyhow!("Plan step {n} invalid: {e}"))?;
 
         if multi_step {

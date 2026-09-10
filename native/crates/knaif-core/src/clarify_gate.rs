@@ -22,13 +22,21 @@ use crate::registry::Registry;
 const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
 
 /// Tools whose schema accepts an `output` arg — eligible chain-intermediate producers.
+/// Tools that can be handed an `output` filename.
+///
+/// **Declared args only — an `arg_schemas` entry does not make a tool output-capable.**
+/// This used to also accept `arg_schemas.contains_key("output")`, which put this function
+/// at odds with our own validator: `validate_plan` rejects an arg that is not in
+/// `required_args`/`optional_args` ("unsupported args"), so binding a chain intermediate to
+/// such a tool produced a plan the next stage refused. Python derives the set the same way,
+/// and the L2 clarify-gate contract carries a case for exactly this shape
+/// (`output_capable_only_via_arg_schemas`), which is how the disagreement surfaced.
 pub fn output_capable_tools(registry: &Registry) -> HashSet<String> {
     registry
         .iter()
         .filter(|(_, d)| {
             d.optional_args.iter().any(|a| a == "output")
                 || d.required_args.iter().any(|a| a == "output")
-                || d.arg_schemas.contains_key("output")
         })
         .map(|(n, _)| n.clone())
         .collect()
