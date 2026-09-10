@@ -1101,7 +1101,15 @@ impl PlanSession {
         // JSON escape; normalize separators to forward slashes (accepted by ffmpeg + `std::path` on
         // Windows) before the utterance reaches the prompt so the emitted plan parses.
         let utterance = normalize_path_separators(utterance);
-        let (system, user) = knaif_core::build_prompt(&utterance, &self.registry, &self.overrides);
+        // Retrieval (V1): show the model the tools relevant to *this* utterance, in relevance
+        // order, rather than the whole registry. The port existed in knaif-core but nothing
+        // called it, so native's prompt listed all 13 ffmpeg tools where the reference lists 5 —
+        // the single largest prompt divergence between the runtimes. `retrieve_tools` returns a
+        // ranked Vec, and `build_prompt_ordered` renders it as given.
+        let retrieved =
+            knaif_core::retrieve_tools(&utterance, &self.registry, knaif_core::DEFAULT_TOP_K, 0.0);
+        let tools: Vec<&knaif_core::ToolDef> = retrieved.iter().map(|(_, d)| *d).collect();
+        let (system, user) = knaif_core::build_prompt_ordered(&utterance, &tools, &self.overrides);
         emit_prompt_dump(prompt_dump_enabled(), &system, &user);
         let payload = infer_with_repair(
             self.backend.as_ref(),
@@ -1241,8 +1249,40 @@ fn prompt_dump(enabled: bool, system: &str, user: &str) -> Option<String> {
 /// that echoes a path verbatim (`.\clip.mov`) would otherwise emit an illegal `\c` JSON escape;
 /// forward slashes are accepted by ffmpeg and `std::path` on Windows, so this is lossless for the
 /// file-path domain these skills operate in.
+/// **Only path-shaped tokens are rewritten** (V3). This used to replace *every* backslash in
+/// the utterance, which differs from Python on two shapes the prompt contract pins: a quoted
+/// path (the quotes make it not a path token, and it is not a single token anyway) and a lone
+/// backslash, which has no alphanumeric and stays literal. Splitting on `' '` rather than any
+/// whitespace also mirrors the reference, so a tab is not silently normalized away.
 fn normalize_path_separators(utterance: &str) -> String {
-    utterance.replace('\\', "/")
+    if !utterance.contains('\\') {
+        return utterance.to_string();
+    }
+    utterance
+        .split(' ')
+        .map(|token| {
+            if token.contains('\\') && is_path_token(token) {
+                token.replace('\\', "/")
+            } else {
+                token.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Is this space-delimited token shaped like a path?
+///
+/// Port of Python's `_PATH_TOKEN_RE` (`prompt.py`): made only of path characters (ASCII word
+/// chars, `-`, `.`, `:`, backslash, `/`) with **at least one alphanumeric**, so a bare
+/// backslash stays literal. Spelled out rather than pulling in a regex dependency — it is one
+/// character-class test and the CLI has no other use for `regex`.
+fn is_path_token(token: &str) -> bool {
+    !token.is_empty()
+        && token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ':' | '\\' | '/'))
+        && token.chars().any(|c| c.is_ascii_alphanumeric())
 }
 
 /// Extract JSON → parse → normalize → apply defaults → validate. Errors describe the first failure.
@@ -1919,6 +1959,22 @@ mod tests {
     }
 
     #[test]
+    fn normalize_leaves_non_path_backslashes_alone() {
+        // V3: converged on Python's `_PATH_TOKEN_RE`. Both shapes are cases in
+        // contracts/parity/prompt_cases.json; the blanket replace got both wrong.
+        assert_eq!(
+            normalize_path_separators(r#"convert "C:\Users\me\my clip.mp4" to webm"#),
+            r#"convert "C:\Users\me\my clip.mp4" to webm"#,
+            "a quoted path is not a path *token* — quotes are not path characters"
+        );
+        assert_eq!(
+            normalize_path_separators(r"what does \ mean here"),
+            r"what does \ mean here",
+            "a lone backslash has no alphanumeric and stays literal"
+        );
+    }
+
+    #[test]
     fn normalize_leaves_forward_slash_and_bare_paths_untouched() {
         assert_eq!(
             normalize_path_separators("convert ./clip.mov to mp4"),
@@ -2023,14 +2079,14 @@ mod tests {
     /// prevent (an earlier ad-hoc comparison broke that rule and reported 18.2% disagreement,
     /// of which 150/154 were an artifact of comparing different stages).
     ///
-    /// `#[ignore]` because it **cannot pass today** — that is the point. Native rewrites every
-    /// backslash in the utterance; Python rewrites only path-shaped tokens, so a quoted Windows
-    /// path and a lone backslash diverge. Un-skip in V3's PR, which is the only moment the
-    /// contract is proven to detect the bug it was written for.
+    /// **Green since V3 (2026-09-10).** It was authored red and verified red first: native
+    /// rewrote every backslash in the utterance where Python rewrites only path-shaped tokens,
+    /// so a quoted Windows path and a lone backslash diverged. That failure, then this pass, is
+    /// the evidence the contract detects what it was written for — a contract that was never
+    /// observed failing proves nothing.
     ///
     /// See docs/plans/2026-09-10-skill-quality-lifecycle.md (L1a, V3).
     #[test]
-    #[ignore = "red until V3 converges normalize_path_separators on Python's _PATH_TOKEN_RE"]
     fn prompt_parity_cases() {
         let fixtures =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/parity/prompt_cases.json");
