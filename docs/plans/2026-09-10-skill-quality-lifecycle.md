@@ -342,7 +342,12 @@ an experiment (S3g), not a decision.
 
 The durable half, and the only layer CI can run on every change.
 
-- [ ] **L1a — Prompt-parity contract.** Fixed utterances × fixed registries → both runtimes
+- [x] **L1a — Prompt-parity contract.** *(Authored 2026-09-10: `contracts/parity/prompt_cases.json`,
+  8 cases, expected values from Python. Python side green
+  (`python/core/tests/test_prompt_parity.py`); Rust side **red-but-skipped** in
+  `apps/cli/src/main.rs::prompt_parity_cases`, un-skip in V3's PR. Verified genuinely red:
+  the tool listings already agree byte for byte, and it fails on exactly the two
+  normalization cases — `quoted_windows_path` and `bare_backslash_is_not_a_path`.)* Fixed utterances × fixed registries → both runtimes
   produce the same prompt string, byte for byte, with **no allow-list**. Extend `contracts/parity/`
   in the shape `planner_cases.json` uses; consumed by a Python test and a Rust test.
   - **Pin every input, not just utterance and registry.** `build_prompt` also takes
@@ -363,18 +368,29 @@ The durable half, and the only layer CI can run on every change.
     `* text=auto` has produced this exact bug three times in this repo (see the
     `installers/licenses/**`, `site/data/*.json` and `*.ipynb` entries in `.gitattributes`). A
     contract that passes in CI and fails on the maintainer's box is one people learn to skip.
-- [ ] **L1b — Retrieval-parity contract.** Same utterance + registry → same selected tool set **and
+- [x] **L1b — Retrieval-parity contract.** *(Authored 2026-09-10:
+  `contracts/parity/retrieval_cases.json`, 7 cases including the pure tie-break case, CJK and
+  diacritics. Python green; Rust red-but-skipped in `native/crates/knaif-core/tests/parity.rs`.
+  Two findings, both V1's: `knaif_core::retrieve_tools` returns a `BTreeMap`, which cannot
+  express a ranking at all, and **nothing calls it** — the port exists but is unwired.)* Same utterance + registry → same selected tool set **and
   order**. Separable from L1a and worth its own cases: retrieval is scoring logic with tie-breaks,
   and it is where CJK tokenization and diacritic handling live. **Order is the load-bearing half**
   — include cases with tied scores, where the `(score, name)`-descending tie-break is the only
   thing under test.
-- [ ] **L1c — Settings-parity contract.** Assert both runtimes' generation defaults agree —
+- [x] **L1c — Settings-parity contract.** *(2026-09-10:
+  `python/core/tests/test_settings_parity.py`, green — the three copies agree today at
+  512 / 8192 / greedy / thinking-suppressed. Written as a three-way comparison on purpose;
+  rewrite it against the canonical file when V4 lands.)* Assert both runtimes' generation defaults agree —
   `max_tokens`, `n_ctx`, sampling, thinking suppression. After V4 there is one canonical copy, so
   this becomes *"both runtimes read the canonical file"* — a weaker assertion over a stronger
   invariant. **Write it that way deliberately**; porting a three-way comparison onto a single
   source yields a test that can only ever pass. Keep one case reading each runtime's *effective*
   value at the point of use, so a hard-coded fallback shadowing the contract file still fails.
-- [ ] **L1d — Gate in CI.** Belongs in the existing `python` and `native` jobs — both already run
+- [x] **L1d — Gate in CI.** *(2026-09-10: no workflow edit needed — `contracts/**` already
+  routes to both the `python` and `native` jobs, and `test_ci_workflow.py` now asserts that
+  for each of the three contract files rather than leaving it to be believed. Coverage is
+  recorded in the contract files themselves: Ubuntu in CI, Windows locally (this run), macOS
+  unexercised. The `platforms.yaml` guard itself stays in G2.)* Belongs in the existing `python` and `native` jobs — both already run
   on changes to `skills/` and `contracts/`. **Both are `ubuntu-latest` only**, so CI green is not
   evidence the contract holds where the work is done: run L1 locally on Windows as part of V
   before calling this done, and state the real coverage in the contract file — **Ubuntu in CI,
@@ -398,15 +414,30 @@ The durable half, and the only layer CI can run on every change.
 Same plan JSON in → same expansion, optimizer, validation verdict, rendered command out. No model
 means no noise: this layer is either 100% or broken.
 
-- [ ] **L2a — Extend `contracts/parity/planner_cases.json`** to cover expansion and rendering, not
+- [x] **L2a — Extend `contracts/parity/planner_cases.json`** *(2026-09-10. The clarify gate got
+  its own file, `contracts/parity/clarify_gate_cases.json` (10 cases), because the stage is
+  `link_chain_intermediates → hallucinated-filename guard` and belongs together. **It found a live
+  divergence on its first run**: native treated a tool declaring `output` only in `arg_schemas` as
+  output-capable, so it bound a chain intermediate to an arg its own `validate_plan` then rejected
+  as unsupported — two Rust ports contradicting each other. Aligned to Python; latent in the
+  shipped skills (neither declares a tool that shape) but real. Both sides green, 10/10.)* to cover expansion and rendering, not
   just planning: chain-intermediate linking, variable resolution, `apply_defaults`, and the
   hallucinated-filename gate. **The clarify gate belongs here** — it is deterministic, it fires on
   ~17% of the ffmpeg corpus in the native runtime, and nothing currently proves Python's
   equivalent fires on the same rows.
-- [ ] **L2b — Assert validation *verdicts* agree, not just accepted plans.** A plan Python rejects
+- [x] **L2b — Assert validation *verdicts* agree, not just accepted plans.** *(2026-09-10:
+  `planner_cases.json` 14 → 22 cases. **Found the dangerous direction on the first run**: Python
+  rejects a model-proposed `internal` tool, native accepted it — `planner.rs` had no internal
+  check and no `allow_internal` at all. Internal tools are the ones that run a command with the
+  args they are handed, so accepting one skips intent expansion entirely; the prompt never lists
+  them, but that is obscurity, not validation. Fixed with `validate_plan_with` /
+  `validate_step_with`, mirroring Python's two-phase design. One case is the exact validator rule
+  that made the L2a fix correct. Contracts assert the error *class*, never its prose.)* A plan Python rejects
   and Rust accepts is the dangerous direction (Rust ships). Include known-bad plans with the
   expected error class on each side.
-- [ ] **L2c — Run L2 in the same CI jobs as L1**, under the same 100% threshold.
+- [x] **L2c — Run L2 in the same CI jobs as L1**, under the same 100% threshold. *(2026-09-10:
+  automatic — `contracts/**` already routes to both jobs, now asserted per contract file in
+  `test_ci_workflow.py`.)*
 
 ## Workstream L3 — Behavioral parity (needs a GGUF; local + release)
 
@@ -599,7 +630,12 @@ remains is a loop.
   partial-failure **recovery**, **rollback** of steps already executed, and **resumption** of a
   half-run chain. Nothing in L4 needs them; folding them in turns a tractable workstream into a
   second plan. Say so in `docs/NATIVE.md` so the gap is a documented boundary, not a surprise.
-- [ ] **E5 — Sequencing: E lands *after* the L2 contracts exist.** This is the one workstream that
+- [x] **E5 — Sequencing: E lands *after* the L2 contracts exist.** *(Cases authored 2026-09-10:
+  `apps/cli/tests/executor_semantics.rs`, four `#[ignore]`d tests driven by
+  `KNAIF_LLM_MOCK_RESPONSE` so they pin execution with no model. Verified genuinely red — all four
+  fail when run with `--ignored`. One initially passed for the wrong reason (the clarify gate
+  preempted the executor); its utterance now names the file so the executor is actually reached.
+  When they are un-skipped, the job running them needs ffmpeg on PATH.)* This is the one workstream that
   changes shipped runtime behavior, so the deterministic cases that pin ordered execution must be
   written first and must fail before E2 — otherwise the executor is asserted correct by the same
   change that introduces it, which is the pattern this plan exists to break.

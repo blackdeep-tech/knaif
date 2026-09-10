@@ -96,6 +96,12 @@ def test_single_file_routes_to_the_right_jobs(path, expected):
         "skills/ffmpeg/python/handlers.py",
         "skills/ffmpeg/native/src/lib.rs",
         "skills/documents/skill.yaml",
+        # The L1 parity contracts (plan 2026-09-10, L1d). Each is consumed by a Python
+        # test and a Rust test, so a change to one that reached only half the repo would
+        # let the two runtimes drift through the very file written to stop that.
+        "contracts/parity/prompt_cases.json",
+        "contracts/parity/retrieval_cases.json",
+        "contracts/parity/planner_cases.json",
     ],
 )
 def test_dual_runtime_paths_run_both_runtimes(path):
