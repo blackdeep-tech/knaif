@@ -231,14 +231,14 @@ impl LlamaCppBackend {
         let n_ctx = std::env::var("KNAIF_N_CTX")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(8192);
+            .unwrap_or(crate::N_CTX);
         Ok(Self {
             backend,
             model,
             chat_template,
             n_ctx,
             n_threads: resolve_n_threads(),
-            max_tokens: 512,
+            max_tokens: crate::MAX_TOKENS,
         })
     }
 

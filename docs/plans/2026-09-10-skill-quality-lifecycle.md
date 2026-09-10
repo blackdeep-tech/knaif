@@ -325,6 +325,22 @@ an experiment (S3g), not a decision.
   - **Direction reversed:** Python keeps `select_examples`, and the convergence work is now
     **Rust gaining it**, not Python dropping it. Evidence:
     `evals/runs/2026-09-10_s3g-factorial_success/summary.md`.
+  - **PORTED 2026-09-10.** `select_examples` + `render_examples_block` are in
+    `knaif-core::prompt`, and `PlanSession::plan` calls them — mirroring
+    `CommandAgent.build_prompt`, fallback included (an empty selection leaves the unfiltered
+    block standing). `PromptOverrides` now keeps the examples structured instead of rendering
+    once at load: rendering early and discarding the structure is precisely what made native
+    send all 28 of ffmpeg's examples on every utterance.
+  - **Result: the whole system prompt is now byte-identical across the runtimes.** Verified by
+    diffing Python's `build_prompt` against `$KNAIF_DUMP_PROMPT` for five utterances across both
+    skills — all five identical, ffmpeg and documents. V1 closed the tool-listing half; this
+    closes the examples half, and nothing measurable is left between them.
+  - **Two semantics a re-derivation gets wrong, both pinned by the contract:** the domain cap is
+    a *cap, not a relevance threshold* (three examples are kept even when every one scores zero
+    — filtering on overlap > 0 would send the model a clarify/reject pair and nothing else), and
+    the ranking sort must be *stable*, because Python's `sorted(reverse=True)` leaves equal
+    scores in corpus order. Both were mutation-tested: each mutation fails the contract and the
+    shipped golden.
 - [x] **V1's `top_k` question — SETTLED 2026-09-10: leave it at 5.** The same factorial varied
   `top_k` ∈ {5, 8, 99} (99 = every public tool, i.e. ranking without filtering). 8 edges 5 on
   ffmpeg in both example modes (0.907 vs 0.902 selected; 0.916 vs 0.914 static) but never
@@ -338,15 +354,36 @@ an experiment (S3g), not a decision.
   two shapes the blanket replace got wrong. **L1a went green on this change** and is un-skipped.)* (`prompt.py:27`),
   replacing the blanket `replace('\\', "/")` at `main.rs:1185`. Existing Rust tests at
   `main.rs:1853-1869` already cover the cases and must be updated, not deleted.
-- [ ] **V4 — One source of truth for generation settings.** `max_tokens` lives in `llama.rs:241`,
-  `models.yaml` and `eval_backends.yaml`; all three currently agree at 512, so this is hygiene,
-  not a fix — but the duplication already caused one wrong finding (a superseded stanza read as
-  live). Canonical copy in `contracts/runtime/`, synced by `just sync-runtime` with a drift guard,
-  as `core_tools.yaml` is.
-- [ ] **V5 — Fix the two stale `prompt.rs` notes.** The module docstring claims the tool listing is
-  alphabetical "because `Registry` is a `BTreeMap`" (it sorts by `def.order`), and the `def.order`
-  comment claims the model was trained on that order (training prompts are in *relevance* order).
-  Both are provably wrong today and both expire when V1 lands.
+- [x] **V4 — DONE 2026-09-10: `contracts/runtime/generation.yaml` is canonical, with a guard on
+  each consumer.** `max_tokens` lived in four places, not three (`llama.rs:241` *and*
+  `lib.rs`'s `$KNAIF_MAX_TOKENS` fallback, plus both YAMLs); native now has one
+  `knaif_llm::MAX_TOKENS` / `N_CTX` pair and the contract holds all of them together. The
+  settings did all agree, so this is hygiene as expected — no defect found.
+  - **Enforced by comparison, not by `just sync-runtime`** — a deliberate deviation from this
+    plan's wording. `core_tools.yaml` is copied because its consumer is a loader; these
+    consumers are hand-annotated config files and Rust constants, and a generator writing into
+    them would flatten commentary worth more than the duplication costs. Two guards read the
+    contract instead: `python/core/tests/test_generation_settings.py` (both YAMLs + the Python
+    orchestrator's defaults) and `native/crates/knaif-llm/tests/generation.rs` (the native
+    constants). Verified non-vacuous by moving `max_tokens` in the contract: 1 Rust and 3 Python
+    failures, each naming the file to fix.
+  - **Scope is the settings that can change what the model emits** — `max_tokens`, `n_ctx`,
+    `temperature`, `json_mode`, `thinking_enabled`. `n_gpu_layers` (native 999, the YAMLs 99 —
+    both mean "offload everything"), `n_threads` and `verbose` are excluded on purpose: pinning
+    them would fail the guard on differences that cannot change a plan.
+  - Experiment stanzas in `eval_backends.yaml` are **not** pinned, and a test asserts they
+    aren't: freezing them would freeze the record of the experiments themselves.
+- [x] **V5 — DONE 2026-09-10: both stale notes rewritten.** The module docstring recorded two
+  "intentional, prompt-only divergences" — an alphabetical tool listing and compact example JSON
+  — and both were neither intentional nor prompt-only by the time it was read: V1 fixed the
+  first, and `to_py_json` had already fixed the second. It now records that there are no
+  divergences left and why that matters. The `ToolDef::order` comment claimed the fine-tune was
+  trained on `tools.yaml` order; **checked against the builder rather than assumed** —
+  `python/training/build_dataset.py:136` builds every training prompt as
+  `retrieve_tools(utt)` → `agent.build_prompt(registry_override=…)`, so training prompts carry
+  tools in *relevance* order **and a selected examples block**. Native was out of distribution
+  on both halves of the prompt until V1 and V2; the comment now says what `order` is actually
+  for.
 
 ---
 
@@ -398,6 +435,20 @@ The durable half, and the only layer CI can run on every change.
   invariant. **Write it that way deliberately**; porting a three-way comparison onto a single
   source yields a test that can only ever pass. Keep one case reading each runtime's *effective*
   value at the point of use, so a hard-coded fallback shadowing the contract file still fails.
+- [x] **L1e — Example-selection contract.** *(2026-09-10, authored for V2 and verified red first:
+  `contracts/parity/example_cases.json` — 11 synthetic cases plus 5 goldens over the real ffmpeg
+  and documents bundles, consumed by `python/core/tests/test_example_selection_parity.py` and
+  `example_selection_parity_cases` in `native/crates/knaif-core/tests/parity.rs`. The red was a
+  **compile error**, not a failed assertion, because native had no example selection at all —
+  recorded here so nobody later reads a green run as evidence the port was already close.)*
+  Not in the original plan; the prompt divergence turned out to have two halves and only the tool
+  listing had a contract.
+  - The unit contract is not enough on its own, and V1 is why: `retrieve_tools` was a faithful,
+    fully tested port that **nothing called**. So `apps/cli/tests/prompt_examples.rs` asserts the
+    shipped binary's prompt through `$KNAIF_DUMP_PROMPT`, and both halves were mutation-tested —
+    reverting the CLI wiring fails it, and each of the two easy-to-get-wrong semantics fails the
+    contract *and* the golden.
+
 - [x] **L1d — Gate in CI.** *(2026-09-10: no workflow edit needed — `contracts/**` already
   routes to both the `python` and `native` jobs, and `test_ci_workflow.py` now asserts that
   for each of the three contract files rather than leaving it to be believed. Coverage is
