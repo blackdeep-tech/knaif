@@ -26,28 +26,56 @@ SKILLS_ROOT = REPO_ROOT / "skills"
 
 
 @pytest.mark.parametrize("skill", list_skills(SKILLS_ROOT))
-def test_safety_corpus_is_all_rejects(skill: str) -> None:
+def test_safety_corpus_expectations_come_from_the_rows(skill: str) -> None:
+    """Every row must expect a refusal — but which kind is the row's own to say."""
     rows = load_safety_corpus(skill, root=SKILLS_ROOT)
     assert rows, f"{skill}: empty safety corpus"
-    assert {r.expected_outcome for r in rows} == {"reject"}
+    assert {r.expected_outcome for r in rows} <= {"clarify", "reject"}
 
 
-def test_score_safety_is_perfect_only_when_every_row_rejects() -> None:
+def test_ffmpeg_safety_expects_both_kinds_of_refusal() -> None:
+    """Assuming all-reject would mark four correct clarifies as safety failures."""
     rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
-    result = score_safety(rows, ["reject"] * len(rows))
+    expected = [r.expected_outcome for r in rows]
+    assert expected.count("clarify") == 4
+    assert expected.count("reject") == 5
+
+
+def test_score_safety_grades_each_row_against_its_own_expectation() -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    result = score_safety(rows, [r.expected_outcome for r in rows])
     assert result["pass_rate"] == 1.0
     assert result["total"] == len(rows)
     assert result["failures"] == []
+    assert result["unsafe"] == 0
 
 
-def test_score_safety_names_the_rows_that_planned_instead() -> None:
+def test_over_refusing_is_a_miss_but_not_a_breach() -> None:
+    """Rejecting where a clarify was wanted is conservative: wrong, but nothing ran."""
     rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
-    outcomes = ["reject"] * len(rows)
-    outcomes[0] = "plan"
+    outcomes = ["reject" if r.expected_outcome == "reject" else "reject" for r in rows]
     result = score_safety(rows, outcomes)
     assert result["pass_rate"] < 1.0
+    assert result["unsafe"] == 0, "no dangerous request was acted on"
+
+
+def test_planning_a_destructive_request_is_a_breach() -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    outcomes = [r.expected_outcome for r in rows]
+    idx = next(i for i, r in enumerate(rows) if r.expected_outcome == "reject")
+    outcomes[idx] = "plan"
+    result = score_safety(rows, outcomes)
+    assert result["unsafe"] == 1
+    assert result["failures"][0]["expected"] == "reject"
     assert result["failures"][0]["outcome"] == "plan"
-    assert result["failures"][0]["id"] == rows[0].id
+
+
+def test_every_outcome_is_recorded_so_a_result_can_be_rescored() -> None:
+    """A file that lists only failures cannot be re-graded without re-running the model."""
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    result = score_safety(rows, [r.expected_outcome for r in rows])
+    assert [o["outcome"] for o in result["outcomes"]] == [r.expected_outcome for r in rows]
+    assert [o["id"] for o in result["outcomes"]] == [r.id for r in rows]
 
 
 def test_score_safety_rejects_a_mismatched_outcome_list() -> None:
@@ -145,7 +173,7 @@ class _Out:
 def test_safety_command_scores_and_saves(tmp_path: Path, monkeypatch, capsys) -> None:
     rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
     monkeypatch.setattr(cli, "_make_agent", lambda *a, **k: object())
-    monkeypatch.setattr(cli, "run_corpus", lambda *a, **k: [_Out("reject") for _ in rows])
+    monkeypatch.setattr(cli, "run_corpus", lambda *a, **k: [_Out(r.expected_outcome) for r in rows])
 
     out = tmp_path / "safety.json"
     cli.cmd_safety(
@@ -160,7 +188,7 @@ def test_safety_command_scores_and_saves(tmp_path: Path, monkeypatch, capsys) ->
 
 def test_safety_command_exits_nonzero_when_a_row_plans(tmp_path: Path, monkeypatch) -> None:
     rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
-    outs = [_Out("reject") for _ in rows]
+    outs = [_Out(r.expected_outcome) for r in rows]
     outs[0] = _Out("plan")
     monkeypatch.setattr(cli, "_make_agent", lambda *a, **k: object())
     monkeypatch.setattr(cli, "run_corpus", lambda *a, **k: outs)

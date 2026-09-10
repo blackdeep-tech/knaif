@@ -15,6 +15,7 @@ import yaml
 
 from knaif import list_skills
 from knaif._console import enable_utf8_console
+from knaif.registry import DEFAULT_TOP_K
 
 from .runner import run_corpus
 
@@ -127,22 +128,59 @@ def _resolve_backends(
     return {}
 
 
-def _make_agent(skill: str, sandbox: Path, backend_cfg: dict[str, Any] | None) -> Any:
+def _make_agent(
+    skill: str,
+    sandbox: Path,
+    backend_cfg: dict[str, Any] | None,
+    examples: str = "selected",
+) -> Any:
+    """Build the agent for a run.
+
+    *examples* is one of the two factors S3g varies:
+
+    * ``selected`` — Python's reference behavior: `select_examples` filters the block
+      per utterance against the retrieved tools.
+    * ``static`` — the native runtime's behavior: one fixed block from `prompt.yaml`,
+      no filtering. Emptying `prompt_examples` is what turns the filter off; the block
+      itself is untouched, so this measures selection, not the presence of examples.
+    """
     from knaif import create_agent
 
     if not backend_cfg:
-        return create_agent(skill, sandbox=sandbox)
+        agent = create_agent(skill, sandbox=sandbox)
+    else:
+        from knaif.orchestrator import InferenceOrchestrator
 
-    from knaif.orchestrator import InferenceOrchestrator
+        orch = InferenceOrchestrator(
+            backend=backend_cfg["backend"],
+            model_config=backend_cfg.get("options"),
+            model_path=backend_cfg.get("model_path"),
+            ollama_url=backend_cfg.get("ollama_url", "http://localhost:11434"),
+            model_name=backend_cfg.get("model"),
+        )
+        agent = create_agent(skill, sandbox=sandbox, orchestrator=orch)
 
-    orch = InferenceOrchestrator(
-        backend=backend_cfg["backend"],
-        model_config=backend_cfg.get("options"),
-        model_path=backend_cfg.get("model_path"),
-        ollama_url=backend_cfg.get("ollama_url", "http://localhost:11434"),
-        model_name=backend_cfg.get("model"),
-    )
-    return create_agent(skill, sandbox=sandbox, orchestrator=orch)
+    if examples == "static":
+        agent.prompt_examples = []
+    elif examples != "selected":
+        sys.exit(f"--examples must be `selected` or `static`, got {examples!r}")
+    return agent
+
+
+def _stamp_prompt_config(
+    scoreboard: dict[str, Any], *, top_k: int, examples: str, retrieval: bool
+) -> None:
+    """Record the prompt settings this run resolved at inference time.
+
+    Not decoration: `top_k` and example selection change what the model sees, so two
+    scoreboards that resolved them differently measure different systems. Recording it
+    is what lets `diff_snapshots` refuse that comparison instead of reporting a trend.
+    """
+    scoreboard["prompt_config"] = {
+        "top_k": top_k,
+        "examples": examples,
+        "retrieval": retrieval,
+    }
 
 
 def _corpus_path(skill: str) -> Path:
@@ -717,9 +755,13 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         # stem resolution globs for input files. Eval inputs live in fixture_dir,
         # so point the agent there — otherwise extension-less corpus names
         # (e.g. "clip_4k") raise StemNotFoundError and force a spurious clarify.
-        agent = _make_agent(args.skill, fixture_dir, None if use_mock else backend_cfg)
+        examples_mode = getattr(args, "examples", None) or "selected"
+        agent = _make_agent(
+            args.skill, fixture_dir, None if use_mock else backend_cfg, examples=examples_mode
+        )
 
         apply_retrieval = not getattr(args, "no_retrieval", False)
+        top_k = getattr(args, "top_k", None)
 
         if use_output_diff:
             outputs = run_corpus(
@@ -732,6 +774,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 sandbox=backend_sandbox,
                 fixture_dir=fixture_dir,
                 apply_retrieval=apply_retrieval,
+                top_k=top_k,
             )
             baselines_dir = backend_sandbox / "baselines"
             baseline_paths = _build_baseline_outputs(
@@ -754,6 +797,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 sandbox=backend_sandbox,
                 fixture_dir=fixture_dir,
                 apply_retrieval=apply_retrieval,
+                top_k=top_k,
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, "success", backend_sandbox)
         else:
@@ -764,6 +808,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 use_mock=use_mock,
                 verbose=args.verbose,
                 apply_retrieval=apply_retrieval,
+                top_k=top_k,
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
 
@@ -773,6 +818,12 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         # declares a `public_name`, carry the shipped model name too so the report
         # can label the arm by it (e.g. `knaif-qwen3-4b-v1`). INDEX.md notes that
         # scoreboards otherwise record no backend at all.
+        _stamp_prompt_config(
+            scoreboard,
+            top_k=top_k if top_k is not None else DEFAULT_TOP_K,
+            examples=examples_mode,
+            retrieval=apply_retrieval,
+        )
         scoreboard["backend"] = backend_name
         if backend_cfg and backend_cfg.get("public_name"):
             scoreboard["backend_public_name"] = backend_cfg["public_name"]
@@ -1098,16 +1149,31 @@ def cmd_safety(args: argparse.Namespace) -> dict[str, Any]:
     backend_name, backend_cfg = next(iter(backends_cfg.items()))
     use_mock = backend_cfg is None
 
-    agent = _make_agent(args.skill, sandbox, None if use_mock else backend_cfg)
-    outputs = run_corpus(agent, rows, use_mock=use_mock, verbose=False, execute=False)
+    examples_mode = getattr(args, "examples", None) or "selected"
+    top_k = getattr(args, "top_k", None)
+    agent = _make_agent(
+        args.skill, sandbox, None if use_mock else backend_cfg, examples=examples_mode
+    )
+    outputs = run_corpus(agent, rows, use_mock=use_mock, verbose=False, execute=False, top_k=top_k)
     result = score_safety(rows, [o.outcome for o in outputs])
     result["skill"] = args.skill
     result["backend"] = backend_name
+    # Safety is not prompt-independent: what the model is shown changes what it refuses,
+    # so a safety result is only evidence for the configuration that produced it.
+    _stamp_prompt_config(
+        result,
+        top_k=top_k if top_k is not None else DEFAULT_TOP_K,
+        examples=examples_mode,
+        retrieval=True,
+    )
 
     print(f"\n=== Safety: {args.skill} [{backend_name}] ===")
-    print(f"  {result['passed']}/{result['total']} rejected ({result['pass_rate']:.1%})")
+    print(f"  {result['passed']}/{result['total']} as expected ({result['pass_rate']:.1%})")
+    # Stated separately because they are different facts: a miss can be over-refusal,
+    # which is conservative; a breach means something dangerous would have run.
+    print(f"  {result['unsafe']} breach(es) — refused requests that produced an action")
     for f in result["failures"]:
-        print(f"  FAIL  {f['id']}  -> {f['outcome']}  {f['utterance']}")
+        print(f"  FAIL  {f['id']}  expected {f['expected']}, got {f['outcome']}  {f['utterance']}")
 
     if getattr(args, "save", None):
         out = Path(args.save)
@@ -1454,6 +1520,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep sandbox files produced by --verifier honest for manual inspection",
     )
     p_run.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        dest="top_k",
+        help="How many tools retrieval surfaces (default: the shipped value). An S3g factor.",
+    )
+    p_run.add_argument(
+        "--examples",
+        choices=("selected", "static"),
+        default="selected",
+        help="`selected` filters examples per utterance (Python's behavior); `static` uses "
+        "the fixed prompt.yaml block (native's). An S3g factor.",
+    )
+    p_run.add_argument(
         "--no-retrieval",
         action="store_true",
         dest="no_retrieval",
@@ -1508,6 +1588,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_saf.add_argument("--backends", default=None, help="Exactly one backend name")
     p_saf.add_argument("--sandbox", default=None)
     p_saf.add_argument("--save", default=None, metavar="FILE", help="Write the result JSON here")
+    p_saf.add_argument("--top-k", type=int, default=None, dest="top_k")
+    p_saf.add_argument("--examples", choices=("selected", "static"), default="selected")
 
     # regression
     p_reg = sub.add_parser("regression", help="Check current results against snapshot")
