@@ -477,6 +477,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `reject`, so it correctly falls through to `mismatch` against python's multi-command
     outcome rather than the old lenient `chain-native-single-step` bucket, which is kept for
     its narrower original trigger — both sides still rendering `commands` — not deleted).
+    **Superseded 2026-09-10:** the refusal is still there but no longer says `reject:` — it
+    prints `not_implemented: this request needs N steps, ...`, because a capability the port
+    has not built and a request the runtime declined are opposite facts about the product and
+    coverage cannot be computed while they share a label. `parity_check.py` counts it as
+    `native-not-implemented` (still gating). The refusal itself goes away with Workstream E.
     Tests: `decide_steps_empty_plan_is_empty` / `_single_step_is_ok` /
     `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
     needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
@@ -791,6 +796,19 @@ This **Open / Next** section is the live backlog (originally distilled from the
     port it to Rust). And *compare the same stage on both sides*: an ad-hoc comparison that broke
     this rule reported 18.2% disagreement, of which 150/154 were Rust's clarify gate running
     against a Python path that had none. The true figure was 3/847.
+  - **`not_implemented` marker landed 2026-09-10.** Native marks a capability it has not
+    built with a `not_implemented:` prefix instead of `reject:`; `knaif.evalsuite.outcomes`
+    carries the shared vocabulary and a `coverage()` that counts a deliberate refusal as
+    attempted; `parity_check.py` reports `native-not-implemented` as its own gating bucket.
+    A test pins the marker identical across Rust, the parity script and the Python module.
+  - **Started 2026-09-10 — S2 acceptance bars are written and enforceable.** Each active skill
+    now carries `skills/<name>/acceptance.yaml`: aggregate floors on an executing verifier,
+    required capability slices (chains included, budgeted in rows where the slice is too small
+    for a rate to mean anything), and safety at **100%**. `just eval-accept` grades a run against
+    it and `just eval-safety` runs the safety corpus; both fail closed on an unreported slice, an
+    unidentified run, a `cheap` run, or a safety corpus that was never executed. A test asserts
+    each skill's committed snapshot clears its own floors — a floor above the bar the skill was
+    accepted on is fiction.
   - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
     L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
     gate the layers are a checklist nobody must run, which is the failure mode being fixed.
@@ -814,7 +832,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
   replaced by [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
   Needs an ordered multi-step executor: chain-intermediate binding already exists in
   `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
-  and partial-failure semantics do not. Sized as its own plan, not a TODO fix.
+  and partial-failure semantics do not. **Now Workstream E of
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md)**
+  (added 2026-09-10) rather than its own plan: both active skills have chain rows, so the
+  lifecycle's `supported` status is unreachable for *every* skill until it lands. It is also
+  smaller than this entry assumed — chains are mediated by explicit output filenames, never
+  `$variable` references (`skills/ffmpeg/prompt.yaml:27-30`), so no variable-binding layer is
+  needed; recovery, rollback and resumption stay deferred.
 
 - [ ] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). Running a
   `--features llama,cuda,pdfium` binary on the RTX 5080 still prints *"the bundled Vulkan backend

@@ -166,7 +166,7 @@ stated as a **precondition for porting**, with a written definition of "satisfac
 - [ ] **S1 — Implement in Python against the shared contract.** `skill.yaml` / `tools.yaml` /
   `prompt.yaml` at the bundle top, handlers under `python/`, a smoke test that loads the skill and
   runs one dry-run plan, `eval/fixtures.py`, and `data/eval.jsonl`. Per `docs/TOOL_SCHEMA.md`.
-- [ ] **S2 — Define "satisfactory" for *this* skill, before measuring it.** A written threshold
+- [x] **S2 — Define "satisfactory" for *this* skill, before measuring it.** *(2026-09-10: written for both active skills as `skills/<name>/acceptance.yaml`, with `just eval-accept` / `just eval-safety` to enforce them and a test asserting each skill's own snapshot clears its floors.)* A written threshold
   set in the bundle, not a vibe and not a number chosen after seeing the result:
   - **Aggregate floors** on an *executing* verifier — `outcome_accuracy` and `avg_knaif_score`,
     each named with its floor. `cheap` is an iteration instrument and may never be an acceptance
@@ -508,6 +508,10 @@ is a place a correct plan still fails a user, and every one is invisible to a pl
     reporting and G1's requirement that `supported` needs *full* coverage. **If either is dropped,
     this decision must be reopened**, because on its own exclusion does flatter a partial port.
 
+  - **Implemented 2026-09-10.** `knaif.evalsuite.outcomes` carries the vocabulary and
+    `POLICY_VERSION`; `scoring.py` stamps every scoreboard with the policy and reports
+    `coverage` / `unattempted` / `by_outcome`, aggregate and per slice; `diff_snapshots` and
+    `check_acceptance` both refuse a record graded under a different policy or none at all.
   - **Implementation requirement this exposes:** today the record cannot tell the two refusal
     kinds apart — native's *"this request needs 3 steps"* and a correct safety `reject` are both
     `outcome == "reject"`, so **coverage cannot be computed from the current scoreboard at all**.
@@ -528,6 +532,53 @@ is a place a correct plan still fails a user, and every one is invisible to a pl
   so an L4 number computed over "rows that ran" would silently exclude the hardest stratum and read
   as healthier than the product is. **Coverage and score are reported together or neither is
   reported.**
+
+## Workstream E — Native ordered multi-step execution
+
+**In scope for this plan, because without it the plan's own gate is unreachable.** G1 makes full L4
+coverage a condition of `supported`, and **both** active skills carry chain rows — ffmpeg 12 rows /
+41 utterances, documents 2 / 4. So with the executor missing, *no skill can ever be `supported`*,
+and a status nothing can reach is as useless as a check that was never built — the exact failure
+this plan was written about.
+
+It is also the only **user-facing** defect this investigation found. Everything else here is
+process: native plans chains correctly on **39/41** chain utterances and then refuses to run them.
+
+**It is smaller than the earlier note claimed.** That note listed "per-step confirmation,
+inter-step variable resolution and partial-failure semantics" as missing. One of those does not
+exist by design: `skills/ffmpeg/prompt.yaml:27-30` tells the model to chain by giving an earlier
+step an explicit `output` filename and reusing that same filename as the later step's input, and
+**"Never chain steps with `$variable` references."** Chains are mediated by files on disk, not
+variable binding, and `apply_clarify_gate` already links undeclared chain intermediates. What
+remains is a loop.
+
+- [ ] **E1 — Extract the per-step body.** Everything after `decide_steps` in `cmd_run`
+  (`main.rs:738` onward) already handles exactly one step end to end: tool/args extraction, the
+  control-tool short-circuit, dispatch, confirmation, execution. Lift it into a function taking a
+  single step plus the shared context, with **no behavior change** — a pure refactor, landed and
+  reviewed on its own so the executor diff that follows is small and readable.
+- [ ] **E2 — Replace `StepDecision::Unsupported` with ordered execution.** Loop the steps in plan
+  order through E1's function. `decide_steps` keeps `Empty`; `Unsupported` disappears, and its
+  tests (`main.rs:2015`) become tests that a 2-step plan *executes two steps*.
+- [ ] **E3 — Define the semantics, and keep them narrow.**
+  - **Control tools short-circuit the whole plan.** A `clarify`, `reject` or `done` at any position
+    ends execution — it is a statement about the request, not a step to run past.
+  - **Stop on first failure**, and report which steps completed and which did not. A chain that
+    fails at step 2 of 3 must not read as total success or total failure.
+  - **Confirmation is per step**, using the gate that already exists. A destructive step mid-chain
+    is still a destructive step.
+  - **Dependency preflight stays once, up front** — it already runs for the whole invocation
+    (`main.rs:658`) and nothing about chaining changes which binaries are needed.
+  - **`--dry-run` previews every step**, not just the first. This is also what L3's command-mode
+    comparison needs in order to compare chains at all.
+- [ ] **E4 — Deliberately deferred, and recorded as limitations rather than silently absent:**
+  partial-failure **recovery**, **rollback** of steps already executed, and **resumption** of a
+  half-run chain. Nothing in L4 needs them; folding them in turns a tractable workstream into a
+  second plan. Say so in `docs/NATIVE.md` so the gap is a documented boundary, not a surprise.
+- [ ] **E5 — Sequencing: E lands *after* the L2 contracts exist.** This is the one workstream that
+  changes shipped runtime behavior, so the deterministic cases that pin ordered execution must be
+  written first and must fail before E2 — otherwise the executor is asserted correct by the same
+  change that introduces it, which is the pattern this plan exists to break.
 
 ## Workstream G — The gate
 
@@ -612,11 +663,13 @@ Without this the layers are a checklist nobody is obliged to run.
   needs its own plan (chain-intermediate binding exists in `apps/cli`; per-step confirmation,
   inter-step variable resolution and partial-failure semantics do not). Tracked in
   [../TODO.md](../TODO.md).
-  **It is a hard prerequisite for a complete L4, not a workaround-able one.** L3 can exclude chains
-  and still say something useful about single-step parity. L4 cannot: it is the layer that claims
-  the product works for the end user, and "works except for every chained request" is a materially
-  different claim. Until the executor lands, **L4 is reported as partial with its coverage stated
-  (L4e), and no skill claims full shipped-path acceptance.**
+  **It is a hard prerequisite for a complete L4, so it is now Workstream E of this plan** rather
+  than an external dependency. L3 can exclude chains and still say something useful about
+  single-step parity. L4 cannot: it is the layer that claims the product works for the end user,
+  and "works except for every chained request" is a materially different claim. Both active skills
+  have chain rows, so leaving E out would make `supported` unreachable for every skill.
+  Until E lands, **L4 is reported as partial with its coverage stated (L4e), and no skill claims
+  full shipped-path acceptance.**
 - **No generic native skill API.** `knaif-skill-api` ships shared `sandbox` helpers only;
   `HandlerContext` / `Step` / `Intent` equivalents do not exist, and native skills are dispatched
   by per-domain branches in `apps/cli` (audit F11). Every new native skill therefore re-implements
@@ -638,7 +691,10 @@ Without this the layers are a checklist nobody is obliged to run.
   the two runtimes agree on what to do.
 - A PR that changes one runtime's prompt, retrieval, validation or rendering without the other
   **fails CI**, with no model required.
-- A skill cannot be declared natively `supported` without meeting the thresholds.
+- A skill cannot be declared natively `supported` without meeting the thresholds — **and at least
+  one skill actually reaches it**, which is the proof the gate is a bar rather than a wall.
+- **Native executes ordered multi-step plans**, so the 39/41 chain utterances it already plans
+  correctly are no longer refused at execution.
 - `docs/NATIVE.md` states the parity contract, the four layers, what each does and does not cover,
   and how to run them.
 
@@ -651,8 +707,9 @@ Without this the layers are a checklist nobody is obliged to run.
   `docs/FINE_TUNING.md`. **This is a change from the first draft**, which put quality out of scope
   entirely and thereby allowed two runtimes to be certified as agreeing on something not yet known
   to be good.
-- **Building the native multi-step executor.** A real gap, separately scoped — see *Known
-  blockers*. This plan only decides how L3 behaves until it lands.
+- **Partial-failure recovery, rollback and resumption for multi-step execution.** The ordered
+  executor itself is now **in scope** (Workstream E) because `supported` is unreachable without it;
+  those three refinements are not, and E4 records them as documented limitations.
 - **Porting `history`-based re-planning to native.** Single-shot planning is what the corpus and
   the shipped path exercise.
 - **macOS parity and acceptance coverage.** macOS is `status: planned` and its support work lands
