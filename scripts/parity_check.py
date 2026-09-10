@@ -24,14 +24,15 @@ normalized to a token list so cosmetic quoting/spacing differences don't registe
 commands.
 
 Known scope limit: native `run` (main.rs) executes exactly one intent per invocation — there
-is no ordered multi-step executor yet (variable binding, per-intent confirmation, chain
-execution). It used to silently preview/execute only the FIRST plan step and drop the rest;
-per docs/audits/2026-09-07-core-principles-and-rtx5080.md (F5), it now explicitly rejects a
-multi-step plan instead (`reject: this request needs N steps, ...`), so a chain row's native
-outcome is `reject`, not `commands`, and correctly compares as a `mismatch` against python's
-multi-command outcome rather than being scored `chain-native-single-step`. That bucket is
-kept for its original narrower trigger (both sides render `commands`, e.g. a same-intent
-multi-input row) but no longer fires for genuinely multi-intent chains.
+is no ordered multi-step executor yet (chain execution, per-intent confirmation). It used to
+silently preview/execute only the FIRST plan step and drop the rest; per
+docs/audits/2026-09-07-core-principles-and-rtx5080.md (F5) it now refuses a multi-step plan
+outright, printing `not_implemented: this request needs N steps, ...`. That marker matters:
+a capability the port has not built and a request the runtime deliberately declined are
+opposite facts about the product — a coverage gap versus the safety model working — so they
+are counted apart, as `native-not-implemented` rather than `mismatch`. Both still gate.
+`chain-native-single-step` is kept for its original narrower trigger (both sides render
+`commands`, e.g. a same-intent multi-input row) and does not fire for multi-intent chains.
 
 Usage (normally via `just parity ffmpeg`, which builds native first):
     uv run python scripts/parity_check.py --skill ffmpeg \
@@ -59,6 +60,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+# The marker native prints for a capability it has not built, as distinct from a `reject:`
+# — a request it understood and declined. Kept in sync with `NOT_IMPLEMENTED_PREFIX` in
+# `apps/cli/src/main.rs` and `knaif.evalsuite.outcomes`; a test asserts all three agree.
+NOT_IMPLEMENTED_PREFIX = "not_implemented:"
 
 
 # ── output parsing (pure) ─────────────────────────────────────────────────────
@@ -277,6 +283,11 @@ def parse_native(stdout: str, stderr: str) -> Outcome:
         low = s.lower()
         if low.startswith("clarify:"):
             kind, text = "clarify", s.split(":", 1)[1].strip()
+            continue
+        # Checked before `reject:` — a capability the runtime has not built is a coverage
+        # gap, not the safety model working, and the two must never share a bucket.
+        if low.startswith(NOT_IMPLEMENTED_PREFIX):
+            kind, text = "not_implemented", s.split(":", 1)[1].strip()
             continue
         if low.startswith("reject:"):
             kind, text = "reject", s.split(":", 1)[1].strip()
@@ -678,7 +689,7 @@ def compare(
     cwd: str | None = None,
 ) -> tuple[str, str]:
     """Return (status, note). status ∈ {match, mismatch, decline-divergence,
-    not-comparable, chain-native-single-step}.
+    not-comparable, chain-native-single-step, native-not-implemented}.
 
     *cwd*: forward-slashed shared working directory both runtimes ran under — passed
     through to ``Outcome.key()`` for command-mode argv path canonicalization (F7). The
@@ -687,6 +698,12 @@ def compare(
     """
     # One side planned but its dry-run renders no command (python compress/platform/thumbnail/
     # batch) — can't command-compare, so exclude rather than score as drift.
+    # A capability native has not built. Still a divergence and still gates (below) — but
+    # counted apart from command drift, because "the port is missing a feature" and "the two
+    # planners disagree" call for different work, and an aggregate that merges them tells you
+    # neither. This is what makes L4's coverage number computable at all.
+    if native.kind == "not_implemented":
+        return "native-not-implemented", f"native capability gap: {native.text}"
     if "rendered-none" in (native.kind, py.kind):
         return (
             "not-comparable",
@@ -855,6 +872,7 @@ def main() -> int:
         "decline-divergence": 0,
         "not-comparable": 0,
         "chain-native-single-step": 0,
+        "native-not-implemented": 0,
     }
 
     def handle(idx: int, row: Row, native: Outcome, py: Outcome) -> None:
@@ -866,6 +884,7 @@ def main() -> int:
             "decline-divergence": "!",
             "not-comparable": "–",
             "chain-native-single-step": "≈",
+            "native-not-implemented": "∅",
         }[status]
         print(f"[{idx:>3}/{len(rows)}] {icon} {row.id:<16} {row.utterance[:52]}")
         if status != "match":
@@ -931,6 +950,10 @@ def main() -> int:
     print(f"  decline-divergence      : {counts['decline-divergence']}  (reject vs clarify)")
     print(f"  not-comparable          : {counts['not-comparable']}  (python renders no cmd)")
     print(f"  chain (native 1-step)   : {counts['chain-native-single-step']}")
+    print(
+        f"  native not-implemented  : {counts['native-not-implemented']}"
+        "  (capability gap, not drift)"
+    )
     print(f"  total rows / time       : {total} / {elapsed:.0f}s")
 
     out = args.out or (
@@ -957,9 +980,16 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"  report                  : {out}")
-    # Non-zero on real divergence (command drift or reject/clarify disagreement). The chain
-    # single-step class is a known native limitation, not a failure, so it doesn't gate.
-    return 1 if (counts["mismatch"] or counts["decline-divergence"]) else 0
+    # Non-zero on real divergence: command drift, reject/clarify disagreement, or a
+    # capability native has not built. The chain single-step class is a known native
+    # limitation, not a failure, so it doesn't gate. `native-not-implemented` does gate —
+    # it is exactly what used to land in `mismatch` before the marker existed, and demoting
+    # it to a non-gating bucket would quietly turn the executor gap into a passing result.
+    return (
+        1
+        if (counts["mismatch"] or counts["decline-divergence"] or counts["native-not-implemented"])
+        else 0
+    )
 
 
 def _fmt_cmds(o: Outcome) -> str:
@@ -1003,6 +1033,21 @@ def _self_test() -> int:
     # clarify / reject.
     assert parse_native("clarify: which file?\n", "").kind == "clarify"
     assert parse_native("reject: blocked by policy\n", "").kind == "reject"
+    # A capability gap is not a reject: the two are opposite facts about the product, and
+    # merging them makes coverage uncomputable.
+    ni = parse_native("not_implemented: this request needs 2 steps, but native ...\n", "")
+    assert ni.kind == "not_implemented", ni
+    assert ni.text.startswith("this request needs 2 steps"), ni
+    chain_row = Row(id="r1", utterance="u", tags=["chain2"], is_chain=True)
+    st, note = compare(
+        chain_row,
+        ni,
+        parse_native("ffmpeg -y -i a.mp4 out.mkv\n", ""),
+        strict=False,
+        plan_mode=False,
+        cwd=None,
+    )
+    assert st == "native-not-implemented", (st, note)
     assert parse_python("\n❓ CLARIFY: which file?\n", "").kind == "clarify"
     assert parse_python("\n\U0001f6ab REJECT: no\n", "").kind == "reject"
     # A real divergence must register as different keys.

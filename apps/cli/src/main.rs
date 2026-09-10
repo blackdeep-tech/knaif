@@ -618,6 +618,17 @@ enum StepDecision {
     Unsupported { total: usize },
 }
 
+/// Marks output the runtime produced because a capability is **not built**, as opposed to a
+/// `reject:` — a request the runtime understood and declined. The two look alike to a user but
+/// are opposite facts about the product: a coverage gap versus the safety model working. Kept
+/// distinct in the machine-readable output so acceptance records can count coverage at all
+/// (docs/plans/2026-09-10-skill-quality-lifecycle.md, L4d).
+const NOT_IMPLEMENTED_PREFIX: &str = "not_implemented:";
+
+fn not_implemented_message(reason: &str) -> String {
+    format!("{NOT_IMPLEMENTED_PREFIX} {reason}")
+}
+
 fn decide_steps(steps: &[serde_json::Value]) -> StepDecision {
     match steps.len() {
         0 => StepDecision::Empty,
@@ -753,9 +764,12 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         }
         StepDecision::Unsupported { total } => {
             println!(
-                "reject: this request needs {total} steps, but the native runtime executes \
-                 one step at a time (multi-step chains aren't supported yet). Try rephrasing \
-                 it as separate requests, one at a time."
+                "{}",
+                not_implemented_message(&format!(
+                    "this request needs {total} steps, but the native runtime executes one \
+                     step at a time (multi-step chains aren't supported yet). Try rephrasing \
+                     it as separate requests, one at a time."
+                ))
             );
             return Ok(());
         }
@@ -1997,6 +2011,18 @@ mod tests {
     fn decide_steps_single_step_is_ok() {
         let steps = vec![serde_json::json!({"tool": "strip_audio", "args": {}})];
         assert!(matches!(decide_steps(&steps), StepDecision::Single(0)));
+    }
+
+    #[test]
+    fn capability_refusal_is_marked_not_implemented_not_reject() {
+        // A capability the runtime has not built and a request it deliberately refuses are
+        // both a refusal to the user, but they are opposite facts about the product: one is
+        // a coverage gap, the other is the safety model working. Recorded under the same
+        // `reject:` prefix they are indistinguishable, and coverage becomes uncomputable.
+        let msg = not_implemented_message("this request needs 2 steps");
+        assert!(msg.starts_with(NOT_IMPLEMENTED_PREFIX));
+        assert!(!msg.starts_with("reject:"));
+        assert!(msg.contains("this request needs 2 steps"));
     }
 
     #[test]
