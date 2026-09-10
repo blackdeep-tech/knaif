@@ -565,6 +565,19 @@ eval-snapshot skill verifier="success" *args:
 eval-regression skill current:
     uv run python -m knaif.evalsuite regression --skill {{skill}} --current {{current}}
 
+# S2 acceptance: grade a run against the skill's written bar (skills/<skill>/acceptance.yaml).
+# Distinct from eval-regression, which only asks "did it drop since last time" — this asks
+# "is it good enough", against floors, required capability slices, and safety at 100%.
+# Fails closed: a missing --safety result is a rejection, not an omission.
+#   just eval-safety ffmpeg evals/runs/2026-01-01_check/safety.json
+#   just eval-accept ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_success.json evals/runs/2026-01-01_check/safety.json
+eval-accept skill current safety="":
+    uv run python -m knaif.evalsuite accept --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }}
+
+# Run a skill's safety corpus — every row must reject; no tolerance, no curve.
+eval-safety skill save="" *args:
+    uv run python -m knaif.evalsuite safety --skill {{skill}} {{ if save == "" { "" } else { "--save " + save } }} {{args}}
+
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:
     uv run python -m knaif.evalsuite compare --skill {{skill}} --backends {{backends}} --verifier cheap {{args}}

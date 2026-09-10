@@ -250,6 +250,7 @@ training mix, and (if it ships natively) ported. The bundle holds all four conce
 ```text
 skills/<name>/
   skill.yaml tools.yaml prompt.yaml    # declarative contract — read by both runtimes
+  acceptance.yaml                      # the written "good enough" bar (S2)
   python/                              # Python handlers + tests
   native/                              # Rust crate (Cargo workspace member)
   data/                                # corpora: eval, train, safety, locked snapshot
@@ -263,7 +264,8 @@ Corpora and the acceptance bar live **in the skill**, not centrally:
 | File | Role |
 |---|---|
 | `data/eval.jsonl` | the eval corpus (row schema in `docs/EVAL_FRAMEWORK.md`) |
-| `data/eval_snapshot.json` | the committed acceptance bar; regression gate compares against it |
+| `data/eval_snapshot.json` | the committed baseline; the regression gate compares against it |
+| `acceptance.yaml` | the S2 acceptance bar — aggregate floors, required capability slices, safety at 100%. Answers "is it good enough", which a snapshot cannot |
 | `data/safety_test.jsonl` | utterances that must produce `reject` |
 | `eval/fixtures.py` | generates fixtures into `sandbox/fixtures/<skill>/` |
 | `eval/verifiers.py` | skill-specific grading beyond the shared verifiers |
@@ -282,9 +284,12 @@ just eval <skill>
 # 3. honest — ALWAYS regenerate fixtures first (missing fixtures score correct plans ~0)
 just eval-fixtures <skill>
 just eval-success <skill>
-# 4. lock the acceptance bar (own commit)
+# 4. clear the written acceptance bar (floors + required slices + safety at 100%)
+just eval-safety <skill> <save.json>
+just eval-accept <skill> <scoreboard.json> <safety.json>
+# 5. lock the baseline (own commit)
 just eval-snapshot <skill>
-# 5. native parity, if the skill ships natively
+# 6. native parity, if the skill ships natively
 just parity <skill>
 
 just eval-regression <skill> <current>   # gate a saved run's scoreboard against the committed snapshot

@@ -1,0 +1,179 @@
+"""The `evalsuite accept` command and the safety-corpus scorer (Workstream S2).
+
+An acceptance bar nobody can run is prose. These pin the two pieces that make
+`skills/<name>/acceptance.yaml` enforceable: scoring the safety corpus, and the
+CLI that grades a saved scoreboard against the bar. Both fail closed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import pytest
+
+from knaif import list_skills
+from knaif.evalsuite import cli
+from knaif.evalsuite.acceptance import load_safety_corpus, score_safety
+from knaif.evalsuite.outcomes import POLICY_VERSION
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SKILLS_ROOT = REPO_ROOT / "skills"
+
+
+# -- safety corpus ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("skill", list_skills(SKILLS_ROOT))
+def test_safety_corpus_is_all_rejects(skill: str) -> None:
+    rows = load_safety_corpus(skill, root=SKILLS_ROOT)
+    assert rows, f"{skill}: empty safety corpus"
+    assert {r.expected_outcome for r in rows} == {"reject"}
+
+
+def test_score_safety_is_perfect_only_when_every_row_rejects() -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    result = score_safety(rows, ["reject"] * len(rows))
+    assert result["pass_rate"] == 1.0
+    assert result["total"] == len(rows)
+    assert result["failures"] == []
+
+
+def test_score_safety_names_the_rows_that_planned_instead() -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    outcomes = ["reject"] * len(rows)
+    outcomes[0] = "plan"
+    result = score_safety(rows, outcomes)
+    assert result["pass_rate"] < 1.0
+    assert result["failures"][0]["outcome"] == "plan"
+    assert result["failures"][0]["id"] == rows[0].id
+
+
+def test_score_safety_rejects_a_mismatched_outcome_list() -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    with pytest.raises(ValueError):
+        score_safety(rows, ["reject"])
+
+
+# -- the accept command -------------------------------------------------------
+
+
+def _args(skill: str, current: Path | None, safety: Path | None = None) -> argparse.Namespace:
+    return argparse.Namespace(
+        skill=skill,
+        current=str(current) if current else None,
+        safety=str(safety) if safety else None,
+    )
+
+
+def _board(**over) -> dict:
+    board = {
+        "verifier": "success",
+        "total": 847,
+        "outcome_accuracy": 0.95,
+        "avg_knaif_score": 0.99,
+        "by_tag": {},
+    }
+    board.update(over)
+    return board
+
+
+def _passing_board(skill: str) -> dict:
+    """A scoreboard that clears the real bar — the committed snapshot does, by construction.
+
+    Stamped with the current scoring policy: the committed snapshots predate it, and a
+    run that cannot say which semantics graded it is correctly refused (S5 re-locks them).
+    """
+    board = json.loads(
+        (SKILLS_ROOT / skill / "data" / "eval_snapshot.json").read_text(encoding="utf-8")
+    )
+    board["scoring_policy"] = POLICY_VERSION
+    return board
+
+
+def test_accept_passes_on_the_accepted_baseline(tmp_path: Path, capsys) -> None:
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(_passing_board("ffmpeg")), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(json.dumps({"total": 9, "pass_rate": 1.0}), encoding="utf-8")
+
+    cli.cmd_accept(_args("ffmpeg", current, safety))
+    assert "ACCEPTED" in capsys.readouterr().out
+
+
+def test_accept_without_a_safety_run_fails(tmp_path: Path) -> None:
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(_passing_board("ffmpeg")), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_accept(_args("ffmpeg", current))
+    assert exc.value.code == 1
+
+
+def test_accept_requires_a_current_scoreboard(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_accept(_args("ffmpeg", None))
+    assert exc.value.code != 0
+
+
+def test_accept_rejects_a_cheap_run(tmp_path: Path) -> None:
+    current = tmp_path / "board.json"
+    board = _passing_board("ffmpeg")
+    board["verifier"] = "cheap"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(json.dumps({"total": 9, "pass_rate": 1.0}), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_accept(_args("ffmpeg", current, safety))
+    assert exc.value.code == 1
+
+
+def test_accept_is_wired_into_the_parser() -> None:
+    parser = cli.build_parser()
+    args = parser.parse_args(["accept", "--skill", "ffmpeg", "--current", "x.json"])
+    assert args.command == "accept"
+
+
+# -- the safety command -------------------------------------------------------
+
+
+class _Out:
+    def __init__(self, outcome: str) -> None:
+        self.outcome = outcome
+
+
+def test_safety_command_scores_and_saves(tmp_path: Path, monkeypatch, capsys) -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    monkeypatch.setattr(cli, "_make_agent", lambda *a, **k: object())
+    monkeypatch.setattr(cli, "run_corpus", lambda *a, **k: [_Out("reject") for _ in rows])
+
+    out = tmp_path / "safety.json"
+    cli.cmd_safety(
+        argparse.Namespace(
+            skill="ffmpeg", config=None, backends=None, sandbox=str(tmp_path), save=str(out)
+        )
+    )
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    assert saved["pass_rate"] == 1.0
+    assert saved["total"] == len(rows)
+
+
+def test_safety_command_exits_nonzero_when_a_row_plans(tmp_path: Path, monkeypatch) -> None:
+    rows = load_safety_corpus("ffmpeg", root=SKILLS_ROOT)
+    outs = [_Out("reject") for _ in rows]
+    outs[0] = _Out("plan")
+    monkeypatch.setattr(cli, "_make_agent", lambda *a, **k: object())
+    monkeypatch.setattr(cli, "run_corpus", lambda *a, **k: outs)
+
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_safety(
+            argparse.Namespace(
+                skill="ffmpeg", config=None, backends=None, sandbox=str(tmp_path), save=None
+            )
+        )
+    assert exc.value.code == 1
+
+
+def test_safety_is_wired_into_the_parser() -> None:
+    args = cli.build_parser().parse_args(["safety", "--skill", "ffmpeg"])
+    assert args.command == "safety"

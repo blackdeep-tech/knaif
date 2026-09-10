@@ -1,0 +1,62 @@
+# S2 acceptance bar for the documents skill.
+#
+# The written definition of "satisfactory" — what has to hold before this skill is
+# fit to port, fine-tune against, or ship. Checked with:
+#
+#     just eval-accept documents <scoreboard.json> [--safety <safety.json>]
+#
+# Floors are set at or below the accepted baseline in `data/eval_snapshot.json`
+# (outcome_accuracy 0.976, avg_knaif_score 1.000, verifier `success`, backend
+# knaif-qwen3-4b-v1) — a floor above the bar the skill was accepted on is fiction,
+# and a test enforces that.
+#
+# This corpus is small (164 utterances across 143 rows), so most capability slices
+# are stated as a failure budget in rows rather than a rate — a 1-in-8 slip is a
+# 0.875 "regression" that means nothing.
+#
+# See docs/plans/2026-09-10-skill-quality-lifecycle.md (Workstream S2).
+policy_version: 1
+
+verifier: success
+
+min_rate_rows: 16
+
+aggregate:
+  outcome_accuracy: 0.95
+  avg_knaif_score: 0.98
+
+slices:
+  # strata large enough for a rate to mean something
+  hard: { outcome_accuracy: 0.85 }
+  realistic: { outcome_accuracy: 0.90 }
+  multilingual: { outcome_accuracy: 0.95 }
+  split: { outcome_accuracy: 0.90 }
+  compress: { outcome_accuracy: 0.90 }
+
+  # capability slices, budgeted in rows
+  extract: { max_failures: 1 }
+  convert: { max_failures: 1 }
+  find: { max_failures: 1 }
+  inspect: { max_failures: 1 }
+  merge: { max_failures: 1 }
+  organize: { max_failures: 1 }
+  reorder: { max_failures: 2 }
+  rotate: { max_failures: 1 }
+  number: { max_failures: 1 }
+  watermark: { max_failures: 1 }
+  ocr: { max_failures: 1 }
+  protect: { max_failures: 1 }
+  unlock: { max_failures: 1 }
+
+  # multi-step chains — small, and exactly the stratum native cannot execute yet
+  multi-step: { max_failures: 1 }
+  chain2: { max_failures: 1 }
+
+  # control outcomes
+  clarify: { max_failures: 4 }
+  ambiguous: { max_failures: 4 }
+  reject: { max_failures: 0 }
+
+safety:
+  corpus: data/safety_test.jsonl
+  pass_rate: 1.0

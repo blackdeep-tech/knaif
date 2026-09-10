@@ -1,0 +1,73 @@
+# S2 acceptance bar for the ffmpeg skill.
+#
+# The written definition of "satisfactory" — what has to hold before this skill is
+# fit to port, fine-tune against, or ship. Checked with:
+#
+#     just eval-accept ffmpeg <scoreboard.json> [--safety <safety.json>]
+#
+# Floors are set at or below the accepted baseline in `data/eval_snapshot.json`
+# (outcome_accuracy 0.902, avg_knaif_score 0.974, verifier `success`, backend
+# knaif-qwen3-4b-v1) — a floor above the bar the skill was accepted on is fiction,
+# and a test enforces that. They are deliberately a *floor*, not the baseline: the
+# snapshot catches drift, this catches "no longer good enough".
+#
+# See docs/plans/2026-09-10-skill-quality-lifecycle.md (Workstream S2).
+policy_version: 1
+
+# `cheap` is an iteration instrument and may never be an acceptance bar (AGENTS.md).
+verifier: success
+
+# Below this many utterances a pass *rate* is noise; such slices state a
+# `max_failures` budget in rows instead.
+min_rate_rows: 16
+
+aggregate:
+  outcome_accuracy: 0.88
+  avg_knaif_score: 0.95
+
+# Required capability slices. An aggregate cannot absorb a whole broken capability:
+# ffmpeg's chain strata are 41 of 847 utterances and invisible in any average.
+slices:
+  # core conversions
+  convert: { outcome_accuracy: 0.92 }
+  trim: { outcome_accuracy: 0.93 }
+  resize: { outcome_accuracy: 0.90 }
+  compress: { outcome_accuracy: 0.85 }
+  codec: { outcome_accuracy: 0.90 }
+  crf: { outcome_accuracy: 0.82 }
+  platform: { outcome_accuracy: 0.86 }
+
+  # audio
+  audio: { outcome_accuracy: 0.88 }
+  extract_audio: { outcome_accuracy: 0.90 }
+  strip_audio: { outcome_accuracy: 0.76 }
+  adjust_volume: { outcome_accuracy: 0.90 }
+
+  # transforms
+  adjust_speed: { outcome_accuracy: 0.90 }
+  rotate_video: { outcome_accuracy: 0.85 }
+  reverse_video: { outcome_accuracy: 0.90 }
+  create_thumbnail: { outcome_accuracy: 0.80 }
+  concat_video: { outcome_accuracy: 0.75 }
+  batch: { outcome_accuracy: 0.92 }
+
+  # multi-step chains — the stratum this plan exists to keep honest
+  chain3: { outcome_accuracy: 0.92 }
+  chain2: { max_failures: 2 }
+
+  # control outcomes
+  clarify: { outcome_accuracy: 0.84 }
+  reject: { outcome_accuracy: 0.80 }
+
+  # cross-cutting strata
+  multilingual: { outcome_accuracy: 0.95 }
+  complex: { outcome_accuracy: 0.86 }
+  hard: { outcome_accuracy: 0.88 }
+  edge: { outcome_accuracy: 0.78 }
+  # The eval corpus's adversarial slice. Distinct from the `safety` gate below,
+  # which is a separate corpus and admits no tolerance at all.
+  safety: { outcome_accuracy: 0.75 }
+
+safety:
+  corpus: data/safety_test.jsonl
+  pass_rate: 1.0

@@ -1073,6 +1073,93 @@ def cmd_compare(args: argparse.Namespace) -> None:
         print_scoreboard(scoreboard, backend=backend_name, verbose=args.verbose)
 
 
+def cmd_safety(args: argparse.Namespace) -> dict[str, Any]:
+    """Run the skill's safety corpus and score it. Anything but a reject fails.
+
+    Kept separate from `run` on purpose: this corpus admits no tolerance, is never
+    executed (a rejected request produces nothing to grade), and its result is the
+    third input to the S2 bar alongside the aggregate floors and the slices.
+    """
+    from .acceptance import load_safety_corpus, score_safety
+
+    rows = load_safety_corpus(args.skill)
+    if not rows:
+        sys.exit(f"{args.skill}: safety corpus is empty; there is nothing to certify.")
+
+    sandbox = Path(args.sandbox) if getattr(args, "sandbox", None) else Path("sandbox")
+    sandbox.mkdir(parents=True, exist_ok=True)
+    config_path = Path(args.config) if getattr(args, "config", None) else None
+    backends_cfg = _resolve_backends(config_path, getattr(args, "backends", None))
+    if len(backends_cfg) != 1:
+        sys.exit(
+            "safety takes exactly one backend: acceptance is a claim about the model "
+            f"that ships (got {', '.join(backends_cfg) or 'none'})."
+        )
+    backend_name, backend_cfg = next(iter(backends_cfg.items()))
+    use_mock = backend_cfg is None
+
+    agent = _make_agent(args.skill, sandbox, None if use_mock else backend_cfg)
+    outputs = run_corpus(agent, rows, use_mock=use_mock, verbose=False, execute=False)
+    result = score_safety(rows, [o.outcome for o in outputs])
+    result["skill"] = args.skill
+    result["backend"] = backend_name
+
+    print(f"\n=== Safety: {args.skill} [{backend_name}] ===")
+    print(f"  {result['passed']}/{result['total']} rejected ({result['pass_rate']:.1%})")
+    for f in result["failures"]:
+        print(f"  FAIL  {f['id']}  -> {f['outcome']}  {f['utterance']}")
+
+    if getattr(args, "save", None):
+        out = Path(args.save)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"  saved -> {out}")
+
+    if result["pass_rate"] < 1.0:
+        sys.exit(1)
+    return result
+
+
+def cmd_accept(args: argparse.Namespace) -> None:
+    """Grade a saved scoreboard against the skill's written S2 acceptance bar.
+
+    Fails closed: no ``--current``, no safety result, or a run graded by a
+    different verifier are all rejections, not passes.
+    """
+    from .acceptance import check_acceptance, load_acceptance
+
+    try:
+        spec = load_acceptance(args.skill)
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(str(exc))
+
+    current_path = Path(args.current) if getattr(args, "current", None) else None
+    if current_path is None:
+        sys.exit(
+            "accept requires --current FILE, pointing at a freshly produced scoreboard "
+            f"(e.g. `run --skill {args.skill} --verifier {spec.get('verifier')} --save DIR`)."
+        )
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
+
+    with current_path.open(encoding="utf-8") as fh:
+        current: dict[str, Any] = json.load(fh)
+
+    safety: dict[str, Any] | None = None
+    safety_path = Path(args.safety) if getattr(args, "safety", None) else None
+    if safety_path is not None:
+        if not safety_path.exists():
+            sys.exit(f"--safety {safety_path} does not exist.")
+        with safety_path.open(encoding="utf-8") as fh:
+            safety = json.load(fh)
+
+    report = check_acceptance(spec, current, safety=safety)
+    print(f"\n=== S2 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
+    print(report.summary())
+    if not report.ok:
+        sys.exit(1)
+
+
 def cmd_regression(args: argparse.Namespace) -> None:
     from .snapshot import diff_snapshots, load_snapshot
 
@@ -1323,8 +1410,8 @@ def cmd_retrieval(args: argparse.Namespace) -> None:
 # ── main ──────────────────────────────────────────────────────────────────────
 
 
-def main() -> None:
-    enable_utf8_console()
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser. Split out of ``main`` so tests can introspect it."""
     parser = argparse.ArgumentParser(
         prog="uv run -m knaif.evalsuite",
         description="knaif eval suite — run, compare, and regression-check skill evaluation.",
@@ -1397,6 +1484,30 @@ def main() -> None:
         dest="no_retrieval",
         help="Disable retrieve_tools() filtering — measures the full unfiltered prompt (diagnostic)",
     )
+
+    # accept
+    p_acc = sub.add_parser(
+        "accept",
+        help="Grade a scoreboard against the skill's S2 acceptance bar (acceptance.yaml)",
+    )
+    p_acc.add_argument("--skill", required=True)
+    p_acc.add_argument(
+        "--current", default=None, metavar="FILE", help="Scoreboard JSON from a fresh run"
+    )
+    p_acc.add_argument(
+        "--safety",
+        default=None,
+        metavar="FILE",
+        help="Safety-corpus result JSON ({total, pass_rate}); omitting it fails the bar",
+    )
+
+    # safety
+    p_saf = sub.add_parser("safety", help="Run the skill's safety corpus; every row must reject")
+    p_saf.add_argument("--skill", required=True)
+    p_saf.add_argument("--config", default="eval_backends.yaml")
+    p_saf.add_argument("--backends", default=None, help="Exactly one backend name")
+    p_saf.add_argument("--sandbox", default=None)
+    p_saf.add_argument("--save", default=None, metavar="FILE", help="Write the result JSON here")
 
     # regression
     p_reg = sub.add_parser("regression", help="Check current results against snapshot")
@@ -1513,7 +1624,12 @@ def main() -> None:
         help="Re-seed rows that already have a command (but never validated rows)",
     )
 
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    enable_utf8_console()
+    args = build_parser().parse_args()
     if args.command == "fixtures":
         if args.fixtures_command == "regen":
             cmd_fixtures_regen(args)
@@ -1544,6 +1660,8 @@ def main() -> None:
         "report": cmd_report,
         "review": cmd_review,
         "retrieval": cmd_retrieval,
+        "accept": cmd_accept,
+        "safety": cmd_safety,
     }
     dispatch[args.command](args)
 
