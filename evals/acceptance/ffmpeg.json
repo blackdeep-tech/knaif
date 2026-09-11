@@ -41,16 +41,16 @@
       }
     },
     "L4": {
-      "run": "evals\\runs\\2026-09-11_l4-ffmpeg-n1n2_success\\ffmpeg_native-cli_success.json",
-      "summary": "NOT ACCEPTED - 4 of 36 thresholds unmet:",
+      "run": "evals\\runs\\2026-09-11_l4-ffmpeg-n4_success\\ffmpeg_native-cli_success.json",
+      "summary": "NOT ACCEPTED - 2 of 36 thresholds unmet:",
       "passed": false,
       "coverage": 1.0,
-      "outcome_accuracy": 0.8819362455726092,
-      "avg_knaif_score": 0.9706845238095239,
+      "outcome_accuracy": 0.8866587957497049,
+      "avg_knaif_score": 0.9708924349881798,
       "lane": "native-cli",
       "model": "knaif-qwen3-4b-v1",
       "evidence": {
-        "bundle": "18eab95949674d455fc898a0e3fea830ca9060bd1784d59da2997eb28014db95",
+        "bundle": "3f8403608948855558478a5a51fd9bf6bd302cfa8c5f4b21de50d17c4a30c56a",
         "contracts": "ccee73d651d153e2bcefabd84c3ec4c499db3008310d9b1fad84c709bfb672b7",
         "python_core": "c106f46df322a02287be5881f3923bbebc091f68fe960bb5299a910087286519",
         "corpus": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469",
