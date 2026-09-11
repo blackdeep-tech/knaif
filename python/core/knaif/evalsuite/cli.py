@@ -851,6 +851,27 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     return results
 
 
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _git(*cmd: str) -> str:
+    import subprocess
+
+    try:
+        return subprocess.run(
+            ["git", *cmd], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
 def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     """L4a: grade the shipped native binary on the artifacts it really produces.
 
@@ -859,7 +880,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     that appear on disk with the skill's executing verifier.
     """
     from .corpus import load_corpus
-    from .native_lane import load_lane, run_native_corpus
+    from .native_lane import detect_backend, load_lane, run_native_corpus
     from .report import print_scoreboard, save_scoreboard_json
     from .scoring import score_corpus
 
@@ -902,7 +923,9 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     print(f"  binary      : {lane.binary}")
     print(f"  model       : {lane.model_path}")
     print(f"  fixtures    : {fixture_dir}")
-    print(f"  sandbox     : {lane_sandbox}\n", flush=True)
+    print(f"  sandbox     : {lane_sandbox}")
+    compute_backend = detect_backend(lane, args.skill, lane_sandbox)
+    print(f"  compute     : {compute_backend or 'UNKNOWN (the binary did not say)'}\n", flush=True)
 
     outputs = run_native_corpus(
         lane,
@@ -918,6 +941,13 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["lane"] = lane.name
     scoreboard["lane_kind"] = "native_cli"
     scoreboard["lane_entry_point"] = lane.entry_point
+    # Left null rather than assumed when the binary does not say: two runs on different
+    # compute backends are not comparable, and a record that guesses cannot be checked.
+    scoreboard["compute_backend"] = compute_backend
+    scoreboard["binary_sha256"] = _sha256_file(lane.binary)
+    scoreboard["model_sha256_prefix"] = _sha256_file(lane.model_path)[:16]
+    scoreboard["git_sha"] = _git("rev-parse", "HEAD")
+    scoreboard["git_dirty"] = bool(_git("status", "--porcelain"))
     scoreboard["backend"] = lane.name
     if lane.public_name:
         scoreboard["backend_public_name"] = lane.public_name
@@ -931,6 +961,10 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     # attempt — which is exactly the hardest stratum — and reads healthier than the product is.
     coverage = scoreboard.get("coverage")
     unattempted = scoreboard.get("unattempted")
+    if scoreboard["git_dirty"]:
+        print("\n  WARNING: working tree dirty — the git SHA does not describe what ran")
+    if compute_backend is None:
+        print("  WARNING: compute backend unrecorded — two backends are not comparable")
     print(f"\n  coverage    : {coverage:.4f}  ({unattempted} row(s) unattempted)")
     if coverage is not None and coverage < args.min_coverage:
         print(

@@ -58,6 +58,9 @@ _RUNNING_RE = re.compile(r"^running:\s*(.+)$", re.MULTILINE)
 #: A token that could name a file: word characters, dots and dashes, with an extension.
 _FILE_TOKEN_RE = re.compile(r"[\w\-.]+\.[A-Za-z0-9]{1,5}")
 
+#: llama.cpp's own device-assignment line, which names the backend the weights ran on.
+_DEVICE_RE = re.compile(r"^llama_prepare_model_devices: using device (\S+)", re.MULTILINE)
+
 
 @dataclass(frozen=True)
 class LaneConfig:
@@ -174,6 +177,47 @@ def parse_run_output(stdout: str, stderr: str, returncode: int) -> dict[str, Any
     else:
         outcome = "plan"
     return {"plan": plan, "commands": commands, "outcome": outcome}
+
+
+def detect_backend(lane: LaneConfig, skill: str, cwd: Path) -> str | None:
+    """Ask the binary which compute backend it loads the weights onto.
+
+    Measured with one `--dry-run --verbose` probe rather than taken from an environment
+    variable, because the thing that matters is what the run *did*, and a variable records
+    what someone believed. It matters at all for the reason L3b gives: greedy argmax over
+    different FP accumulation flips near-ties, so a CPU→CUDA change between two runs is
+    indistinguishable from whatever the runs were meant to compare.
+
+    Returns `None` when the binary does not say — an unanswered question, never a guess.
+    """
+    try:
+        proc = subprocess.run(
+            [
+                str(lane.binary),
+                "run",
+                skill,
+                "--yes",
+                "--dry-run",
+                "--verbose",
+                "--model",
+                str(lane.model_path),
+                "convert",
+                "probe.mp4",
+                "to",
+                "mkv",
+            ],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=_lane_env(),
+            timeout=lane.timeout_s,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    match = _DEVICE_RE.search(f"{proc.stdout}\n{proc.stderr}")
+    return match.group(1) if match else None
 
 
 def _produced_files(work_dir: Path, before: set[str]) -> list[Path]:
