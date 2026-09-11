@@ -1,6 +1,7 @@
 # Skill quality lifecycle — Python proves it, Rust ships it, both must agree
 
-**Status:** Active — Workstreams V, E, L1, L2, G complete; L3 measured, L4 built not run ·
+**Status:** Active — Workstreams V, E, L1, L2, G complete; L3 measured; L4 built and gated,
+never run over a corpus ·
 **Created:** 2026-09-10 · **Last worked:** 2026-09-11 · **Completed:** —
 **Owner:** core · **Ref:** supersedes and absorbs the 2026-08-08 native/Python planning-parity
 plan (retired 2026-09-10; its measurements are carried below, its history is in git);
@@ -41,19 +42,21 @@ builds on `scripts/parity_check.py` and `contracts/parity/`
 > refusal from a correct one, so **coverage is not computable from today's records** until the
 > runner marks them apart. See L4d.
 
-> **Where this stands (2026-09-11).** 33 of 45 items done. Complete: **V** (prompt convergence
+> **Where this stands (2026-09-11).** 35 of 45 items done. Complete: **V** (prompt convergence
 > — the whole system prompt is now byte-identical across runtimes), **E** (the native executor;
-> this plan's one user-facing fix), **L1/L2** (the deterministic contracts, in `just check`), and
+> this plan's one user-facing fix), **L1/L2** (the deterministic contracts, in `just check`),
 > **G** (the gate — which lowered both skills from `supported` to `in-progress` on its first run,
-> because nothing backed the word).
+> because nothing backed the word), and as of today **L4's machinery end to end**: the lane, the
+> acceptance rule, and the verdict that records itself as evidence.
 >
 > **Not done, and the honest shape of what is left:**
-> - **L4 is built but never run over a corpus.** `just eval-native` works and is smoke-verified;
->   no skill has an L4 number, which is why none can be `supported`.
-> - **L4d's acceptance rule is prose, not code.** The scoring contract under it is implemented;
->   the comparison against the Python snapshot is not.
+> - **L4 has never been run over a corpus.** `just eval-native` + `just eval-accept-native` are
+>   built and tested; no skill has an L4 number, which is why none can be `supported`. That run
+>   needs a release binary, a GGUF and the external binaries — it is the next thing to do, and it
+>   is the only remaining step between here and a skill that can legitimately claim `supported`.
 > - **Five defects L3 found are recorded and unfixed** (N1–N5), including an aspect-crop filter
->   that ffmpeg rejects on **both** runtimes.
+>   that ffmpeg rejects on **both** runtimes. N1/N2 will show up in the first L4 run as real
+>   failures rather than as parity disagreements.
 > - **Stages S1/S3/S4/S6 are lifecycle steps for future skills**, not deliverables here. **S5**
 >   (re-locking the snapshots) is blocked on an owner decision about three ffmpeg safety rows.
 > - **Two decisions are open and belong to the owner**, not to more work: L3's pass bar (which
@@ -684,7 +687,10 @@ is a place a correct plan still fails a user, and every one is invisible to a pl
     catastrophe that isn't real, which is worse than not running it.
   - **Real execution writes real files.** Run it in the fixture sandbox, and treat the produced
     artifacts as the graded output, not a log line claiming success.
-- [ ] **L4b — Python-side execution is a *diagnostic*, never the gate.** Executing a native plan
+- [x] **L4b — DONE 2026-09-11: enforced, not asserted.** `accept-native` refuses a scoreboard
+  whose `lane_kind` is not `native_cli`, so a Python-side run cannot buy acceptance even by
+  accident. Stating the rule in prose was what the original design did, and prose is what let
+  the first draft make this the acceptance instrument. *(Original text: Python-side execution is a **diagnostic**, never the gate.* Executing a native plan
   through Python's pipeline is useful for **locating** a failure (planner vs executor), and that is
   the only thing it may be used for. It must not be reported as the acceptance number, and any
   output it produces carries the label *"native planner, Python execution — not the shipped
@@ -699,7 +705,30 @@ is a place a correct plan still fails a user, and every one is invisible to a pl
   (`evalsuite/cli.py:130`), so a `rust-cli` key is not inert — it is a token-generation backend
   that will be constructed and fail, or half-work. Use a **separate top-level section** (e.g.
   `lanes:`), so the config shape says what the thing is.
-- [ ] **L4d — Specify the acceptance rule; "within 2 points of the snapshot" names no metric.**
+- [x] **L4d — DONE 2026-09-11: the rule is code.** `acceptance.check_native_acceptance` +
+  `just eval-accept-native`, graded against the frozen snapshot and the S2 bar together, with
+  the verdict written into the skill's acceptance record either way. Four things the
+  implementation settled or found, none of them a restatement of the prose below:
+  - **The contract said 0.95 coverage and G1 said complete; they cannot both be the acceptance
+    bar.** They turned out to be two numbers for two jobs, and the contract now says so: the
+    lane's `--min-coverage` is a *reporting* gate (below it, print no aggregate at all — L4e),
+    while acceptance needs **complete** coverage, because `supported` claims the binary works
+    for the corpus and a capability it cannot attempt is not covered by a score over the rest.
+  - **Safety was about to be certified with the wrong runtime's answers.** `eval-safety` runs
+    the corpus through the *Python* agent; feeding that result to an L4 bar would certify the
+    binary's refusals using behavior it never produced — this plan's own failure mode, inside
+    the check meant to prevent it. `evalsuite safety --lane` (`just eval-safety-native`) runs
+    the same corpus through the binary, and `accept-native` refuses a safety result that did
+    not come from it.
+  - **The committed snapshots carry no `scoring_policy`**, so strictly they are baselines of
+    unknown semantics. They are comparable — policy v1 codified the scoring already in force
+    and adds only `not_implemented`, which Python never emits — but that argument expires at
+    the next policy bump, so the code refuses an unstamped baseline once `POLICY_VERSION > 1`
+    rather than carrying the assumption silently past it. A test fails at that moment and says
+    to re-lock (S5).
+  - **The floors are restated from `contracts/release/native_status.yaml`, not re-derived**,
+    with a guard test comparing them — the V4 pattern, for the V4 reason.
+  *(Original text: Specify the acceptance rule; "within 2 points of the snapshot" names no metric.*
   `eval_snapshot.json` carries `outcome_accuracy` (ffmpeg: 0.902), `avg_knaif_score` (0.974),
   `avg_baseline_score`, `intent_metrics` and `by_tag` — "2 points" of which was never said. Define:
   - **Metrics:** `outcome_accuracy` **and** `avg_knaif_score`, each gated separately. Both, because
@@ -889,11 +918,13 @@ Without this the layers are a checklist nobody is obliged to run.
     coverage keys (`ubuntu`) name the same thing differently, so an alias map is declared in the
     contract. The first version reported Linux as uncovered — a guard that cries wolf gets
     deleted, which is worse than not having one.
-  - **Not done: the L4 acceptance threshold is not enforced**, because L3's bar is an open owner
-    decision (see L3a). `thresholds.L3` is explicitly `null` in the contract and the validator
-    checks that evidence exists and is current, reporting the recorded rate rather than judging
-    it. Also not done: binding a record to the **native release artifact's** sha256, and keeping
-    a released artifact's record as historical evidence — both need a release to exist first.
+  - **L4's threshold is enforced as of 2026-09-11** (L4d): `accept-native` applies it and writes
+    `passed` into the record, and the gate reads a failing record as `failing` rather than as
+    evidence. **L3's is still not**, because its bar is an open owner decision (see L3a):
+    `thresholds.L3` is explicitly `null` in the contract and the validator checks that evidence
+    exists and is current, reporting the recorded rate rather than judging it. Also not done:
+    binding a record to the **native release artifact's** sha256, and keeping a released
+    artifact's record as historical evidence — both need a release to exist first.
   - *(Original text: a validator that rejects missing, partial or stale evidence.* Status rules and doc
   updates are not a gate; something must fail. Add a check (in `just check` and the release
   gate) that for every skill claiming `supported`, an acceptance record exists and is **current**.

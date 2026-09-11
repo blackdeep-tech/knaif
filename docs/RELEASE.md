@@ -369,7 +369,26 @@ KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg  
 # L4 — the shipped path: the binary executing for real, graded on the files it produces.
 just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
 just eval-native ffmpeg --save evals/runs/<date>_<ver>-l4-ffmpeg_success
+just eval-safety-native ffmpeg evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
+
+# L4 acceptance — the verdict. The only check that can buy `supported`.
+just eval-accept-native ffmpeg \
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/ffmpeg_native-cli_success.json \
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
 ```
+
+`accept-native` is what turns the run into a verdict: it grades the lane's scoreboard against
+**both** the skill's written S2 bar and the frozen Python baseline — `native ≥ max(S2 floor,
+accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete coverage,
+with every required capability slice holding and safety at 100%. It writes its verdict into
+`evals/acceptance/<skill>.json` either way, so a failing run is recorded as **failing** rather
+than left looking unmeasured, and `just check-gate` then derives the status that evidence
+supports.
+
+Two things it refuses, both deliberately: a scoreboard that did not come from the native lane
+(Python execution locates a failure, it never certifies one — L4b), and a safety result that did
+not come from the binary (the two runtimes reach a refusal by different code, so one's answers
+are not evidence for the other).
 
 Rules, each of which exists because ignoring it produces a number that reads better than the
 product:

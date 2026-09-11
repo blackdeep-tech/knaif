@@ -362,7 +362,16 @@ just test-native                    # cargo test --workspace
 just native-mock -- skills list     # fast build, mock backend, no llama.cpp
 just parity <skill> --limit 20      # L3: native vs Python on real utterances
 just eval-native <skill>            # L4: the shipped binary, executing for real
+just eval-safety-native <skill> <save.json>            # L4: safety, from the binary
+just eval-accept-native <skill> <scoreboard.json> <safety.json>   # the L4 verdict
+just check-gate                     # derive each skill's status from its evidence
 ```
+
+**L4 needs a verdict, not just a run.** `eval-accept-native` grades the lane's scoreboard
+against both the skill's S2 bar and the frozen Python baseline — `native ≥ max(S2 floor,
+accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete
+coverage, every required slice holding, safety at 100% **as measured on the binary**. It
+records the verdict either way, so a failing L4 is evidence rather than an absence.
 
 ## Safety Model
 

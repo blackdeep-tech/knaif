@@ -31,6 +31,21 @@ ACCEPTANCE_FILENAME = "acceptance.yaml"
 #: Verifiers that actually execute the plan and grade the artifact.
 EXECUTING_VERIFIERS = ("success", "output_diff")
 
+#: L4d: how far below the accepted Python score the shipped runtime may land on a metric.
+#: A *lower bound*, never a band — improvement always passes.
+NATIVE_TOLERANCE = 0.02
+
+#: The two metrics L4 gates, separately. Routing to the right tool and producing a good
+#: artifact are different failures, and a perfect score on one does not buy the other.
+NATIVE_METRICS = ("outcome_accuracy", "avg_knaif_score")
+
+#: Acceptance requires *complete* coverage — distinct from the lane's own reporting
+#: threshold, which only decides whether a score is printed at all (L4e).
+NATIVE_COVERAGE_FLOOR = 1.0
+
+# These three restate `thresholds.L4` in contracts/release/native_status.yaml, which is
+# canonical. `python/core/tests/test_native_acceptance.py` fails if they drift apart.
+
 _DEFAULT_SKILLS_ROOT = Path("skills")
 
 # Floors are written to 2-3 decimals; compare with a tolerance so a floor of 0.90
@@ -424,3 +439,193 @@ def check_acceptance(
             )
 
     return AcceptanceReport(violations=violations, checked=checked)
+
+
+# -- L4: the shipped native runtime -------------------------------------------
+
+
+def native_aggregate_floors(
+    spec: dict[str, Any],
+    baseline: dict[str, Any],
+    tolerance: float = NATIVE_TOLERANCE,
+) -> dict[str, float]:
+    """The floors an L4 run must clear: the S2 bar, raised by the parity allowance.
+
+        native >= max(S2 floor, accepted Python score - tolerance)
+
+    Both halves earn their place. Without the tolerance, native could lose ground to
+    Python indefinitely as long as it stayed above a floor written long ago. Without the
+    `max()`, a bare relative allowance lets the product ship *below* the minimum someone
+    wrote down: if Python drifts to just above its floor and native lands two points
+    under that, the shipped runtime is worse than the bar the skill was accepted on. The
+    floor is an absolute; the tolerance is a parity allowance.
+    """
+    floors = {k: float(v) for k, v in (spec.get("aggregate") or {}).items()}
+    for metric in NATIVE_METRICS:
+        accepted = baseline.get(metric)
+        if accepted is None:
+            continue
+        floors[metric] = max(floors.get(metric, 0.0), float(accepted) - tolerance)
+    return floors
+
+
+def check_native_acceptance(
+    spec: dict[str, Any],
+    baseline: dict[str, Any],
+    scoreboard: dict[str, Any],
+    safety: dict[str, Any] | None = None,
+    *,
+    coverage_floor: float = NATIVE_COVERAGE_FLOOR,
+    tolerance: float = NATIVE_TOLERANCE,
+) -> AcceptanceReport:
+    """Grade an L4 lane run against the S2 bar and the frozen Python baseline.
+
+    *baseline* is the skill's `data/eval_snapshot.json` — the accepted, named baseline
+    stages 4-6 are measured against (S5). Three things are checked that the Python-side
+    bar does not:
+
+    * **the parity allowance** above, on each gated metric;
+    * **coverage**, which defaults to *complete*. `avg_knaif_score` excludes rows the
+      runtime never attempted, and that exclusion is only honest while coverage is gated
+      independently — a partial port would otherwise be flattered by its own gaps (L4d/L4e);
+    * **identity with the baseline** — same verifier, same population, same model. A run
+      that differs on any of them answers a different question, however good it looks.
+
+    Everything else — required capability slices, safety at 100%, the scoring-policy
+    stamp — is the same bar the Python side clears, and is delegated rather than restated.
+    """
+    violations: list[Violation] = []
+    checked = 0
+
+    # Identity with the frozen baseline. Checked before the numbers, because a mismatch
+    # here means the numbers below are not comparable at all.
+    for key, name in (("verifier", "verifier"), ("total", "total")):
+        checked += 1
+        want, got = baseline.get(key), scoreboard.get(key)
+        if want is not None and got != want:
+            violations.append(
+                Violation(
+                    "identity",
+                    name,
+                    f"{name}: the run reports {got!r}, the accepted baseline {want!r}. "
+                    "L4 compares against the frozen baseline, so it must use the same "
+                    "corpus and verifier.",
+                )
+            )
+
+    # The baseline's own scoring semantics. An unstamped snapshot is comparable *only*
+    # because policy v1 codifies what `scoring.py` already did, and adds one distinction
+    # (`not_implemented`) that Python never emits — so a pre-policy Python snapshot was in
+    # fact graded under v1's rules. That argument expires the moment the policy changes,
+    # and this refuses rather than carrying the assumption silently past it.
+    checked += 1
+    bar_policy = spec.get("policy_version")
+    base_policy = baseline.get("scoring_policy")
+    if base_policy is not None and base_policy != bar_policy:
+        violations.append(
+            Violation(
+                "identity",
+                "baseline_policy",
+                f"the accepted baseline was graded under scoring policy v{base_policy}, the "
+                f"bar is written against v{bar_policy}. Re-lock the baseline under the new "
+                "semantics (S5) — a number graded under old rules is not a target for a new one.",
+            )
+        )
+    elif base_policy is None and POLICY_VERSION > 1:
+        violations.append(
+            Violation(
+                "identity",
+                "baseline_policy",
+                "the accepted baseline declares no scoring_policy and the policy has since "
+                f"moved to v{POLICY_VERSION}. It was safe to treat an unstamped snapshot as v1 "
+                "(v1 codified the scoring already in force); it is not safe now. Re-lock it (S5).",
+            )
+        )
+
+    checked += 1
+    want_model = baseline.get("backend_public_name")
+    got_model = scoreboard.get("backend_public_name")
+    if want_model is not None and got_model != want_model:
+        violations.append(
+            Violation(
+                "identity",
+                "model",
+                f"model: the run reports {got_model!r}, the accepted baseline {want_model!r}. "
+                "A different model is a different system, not a parity result.",
+            )
+        )
+
+    # Coverage (L4e): reported together with the score, or neither is reported.
+    checked += 1
+    coverage = scoreboard.get("coverage")
+    if coverage is None:
+        violations.append(
+            Violation(
+                "coverage",
+                "coverage",
+                "the run reports no coverage; a score over an unknown population cannot be "
+                "an acceptance result",
+                coverage_floor,
+                None,
+            )
+        )
+    elif float(coverage) + _EPS < coverage_floor:
+        violations.append(
+            Violation(
+                "coverage",
+                "coverage",
+                f"coverage {float(coverage):.4f} < {coverage_floor:.4f} "
+                f"({scoreboard.get('unattempted')} row(s) unattempted). The shipped runtime "
+                "cannot attempt part of the corpus, so the score describes the rows it "
+                "happened to manage.",
+                coverage_floor,
+                float(coverage),
+            )
+        )
+
+    # The aggregate metrics, each against its raised floor.
+    floors = native_aggregate_floors(spec, baseline, tolerance)
+    for metric, floor in floors.items():
+        checked += 1
+        accepted = baseline.get(metric)
+        if metric in NATIVE_METRICS and accepted is None:
+            violations.append(
+                Violation(
+                    "aggregate",
+                    metric,
+                    f"{metric}: the accepted baseline does not report it, so there is "
+                    "nothing to be within tolerance of",
+                    floor,
+                    None,
+                )
+            )
+            continue
+        observed = scoreboard.get(metric)
+        why = (
+            f"S2 floor {float((spec.get('aggregate') or {}).get(metric, 0.0)):.3f}; "
+            f"Python {float(accepted):.3f} - {tolerance:.2f} allowance"
+            if accepted is not None
+            else f"S2 floor {floor:.3f}"
+        )
+        if observed is None:
+            violations.append(
+                Violation("aggregate", metric, f"{metric} not reported by the run", floor, None)
+            )
+        elif float(observed) + _EPS < floor:
+            violations.append(
+                Violation(
+                    "aggregate",
+                    metric,
+                    f"{metric} {float(observed):.3f} < {floor:.3f} ({why})",
+                    floor,
+                    float(observed),
+                )
+            )
+
+    # Slices, safety and the scoring-policy stamp are the S2 bar unchanged. The aggregate
+    # is emptied because it was just checked here against the raised floors.
+    delegated = check_acceptance({**spec, "aggregate": {}}, scoreboard, safety)
+    return AcceptanceReport(
+        violations=violations + list(delegated.violations),
+        checked=checked + delegated.checked,
+    )

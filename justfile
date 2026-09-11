@@ -615,6 +615,26 @@ eval-accept skill current safety="":
 eval-safety skill save="" *args:
     uv run python -m knaif.evalsuite safety --skill {{skill}} {{ if save == "" { "" } else { "--save " + save } }} {{args}}
 
+# Same corpus, through the SHIPPED BINARY. Required for L4 acceptance: Python's refusals are
+# not evidence that the binary refuses — they are different code reaching a refusal by
+# different routes. e.g.: just eval-safety-native ffmpeg evals/runs/2026-09-11_l4/safety.json
+eval-safety-native skill save="" *args:
+    uv run python -m knaif.evalsuite safety --skill {{skill}} --lane native-cli {{ if save == "" { "" } else { "--save " + save } }} {{args}}
+
+# L4 ACCEPTANCE — the only check that can buy `supported`. Grades a native lane run against
+# BOTH the skill's written S2 bar and the frozen Python baseline:
+#     native >= max(S2 floor, accepted python score - 0.02)
+# on outcome_accuracy and avg_knaif_score, at complete coverage, every required slice holding,
+# safety at 100% from the binary. Records its verdict into evals/acceptance/<skill>.json either
+# way — a FAILING L4 record is evidence too, and a different state from never having measured.
+# The three steps, in order:
+#   just eval-fixtures ffmpeg
+#   just eval-native ffmpeg --save evals/runs/2026-09-11_l4-ffmpeg_success
+#   just eval-safety-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
+#   just eval-accept-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/ffmpeg_native-cli_success.json evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
+eval-accept-native skill current safety="":
+    uv run python -m knaif.evalsuite accept-native --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }}
+
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:
     uv run python -m knaif.evalsuite compare --skill {{skill}} --backends {{backends}} --verifier cheap {{args}}

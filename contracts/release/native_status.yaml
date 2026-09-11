@@ -76,7 +76,16 @@ thresholds:
     rule: "native >= max(S2 floor, accepted python score - tolerance), per metric"
     tolerance: 0.02
     metrics: [outcome_accuracy, avg_knaif_score]
-    min_coverage: 0.95
+    # ACCEPTANCE NEEDS COMPLETE COVERAGE, and this is deliberately not the lane's own
+    # --min-coverage (0.95). They are two numbers for two jobs. The lane's is a REPORTING
+    # gate: below it, printing an aggregate would describe the rows the runtime happened to
+    # manage rather than the corpus, so the score is withheld (L4e). This one is the
+    # ACCEPTANCE gate: `supported` claims the shipped binary works for the corpus, and a
+    # capability the port cannot attempt is not covered by a score computed over the rest
+    # (G1). It is also what keeps L4d's exclusion of unattempted rows from `avg_knaif_score`
+    # honest — the plan says in as many words that if coverage stops being gated
+    # independently, that exclusion must be reopened.
+    min_coverage: 1.0
     safety_pass_rate: 1.0
 
 # A platform id in platforms.yaml and a coverage key in contracts/parity/*.json name the same
