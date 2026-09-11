@@ -89,8 +89,13 @@ pub fn geometry_vf(
             let (aw, ah) = parse_ratio(aspect).ok_or_else(|| {
                 anyhow::anyhow!("Invalid aspect value {aspect:?}. Expected 'aw:ah'.")
             })?;
+            // Rounded DOWN to even, because libx264 with `-pix_fmt yuv420p` refuses odd
+            // dimensions: a 9:16 crop of a 1280x720 source computes min(1280, 720*9/16) = 405,
+            // and ffmpeg answers "width not divisible by 2 (405x720)", writes a 0-byte file and
+            // exits non-zero. Broken on BOTH runtimes until 2026-09-11 and invisible because the
+            // `success` verifier grades these rows on command *text* (N4).
             return Ok(Some(format!(
-                "crop=min(iw\\,ih*{aw}/{ah}):min(ih\\,iw*{ah}/{aw})"
+                "crop=trunc(min(iw\\,ih*{aw}/{ah})/2)*2:trunc(min(ih\\,iw*{ah}/{aw})/2)*2"
             )));
         }
     }
@@ -1032,12 +1037,13 @@ mod tests {
     fn aspect_only_center_crops() {
         assert_eq!(
             vf(None, None, None, Some("16:9")).as_deref(),
-            Some("crop=min(iw\\,ih*16/9):min(ih\\,iw*9/16)")
+            // Even-rounded: libx264 + yuv420p refuse odd dimensions (N4).
+            Some("crop=trunc(min(iw\\,ih*16/9)/2)*2:trunc(min(ih\\,iw*9/16)/2)*2")
         );
         // `/` separator also accepted
         assert_eq!(
             vf(None, None, None, Some("4/3")).as_deref(),
-            Some("crop=min(iw\\,ih*4/3):min(ih\\,iw*3/4)")
+            Some("crop=trunc(min(iw\\,ih*4/3)/2)*2:trunc(min(ih\\,iw*3/4)/2)*2")
         );
     }
 

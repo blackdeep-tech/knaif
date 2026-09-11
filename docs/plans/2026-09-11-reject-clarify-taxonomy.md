@@ -1,6 +1,14 @@
 # `reject` vs `clarify` — one word doing two jobs
 
-**Status:** Planned, not started · **Created:** 2026-09-11 · **Owner:** core
+**Status:** Planning — decided, not started ·
+**Created:** 2026-09-11 · **Last worked:** 2026-09-11 · **Completed:** —
+**Owner:** core · **Ref:** unblocks S5 in
+[2026-09-10-skill-quality-lifecycle.md](2026-09-10-skill-quality-lifecycle.md)
+
+**Goal:** Make `reject` mean *unsafe* and `clarify` cover everything else that cannot be planned,
+so the contract, the prompt and the corpora stop contradicting each other — and ffmpeg's safety
+bar becomes reachable on evidence rather than on tolerance.
+
 **Decision taken 2026-09-11:** adopt option 1 below. Option 2 (a third control tool) is
 **ruled out** — it widens the prompt for every skill and adds a distinction a 4B model would get
 wrong, which is the kind of complexity that causes more failures than it prevents.

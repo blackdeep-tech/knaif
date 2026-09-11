@@ -271,7 +271,13 @@ def _geometry_vf(
         if not m:
             raise ValueError(f"Invalid aspect value {aspect!r}. Expected 'aw:ah'.")
         aw, ah = m.group(1), m.group(2)
-        return f"crop=min(iw\\,ih*{aw}/{ah}):min(ih\\,iw*{ah}/{aw})"
+        # Rounded DOWN to even, because libx264 with `-pix_fmt yuv420p` refuses odd
+        # dimensions outright: a 9:16 crop of a 1280x720 source computes
+        # min(1280, 720*9/16) = 405, and ffmpeg answers "width not divisible by 2
+        # (405x720)", writes a 0-byte file and exits non-zero. This was invisible for
+        # months because the `success` verifier grades these rows on command *text*
+        # (`filter:crop` present), so the broken artifact scored 1.0 on both runtimes (N4).
+        return f"crop=trunc(min(iw\\,ih*{aw}/{ah})/2)*2:trunc(min(ih\\,iw*{ah}/{aw})/2)*2"
 
     if width and height:
         effective_fit = fit or "crop"
@@ -282,9 +288,7 @@ def _geometry_vf(
                 f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
             )
-        return (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase," f"crop={width}:{height}"
-        )
+        return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
 
     if width:
         return f"scale=min({width}\\,iw):-2"
