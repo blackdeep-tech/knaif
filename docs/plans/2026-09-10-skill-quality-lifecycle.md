@@ -656,7 +656,32 @@ that finds them, not the one that repairs them.
   never created. So "crop clip.mp4 to a square" is broken for users on **both** runtimes — a
   cross-runtime product bug that a parity check comparing only "do they agree" would have missed
   entirely, since they nearly agree on being wrong.
-- [~] **N6 — the marker half is FIXED 2026-09-11; the missing capability is not.**
+- [x] **N6 — DONE 2026-09-11, both halves. `reverse_video` is implemented, and every public tool
+  in both bundles now exists in the native runtime.**
+  - **It was never a missing capability — it was a missing dispatch arm.** The engine had
+    implemented `mode = "reverse"` all along (the `-vf reverse` / `-af areverse` filters, the
+    include-audio branch, the container default) *with its own tests*. What did not exist was the
+    five-line arm in `resolve_intent` mapping the tool name `reverse_video` onto that mode, so the
+    capability was present and unreachable. The fall-through message named `join_videos` as the
+    outstanding work, and `join_videos`/concat was later implemented through a **different**
+    function (`expand_concat`) — which made the message look satisfied while the other tool it
+    was catching stayed unwired. History is squashed at 1.0.1, so that sequence is inference from
+    the code, not from commits.
+  - **Verified against Python, end to end**: the shipped binary renders
+    `ffmpeg -y -i clip.mp4 -vf reverse -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p
+    -af areverse -c:a aac -b:a 128k clip_reversed.mov` — byte-identical to Python's rendering
+    modulo path absolutization, `.mov` included — and executing it really produces a 10.008 s
+    reversed artifact from the 10.0 s source.
+  - **One trap worth keeping:** the native unit tests expand with a *stub* probe, which reports no
+    container, so the extension wins and they expect `clip_reversed.mp4`. Against the real file
+    ffprobe calls the container `mov` and **both** runtimes render `.mov`. Reading the unit test
+    as a divergence would be wrong, and the test says so at the assertion.
+  - **The gap is now enumerable, which it was not.** ffmpeg gained an `is_supported` list
+    mirroring the one `documents` has always had, and
+    `python/core/tests/test_native_tool_parity.py` asserts in both directions that it equals the
+    bundle's public tools. Mutation-tested by removing `reverse_video` from the list. A tool added
+    to `tools.yaml` without a native implementation now fails the build rather than the user.
+  - *(Original text:)* the marker half is FIXED 2026-09-11; the missing capability is not.
   `NOT_IMPLEMENTED_PREFIX` / `not_implemented_message` moved from `apps/cli` into
   `knaif-skill-api::capability`, and ffmpeg's fall-through arm now uses it. Verified through the
   rebuilt binary: *"not_implemented: the ffmpeg intent \"reverse_video\" is not built into the

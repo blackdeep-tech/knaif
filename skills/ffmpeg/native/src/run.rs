@@ -233,6 +233,32 @@ fn resolve_output(output: &str, sandbox: Option<&Path>) -> anyhow::Result<std::p
 
 /// Map one intent's args to its [`Resolved`] plan. `Ok(Ok(..))` = ready to render; `Ok(Err(msg))` =
 /// a clarify is needed (e.g. an unknown platform); `Err` = a hard/unknown-tool error.
+/// Public tools this runtime dispatches, declared rather than inferred from the match below.
+///
+/// `documents` has had an `is_supported` list since its port; ffmpeg had only the match arms, so
+/// the one tool with no arm (`reverse_video`) was invisible — nothing could enumerate what was
+/// missing, and the first L4 run recorded it as 25 execution errors rather than as an
+/// unimplemented capability. A contract test asserts this list equals the bundle's public tools,
+/// so a tool added to `tools.yaml` without a native implementation fails the build, not the user.
+pub fn is_supported(tool: &str) -> bool {
+    matches!(
+        tool,
+        "adjust_speed"
+            | "adjust_volume"
+            | "compress_video"
+            | "concat_video"
+            | "convert_video"
+            | "create_thumbnail"
+            | "extract_audio"
+            | "prepare_for_platform"
+            | "resize_video"
+            | "reverse_video"
+            | "rotate_video"
+            | "strip_audio"
+            | "trim_video"
+    )
+}
+
 fn resolve_intent(
     tool: &str,
     args: &serde_json::Map<String, Value>,
@@ -404,6 +430,18 @@ fn resolve_intent(
             set_output(&mut options, args);
             quality = Some(resolve_quality_profile(
                 &str_arg(args, "quality").unwrap_or_else(|| "balanced".into()),
+                data,
+            )?);
+        }
+        // The engine has implemented `mode = "reverse"` (filters, audio handling, container
+        // default) and tested it all along; only this dispatch arm was missing, so the tool was
+        // unreachable. Python defaults quality to `visually_good` here, not `balanced`.
+        "reverse_video" => {
+            options.mode = Some("reverse".into());
+            options.include_audio = args.get("include_audio").and_then(Value::as_bool);
+            set_output(&mut options, args);
+            quality = Some(resolve_quality_profile(
+                &str_arg(args, "quality").unwrap_or_else(|| "visually_good".into()),
                 data,
             )?);
         }
@@ -909,6 +947,55 @@ mod tests {
                 "f_speed.mp4"
             ]
         );
+    }
+
+    // `reverse_video` was the one public ffmpeg tool with no native dispatch arm, even though
+    // the engine has implemented and tested `mode = "reverse"` all along (engine.rs). Ground
+    // truth from Python for the same intent args.
+    #[test]
+    fn reverse_keeps_audio_by_default() {
+        assert_eq!(
+            cmd("reverse_video", serde_json::json!({"inputs": "clip.mp4"})),
+            vec![
+                "ffmpeg",
+                "-y",
+                "-i",
+                "clip.mp4",
+                "-vf",
+                "reverse",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "23",
+                "-preset",
+                "medium",
+                "-pix_fmt",
+                "yuv420p",
+                "-af",
+                "areverse",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                // `.mp4`, not `.mov`, and the difference is the STUB PROBE - not a divergence.
+                // Reverse preserves the source container (engine.rs, `mode == "reverse"`), taking
+                // `probe.container` first and falling back to the input's extension. These tests
+                // expand without a real file, so the stub reports no container and the extension
+                // wins. Against the real `clip.mp4`, ffprobe reports the container as `mov` and
+                // BOTH runtimes render `clip_reversed.mov` - verified end to end.
+                "clip_reversed.mp4"
+            ]
+        );
+    }
+
+    #[test]
+    fn reverse_without_audio_drops_the_track() {
+        let got = cmd(
+            "reverse_video",
+            serde_json::json!({"inputs": "clip.mp4", "include_audio": false}),
+        );
+        assert!(got.contains(&"-an".to_string()), "got {got:?}");
+        assert!(!got.contains(&"areverse".to_string()), "got {got:?}");
     }
 
     #[test]
