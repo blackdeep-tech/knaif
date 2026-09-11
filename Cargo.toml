@@ -35,6 +35,11 @@ knaif-skill-documents = { path = "skills/documents/native" }
 # Third-party.
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+# Filename globbing for ffmpeg batch inputs. Apache-2.0 (same as knaif), zero runtime deps,
+# ~1.5k lines, maintained by rust-lang. Already in the tree as a BUILD dep; this makes it a
+# runtime one, so `just licenses` must be regenerated (it appends to the existing Apache-2.0
+# block). Adopted only after diffing it against Python fnmatch — see run.rs.
+glob = "0.3"
 # Physical (non-SMT) core count, which std only approximates via available_parallelism (logical).
 # llama.cpp wants them separately: generation is memory-bound and peaks at PHYSICAL cores, while
 # prompt decode is compute-bound and scales to ALL logical threads. See docs/PERFORMANCE.md §3.

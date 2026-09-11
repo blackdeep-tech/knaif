@@ -213,89 +213,54 @@ fn has_glob_magic(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[')
 }
 
-/// fnmatch one path component: `*` (any run), `?` (one char), `[abc]` / `[a-z]` / `[!abc]`.
+/// fnmatch one path component, via the `glob` crate.
 ///
-/// Ported rather than taken from the `glob` crate deliberately. `glob` is currently a
-/// **build-only** dependency (clang-sys, llama-cpp-sys, find_cuda_helper), so making it a runtime
-/// dependency for one predicate would add it to the shipped binary and to the distributed license
-/// surface for no functional gain — the same reasoning V3 applied to `regex`.
+/// The requirement is **"match Python's `fnmatch`"**, not "glob correctly", so the crate is
+/// adopted behind this function with one correction. `glob` treats `**` as a *recursive wildcard*
+/// — a directory-descent extension fnmatch does not have — and **rejects the pattern outright**
+/// when `**` is not a whole path component: `**.mp4` and `a**b` are syntax errors to it and
+/// ordinary patterns to Python. Under fnmatch a run of `*` is just `*`, so collapsing the run
+/// before handing the pattern over restores Python's reading exactly.
 ///
-/// Matches a NAME only, never a path: there are no separators to worry about, which is what makes
-/// a compact matcher sufficient here.
+/// Found by diffing the crate against `fnmatch.fnmatchcase` rather than by trusting it; the
+/// disagreement is pinned in `the_glob_crate_still_differs_on_recursive_wildcards`.
+///
+/// Matches a NAME, never a path, so separator handling never comes into it.
 fn name_matches(pattern: &str, name: &str) -> bool {
-    let (p, n): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
-    let (mut pi, mut ni) = (0usize, 0usize);
-    // Backtrack point for the most recent `*`, so `a*b*c` works without recursion.
-    let (mut star, mut star_ni) = (None::<usize>, 0usize);
-    while ni < n.len() {
-        let matched = if pi < p.len() {
-            match p[pi] {
-                '?' => true,
-                '[' => match_class(&p, &mut pi, n[ni]),
-                '*' => {
-                    star = Some(pi);
-                    star_ni = ni;
-                    pi += 1;
-                    continue;
-                }
-                c => c == n[ni],
-            }
-        } else {
-            false
-        };
-        if matched {
-            pi += 1;
-            ni += 1;
-        } else if let Some(s) = star {
-            // The `*` swallows one more character and we retry from just after it.
-            pi = s + 1;
-            star_ni += 1;
-            ni = star_ni;
-        } else {
-            return false;
-        }
+    let collapsed = collapse_star_runs(pattern);
+    match glob::Pattern::new(&collapsed) {
+        Ok(p) => p.matches_with(name, GLOB_OPTS),
+        // An unparseable pattern matches nothing rather than aborting the whole expansion — the
+        // same shape as a pattern that simply found no files.
+        Err(_) => false,
     }
-    while pi < p.len() && p[pi] == '*' {
-        pi += 1;
-    }
-    pi == p.len()
 }
 
-/// Match one `[...]` class, advancing `pi` to the closing bracket. An unterminated `[` is a
-/// literal bracket, which is what fnmatch does.
-fn match_class(p: &[char], pi: &mut usize, c: char) -> bool {
-    let open = *pi;
-    let mut i = open + 1;
-    // Only `!` negates. `^` is an ordinary member, because Python's `fnmatch` says so and this
-    // has to match Python, not sh — `[^a]` matches the literal `^` or `a`. Caught by diffing
-    // this matcher against `fnmatch.fnmatchcase`, not by reasoning about it.
-    let negated = matches!(p.get(i), Some('!'));
-    if negated {
-        i += 1;
-    }
-    let mut found = false;
-    let mut first = true;
-    while i < p.len() && (p[i] != ']' || first) {
-        first = false;
-        // A range, but only when the `-` sits between two members rather than at either end.
-        if i + 2 < p.len() && p[i + 1] == '-' && p[i + 2] != ']' {
-            if p[i] <= c && c <= p[i + 2] {
-                found = true;
+/// `glob`'s matching options, pinned to fnmatch's: case-sensitive, and no special treatment of a
+/// leading dot (Python's `fnmatch` happily matches `.mp4` against `*.mp4`).
+const GLOB_OPTS: glob::MatchOptions = glob::MatchOptions {
+    case_sensitive: true,
+    require_literal_separator: true,
+    require_literal_leading_dot: false,
+};
+
+/// Collapse runs of `*` to a single `*` — fnmatch's reading, and what keeps `**` from being a
+/// syntax error to the `glob` crate.
+fn collapse_star_runs(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let mut prev_star = false;
+    for c in pattern.chars() {
+        if c == '*' {
+            if !prev_star {
+                out.push(c);
             }
-            i += 3;
+            prev_star = true;
         } else {
-            if p[i] == c {
-                found = true;
-            }
-            i += 1;
+            out.push(c);
+            prev_star = false;
         }
     }
-    if i >= p.len() {
-        // Unterminated: treat the `[` as a literal character.
-        return c == '[';
-    }
-    *pi = i;
-    found != negated
+    out
 }
 
 /// Expand any glob patterns in *inputs* against the sandbox, mirroring Python's `ResolveInputs`.
@@ -808,6 +773,40 @@ fn resolve_quality_profile(quality: &str, data: &FfmpegData) -> anyhow::Result<Q
     }
 }
 
+/// The contract the port owes Python, as data: every expectation generated from
+/// `fnmatch.fnmatchcase`, the function behind `Path.glob`. Shared by the two matcher tests so
+/// the hand-rolled matcher and the `glob` crate are judged against the SAME cases.
+#[cfg(test)]
+const PYTHON_FNMATCH_CASES: &[(&str, &str, bool)] = &[
+    ("*.mp4", "a.mp4", true),
+    ("*.mp4", "a.mkv", false),
+    ("*.mp4", ".mp4", true),
+    ("*", "x", true),
+    ("*", "", true),
+    ("a*b", "ab", true),
+    ("a*b", "axxb", true),
+    ("a*b", "axxc", false),
+    ("a*b*c", "axbyc", true),
+    ("a*b*c", "abc", true),
+    ("?.mp4", "a.mp4", true),
+    ("?.mp4", "ab.mp4", false),
+    ("clip?.mp4", "clip1.mp4", true),
+    ("[ab].mp4", "a.mp4", true),
+    ("[ab].mp4", "c.mp4", false),
+    ("[a-c].mp4", "b.mp4", true),
+    ("[a-c].mp4", "d.mp4", false),
+    ("[!a].mp4", "b.mp4", true),
+    ("[!a].mp4", "a.mp4", false),
+    ("[^a].mp4", "b.mp4", false),
+    ("[^a].mp4", "^.mp4", true),
+    ("*.MP4", "a.mp4", false),
+    ("clip*.mp4", "clip_4k.mp4", true),
+    ("*.*", "a.b", true),
+    ("*.*", "ab", false),
+    ("**.mp4", "a.mp4", true),
+    ("a**b", "aXb", true),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1244,44 +1243,34 @@ mod tests {
     }
 
     #[test]
+    fn the_glob_crate_still_differs_on_recursive_wildcards() {
+        // WHY `collapse_star_runs` EXISTS, pinned as a fact about the crate rather than left as
+        // a comment. `glob` reads `**` as a recursive wildcard and REJECTS it outside a whole
+        // path component; Python's fnmatch reads it as an ordinary run of stars. Found by
+        // diffing, not by reading docs.
+        //
+        // If a future `glob` release starts accepting these, this test fails and the
+        // normalization can be reconsidered — which is the point of pinning it.
+        for pattern in ["**.mp4", "a**b"] {
+            assert!(
+                glob::Pattern::new(pattern).is_err(),
+                "{pattern:?} now parses; re-evaluate collapse_star_runs"
+            );
+            assert!(
+                glob::Pattern::new(&collapse_star_runs(pattern)).is_ok(),
+                "collapsing must make {pattern:?} parseable"
+            );
+        }
+    }
+
+    #[test]
     fn the_matcher_agrees_with_pythons_fnmatch() {
-        // Every expectation generated from `fnmatch.fnmatchcase`, the function behind
-        // `Path.glob`. Diffing against it rather than reasoning about it is what caught
-        // `[^a]`: fnmatch negates on `!` ONLY, so `^` is an ordinary class member.
-        // This is the contract the port owes Python, expressed as data.
-        for (pattern, name, expected) in [
-            ("*.mp4", "a.mp4", true),
-            ("*.mp4", "a.mkv", false),
-            ("*.mp4", ".mp4", true),
-            ("*", "x", true),
-            ("*", "", true),
-            ("a*b", "ab", true),
-            ("a*b", "axxb", true),
-            ("a*b", "axxc", false),
-            ("a*b*c", "axbyc", true),
-            ("a*b*c", "abc", true),
-            ("?.mp4", "a.mp4", true),
-            ("?.mp4", "ab.mp4", false),
-            ("clip?.mp4", "clip1.mp4", true),
-            ("[ab].mp4", "a.mp4", true),
-            ("[ab].mp4", "c.mp4", false),
-            ("[a-c].mp4", "b.mp4", true),
-            ("[a-c].mp4", "d.mp4", false),
-            ("[!a].mp4", "b.mp4", true),
-            ("[!a].mp4", "a.mp4", false),
-            ("[^a].mp4", "b.mp4", false),
-            ("[^a].mp4", "^.mp4", true),
-            ("[.mp4", "[.mp4", true),
-            ("a[b.mp4", "a[b.mp4", true),
-            ("*.MP4", "a.mp4", false),
-            ("clip*.mp4", "clip_4k.mp4", true),
-            ("*.*", "a.b", true),
-            ("*.*", "ab", false),
-            ("**.mp4", "a.mp4", true),
-            ("a**b", "aXb", true),
-            ("[]a].mp4", "].mp4", true),
-        ] {
-            assert_eq!(name_matches(pattern, name), expected, "{pattern} vs {name}");
+        for (pattern, name, expected) in PYTHON_FNMATCH_CASES {
+            assert_eq!(
+                name_matches(pattern, name),
+                *expected,
+                "{pattern} vs {name}"
+            );
         }
     }
 

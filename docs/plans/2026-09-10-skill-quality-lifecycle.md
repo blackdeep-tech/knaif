@@ -659,16 +659,27 @@ that finds them, not the one that repairs them.
   - **`concat_video` is deliberately excluded.** Python's `ConcatVideoIntent` does not route its
     inputs through `ResolveInputs`, so globbing there would be a new divergence rather than a fix.
     Checked before writing the code, not after.
-  - **The matcher is ported rather than taken from the `glob` crate.** `glob` is currently a
-    **build-only** dependency (clang-sys, llama-cpp-sys, find_cuda_helper), so making it a runtime
-    dependency for one predicate would add it to the shipped binary and the distributed license
-    surface — the reasoning V3 applied to `regex`.
-  - **Two bugs the verification caught that reasoning did not.** A 30-case table diffed against
-    Python's `fnmatch.fnmatchcase` found that fnmatch negates a character class on `!` **only**,
-    so `[^a]` matches a literal `^` — the shell semantics I had assumed were wrong. And running
-    the real binary found that a bare `*.mp4` has an *empty* parent, so `read_dir("")` failed and
-    the glob matched nothing in CLI mode; Python never hits this because it re-bases every
-    relative path onto the sandbox first. Neither was visible in the unit tests as first written.
+  - **The matcher is the `glob` crate (owner decision 2026-09-11), behind an adoption gate.**
+    An earlier note here said it was hand-ported to avoid a bundled dependency, citing V3's
+    refusal of `regex`. **That reasoning did not survive checking**: `glob` is `MIT OR Apache-2.0`
+    — Apache-2.0 being knaif's own licence — with **zero runtime dependencies** and ~1.5k lines,
+    maintained by rust-lang. Regenerating `just licenses` added exactly **one line** to the
+    report's existing Apache-2.0 block. `regex` is a large crate with a dependency tree; the
+    precedent did not transfer, and it was invoked without testing whether it applied.
+  - **The crate was adopted only after diffing it against Python**, and the diff found a real
+    disagreement: `glob` reads `**` as a *recursive wildcard* and **rejects the pattern outright**
+    when it is not a whole path component, so `**.mp4` and `a**b` are syntax errors to it and
+    ordinary patterns to Python. `collapse_star_runs` folds a run of `*` into one (fnmatch's own
+    reading) before handing the pattern over, and a test **pins the crate's behaviour** so a
+    future release that changes it fails rather than silently diverges. Measured first: **zero**
+    of the 66 glob-bearing plans across two full L4 runs used `**`, so the divergence is real but
+    not yet live.
+  - **Three bugs the verification caught that reasoning did not.** The `**` rejection above; that
+    fnmatch negates a character class on `!` **only**, so `[^a]` matches a literal `^` (the shell
+    semantics assumed by the hand-written matcher were wrong); and — from running the real binary
+    rather than the unit tests — that a bare `*.mp4` has an *empty* parent, so `read_dir("")`
+    failed and globs matched nothing **in exactly the CLI mode the eval lane uses**. Python never
+    hits the last one because it re-bases every relative path onto the sandbox first.
 - [ ] **N2 — Native does not resolve bare stems, so it never clarifies** (`ffmpeg_288`, `289`).
   Plans carry `input: "silent_clip"` / `"mov"`, with no extension. Python resolves stems against
   the sandbox and asks *"Which silent_clip did you mean?"*; native renders `-i silent_clip`

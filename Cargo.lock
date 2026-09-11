@@ -1336,6 +1336,7 @@ name = "knaif-skill-ffmpeg"
 version = "1.1.0"
 dependencies = [
  "anyhow",
+ "glob",
  "knaif-skill-api",
  "serde",
  "serde_json",
