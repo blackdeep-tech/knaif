@@ -206,9 +206,38 @@ type-check-py: type-check
 # Full Python check: lint + type + test + generated-docs check
 check-py: lint-py type-check-py test-py gen-skills-check
 
-# Full CI check: Python, native, and both websites (astro check). Needs node + pnpm on
-# PATH — `just bootstrap` provisions them from mise.toml. Site recipes live at the bottom.
-check: check-py check-native site-check
+# The deterministic parity layers — L1 (contract conformance) and L2 (deterministic pipeline)
+# — on BOTH runtimes (plan docs/plans/2026-09-10-skill-quality-lifecycle.md, G4).
+#
+# In `just check` by default because they are the layers that cost nothing to run: no model,
+# no GPU, no external binaries, seconds. Their whole purpose is to fail a PR that changes one
+# runtime's prompt, retrieval, validation or rendering without the other — which they cannot do
+# if running them is a thing you have to remember.
+#
+# The Python halves already run inside `test-py`; this recipe exists so the RUST halves run too
+# (`check-native` is fmt + clippy only) and so a failure names the layer rather than arriving as
+# an anonymous cargo test. `just test-native` remains the broader workspace run.
+check-contracts:
+    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py -q
+    cargo test -p knaif-core --test parity
+    cargo test -p knaif-llm --test generation
+    cargo test -p knaif-cli --test executor_semantics
+    cargo test -p knaif-cli --test prompt_examples
+    cargo test -p knaif-cli --bin knaif prompt_parity
+    uv run python "{{justfile_directory()}}/scripts/parity_check.py" --self-test
+    uv run python -m knaif.evalsuite gate --record-contracts
+
+# G1/G2 — a skill may not claim a native status its evidence does not support. Reads
+# contracts/release/native_status.yaml; `supported` needs an L4 acceptance record, `parity`
+# needs an L3 run, and either goes stale when the tree moves underneath it. Also asserts the
+# platform matrix: a platform may not be `supported` without recorded parity coverage.
+check-gate:
+    uv run python -m knaif.evalsuite gate
+
+# Full CI check: Python, native, both websites (astro check), and the L1/L2 parity contracts.
+# Needs node + pnpm on PATH — `just bootstrap` provisions them from mise.toml. Site recipes
+# live at the bottom.
+check: check-py check-native check-contracts check-gate site-check
 
 # Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent.
 #

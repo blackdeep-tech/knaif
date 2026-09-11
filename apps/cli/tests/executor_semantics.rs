@@ -12,8 +12,11 @@
 //! Before E2, native answered any multi-step plan with `not_implemented:` and ran nothing, which
 //! is what each of these was written against.
 //!
-//! These execute `run --dry-run`, so the job that runs them needs ffmpeg on PATH for dependency
-//! preflight. Today that is true locally and not in CI.
+//! **They need no external binaries.** An earlier note here claimed the job running them needed
+//! ffmpeg on PATH for dependency preflight; that was wrong, and it would have kept them out of
+//! CI for no reason. `cmd_run` runs `detect_skill_deps` only when `!dry_run`, and ffmpeg's
+//! dry-run expansion stubs missing inputs rather than probing them. Verified by running this
+//! binary with ffmpeg absent from PATH: 6 passed.
 //!
 //! See docs/plans/2026-09-10-skill-quality-lifecycle.md (Workstream E, L2a).
 
