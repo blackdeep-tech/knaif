@@ -334,16 +334,34 @@ runtimes:
 
 The native runtime is a **port, not a rewrite** — same prompt, same validation, same
 expansion, so the same utterance must render the same command on both sides.
-`just parity <skill>` pins both runtimes to the identical GGUF and diffs the rendered
-output; results land in `evals/parity/`. Cross-runtime contracts (`contracts/runtime/`,
-`contracts/parity/planner_cases.json`) exist so the two implementations can't drift
-silently. See `docs/NATIVE.md`.
+
+**Porting does not start until stages 1–3 are done.** A skill that has not cleared Python
+acceptance (written thresholds, met on an executing verifier, baseline frozen — see *Evaluation*
+above) has no reference to be ported *against*: two runtimes agreeing on a behavior nobody
+accepted is not parity, it is a shared guess.
+
+**Exit criteria are four measured layers, not prose.** "Same prompt, same validation" is the
+intent; these are the checks that make it true. Full definitions in
+[docs/plans/2026-09-10-skill-quality-lifecycle.md](docs/plans/2026-09-10-skill-quality-lifecycle.md).
+
+| Layer | What it checks | Needs a model? | Bar |
+|---|---|---|---|
+| **L1** contract | prompt, retrieval, generation settings — from `contracts/parity/*.json` | no | 100%, every PR |
+| **L2** deterministic | parse → validate → defaults → expand → clarify gate, and ordered execution | no | 100%, every PR |
+| **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | see the plan — read as *symmetric disagreement*, not a native score |
+| **L4** shipped path | `knaif run` executing for real, graded on the files produced | yes (GGUF + external binaries) | reported **with coverage**; the only number backing "it works" |
+
+`runtimes.native.status` is a claim about those layers: `in-progress` (any subset),
+`parity` (L1/L2 at 100%, L3 met), `supported` (additionally full L4 acceptance). **Only
+`supported` is release-eligible.**
 
 ```bash
+just check-contracts                # L1 + L2 on both runtimes — no model, seconds (in `just check`)
 just check-native                   # fmt + clippy, warnings are errors
 just test-native                    # cargo test --workspace
 just native-mock -- skills list     # fast build, mock backend, no llama.cpp
-just parity <skill> --limit 20      # native vs Python on real utterances
+just parity <skill> --limit 20      # L3: native vs Python on real utterances
+just eval-native <skill>            # L4: the shipped binary, executing for real
 ```
 
 ## Safety Model

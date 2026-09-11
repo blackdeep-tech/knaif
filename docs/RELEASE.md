@@ -354,6 +354,41 @@ version `Cargo.toml` claims; `skills list` finds ffmpeg + documents via exe-rela
 downloads. `NOTICE` was absent from every artifact on every OS through 1.0.1 precisely because no
 check read it.
 
+### Runtime parity and shipped-path acceptance — REQUIRED before publishing
+
+`smoke.sh` proves the artifact *runs*. It does not prove the native runtime still agrees with the
+reference, or that a skill still does the job. Those are L3 and L4 of
+[the skill-quality plan](plans/2026-09-10-skill-quality-lifecycle.md), and they need a GGUF, so
+they cannot live in CI — which is exactly why they have to be a named release step rather than
+something someone remembers.
+
+```bash
+# L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
+KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity"
+
+# L4 — the shipped path: the binary executing for real, graded on the files it produces.
+just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
+just eval-native ffmpeg --save evals/runs/<date>_<ver>-l4-ffmpeg_success
+```
+
+Rules, each of which exists because ignoring it produces a number that reads better than the
+product:
+
+- **Run it from a clean tree.** Both runs record the git SHA and warn when the tree is dirty; a
+  dirty run does not describe a releasable commit.
+- **Record the backend.** `$KNAIF_PARITY_BACKEND` is stamped into `meta.json` and left `null`
+  when unset. Greedy argmax over different FP accumulation can flip a near-tie, so two runs on
+  different backends are not comparable — this is measured, not theoretical (see
+  `evals/parity/2026-09-10_l3-ffmpeg-command/backend_attribution.json`).
+- **Add a row to `evals/INDEX.md`** for each saved run. A run nobody indexed is a run nobody can
+  find when the next release asks "was this better or worse?".
+- **Quote the right number.** L4 — the binary executing for real, reported *with its coverage* —
+  is the only number that may back a claim that the product works. L1's 100% proves the prompts
+  match; L3's rate proves the runtimes agree on what to do. Neither says a user's file came out
+  right.
+- **Read L3's rate as symmetric disagreement, not a native score.** It says nothing about which
+  side is correct; native has been the better answer on real rows.
+
 ### Testing the Windows installer without damaging a real install
 
 The wizard cannot be verified silently — `/VERYSILENT` never builds the task tree, which is how
@@ -596,6 +631,25 @@ time, so no re-upload is needed. Skill bundles are deliberately excluded from th
 ---
 
 ## 6. Notes for users (put these in the release body)
+
+### Stating the quality claim honestly
+
+Every layer measures something different, and only one of them is about the product working. Quote
+accordingly (plan G5):
+
+| Layer | What it proves | What it does NOT prove |
+|---|---|---|
+| L1 contract | The two runtimes build the same prompt, retrieve the same tools, share the same settings | Nothing about behavior — a matching prompt can still produce a wrong plan |
+| L2 deterministic | Parse/validate/expand/gate agree, and native executes chains in order | Nothing about what the model chooses |
+| L3 behavioral | The runtimes **agree on what to do** for real utterances | Which side is *right*. It is symmetric disagreement; native has been the better answer on real rows |
+| L4 shipped path | **The installed binary produced the right files** | Only for the skills, corpus and coverage the run actually covered |
+
+So: **an L4 number, reported with its coverage, is the only one that may back "it works".** A
+release that quotes L1's 100% as a quality figure is claiming the prompts match and hoping the
+reader mistakes it for something else.
+
+State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
+locally, macOS unexercised** — say that rather than implying three platforms.
 
 **Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
 Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence

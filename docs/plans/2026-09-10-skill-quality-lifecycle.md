@@ -820,7 +820,10 @@ remains is a loop.
   `KNAIF_LLM_MOCK_RESPONSE` so they pin execution with no model. Verified genuinely red — all four
   fail when run with `--ignored`. One initially passed for the wrong reason (the clarify gate
   preempted the executor); its utterance now names the file so the executor is actually reached.
-  When they are un-skipped, the job running them needs ffmpeg on PATH.)* This is the one workstream that
+  **The "needs ffmpeg on PATH" note recorded here was wrong** — checked 2026-09-11 by running
+  the binary with ffmpeg absent: 6 passed. `cmd_run` preflights dependencies only when
+  `!dry_run`, and the dry-run expansion stubs missing inputs. They are pure L2 and run anywhere,
+  which is what let G4 put them in `just check` unconditionally.)* This is the one workstream that
   changes shipped runtime behavior, so the deterministic cases that pin ordered execution must be
   written first and must fail before E2 — otherwise the executor is asserted correct by the same
   change that introduces it, which is the pattern this plan exists to break.
@@ -829,8 +832,17 @@ remains is a loop.
 
 Without this the layers are a checklist nobody is obliged to run.
 
-- [ ] **G1 — Make `skill.yaml`'s `runtimes.native.status` mean something, and require L4 for
-  `supported`.** The first draft required only L1–L3 — but L3 may exclude chains, so a skill could
+- [x] **G1 — DONE 2026-09-11.** The three statuses are defined in
+  `contracts/release/native_status.yaml`, and `knaif.evalsuite.gate` derives the status a skill's
+  evidence supports and fails when the declaration outruns it.
+  - **Both active skills were lowered from `supported` to `in-progress` the first time the gate
+    ran**, because there was nothing behind the word: no L4 acceptance record for either skill,
+    and ffmpeg's first L3 run scored 0.819 against a 1.0 bar. This is the gate doing its job on
+    day one, not a regression — the skills are exactly as capable as they were yesterday; the
+    claim about them is now measured. `runtimes.native.status` is display-only (`knaif skills
+    list`), and nothing on the website renders it, so the change is not user-visible.
+  - *(Original text: make `skill.yaml`'s `runtimes.native.status` mean something, and require L4
+    for `supported`.* The first draft required only L1–L3 — but L3 may exclude chains, so a skill could
   become `supported` while an entire capability was refused at execution. Statuses:
   - **`in-progress`** — porting started; any subset of layers passing. Development evidence, no
     release eligibility.
@@ -840,7 +852,30 @@ Without this the layers are a checklist nobody is obliged to run.
     excluded), both metrics within tolerance, every slice gate met, safety 100%. **Only
     `supported` is release-eligible.**
   Partial runs stay useful and stay published — they just cannot buy `supported`.
-- [ ] **G2 — A validator that rejects missing, partial or stale evidence.** Status rules and doc
+- [x] **G2 — DONE 2026-09-11: `just check-gate`, in `just check`.** Evidence lives in
+  `evals/acceptance/<skill>.json` and is bound to the tuple below; each layer is reported
+  **valid / failing / stale / pending** independently, and status is **derived** from the valid
+  ones rather than decremented.
+  - **Evidence is written by whatever verified it, never typed.** `just check-contracts` records
+    L1/L2 *after* the tests pass; `gate --record-parity <run>` reads a saved run's own
+    `meta.json` for L3. A record therefore means "this ran against this tree".
+  - **`failing` is a distinct state from `pending`**, added after the first implementation got it
+    wrong: it counted a *failed* L3 run as valid evidence, which would have let a status rest on
+    a measurement that said no.
+  - **The tuple covers the shared members that get forgotten** — `python_core`
+    (planner/prompt/registry), `contracts`, the verifier *implementation* (not its name), and
+    the generation settings — each with a test proving an edit there invalidates every dependent
+    layer. Self-demonstrated: editing `skill.yaml` to add a comment marked L1/L2/L3 stale.
+  - **Platform guard is live and passes**, with one correction: platform ids (`linux-x64`) and
+    coverage keys (`ubuntu`) name the same thing differently, so an alias map is declared in the
+    contract. The first version reported Linux as uncovered — a guard that cries wolf gets
+    deleted, which is worse than not having one.
+  - **Not done: the L4 acceptance threshold is not enforced**, because L3's bar is an open owner
+    decision (see L3a). `thresholds.L3` is explicitly `null` in the contract and the validator
+    checks that evidence exists and is current, reporting the recorded rate rather than judging
+    it. Also not done: binding a record to the **native release artifact's** sha256, and keeping
+    a released artifact's record as historical evidence — both need a release to exist first.
+  - *(Original text: a validator that rejects missing, partial or stale evidence.* Status rules and doc
   updates are not a gate; something must fail. Add a check (in `just check` and the release
   gate) that for every skill claiming `supported`, an acceptance record exists and is **current**.
   - **Bind acceptance to a tuple**, all recorded in the run's `meta.json`: skill bundle hash +
@@ -883,15 +918,31 @@ Without this the layers are a checklist nobody is obliged to run.
     - This plan closes with **Ubuntu covered in CI, Windows covered locally, and macOS
       unexercised and `planned`** — an honest, complete statement of what was verified. The guard
       is what makes that statement stay true.
-- [ ] **G3 — Add the gate to the skill lifecycle in `AGENTS.md`.** The bundle already documents
+- [x] **G3 — DONE 2026-09-11.** The native-port section now names L1–L4 as exit criteria in a
+  table (what each checks, whether it needs a model, what its bar is), states that
+  `runtimes.native.status` is a claim about those layers, and says explicitly that porting does
+  not start until stages 1–3 are done — a skill with no accepted reference has nothing to be
+  ported *against*. *(Original text: add the gate to the skill lifecycle in `AGENTS.md`.* The bundle already documents
   four concerns (handlers, eval, training, native port); the native-port section should name
   **L1–L4** as its exit criteria — L4 included, since it is the only one that establishes the
   ported skill works — rather than "same prompt, same validation, same expansion" as prose. It
   should also record that stages 1–3 (Workstream S) gate the port's *start*, which the current
   lifecycle text does not say.
-- [ ] **G4 — Add L1/L2 to `just check`** so the deterministic layers run locally by default, and
+- [x] **G4 — DONE 2026-09-11: `just check-contracts`, in `just check`.** Runs both runtimes'
+  L1/L2 in seconds — no model, no GPU, no external binaries — and names the layer when it fails
+  rather than arriving as an anonymous cargo test. L3/L4 are now a named step in
+  `docs/RELEASE.md` §4 with the rules that make a saved run quotable (clean tree, recorded
+  backend, INDEX row, and which number may back which claim).
+  - **A stale note nearly kept these out of CI:** the executor cases claimed they needed ffmpeg
+    on PATH. Checked rather than inherited — `cmd_run` preflights dependencies only when
+    `!dry_run` — and verified by running the binary with ffmpeg absent: 6 passed. They are pure
+    L2 and run anywhere. *(Original text: add L1/L2 to `just check`* so the deterministic layers run locally by default, and
   L3/L4 to `docs/RELEASE.md` §4 as a release step with the run recorded.
-- [ ] **G5 — State the release claim honestly.** Whatever L3 measures for each shipped skill is
+- [x] **G5 — DONE 2026-09-11.** `docs/RELEASE.md` §6 carries a table of what each layer proves
+  and, more importantly, what it does **not**: only an L4 number reported with its coverage may
+  back "it works"; L1's 100% proves the prompts match; L3's rate is *symmetric disagreement* and
+  says nothing about which side is right. Platform coverage is stated with it — Ubuntu in CI,
+  Windows locally, macOS unexercised. *(Original text: state the release claim honestly.* Whatever L3 measures for each shipped skill is
   the number that may be quoted for runtime agreement — not L1's 100%, which proves only that the
   prompts match.
 
