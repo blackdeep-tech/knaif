@@ -49,19 +49,25 @@ builds on `scripts/parity_check.py` and `contracts/parity/`
 > because nothing backed the word), and as of today **L4's machinery end to end**: the lane, the
 > acceptance rule, and the verdict that records itself as evidence.
 >
-> **ffmpeg has its first L4 number as of 2026-09-11, and it is a NOT ACCEPTED.** Native
-> `outcome_accuracy` **0.8123** against Python's 0.9020 — nine points down, far outside the
-> two-point allowance — while `avg_knaif_score` is **0.9827 vs 0.9738, better than Python**. Read
-> together: *when the shipped binary produces an artifact, the artifact is at least as good as
-> Python's; it just fails to produce one far more often.* Gating the two metrics separately is what
-> made that visible, on the rule's first use. Run and full attribution:
-> `evals/runs/2026-09-11_l4-ffmpeg_success/report.md`. `just check-gate` now reports
-> `ffmpeg L4:FAIL`, which is why `in-progress` is the status the evidence supports.
+> **ffmpeg has an L4 number as of 2026-09-11: `outcome_accuracy` 0.8430, `avg_knaif_score` 0.9835,
+> complete coverage — NOT ACCEPTED, 11 of 36 thresholds unmet.** Quote
+> `evals/runs/2026-09-11_l4-ffmpeg-rerun_success/` (clean tree, `git_sha 3065171`, backend CUDA0);
+> the earlier `2026-09-11_l4-ffmpeg_success` was taken with a superseded instrument and is kept
+> only as its record.
 >
-> **The instrument defects that run exposed are fixed (N6 marker half, N7 all three), so the
-> number can be re-taken honestly — but the 2026-09-11 run predates the fixes**, and its recorded
-> coverage of 1.0000 is wrong (the true figure is 0.9705) and its "1 safety breach" is a false
-> positive. Quote the re-run, not that one.
+> **The two metrics say different things, and gating them separately is what made that visible.**
+> Native is nine points below Python on routing (0.843 vs 0.902) and *above* it on artifact
+> quality (0.9835 vs 0.9738). When the shipped binary produces an artifact the artifact is good;
+> it fails to produce one too often. A blended score would have averaged that away.
+>
+> **Both runs together are the argument for this layer.** The first exposed four instrument
+> defects and one unimplemented tool; fixing them moved outcome +3.1pt, errors 96 → 70, and
+> **eleven slices up with none down** — five of them landing exactly on Python (`reverse` 0.800,
+> `reverse_video` 0.949, `chain2` 0.889, `hard` 0.929, `reject` 0.853). One missing dispatch arm
+> was depressing all eleven, because reverse appears inside chains, complex rows and every
+> language variant. **N1 (globs) is now the dominant remaining defect** — `batch` unchanged at
+> 0.034 against Python's 1.000 — and that it did not move is the control proving the fixes were
+> additive.
 >
 > **Not done, and the honest shape of what is left:**
 > - **documents has no L4 number**, and ffmpeg's came from a dirty tree, so it is a development
@@ -705,11 +711,17 @@ that finds them, not the one that repairs them.
   is the serious one:
   - **The capability is missing**: 25 of 847 rows, `reverse_video` at 0.410 against a 0.900 floor.
   - **It is recorded as `error`, not `not_implemented`**, so the coverage number cannot see it.
-    The L4 run reported **coverage 1.0000 when the true figure is 0.9705**. That is not
-    bookkeeping: L4d excludes unattempted rows from `avg_knaif_score`, and this plan says in as
-    many words that the exclusion is honest *only* while coverage is gated independently — so
-    native's 0.9827 is flattered by precisely the mechanism the decision was conditioned on.
-    `outcomes.py` exists for this distinction and one of the two skills does not use it.
+    The L4 run reported **coverage 1.0000 when the true figure is 0.9705**. `outcomes.py` exists
+    for this distinction and one of the two skills did not use it.
+    - ⚠️ **A claim made here when N6 was filed was wrong, and the re-run disproved it.** This
+      entry said native's `avg_knaif_score` of 0.9827 was "flattered by precisely the mechanism
+      the decision was conditioned on" — i.e. that excluding unattempted rows had inflated the
+      quality average. It had not. In that run all 39 `reverse_video` rows carried
+      `knaif_score = None` because they were `error` outcomes, which the scorer **already**
+      excludes, so both runs scored the same population; the re-run moved the metric by +0.0008.
+      **Coverage was the only number the defect corrupted.** The mechanism L4d warns about is
+      real and the gating still matters — it simply was not what went wrong here, and saying so
+      loosely is the same species of error this plan exists to stop.
 - [x] **N7 — DONE 2026-09-11: three harness defects in the L4 lane itself**, each of which made
   the first run read better, or more alarmingly, than the truth. *(Found by L4, fixed the same
   day, each with a test.)*

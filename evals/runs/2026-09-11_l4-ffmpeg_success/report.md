@@ -55,7 +55,11 @@ Attributed from the plans saved with each row, not inferred from the aggregate.
    capability native does not have is recorded as `error` rather than `not_implemented`. That
    matters beyond bookkeeping: L4d excludes unattempted rows from `avg_knaif_score`, and the plan
    says in as many words that the exclusion is honest *only* while coverage is gated independently.
-   So **0.9827 is flattered by exactly the mechanism the plan warned about**.
+   ⚠️ **Corrected 2026-09-11 by the re-run:** this originally said 0.9827 was "flattered by
+   exactly the mechanism the plan warned about". It was not. All 39 `reverse_video` rows here
+   carry `knaif_score = None` because they are `error` outcomes, which the scorer already
+   excludes — so both runs scored the same population, and the re-run moved the metric by
+   +0.0008. **Coverage is the only number this defect corrupted.**
 2. **The per-row `error` field is useless.** It captures the last 500 characters of stderr, which
    llama.cpp fills with CUDA init chatter. Every attribution above had to be recovered from the
    saved plans instead.
