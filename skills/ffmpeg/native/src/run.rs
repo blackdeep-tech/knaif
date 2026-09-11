@@ -114,8 +114,11 @@ pub fn expand(
         Ok(r) => r,
         Err(clarify) => return Ok(Expansion::Clarify(clarify)),
     };
-    let mut commands = Vec::with_capacity(resolved.inputs.len());
-    for input in &resolved.inputs {
+    // Globs become one input per matching file BEFORE the render loop, so each match gets its own
+    // command and its own derived output name (N1).
+    let inputs = expand_input_globs(&resolved.inputs, sandbox)?;
+    let mut commands = Vec::with_capacity(inputs.len());
+    for input in &inputs {
         // Probe and render the RESOLVED path — checking one representation and reading another
         // is not a boundary (see resolve_input_in_sandbox; fix review R1).
         let input_path = resolve_input_in_sandbox(input, sandbox)?;
@@ -204,6 +207,168 @@ fn assemble_concat_inputs(args: &serde_json::Map<String, Value>) -> anyhow::Resu
 /// `<sandbox>/clip.mp4` while ffprobe/ffmpeg open `<cwd>/clip.mp4` — a different file (2026-09-07
 /// fix review, R1). In open/CLI mode (`sandbox` is `None`) there is no boundary to enforce and
 /// nothing to re-base, so the raw string is returned unchanged.
+/// True when *s* carries fnmatch magic — the same three characters Python's `ResolveInputs`
+/// treats as "this is a pattern, not a path".
+fn has_glob_magic(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[')
+}
+
+/// fnmatch one path component: `*` (any run), `?` (one char), `[abc]` / `[a-z]` / `[!abc]`.
+///
+/// Ported rather than taken from the `glob` crate deliberately. `glob` is currently a
+/// **build-only** dependency (clang-sys, llama-cpp-sys, find_cuda_helper), so making it a runtime
+/// dependency for one predicate would add it to the shipped binary and to the distributed license
+/// surface for no functional gain — the same reasoning V3 applied to `regex`.
+///
+/// Matches a NAME only, never a path: there are no separators to worry about, which is what makes
+/// a compact matcher sufficient here.
+fn name_matches(pattern: &str, name: &str) -> bool {
+    let (p, n): (Vec<char>, Vec<char>) = (pattern.chars().collect(), name.chars().collect());
+    let (mut pi, mut ni) = (0usize, 0usize);
+    // Backtrack point for the most recent `*`, so `a*b*c` works without recursion.
+    let (mut star, mut star_ni) = (None::<usize>, 0usize);
+    while ni < n.len() {
+        let matched = if pi < p.len() {
+            match p[pi] {
+                '?' => true,
+                '[' => match_class(&p, &mut pi, n[ni]),
+                '*' => {
+                    star = Some(pi);
+                    star_ni = ni;
+                    pi += 1;
+                    continue;
+                }
+                c => c == n[ni],
+            }
+        } else {
+            false
+        };
+        if matched {
+            pi += 1;
+            ni += 1;
+        } else if let Some(s) = star {
+            // The `*` swallows one more character and we retry from just after it.
+            pi = s + 1;
+            star_ni += 1;
+            ni = star_ni;
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == '*' {
+        pi += 1;
+    }
+    pi == p.len()
+}
+
+/// Match one `[...]` class, advancing `pi` to the closing bracket. An unterminated `[` is a
+/// literal bracket, which is what fnmatch does.
+fn match_class(p: &[char], pi: &mut usize, c: char) -> bool {
+    let open = *pi;
+    let mut i = open + 1;
+    // Only `!` negates. `^` is an ordinary member, because Python's `fnmatch` says so and this
+    // has to match Python, not sh — `[^a]` matches the literal `^` or `a`. Caught by diffing
+    // this matcher against `fnmatch.fnmatchcase`, not by reasoning about it.
+    let negated = matches!(p.get(i), Some('!'));
+    if negated {
+        i += 1;
+    }
+    let mut found = false;
+    let mut first = true;
+    while i < p.len() && (p[i] != ']' || first) {
+        first = false;
+        // A range, but only when the `-` sits between two members rather than at either end.
+        if i + 2 < p.len() && p[i + 1] == '-' && p[i + 2] != ']' {
+            if p[i] <= c && c <= p[i + 2] {
+                found = true;
+            }
+            i += 3;
+        } else {
+            if p[i] == c {
+                found = true;
+            }
+            i += 1;
+        }
+    }
+    if i >= p.len() {
+        // Unterminated: treat the `[` as a literal character.
+        return c == '[';
+    }
+    *pi = i;
+    found != negated
+}
+
+/// Expand any glob patterns in *inputs* against the sandbox, mirroring Python's `ResolveInputs`.
+///
+/// Native passed `*.mp4` straight to ffmpeg, which does not glob — so "convert all mp4 files in
+/// this folder" rendered one command against a literal `*.mp4` and did nothing useful. Measured on
+/// the 2026-09-11 L4 re-run it was 29 of 52 native-only failures, and the whole of the `batch`
+/// slice (0.034 against Python's 1.000).
+///
+/// The semantics are Python's, and each one is load-bearing:
+/// * the pattern applies to the **name component only** — `videos/*.mp4` globs inside `videos/`,
+///   never recursively, so a glob cannot quietly pull in a whole tree;
+/// * results are **sorted**, so the rendered command order is reproducible;
+/// * **files only** — a matching directory is not an input;
+/// * a path with no magic is passed through **untouched even when missing**, leaving "not found"
+///   to the probe rather than silently expanding to nothing.
+///
+/// Not applied to `concat_video`: Python's `ConcatVideoIntent` does not route its inputs through
+/// `ResolveInputs`, so globbing there would be a divergence, not a fix.
+fn expand_input_globs(inputs: &[String], sandbox: Option<&Path>) -> anyhow::Result<Vec<String>> {
+    let mut out = Vec::with_capacity(inputs.len());
+    for raw in inputs {
+        if !has_glob_magic(raw) {
+            out.push(raw.clone());
+            continue;
+        }
+        let as_path = Path::new(raw);
+        let Some(file_name) = as_path.file_name().and_then(|n| n.to_str()) else {
+            out.push(raw.clone());
+            continue;
+        };
+        let parent = as_path.parent().unwrap_or(Path::new(""));
+        // A bare `*.mp4` has an EMPTY parent, and `read_dir("")` fails — so in open/CLI mode the
+        // glob would match nothing at all. Python never sees this because it re-bases every
+        // relative path onto the sandbox (or root) first, making the parent concrete. `.` is the
+        // same base the rest of CLI mode already resolves against.
+        let parent = if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        };
+        // The directory is resolved and boundary-checked like any other input, so a pattern
+        // cannot read outside the sandbox.
+        let dir = resolve_input_in_sandbox(&parent.to_string_lossy(), sandbox)?;
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue; // No such directory: the pattern matches nothing, exactly as Python's does.
+        };
+        // Emit each match in the shape the pattern was written in — `a.mp4` for `*.mp4`,
+        // `videos/a.mp4` for `videos/*.mp4` — rather than the resolved directory joined to the
+        // name. The render loop resolves every input against the sandbox anyway, so re-basing
+        // here would resolve twice and leave a synthesized `.\` in the rendered command.
+        let as_written = as_path.parent().unwrap_or(Path::new(""));
+        let mut matched: Vec<String> = entries
+            .flatten()
+            .filter(|e| e.path().is_file())
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|n| name_matches(file_name, n))
+            })
+            .map(|e| {
+                as_written
+                    .join(e.file_name())
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        matched.sort();
+        out.extend(matched);
+    }
+    Ok(out)
+}
+
 fn resolve_input_in_sandbox(
     raw: &str,
     sandbox: Option<&Path>,
@@ -1076,6 +1241,146 @@ mod tests {
             Some(sandbox),
         );
         assert!(err.is_err(), "output outside the sandbox must be rejected");
+    }
+
+    #[test]
+    fn the_matcher_agrees_with_pythons_fnmatch() {
+        // Every expectation generated from `fnmatch.fnmatchcase`, the function behind
+        // `Path.glob`. Diffing against it rather than reasoning about it is what caught
+        // `[^a]`: fnmatch negates on `!` ONLY, so `^` is an ordinary class member.
+        // This is the contract the port owes Python, expressed as data.
+        for (pattern, name, expected) in [
+            ("*.mp4", "a.mp4", true),
+            ("*.mp4", "a.mkv", false),
+            ("*.mp4", ".mp4", true),
+            ("*", "x", true),
+            ("*", "", true),
+            ("a*b", "ab", true),
+            ("a*b", "axxb", true),
+            ("a*b", "axxc", false),
+            ("a*b*c", "axbyc", true),
+            ("a*b*c", "abc", true),
+            ("?.mp4", "a.mp4", true),
+            ("?.mp4", "ab.mp4", false),
+            ("clip?.mp4", "clip1.mp4", true),
+            ("[ab].mp4", "a.mp4", true),
+            ("[ab].mp4", "c.mp4", false),
+            ("[a-c].mp4", "b.mp4", true),
+            ("[a-c].mp4", "d.mp4", false),
+            ("[!a].mp4", "b.mp4", true),
+            ("[!a].mp4", "a.mp4", false),
+            ("[^a].mp4", "b.mp4", false),
+            ("[^a].mp4", "^.mp4", true),
+            ("[.mp4", "[.mp4", true),
+            ("a[b.mp4", "a[b.mp4", true),
+            ("*.MP4", "a.mp4", false),
+            ("clip*.mp4", "clip_4k.mp4", true),
+            ("*.*", "a.b", true),
+            ("*.*", "ab", false),
+            ("**.mp4", "a.mp4", true),
+            ("a**b", "aXb", true),
+            ("[]a].mp4", "].mp4", true),
+        ] {
+            assert_eq!(name_matches(pattern, name), expected, "{pattern} vs {name}");
+        }
+    }
+
+    // ---- N1: glob expansion (the largest single cause of the L4 outcome gap) ----
+    //
+    // Python's `ResolveInputs` expands a pattern against the sandbox and yields ONE command per
+    // matching file; native passed the literal `*.mp4` to ffmpeg, which does not glob. Measured
+    // on the 2026-09-11 L4 re-run: 29 of the 52 native-only failures, and the `batch` slice at
+    // 0.034 against Python's 1.000.
+    //
+    // Semantics ported deliberately (python/core/knaif/steps/_resolve_inputs.py):
+    //   * the pattern applies to the NAME component only - `videos/*.mp4` globs inside
+    //     `videos/`, never recursively;
+    //   * results are SORTED, so the command order is deterministic;
+    //   * directories match nothing (files only);
+    //   * a path with no magic characters is passed through untouched, even if missing, so
+    //     "file not found" stays the probe's error to report.
+
+    fn glob_sandbox(tag: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("knaif-ffmpeg-glob-{}-{}", std::process::id(), tag));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_glob_expands_to_one_command_per_matching_file() {
+        let sandbox = glob_sandbox("basic");
+        for name in ["b.mp4", "a.mp4", "notes.txt"] {
+            std::fs::write(sandbox.join(name), b"x").unwrap();
+        }
+        let exp = expand_dry_run(
+            "convert_video",
+            &args(serde_json::json!({"inputs": ["*.mp4"], "container": "mkv"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        let cmds = match exp {
+            Expansion::Commands(c) => c,
+            Expansion::Clarify(q) => panic!("expected commands, got clarify: {q}"),
+        };
+        assert_eq!(cmds.len(), 2, "one command per matching file: {cmds:?}");
+        // Sorted, so the order is reproducible across runs and platforms.
+        assert!(cmds[0].iter().any(|a| a.ends_with("a.mp4")), "{cmds:?}");
+        assert!(cmds[1].iter().any(|a| a.ends_with("b.mp4")), "{cmds:?}");
+        // The non-matching file is not swept in.
+        assert!(
+            !cmds.iter().flatten().any(|a| a.ends_with("notes.txt")),
+            "{cmds:?}"
+        );
+        std::fs::remove_dir_all(&sandbox).ok();
+    }
+
+    #[test]
+    fn a_glob_never_leaves_its_own_directory() {
+        // `videos/*.mp4` must not reach a sibling directory, and must not recurse.
+        let sandbox = glob_sandbox("scoped");
+        std::fs::create_dir_all(sandbox.join("videos/nested")).unwrap();
+        std::fs::create_dir_all(sandbox.join("other")).unwrap();
+        std::fs::write(sandbox.join("videos/in.mp4"), b"x").unwrap();
+        std::fs::write(sandbox.join("videos/nested/deep.mp4"), b"x").unwrap();
+        std::fs::write(sandbox.join("other/sibling.mp4"), b"x").unwrap();
+
+        let exp = expand_dry_run(
+            "convert_video",
+            &args(serde_json::json!({"inputs": ["videos/*.mp4"], "container": "mkv"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        let cmds = match exp {
+            Expansion::Commands(c) => c,
+            Expansion::Clarify(q) => panic!("clarify: {q}"),
+        };
+        assert_eq!(cmds.len(), 1, "only videos/in.mp4 matches: {cmds:?}");
+        assert!(cmds[0].iter().any(|a| a.ends_with("in.mp4")), "{cmds:?}");
+        std::fs::remove_dir_all(&sandbox).ok();
+    }
+
+    #[test]
+    fn a_plain_path_is_passed_through_even_when_missing() {
+        // No magic characters: not a glob, so a missing file stays the probe's error to report
+        // rather than silently expanding to nothing.
+        let sandbox = glob_sandbox("plain");
+        let exp = expand_dry_run(
+            "convert_video",
+            &args(serde_json::json!({"inputs": ["ghost.mp4"], "container": "mkv"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        match exp {
+            Expansion::Commands(c) => {
+                assert_eq!(c.len(), 1, "the missing path still renders one command")
+            }
+            Expansion::Clarify(q) => panic!("clarify: {q}"),
+        }
+        std::fs::remove_dir_all(&sandbox).ok();
     }
 
     #[test]

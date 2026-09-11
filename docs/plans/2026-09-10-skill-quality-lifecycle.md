@@ -636,7 +636,7 @@ command, so the model is not involved and every one is a port defect. Evidence:
 they are skill-renderer changes needing their own corpus verification, and Phase 5 is the layer
 that finds them, not the one that repairs them.
 
-- [ ] **N1 — Native does not expand globs** (`ffmpeg_029`, `076`, `139`, `214`, `229` — 5 rows,
+- [x] **N1 — FIXED 2026-09-11. Native expands globs.** (`ffmpeg_029`, `076`, `139`, `214`, `229` — 5 rows,
   the largest class). Both sides plan `inputs: ["*.mp4"]`. Python expands it against the sandbox
   and emits one command per file; native passes the literal token to ffmpeg, **which does not
   glob**, and renders the output as `*_converted.mp4`. "Convert all mp4 files in this folder"
@@ -646,6 +646,29 @@ that finds them, not the one that repairs them.
     against Python's 1.000** and takes roughly a third of `convert` (0.728 vs 0.968) with it.
     L3 saw five disagreeing rows; L4 sees a broken capability, which is the difference between
     the two layers stated as a number.
+  - **The fix**: `expand_input_globs` turns a pattern into one input per matching file *before*
+    the render loop, so each match gets its own command and its own derived output name.
+    **Measured on the `batch` slice through the shipped binary: 0.034 → 1.000**, equal to Python,
+    29/29 outcome-correct with 24 producing real files. (The other five name no file, so the
+    lane copies no fixture and the glob correctly matches nothing — they pass by doing nothing,
+    which is worth knowing before quoting the slice as a clean 1.000.)
+  - **Python's semantics were ported, not invented**, and each one earns its place: the pattern
+    applies to the **name component only** (`videos/*.mp4` never recurses), results are
+    **sorted** so command order is reproducible, **files only**, and a path with no magic passes
+    through **untouched even when missing** so "not found" stays the probe's error to report.
+  - **`concat_video` is deliberately excluded.** Python's `ConcatVideoIntent` does not route its
+    inputs through `ResolveInputs`, so globbing there would be a new divergence rather than a fix.
+    Checked before writing the code, not after.
+  - **The matcher is ported rather than taken from the `glob` crate.** `glob` is currently a
+    **build-only** dependency (clang-sys, llama-cpp-sys, find_cuda_helper), so making it a runtime
+    dependency for one predicate would add it to the shipped binary and the distributed license
+    surface — the reasoning V3 applied to `regex`.
+  - **Two bugs the verification caught that reasoning did not.** A 30-case table diffed against
+    Python's `fnmatch.fnmatchcase` found that fnmatch negates a character class on `!` **only**,
+    so `[^a]` matches a literal `^` — the shell semantics I had assumed were wrong. And running
+    the real binary found that a bare `*.mp4` has an *empty* parent, so `read_dir("")` failed and
+    the glob matched nothing in CLI mode; Python never hits this because it re-bases every
+    relative path onto the sandbox first. Neither was visible in the unit tests as first written.
 - [ ] **N2 — Native does not resolve bare stems, so it never clarifies** (`ffmpeg_288`, `289`).
   Plans carry `input: "silent_clip"` / `"mov"`, with no extension. Python resolves stems against
   the sandbox and asks *"Which silent_clip did you mean?"*; native renders `-i silent_clip`
