@@ -87,7 +87,8 @@ Resolution precedence, highest first:
 
 A planner only has to route and fill arguments, so the bar is instruction-following and
 schema discipline rather than world knowledge. Three 4B-class bases were benchmarked on the
-real corpora with the `success` verifier:
+real corpora with the `success` verifier, in the **Python lane** — these compare bases
+against each other, not what the native CLI delivers:
 
 | Base | ffmpeg full | ffmpeg hard | documents full |
 |---|---:|---:|---:|
@@ -117,7 +118,10 @@ alpha 16, 3 epochs, lr 2e-4, completion-only loss, trained on the union of `ffmp
 | `knaif-qwen3-1.7b-v1` | ffmpeg hard **+3.6 pt**, chain3 **+6.2 pt**; documents held |
 
 The gains sit in the hard and multi-step slices, which is what you would expect from
-training that teaches composition rather than capability. Rows tagged `hard` and `chain3`
+training that teaches composition rather than capability. These are the **fine-tune
+experiment's** figures, at that run's quant; the committed baseline the regression gate
+uses is separate and slightly lower on the hard slice (0.929 at the shipped Q4) — see
+[snapshots](/evaluate/snapshots/). Rows tagged `hard` and `chain3`
 are held out of training entirely, so those numbers measure generalisation.
 
 Fine-tuning also **shrinks the quantization tax** rather than merely raising the score: the

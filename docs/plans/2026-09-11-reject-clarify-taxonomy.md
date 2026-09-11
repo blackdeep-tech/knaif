@@ -30,6 +30,10 @@ wrong, which is the kind of complexity that causes more failures than it prevent
 | impossible-result requests (11 utterances) | **→ `clarify`.** Not a safety boundary; the rule stays one sentence |
 | network access (egress **and** ingress) | **→ `clarify`, and dropped from training.** Scope, not safety — upload-capable skills are coming (superseded a same-day decision to keep `reject`) |
 | `safety_test.jsonl` composition | **invariants only.** Scope rows move to `eval.jsonl`; the 100% gate then tests one thing |
+| a chain with one failed step | **the whole chain is `error`** — matches native, so it needs no new rule on either side |
+| `documents` training rows | **same treatment as ffmpeg.** Its eval and safety corpora are already clean; its `train.jsonl` is not |
+| if `edge` still misses 0.78 | **stay blocked and investigate.** The floor was set before the result; pre-registered now so it cannot be softened after |
+| what may be measured, stored and published | **`success` only.** `cheap` is for development. Every stored snapshot, every doc and every website number comes from an executing run, labelled with the **lane** it came from — see T9 |
 | zero-duration trim (`ffmpeg_161`) | **produce one frame.** A frame-count request maps to `-frames:v N`, never a zero-length time range |
 | explicit `output == input` (`ffmpeg_175`) | **disambiguate and report** — `<stem>_converted.<ext>`; the user asked for a copy |
 | training data | **author rows and retrain (S4).** Prompt-only is not accepted as the end state |
@@ -192,9 +196,12 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   Naming them in `TOOL SCOPE` is skill-local and safe — a prompt is not weights. Record the
   same policy in `skills/ffmpeg/SPEC.md` so it is reviewable outside a prompt string. Watch the
   prompt-size ceiling — `test_prompt_audit` caps ffmpeg at 14,000 chars.
-- [ ] **T3 — documents.** Its `prompt.yaml` says nothing about `reject` and inherits the contract,
-  so T1 changes its behaviour too. Small surface (3 `reject` / 10 `clarify` utterances) but it is
-  **not** zero, and the cross-skill check in T6 is not optional.
+- [ ] **T3 — documents — a bigger surface than the eval count suggests.** Its `prompt.yaml` says
+  nothing about `reject` and inherits the contract, so T1 changes its behaviour too. The *eval*
+  surface is small (3 `reject` / 10 `clarify` utterances) and its **safety corpus is already clean**
+  — all 9 rows are destructive invariants, so T4b has no documents work. **Its `train.jsonl` is the
+  problem**: 10 `reject` rows, 5 of them scope (see T5). Give it a `TOOL SCOPE` unsupported list of
+  its own, the way T2 does for ffmpeg. The cross-skill check in T6 is not optional.
 - [ ] **T4 — Corpora.** `safety_test.jsonl`: 004 → `reject`; 006/007 keep the `clarify` label and
   move out of the safety corpus under T4b. Then apply the
   T1 line to `eval.jsonl` — ffmpeg has 34 `reject` / 199 `clarify` utterances, documents 3 / 10.
@@ -256,13 +263,16 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   | row | why it scores 0.0 | flips to `error`? |
   |---|---|---|
   | `ffmpeg_130`, `ffmpeg_161` ×2, `ffmpeg_209`, `ffmpeg_271` | `artifact_file_missing_or_not_produced` / `output_not_produced` | yes — 5 rows |
-  | `ffmpeg_268` | chain: step 0 produced the wrong container, step 1 produced nothing | partial — depends on the chain rule |
+  | `ffmpeg_268` | chain: step 0 produced the wrong container, step 1 produced nothing | **yes** — decided: any failed step fails the chain |
   | `ffmpeg_174` | produced **mp3** where mp4 was required — ffmpeg exited **0** | **no** — quality failure |
   | `ffmpeg_236` | missing `scale` filter — ffmpeg exited **0** | **no** — quality failure |
 
   Measured on the committed baseline — **847 scored rows, 764 correct, `outcome_accuracy`
   0.90200708**, matching the snapshot (a warmup row is included in the scoreboard; excluding it was
-  a second-audit correction): **0.89610 at 5 rows, 0.89492 at 6** — not 0.8926. Native's N4
+  a second-audit correction): **0.89610 at 5 rows, 0.89492 at 6**. **Decided: a chain with any
+  failed step records `error`**, which is what native already does (*"1 of N command(s) failed"*),
+  so the 6-row figure is the one to predict — `outcome_accuracy` **0.89492**, `avg_knaif_score`
+  **0.98404**. Not 0.8926 either way. Native's N4
   aggregate is 0.88666, so the deficit is **~0.8–0.9 points, not ~0.6**.
 
   ⚠️ **These are conditional estimates, not measurements.** `_run_artifact` returns `None` for a
@@ -318,6 +328,10 @@ changes Python's planning behaviour, so it must clear that bar before native is 
       re-opens it.
   - Land the harness repair and the two product fixes **together**, or `edge` regresses on the
     honest instrument.
+  - **Pre-registered contingency, decided before the measurement:** if `edge` still misses 0.78
+    after both fixes, **the skill stays blocked and the miss gets investigated** — the floor was
+    written before the result, so a miss means the work is unfinished, not that the bar is wrong.
+    Recorded here so it cannot be softened once the number is known.
 
 - [ ] **T5 — Training data, and a retrain. Decided 2026-09-11: author rows and run S4.**
   `train.jsonl` teaches the old split, and auditing its **17 ffmpeg `reject` rows** shows how
@@ -337,6 +351,18 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   **The four network rows are deleted rather than relabelled.** A `clarify` row still teaches a
   network-specific prior into weights shared with a future upload skill; `TOOL SCOPE` resolves them
   correctly at inference with nothing trained at all. Train invariants; let the tool list do scope.
+
+  **`documents/data/train.jsonl` gets the same treatment — decided, and it is not optional.** One
+  union dataset trains one model, so leaving it alone would feed the run contradictory supervision:
+
+  | row | new label |
+  |---|---|
+  | email to legal, upload to cloud drive, download a URL | **deleted** — same reason as ffmpeg's |
+  | **print on the office printer, fax to the bank** | → `clarify` — a print skill would print; they fail the invariant test identically |
+  | forge a signature on agreement.pdf | **stays `reject`** — fraud is wrong under every skill, which is exactly what makes it an invariant |
+  | delete every pdf, shred, wipe the folder, overwrite the original | **stays `reject`** |
+
+  Five of documents' ten `reject` rows change. Its eval and safety corpora need no work.
 
   Then run `docs/FINE_TUNING.md` §3 — union chat dataset → LoRA → merge → GGUF → quantize.
 
@@ -400,6 +426,30 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   - [ ] `just check-gate`, and a row in `evals/INDEX.md` per saved run
 
   Safety should read 9/9; if it does not, the model — not the corpus — is the remaining gap.
+
+- [ ] **T9 — Publication provenance: the number a user reads must be the number a user gets.**
+  Policy, decided 2026-09-11: **`success` is the only verifier that may be stored or published**;
+  `cheap` stays an in-development instrument. And a published accuracy has to name the lane it was
+  measured in, because the two lanes genuinely differ:
+  - **Python lane** (`run --skill`) — the authoring and SDK runtime. Legitimate to publish **as
+    such**, never as "knaif's accuracy".
+  - **L4 native lane** (`eval-native`) — `knaif run` executing for real. **This is what someone who
+    installs the CLI gets, so this is the headline number.**
+
+  Two concrete gaps to close in this task:
+  - **`site/dev/src/content/docs/evaluate/snapshots.md:93` publishes ffmpeg at 0.903 with no lane
+    label.** That is the Python snapshot; the shipped binary measured **0.88666** in the N4 run. The
+    page's claim *"both locked with executing verifiers"* is true and still misleading — right
+    verifier, wrong lane. (Its "846 utterances" is also the warmup-excluded count; the scoreboard
+    total is 847.) `site/dev/src/content/docs/models/index.md:94,116` has the same shape.
+  - **Nothing enforces the verifier when a snapshot is written.** `run --snapshot` defaults to
+    `--verifier cheap` (`cli.py:1868`) and `save_snapshot` (`snapshot.py:10`) stores whatever it is
+    handed — so a `cheap` baseline can be locked with one command today. Acceptance already refuses
+    `cheap` (`acceptance.py:128`); the snapshot writer should too. **Test first**: locking a
+    non-executing scoreboard must raise, not warn.
+
+  Every number this plan moves gets republished from the re-locked runs, with lane, verifier, model
+  and corpus size stated next to it.
 
 ## Why this is worth doing beyond the three rows
 

@@ -138,9 +138,10 @@ uv run python -m knaif.evalsuite run --skill ffmpeg --verifier success \
    and reading that FAIL as catastrophic forgetting is a mistake already made once here. For
    the forgetting question, baseline **your own pre-run** (same family, same pipeline);
    reserve the snapshot gate for the promotion decision in §6. Two setup traps come with it:
-   the run folder must contain a scoreboard at **each** skill's snapshot verifier (ffmpeg's
-   is `cheap`, documents' is `success`, so sweep at *both* into one folder — otherwise the
-   unmeasured skill is silently skipped, not failed), and a gate that cannot fail is worse
+   the run folder must contain a scoreboard at **each** skill's snapshot verifier (both are
+   `success` today — a snapshot can no longer be locked from a non-executing run — so sweep
+   at every verifier the skills in the run actually declare, otherwise an unmeasured skill is
+   silently skipped, not failed), and a gate that cannot fail is worse
    than none. See *The two ways an aggregate gate lies to you* in
    [EVAL_VERIFICATION_SOP.md](EVAL_VERIFICATION_SOP.md).
 10. **Fix retrieval before blaming the model.** Run `uv run -m knaif.evalsuite retrieval`

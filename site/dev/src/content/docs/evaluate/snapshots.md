@@ -86,13 +86,31 @@ the runs were kept.
 
 ## What good looks like
 
-For reference, the shipped skills' committed bars:
+For reference, the committed bars — **as measured in the Python lane**, on the
+`success` verifier, backend `qwen3-4b-sft-v3-flat-q4`. Every figure here is read straight
+from that skill's `data/eval_snapshot.json`:
 
 | Skill | Corpus | Full | Hard slice | 3-step chains |
 |---|---:|---:|---:|---:|
-| `ffmpeg` | 846 utterances | 0.903 | 0.945 | 0.969 |
+| `ffmpeg` | 847 utterances | 0.902 | 0.929 | 0.969 |
 | `documents` | 164 utterances | 0.976 | 0.914 | — |
 
-Both locked with executing verifiers. Note that ffmpeg's *full* score is lower than its
-hard slice — the aggregate includes clarify and reject rows, which are harder to get right
-than they look.
+Note that ffmpeg's *full* score is lower than its hard slice — the aggregate includes
+clarify and reject rows, which are harder to get right than they look.
+
+### Which lane a number came from
+
+**These are authoring-lane numbers.** They come from the Python runtime — the `knaif`
+package, and what the SDK gives you. The native CLI is a separate measurement (L4: the
+shipped binary, executing for real), and the two do not agree:
+
+| | ffmpeg `outcome_accuracy` |
+|---|---:|
+| Python lane, committed snapshot | **0.902** |
+| Native CLI, last measured L4 run | **0.887** |
+
+Neither skill's native runtime is release-eligible yet — both sit at `in-progress`, with
+no accepted L4 record. So quote the Python figure for the library and the SDK, quote the
+native figure for the CLI, and never quote either as "knaif's accuracy" without saying
+which runtime produced it. `cheap` numbers are never published at all: a snapshot can only
+be locked from an executing run.

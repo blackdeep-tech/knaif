@@ -6,9 +6,36 @@ import json
 from pathlib import Path
 from typing import Any
 
+#: Verifiers that execute the plan and grade the files it produced. Only these measure
+#: something a user can experience; `cheap` grades the plan text alone.
+#: Kept in sync with `scoring._EXECUTING_VERIFIERS`.
+EXECUTING_VERIFIERS = frozenset({"success", "honest", "output_diff"})
+
 
 def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
-    """Write a snapshot JSON — same format as the scoreboard, without per-row detail."""
+    """
+    Write a snapshot JSON — same format as the scoreboard, without per-row detail.
+
+    Refuses anything but an executing run. A snapshot is the *accepted bar*: every later
+    regression check reads it, so a `cheap` baseline records a number no user can
+    experience and does so silently. `acceptance.py` already refuses a `cheap` scoreboard
+    and `eval-native` refuses one at the CLI; this closes the writer, because
+    `run --snapshot` still defaults to `--verifier cheap`.
+    """
+    verifier = scoreboard.get("verifier")
+    if verifier is None:
+        raise ValueError(
+            "Refusing to lock a baseline from a scoreboard that declares no verifier — "
+            "an unidentified run cannot be compared against later."
+        )
+    if verifier not in EXECUTING_VERIFIERS:
+        raise ValueError(
+            f"Refusing to lock a baseline scored with {verifier!r}: a snapshot is the "
+            f"accepted bar and must come from an executing verifier "
+            f"({', '.join(sorted(EXECUTING_VERIFIERS))}). `cheap` grades the plan, not "
+            f"the files it produced — re-run with --verifier success."
+        )
+
     path = Path(path)
     snapshot = {k: v for k, v in scoreboard.items() if k != "rows"}
     path.parent.mkdir(parents=True, exist_ok=True)
