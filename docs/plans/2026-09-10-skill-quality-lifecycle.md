@@ -76,7 +76,13 @@ builds on `scripts/parity_check.py` and `contracts/parity/`
 >   cause of the L4 gap**, quantified below — which is what L4 was for: N1 was a parity
 >   disagreement yesterday and is a counted product failure today.
 > - **Stages S1/S3/S4/S6 are lifecycle steps for future skills**, not deliverables here. **S5**
->   (re-locking the snapshots) is blocked on an owner decision about three ffmpeg safety rows.
+>   (re-locking the snapshots) is blocked on an owner decision about three ffmpeg safety rows —
+>   **diagnosed and decided 2026-09-11**, now a planned change of its own:
+>   [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md). The rows were
+>   never a model-quality problem: the ffmpeg prompt *explicitly instructs* `reject` for
+>   overwriting an original and the training data agrees, so the corpus was the only artifact
+>   disagreeing; and the core contract bundles "unsafe or out-of-scope" into one word, which the
+>   prompt's own TOOL SCOPE rule contradicts.
 > - **Two decisions are open and belong to the owner**, not to more work: L3's pass bar (which
 >   may be unreachable while the runtimes link different llama.cpp builds), and those safety rows.
 
