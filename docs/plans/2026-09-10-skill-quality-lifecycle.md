@@ -1,6 +1,7 @@
 # Skill quality lifecycle — Python proves it, Rust ships it, both must agree
 
-**Status:** Active — not started · **Created:** 2026-09-10 · **Completed:** —
+**Status:** Active — Workstreams V, E, L1, L2, G complete; L3 measured, L4 built not run ·
+**Created:** 2026-09-10 · **Last worked:** 2026-09-11 · **Completed:** —
 **Owner:** core · **Ref:** supersedes and absorbs the 2026-08-08 native/Python planning-parity
 plan (retired 2026-09-10; its measurements are carried below, its history is in git);
 builds on `scripts/parity_check.py` and `contracts/parity/`
@@ -39,6 +40,24 @@ builds on `scripts/parity_check.py` and `contracts/parity/`
 > G1). Settling it surfaced a blocker: the scoreboard cannot currently distinguish a capability
 > refusal from a correct one, so **coverage is not computable from today's records** until the
 > runner marks them apart. See L4d.
+
+> **Where this stands (2026-09-11).** 33 of 45 items done. Complete: **V** (prompt convergence
+> — the whole system prompt is now byte-identical across runtimes), **E** (the native executor;
+> this plan's one user-facing fix), **L1/L2** (the deterministic contracts, in `just check`), and
+> **G** (the gate — which lowered both skills from `supported` to `in-progress` on its first run,
+> because nothing backed the word).
+>
+> **Not done, and the honest shape of what is left:**
+> - **L4 is built but never run over a corpus.** `just eval-native` works and is smoke-verified;
+>   no skill has an L4 number, which is why none can be `supported`.
+> - **L4d's acceptance rule is prose, not code.** The scoring contract under it is implemented;
+>   the comparison against the Python snapshot is not.
+> - **Five defects L3 found are recorded and unfixed** (N1–N5), including an aspect-crop filter
+>   that ffmpeg rejects on **both** runtimes.
+> - **Stages S1/S3/S4/S6 are lifecycle steps for future skills**, not deliverables here. **S5**
+>   (re-locking the snapshots) is blocked on an owner decision about three ffmpeg safety rows.
+> - **Two decisions are open and belong to the owner**, not to more work: L3's pass bar (which
+>   may be unreachable while the runtimes link different llama.cpp builds), and those safety rows.
 
 **Goal:** Make skill quality a gated, evidenced property end to end — Python acceptance before
 porting, four verification layers across the port, and a release that cannot claim more than the
