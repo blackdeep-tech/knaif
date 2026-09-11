@@ -48,3 +48,28 @@ grades them on command *text* (`filter:crop` present) and the Python eval harnes
 propagate ffmpeg's exit code. Native's lane does. For four rows of this corpus, **the shipped
 runtime has been the more honest instrument than the reference it is measured against** — which
 is worth remembering when reading the remaining 1.5-point gap to Python as a native deficit.
+
+## Follow-up finding: the baseline itself over-counts (2026-09-11)
+
+Diagnosing the last `edge` row showed the same pattern as N4, and it reaches the **reference**:
+
+- All three native-only `edge` failures (`ffmpeg_161` ×2 — a zero-duration trim; `ffmpeg_175` —
+  output equals input) render **byte-identical commands to Python's**. The commands genuinely
+  fail. Native reports the failure; Python's eval harness does not propagate ffmpeg's exit code,
+  so the row stays `outcome=plan` and counts as **correct**.
+- Measured across the committed Python baseline: **8 of 575 `plan` rows are scored `knaif = 0.0`
+  and still counted outcome-correct** — the command produced nothing usable.
+- Counting those as failures would put Python's `outcome_accuracy` at **0.8926**, not the
+  published **0.9020**.
+
+**Consequence for how the gap is read.** Native is at 0.88666. Against the published Python
+number that is 1.5 points behind; against a Python measured the way native is measured, it is
+**~0.6 points** behind. The remaining `edge` row is not a port defect at all — it is the harness
+asymmetry, and "fixing" it in native would mean making native *less* honest.
+
+Two legitimate directions, neither chosen here:
+1. **Fix the product bugs** — make a zero-duration trim yield one frame, and refuse or redirect
+   `output == input` (the ffmpeg prompt already mandates `reject` for overwriting an original).
+   Both runtimes improve and the row passes for real.
+2. **Fix the Python harness** to propagate execution failure (audit F10 territory), which lowers
+   the baseline and forces an S5 re-lock, but makes the two runtimes comparable.
