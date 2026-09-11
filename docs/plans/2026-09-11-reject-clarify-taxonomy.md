@@ -7,7 +7,9 @@
 
 **Goal:** Make `reject` mean *unsafe* and `clarify` cover everything else that cannot be planned,
 so the contract, the prompt and the corpora stop contradicting each other — and ffmpeg's safety
-bar becomes reachable on evidence rather than on tolerance.
+bar becomes reachable on evidence rather than on tolerance. **Scope widened 2026-09-11** to carry
+the one other change that moves the same baseline (T5b: the eval harness silently counts failed
+commands as correct), so both land in a single S5 re-lock instead of two.
 
 **Decision taken 2026-09-11:** adopt option 1 below. Option 2 (a third control tool) is
 **ruled out** — it widens the prompt for every skill and adds a distinction a 4B model would get
@@ -104,6 +106,31 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   slice**, **both skills**, paired against the shipped configuration. Changing the safety block can
   move the whole reject/clarify balance, not just three rows — `clarify` is 199 ffmpeg utterances
   and `reject` 34, so a shift there swamps the three rows this started with.
+- [ ] **T5b — Decide the harness question, because it lands in the same re-lock.**
+  **The Python eval harness does not propagate ffmpeg's exit code.** A command that fails still
+  records `outcome = plan` and counts as *correct*; only the artifact score notices, and not
+  always. Measured on the committed baseline: **8 of 575 `plan` rows score `knaif = 0.0` and are
+  still counted outcome-correct**. Counting them as failures puts Python's `outcome_accuracy` at
+  **0.8926**, not the published **0.9020**.
+  - **This is why the last `edge` row is not a port defect.** `ffmpeg_161` (zero-duration trim)
+    and `ffmpeg_175` (`output == input`) render **byte-identical commands on both runtimes**.
+    They genuinely fail. Native reports it, Python does not — so native is penalised for being
+    the more honest instrument, and "fixing" it in native would mean making it less honest.
+  - **It belongs here and not in the lifecycle plan** because it moves the *baseline*, exactly
+    like the corpus relabelling does. Landing them apart means two S5 re-locks and two rounds of
+    argument; landing them together is one measured pass. Evidence:
+    `evals/runs/2026-09-11_l4-ffmpeg-n4_success/report.md`.
+  - **The decision is which of two, not whether:**
+    1. **Fix the harness** — propagate execution failure into the outcome (audit F10 territory).
+       The baseline drops to ~0.8926, the two runtimes become comparable, and native's apparent
+       1.5-point deficit turns out to be ~0.6. Honest, and it lowers a published number.
+    2. **Fix the product bugs instead** — a zero-duration trim yields one frame; `output == input`
+       is refused or redirected (the ffmpeg prompt *already* mandates `reject` for overwriting an
+       original, so this one is arguably a bug on both sides). Both runtimes improve and the rows
+       pass for real, but the harness stays able to score a failed command as correct.
+    Doing **both** is defensible and probably right; doing neither leaves the `edge` floor
+    unreachable except by making native worse.
+
 - [ ] **T7 — Re-lock (S5).** Corpus relabelling changes the expected-outcome population, so the
   snapshots no longer compare like-for-like. Re-lock in its own commit, and note this unblocks the
   S5 item that was already waiting on this exact decision.
