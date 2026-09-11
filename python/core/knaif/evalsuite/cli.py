@@ -949,6 +949,76 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     return scoreboard
 
 
+def cmd_gate(args: argparse.Namespace) -> None:
+    """G1/G2: check (or record) that each skill's declared native status has evidence."""
+    from .gate import (
+        STATUS_ORDER,
+        check_platform_coverage,
+        evaluate_skill,
+        record_from_parity_run,
+        record_layers,
+    )
+
+    root = Path.cwd()
+
+    if args.record_contracts:
+        # Called by `just check-contracts` AFTER the L1/L2 tests pass. Evidence is a side effect
+        # of the check succeeding, never something a person types.
+        for skill in sorted(list_skills()):
+            path = record_layers(
+                skill,
+                root,
+                {
+                    "L1": {"summary": "contracts/parity/* green on both runtimes"},
+                    "L2": {"summary": "deterministic pipeline + ordered execution green"},
+                },
+            )
+            print(f"  recorded L1/L2 evidence for {skill}: {path}")
+        return
+
+    if args.record_parity:
+        run_dir = Path(args.record_parity)
+        if not (run_dir / "meta.json").is_file():
+            sys.exit(f"ERROR: {run_dir} has no meta.json — pass a saved parity run directory")
+        path = record_from_parity_run(args.skill, root, run_dir)
+        print(f"  recorded L3 evidence for {args.skill}: {path}")
+        return
+
+    problems = check_platform_coverage(root)
+    for skill in sorted(list_skills()):
+        declared = _declared_native_status(skill, root)
+        if declared is None:
+            continue
+        gate = evaluate_skill(skill, root, declared)
+        marks = "  ".join(
+            f"{s.layer}:{ {'valid': 'ok', 'failing': 'FAIL', 'stale': 'STALE', 'pending': '-'}[s.state] }"
+            for s in gate.layers
+        )
+        print(f"  {skill:<12} declared={declared:<12} evidence={gate.derived:<12} {marks}")
+        for state in gate.layers:
+            if state.detail and state.state != "valid":
+                print(f"       {state.layer}: {state.detail}")
+        problems += gate.problems
+
+    if problems:
+        print("\nGATE FAILED:")
+        for p in problems:
+            print(f"  - {p}")
+        print(
+            "\nA status is a claim about measured layers, not an intention. Either produce the "
+            "evidence (`just check-contracts`, `just parity`, `just eval-native`) or lower the "
+            f"claim in skill.yaml to one of: {', '.join(STATUS_ORDER)}."
+        )
+        sys.exit(1)
+    print("\ngate: every declared native status is backed by current evidence")
+
+
+def _declared_native_status(skill: str, root: Path) -> str | None:
+    manifest = yaml.safe_load((root / "skills" / skill / "skill.yaml").read_text(encoding="utf-8"))
+    native = ((manifest or {}).get("runtimes") or {}).get("native") or {}
+    return native.get("status")
+
+
 def _matrix_row(scoreboard: dict[str, Any]) -> dict[str, Any]:
     """Pull the four headline metrics from a scoreboard into a flat matrix cell."""
     intent = scoreboard.get("intent_metrics") or {}
@@ -1725,6 +1795,27 @@ def build_parser() -> argparse.ArgumentParser:
         "result about the corpus.",
     )
 
+    # gate — G1/G2
+    p_gate = sub.add_parser(
+        "gate",
+        help="Check that each skill's declared native status is backed by current evidence",
+    )
+    p_gate.add_argument("--skill", default=None)
+    p_gate.add_argument(
+        "--record-contracts",
+        action="store_true",
+        dest="record_contracts",
+        help="Record L1/L2 evidence for every skill. Run by `just check-contracts` after the "
+        "tests pass — evidence is a side effect of the check, never typed.",
+    )
+    p_gate.add_argument(
+        "--record-parity",
+        default=None,
+        dest="record_parity",
+        metavar="RUN_DIR",
+        help="Record L3 evidence for --skill from a saved parity run directory.",
+    )
+
     # regression
     p_reg = sub.add_parser("regression", help="Check current results against snapshot")
     p_reg.add_argument("--skill", default=None)
@@ -1879,6 +1970,7 @@ def main() -> None:
         "accept": cmd_accept,
         "safety": cmd_safety,
         "native": cmd_native,
+        "gate": cmd_gate,
     }
     dispatch[args.command](args)
 

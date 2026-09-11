@@ -1,0 +1,90 @@
+# native_status.yaml — what `skill.yaml`'s `runtimes.native.status` is allowed to claim.
+#
+# WHY THIS FILE EXISTS
+#
+# `status: supported` was a word anyone could type. Nothing read it, nothing checked it, and
+# nothing said what it meant — so it recorded an intention rather than a fact
+# (docs/plans/2026-09-10-skill-quality-lifecycle.md, G1/G2). This file gives each status a
+# definition in terms of evidence, and `knaif.evalsuite.gate` fails when a declaration outruns
+# the evidence that exists.
+#
+# THE ORDERING RULE THAT MATTERS
+#
+# Status is **derived from the layers that still have valid evidence** — never by decrementing a
+# previous status. A change to the Python core, the contracts, the bundle or the inference
+# settings invalidates L3/L4 *and* L1/L2, so quietly demoting `supported` to `parity` would
+# assert a claim whose evidence had also just expired. A skill whose evidence is all stale is
+# `in-progress`, whatever it used to be.
+
+schema_version: 1
+
+statuses:
+  in-progress:
+    means: "Porting started. Any subset of layers passing, or none."
+    requires: []
+    release_eligible: false
+    note: >-
+      Development evidence. Publishing a partial run is encouraged — it simply cannot buy a
+      higher status.
+
+  parity:
+    means: >-
+      The two runtimes agree on what to do. Says nothing about the product working: a shared
+      wrong answer is still agreement.
+    requires: [L1, L2, L3]
+    release_eligible: false
+
+  supported:
+    means: >-
+      Additionally, the shipped binary was measured executing for real and produced the right
+      files, at full coverage. The only status a release may quote for "it works".
+    requires: [L1, L2, L3, L4]
+    release_eligible: true
+
+# What each layer's evidence is, and what invalidates it. `invalidated_by` names the members of
+# the evidence tuple a layer depends on: change one and that layer's record goes stale.
+layers:
+  L1:
+    what: "Contract conformance — prompt, retrieval, generation settings. No model."
+    evidence: "contracts/parity/*.json green on both runtimes (`just check-contracts`)."
+    invalidated_by: [contracts, python_core, bundle]
+  L2:
+    what: "Deterministic pipeline — parse/validate/defaults/expand/gate, ordered execution."
+    evidence: "contracts/parity/planner_cases.json + apps/cli/tests/executor_semantics.rs."
+    invalidated_by: [contracts, python_core, bundle]
+  L3:
+    what: "Behavioral parity on the real corpus. Needs a GGUF."
+    evidence: "A run directory under evals/parity/ with report.json + meta.json."
+    invalidated_by: [contracts, python_core, bundle, corpus, model, native_binary, settings]
+  L4:
+    what: "The shipped path: `knaif run` executing for real, graded on produced files."
+    evidence: "An acceptance record under evals/acceptance/<skill>.json."
+    invalidated_by:
+      [contracts, python_core, bundle, corpus, model, native_binary, settings, verifier, policy]
+
+# THE ACCEPTANCE THRESHOLD IS DELIBERATELY NOT STATED HERE, and that is a gap rather than a
+# design choice. L3's pass/fail rate is an open owner decision: the two runtimes link different
+# llama.cpp builds (llama-cpp-2 vs llama-cpp-python), and with prompts verified byte-identical
+# and both sides self-deterministic they still choose different tokens on near-ties — measured
+# 2026-09-10, see evals/parity/2026-09-10_l3-ffmpeg-command/. A rate bar may be unreachable by
+# construction, so the validator checks that evidence EXISTS and is CURRENT, and reports the
+# recorded rate rather than judging it. When the bar is settled, add it here and make the
+# validator enforce it.
+thresholds:
+  L3: null   # open — see above
+  L4:
+    rule: "native >= max(S2 floor, accepted python score - tolerance), per metric"
+    tolerance: 0.02
+    metrics: [outcome_accuracy, avg_knaif_score]
+    min_coverage: 0.95
+    safety_pass_rate: 1.0
+
+# A platform id in platforms.yaml and a coverage key in contracts/parity/*.json name the same
+# thing differently: the platform is `linux-x64`, the runner that exercised it is `ubuntu`.
+# Declared here rather than inferred from a prefix, so the guard cannot quietly stop matching
+# when a runner is renamed — and so it does not report a gap that does not exist. A guard that
+# cries wolf gets deleted, which is worse than not having one.
+platform_coverage_aliases:
+  linux: [ubuntu, debian, linux]
+  windows: [windows]
+  macos: [macos, darwin]

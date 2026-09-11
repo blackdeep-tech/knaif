@@ -28,9 +28,20 @@ def test_ffmpeg_declares_ffmpeg_binaries_required():
     assert set(tool["commands"]) == {"ffmpeg", "ffprobe"}
 
 
-def test_ffmpeg_runtimes_mark_native_supported_with_crate():
+def test_ffmpeg_declares_a_native_crate_and_a_valid_status():
+    """The crate is a fact about the bundle; the status is a *claim about evidence* and moves.
+
+    This used to assert `status == "supported"` literally, which would have made the G1/G2 gate
+    unusable — the gate's whole job is to lower a status when the evidence does not support it,
+    and a test pinning the word would have failed the moment it did that (it did: 2026-09-11).
+    What belongs here is that the declared status is one the contract defines; whether *this*
+    status is earned is `knaif.evalsuite.gate`'s question, tested in `test_gate.py`.
+    """
+    from knaif.evalsuite.gate import load_status_contract
+
     skill = Skill.load(FFMPEG)
-    assert skill.runtimes["native"]["status"] == "supported"
+    contract = load_status_contract(Path(__file__).resolve().parents[3])
+    assert skill.runtimes["native"]["status"] in contract["statuses"]
     assert skill.runtimes["native"]["crate"] == "knaif-skill-ffmpeg"
 
 

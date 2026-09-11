@@ -22,7 +22,13 @@ runtimes:
   python:
     handlers: handlers.FFmpegSkill   # resolved inside skills/ffmpeg/python/ (loaded by path)
   native:
-    status: supported
+    # STATUS IS EVIDENCE-BACKED, not an intention: `just check-gate` fails when this claims more
+    # than evals/acceptance/<skill>.json supports (contracts/release/native_status.yaml defines
+    # the three statuses). Lowered from `supported` to `in-progress` on 2026-09-11, when the
+    # gate first ran and there was nothing behind the old word: L1/L2 are green, but there is no
+    # L4 acceptance record for either skill, and ffmpeg's first L3 run scored 0.819 against a
+    # 1.0 bar. Raise it again by producing the evidence — `just parity`, then `just eval-native`.
+    status: in-progress
     crate: knaif-skill-ffmpeg
 
 # External binaries the skill shells out to. The installer detects these and offers to

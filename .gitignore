@@ -88,6 +88,13 @@ evals/**
 # them stay ignored. See docs/plans/2026-09-10-skill-quality-lifecycle.md (S3g).
 !evals/**/summary.json
 !evals/**/summary.md
+# Acceptance records are what the native-status gate READS, not scratch: `just check-gate`
+# resolves evals/acceptance/<skill>.json by path and derives a skill's status from it, so an
+# uncommitted record means CI sees no evidence for any skill and every status collapses to
+# `in-progress`. Written by the checks that verify each layer (never by hand), a few KB, and
+# diffable — the hashes in them are the whole point, since a changed hash is what marks a
+# layer stale. See docs/plans/2026-09-10-skill-quality-lifecycle.md (G2).
+!evals/acceptance/*.json
 evals/**/.baselines/
 evals/**/out.*
 evals/**/report.html

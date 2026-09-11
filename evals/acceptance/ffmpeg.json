@@ -1,0 +1,44 @@
+{
+  "skill": "ffmpeg",
+  "layers": {
+    "L1": {
+      "summary": "contracts/parity/* green on both runtimes",
+      "evidence": {
+        "bundle": "df2b91ed6d580f3f3f4ef5085420d0942751c1018f1a7a96c26bb42620011561",
+        "contracts": "8d16c752702a089cd716cddaeaf59b852a18e831428945d8f02196659faf4a8a",
+        "python_core": "c106f46df322a02287be5881f3923bbebc091f68fe960bb5299a910087286519",
+        "corpus": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469",
+        "verifier": "7eb276c140d4e735de126158d5c6a9f1805d64ef06268f24c02ebced08e0b55b",
+        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+      }
+    },
+    "L2": {
+      "summary": "deterministic pipeline + ordered execution green",
+      "evidence": {
+        "bundle": "df2b91ed6d580f3f3f4ef5085420d0942751c1018f1a7a96c26bb42620011561",
+        "contracts": "8d16c752702a089cd716cddaeaf59b852a18e831428945d8f02196659faf4a8a",
+        "python_core": "c106f46df322a02287be5881f3923bbebc091f68fe960bb5299a910087286519",
+        "corpus": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469",
+        "verifier": "7eb276c140d4e735de126158d5c6a9f1805d64ef06268f24c02ebced08e0b55b",
+        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+      }
+    },
+    "L3": {
+      "run": "evals\\parity\\2026-09-10_l3-ffmpeg-command",
+      "summary": "2026-09-10_l3-ffmpeg-command: rate=0.819444 threshold=1.0 passed=False",
+      "equivalence_rate": 0.819444,
+      "passed": false,
+      "backend": "cuda",
+      "git_sha": "14f7f7bef3e6384af8d490696acd7b99f63ffac9",
+      "git_dirty": true,
+      "evidence": {
+        "bundle": "bb2b42a9c86e561a50792e464359bf62cb85308bcac9d5e05981c3c864982d34",
+        "contracts": "8d16c752702a089cd716cddaeaf59b852a18e831428945d8f02196659faf4a8a",
+        "python_core": "c106f46df322a02287be5881f3923bbebc091f68fe960bb5299a910087286519",
+        "corpus": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469",
+        "verifier": "7eb276c140d4e735de126158d5c6a9f1805d64ef06268f24c02ebced08e0b55b",
+        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+      }
+    }
+  }
+}
