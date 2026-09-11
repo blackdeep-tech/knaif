@@ -1276,6 +1276,19 @@ impl PlanSession {
         // then downgrade to a clarify when the model invented an input file the utterance never
         // named. Applied here so both `run` and `plan` inherit it, matching Python's `infer`.
         let gated = knaif_core::apply_clarify_gate(payload, &utterance, &self.output_capable);
+        // Extension-less stems (`clip_4k`, `silent_clip`) resolve against the working directory,
+        // or become a clarify when it cannot decide — port of Python's `resolve_stems` call in
+        // `CommandAgent._execute_steps`, applied at the same stage (N2). Without it native
+        // rendered `-i clip_4k` verbatim and acted on an ambiguous reference where Python asked.
+        //
+        // **Resolved against `sandbox` when set, otherwise `base` (the cwd) — and the second half
+        // is a deliberate widening of Python's rule**, which skips stem resolution entirely when
+        // no sandbox is configured. Two reasons: open/CLI mode is exactly how the shipped binary
+        // is used and how the L4 lane drives it, so gating on a sandbox would leave the defect in
+        // place everywhere it actually bites; and native already resolves *relative inputs*
+        // against the cwd in this mode, so resolving stems there too is consistent with how the
+        // same path is already read rather than a new notion of where files live.
+        let gated = resolve_plan_stems(gated, sandbox.unwrap_or(base));
         emit_plan_dump(plan_dump_enabled(), &gated);
         Ok(gated)
     }
@@ -1795,6 +1808,46 @@ fn first_run_model_message(skill: &str, recommended: Option<&str>, installed: bo
              (See `knaif models list` for available models.)"
         ),
     }
+}
+
+/// Resolve extension-less stems in every non-terminal step, or downgrade the whole plan to a
+/// clarify when the sandbox cannot pin one down.
+///
+/// Mirrors Python's loop in `CommandAgent._execute_steps`: terminal tools carry no file paths and
+/// are skipped, and the FIRST unresolvable stem replaces the entire plan with a single clarify —
+/// asking once beats half-running a plan whose inputs are in doubt.
+fn resolve_plan_stems(payload: serde_json::Value, sandbox: &Path) -> serde_json::Value {
+    const TERMINAL: [&str; 4] = ["clarify", "reject", "done", "wait_for_confirmation"];
+    let Some(steps) = payload.get("plan").and_then(|p| p.as_array()) else {
+        return payload;
+    };
+    let mut out = Vec::with_capacity(steps.len());
+    for step in steps {
+        let tool = step.get("tool").and_then(|t| t.as_str()).unwrap_or("");
+        if TERMINAL.contains(&tool) {
+            out.push(step.clone());
+            continue;
+        }
+        let Some(args) = step.get("args") else {
+            out.push(step.clone());
+            continue;
+        };
+        match knaif_core::resolve_stems(args, sandbox) {
+            knaif_core::StemOutcome::Resolved(resolved) => {
+                let mut s = step.clone();
+                if let Some(obj) = s.as_object_mut() {
+                    obj.insert("args".into(), resolved);
+                }
+                out.push(s);
+            }
+            knaif_core::StemOutcome::Clarify(question) => {
+                return serde_json::json!({
+                    "plan": [{"tool": "clarify", "args": {"question": question}}]
+                });
+            }
+        }
+    }
+    serde_json::json!({ "plan": out })
 }
 
 #[cfg(test)]

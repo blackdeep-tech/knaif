@@ -20,8 +20,8 @@ from knaif.evalsuite.native_lane import (
     build_argv,
     extract_failure,
     load_lane,
-    needed_fixtures,
     parse_run_output,
+    provision_fixtures,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -83,33 +83,49 @@ def test_a_failed_chain_is_an_error_even_though_step_one_wrote_a_file() -> None:
     assert got["commands"] == ["ffmpeg -y -i a.mp4 s.mp4"]
 
 
-# ── fixture selection ─────────────────────────────────────────────────────────
+# ── fixture provisioning ──────────────────────────────────────────────────────
 
 
-def test_only_the_named_fixtures_are_copied(tmp_path: Path) -> None:
-    for name in ("clip.mp4", "clip2.mp4", "audio.mp3"):
-        (tmp_path / name).write_bytes(b"x")
-    got = needed_fixtures(_Row(), "join clip.mp4 and clip2.mp4", tmp_path)
-    assert {p.name for p in got} == {"clip.mp4", "clip2.mp4"}
+def test_every_fixture_is_visible_to_every_utterance(tmp_path: Path) -> None:
+    """Python's verifiers run the corpus in ONE sandbox where all fixtures are visible.
+
+    The lane used to copy only the fixtures an utterance named, which is stricter — and the
+    difference was scored against the runtime: `ffmpeg_084` plans `clip.mp4` (a real fixture)
+    while its row declares `clip_4k.mp4`, so native was handed one file and blamed for the
+    missing input that Python could see.
+    """
+    fixtures, work = tmp_path / "fx", tmp_path / "work"
+    fixtures.mkdir()
+    work.mkdir()
+    for name in ("clip.mp4", "clip_4k.mp4", "audio.mp3"):
+        (fixtures / name).write_bytes(b"x")
+
+    assert provision_fixtures(fixtures, work) == 3
+    assert {p.name for p in work.iterdir()} == {"clip.mp4", "clip_4k.mp4", "audio.mp3"}
 
 
-def test_the_rows_declared_fixture_is_included_even_when_unnamed(tmp_path: Path) -> None:
-    (tmp_path / "clip.mp4").write_bytes(b"x")
-    got = needed_fixtures(_Row(fixture="clip.mp4"), "make the video smaller", tmp_path)
-    assert [p.name for p in got] == ["clip.mp4"]
+def test_dotfiles_are_not_provisioned(tmp_path: Path) -> None:
+    """`.cache.json` sits in the fixture directory and is not media."""
+    fixtures, work = tmp_path / "fx", tmp_path / "work"
+    fixtures.mkdir()
+    work.mkdir()
+    (fixtures / "clip.mp4").write_bytes(b"x")
+    (fixtures / ".cache.json").write_text("{}", encoding="utf-8")
+
+    provision_fixtures(fixtures, work)
+    assert {p.name for p in work.iterdir()} == {"clip.mp4"}
 
 
-def test_a_filename_with_no_fixture_is_not_invented(tmp_path: Path) -> None:
-    """The corpus references missing files on purpose; materializing one erases the case."""
-    (tmp_path / "clip.mp4").write_bytes(b"x")
-    got = needed_fixtures(_Row(), "compress holiday.mp4", tmp_path)
-    assert got == []
-
-
-def test_a_fixture_named_twice_is_copied_once(tmp_path: Path) -> None:
-    (tmp_path / "clip.mp4").write_bytes(b"x")
-    got = needed_fixtures(_Row(fixture="clip.mp4"), "trim clip.mp4 then resize clip.mp4", tmp_path)
-    assert [p.name for p in got] == ["clip.mp4"]
+def test_provisioning_does_not_duplicate_the_bytes(tmp_path: Path) -> None:
+    """847 utterances x 8.7 MB would be ~7 GB of copies, so these are hard links where the
+    filesystem allows it. Asserted through content identity rather than link counts, which
+    differ across platforms."""
+    fixtures, work = tmp_path / "fx", tmp_path / "work"
+    fixtures.mkdir()
+    work.mkdir()
+    (fixtures / "clip.mp4").write_bytes(b"original")
+    provision_fixtures(fixtures, work)
+    assert (work / "clip.mp4").read_bytes() == b"original"
 
 
 # ── lane config (L4c) ─────────────────────────────────────────────────────────

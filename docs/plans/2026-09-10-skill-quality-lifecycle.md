@@ -680,11 +680,40 @@ that finds them, not the one that repairs them.
     rather than the unit tests — that a bare `*.mp4` has an *empty* parent, so `read_dir("")`
     failed and globs matched nothing **in exactly the CLI mode the eval lane uses**. Python never
     hits the last one because it re-bases every relative path onto the sandbox first.
-- [ ] **N2 — Native does not resolve bare stems, so it never clarifies** (`ffmpeg_288`, `289`).
+- [ ] **N8 — "merge everything in this folder" works in neither runtime.** *(Owner decision
+  2026-09-11: do it Python-first then port — HELD as backlog, not started.)* `concat_video` is the
+  one tool whose inputs do not go through `ResolveInputs`, on **both** sides, so a glob never
+  expands for it. N1's fix deliberately excluded it rather than create a divergence.
+  - **Measured before deciding, and the measurement is why it is held:** it would move **nothing**.
+    All 36 concat utterances in the corpus name explicit files; **zero** ask for a whole-folder
+    merge, so the `concat_video` slice would not move, and none of its 7 current failures is about
+    expanding a pattern (6 of them fail in Python too, over *which* files rather than *how many*).
+  - **It is therefore feature work, not acceptance work** — the only remaining item that is not on
+    the path to clearing the bar. It also needs new corpus rows, which change the population and
+    so force an S5 re-lock.
+- [x] **N2 — FIXED 2026-09-11. Native resolves stems, and clarifies when it cannot.** (`ffmpeg_288`, `289`).
   Plans carry `input: "silent_clip"` / `"mov"`, with no extension. Python resolves stems against
   the sandbox and asks *"Which silent_clip did you mean?"*; native renders `-i silent_clip`
   verbatim, producing a command that fails at runtime. Native is **less safe** here: it acts on
   an ambiguous reference instead of asking.
+  - **The fix**: `knaif_core::resolve_stems` ports Python's rule exactly — 0 sandbox matches or
+    >1 both become a **clarify** carrying Python's own wording; exactly 1 substitutes the
+    filename. Wired in `apps/cli` at the same stage Python applies it (after the clarify gate,
+    before dispatch), with terminal tools skipped. Verified through the shipped binary:
+    `clip_4k` → `-i clip_4k.mp4`, and *"the silent clip"* → *"No file matching 'silent_clip.*'
+    found — please specify the filename."* where it used to hand ffmpeg a missing file.
+  - **The structural-marker rule is the half a re-derivation drops.** Python only treats a value
+    as a stem when it contains `_`, `-` or a digit, so `clip`, `mov`, `video` and `audio` pass
+    through **untouched**. Resolving those would turn a working plan into a clarify — a
+    divergence in the opposite direction from the bug. Six Rust tests pin it against ground truth
+    captured by running Python's own `resolve_stems`.
+  - ⚠️ **One deliberate widening of Python's rule, flagged because it is a real difference.**
+    Python skips stem resolution entirely when no sandbox is configured; native resolves against
+    the **cwd** in that case. Open/CLI mode is how the shipped binary is actually used *and* how
+    the L4 lane drives it, so gating on a sandbox would have left the defect in place everywhere
+    it bites — the fix would have passed its unit tests and changed nothing measured. Native
+    already resolves relative inputs against the cwd in this mode, so this reads the same path
+    the same way rather than inventing a second notion of where files live.
 - [ ] **N3 — `target_size_mb` does not drive a downscale natively** (`ffmpeg_020`). For
   "under 1 MB" Python adds `-vf scale=854:480`; native re-encodes at source resolution and will
   miss the target the user named.
@@ -756,7 +785,7 @@ that finds them, not the one that repairs them.
       **Coverage was the only number the defect corrupted.** The mechanism L4d warns about is
       real and the gating still matters — it simply was not what went wrong here, and saying so
       loosely is the same species of error this plan exists to stop.
-- [x] **N7 — DONE 2026-09-11: three harness defects in the L4 lane itself**, each of which made
+- [x] **N7 — DONE 2026-09-11: FOUR harness defects in the L4 lane itself**, each of which made
   the first run read better, or more alarmingly, than the truth. *(Found by L4, fixed the same
   day, each with a test.)*
   - **The per-row `error` field was useless.** It stored `(stderr or stdout)[-500:]`, and
@@ -776,6 +805,14 @@ that finds them, not the one that repairs them.
     folder"* as `-r` and rejected the command line before any inference — and the row then scored
     as though the runtime had considered the request and failed. `build_argv` now puts `--` before
     the request words. One row in this corpus; it would have been silent in any other.
+  - **The lane withheld fixtures Python could see.** It copied only the fixtures an utterance
+    *named*, while Python's verifiers run the whole corpus in one sandbox where every fixture is
+    visible. So `ffmpeg_084` — which plans `clip.mp4`, a real fixture, while its row declares
+    `clip_4k.mp4` — failed natively on a missing input and "passed" in Python on the same plan.
+    That is a harness asymmetry scored as a runtime defect, ~4 rows. `provision_fixtures` now
+    hard-links **every** fixture into each work directory. **Output isolation is untouched** and
+    is the property actually worth having: a file produced by one row still cannot satisfy
+    another. Hard links because 847 × 8.7 MB of copies is ~7 GB.
 - [ ] **N5 — Not a native defect: Python's `run --dry-run` renders only the first step of some
   chains** (`ffmpeg_118`). Native renders both steps of compress → prepare_for_platform; Python
   renders one. This surfaced only because Workstream E made native render whole chains. Recorded

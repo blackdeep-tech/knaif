@@ -23,8 +23,8 @@ pub use deps::{
 };
 pub use extract::{extract_json, ExtractedJson};
 pub use planner::{
-    apply_defaults, normalize_plan, optimize_plan, parse_plan, resolve_args, validate_plan,
-    validate_step,
+    apply_defaults, normalize_plan, optimize_plan, parse_plan, resolve_args, resolve_stems,
+    validate_plan, validate_step, StemOutcome,
 };
 pub use prompt::{
     build_prompt, build_prompt_ordered, load_prompt_yaml, render_examples_block, select_examples,

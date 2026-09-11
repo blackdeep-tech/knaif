@@ -1136,3 +1136,224 @@ convert:
         std::fs::remove_dir_all(&tmp).ok();
     }
 }
+
+// ── stem resolution (port of `planner.resolve_stems`) ────────────────────────
+
+/// Arg keys whose values are file paths. Mirrors Python's `_PATH_ARG_KEYS`.
+const STEM_PATH_ARG_KEYS: &[&str] = &[
+    "inputs", "input", "files", "src", "dst", "path", "base", "append",
+];
+
+/// What resolving a stem produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StemOutcome {
+    /// Nothing to do, or resolved in place.
+    Resolved(serde_json::Value),
+    /// The model named something the sandbox cannot pin down. Carries the question to ask.
+    Clarify(String),
+}
+
+/// True if *value* looks like an extension-less filename stem worth resolving.
+///
+/// The **structural marker** (`_`, `-`, or a digit) is the load-bearing half and is easy to drop
+/// when re-deriving this: without it, ordinary words like `video` or `audio` become stems, and a
+/// plan naming one gets downgraded to a clarify instead of running. Ported from Python's
+/// `_is_stem_candidate`.
+fn is_stem_candidate(value: &str) -> bool {
+    if value.starts_with('$') || value.contains('.') {
+        return false;
+    }
+    if value.contains('*') || value.contains('?') || value.contains('[') {
+        return false;
+    }
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return false;
+    }
+    value
+        .chars()
+        .any(|c| c == '_' || c == '-' || c.is_ascii_digit())
+}
+
+/// Resolve one stem against the sandbox: 0 matches → clarify, 1 → the filename, >1 → clarify.
+///
+/// The two questions are Python's, word for word, because they reach the user.
+fn resolve_one_stem(value: &str, sandbox: &Path) -> Result<String, String> {
+    if !is_stem_candidate(value) {
+        return Ok(value.to_string());
+    }
+    let Ok(entries) = std::fs::read_dir(sandbox) else {
+        return Err(format!(
+            "No file matching '{value}.*' found — please specify the filename."
+        ));
+    };
+    let mut matches: Vec<String> = entries
+        .flatten()
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| e.file_name().to_str().map(String::from))
+        .filter(|n| !n.starts_with('.'))
+        .filter(|n| {
+            n.strip_prefix(value)
+                .is_some_and(|rest| rest.starts_with('.') && rest.len() > 1)
+        })
+        .collect();
+    match matches.len() {
+        0 => Err(format!(
+            "No file matching '{value}.*' found — please specify the filename."
+        )),
+        1 => Ok(matches.remove(0)),
+        _ => {
+            matches.sort();
+            Err(format!(
+                "'{value}' matches multiple files: {} — please specify which one.",
+                matches.join(", ")
+            ))
+        }
+    }
+}
+
+/// Substitute extension-less filename stems in a step's path-bearing args.
+///
+/// Native rendered `-i clip_4k` verbatim and let ffmpeg fail on a missing file, where Python
+/// resolves the stem to `clip_4k.mp4` — or asks which file was meant when the sandbox cannot
+/// decide. Measured on the 2026-09-11 L4 re-run: the second largest native-only failure class
+/// after globs, and **the more serious of the two**, because native was acting on an ambiguous
+/// reference where Python asked (N2).
+pub fn resolve_stems(args: &serde_json::Value, sandbox: &Path) -> StemOutcome {
+    let Some(obj) = args.as_object() else {
+        return StemOutcome::Resolved(args.clone());
+    };
+    let mut out = obj.clone();
+    for key in STEM_PATH_ARG_KEYS {
+        let Some(val) = obj.get(*key) else { continue };
+        match val {
+            serde_json::Value::String(s) => match resolve_one_stem(s, sandbox) {
+                Ok(r) => {
+                    out.insert((*key).to_string(), serde_json::Value::String(r));
+                }
+                Err(q) => return StemOutcome::Clarify(q),
+            },
+            serde_json::Value::Array(items) => {
+                let mut resolved = Vec::with_capacity(items.len());
+                for item in items {
+                    match item {
+                        serde_json::Value::String(s) => match resolve_one_stem(s, sandbox) {
+                            Ok(r) => resolved.push(serde_json::Value::String(r)),
+                            Err(q) => return StemOutcome::Clarify(q),
+                        },
+                        other => resolved.push(other.clone()),
+                    }
+                }
+                out.insert((*key).to_string(), serde_json::Value::Array(resolved));
+            }
+            _ => {}
+        }
+    }
+    StemOutcome::Resolved(serde_json::Value::Object(out))
+}
+
+#[cfg(test)]
+mod stem_tests {
+    use super::*;
+
+    /// Ground truth captured by running Python's `planner.resolve_stems` over the same sandbox.
+    fn sandbox() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("knaif-stems-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in [
+            "clip_4k.mp4",
+            "clip.mp4",
+            "clip.mov",
+            "audio.mp3",
+            ".hidden.mp4",
+        ] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        dir
+    }
+
+    fn run(args: serde_json::Value) -> StemOutcome {
+        resolve_stems(&args, &sandbox())
+    }
+
+    #[test]
+    fn a_unique_stem_resolves_to_the_filename() {
+        assert_eq!(
+            run(serde_json::json!({"input": "clip_4k"})),
+            StemOutcome::Resolved(serde_json::json!({"input": "clip_4k.mp4"}))
+        );
+    }
+
+    #[test]
+    fn a_stem_with_no_match_asks_which_file() {
+        match run(serde_json::json!({"input": "silent_clip"})) {
+            StemOutcome::Clarify(q) => {
+                assert_eq!(
+                    q,
+                    "No file matching 'silent_clip.*' found — please specify the filename."
+                )
+            }
+            other => panic!("expected clarify, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_bare_word_is_not_a_stem() {
+        // THE EASY ONE TO GET WRONG. `clip`, `mov`, `video` have no `_`, `-` or digit, so Python
+        // does not treat them as stems at all — they pass through untouched. Resolving them would
+        // turn `clip` into `clip.mp4` (or a clarify) where Python leaves it alone, which is a
+        // divergence in the *opposite* direction from the bug being fixed.
+        for word in ["clip", "mov", "video", "audio"] {
+            assert_eq!(
+                run(serde_json::json!({ "input": word })),
+                StemOutcome::Resolved(serde_json::json!({ "input": word })),
+                "{word} must pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn refs_globs_and_real_filenames_pass_through() {
+        for value in ["$prev", "*.mp4", "clip.mp4"] {
+            assert_eq!(
+                run(serde_json::json!({ "input": value })),
+                StemOutcome::Resolved(serde_json::json!({ "input": value })),
+                "{value} must pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn a_list_resolves_each_entry() {
+        assert_eq!(
+            run(serde_json::json!({"inputs": ["clip_4k", "audio"]})),
+            StemOutcome::Resolved(serde_json::json!({"inputs": ["clip_4k.mp4", "audio"]}))
+        );
+    }
+
+    #[test]
+    fn an_ambiguous_stem_lists_the_candidates() {
+        let dir = std::env::temp_dir().join(format!("knaif-stems-amb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in ["take_1.mp4", "take_1.mov"] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        match resolve_stems(&serde_json::json!({"input": "take_1"}), &dir) {
+            StemOutcome::Clarify(q) => {
+                assert!(q.contains("take_1.mov, take_1.mp4"), "{q}");
+                assert!(q.contains("please specify which one"), "{q}");
+            }
+            other => panic!("expected clarify, got {other:?}"),
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
