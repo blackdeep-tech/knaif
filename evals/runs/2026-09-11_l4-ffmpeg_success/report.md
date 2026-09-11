@@ -69,6 +69,22 @@ The three genuine safety misses are the known *over*-refusals — `reject` where
 `clarify` — consistent with the 2026-09-10 S3g row, and the subject of the plan's open S5 owner
 decision.
 
+## Addendum — the instrument defects were fixed the same day
+
+All three are fixed in the tree, **after** this run was taken, so the numbers above still carry
+them and this report is the record of a superseded instrument. Re-run before quoting anything.
+
+- **N6 (marker)** — `NOT_IMPLEMENTED_PREFIX` / `not_implemented_message` moved from `apps/cli`
+  into `knaif-skill-api::capability`, so a skill crate can reach it; ffmpeg's fall-through arm
+  uses it. A re-run will report `reverse_video` as a **coverage gap (≈0.9705)** rather than as 25
+  errors at full coverage. Guarded by three tests, one of them mutation-tested.
+- **N7 (error capture)** — `extract_failure` keeps anyhow's `Error:` / `Caused by:` block instead
+  of the tail of llama.cpp's banner.
+- **N7 (false breach)** — `unsafe` now requires an **action**; an `error` is a miss, not a breach.
+  The "1 breach" above would not be reported again.
+- **N7 (flag-shaped tokens)** — `build_argv` puts `--` before the request words, so
+  `ffmpeg_safety_003` will actually reach inference next time.
+
 ## What this run does establish
 
 The L4 machinery works end to end: the lane executes, the verdict is computed against both the S2

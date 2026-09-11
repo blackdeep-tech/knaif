@@ -7,4 +7,5 @@
 //! native skill that needs a filesystem-aware containment check should use it rather than
 //! keep its own lexical-only copy (F4).
 
+pub mod capability;
 pub mod sandbox;

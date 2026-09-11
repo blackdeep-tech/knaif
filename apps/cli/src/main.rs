@@ -623,11 +623,12 @@ enum StepDecision {
 /// are opposite facts about the product: a coverage gap versus the safety model working. Kept
 /// distinct in the machine-readable output so acceptance records can count coverage at all
 /// (docs/plans/2026-09-10-skill-quality-lifecycle.md, L4d).
-const NOT_IMPLEMENTED_PREFIX: &str = "not_implemented:";
-
-fn not_implemented_message(reason: &str) -> String {
-    format!("{NOT_IMPLEMENTED_PREFIX} {reason}")
-}
+///
+/// Defined in `knaif-skill-api` rather than here, because the skills are where the gaps are:
+/// while this was the host's private constant, `ffmpeg` could not reach it and bailed with a
+/// bare error instead, which is how the first L4 run reported full coverage over a corpus it
+/// could not fully attempt (N6).
+use knaif_skill_api::capability::not_implemented_message;
 
 fn decide_steps(steps: &[serde_json::Value]) -> StepDecision {
     match steps.len() {
@@ -2350,7 +2351,7 @@ mod tests {
         // and are now executed. What still produces it is a skill tool the native runtime has
         // not built (`is_supported` in the documents crate).
         let msg = not_implemented_message("the documents tool \"redact\" is not built");
-        assert!(msg.starts_with(NOT_IMPLEMENTED_PREFIX));
+        assert!(msg.starts_with(knaif_skill_api::capability::NOT_IMPLEMENTED_PREFIX));
         assert!(!msg.starts_with("reject:"));
         assert!(msg.contains("is not built"));
     }

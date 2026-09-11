@@ -289,7 +289,8 @@ fn resolve_intent(
             let mut video_codec = str_arg(args, "video_codec");
             // A model sometimes slots a video codec token ("av1", "hevc") into the container arg.
             if let Some(c) = &container {
-                if video_codec.is_none() && data.vocab.video_encoder_map.contains_key(&c.to_lowercase())
+                if video_codec.is_none()
+                    && data.vocab.video_encoder_map.contains_key(&c.to_lowercase())
                 {
                     video_codec = Some(c.to_lowercase());
                     container = None;
@@ -416,9 +417,14 @@ fn resolve_intent(
                 data,
             )?);
         }
-        other => anyhow::bail!(
-            "ffmpeg intent {other:?} has no native dry-run expansion yet (join_videos + execution land next)"
-        ),
+        // The `not_implemented:` marker, not a bare error: this is a capability the native
+        // runtime does not have, which is a different fact from a failure and has to stay
+        // countable in the machine-readable output. Without it the L4 lane records the row as
+        // `error`, coverage cannot see the gap, and the quality average is computed over a
+        // population that silently excludes what the port cannot do (L4d, N6).
+        other => anyhow::bail!(knaif_skill_api::capability::not_implemented_message(
+            &format!("the ffmpeg intent {other:?} is not built into the native runtime yet")
+        )),
     }
 
     Ok(Ok(Resolved {

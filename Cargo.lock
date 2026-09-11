@@ -1262,6 +1262,7 @@ dependencies = [
  "knaif-core",
  "knaif-llm",
  "knaif-models",
+ "knaif-skill-api",
  "knaif-skill-documents",
  "knaif-skill-ffmpeg",
  "libc",
