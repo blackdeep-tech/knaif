@@ -830,32 +830,45 @@ def ffmpeg_rows() -> list[Row]:
     for utt, s in v3_audio:
         r.append((utt, P(s), ["v3", "hard_target", "audio", "extract", "contrastive"]))
 
-    v3_reject = [
+    # Relabelled `reject` -> `clarify` on 2026-09-12 (T5 of
+    # docs/plans/2026-09-11-reject-clarify-taxonomy.md). They keep their contrastive job -
+    # do not reach for create_thumbnail on an audio file - with the label corrected: a type
+    # mismatch was never *unsafe*, it is a request that cannot be satisfied, and the honest
+    # answer says so and offers the nearest thing that works.
+    v3_unachievable = [
         (
             "Create a thumbnail from narration.wav.",
-            "A thumbnail requires video frames; audio-only files cannot produce one.",
+            "A thumbnail needs video frames, so that isn't achievable from an audio-only "
+            "file. Is there a video I should use instead?",
         ),
         (
             "Grab a poster frame from track.wav.",
-            "A poster frame requires a video file, not an audio-only file.",
+            "A poster frame needs a video file, so that isn't achievable from track.wav. "
+            "Which video should I use?",
         ),
         (
             "Make a gif from voice.aac.",
-            "An animated gif requires video frames; an audio-only file is not valid input.",
+            "A gif needs video frames, so that isn't achievable from an audio-only file. "
+            "Is there a video I should use instead?",
         ),
         (
             "Turn audio.mp3 into a video thumbnail.",
-            "Audio-only files do not contain frames for a thumbnail.",
+            "Audio files hold no frames, so a thumbnail isn't achievable from audio.mp3. "
+            "Which video should I use?",
         ),
         (
             "Convert clip.mp4 to a format that does not exist.",
-            "A nonexistent output format is not a valid request.",
+            "That format isn't supported. Which container did you mean - mp4, mkv, webm, "
+            "or gif?",
         ),
-        ("Encode clip.mp4 with madeupcodec.", "A nonexistent codec is not a valid request."),
+        (
+            "Encode clip.mp4 with madeupcodec.",
+            "madeupcodec isn't supported. Did you mean h264, h265, vp9, or av1?",
+        ),
     ]
-    for utt, reason in v3_reject:
+    for utt, q in v3_unachievable:
         r.append(
-            (utt, P(step("reject", reason=reason)), ["v3", "hard_target", "reject", "contrastive"])
+            (utt, P(step("clarify", question=q)), ["v3", "hard_target", "clarify", "contrastive"])
         )
 
     # ── multilingual (DE/ES/FR/RU/BG) — NO ZH ──
@@ -975,46 +988,139 @@ def ffmpeg_rows() -> list[Row]:
     for utt, q in clar:
         r.append((utt, P(step("clarify", question=q)), ["clarify"]))
 
-    # ── reject ──
-    rej = [
-        (
-            "Delete all the videos in this folder.",
-            "Deleting files is outside the scope of media processing.",
-        ),
+    # ── v4: terse "no audio" chains ──
+    # These lived only in `train.jsonl`, not here, so running this script deleted them -
+    # found on 2026-09-12 when T5 first regenerated the file. They are the fix for a known
+    # live failure ("convert X to mp4 with no audio" does not chain strip_audio) and have
+    # never been trained: the shipped model is sft-v3 and these were authored after it.
+    # Anything that only exists in the generated file is one regeneration from gone.
+    v4_terse_no_audio = [
+        ("convert holiday.mov to mp4 with no audio", "holiday.mov", "holiday.mp4"),
+        ("convert intro.mov to mp4 without audio", "intro.mov", "intro.mp4"),
+        ("make webcam.mov an mp4 with no sound", "webcam.mov", "webcam.mp4"),
+        ("convert gameplay.avi to mp4, no audio", "gameplay.avi", "gameplay.mp4"),
+        ("turn lecture.mov into an mp4 but no audio", "lecture.mov", "lecture.mp4"),
+        ("convert broll.mkv to mp4 with no sound track", "broll.mkv", "broll.mp4"),
+        ("convert demo.webm to mp4 minus the audio", "demo.webm", "demo.mp4"),
+        ("save render.mov as an mp4 with the audio removed", "render.mov", "render.mp4"),
+    ]
+    for utt, src, out in v4_terse_no_audio:
+        r.append(
+            (
+                utt,
+                P(
+                    step("convert_video", inputs=[src], container="mp4", output=out),
+                    step("strip_audio", inputs=[out]),
+                ),
+                ["v4", "hard_target", "chain", "chain2", "convert", "strip", "terse_no_audio"],
+            )
+        )
+
+    # ── unsupported (→ clarify, not reject) ──
+    # Network access and impossible results moved here on 2026-09-12 (T5). One fine-tune
+    # serves every skill, and `build_dataset.py` binds each row to its own skill's prompt and
+    # retrieved tools - so what these teach is "email -> clarify UNDER FFMPEG'S INVENTORY",
+    # which stays true the day an upload skill ships. Training "email -> reject" would have
+    # taught that skill its core capability is a refusal.
+    # Note the wording: `score_corpus` grades these on the outcome label alone, so the
+    # question text is the only thing telling the user which kind of clarify they got.
+    unsupported = [
         (
             "Email promo.mp4 to my client.",
-            "Sending or emailing files is outside the local media-processing scope.",
+            "Emailing isn't supported - I only process media on this machine. Should I "
+            "compress promo.mp4 for email instead?",
         ),
-        ("Upload vlog.mp4 to YouTube.", "Uploading to external services is out of scope."),
+        (
+            "Upload vlog.mp4 to YouTube.",
+            "Uploading isn't supported - I only process media on this machine. Should I "
+            "prepare vlog.mp4 for YouTube instead?",
+        ),
         (
             "Download the video from https://example.com/clip.mp4 and convert it.",
-            "Downloading from URLs is outside the local sandbox scope.",
-        ),
-        (
-            "Upscale lecture.mp4 to flawless 4K.",
-            "Promising flawless/perfect upscaling is not an achievable result.",
-        ),
-        ("Wipe the drive after converting these.", "Formatting or wiping storage is out of scope."),
-        (
-            "Overwrite the original master.mov in place.",
-            "Overwriting the original source file is not allowed.",
+            "Downloading isn't supported - I work on files already on this machine. Which "
+            "local file should I convert?",
         ),
         (
             "Send footage.mov to the server.",
-            "Sending files to a server is outside the local scope.",
+            "Sending files isn't supported - I only process media on this machine. Is there "
+            "a media operation I can help with instead?",
+        ),
+        (
+            "Upscale lecture.mp4 to flawless 4K.",
+            "Flawless upscaling isn't achievable - detail that is not in the source cannot "
+            "be invented. Should I resize lecture.mp4 to 4K anyway?",
         ),
         (
             "Convert clip.mp4 with the fakecodec99 codec.",
-            "A nonexistent codec is not a valid request.",
+            "fakecodec99 isn't supported. Did you mean h264, h265, vp9, or av1?",
         ),
-        ("Make a 0x0 thumbnail of demo.mkv.", "A zero-size output is not a valid result."),
+        (
+            "Make a 0x0 thumbnail of demo.mkv.",
+            "A 0x0 image isn't achievable. What size should the thumbnail be?",
+        ),
         (
             "Magically improve the quality of teaser.mp4.",
-            "Magically improving quality is not an achievable result.",
+            "Improving quality isn't achievable on its own - tell me what to change: file "
+            "size, resolution, or audio?",
         ),
     ]
-    for utt, reason in rej:
-        r.append((utt, P(step("reject", reason=reason)), ["reject"]))
+    for utt, q in unsupported:
+        r.append((utt, P(step("clarify", question=q)), ["clarify", "unsupported"]))
+
+    # ── reject: ffmpeg's safety policy, and nothing else ──
+    # Three of the original eleven survive. The other eight were capability gaps, and
+    # teaching them as refusals is what produced "reject = anything I can't do".
+    #
+    # The third element is the invariant the row teaches, named with the same vocabulary the
+    # safety corpus tags its rows with. `test_every_safety_category_is_taught_in_training`
+    # joins the two: the gate admits no tolerance, so a category it tests with nothing behind
+    # it here is a scheduled failure. Cutting 17 rows to 3 left `sandbox_escape`,
+    # `system_files` and `shell_injection` declared in the prompt, tested by the gate, and
+    # taught nowhere — and the T6a control arm duly failed `ffmpeg_safety_system_root_dir`,
+    # the model planning `convert_video` over `/*` and the sandbox validator refusing it.
+    rej = [
+        (
+            "Delete all the videos in this folder.",
+            "Deleting files would destroy your originals; that is outside this skill's "
+            "safety policy.",
+            "destructive",
+        ),
+        (
+            "Wipe the drive after converting these.",
+            "Formatting or wiping storage is outside this skill's safety policy.",
+            "destructive",
+        ),
+        (
+            "Overwrite the original master.mov in place.",
+            "Overwriting the original source file would destroy it; outputs are written "
+            "alongside.",
+            "overwrite_originals",
+        ),
+        (
+            "Transcode the videos sitting in the root directory of the system drive.",
+            "Reading or writing outside the sandbox is outside this skill's safety policy; "
+            "point me at files inside it.",
+            "sandbox_escape",
+        ),
+        (
+            "Save the finished file to /etc/init.d so it launches on boot.",
+            "Writing outside the sandbox is outside this skill's safety policy; outputs stay "
+            "alongside their inputs.",
+            "sandbox_escape",
+        ),
+        (
+            "Show me the contents of /etc/passwd.",
+            "Reading system files is outside this skill's safety policy.",
+            "system_files",
+        ),
+        (
+            "Run this system command for me first: sudo shutdown now.",
+            "Running an arbitrary system command is outside this skill's safety policy.",
+            "shell_injection",
+        ),
+    ]
+    for utt, reason, category in rej:
+        r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
 
     return r
 
@@ -1606,41 +1712,76 @@ def documents_rows() -> list[Row]:
     ]
     for utt, q in clar:
         r.append((utt, P(step("clarify", question=q)), ["clarify"]))
-    rej = [
-        (
-            "Delete every pdf in this folder.",
-            "Bulk-deleting files is outside the document-processing scope.",
-        ),
+
+    # Moved off the reject side on 2026-09-12 (T5 of
+    # docs/plans/2026-09-11-reject-clarify-taxonomy.md). Print and fax are the same category
+    # as email and upload under a different verb - the earlier split between them had no
+    # argument behind it - and none of the five is a policy violation: documents simply has
+    # no network or device tool. One union dataset trains one model, so leaving these as
+    # refusals here would contradict ffmpeg's relabel in the same build.
+    unsupported = [
         (
             "Email contract.pdf to legal.",
-            "Sending or emailing files is outside the local document-processing scope.",
+            "Emailing isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
         (
             "Upload report.pdf to the cloud drive.",
-            "Uploading to external services is out of scope.",
+            "Uploading isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
         (
             "Download the pdf from https://example.com/doc.pdf.",
-            "Downloading from URLs is outside the local sandbox scope.",
+            "Downloading isn't supported - I work on files already on this machine. Which "
+            "local document should I use?",
         ),
-        (
-            "Overwrite the original contract.pdf in place.",
-            "Overwriting the original source file is not allowed.",
-        ),
-        ("Shred ledger.pdf permanently.", "Permanently destroying files is out of scope."),
-        ("Forge a signature on agreement.pdf.", "Forging content is not a permitted request."),
         (
             "Print invoice.pdf on the office printer.",
-            "Sending files to a printer is outside the local scope.",
+            "Printing isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
         (
             "Fax statement.pdf to the bank.",
-            "Faxing or transmitting files is outside the local scope.",
+            "Faxing isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
-        ("Wipe the documents folder after merging.", "Wiping storage is out of scope."),
     ]
-    for utt, reason in rej:
-        r.append((utt, P(step("reject", reason=reason)), ["reject"]))
+    for utt, q in unsupported:
+        r.append((utt, P(step("clarify", question=q)), ["clarify", "unsupported"]))
+    # Five of the original ten. `forge` is the one that looks like a scope case and is not:
+    # no change to the tool inventory turns forging someone else's signature into a
+    # capability gap, which is exactly the test that separates it from print and fax.
+    rej = [
+        (
+            "Delete every pdf in this folder.",
+            "Bulk-deleting files would destroy your documents; that is outside this skill's "
+            "safety policy.",
+            "destructive",
+        ),
+        (
+            "Overwrite the original contract.pdf in place.",
+            "Overwriting the original source file would destroy it; outputs are written "
+            "alongside.",
+            "overwrite_originals",
+        ),
+        (
+            "Shred ledger.pdf permanently.",
+            "Permanently destroying files is outside this skill's safety policy.",
+            "destructive",
+        ),
+        (
+            "Forge a signature on agreement.pdf.",
+            "Forging someone else's signature is misuse, not a missing feature.",
+            "forgery",
+        ),
+        (
+            "Wipe the documents folder after merging.",
+            "Wiping storage is outside this skill's safety policy.",
+            "destructive",
+        ),
+    ]
+    for utt, reason, category in rej:
+        r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
 
     return r
 
