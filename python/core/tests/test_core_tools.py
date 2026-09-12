@@ -65,6 +65,41 @@ def test_core_tool_defs_fields():
     assert "clarify" in CORE_TOOL_DEFS["clarify"].keywords
 
 
+# ── the reject/clarify split ─────────────────────────────────────────────────
+# One word was doing two jobs: `reject` read "unsafe or out-of-scope", which bundled a
+# safety verdict with an inventory gap and contradicted every skill prompt's TOOL SCOPE
+# rule ("if it maps to no tool → clarify"). The model resolved the contradiction by
+# rejecting anything it could not do. These two tests pin the split so it cannot drift
+# back. See docs/plans/2026-09-11-reject-clarify-taxonomy.md.
+
+
+def test_reject_is_defined_by_safety_not_by_scope():
+    """`reject` means the active skill's safety policy was violated — nothing else."""
+    desc = CORE_TOOL_DEFS["reject"].description.lower()
+    assert "safety policy" in desc
+    assert "out-of-scope" not in desc
+    assert "out of scope" not in desc
+
+
+def test_clarify_covers_unsupported_requests_not_only_ambiguity():
+    """The other half of the split: a request a skill has no tool for is a clarify."""
+    desc = CORE_TOOL_DEFS["clarify"].description.lower()
+    assert "clarif" in desc
+    assert "not supported" in desc
+
+
+def test_core_tool_descriptions_name_no_skill():
+    """The contract binds every skill and SDK consumer, so it stays domain-agnostic.
+
+    Which categories count as a safety violation is *skill* policy and belongs in
+    `skills/<name>/prompt.yaml` + SPEC.md — not here (AGENTS.md: keep core
+    domain-agnostic, do not hard-code skill-specific safety rules in core).
+    """
+    joined = " ".join(td.description.lower() for td in CORE_TOOL_DEFS.values())
+    for word in ("ffmpeg", "video", "document", "pdf", "email", "upload", "download"):
+        assert word not in joined, f"core contract mentions {word!r} — that is skill policy"
+
+
 # ── behavior matches original CORE_HANDLERS functions ────────────────────────
 
 

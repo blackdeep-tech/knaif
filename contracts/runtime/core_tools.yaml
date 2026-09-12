@@ -5,15 +5,25 @@
 # tools.yaml so both render identically in the prompt. These four tools ship
 # with core in every language implementation, so they live here (not in a
 # skill dir). Keep the entries in sync with CORE_STEP_MAP by `name`.
+#
+# `reject` and `clarify` divide one question between them: was the request
+# refused because it breaks the active skill's safety policy (`reject`), or
+# merely because that skill has no tool for it (`clarify`)? Policy violation
+# → reject; inventory gap → clarify, which says so instead of asking an
+# open-ended question. WHICH categories are a policy violation is per-skill
+# and belongs in skills/<name>/prompt.yaml and SPEC.md — never here, because
+# this file binds every skill and SDK consumer (AGENTS.md: keep core
+# domain-agnostic). "Delete these files" violates a media tool's policy and is
+# the declared job of an authorized file-management skill.
 
 clarify:
-  description: "Ask the user for clarification."
+  description: "Ask the user for clarification, or say the request is not supported by this skill."
   keywords: [clarify, question, ask, unclear, ambiguous]
   required_args: [question]
   safety_category: safe
 
 reject:
-  description: "Reject the user request (unsafe or out-of-scope)."
+  description: "Refuse a request that violates the active skill's safety policy."
   keywords: [reject, refuse, deny, unsafe, forbidden, dangerous]
   required_args: [reason]
   safety_category: safe
