@@ -397,14 +397,67 @@ changes Python's planning behaviour, so it must clear that bar before native is 
       **Renaming a producer's output must update its consumers, or the fix silently corrupts
       chains.** The prompt tells the model to chain by reusing an explicit filename, so if
       `convert_video`'s `clip.mp4` becomes `clip_converted_2.mp4`, a later step still naming
-      `clip.mp4` reads **the original input** and quietly does the wrong work. Required: a
-      plan-level **output reservation map** built before any recipe is rendered, and a rewrite of
-      every downstream reference to a renamed output — while leaving a reference to the *original
-      source* alone, which is a legitimate thing for a later step to want.
+      `clip.mp4` reads **the original input** and quietly does the wrong work.
+
+      **Decided 2026-09-12 — positional last-writer-wins, and there is no ambiguity to respond
+      to.** The open question was which file a later `"input": "clip.mp4"` means when the original
+      input and the producer's requested output share the name. It has **one referent, not two**,
+      because core has already bound it before any recipe is rendered:
+      `CommandAgent._forward_thread_reused_sources` (`python/core/knaif/agent.py`) rewrites a later
+      reference to a single-source producer's input onto that producer's `output`. Verified on this
+      task's own shapes — a producer declaring `small.mp4` has its consumer's `clip.mp4`
+      **rewritten to `small.mp4`**. A downstream reference to the *original source* therefore does
+      not survive the optimizer at all, so in the identity case the surviving literal `clip.mp4`
+      can only mean the producer's output. The rule:
+
+      > A name an earlier step declares it will write binds, for every later step, to what that
+      > step actually wrote. Collision handling **substitutes** the old output name with the
+      > resolved one across steps **strictly after** the producer; it never re-infers which file
+      > was meant. A name no earlier step writes binds to the file on disk.
+
+      **The reservation must therefore be ordered, not a flat set** — a set of reserved names drops
+      the position that makes the rule decidable, which is exactly why "an output-reservation map
+      alone cannot distinguish them". Walk the plan in execution order carrying a
+      `name → resolved path` table: resolve step *i*'s inputs through the table **as it stands
+      before step *i***, then resolve step *i*'s output and record the rebinding for *i+1…n* only.
+      Key on the **resolved absolute path** (`_build_one_recipe` already resolves a relative output
+      against `input_path.parent`), or `./clip.mp4` and `clip.mp4` land in different entries.
+
+      **Correction to the earlier draft of this task.** "Leave a reference to the *original source*
+      alone" was wrong and must not be implemented: core deliberately does the opposite, and
+      restoring it would reintroduce the documents bug `_forward_thread_reused_sources` exists to
+      fix (`unlock_pdf` then `find_in_document` reading the still-locked original). Pinned by
+      `test_forward_threads_to_explicit_producer_output`.
+
+      **The one case core does not cover** is a **multi-input** producer with an explicit output
+      (`concat_video` over `[a.mp4, b.mp4]` writing `a.mp4`): forward-threading skips producers with
+      more than one source, so a later `a.mp4` is left unnormalised and is ambiguous on its face.
+      The same rule settles it — step 0 declared it would write that name, so every later use means
+      the join result — but the substitution must run **regardless of whether threading already
+      normalised the reference**. Batch and glob producers need no rule at all: they declare no
+      explicit output, so `_derive_output_path` gives them `a_converted.<ext>`, which is never a
+      name a consumer used.
+
+      **Accepted consequence, stated rather than discovered:** once a name is rebound, no later step
+      can address the pre-transform file by that name. That matches the plan the model wrote — it
+      believes step 0 overwrote the original — and it was not expressible before this fix either.
+
       **This does not fit where the first draft put it.** `_build_one_recipe` receives
       `(probe, platform_profile, quality_profile, options, sandbox)` — no plan, no shared map — so
       the reservation has to live one level up, where the plan is visible, with the resolved output
-      passed down. A test pins a two-step chain whose first output is renamed.
+      passed down. **Remaining implementation choice: the call site.** The pass belongs **after
+      `resolve_stems` and before the expansion loop** in `execute_plan` — the first point where both
+      the whole plan and real disk state are visible — reached from core through a default-no-op
+      `Skill` hook, so the `-y` / `_converted` rule stays in the skill and core keeps no
+      skill-specific naming logic.
+
+      **Tests, written before the implementation** (`skills/ffmpeg/python/tests/test_output_collision_binding.py`):
+      two premise tests that pass today (a reference to the original source does not survive; a
+      read-only producer rebinds nothing), one guard that must keep passing (the producer's own
+      input is never rewritten), and three `xfail(strict=True)` specs — the output is renamed, the
+      downstream reference follows the rename, and the multi-input case rebinds without relying on
+      forward-threading. Strict, so they fail the moment the behaviour lands and the marks must be
+      removed with it.
       Refusing was rejected because the row expects `plan`; a confirm gate was rejected because in
       an unattended run it degrades to a refusal. Write the rule next to `_assert_in_sandbox` in
       `_engine.py`, where explicit outputs are already policed. Three of the
