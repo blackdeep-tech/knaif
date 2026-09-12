@@ -18,8 +18,9 @@ in python/core/tests/test_chain_intermediate_linking.py). The rule:
     name with the resolved one across steps strictly after the producer; it never
     re-infers which file was meant.
 
-The premise tests pass today. The rule tests are ``xfail(strict=True)`` until
-collision handling lands - remove the marks with the implementation.
+All of these pass. The three rule tests were written as ``xfail(strict=True)`` before the
+implementation and the marks came off with it, which is the only reason they are known to
+test the behaviour rather than to describe it.
 
 See docs/plans/2026-09-11-reject-clarify-taxonomy.md -> T5b.
 """
@@ -36,11 +37,6 @@ from knaif.agent import CommandAgent
 from knaif.skill import Skill
 
 FFMPEG_SKILL_DIR = Path(__file__).parents[2]
-
-_PENDING = pytest.mark.xfail(
-    strict=True,
-    reason="T5b collision handling not implemented yet; this pins the agreed binding rule",
-)
 
 
 @pytest.fixture()
@@ -129,7 +125,6 @@ def test_binding_premise_readonly_producer_leaves_the_reference_alone(agent):
 # -- The rule: rename, then substitute across later steps ---------------------
 
 
-@_PENDING
 def test_renamed_output_is_not_the_producers_own_input(agent):
     """``ffmpeg -y -i clip.mp4 ... clip.mp4`` truncates the source; rename the output."""
     plan = _link(
@@ -146,7 +141,6 @@ def test_renamed_output_is_not_the_producers_own_input(agent):
     assert produced[0]["output"] != produced[0]["input"]
 
 
-@_PENDING
 def test_downstream_reference_follows_the_rename(agent):
     """The identity case: a later ``clip.mp4`` means what step 0 wrote, not the original."""
     plan = _link(
@@ -188,7 +182,6 @@ def test_producers_own_input_is_not_rewritten(agent):
     assert Path(produced[0]["input"]).name == "clip.mp4"
 
 
-@_PENDING
 def test_multi_input_producer_rename_still_rebinds_downstream(agent):
     """Forward-threading skips multi-source producers; the substitution must not rely on it.
 

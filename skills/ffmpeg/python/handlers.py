@@ -76,7 +76,7 @@ from ._reporting import (
     _load_platform_summary,
     _load_quality_hint,
     _preflight_inputs,
-    _run_artifact,
+    _preflight_trim_frames,
 )
 from .intents import (
     AdjustSpeedIntent,
@@ -148,15 +148,53 @@ class FFmpegSkill(Skill):
     ]
 
     def preflight(self, tool: str, args: dict[str, Any], **kw: Any) -> list[str]:
-        return _preflight_inputs(args, **kw)
+        return _preflight_trim_frames(args) + _preflight_inputs(args, **kw)
 
     def format_results(
         self, results: list[dict[str, Any]], *, dry_run: bool
     ) -> list[dict[str, str]]:
-        return _format_results(results, dry_run=dry_run)
+        items = _format_results(results, dry_run=dry_run)
+        # A rename the user is not told about is half an answer: they asked to convert
+        # clip.mp4 and a differently-named file appeared. Report it first, before the
+        # outputs, so the name in the next line is the one they were just told about.
+        #
+        # Scoped to the tools actually in *these* results: the formatter runs once per
+        # intent, so an unscoped note prints again on every later intent, the second time
+        # attached to one that renamed nothing.
+        tools_here = {step.get("tool") for step in results}
+        notes = [
+            {
+                "kind": "note",
+                "message": (
+                    f"{sub['requested']} would have been overwritten by the step that reads "
+                    f"it, so the result was written to {sub['used']} instead."
+                ),
+            }
+            for sub in self.output_substitutions
+            if sub["step"] in tools_here
+        ]
+        return notes + items
 
-    def run_artifact(self, cmd: Any, fixture: Any, out_dir: Any) -> Any:
-        return _run_artifact(cmd, fixture, out_dir)
+    def resolve_output_collisions(
+        self, plan: list[dict[str, Any]], *, sandbox: Any = None
+    ) -> list[dict[str, Any]]:
+        """Rename an output that would truncate its own input, and rebind its consumers.
+
+        Every rendered command carries ``-y``, so this is the difference between converting
+        a file and destroying it. The substitutions are kept on the skill so
+        ``format_results`` can tell the user which name was actually written — the user
+        asked for a copy, and silently writing it somewhere else is only half an answer.
+        """
+        from ._collisions import rebind_colliding_outputs
+
+        plan, subs = rebind_colliding_outputs(plan, sandbox)
+        # Rebound every call, never accumulated: `execute_plan` has clarify returns *before*
+        # this hook, so a plan that never reached it must not inherit the last one's notes.
+        # (One skill instance serves one agent, so concurrent `execute_plan` calls on the
+        # same agent would still interleave here — as they would through every other piece
+        # of per-plan state in the pipeline.)
+        self.output_substitutions = subs
+        return plan
 
 
 __all__ = [
@@ -238,7 +276,6 @@ __all__ = [
     "_profiles_root",
     "_quality_from_crf",
     "_render_command",
-    "_run_artifact",
     "_summarise_probe",
     "_valid_platforms",
     "FFmpegSkill",

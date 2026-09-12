@@ -651,6 +651,32 @@ A skill that does not override `run_artifact` leaves it returning `None`, and ev
 execution against fixtures is skipped (the `artifact_path` on each `AgentOutput` stays
 `None`).
 
+## Output Collisions (Optional)
+
+Override `Skill.resolve_output_collisions` to rewrite plan outputs that would destroy a file,
+and rebind the steps that referred to them. Core calls it once per plan, **after stem
+resolution and before expansion** — the first point where both the whole plan and real disk
+state are visible — and the default is a no-op.
+
+```python
+class MySkill(Skill):
+    def resolve_output_collisions(self, plan, *, sandbox=None):
+        """Return the plan, with colliding outputs renamed and consumers rebound."""
+        ...
+```
+
+The rule a skill implements here, if it implements one:
+
+> A name an earlier step declares it will write binds, for every later step, to what that
+> step actually wrote. Substitute the old name with the resolved one across steps **strictly
+> after** the producer; never re-infer which file was meant.
+
+Whether an output collides at all, and what a free replacement is called, are **skill
+policy** and stay in the skill. ffmpeg renders every command with `-y`, so an output equal to
+its own input truncates the source before ffmpeg reads it (`skills/ffmpeg/python/_collisions.py`);
+a skill whose handlers write to a temporary file and move it has no such problem. Core supplies
+the extension point and keeps no naming logic of its own.
+
 ## Shared Steps (`knaif.steps`)
 
 Steps reused across skills live in `knaif.steps` (the class) with metadata in
