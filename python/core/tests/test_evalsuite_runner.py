@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from knaif.evalsuite.corpus import CorpusRow
 from knaif.evalsuite.runner import (
@@ -299,7 +299,12 @@ def test_run_corpus_gate_clarify_does_not_overwrite_model_clarify():
     agent.execute_plan.assert_not_called()
 
 
-def test_run_corpus_single_output_still_uses_artifact_runner(tmp_path):
+def test_run_corpus_single_output_goes_through_the_chain(tmp_path):
+    """One execution path for every command-based row (T5b).
+
+    The single-command branch used to rewrite `-i` to the fixture and the output elsewhere,
+    which is why Python could never reproduce `ffmpeg_175`'s `output == input` collision.
+    """
     fixture_dir = tmp_path / "fixtures"
     fixture_dir.mkdir()
     (fixture_dir / "clip.mov").write_bytes(b"src")
@@ -319,9 +324,20 @@ def test_run_corpus_single_output_still_uses_artifact_runner(tmp_path):
     )
     agent.artifact_runner = MagicMock(return_value=produced)
 
-    outputs = run_corpus(agent, [row], execute=True, sandbox=sandbox, fixture_dir=fixture_dir)
+    with patch("knaif.evalsuite.runner.run_command_chain") as chained:
+        chained.return_value = [
+            {
+                "command": "",
+                "resolved_command": "",
+                "returncode": 0,
+                "stderr": "",
+                "output": produced,
+            }
+        ]
+        outputs = run_corpus(agent, [row], execute=True, sandbox=sandbox, fixture_dir=fixture_dir)
     out = outputs[0]
-    assert agent.artifact_runner.called
+    assert chained.called
+    assert not agent.artifact_runner.called
     assert out.artifact_path == produced
     assert out.artifact_paths == [produced]
 

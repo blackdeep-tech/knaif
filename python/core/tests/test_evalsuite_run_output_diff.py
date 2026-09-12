@@ -76,7 +76,22 @@ def test_run_output_diff_writes_scoreboard(tmp_path: Path):
     with (
         patch("knaif.evalsuite.cli._make_agent"),
         patch("knaif.evalsuite.cli.run_corpus", return_value=[output]),
-        patch("knaif.evalsuite.cli._execute_against_fixture", return_value=baseline_path),
+        # Baselines are rendered commands, so they go through the chain now, not the
+        # skill's artifact_runner (T5b: ffmpeg retired its runner, and routing baselines
+        # through it produced no reference artifacts at all).
+        patch(
+            "knaif.evalsuite.cli.run_command_chain",
+            return_value=[
+                {
+                    "command": "",
+                    "resolved_command": "",
+                    "returncode": 0,
+                    "stderr": "",
+                    "output": baseline_path,
+                    "collapsed_paths": [],
+                }
+            ],
+        ),
         patch(
             "knaif.evalsuite.cli._load_skill_verifiers",
             return_value=({"output_diff": MagicMock(return_value=fake_result)}, {}),
@@ -137,7 +152,7 @@ def test_run_output_diff_skips_row_without_baseline(tmp_path: Path):
     with (
         patch("knaif.evalsuite.cli._make_agent"),
         patch("knaif.evalsuite.cli.run_corpus", return_value=[output]),
-        patch("knaif.evalsuite.cli._execute_against_fixture", return_value=None),
+        patch("knaif.evalsuite.cli.run_command_chain", return_value=[]),
         patch(
             "knaif.evalsuite.cli._load_skill_verifiers",
             return_value=({"output_diff": mock_diff}, {}),
@@ -210,7 +225,19 @@ def test_run_stamps_backend_identity_into_scoreboard(tmp_path: Path):
     with (
         patch("knaif.evalsuite.cli._make_agent"),
         patch("knaif.evalsuite.cli.run_corpus", return_value=[output]),
-        patch("knaif.evalsuite.cli._execute_against_fixture", return_value=baseline_path),
+        patch(
+            "knaif.evalsuite.cli.run_command_chain",
+            return_value=[
+                {
+                    "command": "",
+                    "resolved_command": "",
+                    "returncode": 0,
+                    "stderr": "",
+                    "output": baseline_path,
+                    "collapsed_paths": [],
+                }
+            ],
+        ),
         patch(
             "knaif.evalsuite.cli._load_skill_verifiers",
             return_value=({"output_diff": MagicMock(return_value=fake_result)}, {}),

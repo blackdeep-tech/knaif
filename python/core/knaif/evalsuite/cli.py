@@ -18,6 +18,7 @@ from knaif._console import enable_utf8_console
 from knaif.registry import DEFAULT_TOP_K
 
 from .acceptance import EXECUTING_VERIFIERS
+from .chain import run_command_chain
 from .runner import run_corpus
 
 
@@ -661,6 +662,17 @@ def cmd_report(args: argparse.Namespace) -> None:
     )
 
 
+def _looks_like_a_command(artifact: str) -> bool:
+    """Is this artifact a shell command line, or a payload for `Skill.run_artifact`?
+
+    `documents` hands over a JSON plan payload; ffmpeg hands over a command. The distinction
+    decides which execution path an artifact takes, and getting it wrong silently disables one
+    of them.
+    """
+    text = (artifact or "").strip()
+    return bool(text) and not text.startswith(("{", "["))
+
+
 def _build_baseline_outputs(
     corpus: list[Any],
     outputs: list[Any],
@@ -690,9 +702,25 @@ def _build_baseline_outputs(
             continue
 
         out_dir = baselines_dir / row.id
-        result = _execute_against_fixture(baseline_cmd, fixture_file, out_dir, skill=skill)
-        if result is not None:
-            baseline_paths[row.id] = result
+        # A baseline is a rendered command, so it takes the same path as the model's own —
+        # provision a work dir, re-root every token into it, run it as written. It used to go
+        # through `_execute_against_fixture`, which reaches the skill's `artifact_runner`; when
+        # ffmpeg retired its runner (T5b) that returned None for every row, so `output_diff`
+        # silently produced no reference artifacts at all and every comparison went unscored.
+        # `artifact_runner` stays for a skill whose artifact is not a command line.
+        if _looks_like_a_command(baseline_cmd):
+            chain = run_command_chain(
+                [baseline_cmd], fixture_dir, out_dir, fixture_file=fixture_file
+            )
+            produced = chain[-1] if chain else None
+            if produced is not None and produced["returncode"] == 0:
+                out_path = Path(produced["output"])
+                if out_path.exists():
+                    baseline_paths[row.id] = out_path
+        else:
+            result = _execute_against_fixture(baseline_cmd, fixture_file, out_dir, skill=skill)
+            if result is not None:
+                baseline_paths[row.id] = result
 
     return baseline_paths
 
@@ -745,6 +773,18 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         if getattr(args, "fixture_dir", None)
         else _default_fixture_dir(sandbox, args.skill)
     )
+
+    # A score is only as meaningful as the media behind it, so the fixtures are checked before
+    # an executing run and the answer is **recorded in the scoreboard**, not just printed. A
+    # warning on a console nobody kept is not evidence: acceptance reads scoreboards, and it
+    # has to be able to tell a number measured against known media from one that was not.
+    fixture_integrity: list[str] = []
+    if use_output_diff or use_success:
+        from .provisioning import verify_fixture_integrity
+
+        fixture_integrity = verify_fixture_integrity(fixture_dir)
+        for problem in fixture_integrity:
+            print(f"  Warning: {problem} — re-run `just eval-fixtures` to restore it", flush=True)
 
     results: dict[str, dict[str, Any]] = {}
     for backend_name, backend_cfg in backends_cfg.items():
@@ -801,6 +841,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 top_k=top_k,
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, "success", backend_sandbox)
+            _reclaim_row_dirs(outputs, corpus, backend_sandbox, scoreboard)
         else:
             outputs = run_corpus(
                 agent,
@@ -812,6 +853,17 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 top_k=top_k,
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
+
+        # Carry the fixture evidence with the score. `fixture_hashes` says which media the
+        # run measured against; `fixture_integrity` lists anything that had drifted from what
+        # was generated. Both travel in the saved scoreboard so a later reader — or an
+        # acceptance check — can see it without re-deriving it from a directory that has since
+        # moved on. T9's provenance argument, one level down.
+        if use_output_diff or use_success:
+            from .provisioning import fixture_content_hashes
+
+            scoreboard["fixture_hashes"] = fixture_content_hashes(fixture_dir)
+            scoreboard["fixture_integrity"] = fixture_integrity
 
         # Stamp backend identity into the scoreboard. The eval backend key
         # (`backend_name`) is deliberately stable — it is the join key for run
@@ -1754,6 +1806,35 @@ def cmd_show_baseline(args: argparse.Namespace) -> None:
     print(f"Row {args.id!r} not found in corpus.")
 
 
+def _reclaim_row_dirs(outputs: list, corpus: list, sandbox: Path, scoreboard: dict) -> None:
+    """Delete the work directory of every row that passed; keep the ones that did not.
+
+    Provisioning by copy costs ~8.6 MB per row, so a full ffmpeg corpus is ~7 GB of work
+    dirs — and nothing ever removed them (each fixture used to show ~857 hard links). Copying
+    is what makes a row's output unable to corrupt the shared fixtures, so the disk cost is
+    the price of that; bounding it to *failed* rows is what makes the price affordable.
+
+    Runs after scoring, never before: the grader reads `artifact_path` out of these
+    directories. A failed row keeps everything, because that is exactly when someone needs to
+    look at what the command actually produced.
+    """
+    from .provisioning import cleanup_row_dir
+
+    expected = {row.id: row.expected_outcome for row in corpus}
+    # A row can route correctly, exit 0, and still produce the wrong codec or dimensions —
+    # a *graded* failure with no execution error. Deleting its work dir throws away the only
+    # copy of what the command actually produced, which is exactly what someone needs to see.
+    # So retention follows the score, not the outcome label.
+    scored = {(r.get("id"), r.get("utterance_idx", 0)): r for r in (scoreboard.get("rows") or [])}
+    for out in outputs:
+        row_score = scored.get((out.id, out.utterance_idx)) or {}
+        graded_ok = row_score.get("knaif_score") in (None, 1.0) and not row_score.get(
+            "knaif_failed"
+        )
+        passed = out.outcome == expected.get(out.id) and not out.error and graded_ok
+        cleanup_row_dir(sandbox / f"{out.id}__{out.utterance_idx}", keep=not passed)
+
+
 def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     import hashlib
     import subprocess
@@ -1764,7 +1845,10 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     fixture_dir.mkdir(parents=True, exist_ok=True)
 
     cache_path = fixture_dir / ".cache.json"
-    cache: dict[str, str] = {}
+    # `{fixture name: command hash}` plus one reserved `__content__` key holding
+    # `{fixture name: sha256 of the bytes}`. A fixture name always has an extension, so the
+    # reserved key cannot collide with one.
+    cache: dict[str, Any] = {}
     if cache_path.exists():
         try:
             cache = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -1772,6 +1856,7 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
             cache = {}
 
     updated = False
+    regenerated: list[str] = []
     for name, cmd_template in fixtures.items():
         # name is the full filename, e.g. "clip.mp4"
         out_path = fixture_dir / name
@@ -1798,13 +1883,34 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
                 )
             else:
                 cache[name] = sha
+                regenerated.append(name)
                 updated = True
         except FileNotFoundError:
             print(f"  Warning: ffmpeg not found on PATH — skipping fixture {name!r}", flush=True)
         except subprocess.TimeoutExpired:
             print(f"  Warning: fixture {name!r} timed out after 120s", flush=True)
 
-    if updated:
+    # Record a CONTENT hash per fixture alongside the command hash. The command hash keeps
+    # its own job — deciding whether a fixture needs regenerating — but it cannot notice a
+    # fixture whose *bytes* changed underneath it, which is exactly what hard-linked
+    # provisioning used to cause: a plan writing to a fixture's name corrupted the shared
+    # file for every later row, silently. With this, a score traces to the media it was
+    # measured against. See T5b of docs/plans/2026-09-11-reject-clarify-taxonomy.md.
+    from .provisioning import fixture_content_hashes
+
+    # Only a fixture this run actually (re)generated gets its content hash written. Blessing
+    # whatever bytes happen to be on disk would defeat the point: the command hash skips an
+    # unchanged fixture, so a corrupted one is skipped and then *certified* — generate, alter
+    # the bytes, re-run, and the alteration becomes the trusted value. A hash for a file
+    # nobody regenerated is a record of a guess.
+    actual = fixture_content_hashes(fixture_dir)
+    content: dict[str, str] = dict(cache.get("__content__") or {})
+    for name in regenerated:
+        if name in actual:
+            content[name] = actual[name]
+    content = {k: v for k, v in content.items() if k in actual}
+    if updated or content != (cache.get("__content__") or {}):
+        cache["__content__"] = content
         cache_path.write_text(json.dumps(cache, indent=2), encoding="utf-8")
 
 
@@ -1981,7 +2087,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # safety
-    p_saf = sub.add_parser("safety", help="Run the skill's safety corpus; every row must reject")
+    p_saf = sub.add_parser(
+        "safety",
+        help="Run the skill's safety corpus; every row must produce the refusal it asks for",
+    )
     p_saf.add_argument("--skill", required=True)
     p_saf.add_argument("--config", default="eval_backends.yaml")
     p_saf.add_argument("--backends", default=None, help="Exactly one backend name")

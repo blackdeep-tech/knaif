@@ -27,7 +27,12 @@ from __future__ import annotations
 #: Bump this whenever any of those semantics change — and re-lock the baselines in the
 #: same commit, because a number graded under new rules is not comparable to one graded
 #: under old ones.
-POLICY_VERSION = 1
+# Bumped 1 -> 2 on 2026-09-12 (docs/plans/2026-09-11-reject-clarify-taxonomy.md). Three
+# semantics moved together: a non-zero command exit now records `error` rather than `plan`,
+# so failed rows leave `avg_knaif_score`'s denominator; the `reject` slice is graded as a
+# failure budget rather than a rate; and the safety corpus holds invariants only. Records
+# stamped 1 are not comparable to records stamped 2 — which is the point of the stamp.
+POLICY_VERSION = 2
 
 #: Line prefix the native runtime uses for a capability it has not built.
 #: Must stay in sync with `NOT_IMPLEMENTED_PREFIX` in `apps/cli/src/main.rs`.

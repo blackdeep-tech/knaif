@@ -212,7 +212,6 @@ def run_corpus(
 
             artifact_path: Path | None = None
             artifact_paths: list[Path] = []
-            row_outputs = getattr(row, "outputs", None)
             # Every rendered command, in plan order. Recorded whether or not we execute, so
             # command-text criteria see a chain's earlier steps even on a non-executing run.
             artifact_commands = _extract_artifacts(exec_results) if exec_results else []
@@ -226,23 +225,39 @@ def run_corpus(
                 _fp = fixture_dir / row.fixture
                 if _fp.exists():
                     row_dir = sandbox / f"{row.id}__{utt_idx}"
-                    row_dir.mkdir(parents=True, exist_ok=True)
-                    # Chain whenever the plan rendered MORE THAN ONE command — not only when
-                    # the row declares multiple `outputs`. A two-intent plan with a single
-                    # final deliverable (rotate → compress) otherwise fell to the branch
-                    # below, which runs only the last command and rewires its input back to
-                    # the original fixture: the rotation never happened and the row was
-                    # scored as a model failure. See the 2026-09-07 fix review.
-                    if row_outputs or len(artifact_commands) > 1:
-                        # Run the plan's batch commands as a chain so each intent's
-                        # intermediate output materializes as the next one's input.
-                        commands = artifact_commands
-                        chain = run_command_chain(commands, fixture_dir, row_dir)
+                    # Provision by COPY into a per-row directory and run the plan's commands
+                    # there exactly as rendered — the same shape the native lane already
+                    # uses. One execution path for every command-based row, single-command
+                    # plans included: two implementations of one rule are how the lanes
+                    # drifted apart, and the old single-command branch rewrote `-i` to the
+                    # fixture and the output elsewhere, which removed the `output == input`
+                    # collision before ffmpeg ever saw it.
+                    #
+                    # `artifact_runner` stays the extension point for a skill whose artifact
+                    # is **not** a command line: `documents` hands over a JSON plan payload,
+                    # and routing "every row" through the chain would delete its execution
+                    # entirely. What both paths share is the contract — per-row provisioning,
+                    # faithful paths, and a failure that reaches the outcome.
+                    if artifact_commands:
+                        chain = run_command_chain(artifact_commands, fixture_dir, row_dir)
                         artifact_paths = [
                             Path(r["output"]) for r in chain if Path(r["output"]).exists()
                         ]
                         artifact_path = artifact_paths[-1] if artifact_paths else None
+                        # **A non-zero exit fails the row.** It used to be invisible: the row
+                        # recorded `outcome = plan` and counted as *correct*, so a command
+                        # that could not run scored the same as one that did. A chain with any
+                        # failed step fails as a whole — which is what native already reports
+                        # ("1 of N command(s) failed"), so it needs no new rule on either side.
+                        failed = next((r for r in chain if r["returncode"] != 0), None)
+                        if failed is not None:
+                            outcome = "error"
+                            error = (
+                                f"command failed (exit {failed['returncode']}): "
+                                f"{(failed.get('stderr') or '').strip()[-300:]}"
+                            )
                     elif agent.artifact_runner is not None:
+                        row_dir.mkdir(parents=True, exist_ok=True)
                         try:
                             artifact_path = agent.artifact_runner(artifact, _fp, row_dir)
                         except Exception:  # noqa: BLE001

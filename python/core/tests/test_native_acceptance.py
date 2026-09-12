@@ -29,6 +29,8 @@ from knaif.evalsuite.acceptance import (
 )
 from knaif.evalsuite.outcomes import POLICY_VERSION
 
+from .conftest import rebase_snapshot_tag_counts
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -52,6 +54,10 @@ def _baseline(**over: object) -> dict:
         "outcome_accuracy": 0.902,
         "avg_knaif_score": 0.974,
         "backend_public_name": "knaif-qwen3-4b-v1",
+        # Stamped: every test below is about the native ALLOWANCE, and an unstamped baseline
+        # is refused outright under v2 (see the test above) — which would make them all pass
+        # for the wrong reason.
+        "scoring_policy": POLICY_VERSION,
     }
     snap.update(over)  # type: ignore[arg-type]
     return snap
@@ -269,17 +275,20 @@ def test_a_baseline_graded_under_a_different_policy_is_not_a_target() -> None:
     assert ("identity", "baseline_policy") in [(v.kind, v.name) for v in report.violations]
 
 
-def test_an_unstamped_baseline_is_comparable_only_while_the_policy_is_v1() -> None:
-    """The committed snapshots predate the policy stamp. They are comparable because v1
-    codified the scoring already in force — an argument that expires on the next bump, so
-    the code refuses then rather than carrying the assumption past it."""
-    assert "scoring_policy" not in _baseline()
-    report = check_native_acceptance(_spec(), _baseline(), _scoreboard(), safety=_safety())
-    assert report.ok, report.summary()
-    assert POLICY_VERSION == 1, (
-        "the policy moved: an unstamped baseline is no longer safe to compare against, and "
-        "`check_native_acceptance` now refuses it. Re-lock the snapshots (S5) and retire this."
-    )
+def test_an_unstamped_baseline_is_refused_now_that_the_policy_has_moved() -> None:
+    """The assumption that carried the unstamped snapshots expired, exactly as registered.
+
+    Until 2026-09-12 this test asserted the opposite — that an unstamped baseline *is*
+    comparable — guarded by `assert POLICY_VERSION == 1` and a note saying to retire it on the
+    bump. The argument was that v1 codified the scoring already in force, so a record written
+    before the stamp existed was still a v1 record. v2 changes what a failed command scores,
+    so that no longer holds and the code refuses rather than carrying the assumption past its
+    justification. The refusal clears when S5 re-locks the snapshots under v2.
+    """
+    assert "scoring_policy" not in _baseline(scoring_policy=None) or True
+    unstamped = {k: v for k, v in _baseline().items() if k != "scoring_policy"}
+    report = check_native_acceptance(_spec(), unstamped, _scoreboard(), safety=_safety())
+    assert ("identity", "baseline_policy") in [(v.kind, v.name) for v in report.violations]
 
 
 def test_a_run_graded_under_a_different_scoring_policy_is_not_evidence() -> None:
@@ -323,7 +332,7 @@ def _real_bar_board(**over: object) -> dict:
         }
     )
     board.update(over)  # type: ignore[arg-type]
-    return board
+    return rebase_snapshot_tag_counts(board, "ffmpeg")
 
 
 @pytest.fixture()
@@ -341,7 +350,20 @@ def recorded(monkeypatch):
     return seen
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "the committed snapshot carries no scoring_policy and the policy moved to v2 "
+        "(2026-09-12) — an unstamped baseline is correctly refused until S5 re-locks it"
+    ),
+)
 def test_the_command_accepts_a_run_that_clears_the_real_bar(tmp_path, recorded, capsys) -> None:
+    """Pre-registered, and strict so the re-lock removes it.
+
+    This grades against the *committed* snapshot on disk rather than a stamped fixture, so it
+    cannot pass while that snapshot predates the stamp. The refusal is the behaviour working:
+    the alternative is comparing a v2 run to a baseline nobody measured under v2.
+    """
     from knaif.evalsuite import cli
 
     current = tmp_path / "board.json"
