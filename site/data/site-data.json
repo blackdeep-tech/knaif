@@ -945,12 +945,27 @@
           "safety_category": "destructive"
         },
         {
-          "description": "Trim a single video to a time range.",
+          "arg_schemas": {
+            "duration": {
+              "type": "string"
+            },
+            "end": {
+              "type": "string"
+            },
+            "frames": {
+              "type": "integer"
+            },
+            "start": {
+              "type": "string"
+            }
+          },
+          "description": "Trim a single video to a time range, or grab a fixed number of frames.",
           "name": "trim_video",
           "optional_args": [
             "start",
             "end",
             "duration",
+            "frames",
             "output",
             "preview"
           ],

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import difflib
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +81,34 @@ def _load_quality_hint(quality: str, skill_dir: Path) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Preflights — run before the approval gate to surface errors early.
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _preflight_trim_frames(args: dict[str, Any]) -> list[str]:
+    """Refuse a frame count that cannot mean anything, instead of silently picking a half.
+
+    `frames` is a positive integer and is mutually exclusive with `end` and `duration`.
+    "Give me 3 frames of a 10-second range" has no coherent reading: a precedence rule would
+    quietly drop one half of what was asked for, and the user would have no way to tell which.
+    An error names the conflict and lets them say which they meant.
+    """
+    if "frames" not in args or args.get("frames") is None:
+        return []
+
+    errors: list[str] = []
+    frames = args["frames"]
+    if isinstance(frames, bool) or not isinstance(frames, int):
+        errors.append(f"'frames' must be a whole number of frames, got {frames!r}.")
+    elif frames < 1:
+        errors.append(f"'frames' must be at least 1, got {frames}.")
+
+    conflicting = [k for k in ("end", "duration") if args.get(k) is not None]
+    if conflicting:
+        named = " and ".join(repr(k) for k in conflicting)
+        errors.append(
+            f"'frames' cannot be combined with {named} - a frame count and a time range are "
+            "two different requests. Give one or the other."
+        )
+    return errors
 
 
 def _preflight_inputs(
@@ -225,31 +252,20 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Artifact runner — re-execute a rendered ffmpeg command against a fixture.
-# Used by the eval suite for end-to-end output verification.
+# Artifact runner — RETIRED 2026-09-12 (T5b).
+#
+# `_run_artifact` re-executed a rendered command by rewriting `-i` to the fixture path and
+# the output into a separate directory. Two things followed, both bad:
+#
+#   * Python never executed the command the plan rendered. The `output == input` collision
+#     `ffmpeg_175` is about was removed before ffmpeg saw it, so Python could not reproduce a
+#     failure native hits — and the difference was scored against the runtime.
+#   * A non-zero exit returned `None`, indistinguishable from a missing binary, a timeout, and
+#     a command that exited 0 without writing the file. The row still recorded `outcome =
+#     plan` and counted as correct.
+#
+# Command-based artifacts now go through `knaif.evalsuite.chain.run_command_chain`, which
+# provisions a per-row directory and re-roots every path token into it — one rule instead of
+# two. `Skill.run_artifact` remains the extension point for a skill whose artifact is NOT a
+# command line (`documents` hands over a JSON plan payload).
 # ─────────────────────────────────────────────────────────────────────────────
-
-
-def _run_artifact(command_str: str, fixture_path: Path, out_dir: Path) -> Path | None:
-    """Re-execute an ffmpeg artifact against a fixture file."""
-    toks = command_str.split()
-    if not toks or toks[0] != "ffmpeg":
-        return None
-    try:
-        i_idx = toks.index("-i")
-        toks[i_idx + 1] = str(fixture_path)
-    except (ValueError, IndexError):
-        return None
-    original_output = Path(toks[-1]).name
-    output_path = out_dir / original_output
-    toks[-1] = str(output_path)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        result = subprocess.run(toks, capture_output=True, text=True, timeout=120)
-    except FileNotFoundError:
-        return None
-    except subprocess.TimeoutExpired:
-        return None
-    if result.returncode != 0:
-        return None
-    return output_path if output_path.exists() else None

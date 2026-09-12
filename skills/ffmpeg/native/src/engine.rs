@@ -122,11 +122,80 @@ pub fn geometry_vf(
 }
 
 /// Trim window (values are already stringified, e.g. `"5"` or `"00:00:05"`).
+///
+/// `frames` is a frame COUNT and is exclusive with `duration`/`end` — `normalize_trim`
+/// guarantees only one of the three is ever set, so `build_flags` need not arbitrate.
 #[derive(Debug, Clone, Default)]
 pub struct Trim {
     pub start: Option<String>,
     pub duration: Option<String>,
     pub end: Option<String>,
+    pub frames: Option<i64>,
+}
+
+/// Seconds for `HH:MM:SS[.ms]`, `MM:SS`, or a bare number. Port of `_timestamp_seconds`.
+///
+/// Comparing the strings would not do: `"0"` and `"00:00:00"` are the same instant and the
+/// model writes both.
+fn timestamp_seconds(value: Option<&String>) -> Option<f64> {
+    let text = value?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let mut total = 0.0f64;
+    for part in text.split(':') {
+        // Trim each component: Python's float() ignores surrounding whitespace and Rust's
+        // parse does not, so " 1 : 30 " parsed on one runtime and not the other.
+        let n: f64 = part.trim().parse().ok()?;
+        total = total * 60.0 + n;
+    }
+    Some(total)
+}
+
+/// Resolve a trim request into exactly one of: a frame count, a duration, or an end.
+/// Port of `_normalize_trim`.
+///
+/// **An empty range becomes one frame.** `ffmpeg_161` asks for a one-frame video and the
+/// model emits `-ss 00:00:00 -to 00:00:00`; ffmpeg then exits 0 having written a file with
+/// nothing in it. A user who names a single instant wants the frame at that instant.
+fn normalize_trim(
+    start: Option<String>,
+    duration: Option<String>,
+    end: Option<String>,
+    frames: Option<i64>,
+) -> Trim {
+    if frames.is_some() {
+        return Trim {
+            start,
+            duration: None,
+            end: None,
+            frames,
+        };
+    }
+
+    let start_s = timestamp_seconds(start.as_ref());
+    let end_s = timestamp_seconds(end.as_ref());
+    let duration_s = timestamp_seconds(duration.as_ref());
+
+    // An absent `start` means zero, so `-to 00:00:00` with no start is the same empty range.
+    let effective_start = start_s.unwrap_or(0.0);
+    let empty_range = matches!(end_s, Some(b) if b <= effective_start)
+        || matches!(duration_s, Some(d) if d <= 0.0);
+    if empty_range {
+        return Trim {
+            start,
+            duration: None,
+            end: None,
+            frames: Some(1),
+        };
+    }
+
+    Trim {
+        start,
+        duration,
+        end,
+        frames: None,
+    }
 }
 
 /// Resolved video settings for a recipe.
@@ -242,7 +311,11 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
         if let Some(start) = &recipe.trim.start {
             pre.extend(["-ss".to_string(), start.clone()]);
         }
-        if let Some(dur) = &recipe.trim.duration {
+        if let Some(frames) = recipe.trim.frames {
+            // A frame count replaces the range rather than joining it: with both, ffmpeg
+            // stops at whichever arrives first, so the command would mean neither request.
+            post.extend(["-vframes".to_string(), frames.to_string()]);
+        } else if let Some(dur) = &recipe.trim.duration {
             post.extend(["-t".to_string(), dur.clone()]);
         } else if let Some(end) = &recipe.trim.end {
             post.extend(["-to".to_string(), end.clone()]);
@@ -589,6 +662,7 @@ pub struct Options {
     pub start: Option<String>,
     pub duration: Option<String>,
     pub end: Option<String>,
+    pub frames: Option<i64>,
     pub audio_format: Option<String>,
     pub at_time: Option<String>,
     pub image_format: Option<String>,
@@ -923,11 +997,12 @@ pub fn build_one_recipe(
             recipe.audio_only = audio_only;
         }
         "trim" => {
-            recipe.trim = Trim {
-                start: options.start.clone(),
-                duration: options.duration.clone(),
-                end: options.end.clone(),
-            };
+            recipe.trim = normalize_trim(
+                options.start.clone(),
+                options.duration.clone(),
+                options.end.clone(),
+                options.frames,
+            );
         }
         "extract_audio" => {
             recipe.audio_format = Some(
@@ -941,6 +1016,7 @@ pub fn build_one_recipe(
                     start: options.start.clone(),
                     duration: None,
                     end: options.end.clone(),
+                    frames: None,
                 };
             }
             recipe.video = Video::default(); // no video stream in an audio extract
@@ -1564,5 +1640,87 @@ mod tests {
                 "thumb.jpg"
             ])
         );
+    }
+}
+
+#[cfg(test)]
+mod trim_frames_tests {
+    use super::*;
+
+    // Port of skills/ffmpeg/python/tests/test_trim_frames.py. L2 parity is a byte comparison
+    // of the rendered command, so the flag SPELLING matters as much as the behaviour:
+    // `-vframes`, matching the thumbnail arm and the Python renderer.
+
+    fn trim_flags(t: Trim) -> (Vec<String>, Vec<String>) {
+        let mut recipe = Recipe {
+            mode: "trim".to_string(),
+            ..Default::default()
+        };
+        recipe.trim = t;
+        build_flags(&recipe, &Vocab::default()).unwrap()
+    }
+
+    fn s(v: Option<&str>) -> Option<String> {
+        v.map(str::to_string)
+    }
+
+    #[test]
+    fn a_frame_count_renders_vframes() {
+        let t = normalize_trim(s(Some("00:00:02")), None, None, Some(3));
+        let (pre, post) = trim_flags(t);
+        assert_eq!(pre, vec!["-ss".to_string(), "00:00:02".to_string()]);
+        assert_eq!(post, vec!["-vframes".to_string(), "3".to_string()]);
+    }
+
+    #[test]
+    fn a_frame_count_never_renders_a_duration() {
+        // With both, ffmpeg stops at whichever arrives first and the command means neither.
+        let t = normalize_trim(
+            s(Some("00:00:02")),
+            s(Some("5")),
+            s(Some("00:00:07")),
+            Some(5),
+        );
+        assert!(t.duration.is_none() && t.end.is_none());
+        let (_, post) = trim_flags(t);
+        assert!(!post.contains(&"-t".to_string()));
+        assert!(!post.contains(&"-to".to_string()));
+    }
+
+    #[test]
+    fn equal_bounds_render_exactly_one_frame() {
+        // ffmpeg_161: `-ss 00:00:00 -to 00:00:00` wrote an empty file and exited 0.
+        let t = normalize_trim(s(Some("00:00:00")), None, s(Some("00:00:00")), None);
+        let (_, post) = trim_flags(t);
+        assert_eq!(post, vec!["-vframes".to_string(), "1".to_string()]);
+    }
+
+    #[test]
+    fn equal_bounds_away_from_zero_render_one_frame_there() {
+        let t = normalize_trim(s(Some("00:00:04")), None, s(Some("00:00:04")), None);
+        let (pre, post) = trim_flags(t);
+        assert_eq!(pre, vec!["-ss".to_string(), "00:00:04".to_string()]);
+        assert_eq!(post, vec!["-vframes".to_string(), "1".to_string()]);
+    }
+
+    #[test]
+    fn mixed_timestamp_spellings_are_still_the_same_instant() {
+        // Comparing the strings would miss this; the model writes both spellings.
+        let t = normalize_trim(s(Some("0")), None, s(Some("00:00:00")), None);
+        assert_eq!(t.frames, Some(1));
+    }
+
+    #[test]
+    fn a_zero_duration_is_also_one_frame() {
+        let t = normalize_trim(s(Some("00:00:03")), s(Some("0")), None, None);
+        assert_eq!(t.frames, Some(1));
+    }
+
+    #[test]
+    fn a_real_range_is_untouched() {
+        let t = normalize_trim(s(Some("00:00:02")), None, s(Some("00:00:07")), None);
+        assert_eq!(t.frames, None);
+        let (_, post) = trim_flags(t);
+        assert_eq!(post, vec!["-to".to_string(), "00:00:07".to_string()]);
     }
 }

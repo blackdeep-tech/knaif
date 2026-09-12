@@ -28,6 +28,44 @@ def _coerce_inputs(value: Any) -> list[str]:
     raise ValueError("'inputs' must be a string or list of strings.")
 
 
+#: Suffix walked when an explicit output would overwrite its own input. The user asked for
+#: a *copy*, so "_converted" says what happened; the numbered variants exist because the
+#: first candidate can itself be taken.
+_COLLISION_SUFFIX = "_converted"
+
+
+def next_free_output(requested: Path, taken: set[Path]) -> Path:
+    """First free ``<stem>_converted[_N]<.ext>``. **Never returns *requested* itself.**
+
+    *taken* holds every path the caller has committed to — each input of the plan and each
+    output the plan declares — and the filesystem is consulted on top of it.
+
+    Always advancing is the contract, not an implementation detail. The caller only reaches
+    here once a self-overwrite is established, and a chained intermediate that does not exist
+    on disk yet collides exactly as hard as one that does: an earlier draft checked only
+    ``exists()`` and so handed the colliding path straight back for
+    ``trim -> clip_trimmed.mp4`` feeding ``convert -> clip_trimmed.mp4``, leaving the ``-y``
+    truncation in place while telling the user it had been renamed. It also made the result
+    depend on whether the plan had been run before.
+
+    **Every rendered ffmpeg command carries ``-y``**, so the replacement must be free too:
+    otherwise the fix destroys a file that is already there, another input of the same plan,
+    or a later step's output. The walk is deterministic, so two runs of the same plan on the
+    same tree land on the same name.
+    """
+
+    def is_free(candidate: Path) -> bool:
+        return candidate not in taken and not candidate.exists()
+
+    stem, ext = requested.stem, requested.suffix
+    candidate = requested.with_name(f"{stem}{_COLLISION_SUFFIX}{ext}")
+    n = 2
+    while not is_free(candidate):
+        candidate = requested.with_name(f"{stem}{_COLLISION_SUFFIX}_{n}{ext}")
+        n += 1
+    return candidate
+
+
 def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
     """Raise ValueError if *p* (resolved) is not inside *sandbox* (resolved).
 
@@ -446,6 +484,62 @@ def _container_from_output(output: str | None) -> str | None:
     return ext if ext in _VIDEO_CONTAINERS else None
 
 
+def _timestamp_seconds(value: Any) -> float | None:
+    """Seconds for a timestamp written as ``HH:MM:SS[.ms]``, ``MM:SS``, or a bare number.
+
+    Comparing the strings would not do: ``"0"`` and ``"00:00:00"`` are the same instant and
+    the model writes both.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parts = [float(p) for p in text.split(":")]
+    except ValueError:
+        return None
+    total = 0.0
+    for part in parts:
+        total = total * 60 + part
+    return total
+
+
+def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict[str, Any]:
+    """Resolve a trim request into exactly one of: a frame count, a duration, or an end.
+
+    **An empty range becomes one frame.** ``ffmpeg_161`` asks for a one-frame video and the
+    model emits ``-ss 00:00:00 -to 00:00:00``; ffmpeg then exits 0 having written a file with
+    nothing in it, which the corpus scored as a pass because the container was right. A user
+    who names a single instant wants the frame at that instant - there is no other reading of
+    it, and no reading at all under which producing an empty file is the answer.
+
+    Resolving it here rather than teaching the model the new `frames` argument is deliberate:
+    a product fix that only works after a fine-tune is not a product fix.
+    """
+    if frames is not None:
+        # An explicit count wins outright; preflight has already refused it alongside a range.
+        return {"start": start, "duration": None, "end": None, "frames": frames}
+
+    start_s = _timestamp_seconds(start)
+    end_s = _timestamp_seconds(end)
+    duration_s = _timestamp_seconds(duration)
+
+    # An absent `start` means zero, so "-to 00:00:00" with no start is the same empty range
+    # and produced the same empty file. A *reversed* range (end < start) lands here too: the
+    # engine cannot clarify, so its only choices are one frame or a file with nothing in it.
+    effective_start = 0.0 if start_s is None else start_s
+    empty_range = (end is not None and end_s is not None and end_s <= effective_start) or (
+        duration is not None and duration_s is not None and duration_s <= 0
+    )
+    if empty_range:
+        return {"start": start, "duration": None, "end": None, "frames": 1}
+
+    return {"start": start, "duration": duration, "end": end, "frames": None}
+
+
 def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) -> Path:
     suffix_template = _OUTPUT_SUFFIX_BY_MODE.get(mode, "_out")
     platform = options.get("platform") or ""
@@ -647,11 +741,12 @@ def _build_one_recipe(
         recipe["normalize"] = bool(options.get("normalize", False))
         recipe["audio_only"] = audio_only
     if mode == "trim":
-        recipe["trim"] = {
-            "start": options.get("start"),
-            "duration": options.get("duration"),
-            "end": options.get("end"),
-        }
+        recipe["trim"] = _normalize_trim(
+            start=options.get("start"),
+            duration=options.get("duration"),
+            end=options.get("end"),
+            frames=options.get("frames"),
+        )
     if mode == "extract_audio":
         recipe["audio_format"] = options.get("audio_format", "mp3")
         if options.get("start") is not None or options.get("end") is not None:
@@ -712,7 +807,14 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         trim = recipe.get("trim", {})
         if trim.get("start") is not None:
             pre += ["-ss", str(trim["start"])]
-        if trim.get("duration") is not None:
+        if trim.get("frames") is not None:
+            # A frame count replaces the range rather than joining it: with both, ffmpeg
+            # stops at whichever arrives first, so the command would mean neither request.
+            # `-vframes`, not `-frames:v`: the thumbnail arm below already uses that
+            # spelling and so does the native port. Two spellings of one flag in one
+            # renderer is how the two runtimes drift apart on a byte comparison.
+            post += ["-vframes", str(trim["frames"])]
+        elif trim.get("duration") is not None:
             post += ["-t", str(trim["duration"])]
         elif trim.get("end") is not None:
             post += ["-to", str(trim["end"])]

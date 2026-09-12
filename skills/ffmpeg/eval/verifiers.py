@@ -327,6 +327,26 @@ def honest(
     return VerifyResult(score=0.0, failed=["output_file_not_produced"], verifier_kind="output")
 
 
+def _frame_count(video: dict | None) -> int | None:
+    """Frames in the video stream, from whichever field this build of ffprobe filled in.
+
+    ``nb_frames`` is absent or "N/A" for a stream ffprobe did not count, which is common for
+    a freshly muxed file; ``nb_read_frames`` appears when frames were actually decoded. Try
+    both rather than reporting "unreadable" for a file that is perfectly fine.
+    """
+    if not video:
+        return None
+    for key in ("nb_frames", "nb_read_frames"):
+        raw = video.get(key)
+        if raw in (None, "", "N/A"):
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 SUCCESS_CRITERIA_FIELDS: dict[str, str] = {
     "container": "Expected output container format (mp4, mkv, webm, …)",
     "video_codec": "Expected video codec, aliases resolved (h264, hevc, vp9, av1)",
@@ -337,6 +357,7 @@ SUCCESS_CRITERIA_FIELDS: dict[str, str] = {
     "max_height": "Maximum output height in pixels (inclusive)",
     "filters": "List of substrings that must appear in filter arguments",
     "flags": "List of substrings that must appear as ffmpeg CLI flags",
+    "frames": "Exact number of video frames the output must contain",
 }
 
 
@@ -393,6 +414,7 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
         "no_audio",
         "max_width",
         "max_height",
+        "frames",
     }
     has_file_criteria = any(k in criteria for k in _FILE_FIELDS)
 
@@ -427,6 +449,20 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
     fmt = probe.get("format") or {}
     video = next((s for s in streams if s.get("codec_type") == "video"), None)
     audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+
+    if "frames" in criteria:
+        # `ffmpeg_161` asks for a one-frame video. Its criterion used to be
+        # {"container": "mp4"} — which a full-length MP4 satisfies, so the row scored a pass
+        # while the plan produced a file with nothing in it. A frame count is the only
+        # criterion that can tell "one frame" from "no frames" and from "the whole clip".
+        want = int(criteria["frames"])
+        got = _frame_count(video)
+        if got is None:
+            failed.append("frames: could not read a frame count from the output")
+        elif got == want:
+            matched.append(f"frames={want}")
+        else:
+            failed.append(f"frames: expected {want}, got {got}")
 
     if "container" in criteria:
         containers = [n.strip() for n in fmt.get("format_name", "").lower().split(",")]

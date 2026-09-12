@@ -502,6 +502,31 @@ fn resolve_intent(
             options.start = str_arg(args, "start");
             options.duration = str_arg(args, "duration");
             options.end = str_arg(args, "end");
+            options.frames = i64_arg(args, "frames");
+            // Port of `_preflight_trim_frames`. Without it the two runtimes hold opposite
+            // answers to a decision the plan took explicitly: Python refuses `frames`
+            // alongside a range, native silently dropped the range and rendered the count.
+            if let Some(n) = options.frames {
+                if n < 1 {
+                    anyhow::bail!("'frames' must be at least 1, got {n}.");
+                }
+                let conflicting: Vec<&str> = ["end", "duration"]
+                    .into_iter()
+                    .filter(|k| args.get(*k).is_some_and(|v| !v.is_null()))
+                    .collect();
+                if !conflicting.is_empty() {
+                    anyhow::bail!(
+                        "'frames' cannot be combined with {} - a frame count and a time                          range are two different requests. Give one or the other.",
+                        conflicting
+                            .iter()
+                            .map(|k| format!("'{k}'"))
+                            .collect::<Vec<_>>()
+                            .join(" and ")
+                    );
+                }
+            } else if args.get("frames").is_some_and(|v| !v.is_null()) {
+                anyhow::bail!("'frames' must be a whole number of frames.");
+            }
             set_output(&mut options, args);
             quality = Some(resolve_quality_profile(
                 &str_arg(args, "quality").unwrap_or_else(|| "visually_good".into()),
@@ -630,6 +655,17 @@ fn str_arg(args: &serde_json::Map<String, Value>, key: &str) -> Option<String> {
 
 fn bool_arg(args: &serde_json::Map<String, Value>, key: &str) -> Option<bool> {
     args.get(key).and_then(Value::as_bool)
+}
+
+/// A whole-number arg, tolerating a numeric string (`"3"`) the way Python's `int(...)` would.
+/// Used for `frames`, which is a COUNT: a fractional value is not a smaller request, it is a
+/// different kind of thing, so it is rejected here rather than truncated.
+fn i64_arg(args: &serde_json::Map<String, Value>, key: &str) -> Option<i64> {
+    match args.get(key) {
+        Some(Value::Number(n)) => n.as_i64(),
+        Some(Value::String(s)) => s.trim().parse().ok(),
+        _ => None,
+    }
 }
 
 /// A number arg, tolerating a numeric string (`"2.0"`) the way Python's `float(...)` would.

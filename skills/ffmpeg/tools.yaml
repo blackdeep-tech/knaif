@@ -42,11 +42,28 @@ resize_video:
     inputs: ["{utterance_after:resize}"]
 
 trim_video:
-  description: "Trim a single video to a time range."
-  keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切]
+  description: "Trim a single video to a time range, or grab a fixed number of frames."
+  keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切, frames]
   required_args: [input]
-  optional_args: [start, end, duration, output, preview]
+  optional_args: [start, end, duration, frames, output, preview]
   safety_category: destructive
+  arg_schemas:
+    # A frame COUNT, not a timestamp: "give me 1 frame" had nothing to bind to before, so the
+    # model emitted a zero-length range instead (ffmpeg_161) and ffmpeg wrote an empty file
+    # while exiting 0. Renders as `-vframes N`. Mutually exclusive with `end` and `duration`
+    # — enforced in preflight, because "3 frames AND a 10-second range" has no reading.
+    frames:
+      type: integer
+    # Typed so a numeric timestamp normalises the same way on both runtimes. Untyped, the
+    # model's `{"start": 0, "end": 0}` reached Python's engine as ints (empty range -> one
+    # frame) and native's `str_arg` as None (no trim flags at all) — the two lanes rendering
+    # different commands for one plan, which is precisely what L2 parity exists to catch.
+    start:
+      type: string
+    end:
+      type: string
+    duration:
+      type: string
   mock_args:
     input: "{utterance_after:trim}"
 
