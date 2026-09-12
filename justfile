@@ -691,6 +691,14 @@ parity skill *args:
 site-install:
     pnpm --dir site install --frozen-lockfile
 
+# Update site dependencies within declared ranges; pass --latest to include major upgrades
+site-update *args:
+    pnpm --dir site --recursive update {{args}}
+
+# Update pnpm and the site pin; migrate Corepack shims to standalone pnpm if needed
+site-pnpm-update version="latest":
+    uv run python "{{justfile_directory()}}/scripts/site_pnpm_update.py" "{{version}}"
+
 # Dev server for one site. Usage: just site-dev org   |   just site-dev dev
 site-dev app:
     pnpm --dir site --filter knaif-{{app}} dev
