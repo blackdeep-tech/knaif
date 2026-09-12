@@ -8,6 +8,7 @@ enough to port" stays a judgement call made after seeing the number.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -101,13 +102,142 @@ def test_rate_floors_are_only_used_on_slices_big_enough_to_mean_something(
             )
 
 
+def _corpus_rows(skill: str) -> list[dict]:
+    path = REPO_ROOT / "skills" / skill / "data" / "eval.jsonl"
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
+
+@pytest.mark.parametrize("skill", ACTIVE_SKILLS)
+@pytest.mark.parametrize("outcome", ["reject", "clarify"])
+def test_control_outcome_tags_agree_with_the_expectation(skill: str, outcome: str) -> None:
+    """The `reject` and `clarify` slices must contain exactly the rows that expect them.
+
+    `reject` and `clarify` are both required slices *and* corpus tags, and nothing else ties
+    the two together — so a relabel that moves `expected_outcome` without moving the tag
+    leaves the row measured in the slice it just left. Relabelling 18 utterances from
+    `reject` to `clarify` without this would have left both required slices scoring the
+    wrong population, and each slice would still have looked healthy on its own.
+
+    See docs/plans/2026-09-11-reject-clarify-taxonomy.md -> T4.
+    """
+    for row in _corpus_rows(skill):
+        tags = set(row.get("tags") or [])
+        expected = row.get("expected_outcome")
+        if outcome in tags:
+            assert expected == outcome, (
+                f"{skill}:{row['id']} is tagged {outcome!r} but expects {expected!r} — "
+                f"it would be scored inside the {outcome!r} slice it no longer belongs to"
+            )
+        if expected == outcome:
+            assert outcome in tags, (
+                f"{skill}:{row['id']} expects {outcome!r} but is not tagged {outcome!r} — "
+                f"it is missing from the {outcome!r} slice that is supposed to measure it"
+            )
+
+
+@pytest.mark.parametrize("skill", ACTIVE_SKILLS)
+def test_every_still_comparable_floor_clears_the_accepted_baseline(skill: str) -> None:
+    """The same check over the slices the relabel did not move — never xfailed.
+
+    The mark above is per *skill*, so while two of ffmpeg's slices are stale it stops
+    observing the other twenty-four and both aggregates. Editing a floor, or a corpus tag,
+    would then go uncaught until the re-lock. This keeps watching everything still
+    comparable; delete it when the mark above goes.
+    """
+    spec = load_acceptance(skill, root=REPO_ROOT / "skills")
+    stale = set(_slices_measured_on_a_different_corpus(skill))
+    lean = {**spec, "slices": {k: v for k, v in spec["slices"].items() if k not in stale}}
+    board = {**_snapshot(skill), "scoring_policy": POLICY_VERSION}
+    report = check_acceptance(lean, board, safety={"total": 1, "pass_rate": 1.0})
+    assert report.ok, " | ".join(v.message for v in report.violations)
+
+
 @pytest.mark.parametrize("skill", ACTIVE_SKILLS)
 def test_each_bar_declares_a_policy_the_code_still_implements(skill: str) -> None:
     spec = load_acceptance(skill, root=REPO_ROOT / "skills")
     assert spec["policy_version"] <= POLICY_VERSION
 
 
+def _slices_measured_on_a_different_corpus(skill: str) -> list[str]:
+    """Required slices whose row *count* no longer matches the committed snapshot.
+
+    A slice the snapshot measured over 34 utterances says nothing about a floor written
+    for the 16 that carry the tag today — the two numbers are not about the same thing.
+
+    **Counts undercount the staleness, and deliberately so.** A slice whose membership
+    changed while its size did not looks current here: ffmpeg's `safety` slice is 16
+    utterances before and after T4, but 8 of them flipped from expecting `reject` to
+    expecting `clarify`, so its recorded 0.8125 describes a different measurement over an
+    identically sized population. A count is what a scoreboard records — a relabel leaves no
+    other trace in it — so this detects what is detectable and the re-lock settles the rest.
+    """
+    spec = load_acceptance(skill, root=REPO_ROOT / "skills")
+    tags = _corpus_tags(skill)
+    by_tag = _snapshot(skill).get("by_tag", {})
+    return sorted(
+        tag for tag in spec["slices"] if tag in by_tag and by_tag[tag].get("total") != tags.get(tag)
+    )
+
+
+def _baseline_params() -> list:
+    """Mark a skill xfail(strict) while its snapshot and its corpus disagree on a slice.
+
+    Relabelling a control outcome (T4 of docs/plans/2026-09-11-reject-clarify-taxonomy.md)
+    changes a slice's *population*, so the committed baseline stops being comparable to the
+    bar until S5 re-locks it over a fresh run. That gap is unavoidable, and pre-registering
+    it here is the honest alternative to leaving the old threshold in place so the bar stays
+    green. Strict, so the day the re-lock lands this test passes and the mark must come off.
+    """
+    params = []
+    for skill in ACTIVE_SKILLS:
+        stale = _slices_measured_on_a_different_corpus(skill)
+        marks = (
+            [
+                pytest.mark.xfail(
+                    strict=True,
+                    reason=(
+                        f"{skill}: snapshot and corpus populations differ for "
+                        f"{', '.join(stale)} — not comparable until S5 re-locks"
+                    ),
+                )
+            ]
+            if stale
+            else []
+        )
+        params.append(pytest.param(skill, marks=marks))
+    return params
+
+
 @pytest.mark.parametrize("skill", ACTIVE_SKILLS)
+def test_the_corpus_never_shrinks_below_what_the_snapshot_measured(
+    skill: str,
+) -> None:
+    """A corpus may grow between re-locks. It must never silently shrink.
+
+    Relabelling moves rows between slices and leaves the total alone; T4b of
+    docs/plans/2026-09-11-reject-clarify-taxonomy.md moves rows *between corpora*, which
+    legitimately adds utterances to `eval.jsonl` — the two raw-command phrasings the safety
+    corpus could no longer hold. So equality only holds at a re-lock, and asserting it would
+    make an ordinary corpus addition look like a defect.
+
+    A *drop* is a different thing: nothing in this plan removes an utterance from
+    `eval.jsonl` ("copy, do not move" exists precisely so the `reject` population is not
+    thinned), so a shrinking corpus means rows were lost in an edit. That is what this
+    catches, and it keeps catching it while the per-slice comparison below is stale.
+    """
+    corpus = sum(
+        len(row.get("utterances") or [row.get("utterance")]) for row in _corpus_rows(skill)
+    )
+    measured = _snapshot(skill)["total"]
+    assert corpus >= measured, (
+        f"{skill}: corpus is {corpus} utterances but the snapshot measured {measured} — "
+        "rows were dropped, not relabelled"
+    )
+
+
+@pytest.mark.parametrize("skill", _baseline_params())
 def test_the_accepted_baseline_clears_its_own_floors(skill: str) -> None:
     """The committed snapshot *is* the accepted baseline — a floor above it is fiction.
 
@@ -250,3 +380,69 @@ def test_a_run_from_before_the_policy_existed_cannot_certify() -> None:
 
 def test_validate_rejects_a_policy_the_code_does_not_implement() -> None:
     assert validate_acceptance({**SPEC, "policy_version": POLICY_VERSION + 1})
+
+
+# ── a `plan` row must be reachable from its own utterance ────────────────────
+
+
+def _token(word: str) -> re.Pattern[str]:
+    """Match *word* on ASCII-alphanumeric boundaries only.
+
+    `\b` is the wrong tool twice over here: "remove" would match "mov", and in
+    "将MP3转换为FLAC" the CJK characters around `MP3` are word characters, so `\bmp3\b`
+    does *not* match — silently flagging a Chinese utterance that names its file perfectly
+    well. ASCII-only boundaries get both right.
+    """
+    return re.compile(rf"(?<![a-z0-9]){re.escape(word)}(?![a-z0-9])", re.I)
+
+
+@pytest.mark.parametrize("skill", ACTIVE_SKILLS)
+def test_every_plan_utterance_can_reach_a_file(skill: str) -> None:
+    """An utterance that expects a `plan` must name something the plan can act on.
+
+    Multi-utterance rows are paraphrase sets, and a paraphrase can lose the one thing the
+    expected artifact depends on: "resize clip.mp4 to 480p" became "downscale to 480p",
+    which names no file, refers to none, and cannot produce the row's artifact by any
+    deterministic means. The corpus then scores the *correct* answer as a failure — and it
+    did: in T6a `ffmpeg_218` and `ffmpeg_219` had the model spontaneously reply "Which file
+    should I encode?", exactly right, counted wrong.
+
+    The rule is derived from the corpus alone — its rows' own `fixture` names — and never
+    from a scoreboard. When it was first run against T6a it flagged **13 utterances and all
+    13 had failed**, while flagging nothing that passed: an independent rule and a
+    measurement agreeing completely, which is why the fix was a relabel rather than a
+    retrain target. See `evals/runs/2026-09-12_t6a-control_success/report.md`.
+
+    `batch` rows are exempt by design: their expected plan *is* a glob, so naming no file is
+    the request, not a gap in it.
+    """
+    rows = _corpus_rows(skill)
+    fixtures = {(r.get("fixture") or "").lower() for r in rows if r.get("fixture")}
+    fixtures.discard("")
+    stems = {f.rsplit(".", 1)[0] for f in fixtures}
+    by_ext: dict[str, list[str]] = {}
+    for f in fixtures:
+        if "." in f:
+            by_ext.setdefault(f.rsplit(".", 1)[1], []).append(f)
+    # "the mov" reaches a file only while exactly one fixture has that extension.
+    unique_ext = {e for e, v in by_ext.items() if len(v) == 1}
+
+    def reaches_a_file(utterance: str) -> bool:
+        u = utterance.lower()
+        return (
+            any(_token(f).search(u) for f in fixtures)
+            or any(_token(s).search(u) for s in stems)
+            or any(_token(e).search(u) for e in unique_ext)
+        )
+
+    unreachable = [
+        f"{row['id']}#{i} {utterance!r}"
+        for row in rows
+        if row.get("expected_outcome") == "plan" and "batch" not in set(row.get("tags") or [])
+        for i, utterance in enumerate(row["utterances"])
+        if not reaches_a_file(utterance)
+    ]
+    assert not unreachable, (
+        f"{skill}: these utterances expect a plan but name no file the plan could act on — "
+        "they are clarify rows wearing a plan label:\n  " + "\n  ".join(unreachable)
+    )

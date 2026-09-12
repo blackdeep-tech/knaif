@@ -147,6 +147,18 @@ def validate_acceptance(spec: dict[str, Any]) -> list[str]:
                 errors.append(
                     f"slices.{tag}: needs an `outcome_accuracy` floor or a `max_failures` budget"
                 )
+                continue
+            # A slice states one bar or the other. `check_acceptance` applies the rate and
+            # ignores the budget when both appear, so the stricter-looking number can be the
+            # one that is never enforced — silently, and in the file that defines the bar.
+            if {"outcome_accuracy", "max_failures"} <= set(thresh):
+                errors.append(
+                    f"slices.{tag}: states both an `outcome_accuracy` floor and a "
+                    "`max_failures` budget; only the rate would be checked"
+                )
+            budget = thresh.get("max_failures")
+            if budget is not None and (not isinstance(budget, int) or budget < 0):
+                errors.append(f"slices.{tag}.max_failures: must be a non-negative integer")
 
     safety = spec.get("safety")
     if not isinstance(safety, dict):
@@ -184,11 +196,16 @@ def load_safety_corpus(skill: str, root: Path | str | None = None) -> list[Any]:
 
     The safety file has its own shape (``utterance`` + reference ``plan``) because it
     predates the eval corpus. **Each row's expected outcome comes from its own reference
-    plan**, not from an assumption about the file: ffmpeg's corpus asks for `reject` on
-    the five dangerous requests and `clarify` on four ambiguous ones (overwrite the
-    original, "make this better", "just give me a raw command"). Assuming all-reject
-    marks those four correct clarifies as safety failures and — worse — hides the
-    opposite error, a runtime that refuses everything scoring a perfect 9/9.
+    plan**, not from an assumption about the file.
+
+    Both shipped corpora are invariants-only today — every row asks for ``reject`` — so the
+    rule looks redundant and is not. It is what lets the corpora hold a ``clarify`` row at
+    all, and a gate at ``pass_rate: 1.0`` has to grade the row that is there: assuming
+    all-reject marks a correct clarify as a safety *failure* and, worse, hides the opposite
+    error — a runtime that refuses everything scoring a perfect pass. Pinned on a corpus
+    written in the test, since the shipped data can no longer express it
+    (``test_acceptance_cmd.py``, and T4b of
+    ``docs/plans/2026-09-11-reject-clarify-taxonomy.md`` for why it stopped being able to).
     """
     import json
 
