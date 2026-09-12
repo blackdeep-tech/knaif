@@ -1,8 +1,9 @@
 # `reject` vs `clarify` — one word doing two jobs
 
 **Status:** Planning — audited four times; decisions closed and T5b designed 2026-09-11,
-execution details corrected 2026-09-12. Ready to implement, not started ·
-**Created:** 2026-09-11 · **Last worked:** 2026-09-11 · **Completed:** —
+execution details corrected and the last four open decisions taken 2026-09-12.
+**Ready to start** ·
+**Created:** 2026-09-11 · **Last worked:** 2026-09-12 · **Completed:** —
 **Owner:** core · **Ref:** unblocks S5 in
 [2026-09-10-skill-quality-lifecycle.md](2026-09-10-skill-quality-lifecycle.md)
 
@@ -24,7 +25,8 @@ evidence a shared-contract change invalidates. All of that is folded in below.
 **ruled out** — it widens the prompt for every skill and adds a distinction a 4B model would get
 wrong, which is the kind of complexity that causes more failures than it prevents.
 
-**Open questions closed 2026-09-11, after the second audit:**
+**Open questions closed 2026-09-11, after the second audit** (the last four, marked
+*2026-09-12*, were taken in the pre-start review and are what moved this plan to Ready):
 
 | question | decision |
 |---|---|
@@ -42,6 +44,10 @@ wrong, which is the kind of complexity that causes more failures than it prevent
 | zero-duration trim (`ffmpeg_161`) | **produce one frame.** A frame-count request maps to `-frames:v N`, never a zero-length time range |
 | explicit `output == input` (`ffmpeg_175`) | **disambiguate and report** — `<stem>_converted.<ext>`; the user asked for a copy |
 | training data | **author rows and retrain (S4).** Prompt-only is not accepted as the end state |
+| prompt ceiling *(2026-09-12)* | **raise the full cap to 15,000**; hold the retrieved cap at 10,000 as the real guard — see T2 |
+| `safety_test.jsonl` shrink *(2026-09-12)* | **argument accepted** — invariants only, population held at ~9 rows — see T4b |
+| `reject` slice threshold *(2026-09-12)* | **`max_failures: 3`**, not a rate over 16 rows — see T4 |
+| T5b collision call site *(2026-09-12)* | **a default-no-op `Skill` hook in `execute_plan`**, after `resolve_stems` — see T5b |
 
 ## The finding
 
@@ -209,8 +215,29 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   uploading, sending to a server or cloud, downloading from a URL, and every impossibility
   (nonexistent codec/format, 0x0, "perfect"/"flawless" upscale promises, "improve magically").
   Naming them in `TOOL SCOPE` is skill-local and safe — a prompt is not weights. Record the
-  same policy in `skills/ffmpeg/SPEC.md` so it is reviewable outside a prompt string. Watch the
-  prompt-size ceiling — `test_prompt_audit` caps ffmpeg at 14,000 chars.
+  same policy in `skills/ffmpeg/SPEC.md` so it is reviewable outside a prompt string.
+
+  **The prompt ceiling is a blocker, and the cap moves — decided 2026-09-12.** Measured before
+  starting: ffmpeg's full prompt is **13,994 chars against `test_prompt_audit`'s 14,000 cap — six
+  characters of headroom**. T2's `TOOL SCOPE` list and T5b's `frames` arg both grow it, so T2
+  cannot land additively as written.
+  - **Context is not the constraint.** Every qwen3 backend runs `n_ctx: 8192`
+    (`eval_backends.yaml`, `contracts/runtime/generation.yaml:52`), and the model sees the
+    *retrieved* prompt — retrieval is on by default in the product path (`agent.py:1290`) and the
+    eval path (`runner.py`, `apply_retrieval=True`); `--no-retrieval` is diagnostic only. Worst case
+    over all 847 ffmpeg utterances is **8,244 chars (~2,750 tok at a pessimistic 3.0 ch/tok)**,
+    which with 512 generation is **~40% of the window**. Even the full prompt, if it were ever sent,
+    is ~4,660 tok. **Raise the full cap to 15,000** — ~5,000 tok, still 67% of an 8,192 window, and
+    qwen3 natively supports 32K above that.
+  - **The binding guard is the *retrieved* cap (10,000), and it stays.** Worst case 8,244 leaves
+    only **~1,750 chars of real margin**, and T2's additions go in the header, so they grow every
+    retrieved prompt too. **Re-measure the worst-case retrieved prompt after the rewrite and record
+    the number.** Past ~9,500, trim the wording — do not raise a second cap.
+  - **Precedent.** `test_prompt_audit`'s own docstring records the 13,400 → 14,000 raise on
+    2026-06-18: ~700 chars of *this same* reject-vs-clarify content, worth +0.024 outcome on
+    qwen3-4b and +0.020 on gemma3-4b. The risk on a 1.7B is instruction-following degrading as the
+    policy block grows — unpredictable, measurable only in T6, and the precedent points the other
+    way.
 - [ ] **T3 — documents — a bigger surface than the eval count suggests.** Its `prompt.yaml` says
   nothing about `reject` and inherits the contract, so T1 changes its behaviour too. The *eval*
   surface is small (3 `reject` / 10 `clarify` utterances) and its **safety corpus is already clean**
@@ -229,9 +256,16 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   **Tags must move with labels.** Every relabelled row is tagged `reject` today; leaving the tags
   alone would keep 18 utterances that now expect `clarify` inside the `reject` slice and out of the
   `clarify` slice, so both required slices would measure the wrong population. Two consequences to
-  handle in the same edit: the `reject` slice drops from 34 utterances to **16** — at
-  `acceptance.yaml`'s `min_rate_rows: 16` boundary, where the file's own rule says to state a
-  `max_failures` budget instead of a rate — and `clarify` grows from 198 to 216.
+  handle in the same edit: the `reject` slice drops from 34 utterances to **16**, and `clarify`
+  grows from 198 to 216.
+  **The `reject` threshold becomes `max_failures: 3` — decided 2026-09-12.** An earlier draft said
+  16 rows forces a budget; that was wrong and is corrected here. The check in
+  `test_acceptance.py:96` is `tags[tag] >= floor_rows`, so at exactly 16 a **rate is still legal**
+  and nothing fails today. The budget is chosen anyway, for two reasons: a pass rate over 16 rows is
+  noise, and the slice would sit *one relabel* from breaking
+  `test_rate_floors_are_only_used_on_slices_big_enough_to_mean_something`. Three is the equivalent
+  of today's bar (0.80 × 16 = 12.8). Write it in the same edit as the relabel, or `acceptance.yaml`
+  gets touched twice.
   **The clarification *wording* cannot be fixed here** — an `eval.jsonl` row carries
   `expected_outcome`, `expected_tool` and `success_criteria`, and **no expected response text at
   all**. Only `safety_test.jsonl` and `train.jsonl` hold full plans with a `question` argument. So:
@@ -259,7 +293,13 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   > ⚠️ **Same discipline as the 004 relabel.** This removes rows the model currently fails, so it
   > must be argued on what the corpus is *for* — a 100% gate can only hold invariants, because
   > scope answers legitimately change when a skill ships — and never on the fact that it turns the
-  > gate green. If that argument is not accepted, keep all nine rows and accept a mixed gate.
+  > gate green.
+  >
+  > **Argument accepted 2026-09-12, with the population held.** The corpus stays at **~9 rows of
+  > invariants**: 5 kept, `ffmpeg_147` / `ffmpeg_150` copied in, and new sandbox-escape and
+  > destructive phrasings authored to replace what left. The gate is allowed to get *cleaner*, never
+  > *smaller* — shrinking to 7 would make a 100% bar easier by thinning the instrument, which is the
+  > same error in the opposite direction. "Copy, do not move" is what keeps this defensible.
 
 - [ ] **T5b — Settle the harness *before* anything is measured.** *(Reordered after the audit: it
   defines the instrument, so it cannot run after T6.)*
@@ -445,11 +485,13 @@ changes Python's planning behaviour, so it must clear that bar before native is 
       **This does not fit where the first draft put it.** `_build_one_recipe` receives
       `(probe, platform_profile, quality_profile, options, sandbox)` — no plan, no shared map — so
       the reservation has to live one level up, where the plan is visible, with the resolved output
-      passed down. **Remaining implementation choice: the call site.** The pass belongs **after
-      `resolve_stems` and before the expansion loop** in `execute_plan` — the first point where both
-      the whole plan and real disk state are visible — reached from core through a default-no-op
-      `Skill` hook, so the `-y` / `_converted` rule stays in the skill and core keeps no
-      skill-specific naming logic.
+      passed down. **Call site decided 2026-09-12: a default-no-op `Skill` hook, called from
+      `execute_plan` after `resolve_stems` and before the expansion loop** — the first point where
+      both the whole plan and real disk state are visible. The `-y` / `_converted` rule stays in the
+      skill, so core gains an extension point but no skill-specific naming logic.
+      *Rejected:* renaming earlier in `_plan_payload` to reuse core's forward-threading for free —
+      it runs before stem resolution, so the on-disk collision check would be weaker than the thing
+      it is guarding against.
 
       **Tests, written before the implementation** (`skills/ffmpeg/python/tests/test_output_collision_binding.py`):
       two premise tests that pass today (a reference to the original source does not survive; a
