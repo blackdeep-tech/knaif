@@ -18,6 +18,7 @@ from knaif.registry import retrieve_tools
 
 _FFMPEG_SKILL_DIR = Path("skills") / "ffmpeg"
 _IO_SKILL_DIR = Path("skills") / "io"
+_DOCUMENTS_SKILL_DIR = Path("skills") / "documents"
 
 # Internal ffmpeg tools that must never appear in the model-visible tool block.
 _FFMPEG_INTERNAL_TOOLS = [
@@ -48,6 +49,11 @@ def ffmpeg_agent(tmp_path: Path) -> CommandAgent:
     return CommandAgent.from_skill(_FFMPEG_SKILL_DIR, sandbox=tmp_path)
 
 
+@pytest.fixture()
+def documents_agent(tmp_path: Path) -> CommandAgent:
+    return CommandAgent.from_skill(_DOCUMENTS_SKILL_DIR, sandbox=tmp_path)
+
+
 # ── size budgets ──────────────────────────────────────────────────────────────
 
 
@@ -67,21 +73,77 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     and lifted qwen3-4b outcome +0.024 / gemma3-4b +0.020. The retrieved prompt — the one
     actually used at inference — stays well under budget (see the test below), so this
     growth is confined to the unfiltered full prompt.
+
+    Raised 14,000 → 15,000 on 2026-09-12 (T2 of
+    docs/plans/2026-09-11-reject-clarify-taxonomy.md), which split the SAFETY block by the
+    policy test and moved network access and impossible results to TOOL SCOPE's unsupported
+    list. The prompt had six characters of headroom before the edit; it is 14,646 after it - T4 added the
+    shell-execution rule the split had dropped, and T5b added `trim_video`'s frame count,
+    paid for by removing a restatement of the chaining rule rather than raising this again.
+
+    **Context is not what this guards.** Every qwen3 backend runs ``n_ctx: 8192``
+    (``eval_backends.yaml``, ``contracts/runtime/generation.yaml``), and the model is sent
+    the *retrieved* prompt — retrieval is on by default in both the product and eval paths.
+    15,000 chars is ~5,000 tok at a pessimistic 3.0 ch/tok, still inside an 8,192 window with
+    512 of generation, and qwen3 supports 32K above that. What this number guards is
+    instruction-following on a 1.7B as the policy block grows: unpredictable, measurable only
+    in an eval arm. The 2026-06-18 precedent points the other way, which is why it moved.
     """
     system, _ = ffmpeg_agent.build_prompt("compress a video")
     assert (
-        len(system) < 14_000
-    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 14,000 ceiling"
+        len(system) < 15_000
+    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,000 ceiling"
 
 
 def test_ffmpeg_retrieved_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> None:
-    """ffmpeg retrieved prompt must not grow past baseline (~8,276 chars)."""
+    """ffmpeg retrieved prompt must not grow past baseline (~8,276 chars).
+
+    **This is the cap that binds**, not the full-prompt one above: the retrieved prompt is
+    what the model is actually sent. It stayed at 10,000 through T2 deliberately. Measured
+    over all 851 corpus utterances, the worst case is **8,844 chars** ("convert clip.mp4 to
+    something suitable for streaming"), up from 8,244 before T2 — these additions are in the
+    header, so they grow every retrieved prompt. That leaves ~1,150 chars of real margin.
+    Past ~9,500, trim the wording rather than raising this.
+    """
     utterance = "compress a video"
     retrieved = retrieve_tools(utterance, ffmpeg_agent.registry)
     system, _ = ffmpeg_agent.build_prompt(utterance, registry_override=retrieved)
     assert (
         len(system) < 10_000
     ), f"ffmpeg retrieved prompt is {len(system)} chars — unexpected growth from ~8,276 baseline"
+
+
+def test_documents_prompt_no_unexpected_growth(documents_agent: CommandAgent) -> None:
+    """documents prompt ceilings — new on 2026-09-12, and new for a reason.
+
+    documents had no size guard at all until T3 of
+    docs/plans/2026-09-11-reject-clarify-taxonomy.md gave it a SAFETY / TOOL SCOPE policy
+    block of its own: **4,036 -> 5,392 full**, and the worst case over its 164 corpus
+    utterances **2,146 -> 3,853 retrieved** ("sample-scanned.pdf is basically a photo of a
+    contract…"). ffmpeg's equivalent block was what pushed *that* prompt to six characters
+    under its ceiling, discovered only because a ceiling existed. The second skill gets one
+    before it needs it, not after.
+
+    Both ceilings are ~1.3x the measured worst case — loose enough not to trip on a wording
+    edit, tight enough that another block this size has to be argued for. Measured against
+    the **corpus** worst case rather than one probe utterance: the probe here renders 3,502
+    retrieved, which understates the number the cap is actually near by ~350 chars.
+
+    Context is not what this guards (worst case is ~1.3k tok against `n_ctx: 8192`). What it
+    guards is instruction-following on a 4B as the header grows — documents' header roughly
+    tripled, and that block has not yet been run against a model.
+    """
+    system, _ = documents_agent.build_prompt("compress report.pdf")
+    assert (
+        len(system) < 7_000
+    ), f"documents full prompt is {len(system)} chars — unexpected growth past the 7,000 ceiling"
+
+    utterance = "compress report.pdf"
+    retrieved = retrieve_tools(utterance, documents_agent.registry)
+    system, _ = documents_agent.build_prompt(utterance, registry_override=retrieved)
+    assert (
+        len(system) < 5_000
+    ), f"documents retrieved prompt is {len(system)} chars — past the 5,000 ceiling"
 
 
 # ── tool-count guard ──────────────────────────────────────────────────────────

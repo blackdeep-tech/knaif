@@ -4,8 +4,8 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "c6eb4337af28fc9526884cf806fc067480f113cfbb1dd60325653db0cd105920",
-        "contracts": "ccee73d651d153e2bcefabd84c3ec4c499db3008310d9b1fad84c709bfb672b7",
+        "bundle": "7e445ea64837b68c6773d5d4365b0f7a225b7e78442d85d2fda790486f4033a0",
+        "contracts": "ead40f652c76050af2854cc2e208db6c59363f7eed67e384216b6762c803ae4c",
         "python_core": "c106f46df322a02287be5881f3923bbebc091f68fe960bb5299a910087286519",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
@@ -15,8 +15,8 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "c6eb4337af28fc9526884cf806fc067480f113cfbb1dd60325653db0cd105920",
-        "contracts": "ccee73d651d153e2bcefabd84c3ec4c499db3008310d9b1fad84c709bfb672b7",
+        "bundle": "7e445ea64837b68c6773d5d4365b0f7a225b7e78442d85d2fda790486f4033a0",
+        "contracts": "ead40f652c76050af2854cc2e208db6c59363f7eed67e384216b6762c803ae4c",
         "python_core": "c106f46df322a02287be5881f3923bbebc091f68fe960bb5299a910087286519",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
