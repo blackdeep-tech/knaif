@@ -41,12 +41,23 @@ def _output_capable(tmp_path: Path, name: str) -> set[str]:
     }
 
 
-def _apply_gate(payload: dict, utterance: str, output_capable: set[str]) -> dict:
-    """The composed stage, exactly as `CommandAgent.infer` composes it."""
+def _apply_gate(
+    payload: dict,
+    utterance: str,
+    output_capable: set[str],
+    sandbox_files: list[str] | None = None,
+) -> dict:
+    """The composed stage, exactly as `CommandAgent.infer` composes it.
+
+    *sandbox_files* is what the agent's sandbox holds at gate time. The guard exempts a
+    value whose stem the user named when that value is one of these, so both runtimes have
+    to be handed the same listing or they cannot agree — which is why the contract states
+    it per case rather than leaving each harness to invent one.
+    """
     payload = copy.deepcopy(payload)
     steps = payload.get("plan") or []
     CommandAgent._link_chain_intermediates(steps, utterance, output_capable)
-    hallucinated = CommandAgent._hallucinated_filename(steps, utterance)
+    hallucinated = CommandAgent._hallucinated_filename(steps, utterance, sandbox_files or [])
     if hallucinated:
         return {
             "plan": [
@@ -66,7 +77,12 @@ def _apply_gate(payload: dict, utterance: str, output_capable: set[str]) -> dict
 
 @pytest.mark.parametrize("case", CASES, ids=[c["name"] for c in CASES])
 def test_clarify_gate_matches_the_contract(case: dict, tmp_path: Path) -> None:
-    got = _apply_gate(case["plan"], case["utterance"], _output_capable(tmp_path, case["registry"]))
+    got = _apply_gate(
+        case["plan"],
+        case["utterance"],
+        _output_capable(tmp_path, case["registry"]),
+        case.get("sandbox_files"),
+    )
     assert got == case["expected_payload"]
 
 
@@ -94,3 +110,25 @@ def test_the_contract_probes_the_output_capable_definition() -> None:
     therefore a producer on one side and not the other — so the contract carries a case
     for it rather than leaving the difference to be discovered in a corpus run."""
     assert any(c["name"] == "output_capable_only_via_arg_schemas" for c in CASES)
+
+
+def test_the_contract_states_what_the_sandbox_held() -> None:
+    """The stem exemption is filesystem-dependent, so the contract must pin the filesystem.
+
+    Without `sandbox_files` the two runtimes would each decide for themselves which files
+    exist, and a case would pass on both while describing different behaviour — the exact
+    silent fork this contract exists to prevent.
+    """
+    by_name = {c["name"]: c for c in CASES}
+    exemption_cases = [
+        "named_stem_resolving_to_a_real_file_is_not_hallucinated",
+        "named_stem_with_an_invented_extension_still_clarifies",
+        "a_bare_word_is_not_a_stem_even_when_the_file_exists",
+    ]
+    for name in exemption_cases:
+        assert name in by_name, f"the contract lost its {name!r} case"
+        assert "sandbox_files" in by_name[name], f"{name}: must state the sandbox listing"
+
+    # The older case is the control: "resize clip to 720p" -> clip.mp4 stays flagged with no
+    # sandbox at all, because `clip` carries no structural marker and is not a stem.
+    assert "sandbox_files" not in by_name["bare_stem_is_flagged_here_stems_resolve_later"]

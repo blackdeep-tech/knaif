@@ -1046,13 +1046,18 @@ def test_post_resolution_schema_validation_rejects_wrong_type():
 FFMPEG_SKILL_DIR = Path("skills") / "ffmpeg"
 
 
-def test_agent_exposes_result_formatter_and_artifact_runner_from_skill(sandbox):
-    """Loading the ffmpeg skill wires its RESULT_FORMATTER and ARTIFACT_RUNNER."""
+def test_agent_exposes_result_formatter_from_skill(sandbox):
+    """Loading the ffmpeg skill wires its RESULT_FORMATTER.
+
+    Not ARTIFACT_RUNNER: ffmpeg's artifacts are command lines and go through the eval
+    suite's chain runner, so it exports none (T5b). The hook itself is still wired for
+    skills that need it — see `test_agent_io_skill_has_no_result_formatter` for the
+    both-are-None case.
+    """
     agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=sandbox)
     assert agent.result_formatter is not None
     assert callable(agent.result_formatter)
-    assert agent.artifact_runner is not None
-    assert callable(agent.artifact_runner)
+    assert agent.artifact_runner is None
 
 
 def test_agent_io_skill_has_no_result_formatter(sandbox):
@@ -1132,6 +1137,61 @@ def test_hallucination_guard_flags_invented_input():
     plan = [{"tool": "compress_video", "args": {"inputs": ["made_up.mp4"]}}]
     flagged = CommandAgent._hallucinated_filename(plan, "compress my video")
     assert flagged == "made_up.mp4"
+
+
+def test_hallucination_guard_allows_a_stem_the_user_named(tmp_path):
+    """The user names a file without its extension; the model supplies the real one.
+
+    People say "clip_4k", not "clip_4k.mp4". The guard used to test the FULL filename as a
+    substring of the utterance, so the model resolving the stem correctly — to a file that
+    actually exists — was overridden with a clarify. The T6a control arm lost **eight**
+    utterances this way (`evals/runs/2026-09-12_t6a-control_success/report.md`), spread across
+    `resize`, `speed`, `strip_audio`, `social`, `trim`, `complex` and `reverse`, which is why
+    no single slice made it visible.
+    """
+    plan = [{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080}}]
+    flagged = CommandAgent._hallucinated_filename(
+        plan, "downscale clip_4k to 1920x1080", known_files={"clip_4k.mp4"}
+    )
+    assert flagged is None
+
+
+def test_hallucination_guard_still_flags_a_named_stem_with_an_invented_extension():
+    """Naming the stem does not license inventing which file it is.
+
+    `ffmpeg_228`: "join clip.mov and clip_4k together" → the model planned `clip_4k.mov`,
+    guessing the extension from the other input. `clip_4k.mp4` is the file that exists, so the
+    plan names a file that does not — still a hallucination, and the clarify is right.
+    """
+    plan = [{"tool": "concat_video", "args": {"inputs": ["clip.mov", "clip_4k.mov"]}}]
+    flagged = CommandAgent._hallucinated_filename(
+        plan, "join clip.mov and clip_4k together", known_files={"clip.mov", "clip_4k.mp4"}
+    )
+    assert flagged == "clip_4k.mov"
+
+
+def test_hallucination_guard_does_not_treat_a_bare_word_as_a_stem():
+    """ "the video" is English, not a filename — even when `video.mp4` happens to exist.
+
+    This is the case that decides the rule's shape. A plain substring test on the stem would
+    pass `video.mp4` for "make the video smaller" and `drei.mp4` for the German "drei Clips"
+    ("three clips"), turning two genuine hallucinations into silent plans. So a stem must carry
+    a structural marker — `_`, `-` or a digit — the same definition `planner._is_stem_candidate`
+    already uses to decide what is resolvable.
+    """
+    plan = [{"tool": "compress_video", "args": {"inputs": ["video.mp4"]}}]
+    flagged = CommandAgent._hallucinated_filename(
+        plan, "make the video smaller and ready for WhatsApp", known_files={"video.mp4"}
+    )
+    assert flagged == "video.mp4"
+
+
+def test_hallucination_guard_without_a_sandbox_keeps_the_strict_rule():
+    """No known files → nothing can be confirmed, so every unnamed filename is flagged."""
+    plan = [{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080}}]
+    assert (
+        CommandAgent._hallucinated_filename(plan, "downscale clip_4k to 1920x1080") == "clip_4k.mp4"
+    )
 
 
 def test_hallucination_guard_ignores_output_filename():

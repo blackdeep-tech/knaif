@@ -6,8 +6,8 @@ import copy
 import json
 import re
 import time
-from collections.abc import Iterator
-from pathlib import Path
+from collections.abc import Collection, Iterator
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from .core_tools import CORE_TOOL_DEFS
@@ -19,6 +19,7 @@ from .planner import (
     _VALID_FILE_TYPES,
     StemAmbiguousError,
     StemNotFoundError,
+    _is_stem_candidate,
     _resolve_path,
     apply_defaults,
     classify_preflight_errors,
@@ -37,6 +38,22 @@ from .skill import Skill
 
 _TERMINAL_TOOLS = frozenset({"done", "clarify", "reject"})
 _FILENAME_RE = re.compile(r"\.[a-z][a-z0-9]{1,4}$", re.IGNORECASE)
+
+
+def _named_by_stem(value: str, u_lower: str, known: set[str]) -> bool:
+    """Did the user name this file by its stem, and is the stem's file really there?
+
+    Both halves are required — see :meth:`CommandAgent._hallucinated_filename` for why
+    either alone admits a hallucination. ``_is_stem_candidate`` is reused rather than
+    re-derived so "what counts as a stem" has one definition in the codebase: the
+    resolver and the guard must agree, or the guard passes a name the resolver then
+    refuses.
+    """
+    name = PurePosixPath(value.replace("\\", "/")).name
+    stem = name.rsplit(".", 1)[0]
+    if not stem or not _is_stem_candidate(stem):
+        return False
+    return stem.lower() in u_lower and name.lower() in known
 
 
 def _step_failed(result: Any) -> bool:
@@ -423,6 +440,18 @@ class CommandAgent:
                         "duration_ms": 0.0,
                     }
                 ]
+
+        # Give the skill a chance to rewrite outputs that would destroy a file, and to
+        # rebind the steps that referred to them. Here rather than deeper because a
+        # collision is a property of the whole plan plus what is on disk, and neither is
+        # visible from inside a single step's handler. Default is a no-op
+        # (`Skill.resolve_output_collisions`); the naming policy stays in the skill.
+        if self.skill_instance is not None:
+            rebound = self.skill_instance.resolve_output_collisions(
+                intent_plan, sandbox=self.sandbox
+            )
+            if isinstance(rebound, list):
+                intent_plan = rebound
 
         # Expand each intent independently, preserving intent boundaries.
         intent_blocks: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
@@ -1011,7 +1040,9 @@ class CommandAgent:
         self._link_chain_intermediates(
             payload.get("plan") or [], user_utterance, self._output_capable
         )
-        hallucinated = self._hallucinated_filename(payload.get("plan") or [], user_utterance)
+        hallucinated = self._hallucinated_filename(
+            payload.get("plan") or [], user_utterance, self._sandbox_filenames()
+        )
         if hallucinated:
             return {
                 "plan": [
@@ -1222,17 +1253,61 @@ class CommandAgent:
             for container, key in targets:
                 container[key] = out
 
+    def _sandbox_filenames(self) -> frozenset[str]:
+        """Lowercased names of the files currently in the sandbox, for the guard.
+
+        Read at gate time rather than cached: the sandbox changes under a running agent
+        (a chain writes into it), and a stale listing would reject a file that is there.
+        Non-recursive and files-only, matching what stem resolution globs. Any OS error
+        yields an empty set, which restores the strict rule rather than failing the plan.
+        """
+        if self.sandbox is None:
+            return frozenset()
+        try:
+            return frozenset(p.name.lower() for p in self.sandbox.iterdir() if p.is_file())
+        except OSError:
+            return frozenset()
+
     @staticmethod
-    def _hallucinated_filename(plan: list[dict[str, Any]], utterance: str) -> str | None:
+    def _hallucinated_filename(
+        plan: list[dict[str, Any]],
+        utterance: str,
+        known_files: Collection[str] = (),
+    ) -> str | None:
         """Return any INPUT filename-like arg value missing from *utterance*, else None.
 
         The guard catches the model inventing *input* filenames the user never
         named. It deliberately ignores:
         - ``output`` arg values — output filenames are the model's to invent;
         - chained intermediates — a filename an earlier step declares it will
-          produce (its ``output``) and a later step consumes is legitimate.
+          produce (its ``output``) and a later step consumes is legitimate;
+        - a **stem the user did name**, when the value resolves to a file that is
+          actually there (*known_files*, the sandbox listing).
+
+        The last case is the one the substring test got wrong. People name files the
+        way they say them — "downscale clip_4k to 1920x1080" — and the model supplies
+        `clip_4k.mp4`, the real file. Testing the *full* filename against the utterance
+        then overrides a correct plan with a clarify. The T6a control arm lost eight
+        utterances to exactly that.
+
+        Two conditions keep the relaxation honest, and both are load-bearing:
+
+        * **the value must name a file that exists.** "join clip.mov and clip_4k
+          together" → `clip_4k.mov` keeps its clarify, because `clip_4k.mp4` is the
+          file; naming a stem does not license guessing which file it is.
+        * **the stem must look like a stem** — carrying ``_``, ``-`` or a digit, the
+          same test :func:`planner._is_stem_candidate` uses to decide what is
+          resolvable. Without it "make the video smaller" would pass `video.mp4` and
+          the German "drei Clips" ("three clips") would pass `drei.mp4`, turning two
+          genuine hallucinations into silent plans against the wrong file.
+
+        *known_files* is passed in rather than read here so the guard stays pure and
+        the L2 parity contract can state it (`sandbox_files` in
+        `contracts/parity/clarify_gate_cases.json`). Empty means nothing can be
+        confirmed, and the strict rule applies unchanged.
         """
         u_lower = utterance.lower()
+        known = {name.lower() for name in known_files}
         # Filenames the plan itself produces; consuming one downstream is not a
         # hallucination.
         produced: set[str] = set()
@@ -1254,8 +1329,11 @@ class CommandAgent:
                     continue
                 if value.lower() in produced:
                     continue
-                if value.lower() not in u_lower:
-                    return value
+                if value.lower() in u_lower:
+                    continue
+                if _named_by_stem(value, u_lower, known):
+                    continue
+                return value
         return None
 
     # ── re-planning loop ──────────────────────────────────────────────────────

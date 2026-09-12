@@ -115,10 +115,24 @@ fn clarify_gate_parity_cases() {
             load_registry_str(reg_yaml).unwrap_or_else(|e| panic!("{name}: registry {e}"));
         let output_capable = knaif_core::clarify_gate::output_capable_tools(&registry);
 
+        // The stem exemption is filesystem-dependent, so the case states the listing both
+        // runtimes must be given; absent means an empty sandbox and the strict rule.
+        let known_files: std::collections::HashSet<String> = case
+            .get("sandbox_files")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(|s| s.to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let got = knaif_core::clarify_gate::apply_clarify_gate(
             case["plan"].clone(),
             case["utterance"].as_str().unwrap(),
             &output_capable,
+            &known_files,
         );
         assert_eq!(
             got, case["expected_payload"],

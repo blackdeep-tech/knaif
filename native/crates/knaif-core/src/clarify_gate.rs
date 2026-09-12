@@ -11,12 +11,59 @@
 //! by an earlier step's `output` must appear — case-insensitively — as a substring of the
 //! utterance. The first value that doesn't is the hallucinated filename. Output names are the
 //! model's to invent, so they're exempt.
+//!
+//! One exemption: a value whose **stem** the user named, when that value is a file the sandbox
+//! actually holds (`known_files`). People say "downscale clip_4k to 1920x1080", and the model
+//! answering `clip_4k.mp4` — the real file — was being overridden with a clarify by the plain
+//! substring test. Both halves are required: `clip_4k.mov` for the same utterance stays flagged
+//! because no such file exists, and a stem must carry a structural marker (`_`, `-`, a digit) or
+//! "make the video smaller" would pass `video.mp4`. That marker rule is the same one the stem
+//! resolver uses, so the guard cannot admit a name the resolver would then refuse.
 
 use std::collections::HashSet;
 
 use serde_json::{json, Value};
 
 use crate::registry::Registry;
+
+/// Did the user name this file by its stem, and does the stem's file really exist?
+///
+/// Both halves are load-bearing — see the module header. `known_files` is the sandbox
+/// listing, lowercased by the caller; it is passed in rather than read here so the gate stays
+/// pure and the L2 contract can state it (`sandbox_files` in
+/// `contracts/parity/clarify_gate_cases.json`).
+fn named_by_stem(value: &str, u_lower: &str, known_files: &HashSet<String>) -> bool {
+    let name = value.rsplit(['/', '\\']).next().unwrap_or(value);
+    let stem = match name.rfind('.') {
+        Some(i) => &name[..i],
+        None => name,
+    };
+    if stem.is_empty() || !is_stem_candidate(stem) {
+        return false;
+    }
+    u_lower.contains(&stem.to_lowercase()) && known_files.contains(&name.to_lowercase())
+}
+
+/// A stem is an extension-less identifier carrying a structural marker (`_`, `-` or a digit).
+/// Mirrors Python `planner._is_stem_candidate`: bare words like "video" or "clip" are English,
+/// not filenames, and treating them as stems turns a hallucination into a silent plan.
+fn is_stem_candidate(stem: &str) -> bool {
+    let mut chars = stem.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+    if !stem
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return false;
+    }
+    stem.chars()
+        .any(|c| c == '_' || c == '-' || c.is_ascii_digit())
+}
 
 /// Terminal control tools carry no file inputs (mirrors Python `_TERMINAL_TOOLS`).
 const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
@@ -51,6 +98,7 @@ pub fn apply_clarify_gate(
     mut payload: Value,
     utterance: &str,
     output_capable: &HashSet<String>,
+    known_files: &HashSet<String>,
 ) -> Value {
     if let Some(steps) = payload.get_mut("plan").and_then(Value::as_array_mut) {
         link_chain_intermediates(steps, utterance, output_capable);
@@ -58,7 +106,7 @@ pub fn apply_clarify_gate(
     let Some(steps) = payload.get("plan").and_then(Value::as_array) else {
         return payload;
     };
-    if let Some(name) = hallucinated_filename(steps, utterance) {
+    if let Some(name) = hallucinated_filename(steps, utterance, known_files) {
         let q =
             format!("You didn't mention '{name}' in your request — which file should I work on?");
         payload["plan"] = json!([{ "tool": "clarify", "args": { "question": q } }]);
@@ -174,7 +222,11 @@ fn producer_shape(step: &Value) -> (bool, bool) {
 }
 
 /// The first invented input filename in `plan`, or `None`. See module docs for the rule.
-pub fn hallucinated_filename(plan: &[Value], utterance: &str) -> Option<String> {
+pub fn hallucinated_filename(
+    plan: &[Value],
+    utterance: &str,
+    known_files: &HashSet<String>,
+) -> Option<String> {
     let u_lower = utterance.to_lowercase();
 
     // Filenames the plan itself produces (an earlier step's `output`); consuming one downstream
@@ -213,9 +265,13 @@ pub fn hallucinated_filename(plan: &[Value], utterance: &str) -> Option<String> 
                 if produced.contains(&vl) {
                     continue; // produced by an earlier step
                 }
-                if !u_lower.contains(&vl) {
-                    return Some(v.to_string());
+                if u_lower.contains(&vl) {
+                    continue;
                 }
+                if named_by_stem(v, &u_lower, known_files) {
+                    continue; // the user named the stem and this file is really there
+                }
+                return Some(v.to_string());
             }
         }
     }
@@ -258,7 +314,11 @@ mod tests {
     }
 
     fn gate(payload: Value, utterance: &str) -> Value {
-        apply_clarify_gate(payload, utterance, &HashSet::new())
+        apply_clarify_gate(payload, utterance, &HashSet::new(), &HashSet::new())
+    }
+
+    fn files(names: &[&str]) -> HashSet<String> {
+        names.iter().map(|n| n.to_lowercase()).collect()
     }
 
     #[test]
@@ -308,7 +368,12 @@ mod tests {
             {"tool": "rotate_video", "args": {"inputs": ["clip.mp4"], "angle": 90}},
             {"tool": "compress_video", "args": {"inputs": ["clip_rotated.mp4"]}},
         ]));
-        let out = apply_clarify_gate(p, "rotate clip.mp4 90 degrees then compress it", &capable);
+        let out = apply_clarify_gate(
+            p,
+            "rotate clip.mp4 90 degrees then compress it",
+            &capable,
+            &HashSet::new(),
+        );
         assert_eq!(out["plan"][0]["tool"], "rotate_video");
         assert_eq!(out["plan"][0]["args"]["output"], "clip_rotated.mp4");
         assert_eq!(out["plan"].as_array().unwrap().len(), 2);
@@ -324,6 +389,7 @@ mod tests {
         let out = apply_clarify_gate(
             p,
             "rotate clip.mp4 90 degrees then compress it",
+            &HashSet::new(),
             &HashSet::new(),
         );
         assert_eq!(out["plan"][0]["tool"], "clarify");
@@ -361,5 +427,59 @@ mod tests {
         assert!(!looks_like_filename("H.264")); // digit-led ext
         assert!(!looks_like_filename("e.g")); // 1-char ext
         assert!(!looks_like_filename("file.")); // empty ext
+    }
+
+    // ── the stem exemption (mirrors Python's four tests in test_agent.py) ────────────────
+
+    #[test]
+    fn named_stem_resolving_to_a_real_file_is_not_hallucinated() {
+        let p = plan(
+            json!([{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080}}]),
+        );
+        let out = apply_clarify_gate(
+            p,
+            "downscale clip_4k to 1920x1080",
+            &HashSet::new(),
+            &files(&["clip.mp4", "clip_4k.mp4"]),
+        );
+        assert_eq!(out["plan"][0]["tool"], "resize_video");
+    }
+
+    #[test]
+    fn named_stem_with_an_invented_extension_still_clarifies() {
+        // clip_4k.mp4 is the file; the model took the extension from the other input.
+        let p = plan(
+            json!([{"tool": "concat_video", "args": {"inputs": ["clip.mov", "clip_4k.mov"]}}]),
+        );
+        let out = apply_clarify_gate(
+            p,
+            "join clip.mov and clip_4k together",
+            &HashSet::new(),
+            &files(&["clip.mov", "clip_4k.mp4"]),
+        );
+        assert_eq!(out["plan"][0]["tool"], "clarify");
+    }
+
+    #[test]
+    fn a_bare_word_is_not_a_stem_even_when_the_file_exists() {
+        // "the video" is English. Without the structural-marker rule this would plan against
+        // a file the user never named.
+        let p = plan(json!([{"tool": "compress_video", "args": {"inputs": ["video.mp4"]}}]));
+        let out = apply_clarify_gate(
+            p,
+            "make the video smaller",
+            &HashSet::new(),
+            &files(&["video.mp4"]),
+        );
+        assert_eq!(out["plan"][0]["tool"], "clarify");
+    }
+
+    #[test]
+    fn without_a_listing_the_strict_rule_holds() {
+        let p = plan(
+            json!([{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080}}]),
+        );
+        let out = gate(p, "downscale clip_4k to 1920x1080");
+        assert_eq!(out["plan"][0]["tool"], "clarify");
     }
 }

@@ -1,6 +1,6 @@
 {
   "_comment": "L2 clarify-gate contract. The gate is deterministic (no model), it fires on ~17% of the ffmpeg corpus in the native runtime, and nothing previously proved Python's equivalent fires on the same rows. Given (utterance, plan, registry) both runtimes must produce the same post-gate payload: the plan with chain intermediates bound to their producer, or a single clarify step. Consumed by python/core/tests/test_clarify_gate_parity.py and `clarify_gate_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
-  "_stage": "The stage is `link_chain_intermediates -> hallucinated-filename guard`, in that order. Python composes it in CommandAgent.infer; native in knaif_core::apply_clarify_gate. Comparing either half alone would violate Rule 2.",
+  "_stage": "The stage is `link_chain_intermediates -> hallucinated-filename guard`, in that order. Python composes it in CommandAgent.infer; native in knaif_core::apply_clarify_gate. Comparing either half alone would violate Rule 2. A case may declare `sandbox_files`: the filenames present in the agent's sandbox at gate time. The guard exempts a value whose STEM the user named when that value is one of those files, so both runtimes must be given the same listing to agree. Absent means an empty sandbox — nothing can be confirmed, and the strict substring rule applies.",
   "_expected_values": "Produced by the reference runtime (Python CommandAgent._link_chain_intermediates then ._hallucinated_filename). DO NOT regenerate to make a failing test pass.",
   "_coverage": {
     "ubuntu": "CI",
@@ -345,6 +345,107 @@
             "tool": "clarify",
             "args": {
               "question": "You didn't mention 'clip.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "named_stem_resolving_to_a_real_file_is_not_hallucinated",
+      "why": "People name files the way they say them. 'downscale clip_4k to 1920x1080' names the stem; the model supplies clip_4k.mp4, the file that is actually there. Testing the full filename as a substring of the utterance overrode that correct plan with a clarify and cost the T6a control arm eight utterances across seven slices (evals/runs/2026-09-12_t6a-control_success/report.md).",
+      "registry": "demo",
+      "utterance": "downscale clip_4k to 1920x1080",
+      "sandbox_files": [
+        "clip.mp4",
+        "clip_4k.mp4",
+        "clip_no_audio.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_4k.mp4"
+              ],
+              "height": 1080
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_4k.mp4"
+              ],
+              "height": 1080
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "named_stem_with_an_invented_extension_still_clarifies",
+      "why": "Naming a stem does not license guessing which file it is. ffmpeg_228: 'join clip.mov and clip_4k together' -> the model planned clip_4k.mov, taking the extension from the other input, while clip_4k.mp4 is the file. The value names nothing that exists, so the clarify is correct - this is the case that forces the rule to check the sandbox rather than trusting the stem alone.",
+      "registry": "demo",
+      "utterance": "join clip.mov and clip_4k together",
+      "sandbox_files": [
+        "clip.mov",
+        "clip_4k.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "clip.mov",
+                "clip_4k.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'clip_4k.mov' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_bare_word_is_not_a_stem_even_when_the_file_exists",
+      "why": "The case that decides the rule's shape. 'make the video smaller' contains 'video', and a plain stem-substring test would pass video.mp4 - a genuine hallucination - whenever such a file happened to exist. A stem must carry a structural marker (_, - or a digit), the same definition the stem resolver uses, so the guard and the resolver cannot disagree about what is resolvable.",
+      "registry": "demo",
+      "utterance": "make the video smaller",
+      "sandbox_files": [
+        "video.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "video.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'video.mp4' in your request — which file should I work on?"
             }
           }
         ]

@@ -1275,7 +1275,12 @@ impl PlanSession {
         // `_link_chain_intermediates` + `_hallucinated_filename`): bind undeclared chain outputs,
         // then downgrade to a clarify when the model invented an input file the utterance never
         // named. Applied here so both `run` and `plan` inherit it, matching Python's `infer`.
-        let gated = knaif_core::apply_clarify_gate(payload, &utterance, &self.output_capable);
+        // The guard's stem exemption needs to know which files are really there. Read from the
+        // same directory stem resolution uses two lines down — `sandbox` when configured, else
+        // the cwd — so the guard cannot admit a name the resolver would then refuse.
+        let known_files = listed_filenames(sandbox.unwrap_or(base));
+        let gated =
+            knaif_core::apply_clarify_gate(payload, &utterance, &self.output_capable, &known_files);
         // Extension-less stems (`clip_4k`, `silent_clip`) resolve against the working directory,
         // or become a clarify when it cannot decide — port of Python's `resolve_stems` call in
         // `CommandAgent._execute_steps`, applied at the same stage (N2). Without it native
@@ -1292,6 +1297,21 @@ impl PlanSession {
         emit_plan_dump(plan_dump_enabled(), &gated);
         Ok(gated)
     }
+}
+
+/// Lowercased names of the files directly inside `dir`, for the clarify gate's stem exemption.
+///
+/// Non-recursive and files-only, matching what stem resolution globs. An unreadable directory
+/// yields an empty set, which restores the strict substring rule rather than failing the plan.
+fn listed_filenames(dir: &Path) -> std::collections::HashSet<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return std::collections::HashSet::new();
+    };
+    entries
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().to_lowercase())
+        .collect()
 }
 
 /// Infer a plan and, on parse/validation failure, retry once with the error fed back (port of the
