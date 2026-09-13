@@ -16,7 +16,25 @@ LOG="${1:?usage: watch_run_progress.sh <log-file> [total-rows]}"
 TOTAL="${2:-0}"
 INTERVAL="${WATCH_INTERVAL:-2}"
 
-progress_count() { grep -c 'file(s)' "$LOG" 2>/dev/null || echo 0; }
+# One finished row, in either producer's format. `evalsuite native --verbose` carries an
+# `N file(s)` column; `evalsuite run --verbose` does not — it prints
+# `  [ffmpeg_001]  OK    plan   877ms  <utterance>` — so matching on `file(s)` alone counted
+# zero rows forever for the more common of the two. Both start with a bracketed row id, and in
+# both the outcome is field 3, which is what the tally below reads. The latency column is
+# part of the pattern on purpose: ffmpeg's own stderr (`[in#0 @ 0x...] Error opening ...`)
+# also starts with a bracketed token, and without it the count ran to 1458 on an 851-row
+# log. Verified against a finished run: 851 rows, and the tally reproduces the
+# scoreboard's by_outcome exactly (plan 580, clarify 202, reject 44, error 24,
+# parse_error 1).
+ROW_RE='(^[[:space:]]*\[[^][:space:]]+\][[:space:]]+[A-Za-z]+[[:space:]]+[a-z_]+[[:space:]]+[0-9.]+ms)|file\(s\)'
+
+# `grep -c` PRINTS 0 and EXITS 1 when nothing matches, so `|| echo 0` appended a second line
+# and every later `[ "$n" -gt 0 ]` died on a two-line "0" with "integer expression
+# expected". Guard on the
+# file existing instead, and let grep's own 0 stand.
+progress_count() {
+  if [ -f "$LOG" ]; then grep -cE "$ROW_RE" "$LOG" 2>/dev/null; else echo 0; fi
+}
 
 start_epoch=$(date +%s)
 start_n=$(progress_count)
@@ -42,7 +60,7 @@ while true; do
     baseline_set=1
   fi
 
-  tally=$(grep 'file(s)' "$LOG" 2>/dev/null | awk '{c[$3]++} END {for (k in c) printf "%s=%d ", k, c[k]}')
+  tally=$(grep -E "$ROW_RE" "$LOG" 2>/dev/null | awk '{c[$3]++} END {for (k in c) printf "%s=%d ", k, c[k]}')
   elapsed=$(( $(date +%s) - start_epoch ))
   observed=$(( n - start_n ))
 
