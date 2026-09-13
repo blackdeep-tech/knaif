@@ -204,3 +204,58 @@ def test_an_output_that_lands_elsewhere_is_not_a_self_overwrite(tmp_path: Path) 
     plan, subs = rebind_colliding_outputs([_convert("a/clip.mp4", "a/clip.mp4")], tmp_path)
     assert subs == []
     assert plan[0]["args"]["output"] == "a/clip.mp4"
+
+
+# ── the base an output resolves against is per-tool, not universal ───────────
+
+
+def _concat(sandbox: Path, **args):
+    plan = [{"tool": "concat_video", "args": dict(args)}]
+    out = rebind_colliding_outputs(plan, sandbox)
+    steps = out[0] if isinstance(out, tuple) else out
+    return steps[0]["args"].get("output")
+
+
+def _two_inputs(sandbox: Path) -> None:
+    sub = sandbox / "sub"
+    sub.mkdir(parents=True, exist_ok=True)
+    for name in ("a.mp4", "b.mp4"):
+        (sub / name).write_bytes(b"x")
+
+
+def test_concat_output_colliding_with_an_input_is_still_renamed(tmp_path: Path) -> None:
+    """`concat_video` resolves its output against the SANDBOX, not the first input's parent.
+
+    Every other mode goes through `_build_one_recipe`, which resolves a relative output
+    against `input_path.parent`. `RunConcatStep` resolves it against `ctx.sandbox`. Assuming
+    the first rule for both put the comparison in a directory concat never writes to, so
+    joining `sub/a.mp4` and `sub/b.mp4` into `sub/a.mp4` compared `<sandbox>/sub/sub/a.mp4`
+    against the inputs, found no collision, and left the plan to truncate its own input under
+    `-y` — the exact failure this module exists to prevent.
+    """
+    _two_inputs(tmp_path)
+    got = _concat(tmp_path, inputs=["sub/a.mp4", "sub/b.mp4"], output="sub/a.mp4")
+    assert got != "sub/a.mp4", "the output still names one of its own inputs"
+
+
+def test_concat_output_that_collides_with_nothing_is_left_alone(tmp_path: Path) -> None:
+    """The same wrong base in the other direction: a spurious rename.
+
+    `a.mp4` at the sandbox root collides with nothing — the inputs are in `sub/`. Resolving
+    it against the first input's parent made it `<sandbox>/sub/a.mp4`, which IS an input, so
+    a perfectly good destination was renamed to `a_converted.mp4` and the user got a file
+    they did not ask for.
+    """
+    _two_inputs(tmp_path)
+    assert _concat(tmp_path, inputs=["sub/a.mp4", "sub/b.mp4"], output="a.mp4") == "a.mp4"
+
+
+def test_a_per_file_mode_still_resolves_against_its_input(tmp_path: Path) -> None:
+    """The control: convert_video's output IS relative to its input's directory."""
+    _two_inputs(tmp_path)
+    plan = [{"tool": "convert_video", "args": {"inputs": ["sub/a.mp4"], "output": "a.mp4"}}]
+    out = rebind_colliding_outputs(plan, tmp_path)
+    steps = out[0] if isinstance(out, tuple) else out
+    assert (
+        steps[0]["args"]["output"] != "a.mp4"
+    ), "sub/a.mp4 -> a.mp4 resolves to the input itself for a per-file mode"

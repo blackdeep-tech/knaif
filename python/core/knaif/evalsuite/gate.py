@@ -108,8 +108,25 @@ def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
         ),
         # Shared contracts both runtimes read.
         "contracts": _tree("contracts", ("**/*.yaml", "**/*.json")),
-        # Shared planning code: changes plans for every skill, touching no bundle.
-        "python_core": _tree("python/core/knaif", ("planner.py", "prompt.py", "registry.py")),
+        # Shared planning AND execution code: changes plans for every skill, touching no
+        # bundle. `agent.py` is here because the pipeline it owns — tool dispatch, expansion,
+        # the clarify gate — decides what a run produces just as surely as the planner does;
+        # leaving it out meant the gate could not see the runtime being rewritten.
+        "python_core": _tree(
+            "python/core/knaif", ("planner.py", "prompt.py", "registry.py", "agent.py")
+        ),
+        # What turns a run into a number. A scoring or outcome-policy change makes two
+        # scoreboards incomparable even when nothing about the runtime moved — the same
+        # reason `POLICY_VERSION` exists, expressed as a fingerprint rather than as a stamp.
+        "grading": _tree(
+            "python/core/knaif/evalsuite", ("scoring.py", "outcomes.py", "acceptance.py")
+        ),
+        # L3 and L4 are claims about the SHIPPED BINARY. Its sources were not fingerprinted at
+        # all, so the native runtime could be rewritten under a record still reading "valid".
+        "native": _tree(
+            ".",
+            ("native/crates/*/src/**/*.rs", "apps/cli/src/**/*.rs", "skills/*/native/src/**/*.rs"),
+        ),
         # The corpus the run graded.
         "corpus": _file(f"skills/{skill}/data/eval.jsonl"),
         # "success" is a moving target — hash what grades, not what it is called.
@@ -261,7 +278,14 @@ def record_layers(
     record = load_acceptance_record(skill, root) or {"skill": skill, "layers": {}}
     current = evidence_tuple(skill, root)
     for name, entry in layers.items():
-        record["layers"][name] = {**entry, "evidence": current}
+        # A layer that brings its OWN fingerprint keeps it. The fingerprint belongs to the
+        # measurement, not to the moment someone wrote it down: stamping the present tree onto
+        # a saved run from before a planner change turned expired evidence back into valid
+        # evidence just by re-recording it — the single thing this record exists to prevent.
+        # L1/L2 are recorded by `just check` against the tree as it is, so they pass none and
+        # correctly take the current one.
+        captured = entry.get("evidence")
+        record["layers"][name] = {**entry, "evidence": captured or current}
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 

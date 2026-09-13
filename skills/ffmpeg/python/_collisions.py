@@ -95,8 +95,16 @@ def _resolve_input(raw: str, sandbox: Path | None) -> Path:
     return (sandbox / p) if sandbox is not None else p.resolve()
 
 
-def _output_base(args: dict[str, Any], sandbox: Path | None) -> Path | None:
-    """Directory a relative *output* resolves against: the first input's parent.
+#: Tools whose handler resolves a relative output against the **sandbox** rather than against
+#: the first input's directory. `RunConcatStep` does exactly that (it resolves `output` against
+#: `ctx.sandbox`), while every per-file mode goes through `_build_one_recipe` and resolves
+#: against `input_path.parent`. One rule for both is wrong in both directions: a genuine
+#: collision survives, and a perfectly good destination gets renamed.
+_SANDBOX_OUTPUT_TOOLS = frozenset({"concat_video", "run_concat"})
+
+
+def _output_base(tool: str, args: dict[str, Any], sandbox: Path | None) -> Path | None:
+    """Directory a relative *output* resolves against — which depends on the tool.
 
     **Inputs and outputs do not share a base**, and conflating them is a real bug rather
     than a tidiness point. ``_build_one_recipe`` resolves an input to an absolute probe path
@@ -106,7 +114,17 @@ def _output_base(args: dict[str, Any], sandbox: Path | None) -> Path | None:
     resolved the input twice, which moved every comparison into a directory that does not
     exist: the disk check then found nothing and the fallback happily chose a name already
     holding a file.
+
+    **And the base is not the same for every tool.** ``concat_video`` writes one output for
+    many inputs, so its handler resolves it against the sandbox; "the first input's parent"
+    is meaningless there and got it wrong both ways. Joining ``sub/a.mp4`` and ``sub/b.mp4``
+    into ``sub/a.mp4`` compared ``<sandbox>/sub/sub/a.mp4``, found no collision, and left the
+    plan to truncate its own input under ``-y``; asking for ``a.mp4`` at the sandbox root
+    resolved to ``<sandbox>/sub/a.mp4``, which *is* an input, and renamed a destination that
+    collided with nothing.
     """
+    if tool in _SANDBOX_OUTPUT_TOOLS:
+        return sandbox
     for container, key in _input_refs(args):
         return _resolve_input(str(container[key]), sandbox).parent
     return sandbox
@@ -158,7 +176,7 @@ def rebind_colliding_outputs(
         if step.get("tool") in _TERMINAL_TOOLS:
             continue
         args = step.get("args") or {}
-        out_base = _output_base(args, sandbox)
+        out_base = _output_base(str(step.get("tool") or ""), args, sandbox)
         for container, key in _input_refs(args):
             plan_inputs.add(_resolve_input(str(container[key]), sandbox))
         for key in _OUTPUT_KEYS:
@@ -170,7 +188,7 @@ def rebind_colliding_outputs(
         if step.get("tool") in _TERMINAL_TOOLS:
             continue
         args = step.get("args") or {}
-        out_base = _output_base(args, sandbox)
+        out_base = _output_base(str(step.get("tool") or ""), args, sandbox)
 
         out_key = next((k for k in _OUTPUT_KEYS if _is_filename(args.get(k))), None)
         if out_key is None:

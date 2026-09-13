@@ -43,24 +43,36 @@ statuses:
 
 # What each layer's evidence is, and what invalidates it. `invalidated_by` names the members of
 # the evidence tuple a layer depends on: change one and that layer's record goes stale.
+#
+# Two kinds of member. TREE-SCOPED ones (`contracts`, `python_core`, `bundle`, `corpus`,
+# `verifier`, `settings`, `native`, `grading`) are computed from the working tree by
+# `evidence_tuple`. RUN-SCOPED ones (`model`, `native_binary`, `policy`) cannot be: the GGUF and
+# the built binary are not in the tree, and which model a run used is a fact of that run. They
+# are carried in the fingerprint the measurement captures for itself, which is why a layer that
+# brings its own `evidence` keeps it rather than being re-stamped with the present tree's.
+# `_layer_state` skips any key the current tuple does not carry, so a tree-scoped key that is
+# named here and never computed would be silently ignored — `test_every_tree_scoped_dependency_is_computed`
+# is what stops that from happening quietly.
 layers:
   L1:
     what: "Contract conformance — prompt, retrieval, generation settings. No model."
     evidence: "contracts/parity/*.json green on both runtimes (`just check-contracts`)."
-    invalidated_by: [contracts, python_core, bundle]
+    invalidated_by: [contracts, python_core, bundle, native]
   L2:
     what: "Deterministic pipeline — parse/validate/defaults/expand/gate, ordered execution."
     evidence: "contracts/parity/planner_cases.json + apps/cli/tests/executor_semantics.rs."
-    invalidated_by: [contracts, python_core, bundle]
+    invalidated_by: [contracts, python_core, bundle, native]
   L3:
     what: "Behavioral parity on the real corpus. Needs a GGUF."
     evidence: "A run directory under evals/parity/ with report.json + meta.json."
-    invalidated_by: [contracts, python_core, bundle, corpus, model, native_binary, settings]
+    invalidated_by:
+      [contracts, python_core, bundle, corpus, model, native_binary, settings, native, grading]
   L4:
     what: "The shipped path: `knaif run` executing for real, graded on produced files."
     evidence: "An acceptance record under evals/acceptance/<skill>.json."
     invalidated_by:
-      [contracts, python_core, bundle, corpus, model, native_binary, settings, verifier, policy]
+      [contracts, python_core, bundle, corpus, model, native_binary, settings, verifier, policy,
+       native, grading]
 
 # THE ACCEPTANCE THRESHOLD IS DELIBERATELY NOT STATED HERE, and that is a gap rather than a
 # design choice. L3's pass/fail rate is an open owner decision: the two runtimes link different

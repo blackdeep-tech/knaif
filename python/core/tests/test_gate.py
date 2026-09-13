@@ -51,8 +51,21 @@ def tree(tmp_path: Path) -> Path:
     (tmp_path / "contracts" / "runtime" / "generation.yaml").write_text(
         "max_tokens: 512\n", "utf-8"
     )
-    for name in ("planner.py", "prompt.py", "registry.py"):
+    for name in ("planner.py", "prompt.py", "registry.py", "agent.py"):
         (tmp_path / "python" / "core" / "knaif" / name).write_text("x = 1\n", encoding="utf-8")
+    # The miniature repo must carry the same *kinds* of file the real one does, or a dependency
+    # the contract names records as None and every layer reads "does not pin".
+    (tmp_path / "python" / "core" / "knaif" / "evalsuite").mkdir(parents=True)
+    for name in ("scoring.py", "outcomes.py", "acceptance.py"):
+        (tmp_path / "python" / "core" / "knaif" / "evalsuite" / name).write_text(
+            "x = 1\n", encoding="utf-8"
+        )
+    (tmp_path / "native" / "crates" / "knaif-core" / "src").mkdir(parents=True)
+    (tmp_path / "native" / "crates" / "knaif-core" / "src" / "planner.rs").write_text(
+        "fn main() {}\n", encoding="utf-8"
+    )
+    (tmp_path / "apps" / "cli" / "src").mkdir(parents=True)
+    (tmp_path / "apps" / "cli" / "src" / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
     (tmp_path / "skills" / "demo" / "skill.yaml").write_text("name: demo\n", encoding="utf-8")
     (tmp_path / "skills" / "demo" / "data" / "eval.jsonl").write_text("{}\n", encoding="utf-8")
     (tmp_path / "skills" / "demo" / "eval" / "verifiers.py").write_text("V = 1\n", encoding="utf-8")
@@ -194,3 +207,97 @@ def test_every_skill_declares_a_status_the_contract_knows() -> None:
         native = (manifest.get("runtimes") or {}).get("native") or {}
         if "status" in native:
             assert native["status"] in contract["statuses"], f"{path}: {native['status']}"
+
+
+# ── what the fingerprint must cover, and when it must be taken ───────────────
+
+
+def _write(tree: Path, rel: str, text: str) -> Path:
+    path = tree / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        # The execution pipeline itself: tool dispatch, expansion, the clarify gate. Changing
+        # it changes what every run produces, for every skill, touching no bundle.
+        "python/core/knaif/agent.py",
+        # What turns a run into a number. A scoring change makes two scoreboards
+        # incomparable even when nothing about the runtime moved.
+        "python/core/knaif/evalsuite/scoring.py",
+        "python/core/knaif/evalsuite/outcomes.py",
+        # L3 and L4 are claims about the SHIPPED BINARY. Its sources were not fingerprinted at
+        # all, so the native runtime could be rewritten under a "valid" native-parity record.
+        "native/crates/knaif-core/src/planner.rs",
+        "apps/cli/src/main.rs",
+    ],
+)
+def test_editing_shared_execution_or_grading_code_invalidates_the_evidence(
+    tree: Path, rel: str
+) -> None:
+    """Every one of these could change what a run produces, and none was fingerprinted.
+
+    Found by review: changing all four of `agent.py`, the shared scoring code, the Rust core
+    and the native CLI left the tuple identical and L4 still reading valid. A gate that cannot
+    notice the runtime was rewritten is not a gate.
+    """
+    _write(tree, rel, "x = 1\n")
+    _record_all(tree)
+    assert evaluate_skill("demo", tree, "supported").derived == "supported"
+
+    _write(tree, rel, "x = 2\n")
+    states = {s.state for s in evaluate_skill("demo", tree, "supported").layers}
+    assert "stale" in states, f"editing {rel} left the evidence looking current"
+
+
+def test_recording_an_old_run_does_not_make_it_current(tree: Path) -> None:
+    """The fingerprint belongs to the measurement, not to the moment it was written down.
+
+    `record_layers` stamped `evidence_tuple(now)` onto whatever it was handed — including a
+    saved run directory from before a planner change. So an expired record could be refreshed
+    into validity by re-recording the same old result, which is the one thing the record is
+    supposed to make impossible. A layer that carries its own captured fingerprint must keep
+    it.
+    """
+    _record_all(tree)
+    captured = evidence_tuple("demo", tree)
+
+    # The tree moves on: this is what made the old measurement stale.
+    _write(tree, "python/core/knaif/planner.py", "x = 99\n")
+    assert {s.state for s in evaluate_skill("demo", tree, "supported").layers} == {"stale"}
+
+    # Re-recording the SAME old measurement, carrying the fingerprint it was taken under.
+    record_layers(
+        "demo",
+        tree,
+        {"L3": {"summary": "the same old run", "passed": True, "evidence": captured}},
+    )
+    l3 = next(s for s in evaluate_skill("demo", tree, "supported").layers if s.layer == "L3")
+    assert l3.state == "stale", "an old run was refreshed into validity by re-recording it"
+
+
+#: Members of `invalidated_by` that cannot be computed from the working tree, and must instead
+#: arrive in the fingerprint a measurement captures for itself. The GGUF and the built binary
+#: are not in the tree at all, and which model a run used is a fact of that run.
+_RUN_SCOPED_EVIDENCE = {"model", "native_binary", "policy"}
+
+
+def test_every_tree_scoped_dependency_is_computed(tree: Path) -> None:
+    """A key named in `invalidated_by` but absent from the tuple is silently ignored.
+
+    `_layer_state` filters on `key in current`, so the contract can declare a dependency that
+    is never checked and nothing anywhere says so — the layer simply reads valid forever. This
+    is how `native` could be listed as the thing L3 and L4 are claims about while the Rust
+    sources were not fingerprinted at all.
+    """
+    contract = load_status_contract(tree)
+    computed = set(evidence_tuple("demo", tree))
+    for layer, spec in contract["layers"].items():
+        for key in spec.get("invalidated_by") or []:
+            assert key in computed or key in _RUN_SCOPED_EVIDENCE, (
+                f"{layer}.invalidated_by names {key!r}, which evidence_tuple never computes "
+                f"and which is not declared run-scoped — it would be skipped in silence"
+            )
