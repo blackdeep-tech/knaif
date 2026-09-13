@@ -100,7 +100,7 @@ Available tools:
     args: inputs (required), level (optional), normalize (optional), quality (optional), output (optional), preview (optional)
   - rotate_video: Rotate or flip one or more videos by a fixed angle or axis.
     args: inputs (required), angle (optional), flip (optional), quality (optional), output (optional), preview (optional)
-  - concat_video: Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided.
+  - concat_video: Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input.
     args: , inputs (optional), base (optional), append (optional), output (optional), target_resolution (optional), target_fps (optional)Examples:
   request: "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything."
   output:  {"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip1.mp4", "clip2.mp4"], "platform": "whatsapp", "quality": "visually_good", "preview": true}}]}

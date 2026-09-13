@@ -702,7 +702,14 @@ def _concat_filter_args(
     else:
         infos = []
         for inp in inputs:
-            if dry_run:
+            # Probe whenever the file is really there, dry-run included: ffprobe reads, it
+            # does not write, and `ctx.dry_run` is about side effects. The `inputs` path
+            # already has real dimensions in a dry run (inspect_media supplies them), so
+            # skipping the probe here made the *preview* of a base/append concat show a
+            # different filter graph from the one execution would build — the plan a user
+            # approves has to be the plan that runs. Absent files still fall back to the
+            # dummy info below, which is what the dry-run guard was protecting.
+            if dry_run and not Path(inp).exists():
                 infos.append(
                     {
                         "has_audio": True,
@@ -858,6 +865,27 @@ class RunConcatStep(Step):
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         """Concatenate multiple video files into one using ffmpeg filter_complex concat."""
         inputs = _assemble_concat_inputs(args)
+
+        # Resolve the inputs against the sandbox, exactly as `output` is resolved below.
+        # The `inputs` form arrives here already absolute — `resolve_inputs` ran during
+        # expansion — but `base`/`append` cannot be expanded that way, because they may be
+        # `$var` references that only exist at runtime, so they arrive as bare filenames.
+        # Leaving them bare made the self-probe in `_concat_filter_args` look for `clip.mp4`
+        # relative to the process cwd, find nothing, and emit **no normalization**: `concat`
+        # requires identical width, height and sample rate across its inputs, so any two
+        # clips that differ produced "Nothing was written into output file" and exit -22.
+        # Three of ffmpeg_244's four utterances died here, and every one used base/append.
+        # Already-absolute paths are unchanged, so this is a no-op for the `inputs` form.
+        base_dir = ctx.sandbox if ctx.sandbox is not None else ctx.root
+        if base_dir is not None:
+            resolved_inputs: list[str] = []
+            for inp in inputs:
+                path = Path(str(inp))
+                if not path.is_absolute():
+                    path = (base_dir / path).resolve()
+                    _assert_in_sandbox(path, ctx.sandbox)
+                resolved_inputs.append(str(path))
+            inputs = resolved_inputs
 
         output = str(args["output"])
         if not Path(output).is_absolute():

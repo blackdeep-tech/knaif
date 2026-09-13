@@ -586,8 +586,18 @@ def _build_one_recipe(
 
     # Audio-only inputs (no video stream): an audio operation must produce an
     # audio file in the input's format, not a video container with a re-encoded
-    # aac track. Only adjust_volume currently routes audio-only inputs here.
-    audio_only = mode == "adjust_volume" and not probe.get("video_codec") and not probe.get("width")
+    # aac track.
+    #
+    # `adjust_speed` joined `adjust_volume` here after `ffmpeg_226` ("pull mp3 from clip.mp4
+    # and apply 0.8x tempo") rendered `-vf setpts ... -c:v libx264 ... -c:a aac clip_speed.mp4`
+    # against a file with no video stream: a filter and an encoder for a stream that is not
+    # there, and the user's mp3 handed back as an mp4. **ffmpeg exited 0**, so only the
+    # artifact-level `audio_codec` criterion caught it — the failure mode this whole class of
+    # bug has, and the reason the rule belongs to the operation rather than to one tool.
+    _AUDIO_APPLICABLE_MODES = ("adjust_volume", "adjust_speed")
+    audio_only = (
+        mode in _AUDIO_APPLICABLE_MODES and not probe.get("video_codec") and not probe.get("width")
+    )
     if audio_only:
         container = (
             options.get("container")
@@ -596,6 +606,10 @@ def _build_one_recipe(
             or container
         )
         audio_codec = _audio_encoder_for(container)
+        # A lossless codec ignores a bitrate target and should not carry one (same rule as
+        # the container-mandated path below).
+        if audio_codec in ("flac", "pcm_s16le", "alac"):
+            audio_bitrate = None
 
     if container == "gif":
         video_encoder = ""
@@ -740,6 +754,8 @@ def _build_one_recipe(
         recipe["level"] = options.get("level")
         recipe["normalize"] = bool(options.get("normalize", False))
         recipe["audio_only"] = audio_only
+    if mode == "adjust_speed":
+        recipe["audio_only"] = audio_only
     if mode == "trim":
         recipe["trim"] = _normalize_trim(
             start=options.get("start"),
@@ -861,14 +877,19 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
     elif mode == "adjust_speed":
         speed = float(recipe.get("speed", 1.0))
         pts_factor = round(1.0 / speed, 6)
-        post += ["-vf", f"setpts={pts_factor}*PTS", "-af", f"atempo={speed}"]
-        video = recipe.get("video", {})
-        if video.get("encoder"):
-            post += ["-c:v", video["encoder"]]
-        if video.get("crf") is not None:
-            post += ["-crf", str(video["crf"])]
-        if video.get("preset"):
-            post += ["-preset", video["preset"]]
+        # The tempo filter is the request and always applies; `setpts` retimes a video stream
+        # an audio-only input does not have, and neither does the video encoder.
+        if recipe.get("audio_only"):
+            post += ["-af", f"atempo={speed}"]
+        else:
+            post += ["-vf", f"setpts={pts_factor}*PTS", "-af", f"atempo={speed}"]
+            video = recipe.get("video", {})
+            if video.get("encoder"):
+                post += ["-c:v", video["encoder"]]
+            if video.get("crf") is not None:
+                post += ["-crf", str(video["crf"])]
+            if video.get("preset"):
+                post += ["-preset", video["preset"]]
         audio = recipe.get("audio", {})
         if audio.get("codec"):
             post += ["-c:a", audio["codec"]]

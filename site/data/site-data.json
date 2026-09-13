@@ -805,7 +805,7 @@
             "base",
             "append"
           ],
-          "description": "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided.",
+          "description": "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input.",
           "name": "concat_video",
           "optional_args": [
             "inputs",

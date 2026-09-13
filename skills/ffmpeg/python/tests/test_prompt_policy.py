@@ -169,3 +169,25 @@ def test_lossless_is_a_quality_profile_not_a_refusal_trigger(
     assert "lossless" not in safety_block
     assert "lossless" not in scope_block
     assert "lossless" in prompt.lower(), "the quality-profile mapping went missing"
+
+
+# ── discoverable argument vocabulary ─────────────────────────────────────────
+
+
+def test_the_prompt_teaches_the_target_resolution_vocabulary(prompt: str) -> None:
+    """`concat_video` can already match another input's resolution — say so.
+
+    `ffmpeg_244` ("stitch clip.mov and clip.mp4 using the second clip's resolution") failed
+    on both of its scored utterances with `target_resolution: "auto"` and `"same"`, and the
+    engine refused: *Unrecognised scale value*. But `first` and `second` are accepted values
+    that mean exactly what the utterance asked for — the capability was there and nothing
+    the model could see mentioned it, so it invented a word.
+
+    A capability the prompt never names is a capability the model cannot use. This is the
+    cheapest class of eval failure there is: no code to write, only something to say.
+    """
+    assert "target_resolution" in prompt
+    for value in ("first", "second"):
+        assert (
+            f"'{value}'" in prompt or f'"{value}"' in prompt
+        ), f"the prompt never shows target_resolution={value!r}, so the model cannot pick it"

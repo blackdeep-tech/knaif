@@ -144,7 +144,7 @@ rotate_video:
     inputs: ["{utterance_after:rotate}"]
 
 concat_video:
-  description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided."
+  description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input."
   keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并]
   required_args: []
   optional_args: [inputs, base, append, output, target_resolution, target_fps]

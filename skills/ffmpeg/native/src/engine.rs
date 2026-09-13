@@ -364,13 +364,19 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
     } else if mode == "adjust_speed" {
         let speed = recipe.speed.unwrap_or(1.0);
         let pts = ((1.0 / speed) * 1e6).round() / 1e6;
-        post.extend([
-            "-vf".to_string(),
-            format!("setpts={}*PTS", py_float_str(pts)),
-            "-af".to_string(),
-            format!("atempo={}", py_float_str(speed)),
-        ]);
-        push_video(&mut post, &recipe.video, false);
+        // The tempo filter is the request and always applies; `setpts` retimes a video stream
+        // an audio-only input does not have, and neither does the video encoder.
+        if recipe.audio_only {
+            post.extend(["-af".to_string(), format!("atempo={}", py_float_str(speed))]);
+        } else {
+            post.extend([
+                "-vf".to_string(),
+                format!("setpts={}*PTS", py_float_str(pts)),
+                "-af".to_string(),
+                format!("atempo={}", py_float_str(speed)),
+            ]);
+            push_video(&mut post, &recipe.video, false);
+        }
         push_audio(&mut post, &recipe.audio, true);
     } else if mode == "rotate" {
         let mut filters: Vec<&str> = Vec::new();
@@ -795,8 +801,12 @@ pub fn build_one_recipe(
         .or_else(|| platform.and_then(|p| p.max_audio_bitrate.clone()))
         .or_else(|| Some("128k".to_string()));
 
-    // Audio-only inputs routed through adjust_volume produce an audio file, not a video container.
-    let audio_only = mode == "adjust_volume"
+    // An audio operation on an audio-only input produces an audio file in that file's own
+    // format, not a video container with a re-encoded aac track. `adjust_speed` joined
+    // `adjust_volume` here after ffmpeg_226 rendered `-vf setpts ... -c:v libx264 ... -c:a aac
+    // clip_speed.mp4` from an mp3 — a filter and an encoder for a stream that is not there,
+    // and ffmpeg exiting 0 while handing back the wrong file.
+    let audio_only = matches!(mode.as_str(), "adjust_volume" | "adjust_speed")
         && probe.video_codec.as_deref().is_none_or(str::is_empty)
         && probe.width.is_none_or(|w| w == 0);
     if audio_only {
@@ -812,6 +822,10 @@ pub fn build_one_recipe(
             })
             .unwrap_or(container);
         audio_codec = audio_encoder_for(vocab, &container);
+        // A lossless codec ignores a bitrate target and should not carry one.
+        if matches!(audio_codec.as_str(), "flac" | "pcm_s16le" | "alac") {
+            audio_bitrate = None;
+        }
     }
 
     if container == "gif" {
@@ -1049,6 +1063,7 @@ pub fn build_one_recipe(
         }
         "adjust_speed" => {
             recipe.speed = Some(options.speed.unwrap_or(1.0));
+            recipe.audio_only = audio_only;
         }
         _ => {}
     }
@@ -1212,6 +1227,35 @@ mod tests {
             post,
             s(&["-vf", "reverse", "-c:v", "libx264", "-crf", "23", "-an"])
         );
+    }
+
+    #[test]
+    fn adjust_speed_on_audio_only_drops_the_video_half() {
+        // ffmpeg_226: an mp3 in, and `-vf setpts` + `-c:v libx264` address a stream that is
+        // not there. The tempo filter is the request and must survive. Mirrors Python's
+        // skills/ffmpeg/python/tests/test_audio_only_speed.py.
+        let mut r = recipe("adjust_speed");
+        r.speed = Some(0.8);
+        r.audio_only = true;
+        r.audio.codec = Some("libmp3lame".to_string());
+        r.audio.bitrate = Some("128k".to_string());
+        let (_, post) = flags(&r);
+        assert_eq!(
+            post,
+            s(&["-af", "atempo=0.8", "-c:a", "libmp3lame", "-b:a", "128k"])
+        );
+        assert!(!post.iter().any(|f| f == "-vf" || f == "-c:v"));
+    }
+
+    #[test]
+    fn adjust_speed_on_video_is_unchanged_by_the_audio_rule() {
+        let mut r = recipe("adjust_speed");
+        r.speed = Some(0.8);
+        r.video.encoder = Some("libx264".to_string());
+        let (_, post) = flags(&r);
+        assert!(post.contains(&"-vf".to_string()));
+        assert!(post.contains(&"setpts=1.25*PTS".to_string()));
+        assert!(post.contains(&"libx264".to_string()));
     }
 
     #[test]
