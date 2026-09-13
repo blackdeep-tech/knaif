@@ -26,7 +26,12 @@ from ._engine import (
     _quality_from_crf,
     _summarise_probe,
 )
-from ._reporting import _fmt_files, _load_platform_summary, _load_quality_hint
+from ._reporting import (
+    _fmt_files,
+    _load_platform_summary,
+    _load_quality_hint,
+    _preflight_trim_frames,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent expanders.
@@ -364,6 +369,15 @@ class TrimVideoIntent(Intent):
     name = "trim_video"
 
     def expand(self, args: dict[str, Any]) -> list[dict[str, Any]]:
+        # `frames` is checked HERE, not only in `Skill.preflight`. Preflight runs on the
+        # *expanded* plan, whose steps are `resolve_inputs` / `build_recipes` / ... — none of
+        # which carries a `frames` arg — so the conflict rule never fired for a plan that came
+        # through the agent, and "3 frames of the first 5 seconds" quietly honoured the range.
+        # `expand` is the one place that sees trim_video's own arguments.
+        errors = _preflight_trim_frames(args)
+        if errors:
+            raise ValueError(" ".join(errors))
+
         input_path = args["input"]
         inputs = _coerce_inputs(input_path)
         options: dict[str, Any] = {"mode": "trim"}
@@ -373,6 +387,11 @@ class TrimVideoIntent(Intent):
             options["duration"] = args["duration"]
         if args.get("end") is not None:
             options["end"] = args["end"]
+        # Forwarding this is what makes the frame count exist at all. Without it the arg was
+        # declared in tools.yaml, rendered by the engine and validated by the preflight, and
+        # still did nothing: a three-frame request produced every frame of the clip.
+        if args.get("frames") is not None:
+            options["frames"] = args["frames"]
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         quality = args.get("quality", "visually_good")

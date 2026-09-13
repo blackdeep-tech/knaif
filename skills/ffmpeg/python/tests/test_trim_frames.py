@@ -25,12 +25,14 @@ See docs/plans/2026-09-11-reject-clarify-taxonomy.md -> T5b.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
+from knaif import CommandAgent
 from knaif.skill import Skill
 
 FFMPEG_SKILL_DIR = Path(__file__).parents[2]
@@ -170,3 +172,66 @@ def test_a_zero_duration_is_also_one_frame(engine, tmp_path: Path) -> None:
     cmd = _cmd(engine, tmp_path, start="00:00:03", duration=0)
     assert "-vframes" in cmd and cmd[cmd.index("-vframes") + 1] == "1"
     assert "-t" not in cmd
+
+
+# -- 4. the wiring: from the model's plan to the rendered command -------------
+#
+# Everything above tests `_build_one_recipe` and the preflight in isolation, which is how a
+# frame count could be declared in tools.yaml, rendered correctly by the engine, validated
+# correctly by the preflight — and still do nothing at all. `TrimVideoIntent.expand()` never
+# forwarded it into the recipe options, so a three-frame request against a ten-frame clip
+# produced all ten frames, and the conflict check never ran because `preflight` is handed the
+# *expanded* step's args, where `frames` no longer exists.
+#
+# These tests go through the agent, which is the only level at which that gap is visible.
+
+FIXTURES = Path("sandbox/fixtures/ffmpeg")
+
+agent_test = pytest.mark.skipif(
+    not (FIXTURES / "clip.mp4").exists(),
+    reason="needs the generated ffmpeg fixtures (just eval-fixtures ffmpeg)",
+)
+
+
+def _render_through_agent(args: dict) -> list[str]:
+    agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=FIXTURES.resolve())
+    plan = {"plan": [{"tool": "trim_video", "args": args}]}
+    results = agent.execute_plan(json.loads(json.dumps(plan)), dry_run=True, confirmed=True)
+    for entry in results if isinstance(results, list) else [results]:
+        result = entry.get("result") if isinstance(entry, dict) else None
+        if isinstance(result, dict):
+            for out in result.get("outputs") or []:
+                if out.get("command"):
+                    return [str(c) for c in out["command"]]
+    raise AssertionError(f"no rendered command in {results!r}")
+
+
+@agent_test
+def test_a_frame_count_survives_expansion(tmp_path: Path) -> None:
+    """The defect: `frames` was dropped between the model's plan and the recipe."""
+    cmd = _render_through_agent({"input": "clip.mp4", "frames": 3, "output": "f3.mp4"})
+    assert "-vframes" in cmd, f"frames never reached the command: {' '.join(cmd)}"
+    assert cmd[cmd.index("-vframes") + 1] == "3", " ".join(cmd)
+
+
+@agent_test
+def test_a_frame_count_with_a_range_is_refused_through_the_agent() -> None:
+    """A frame count and a time range are two requests; picking one silently is the bug.
+
+    The preflight that says so never saw `frames` through this path, so the plan executed
+    and quietly honoured the range.
+    """
+    with pytest.raises(ValueError, match="frames"):
+        _render_through_agent(
+            {"input": "clip.mp4", "frames": 3, "end": "00:00:05", "output": "c.mp4"}
+        )
+
+
+@agent_test
+def test_a_frame_count_with_a_start_still_works_through_the_agent() -> None:
+    """`start` is a seek, not a range — it composes with a frame count."""
+    cmd = _render_through_agent(
+        {"input": "clip.mp4", "frames": 2, "start": "00:00:04", "output": "f2.mp4"}
+    )
+    assert "-vframes" in cmd and cmd[cmd.index("-vframes") + 1] == "2", " ".join(cmd)
+    assert "-ss" in cmd, " ".join(cmd)
