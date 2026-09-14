@@ -976,6 +976,14 @@ fn run_ffmpeg_step(
     let mut failures = 0;
     for cmd in &commands {
         let output = cmd.last().cloned().unwrap_or_default();
+        // An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a parent
+        // that need not exist yet; ffmpeg does not create one and fails on open. The path is
+        // already sandbox-checked by the engine.
+        if let Some(parent) = std::path::Path::new(&output).parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).ok();
+            }
+        }
         eprintln!("running: {}", shell_join(cmd));
         let result = knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?;
         if result.status.success() {

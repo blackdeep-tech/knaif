@@ -70,6 +70,15 @@ video_encoder_map:
   h265: libx265
   vp9: libvpx-vp9
   av1: libsvtav1
+  # ISO-BMFF sample-entry tags. These name the same codecs, and a model asked for "HEVC"
+  # answers with the tag the container uses as readily as with the short token — `hvc1` is
+  # what the T6b 4B model emitted for every HEVC row. Unmapped, they reached ffmpeg as
+  # `-c:v hvc1` and it exited with "Unknown encoder".
+  avc1: libx264
+  hvc1: libx265
+  hev1: libx265
+  vp09: libvpx-vp9
+  av01: libsvtav1
 
 # ffmpeg encoder → short codec token (inverse-ish; includes libaom-av1).
 encoder_codec_map:
@@ -81,6 +90,12 @@ encoder_codec_map:
 
 # Recognised video container extensions.
 video_containers: [mp4, mkv, webm, mov, avi, gif, ogg, flv, m4v, wmv]
+
+# Every extension the skill can read as an input. A bare `*` glob is a legitimate way to
+# say "all my media", but `resolve_inputs` expands it against the whole sandbox, so without
+# this filter it also hands ffmpeg the .txt and .json files sitting next to the clips.
+media_extensions: [mp4, mkv, webm, mov, avi, gif, ogg, flv, m4v, wmv,
+                   mp3, wav, flac, aac, m4a, opus, wma, aiff]
 
 # Recognised image extensions (thumbnail / single-frame outputs).
 image_extensions: [jpg, jpeg, png, webp, bmp, tiff, tif]

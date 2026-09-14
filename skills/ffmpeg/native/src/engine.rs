@@ -128,6 +128,8 @@ pub fn geometry_vf(
 #[derive(Debug, Clone, Default)]
 pub struct Trim {
     pub start: Option<String>,
+    /// Negative offset from the end of the input, rendered as `-sseof`.
+    pub start_from_end: Option<f64>,
     pub duration: Option<String>,
     pub end: Option<String>,
     pub frames: Option<i64>,
@@ -138,18 +140,92 @@ pub struct Trim {
 /// Comparing the strings would not do: `"0"` and `"00:00:00"` are the same instant and the
 /// model writes both.
 fn timestamp_seconds(value: Option<&String>) -> Option<f64> {
-    let text = value?.trim();
+    let mut text = value?.trim();
     if text.is_empty() {
         return None;
+    }
+    // A leading sign cannot survive componentwise parsing: `-00` is `-0.0` and `-0.0 * 60`
+    // is still `-0.0`, so `-00:00:02` read as +2.0 rather than -2.0.
+    let negative = text.starts_with('-');
+    if negative || text.starts_with('+') {
+        text = text[1..].trim();
+        if text.is_empty() {
+            return None;
+        }
+    }
+    // Unit suffixes ffmpeg itself accepts: `5s`, `-2s`, `500ms`.
+    for (unit, scale) in [("ms", 0.001f64), ("s", 1.0f64)] {
+        if text.ends_with(unit) && !text.contains(':') {
+            let body = text[..text.len() - unit.len()].trim();
+            let n: f64 = body.parse().ok()?;
+            let seconds = n * scale;
+            return Some(if negative { -seconds } else { seconds });
+        }
     }
     let mut total = 0.0f64;
     for part in text.split(':') {
         // Trim each component: Python's float() ignores surrounding whitespace and Rust's
         // parse does not, so " 1 : 30 " parsed on one runtime and not the other.
         let n: f64 = part.trim().parse().ok()?;
+        if n < 0.0 {
+            return None;
+        }
         total = total * 60.0 + n;
     }
-    Some(total)
+    Some(if negative { -total } else { total })
+}
+
+/// Render seconds for an ffmpeg flag without a trailing `.0` on whole values.
+fn format_seconds(seconds: f64) -> String {
+    if seconds.fract() == 0.0 {
+        format!("{}", seconds as i64)
+    } else {
+        let mut t = format!("{seconds}");
+        if t.contains('.') {
+            t = t.trim_end_matches('0').trim_end_matches('.').to_string();
+        }
+        t
+    }
+}
+
+/// Symbolic instants a user can name but a model cannot compute: the duration is only known
+/// after probing. Port of `_resolve_at_time`. Returns `None` for a token this skill does not
+/// know - callers refuse it rather than invent an instant.
+fn resolve_at_time(value: Option<&String>, duration: Option<f64>) -> Option<String> {
+    let raw = value?;
+    if timestamp_seconds(Some(raw)).is_some() {
+        return Some(raw.clone());
+    }
+    let text = raw.trim().to_ascii_lowercase();
+    if matches!(
+        text.as_str(),
+        "first" | "first_frame" | "start" | "beginning"
+    ) {
+        return Some("0".to_string());
+    }
+    if matches!(
+        text.as_str(),
+        "middle" | "midpoint" | "halfway" | "mid" | "centre" | "center"
+    ) {
+        let d = duration?;
+        if d <= 0.0 {
+            return None;
+        }
+        return Some(format_seconds(d / 2.0));
+    }
+    if matches!(
+        text.as_str(),
+        "last_frame" | "last" | "end" | "final_frame" | "final"
+    ) {
+        let d = duration?;
+        if d <= 0.0 {
+            return None;
+        }
+        // Step back from the very end: seeking exactly to the duration lands past the last
+        // frame and writes nothing.
+        return Some(format_seconds((d - 0.1).max(0.0)));
+    }
+    None
 }
 
 /// Resolve a trim request into exactly one of: a frame count, a duration, or an end.
@@ -167,6 +243,7 @@ fn normalize_trim(
     if frames.is_some() {
         return Trim {
             start,
+            start_from_end: None,
             duration: None,
             end: None,
             frames,
@@ -177,6 +254,22 @@ fn normalize_trim(
     let end_s = timestamp_seconds(end.as_ref());
     let duration_s = timestamp_seconds(duration.as_ref());
 
+    // A NEGATIVE start is ffmpeg's from-end offset, not a reversed range: "the last 2
+    // seconds" arrives as start=-2s (end=0s or absent) and renders as `-sseof -2` with no
+    // `-to`. Reading it as reversed would collapse a 2-second request to a single frame.
+    if matches!(start_s, Some(a) if a < 0.0) && !matches!(end_s, Some(b) if b > 0.0) {
+        return Trim {
+            start: None,
+            start_from_end: start_s,
+            duration: match duration_s {
+                Some(d) if d > 0.0 => duration,
+                _ => None,
+            },
+            end: None,
+            frames: None,
+        };
+    }
+
     // An absent `start` means zero, so `-to 00:00:00` with no start is the same empty range.
     let effective_start = start_s.unwrap_or(0.0);
     let empty_range = matches!(end_s, Some(b) if b <= effective_start)
@@ -184,6 +277,7 @@ fn normalize_trim(
     if empty_range {
         return Trim {
             start,
+            start_from_end: None,
             duration: None,
             end: None,
             frames: Some(1),
@@ -192,6 +286,7 @@ fn normalize_trim(
 
     Trim {
         start,
+        start_from_end: None,
         duration,
         end,
         frames: None,
@@ -308,7 +403,10 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
 
     // Trim: fast-seek before -i; duration/end after -i (then falls through to the encode arm).
     if mode == "trim" {
-        if let Some(start) = &recipe.trim.start {
+        if let Some(from_end) = recipe.trim.start_from_end {
+            // -sseof takes a negative offset from the end of the input.
+            pre.extend(["-sseof".to_string(), format_seconds(from_end)]);
+        } else if let Some(start) = &recipe.trim.start {
             pre.extend(["-ss".to_string(), start.clone()]);
         }
         if let Some(frames) = recipe.trim.frames {
@@ -690,6 +788,54 @@ fn dim_str(d: Option<u32>) -> String {
 }
 
 /// Derive the output path from the input stem + a per-mode suffix + the right extension. Port of
+/// Read an `output` that names a DESTINATION rather than one file. Port of
+/// `_resolve_output_target`.
+///
+/// A batch writes one file per input, so these two spellings are per-file requests and were
+/// being passed to ffmpeg verbatim:
+///
+/// * `videos/*.mp4` - "same name, over there". The `*` reached ffmpeg as a literal character.
+/// * `videos_hevc` - a destination directory. ffmpeg cannot choose a muxer for an
+///   extensionless path without `-f` and failed with "Invalid argument".
+///
+/// A genuine filename (`renamed.mp4`) is returned untouched.
+pub fn resolve_output_target(
+    raw: &str,
+    input: &Path,
+    mode: &str,
+    opts: &Options,
+    container: &str,
+) -> PathBuf {
+    let out = PathBuf::from(raw);
+    let ext = match mode {
+        "extract_audio" => opts.audio_format.as_deref().unwrap_or("mp3"),
+        "thumbnail" => opts.image_format.as_deref().unwrap_or("jpg"),
+        _ => container,
+    };
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let name = out.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
+    if name.contains('*') {
+        // `*.mp4` keeps the pattern's extension; a bare `*` takes the mode's.
+        let pat_ext = out
+            .extension()
+            .and_then(|e| e.to_str())
+            .filter(|e| !e.is_empty())
+            .unwrap_or(ext);
+        let file = format!("{stem}.{pat_ext}");
+        return match out.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent.join(file),
+            _ => PathBuf::from(file),
+        };
+    }
+
+    if out.extension().is_none() {
+        return out.join(format!("{stem}.{ext}"));
+    }
+
+    out
+}
+
 /// `_derive_output_path` (suffix template from `output_suffix_by_mode`, `{platform}` substituted).
 pub fn derive_output_path(
     input: &Path,
@@ -836,7 +982,7 @@ pub fn build_one_recipe(
     }
 
     let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
-        let out = PathBuf::from(raw);
+        let out = resolve_output_target(raw, &input_path, &mode, options, &container);
         if out.is_absolute() {
             out
         } else {
@@ -1028,6 +1174,7 @@ pub fn build_one_recipe(
             if options.start.is_some() || options.end.is_some() {
                 recipe.trim = Trim {
                     start: options.start.clone(),
+                    start_from_end: None,
                     duration: None,
                     end: options.end.clone(),
                     frames: None,
@@ -1036,12 +1183,19 @@ pub fn build_one_recipe(
             recipe.video = Video::default(); // no video stream in an audio extract
         }
         "thumbnail" => {
-            recipe.at_time = Some(
-                options
-                    .at_time
-                    .clone()
-                    .unwrap_or_else(|| "00:00:01".to_string()),
-            );
+            // `probe` carries the duration, which is what makes "the last frame" answerable
+            // here and nowhere upstream. An unknown token must not fall back to the default
+            // instant - that answers a different question than the one asked.
+            let requested = options
+                .at_time
+                .clone()
+                .unwrap_or_else(|| "00:00:01".to_string());
+            let resolved = resolve_at_time(Some(&requested), probe.duration).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unrecognised time '{requested}'. Use a timestamp (00:00:05),                      a number of seconds, or 'first' / 'last'."
+                )
+            })?;
+            recipe.at_time = Some(resolved);
             recipe.image_format = Some(
                 options
                     .image_format
@@ -1766,5 +1920,156 @@ mod trim_frames_tests {
         assert_eq!(t.frames, None);
         let (_, post) = trim_flags(t);
         assert_eq!(post, vec!["-to".to_string(), "00:00:07".to_string()]);
+    }
+
+    // ── argument vocabulary: mirrors skills/ffmpeg/python/tests/test_arg_vocabulary.py ──
+
+    #[test]
+    fn timestamp_reads_unit_suffixes() {
+        for (text, want) in [
+            ("5s", 5.0),
+            ("-2s", -2.0),
+            ("0s", 0.0),
+            ("500ms", 0.5),
+            ("2.5s", 2.5),
+        ] {
+            let got = timestamp_seconds(Some(&text.to_string()));
+            assert_eq!(got, Some(want), "{text}");
+        }
+    }
+
+    #[test]
+    fn timestamp_keeps_a_leading_sign() {
+        // `-00` is `-0.0` and `-0.0 * 60` is still `-0.0`, so this read as +2.0 before.
+        assert_eq!(
+            timestamp_seconds(Some(&"-00:00:02".to_string())),
+            Some(-2.0)
+        );
+        assert_eq!(timestamp_seconds(Some(&"-00:00:00".to_string())), Some(0.0));
+    }
+
+    #[test]
+    fn timestamp_still_reads_plain_clocks_and_numbers() {
+        assert_eq!(timestamp_seconds(Some(&"00:00:05".to_string())), Some(5.0));
+        assert_eq!(timestamp_seconds(Some(&"01:30".to_string())), Some(90.0));
+        assert_eq!(timestamp_seconds(Some(&"2.5".to_string())), Some(2.5));
+    }
+
+    #[test]
+    fn timestamp_rejects_non_times() {
+        for text in ["last_frame", "", "abc", "::"] {
+            assert_eq!(timestamp_seconds(Some(&text.to_string())), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn negative_start_is_a_from_end_offset() {
+        for (start, end) in [
+            ("-2s", Some("0s")),
+            ("-00:00:02", Some("-00:00:00")),
+            ("-2s", None),
+        ] {
+            let got = normalize_trim(Some(start.to_string()), None, end.map(str::to_string), None);
+            assert_eq!(got.start_from_end, Some(-2.0), "{start}");
+            assert_eq!(
+                got.frames, None,
+                "a 2-second request must not become one frame"
+            );
+            assert_eq!(got.end, None);
+        }
+    }
+
+    #[test]
+    fn genuinely_reversed_range_still_becomes_one_frame() {
+        let got = normalize_trim(Some("5".into()), None, Some("2".into()), None);
+        assert_eq!(got.frames, Some(1));
+        assert_eq!(got.start_from_end, None);
+    }
+
+    #[test]
+    fn ordinary_range_is_untouched() {
+        let got = normalize_trim(Some("00:00:01".into()), None, Some("00:00:05".into()), None);
+        assert_eq!(got.start.as_deref(), Some("00:00:01"));
+        assert_eq!(got.end.as_deref(), Some("00:00:05"));
+        assert_eq!(got.frames, None);
+        assert_eq!(got.start_from_end, None);
+    }
+
+    #[test]
+    fn symbolic_at_time_resolves_against_duration() {
+        for token in ["last_frame", "last", "end"] {
+            let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
+            let secs: f64 = got.parse().unwrap();
+            assert!((11.0..12.0).contains(&secs), "{token} -> {got}");
+        }
+        for token in ["middle", "midpoint", "halfway"] {
+            let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
+            let secs: f64 = got.parse().unwrap();
+            assert!((secs - 6.0).abs() < 1e-9, "{token} -> {got}");
+        }
+        for token in ["first", "start", "beginning"] {
+            assert_eq!(
+                resolve_at_time(Some(&token.to_string()), Some(12.0)).as_deref(),
+                Some("0"),
+                "{token}"
+            );
+        }
+    }
+
+    #[test]
+    fn at_time_passes_real_times_through_and_refuses_junk() {
+        assert_eq!(
+            resolve_at_time(Some(&"00:00:03".to_string()), Some(12.0)).as_deref(),
+            Some("00:00:03")
+        );
+        assert_eq!(
+            resolve_at_time(Some(&"banana".to_string()), Some(12.0)),
+            None
+        );
+    }
+
+    // ── batch output that names a destination, not a file ──
+    // Mirrors the `output` cases in python/tests/test_arg_vocabulary.py.
+
+    #[test]
+    fn glob_output_binds_the_input_stem() {
+        let opts = Options::default();
+        for stem in ["clip", "holiday"] {
+            let input = PathBuf::from(format!("/sb/{stem}.mp4"));
+            let got = resolve_output_target("videos/*.mp4", &input, "convert", &opts, "mp4");
+            assert_eq!(
+                got.file_name().and_then(|s| s.to_str()),
+                Some(format!("{stem}.mp4").as_str()),
+                "{stem}"
+            );
+            assert_eq!(
+                got.parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|s| s.to_str()),
+                Some("videos")
+            );
+        }
+    }
+
+    #[test]
+    fn extensionless_output_is_a_directory() {
+        let opts = Options::default();
+        let input = PathBuf::from("/sb/clip.mp4");
+        let got = resolve_output_target("videos_hevc", &input, "convert", &opts, "mkv");
+        assert_eq!(got.file_name().and_then(|s| s.to_str()), Some("clip.mkv"));
+        assert_eq!(
+            got.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str()),
+            Some("videos_hevc")
+        );
+    }
+
+    #[test]
+    fn a_real_output_filename_is_still_honoured() {
+        let opts = Options::default();
+        let input = PathBuf::from("/sb/clip.mp4");
+        let got = resolve_output_target("renamed.mp4", &input, "convert", &opts, "mp4");
+        assert_eq!(got, PathBuf::from("renamed.mp4"));
     }
 }

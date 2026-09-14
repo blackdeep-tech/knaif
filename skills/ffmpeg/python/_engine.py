@@ -343,6 +343,11 @@ def _geometry_vf(
 _OUTPUT_SUFFIX_BY_MODE: dict[str, str] = dict(_VOCAB["output_suffix_by_mode"])
 
 
+# Every extension the skill can read. Passed to `resolve_inputs` so a bare `*` glob means
+# "all my media" rather than "every file in the sandbox" - unfiltered, it handed ffmpeg the
+# .txt and .json sitting beside the clips and ffmpeg died on the first one.
+_MEDIA_EXTENSIONS: list[str] = list(_VOCAB["media_extensions"])
+
 _IMAGE_EXTENSIONS = set(_VOCAB["image_extensions"])
 
 
@@ -484,11 +489,64 @@ def _container_from_output(output: str | None) -> str | None:
     return ext if ext in _VIDEO_CONTAINERS else None
 
 
+# Symbolic instants a user can name but a model cannot compute: the duration is only known
+# after probing, so this layer is the only one that can resolve them. Left unresolved they
+# reached ffmpeg as `-ss last_frame` ("Invalid duration"); the alternative the model has is
+# to guess a number, and on the control arm it guessed 00:00:00 and returned the FIRST frame
+# for a request that said the last.
+_AT_TIME_END_TOKENS = frozenset({"last_frame", "last", "end", "final_frame", "final"})
+_AT_TIME_START_TOKENS = frozenset({"first", "first_frame", "start", "beginning"})
+_AT_TIME_MIDDLE_TOKENS = frozenset({"middle", "midpoint", "halfway", "mid", "centre", "center"})
+
+# Step back from the very end: seeking exactly to the duration lands past the last frame and
+# writes nothing.
+_LAST_FRAME_EPSILON = 0.1
+
+
+def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
+    """Resolve a symbolic instant against the clip duration.
+
+    Returns the value unchanged when it is already a time, and ``None`` when the token is not
+    one this skill knows - callers must refuse it rather than invent an instant for it.
+    """
+    if value is None or isinstance(value, (int, float)):
+        return value
+    text = str(value).strip().lower()
+    if _timestamp_seconds(value) is not None:
+        return value
+    if text in _AT_TIME_START_TOKENS:
+        return "0"
+    if text in _AT_TIME_MIDDLE_TOKENS:
+        if duration is None or duration <= 0:
+            return None
+        return _format_seconds(duration / 2.0)
+    if text in _AT_TIME_END_TOKENS:
+        if duration is None or duration <= 0:
+            return None
+        return _format_seconds(max(0.0, duration - _LAST_FRAME_EPSILON))
+    return None
+
+
+def _format_seconds(seconds: float) -> str:
+    """Render seconds for an ffmpeg flag without a trailing ``.0`` on whole values."""
+    return str(int(seconds)) if float(seconds).is_integer() else f"{float(seconds):g}"
+
+
 def _timestamp_seconds(value: Any) -> float | None:
     """Seconds for a timestamp written as ``HH:MM:SS[.ms]``, ``MM:SS``, or a bare number.
 
     Comparing the strings would not do: ``"0"`` and ``"00:00:00"`` are the same instant and
     the model writes both.
+
+    Two spellings ffmpeg itself accepts have to be read here too, because the callers that
+    compare instants (``_normalize_trim``'s reversed-range guard) are blind to anything this
+    returns ``None`` for:
+
+    * a **unit suffix** — ``5s``, ``-2s``, ``500ms``. ``-2s`` is how "the last 2 seconds"
+      arrives, and it used to fall through to ffmpeg as ``-ss -2s``.
+    * a **leading sign on a clock string**. Parsing componentwise loses it, because
+      ``float("-00") * 60`` is ``-0.0``: ``-00:00:02`` read as **+2.0**, so the guard fired
+      on a number of the wrong sign rather than not at all.
     """
     if value is None:
         return None
@@ -497,14 +555,29 @@ def _timestamp_seconds(value: Any) -> float | None:
     text = str(value).strip()
     if not text:
         return None
+    negative = text.startswith("-")
+    if negative or text.startswith("+"):
+        text = text[1:].strip()
+    if not text:
+        return None
+    for unit, scale in (("ms", 0.001), ("s", 1.0)):
+        if text.endswith(unit) and ":" not in text:
+            body = text[: -len(unit)].strip()
+            try:
+                seconds = float(body) * scale
+            except ValueError:
+                return None
+            return -seconds if negative else seconds
     try:
         parts = [float(p) for p in text.split(":")]
     except ValueError:
         return None
+    if any(p < 0 for p in parts):
+        return None
     total = 0.0
     for part in parts:
         total = total * 60 + part
-    return total
+    return -total if negative else total
 
 
 def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict[str, Any]:
@@ -530,6 +603,20 @@ def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict
     # An absent `start` means zero, so "-to 00:00:00" with no start is the same empty range
     # and produced the same empty file. A *reversed* range (end < start) lands here too: the
     # engine cannot clarify, so its only choices are one frame or a file with nothing in it.
+    # A NEGATIVE start is ffmpeg's from-end offset, not a reversed range: "trim to the last
+    # 2 seconds" arrives as start=-2s (end=0s or absent) and means "start two seconds before
+    # the end, run to the end". It renders as `-sseof -2` with no `-to`. Reading it as a
+    # reversed range would collapse a 2-second request to a single frame - which is exactly
+    # what happened while the sign was being lost in parsing.
+    if start_s is not None and start_s < 0 and (end_s is None or end_s <= 0):
+        return {
+            "start": None,
+            "start_from_end": start_s,
+            "duration": duration if duration_s and duration_s > 0 else None,
+            "end": None,
+            "frames": None,
+        }
+
     effective_start = 0.0 if start_s is None else start_s
     empty_range = (end is not None and end_s is not None and end_s <= effective_start) or (
         duration is not None and duration_s is not None and duration_s <= 0
@@ -538,6 +625,44 @@ def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict
         return {"start": start, "duration": None, "end": None, "frames": 1}
 
     return {"start": start, "duration": duration, "end": end, "frames": None}
+
+
+def _output_extension(mode: str, options: dict[str, Any]) -> str:
+    if mode == "extract_audio":
+        return options.get("audio_format", "mp3")
+    if mode == "thumbnail":
+        return options.get("image_format", "jpg")
+    return options.get("container", "mp4")
+
+
+def _resolve_output_target(
+    raw_output: str, *, input_path: Path, mode: str, options: dict[str, Any]
+) -> Path:
+    """Read an `output` that names a DESTINATION rather than one file.
+
+    A batch writes one file per input, so these two spellings are per-file requests and were
+    being passed to ffmpeg verbatim:
+
+    * ``videos/*.mp4`` - "same name, over there". The ``*`` reached ffmpeg as a literal
+      character in the filename.
+    * ``videos_hevc`` - a destination directory. ffmpeg cannot choose a muxer for an
+      extensionless path without ``-f`` and failed with "Invalid argument".
+
+    A genuine filename (``renamed.mp4``) is returned untouched, so the single-file case is
+    unchanged.
+    """
+    out = Path(raw_output)
+    ext = _output_extension(mode, options)
+
+    if "*" in out.name:
+        # `*.mp4` keeps the pattern's extension; a bare `*` takes the mode's.
+        stem_ext = out.suffix.lstrip(".") or ext
+        return out.with_name(f"{input_path.stem}.{stem_ext}")
+
+    if not out.suffix:
+        return out / f"{input_path.stem}.{ext}"
+
+    return out
 
 
 def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) -> Path:
@@ -621,7 +746,9 @@ def _build_one_recipe(
     output_options["container"] = container
     raw_output = options.get("output_path")
     if raw_output:
-        out = Path(raw_output)
+        out = _resolve_output_target(
+            raw_output, input_path=input_path, mode=mode, options=output_options
+        )
         if not out.is_absolute():
             out = input_path.parent / out
         output_path = out
@@ -773,7 +900,17 @@ def _build_one_recipe(
             }
         recipe.pop("video", None)
     if mode == "thumbnail":
-        recipe["at_time"] = options.get("at_time", "00:00:01")
+        # `probe` carries the duration, which is what makes "the last frame" answerable here
+        # and nowhere upstream. An unknown token resolves to None; falling back to the default
+        # instant would answer a different question than the one asked, so it raises instead.
+        requested_at = options.get("at_time", "00:00:01")
+        resolved_at = _resolve_at_time(requested_at, duration=probe.get("duration"))
+        if resolved_at is None:
+            raise ValueError(
+                f"Unrecognised time {requested_at!r}. Use a timestamp (00:00:05), "
+                "a number of seconds, or 'first' / 'last'."
+            )
+        recipe["at_time"] = resolved_at
         recipe["image_format"] = options.get("image_format", "jpg")
         recipe["scale"] = _parse_scale(options.get("scale"))
         recipe.pop("audio", None)
@@ -821,7 +958,10 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
     # Trim: fast-seek before -i; duration/end after -i (falls through to encode below).
     if mode == "trim":
         trim = recipe.get("trim", {})
-        if trim.get("start") is not None:
+        if trim.get("start_from_end") is not None:
+            # -sseof takes a negative offset from the end of the input.
+            pre += ["-sseof", _format_seconds(trim["start_from_end"])]
+        elif trim.get("start") is not None:
             pre += ["-ss", str(trim["start"])]
         if trim.get("frames") is not None:
             # A frame count replaces the range rather than joining it: with both, ffmpeg

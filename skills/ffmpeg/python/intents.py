@@ -10,6 +10,7 @@ from knaif.tool import Intent, Step
 
 from . import _deps
 from ._engine import (
+    _MEDIA_EXTENSIONS,
     _VIDEO_CODEC_ALIASES,
     _VIDEO_ENCODER_MAP,
     _assert_in_sandbox,
@@ -87,7 +88,11 @@ class PrepareForPlatformIntent(Intent):
         preview = bool(args.get("preview", True))
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_platform_profile",
@@ -149,7 +154,11 @@ class CompressVideoIntent(Intent):
             options["output_path"] = args["output"]
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
         ]
         if target:
@@ -259,7 +268,11 @@ class ConvertVideoIntent(Intent):
         load_quality = quality is not None and not remux
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
         ]
         if load_quality:
@@ -323,7 +336,11 @@ class ResizeVideoIntent(Intent):
             options["output_path"] = args["output"]
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -398,7 +415,11 @@ class TrimVideoIntent(Intent):
         preview = bool(args.get("preview", False))
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -470,7 +491,11 @@ class ExtractAudioIntent(Intent):
             options["output_path"] = output
 
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "build_recipes",
@@ -501,7 +526,11 @@ class CreateThumbnailIntent(Intent):
         if output is not None:
             options["output_path"] = output
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "build_recipes",
@@ -528,7 +557,11 @@ class StripAudioIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "build_recipes",
@@ -553,7 +586,11 @@ class AdjustSpeedIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -591,7 +628,11 @@ class AdjustVolumeIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -633,7 +674,11 @@ class RotateVideoIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -1009,7 +1054,11 @@ class ConcatVideoIntent(Intent):
         if target_fps:
             run_concat_args["target_fps"] = target_fps
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {"tool": "run_concat", "args": run_concat_args, "output": "$concat_result"},
             {
@@ -1045,7 +1094,11 @@ class ReverseVideoIntent(Intent):
             options["output_path"] = args["output"]
 
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",

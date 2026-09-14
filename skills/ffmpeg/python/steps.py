@@ -257,6 +257,12 @@ class RunBatchStep(Step):
             return {"mode": "dry_run", "count": len(outputs), "outputs": outputs}
 
         for c in commands:
+            # An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a
+            # parent that need not exist yet; ffmpeg does not create one and fails on open.
+            # The path is already sandbox-checked by the engine.
+            out = c.get("output")
+            if out:
+                Path(out).parent.mkdir(parents=True, exist_ok=True)
             res = _deps.run_ffmpeg(c["command"])
             outputs.append(
                 {
