@@ -5,10 +5,10 @@
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
         "bundle": "7e445ea64837b68c6773d5d4365b0f7a225b7e78442d85d2fda790486f4033a0",
-        "contracts": "e7afa98c5d8fce003581aabf67e0fcfc9cf0e1afc297f1e1dd5a21d866997bea",
+        "contracts": "f8edfcce8d26339b4c7bd1a33ba1e0410cf4cf59b54a3e40e18f134f69cf3a40",
         "python_core": "d664ebbd51599f1aa5170fcf39895c9fc6cb8022e9997104dfcc926477f2c4d0",
         "grading": "55397d3f26d01d476a034b933880f094f36895d041a6b015d8b8be4eddeccf3c",
-        "native": "e24a1fe983eaa1a6ffb14c20ea738fb66347d099dce8789a1df1c0cf76427ddb",
+        "native": "a2d130dc9984ac186ec3e7aa20af1ff43f8c54d661ad449fb001dfb74b3f1e9e",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
         "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
@@ -18,10 +18,10 @@
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
         "bundle": "7e445ea64837b68c6773d5d4365b0f7a225b7e78442d85d2fda790486f4033a0",
-        "contracts": "e7afa98c5d8fce003581aabf67e0fcfc9cf0e1afc297f1e1dd5a21d866997bea",
+        "contracts": "f8edfcce8d26339b4c7bd1a33ba1e0410cf4cf59b54a3e40e18f134f69cf3a40",
         "python_core": "d664ebbd51599f1aa5170fcf39895c9fc6cb8022e9997104dfcc926477f2c4d0",
         "grading": "55397d3f26d01d476a034b933880f094f36895d041a6b015d8b8be4eddeccf3c",
-        "native": "e24a1fe983eaa1a6ffb14c20ea738fb66347d099dce8789a1df1c0cf76427ddb",
+        "native": "a2d130dc9984ac186ec3e7aa20af1ff43f8c54d661ad449fb001dfb74b3f1e9e",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
         "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
