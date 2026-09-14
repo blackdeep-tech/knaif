@@ -116,8 +116,12 @@ pub fn expand(
     };
     // Globs become one input per matching file BEFORE the render loop, so each match gets its own
     // command and its own derived output name (N1).
-    let inputs = expand_input_globs(&resolved.inputs, sandbox)?;
-    let mut commands = Vec::with_capacity(inputs.len());
+    let inputs = expand_input_globs(&resolved.inputs, sandbox, &data.vocab.media_extensions)?;
+    // Build every recipe first: only the batch can see two inputs landing on one output
+    // path, and every rendered command carries -y, so an unresolved clash is a silent
+    // overwrite rather than an error.
+    let mut recipes = Vec::with_capacity(inputs.len());
+    let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::with_capacity(inputs.len());
     for input in &inputs {
         // Probe and render the RESOLVED path — checking one representation and reading another
         // is not a boundary (see resolve_input_in_sandbox; fix review R1).
@@ -131,6 +135,13 @@ pub fn expand(
             &data.vocab,
             sandbox,
         )?;
+        outs.push((input_path.clone(), std::path::PathBuf::from(&recipe.output)));
+        recipes.push(recipe);
+    }
+    crate::engine::disambiguate_outputs(&mut outs);
+    let mut commands = Vec::with_capacity(recipes.len());
+    for (mut recipe, (_, out)) in recipes.into_iter().zip(outs) {
+        recipe.output = out.to_string_lossy().into_owned();
         let (pre, post) = build_flags(&recipe, &data.vocab)?;
         commands.push(render_command(&recipe, &pre, &post, None));
     }
@@ -280,7 +291,17 @@ fn collapse_star_runs(pattern: &str) -> String {
 ///
 /// Not applied to `concat_video`: Python's `ConcatVideoIntent` does not route its inputs through
 /// `ResolveInputs`, so globbing there would be a divergence, not a fix.
-fn expand_input_globs(inputs: &[String], sandbox: Option<&Path>) -> anyhow::Result<Vec<String>> {
+/// Expand globs to one input per matching file, keeping only media.
+///
+/// `media_extensions` mirrors Python, which passes the same list to `resolve_inputs` at all 13
+/// of its call sites: a bare `*` is a legitimate way to say "all my media", and unfiltered it
+/// handed ffmpeg the .txt and .json sitting beside the clips. An EMPTY list disables the
+/// filter, so a vocab without the key behaves as before rather than matching nothing.
+fn expand_input_globs(
+    inputs: &[String],
+    sandbox: Option<&Path>,
+    media_extensions: &[String],
+) -> anyhow::Result<Vec<String>> {
     let mut out = Vec::with_capacity(inputs.len());
     for raw in inputs {
         if !has_glob_magic(raw) {
@@ -320,6 +341,18 @@ fn expand_input_globs(inputs: &[String], sandbox: Option<&Path>) -> anyhow::Resu
                 e.file_name()
                     .to_str()
                     .is_some_and(|n| name_matches(file_name, n))
+            })
+            .filter(|e| {
+                if media_extensions.is_empty() {
+                    return true;
+                }
+                e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .is_some_and(|x| {
+                        let x = x.to_ascii_lowercase();
+                        media_extensions.iter().any(|m| m.to_ascii_lowercase() == x)
+                    })
             })
             .map(|e| {
                 as_written

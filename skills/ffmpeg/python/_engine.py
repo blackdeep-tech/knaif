@@ -528,8 +528,18 @@ def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
 
 
 def _format_seconds(seconds: float) -> str:
-    """Render seconds for an ffmpeg flag without a trailing ``.0`` on whole values."""
-    return str(int(seconds)) if float(seconds).is_integer() else f"{float(seconds):g}"
+    """Render seconds for an ffmpeg flag, identically on both runtimes.
+
+    `:g` was wrong twice over: it rounds to six significant digits where the Rust port does
+    not (`6.172839` became `6.17284`), and it switches to scientific notation for small
+    values (`-1e-06`), which ffmpeg cannot parse as a time at all. Fixed decimal, trailing
+    zeros trimmed, matches `format_seconds` in `engine.rs` character for character.
+    """
+    value = float(seconds)
+    if value.is_integer():
+        return str(int(value))
+    text = f"{value:.9f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _timestamp_seconds(value: Any) -> float | None:
@@ -608,14 +618,41 @@ def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict
     # the end, run to the end". It renders as `-sseof -2` with no `-to`. Reading it as a
     # reversed range would collapse a 2-second request to a single frame - which is exactly
     # what happened while the sign was being lost in parsing.
-    if start_s is not None and start_s < 0 and (end_s is None or end_s <= 0):
-        return {
-            "start": None,
-            "start_from_end": start_s,
-            "duration": duration if duration_s and duration_s > 0 else None,
-            "end": None,
-            "frames": None,
-        }
+    if start_s is not None and start_s < 0:
+        # A supplied bound that could not be read is NOT the same as an absent one. Treating
+        # `end="banana"` as "to the end of the clip" silently answers a different request,
+        # and `duration="0"` is an empty range the guard below still owns.
+        for label, raw, seconds in (("end", end, end_s), ("duration", duration, duration_s)):
+            if raw is not None and seconds is None:
+                raise ValueError(
+                    f"Unrecognised {label} {raw!r}. Use a timestamp (00:00:05), a number of "
+                    "seconds, or a value with a unit (5s, 500ms)."
+                )
+        if duration_s is not None and duration_s <= 0:
+            return {
+                "start": start,
+                "start_from_end": None,
+                "duration": None,
+                "end": None,
+                "frames": 1,
+            }
+        # `end` is a second offset from the end when negative (-10 -> -5 is a 5s window);
+        # a positive `end` alongside a from-end start is contradictory, so leave both alone
+        # and let the ordinary path render what was asked.
+        if end_s is None or end_s <= 0:
+            length = None
+            if duration_s is not None and duration_s > 0:
+                length = duration
+            elif end_s is not None and end_s < 0:
+                span = end_s - start_s
+                length = _format_seconds(span) if span > 0 else None
+            return {
+                "start": None,
+                "start_from_end": start_s,
+                "duration": length,
+                "end": None,
+                "frames": None,
+            }
 
     effective_start = 0.0 if start_s is None else start_s
     empty_range = (end is not None and end_s is not None and end_s <= effective_start) or (
@@ -633,6 +670,44 @@ def _output_extension(mode: str, options: dict[str, Any]) -> str:
     if mode == "thumbnail":
         return options.get("image_format", "jpg")
     return options.get("container", "mp4")
+
+
+def _destination_name(input_path: Path, ext: str) -> str:
+    """The file name an input takes inside a destination directory."""
+    return f"{input_path.stem}.{ext}"
+
+
+def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Give every recipe in a batch its own output path.
+
+    A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
+    render `converted/clip.mp4` — and every command carries `-y`, so the second conversion
+    silently destroyed the first. The distinguishing part is the source extension, which is
+    why it is what gets restored; a counter is the fallback for a genuine repeat.
+
+    Doing it here rather than per file is deliberate: only the batch knows whether there is a
+    clash at all, and a lone `clip.mp4 -> converted/` should stay `clip.mp4`, not become
+    `clip_mp4.mkv` because some other input might have existed.
+    """
+    seen: dict[str, int] = {}
+    for recipe in recipes:
+        out = recipe.get("output")
+        if not out:
+            continue
+        if out not in seen:
+            seen[out] = 1
+            continue
+        path = Path(out)
+        source_ext = Path(recipe.get("input", "")).suffix.lstrip(".").lower()
+        candidate = path.with_name(f"{path.stem}_{source_ext}{path.suffix}") if source_ext else path
+        n = 1
+        while str(candidate) in seen:
+            n += 1
+            stem = f"{path.stem}_{source_ext}_{n}" if source_ext else f"{path.stem}_{n}"
+            candidate = path.with_name(f"{stem}{path.suffix}")
+        recipe["output"] = str(candidate)
+        seen[str(candidate)] = 1
+    return recipes
 
 
 def _resolve_output_target(
@@ -654,13 +729,30 @@ def _resolve_output_target(
     out = Path(raw_output)
     ext = _output_extension(mode, options)
 
-    if "*" in out.name:
-        # `*.mp4` keeps the pattern's extension; a bare `*` takes the mode's.
-        stem_ext = out.suffix.lstrip(".") or ext
-        return out.with_name(f"{input_path.stem}.{stem_ext}")
+    # A wildcard anywhere but the final component cannot be expanded - `out*/clip.mp4` names
+    # no directory this skill can pick, and creating a literal `out*` is not the answer.
+    if any("*" in part for part in out.parts[:-1]):
+        raise ValueError(
+            f"Unrecognised output {raw_output!r}. A '*' may only stand for the file name, "
+            "as in 'videos/*.mp4'."
+        )
 
-    if not out.suffix:
-        return out / f"{input_path.stem}.{ext}"
+    if "*" in out.name:
+        # The `*` stands for the input's stem, and the text around it is kept:
+        # `prefix_*.mp4` -> `prefix_clip.mp4`. Replacing the whole name dropped the prefix.
+        stem_ext = out.suffix.lstrip(".")
+        if "*" in stem_ext:  # `*.*` - the extension is not a pattern this skill can read
+            raise ValueError(
+                f"Unrecognised output {raw_output!r}. A '*' may only stand for the file name."
+            )
+        pattern = out.name[: -(len(stem_ext) + 1)] if stem_ext else out.name
+        name = pattern.replace("*", input_path.stem)
+        return out.with_name(f"{name}.{stem_ext or ext}")
+
+    # `.mp4` is a dotfile, i.e. a concrete file name that pathlib reports as suffix-less.
+    # Only a name with no dot at all is a destination directory.
+    if not out.suffix and not out.name.startswith("."):
+        return out / _destination_name(input_path, ext)
 
     return out
 

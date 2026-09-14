@@ -175,17 +175,41 @@ fn timestamp_seconds(value: Option<&String>) -> Option<f64> {
     Some(if negative { -total } else { total })
 }
 
-/// Render seconds for an ffmpeg flag without a trailing `.0` on whole values.
-fn format_seconds(seconds: f64) -> String {
+/// Render seconds for an ffmpeg flag, identically to Python's `_format_seconds`.
+///
+/// Fixed decimal with trailing zeros trimmed. Plain `{}` display diverged from Python's `:g`
+/// in both directions - `:g` rounded to six significant digits where this did not, and it
+/// emitted scientific notation (`-1e-06`) that ffmpeg cannot parse as a time.
+pub fn format_seconds(seconds: f64) -> String {
     if seconds.fract() == 0.0 {
-        format!("{}", seconds as i64)
+        return format!("{}", seconds as i64);
+    }
+    let mut t = format!("{seconds:.9}");
+    if t.contains('.') {
+        t = t.trim_end_matches('0').trim_end_matches('.').to_string();
+    }
+    if t.is_empty() {
+        "0".to_string()
     } else {
-        let mut t = format!("{seconds}");
-        if t.contains('.') {
-            t = t.trim_end_matches('0').trim_end_matches('.').to_string();
-        }
         t
     }
+}
+
+/// Resolve `.` and `..` without touching the filesystem, for a path that may not exist yet.
+/// `create_dir_all` on an unnormalised parent builds each component in turn on POSIX, so
+/// `../escaped/../sb` creates `escaped` even though the full path resolves inside the sandbox.
+pub fn lexically_normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
 }
 
 /// Symbolic instants a user can name but a model cannot compute: the duration is only known
@@ -239,15 +263,15 @@ fn normalize_trim(
     duration: Option<String>,
     end: Option<String>,
     frames: Option<i64>,
-) -> Trim {
+) -> anyhow::Result<Trim> {
     if frames.is_some() {
-        return Trim {
+        return Ok(Trim {
             start,
             start_from_end: None,
             duration: None,
             end: None,
             frames,
-        };
+        });
     }
 
     let start_s = timestamp_seconds(start.as_ref());
@@ -257,17 +281,51 @@ fn normalize_trim(
     // A NEGATIVE start is ffmpeg's from-end offset, not a reversed range: "the last 2
     // seconds" arrives as start=-2s (end=0s or absent) and renders as `-sseof -2` with no
     // `-to`. Reading it as reversed would collapse a 2-second request to a single frame.
-    if matches!(start_s, Some(a) if a < 0.0) && !matches!(end_s, Some(b) if b > 0.0) {
-        return Trim {
-            start: None,
-            start_from_end: start_s,
-            duration: match duration_s {
-                Some(d) if d > 0.0 => duration,
-                _ => None,
-            },
-            end: None,
-            frames: None,
-        };
+    if matches!(start_s, Some(a) if a < 0.0) {
+        // A supplied bound that could not be read is NOT the same as an absent one: reading
+        // `end="banana"` as "to the end of the clip" silently answers a different request.
+        for (label, raw, seconds) in [
+            ("end", end.as_ref(), end_s),
+            ("duration", duration.as_ref(), duration_s),
+        ] {
+            if raw.is_some() && seconds.is_none() {
+                anyhow::bail!(
+                    "Unrecognised {label} '{}'. Use a timestamp (00:00:05), a number of \
+                     seconds, or a value with a unit (5s, 500ms).",
+                    raw.map(String::as_str).unwrap_or("")
+                );
+            }
+        }
+        if matches!(duration_s, Some(d) if d <= 0.0) {
+            return Ok(Trim {
+                start,
+                start_from_end: None,
+                duration: None,
+                end: None,
+                frames: Some(1),
+            });
+        }
+        if !matches!(end_s, Some(b) if b > 0.0) {
+            let length = if matches!(duration_s, Some(d) if d > 0.0) {
+                duration
+            } else if let (Some(a), Some(b)) = (start_s, end_s) {
+                let span = b - a;
+                if span > 0.0 {
+                    Some(format_seconds(span))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            return Ok(Trim {
+                start: None,
+                start_from_end: start_s,
+                duration: length,
+                end: None,
+                frames: None,
+            });
+        }
     }
 
     // An absent `start` means zero, so `-to 00:00:00` with no start is the same empty range.
@@ -275,22 +333,22 @@ fn normalize_trim(
     let empty_range = matches!(end_s, Some(b) if b <= effective_start)
         || matches!(duration_s, Some(d) if d <= 0.0);
     if empty_range {
-        return Trim {
+        return Ok(Trim {
             start,
             start_from_end: None,
             duration: None,
             end: None,
             frames: Some(1),
-        };
+        });
     }
 
-    Trim {
+    Ok(Trim {
         start,
         start_from_end: None,
         duration,
         end,
         frames: None,
-    }
+    })
 }
 
 /// Resolved video settings for a recipe.
@@ -799,13 +857,73 @@ fn dim_str(d: Option<u32>) -> String {
 ///   extensionless path without `-f` and failed with "Invalid argument".
 ///
 /// A genuine filename (`renamed.mp4`) is returned untouched.
+/// The file name an input takes inside a destination directory. Port of `_destination_name`.
+fn destination_name(input: &Path, ext: &str) -> String {
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    format!("{stem}.{ext}")
+}
+
+/// Give every command in a batch its own output path. Port of `disambiguate_outputs`.
+///
+/// A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
+/// render `converted/clip.mp4` - and every command carries `-y`, so the second conversion
+/// silently destroyed the first. Only the batch can see the clash: a lone `clip.mp4` must
+/// stay `clip.mp4` rather than gain a suffix because some other input might have existed.
+pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
+    let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    for (input, out) in outputs.iter_mut() {
+        if seen.insert(out.clone()) {
+            continue;
+        }
+        let stem = out
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let ext = out
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let source_ext = input
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let build = |name: String| -> PathBuf {
+            let file = if ext.is_empty() {
+                name
+            } else {
+                format!("{name}.{ext}")
+            };
+            out.with_file_name(file)
+        };
+        let mut candidate = if source_ext.is_empty() {
+            build(stem.clone())
+        } else {
+            build(format!("{stem}_{source_ext}"))
+        };
+        let mut n = 1;
+        while seen.contains(&candidate) {
+            n += 1;
+            candidate = if source_ext.is_empty() {
+                build(format!("{stem}_{n}"))
+            } else {
+                build(format!("{stem}_{source_ext}_{n}"))
+            };
+        }
+        seen.insert(candidate.clone());
+        *out = candidate;
+    }
+}
+
 pub fn resolve_output_target(
     raw: &str,
     input: &Path,
     mode: &str,
     opts: &Options,
     container: &str,
-) -> PathBuf {
+) -> anyhow::Result<PathBuf> {
     let out = PathBuf::from(raw);
     let ext = match mode {
         "extract_audio" => opts.audio_format.as_deref().unwrap_or("mp3"),
@@ -815,25 +933,50 @@ pub fn resolve_output_target(
     let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let name = out.file_name().and_then(|s| s.to_str()).unwrap_or("");
 
+    // A wildcard anywhere but the final component cannot be expanded.
+    let parts: Vec<_> = out.components().collect();
+    if parts.len() > 1 {
+        for part in &parts[..parts.len() - 1] {
+            if part.as_os_str().to_string_lossy().contains('*') {
+                anyhow::bail!(
+                    "Unrecognised output '{raw}'. A '*' may only stand for the file name,                      as in 'videos/*.mp4'."
+                );
+            }
+        }
+    }
+
     if name.contains('*') {
-        // `*.mp4` keeps the pattern's extension; a bare `*` takes the mode's.
         let pat_ext = out
             .extension()
             .and_then(|e| e.to_str())
-            .filter(|e| !e.is_empty())
-            .unwrap_or(ext);
-        let file = format!("{stem}.{pat_ext}");
-        return match out.parent() {
+            .unwrap_or("")
+            .to_string();
+        if pat_ext.contains('*') {
+            anyhow::bail!("Unrecognised output '{raw}'. A '*' may only stand for the file name.");
+        }
+        // The `*` stands for the input's stem; text around it is kept.
+        let pattern = if pat_ext.is_empty() {
+            name.to_string()
+        } else {
+            name[..name.len() - (pat_ext.len() + 1)].to_string()
+        };
+        let file = format!(
+            "{}.{}",
+            pattern.replace('*', stem),
+            if pat_ext.is_empty() { ext } else { &pat_ext }
+        );
+        return Ok(match out.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent.join(file),
             _ => PathBuf::from(file),
-        };
+        });
     }
 
-    if out.extension().is_none() {
-        return out.join(format!("{stem}.{ext}"));
+    // `.mp4` is a dotfile - a concrete file name with no extension by the parser's reading.
+    if out.extension().is_none() && !name.starts_with('.') {
+        return Ok(out.join(destination_name(input, ext)));
     }
 
-    out
+    Ok(out)
 }
 
 /// `_derive_output_path` (suffix template from `output_suffix_by_mode`, `{platform}` substituted).
@@ -982,7 +1125,7 @@ pub fn build_one_recipe(
     }
 
     let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
-        let out = resolve_output_target(raw, &input_path, &mode, options, &container);
+        let out = resolve_output_target(raw, &input_path, &mode, options, &container)?;
         if out.is_absolute() {
             out
         } else {
@@ -1162,7 +1305,7 @@ pub fn build_one_recipe(
                 options.duration.clone(),
                 options.end.clone(),
                 options.frames,
-            );
+            )?;
         }
         "extract_audio" => {
             recipe.audio_format = Some(
@@ -1864,7 +2007,7 @@ mod trim_frames_tests {
 
     #[test]
     fn a_frame_count_renders_vframes() {
-        let t = normalize_trim(s(Some("00:00:02")), None, None, Some(3));
+        let t = normalize_trim(s(Some("00:00:02")), None, None, Some(3)).unwrap();
         let (pre, post) = trim_flags(t);
         assert_eq!(pre, vec!["-ss".to_string(), "00:00:02".to_string()]);
         assert_eq!(post, vec!["-vframes".to_string(), "3".to_string()]);
@@ -1878,7 +2021,8 @@ mod trim_frames_tests {
             s(Some("5")),
             s(Some("00:00:07")),
             Some(5),
-        );
+        )
+        .unwrap();
         assert!(t.duration.is_none() && t.end.is_none());
         let (_, post) = trim_flags(t);
         assert!(!post.contains(&"-t".to_string()));
@@ -1888,14 +2032,14 @@ mod trim_frames_tests {
     #[test]
     fn equal_bounds_render_exactly_one_frame() {
         // ffmpeg_161: `-ss 00:00:00 -to 00:00:00` wrote an empty file and exited 0.
-        let t = normalize_trim(s(Some("00:00:00")), None, s(Some("00:00:00")), None);
+        let t = normalize_trim(s(Some("00:00:00")), None, s(Some("00:00:00")), None).unwrap();
         let (_, post) = trim_flags(t);
         assert_eq!(post, vec!["-vframes".to_string(), "1".to_string()]);
     }
 
     #[test]
     fn equal_bounds_away_from_zero_render_one_frame_there() {
-        let t = normalize_trim(s(Some("00:00:04")), None, s(Some("00:00:04")), None);
+        let t = normalize_trim(s(Some("00:00:04")), None, s(Some("00:00:04")), None).unwrap();
         let (pre, post) = trim_flags(t);
         assert_eq!(pre, vec!["-ss".to_string(), "00:00:04".to_string()]);
         assert_eq!(post, vec!["-vframes".to_string(), "1".to_string()]);
@@ -1904,19 +2048,19 @@ mod trim_frames_tests {
     #[test]
     fn mixed_timestamp_spellings_are_still_the_same_instant() {
         // Comparing the strings would miss this; the model writes both spellings.
-        let t = normalize_trim(s(Some("0")), None, s(Some("00:00:00")), None);
+        let t = normalize_trim(s(Some("0")), None, s(Some("00:00:00")), None).unwrap();
         assert_eq!(t.frames, Some(1));
     }
 
     #[test]
     fn a_zero_duration_is_also_one_frame() {
-        let t = normalize_trim(s(Some("00:00:03")), s(Some("0")), None, None);
+        let t = normalize_trim(s(Some("00:00:03")), s(Some("0")), None, None).unwrap();
         assert_eq!(t.frames, Some(1));
     }
 
     #[test]
     fn a_real_range_is_untouched() {
-        let t = normalize_trim(s(Some("00:00:02")), None, s(Some("00:00:07")), None);
+        let t = normalize_trim(s(Some("00:00:02")), None, s(Some("00:00:07")), None).unwrap();
         assert_eq!(t.frames, None);
         let (_, post) = trim_flags(t);
         assert_eq!(post, vec!["-to".to_string(), "00:00:07".to_string()]);
@@ -1969,7 +2113,8 @@ mod trim_frames_tests {
             ("-00:00:02", Some("-00:00:00")),
             ("-2s", None),
         ] {
-            let got = normalize_trim(Some(start.to_string()), None, end.map(str::to_string), None);
+            let got = normalize_trim(Some(start.to_string()), None, end.map(str::to_string), None)
+                .unwrap();
             assert_eq!(got.start_from_end, Some(-2.0), "{start}");
             assert_eq!(
                 got.frames, None,
@@ -1981,14 +2126,15 @@ mod trim_frames_tests {
 
     #[test]
     fn genuinely_reversed_range_still_becomes_one_frame() {
-        let got = normalize_trim(Some("5".into()), None, Some("2".into()), None);
+        let got = normalize_trim(Some("5".into()), None, Some("2".into()), None).unwrap();
         assert_eq!(got.frames, Some(1));
         assert_eq!(got.start_from_end, None);
     }
 
     #[test]
     fn ordinary_range_is_untouched() {
-        let got = normalize_trim(Some("00:00:01".into()), None, Some("00:00:05".into()), None);
+        let got =
+            normalize_trim(Some("00:00:01".into()), None, Some("00:00:05".into()), None).unwrap();
         assert_eq!(got.start.as_deref(), Some("00:00:01"));
         assert_eq!(got.end.as_deref(), Some("00:00:05"));
         assert_eq!(got.frames, None);
@@ -2036,7 +2182,8 @@ mod trim_frames_tests {
         let opts = Options::default();
         for stem in ["clip", "holiday"] {
             let input = PathBuf::from(format!("/sb/{stem}.mp4"));
-            let got = resolve_output_target("videos/*.mp4", &input, "convert", &opts, "mp4");
+            let got =
+                resolve_output_target("videos/*.mp4", &input, "convert", &opts, "mp4").unwrap();
             assert_eq!(
                 got.file_name().and_then(|s| s.to_str()),
                 Some(format!("{stem}.mp4").as_str()),
@@ -2055,7 +2202,7 @@ mod trim_frames_tests {
     fn extensionless_output_is_a_directory() {
         let opts = Options::default();
         let input = PathBuf::from("/sb/clip.mp4");
-        let got = resolve_output_target("videos_hevc", &input, "convert", &opts, "mkv");
+        let got = resolve_output_target("videos_hevc", &input, "convert", &opts, "mkv").unwrap();
         assert_eq!(got.file_name().and_then(|s| s.to_str()), Some("clip.mkv"));
         assert_eq!(
             got.parent()
@@ -2069,7 +2216,143 @@ mod trim_frames_tests {
     fn a_real_output_filename_is_still_honoured() {
         let opts = Options::default();
         let input = PathBuf::from("/sb/clip.mp4");
-        let got = resolve_output_target("renamed.mp4", &input, "convert", &opts, "mp4");
+        let got = resolve_output_target("renamed.mp4", &input, "convert", &opts, "mp4").unwrap();
         assert_eq!(got, PathBuf::from("renamed.mp4"));
+    }
+
+    // ── review findings: exact-string parity with Python ──
+    // The earlier mirrored tests compared numbers, which is exactly how the `:g` divergence
+    // survived. These assert the rendered STRING, against the same table as
+    // python/tests/test_arg_vocabulary_review.py.
+
+    #[test]
+    fn seconds_render_identically_to_python() {
+        for (value, want) in [
+            (5.0f64, "5"),
+            (-2.0, "-2"),
+            (11.9, "11.9"),
+            (6.172839, "6.172839"),
+            (-1.23456789, "-1.23456789"),
+            (-0.000001, "-0.000001"), // never "-1e-06"; ffmpeg cannot parse an exponent
+            (0.5, "0.5"),
+        ] {
+            assert_eq!(format_seconds(value), want, "{value}");
+        }
+    }
+
+    #[test]
+    fn destination_keeps_inputs_apart_when_stems_collide() {
+        let mut outs = vec![
+            (
+                PathBuf::from("/sb/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+            (
+                PathBuf::from("/sb/clip.mov"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+        ];
+        disambiguate_outputs(&mut outs);
+        assert_ne!(outs[0].1, outs[1].1, "both inputs render {:?}", outs[0].1);
+        assert!(
+            outs[1].1.to_string_lossy().contains("mov"),
+            "{:?}",
+            outs[1].1
+        );
+    }
+
+    #[test]
+    fn a_lone_input_keeps_its_plain_name() {
+        let mut outs = vec![(
+            PathBuf::from("/sb/clip.mp4"),
+            PathBuf::from("/sb/out/clip.mkv"),
+        )];
+        disambiguate_outputs(&mut outs);
+        assert_eq!(
+            outs[0].1.file_name().and_then(|s| s.to_str()),
+            Some("clip.mkv")
+        );
+    }
+
+    #[test]
+    fn a_three_way_collision_terminates() {
+        let mut outs = vec![
+            (
+                PathBuf::from("/sb/a/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+            (
+                PathBuf::from("/sb/b/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+            (
+                PathBuf::from("/sb/c/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+        ];
+        disambiguate_outputs(&mut outs);
+        let set: std::collections::HashSet<_> = outs.iter().map(|(_, o)| o.clone()).collect();
+        assert_eq!(set.len(), 3, "{outs:?}");
+    }
+
+    #[test]
+    fn a_dotfile_output_is_a_file_not_a_directory() {
+        let opts = Options::default();
+        let got = resolve_output_target(".mp4", Path::new("/sb/clip.mp4"), "convert", &opts, "mp4")
+            .unwrap();
+        assert_eq!(got, PathBuf::from(".mp4"));
+    }
+
+    #[test]
+    fn a_wildcard_in_a_parent_segment_is_refused() {
+        let opts = Options::default();
+        assert!(resolve_output_target(
+            "out*/clip.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn a_wildcard_pattern_keeps_the_text_around_it() {
+        let opts = Options::default();
+        let got = resolve_output_target(
+            "prefix_*.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4",
+        )
+        .unwrap();
+        assert_eq!(
+            got.file_name().and_then(|s| s.to_str()),
+            Some("prefix_clip.mp4")
+        );
+    }
+
+    #[test]
+    fn lexical_normalize_drops_traversal_without_touching_disk() {
+        // create_dir_all on an unnormalised parent builds each component in turn on POSIX,
+        // so `../escaped/../sb` creates `escaped` even though the whole path resolves inside.
+        let got = lexically_normalize(Path::new("/tmp/sb/../escaped/../sb"));
+        assert_eq!(got, PathBuf::from("/tmp/sb"));
+    }
+
+    #[test]
+    fn from_end_refuses_an_unreadable_end() {
+        let got = normalize_trim(Some("-2s".into()), None, Some("banana".into()), None);
+        assert!(
+            got.is_err(),
+            "an unreadable end must not be read as 'to the end'"
+        );
+    }
+
+    #[test]
+    fn zero_duration_still_wins_over_from_end() {
+        let got = normalize_trim(Some("-2".into()), Some("0".into()), None, None).unwrap();
+        assert_eq!(got.frames, Some(1));
     }
 }

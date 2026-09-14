@@ -21,6 +21,7 @@ from ._engine import (
     _profiles_root,
     _render_command,
     _summarise_probe,
+    disambiguate_outputs,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,6 +115,9 @@ class BuildRecipesStep(Step):
             _build_one_recipe(p, platform_profile, quality_profile, options, sandbox=ctx.sandbox)
             for p in probes
         ]
+        # Only the batch knows whether two inputs land on one output path, and every command
+        # carries -y, so an unresolved clash is a silent overwrite rather than an error.
+        recipes = disambiguate_outputs(recipes)
         return {"count": len(recipes), "recipes": recipes}
 
 
@@ -262,7 +266,13 @@ class RunBatchStep(Step):
             # The path is already sandbox-checked by the engine.
             out = c.get("output")
             if out:
-                Path(out).parent.mkdir(parents=True, exist_ok=True)
+                # Create the RESOLVED parent. The stored path keeps the spelling the plan
+                # supplied, so `../escaped/../sb/out.mp4` passes containment (it resolves
+                # inside) while `os.makedirs` on its unnormalised parent walks through
+                # `../escaped` and creates it - on POSIX, which builds each component in
+                # turn. Windows normalises `..` lexically and does not, which is exactly why
+                # this needs to be right rather than observed.
+                Path(out).resolve().parent.mkdir(parents=True, exist_ok=True)
             res = _deps.run_ffmpeg(c["command"])
             outputs.append(
                 {

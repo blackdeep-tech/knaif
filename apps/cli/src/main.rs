@@ -979,9 +979,14 @@ fn run_ffmpeg_step(
         // An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a parent
         // that need not exist yet; ffmpeg does not create one and fails on open. The path is
         // already sandbox-checked by the engine.
+        // Create the RESOLVED parent: the stored path keeps the spelling the plan supplied,
+        // so `../escaped/../sb/out.mp4` passes containment while creating its unnormalised
+        // parent walks through `../escaped` and creates it on POSIX.
         if let Some(parent) = std::path::Path::new(&output).parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).ok();
+                let target = std::fs::canonicalize(parent)
+                    .unwrap_or_else(|_| knaif_skill_ffmpeg::engine::lexically_normalize(parent));
+                std::fs::create_dir_all(target).ok();
             }
         }
         eprintln!("running: {}", shell_join(cmd));

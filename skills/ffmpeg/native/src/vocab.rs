@@ -34,6 +34,10 @@ pub struct Vocab {
     /// ffmpeg encoder → short codec token.
     #[serde(default)]
     pub encoder_codec_map: BTreeMap<String, String>,
+    /// Every extension the skill can read as an input. Filters glob/dir discovery so a bare
+    /// `*` means "all my media" rather than "every file in the sandbox".
+    #[serde(default)]
+    pub media_extensions: Vec<String>,
     /// Recognised video container extensions.
     #[serde(default)]
     pub video_containers: Vec<String>,

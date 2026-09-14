@@ -95,7 +95,8 @@ video_containers: [mp4, mkv, webm, mov, avi, gif, ogg, flv, m4v, wmv]
 # say "all my media", but `resolve_inputs` expands it against the whole sandbox, so without
 # this filter it also hands ffmpeg the .txt and .json files sitting next to the clips.
 media_extensions: [mp4, mkv, webm, mov, avi, gif, ogg, flv, m4v, wmv,
-                   mp3, wav, flac, aac, m4a, opus, wma, aiff]
+                   mpeg, mpg, ts, m2ts, mts, mxf, 3gp, ogv,
+                   mp3, wav, flac, aac, m4a, opus, wma, aiff, aif]
 
 # Recognised image extensions (thumbnail / single-frame outputs).
 image_extensions: [jpg, jpeg, png, webp, bmp, tiff, tif]
