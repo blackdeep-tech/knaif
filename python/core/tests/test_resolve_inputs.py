@@ -149,3 +149,46 @@ def test_result_dict_accepted_as_list_or_dict(tmp_path):
         files = files["files"]
     assert isinstance(files, list)
     assert str(f) in files
+
+
+def test_extension_filter_does_not_silently_recurse(tmp_path):
+    """Filtering and recursion are separate requests.
+
+    `extensions` used to switch directory listing from `glob` to `rglob`, so asking to keep
+    only media also pulled in every nested directory. Nothing passed `extensions` at the time,
+    so the coupling was never exercised; the ffmpeg skill is the first caller and wants the
+    filter without the recursion.
+    """
+    (tmp_path / "a.mp4").write_bytes(b"")
+    (tmp_path / "notes.txt").write_text("x")
+    nested = tmp_path / "sub"
+    nested.mkdir()
+    (nested / "deep.mp4").write_bytes(b"")
+
+    result = _step().handle({"paths": [str(tmp_path)], "extensions": ["mp4"]}, _ctx())
+    assert result["count"] == 1, result["files"]
+    assert result["files"][0].endswith("a.mp4")
+
+
+def test_extension_filter_applies_to_a_bare_glob(tmp_path):
+    """`*` is a legitimate way to say "all my media" — it must not sweep in everything else."""
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    (tmp_path / "song.mp3").write_bytes(b"")
+    (tmp_path / "notes.txt").write_text("x")
+    (tmp_path / "data.json").write_text("{}")
+
+    result = _step().handle({"paths": [str(tmp_path / "*")], "extensions": ["mp4", "mp3"]}, _ctx())
+    assert result["count"] == 2, result["files"]
+    assert not any(p.endswith((".txt", ".json")) for p in result["files"])
+
+
+def test_recursive_is_opt_in(tmp_path):
+    (tmp_path / "a.mp4").write_bytes(b"")
+    nested = tmp_path / "sub"
+    nested.mkdir()
+    (nested / "deep.mp4").write_bytes(b"")
+
+    result = _step().handle(
+        {"paths": [str(tmp_path)], "extensions": ["mp4"], "recursive": True}, _ctx()
+    )
+    assert result["count"] == 2, result["files"]
