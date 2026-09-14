@@ -156,3 +156,11 @@ scripts/agent_vs_knaif/RESULTS.json
 
 # Claude Code worktree isolation scratch dir
 .claude/worktrees/
+
+# Unsloth writes generated trainer code here (UNSLOTH_COMPILE_LOCATION in the training
+# scripts). Machine-generated, rebuilt on demand, and it linted as 2145 errors when it
+# briefly looked like repo source.
+python/training/cache/
+python/training/output/
+python/training/adapters/
+python/training/merged/

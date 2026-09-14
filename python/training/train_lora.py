@@ -24,11 +24,16 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 # Pin Unsloth's compiled cache under training/ (same convention as phase0_smoke.py).
 os.environ.setdefault("UNSLOTH_COMPILE_LOCATION", os.path.join(_HERE, "cache", "unsloth_compiled"))
 
+# Unsloth MUST be imported before trl/transformers/peft — it patches them at import time,
+# and importing it second leaves the patched trainer half-applied (it then hands trl an
+# unresolved '<EOS_TOKEN>' sentinel). Unsloth warns about this on every run. isort would
+# otherwise sort it after `trl`, so the placement is pinned here deliberately.
+from unsloth import FastLanguageModel  # noqa: E402  # isort: skip
+from unsloth.chat_templates import train_on_responses_only  # noqa: E402  # isort: skip
+
 import torch  # noqa: E402
 from datasets import Dataset  # noqa: E402
 from trl import SFTConfig, SFTTrainer  # noqa: E402
-from unsloth import FastLanguageModel  # noqa: E402
-from unsloth.chat_templates import train_on_responses_only  # noqa: E402
 
 # ── shared hyperparameters (identical for 1.7B and 4B) ──
 MAX_SEQ = 3072  # union prompts (header+tools+examples) reach ~2.1k tokens; headroom so
@@ -83,11 +88,11 @@ def main() -> None:
 
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tok,
+        processing_class=tok,
         train_dataset=ds,
         args=SFTConfig(
             dataset_text_field="text",
-            max_seq_length=MAX_SEQ,
+            max_length=MAX_SEQ,
             per_device_train_batch_size=BATCH,
             gradient_accumulation_steps=GRAD_ACCUM,
             num_train_epochs=args.epochs,

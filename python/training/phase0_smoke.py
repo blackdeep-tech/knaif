@@ -11,10 +11,15 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 # Must be set before importing unsloth — keeps the generated trainer cache in training/.
 os.environ.setdefault("UNSLOTH_COMPILE_LOCATION", os.path.join(_HERE, "cache", "unsloth_compiled"))
 
+# Unsloth MUST be imported before trl/transformers/peft — it patches them at import time,
+# and importing it second leaves the patched trainer half-applied (it then hands trl an
+# unresolved '<EOS_TOKEN>' sentinel). Unsloth warns about this on every run. isort would
+# otherwise sort it after `trl`, so the placement is pinned here deliberately.
+from unsloth import FastLanguageModel  # noqa: E402  # isort: skip
+
 import torch  # noqa: E402
 from datasets import Dataset  # noqa: E402
 from trl import SFTConfig, SFTTrainer  # noqa: E402
-from unsloth import FastLanguageModel  # noqa: E402
 
 model, tok = FastLanguageModel.from_pretrained(
     "Qwen/Qwen3-1.7B",
@@ -32,11 +37,11 @@ model = FastLanguageModel.get_peft_model(
 ds = Dataset.from_dict({"text": ["Smoke test for Blackwell bf16 LoRA."] * 8})
 trainer = SFTTrainer(
     model=model,
-    tokenizer=tok,
+    processing_class=tok,
     train_dataset=ds,
     args=SFTConfig(
         dataset_text_field="text",
-        max_seq_length=2048,
+        max_length=2048,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         max_steps=1,
