@@ -16,9 +16,6 @@ import pytest
 from knaif import list_skills
 from knaif.evalsuite import cli
 from knaif.evalsuite.acceptance import load_safety_corpus, safety_corpus_path, score_safety
-from knaif.evalsuite.outcomes import POLICY_VERSION
-
-from .conftest import rebase_snapshot_tag_counts
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS_ROOT = REPO_ROOT / "skills"
@@ -205,14 +202,14 @@ def _board(**over) -> dict:
 def _passing_board(skill: str) -> dict:
     """A scoreboard that clears the real bar — the committed snapshot does, by construction.
 
-    Stamped with the current scoring policy: the committed snapshots predate it, and a
-    run that cannot say which semantics graded it is correctly refused (S5 re-locks them).
+    True again without help since T7 re-locked both snapshots over the accepted sft-v4 run:
+    they carry `scoring_policy` themselves, and their slice populations are today's corpus.
+    Between T4's relabel and that re-lock this had to stamp the policy and rebase stale tag
+    counts to keep the CLI under test testable; that scaffolding is gone with the gap.
     """
-    board = json.loads(
+    return json.loads(
         (SKILLS_ROOT / skill / "data" / "eval_snapshot.json").read_text(encoding="utf-8")
     )
-    board["scoring_policy"] = POLICY_VERSION
-    return rebase_snapshot_tag_counts(board, skill)
 
 
 def test_accept_passes_on_the_accepted_baseline(tmp_path: Path, capsys) -> None:

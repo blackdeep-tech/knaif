@@ -138,116 +138,27 @@ def test_control_outcome_tags_agree_with_the_expectation(skill: str, outcome: st
 
 
 @pytest.mark.parametrize("skill", ACTIVE_SKILLS)
-def test_every_still_comparable_floor_clears_the_accepted_baseline(skill: str) -> None:
-    """The same check over the slices the relabel did not move — never xfailed.
-
-    The mark above is per *skill*, so while two of ffmpeg's slices are stale it stops
-    observing the other twenty-four and both aggregates. Editing a floor, or a corpus tag,
-    would then go uncaught until the re-lock. This keeps watching everything still
-    comparable; delete it when the mark above goes.
-    """
-    spec = load_acceptance(skill, root=REPO_ROOT / "skills")
-    stale = set(_slices_measured_on_a_different_corpus(skill))
-    lean = {**spec, "slices": {k: v for k, v in spec["slices"].items() if k not in stale}}
-    board = {**_snapshot(skill), "scoring_policy": POLICY_VERSION}
-    report = check_acceptance(lean, board, safety={"total": 1, "pass_rate": 1.0})
-    assert report.ok, " | ".join(v.message for v in report.violations)
-
-
-@pytest.mark.parametrize("skill", ACTIVE_SKILLS)
 def test_each_bar_declares_a_policy_the_code_still_implements(skill: str) -> None:
     spec = load_acceptance(skill, root=REPO_ROOT / "skills")
     assert spec["policy_version"] <= POLICY_VERSION
 
 
-def _slices_measured_on_a_different_corpus(skill: str) -> list[str]:
-    """Required slices whose row *count* no longer matches the committed snapshot.
-
-    A slice the snapshot measured over 34 utterances says nothing about a floor written
-    for the 16 that carry the tag today — the two numbers are not about the same thing.
-
-    **Counts undercount the staleness, and deliberately so.** A slice whose membership
-    changed while its size did not looks current here: ffmpeg's `safety` slice is 16
-    utterances before and after T4, but 8 of them flipped from expecting `reject` to
-    expecting `clarify`, so its recorded 0.8125 describes a different measurement over an
-    identically sized population. A count is what a scoreboard records — a relabel leaves no
-    other trace in it — so this detects what is detectable and the re-lock settles the rest.
-    """
-    spec = load_acceptance(skill, root=REPO_ROOT / "skills")
-    tags = _corpus_tags(skill)
-    by_tag = _snapshot(skill).get("by_tag", {})
-    return sorted(
-        tag for tag in spec["slices"] if tag in by_tag and by_tag[tag].get("total") != tags.get(tag)
-    )
-
-
-def _baseline_params() -> list:
-    """Mark a skill xfail(strict) while its snapshot and its corpus disagree on a slice.
-
-    Relabelling a control outcome (T4 of docs/plans/2026-09-11-reject-clarify-taxonomy.md)
-    changes a slice's *population*, so the committed baseline stops being comparable to the
-    bar until S5 re-locks it over a fresh run. That gap is unavoidable, and pre-registering
-    it here is the honest alternative to leaving the old threshold in place so the bar stays
-    green. Strict, so the day the re-lock lands this test passes and the mark must come off.
-    """
-    params = []
-    for skill in ACTIVE_SKILLS:
-        stale = _slices_measured_on_a_different_corpus(skill)
-        marks = (
-            [
-                pytest.mark.xfail(
-                    strict=True,
-                    reason=(
-                        f"{skill}: snapshot and corpus populations differ for "
-                        f"{', '.join(stale)} — not comparable until S5 re-locks"
-                    ),
-                )
-            ]
-            if stale
-            else []
-        )
-        params.append(pytest.param(skill, marks=marks))
-    return params
-
-
 @pytest.mark.parametrize("skill", ACTIVE_SKILLS)
-def test_the_corpus_never_shrinks_below_what_the_snapshot_measured(
-    skill: str,
-) -> None:
-    """A corpus may grow between re-locks. It must never silently shrink.
-
-    Relabelling moves rows between slices and leaves the total alone; T4b of
-    docs/plans/2026-09-11-reject-clarify-taxonomy.md moves rows *between corpora*, which
-    legitimately adds utterances to `eval.jsonl` — the two raw-command phrasings the safety
-    corpus could no longer hold. So equality only holds at a re-lock, and asserting it would
-    make an ordinary corpus addition look like a defect.
-
-    A *drop* is a different thing: nothing in this plan removes an utterance from
-    `eval.jsonl` ("copy, do not move" exists precisely so the `reject` population is not
-    thinned), so a shrinking corpus means rows were lost in an edit. That is what this
-    catches, and it keeps catching it while the per-slice comparison below is stale.
-    """
-    corpus = sum(
-        len(row.get("utterances") or [row.get("utterance")]) for row in _corpus_rows(skill)
-    )
-    measured = _snapshot(skill)["total"]
-    assert corpus >= measured, (
-        f"{skill}: corpus is {corpus} utterances but the snapshot measured {measured} — "
-        "rows were dropped, not relabelled"
-    )
-
-
-@pytest.mark.parametrize("skill", _baseline_params())
 def test_the_accepted_baseline_clears_its_own_floors(skill: str) -> None:
     """The committed snapshot *is* the accepted baseline — a floor above it is fiction.
 
-    The committed snapshots predate the scoring policy and carry no `scoring_policy`
-    stamp, which `check_acceptance` treats as uncertifiable. That is the correct rule
-    (S5 re-locks them under the policy); this test is a sanity check on the *floors*,
-    so it stamps the policy rather than asserting the snapshots are acceptance-ready.
+    Between T4's relabel and T7's re-lock this could not be asserted plainly: the snapshots
+    described a corpus that no longer existed, so the skill carried a strict xfail and a
+    second test watched whatever was still comparable. T7 locked both snapshots over the
+    accepted sft-v4 run, so the baseline is a current, policy-stamped record again and the
+    check is simply the check — no mark, no stamping, no rebased tag counts.
     """
     spec = load_acceptance(skill, root=REPO_ROOT / "skills")
-    board = {**_snapshot(skill), "scoring_policy": POLICY_VERSION}
+    board = _snapshot(skill)
+    assert board.get("scoring_policy") == POLICY_VERSION, (
+        f"{skill}: the committed snapshot is stamped {board.get('scoring_policy')!r}, not "
+        f"{POLICY_VERSION} — re-lock it rather than stamping it here"
+    )
     report = check_acceptance(spec, board, safety={"total": 1, "pass_rate": 1.0})
     assert report.ok, "\n".join(v.message for v in report.violations)
 

@@ -29,8 +29,6 @@ from knaif.evalsuite.acceptance import (
 )
 from knaif.evalsuite.outcomes import POLICY_VERSION
 
-from .conftest import rebase_snapshot_tag_counts
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -332,7 +330,7 @@ def _real_bar_board(**over: object) -> dict:
         }
     )
     board.update(over)  # type: ignore[arg-type]
-    return rebase_snapshot_tag_counts(board, "ffmpeg")
+    return board
 
 
 @pytest.fixture()
@@ -350,19 +348,16 @@ def recorded(monkeypatch):
     return seen
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the committed snapshot carries no scoring_policy and the policy moved to v2 "
-        "(2026-09-12) — an unstamped baseline is correctly refused until S5 re-locks it"
-    ),
-)
 def test_the_command_accepts_a_run_that_clears_the_real_bar(tmp_path, recorded, capsys) -> None:
-    """Pre-registered, and strict so the re-lock removes it.
+    """A native run that clears both the S2 bar and the frozen Python baseline is ACCEPTED.
 
-    This grades against the *committed* snapshot on disk rather than a stamped fixture, so it
-    cannot pass while that snapshot predates the stamp. The refusal is the behaviour working:
-    the alternative is comparing a v2 run to a baseline nobody measured under v2.
+    This grades against the *committed* snapshot on disk rather than a stamped fixture, which
+    is the point: it cannot pass unless that snapshot is a baseline the current policy can
+    certify. It was pre-registered strict-xfail from 2026-09-12, when the policy moved to v2
+    and the committed snapshots still carried no stamp — refusing to compare a v2 run to a
+    baseline nobody measured under v2 was the behaviour working, not a bug. T7 re-locked both
+    snapshots over the accepted sft-v4 run, so the comparison is legitimate and the mark is
+    gone.
     """
     from knaif.evalsuite import cli
 
