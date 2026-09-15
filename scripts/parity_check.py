@@ -1186,16 +1186,28 @@ def main() -> int:
             print(f"  {r['status']:<24} {r['id']:<18} {r['utterance'][:44]}")
             print(f"    {r['note']}")
 
-    # With --label the run gets a DIRECTORY holding report.json + meta.json (L3b's shape,
-    # matching evals/parity/2026-09-09_p2b-prefix-baseline/). Without one it stays a loose
-    # JSON file — fine for an exploratory run, not enough to quote as evidence.
+    # `--label` means "this is evidence", so it ALWAYS gets meta.json — the provenance
+    # (backend, git sha, binary/model/corpus sha256s, entry points) without which two runs
+    # cannot be compared. It used to be written only when `--label` came WITHOUT `--out`,
+    # so passing both silently produced a bare report.json that this file's own comment
+    # calls "not enough to quote as evidence". That is exactly how the 2026-09-14 L3 record
+    # lost its backend, which then made the 2026-09-15 comparison unattributable: the run
+    # before it was `cuda`, the one after was `vulkan`, and nothing recorded the middle.
+    # `--out` now chooses only WHERE the report goes; meta.json lands beside it.
     run_dir: Path | None = None
-    if args.label and not args.out:
-        run_dir = (
-            REPO_ROOT / "evals" / "parity" / f"{datetime.now(timezone.utc):%Y-%m-%d}_{args.label}"
-        )
+    if args.label:
+        if args.out:
+            out = args.out
+            run_dir = out.parent
+        else:
+            run_dir = (
+                REPO_ROOT
+                / "evals"
+                / "parity"
+                / f"{datetime.now(timezone.utc):%Y-%m-%d}_{args.label}"
+            )
+            out = run_dir / "report.json"
         run_dir.mkdir(parents=True, exist_ok=True)
-        out = run_dir / "report.json"
     else:
         out = args.out or (
             REPO_ROOT
