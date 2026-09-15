@@ -261,3 +261,43 @@ fn example_selection_matches_the_shipped_bundles() {
         );
     }
 }
+
+/// L2: the arg-shape-gate parity contract. Given the same `(plan, registry)` both runtimes
+/// must produce the same clarify payload, or neither must.
+///
+/// Both gates were Python-only until 2026-09-15, and the L4 lane priced the gap: ffmpeg's
+/// `extract_audio` slice measured 0.872 on the native binary against 0.949 in Python, one row
+/// of which was exactly `Tool 'adjust_volume' has unsupported args: [target_sample_rate]`
+/// erroring here where Python clarified. Deterministic, so this is either 100% or broken.
+///
+/// The two gates are asserted separately: they are not composed, they sit on opposite sides of
+/// validation, and they carry different retry semantics (see the contract's `_stage`).
+#[test]
+fn arg_gate_parity_cases() {
+    let fixtures =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../contracts/parity/arg_gate_cases.json");
+    let doc: Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixtures).expect("read fixtures")).unwrap();
+    let registries = doc["registries"].as_object().unwrap();
+
+    for case in doc["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let reg_yaml = registries[case["registry"].as_str().unwrap()]
+            .as_str()
+            .unwrap();
+        let registry = load_registry_str(reg_yaml).expect("registry");
+        let plan = case["plan"].clone();
+
+        let actual = match case["gate"].as_str().unwrap() {
+            "required" => knaif_core::required_args_clarify(&plan, &registry),
+            "unsupported" => knaif_core::unsupported_args_clarify(&plan, &registry),
+            other => panic!("case {name}: unknown gate {other:?}"),
+        };
+        let expected = &case["expected"];
+        match (actual, expected) {
+            (None, Value::Null) => {}
+            (Some(got), want) => assert_eq!(&got, want, "case {name}: gate output differs"),
+            (None, want) => panic!("case {name}: gate did not fire; contract expects {want}"),
+        }
+    }
+}

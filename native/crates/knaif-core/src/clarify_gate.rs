@@ -89,6 +89,112 @@ pub fn output_capable_tools(registry: &Registry) -> HashSet<String> {
         .collect()
 }
 
+/// Terminal tools the arg-shape gates skip. Wider than [`TERMINAL_TOOLS`] by
+/// `wait_for_confirmation`, matching Python's `nl_clarify_gate._TERMINAL_TOOLS`.
+const ARG_GATE_TERMINAL: &[&str] = &["clarify", "reject", "done", "wait_for_confirmation"];
+
+fn clarify_payload(question: String) -> Value {
+    json!({ "plan": [{ "tool": "clarify", "args": { "question": question } }] })
+}
+
+fn non_terminal_steps(payload: &Value) -> impl Iterator<Item = &Value> {
+    payload
+        .get("plan")
+        .and_then(Value::as_array)
+        .map(|v| v.as_slice())
+        .unwrap_or(&[])
+        .iter()
+        .filter(|s| {
+            let t = s.get("tool").and_then(Value::as_str).unwrap_or("");
+            !ARG_GATE_TERMINAL.contains(&t)
+        })
+}
+
+/// Clarify instead of hard-erroring when a step omits an arg the user must supply.
+///
+/// Port of Python `nl_clarify_gate.required_args_clarify`. Fires on a missing required arg,
+/// on one present but empty, and on a tool declaring `any_of_args` with none of them given.
+/// Known tools only — an unknown tool stays a validation error.
+pub fn required_args_clarify(payload: &Value, registry: &Registry) -> Option<Value> {
+    let empty = serde_json::Map::new();
+    for step in non_terminal_steps(payload) {
+        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
+        let Some(def) = registry.get(tool) else {
+            continue; // unknown tool → leave for validation to reject
+        };
+        let args = step
+            .get("args")
+            .and_then(Value::as_object)
+            .unwrap_or(&empty);
+        for arg in &def.required_args {
+            let missing = match args.get(arg.as_str()) {
+                None | Some(Value::Null) => true,
+                Some(Value::String(v)) => v.trim().is_empty(),
+                Some(_) => false,
+            };
+            if missing {
+                return Some(clarify_payload(format!("What {arg} should I use?")));
+            }
+        }
+        if !def.any_of_args.is_empty()
+            && !def
+                .any_of_args
+                .iter()
+                .any(|a| args.contains_key(a.as_str()))
+        {
+            return Some(clarify_payload(format!(
+                "What {} should I use?",
+                def.any_of_args.join(" or ")
+            )));
+        }
+    }
+    None
+}
+
+/// Clarify instead of hard-erroring when a step puts an arg on a *known* tool that the tool
+/// does not declare.
+///
+/// Port of Python `nl_clarify_gate.unsupported_args_clarify`. The inventory-gap case of the
+/// reject/clarify taxonomy: the user asked for something real that no tool can express, and
+/// the model wrote it down as the closest arg it had. Deliberately narrow, so it does not
+/// become somewhere bugs hide behind a polite question — known tools only, and the caller
+/// runs it after `normalize_plan` (so a merely-misnamed key is aliased, not clarified) and
+/// only on a model-proposed plan, never on an expanded one.
+pub fn unsupported_args_clarify(payload: &Value, registry: &Registry) -> Option<Value> {
+    for step in non_terminal_steps(payload) {
+        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
+        let Some(def) = registry.get(tool) else {
+            continue;
+        };
+        let Some(args) = step.get("args").and_then(Value::as_object) else {
+            continue;
+        };
+        let allowed: HashSet<&str> = def
+            .required_args
+            .iter()
+            .chain(def.optional_args.iter())
+            .map(String::as_str)
+            .collect();
+        let extra: Vec<&str> = args
+            .keys()
+            .map(String::as_str)
+            .filter(|k| !allowed.contains(k))
+            .collect();
+        if !extra.is_empty() {
+            let joined = match extra.split_last() {
+                Some((last, [])) => (*last).to_string(),
+                Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+                None => unreachable!("extra is non-empty"),
+            };
+            return Some(clarify_payload(format!(
+                "I can't {} with {joined} — that isn't supported. Could you rephrase?",
+                tool.replace('_', " ")
+            )));
+        }
+    }
+    None
+}
+
 /// Link chain intermediates, then return the plan unchanged or downgraded to a clarify.
 ///
 /// Ordering mirrors Python `infer`: `_link_chain_intermediates` runs first (so a downstream
@@ -481,5 +587,103 @@ mod tests {
         );
         let out = gate(p, "downscale clip_4k to 1920x1080");
         assert_eq!(out["plan"][0]["tool"], "clarify");
+    }
+
+    // ── arg-shape gates ──────────────────────────────────────────────────────
+
+    fn arg_reg(yaml: &str) -> crate::Registry {
+        crate::registry::load_registry_str(yaml).expect("registry")
+    }
+
+    const VOL: &str = "adjust_volume:
+  description: d
+  required_args: [inputs]
+  optional_args: [normalize, level]
+clarify:
+  description: d
+  required_args: [question]
+";
+
+    #[test]
+    fn unsupported_arg_on_a_known_tool_clarifies() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "adjust_volume",
+            "args": {"inputs": ["a.wav"], "target_sample_rate": 22050}}]));
+        let out = unsupported_args_clarify(&p, &r).expect("should clarify");
+        assert_eq!(out["plan"][0]["tool"], "clarify");
+        let q = out["plan"][0]["args"]["question"].as_str().unwrap();
+        assert!(q.contains("target_sample_rate"), "question was {q:?}");
+        assert!(q.contains("support"), "question was {q:?}");
+    }
+
+    #[test]
+    fn supported_args_pass_through() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "adjust_volume",
+            "args": {"inputs": ["a.wav"], "normalize": true}}]));
+        assert!(unsupported_args_clarify(&p, &r).is_none());
+    }
+
+    #[test]
+    fn an_unknown_tool_stays_a_hard_validation_error() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "teleport", "args": {"whatever": 1}}]));
+        assert!(unsupported_args_clarify(&p, &r).is_none());
+    }
+
+    #[test]
+    fn terminal_tools_are_skipped_by_the_arg_gates() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "clarify", "args": {"question": "q", "extra": 1}}]));
+        assert!(unsupported_args_clarify(&p, &r).is_none());
+    }
+
+    #[test]
+    fn every_offending_key_is_named() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "adjust_volume",
+            "args": {"inputs": ["a.wav"], "bitrate": "128k", "target_sr": 1}}]));
+        let out = unsupported_args_clarify(&p, &r).unwrap();
+        let q = out["plan"][0]["args"]["question"].as_str().unwrap();
+        assert!(
+            q.contains("bitrate") && q.contains("target_sr"),
+            "question was {q:?}"
+        );
+    }
+
+    #[test]
+    fn a_missing_required_arg_clarifies() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "adjust_volume", "args": {"normalize": true}}]));
+        let out = required_args_clarify(&p, &r).expect("should clarify");
+        assert_eq!(out["plan"][0]["tool"], "clarify");
+        let q = out["plan"][0]["args"]["question"].as_str().unwrap();
+        assert!(q.contains("inputs"), "question was {q:?}");
+    }
+
+    #[test]
+    fn a_blank_required_arg_counts_as_missing() {
+        let r = arg_reg(VOL);
+        let p = plan(json!([{"tool": "adjust_volume", "args": {"inputs": "   "}}]));
+        assert!(required_args_clarify(&p, &r).is_some());
+    }
+
+    #[test]
+    fn any_of_args_with_none_present_clarifies() {
+        let r = arg_reg(
+            "rotate:
+  description: d
+  required_args: [input]
+  optional_args: [angle, flip]
+  any_of_args: [angle, flip]
+",
+        );
+        let p = plan(json!([{"tool": "rotate", "args": {"input": "a.mp4"}}]));
+        let out = required_args_clarify(&p, &r).expect("should clarify");
+        let q = out["plan"][0]["args"]["question"].as_str().unwrap();
+        assert!(
+            q.contains("angle") && q.contains("flip"),
+            "question was {q:?}"
+        );
     }
 }

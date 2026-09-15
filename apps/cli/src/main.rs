@@ -1357,15 +1357,35 @@ fn infer_with_repair(
                         &retry_raw,
                         &knaif_core::extract_json(&retry_raw).json,
                     );
-                    Err(first_err)
+                    // The re-prompt had its chance. An arg no known tool can express is an
+                    // inventory gap, not a malformed plan, so say so instead of surfacing
+                    // "Tool 'adjust_volume' has unsupported args: [...]" to the user.
+                    unsupported_gap(&retry_raw, &raw, registry).ok_or(first_err)
                 }
             }
         }
         Err(e) => {
             emit_debug(debug, &raw, &knaif_core::extract_json(&raw).json);
-            Err(e)
+            // No repair configured, so this is already the last word.
+            unsupported_gap(&raw, &raw, registry).ok_or(e)
         }
     }
+}
+
+/// The unsupported-arg clarify, from whichever attempt still shows one.
+///
+/// Checks the retry first and falls back to the original: the retry is the more recent answer,
+/// but a retry that failed some *other* way should not mask an inventory gap the first attempt
+/// showed plainly.
+fn unsupported_gap(
+    latest: &str,
+    original: &str,
+    registry: &knaif_core::Registry,
+) -> Option<serde_json::Value> {
+    [latest, original]
+        .iter()
+        .filter_map(|raw| prepared_payload(raw, registry))
+        .find_map(|p| knaif_core::unsupported_args_clarify(&p, registry))
 }
 
 /// Whether to dump raw model output on a parse/validation failure (`$KNAIF_DEBUG` non-empty).
@@ -1518,6 +1538,17 @@ fn is_path_token(token: &str) -> bool {
 }
 
 /// Extract JSON → parse → normalize → apply defaults → validate. Errors describe the first failure.
+///
+/// The two arg-shape clarify gates sit either side of validation, and Python gives them
+/// *different* retry semantics, which this mirrors rather than simplifying:
+///
+/// * `required_args_clarify` runs here, before validation, and short-circuits. The model
+///   omitted something only the user can supply, so a corrective re-prompt would invite it to
+///   invent the value and turn a correct clarify into a wrong plan. Python defers to this gate
+///   by reporting the probe "clean" so no retry fires (`agent.py::_parse_and_check`).
+/// * `unsupported_args_clarify` does NOT run here — see `build_payload_with_repair`. An
+///   undeclared arg is worth one corrective re-prompt, because the model may well pick a
+///   different tool or drop the arg; only once that has failed is it an inventory gap.
 fn try_build_payload(
     raw: &str,
     registry: &knaif_core::Registry,
@@ -1528,8 +1559,23 @@ fn try_build_payload(
     let mut payload = knaif_core::parse_plan(&extracted.json)?;
     knaif_core::normalize_plan(&mut payload, Some(registry));
     knaif_core::apply_defaults(&mut payload, registry);
+    if let Some(clarify) = knaif_core::required_args_clarify(&payload, registry) {
+        return Ok(clarify);
+    }
     knaif_core::validate_plan(&payload, registry, base, sandbox)?;
     Ok(payload)
+}
+
+/// Re-derive a plan as far as `validate_plan` would see it, for the post-retry arg-shape gate.
+///
+/// Stops one step short of validation deliberately: this exists to inspect a plan that validation
+/// has already refused, so running it again would only re-raise the error being handled.
+fn prepared_payload(raw: &str, registry: &knaif_core::Registry) -> Option<serde_json::Value> {
+    let extracted = knaif_core::extract_json(raw);
+    let mut payload = knaif_core::parse_plan(&extracted.json).ok()?;
+    knaif_core::normalize_plan(&mut payload, Some(registry));
+    knaif_core::apply_defaults(&mut payload, registry);
+    Some(payload)
 }
 
 /// Resolve a `--model` argument (a raw path, or a manifest/installed name via the shared store) to a
