@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from knaif.nl_clarify_gate import nl_clarify_gate
+from knaif.nl_clarify_gate import nl_clarify_gate, unsupported_args_clarify
 from knaif.registry import ToolDef
 
 
@@ -341,3 +341,55 @@ def test_multistep_still_gates_unspecified_first_step():
     ]
     result = nl_clarify_gate("resize the 4K video to 1080p and compress it", plan)
     assert result is not plan, "Gate must fire when first step's input is unspecified"
+
+
+# ── unsupported_args_clarify: a known tool given an arg it does not declare ───
+
+
+def _volume_registry() -> dict[str, ToolDef]:
+    return {
+        "adjust_volume": ToolDef(
+            name="adjust_volume",
+            description="x",
+            required_args=("inputs",),
+            optional_args=("normalize", "level"),
+        ),
+        "clarify": ToolDef(name="clarify", description="x", required_args=("question",)),
+    }
+
+
+def test_unsupported_arg_clarifies():
+    """A capability the tool has no arg for is an inventory gap → clarify, not error."""
+    plan = _plan("adjust_volume", inputs=["a.wav"], target_sample_rate=22050)
+    result = unsupported_args_clarify(plan, _volume_registry())
+    assert result is not None
+    assert result[0]["tool"] == "clarify"
+    q = _question(result)
+    assert "target_sample_rate" in q
+    assert "support" in q.lower()
+
+
+def test_supported_args_pass_through():
+    plan = _plan("adjust_volume", inputs=["a.wav"], normalize=True)
+    assert unsupported_args_clarify(plan, _volume_registry()) is None
+
+
+def test_unsupported_args_unknown_tool_left_for_validation():
+    """Unknown tools stay a hard validation error — the gate only covers known tools."""
+    plan = _plan("teleport_video", inputs=["a.wav"], whatever=1)
+    assert unsupported_args_clarify(plan, _volume_registry()) is None
+
+
+def test_unsupported_args_ignores_terminal_tools():
+    plan = [{"tool": "clarify", "args": {"question": "q", "extra": 1}}]
+    assert unsupported_args_clarify(plan, _volume_registry()) is None
+
+
+def test_unsupported_args_lists_every_offending_key():
+    plan = _plan("adjust_volume", inputs=["a.wav"], bitrate="128k", target_sr=22050)
+    q = _question(unsupported_args_clarify(plan, _volume_registry()))
+    assert "bitrate" in q and "target_sr" in q
+
+
+def test_unsupported_args_no_registry_is_noop():
+    assert unsupported_args_clarify(_plan("adjust_volume", x=1), None) is None

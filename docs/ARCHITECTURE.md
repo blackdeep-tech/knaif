@@ -236,6 +236,29 @@ two places:
   it, or when a tool's declared `grounded_args` (e.g. a password) hold a value the
   model invented.
 
+#### The arg-shape gates
+
+Two smaller gates run earlier in `execute_plan`, *before* structural validation, and
+both convert a would-be `ValueError` into a `clarify`:
+
+- `required_args_clarify()` — a step omits a required arg (or a tool declares
+  `any_of_args` and none is present). The user never supplied the value, so asking beats
+  erroring.
+- `unsupported_args_clarify()` — a step puts an arg on a **known** tool that the tool
+  does not declare, e.g. `adjust_volume` given `target_sample_rate`. The user asked for
+  something real that no tool can express, and the model wrote it down as the closest
+  thing it had; per the [reject/clarify taxonomy](plans/2026-09-11-reject-clarify-taxonomy.md)
+  an inventory gap is `clarify`, not a validator string.
+
+Both are deliberately narrow, so neither becomes a place for bugs to hide behind a
+polite question. They fire only on the NL path (`utterance is not None`) — a direct
+`execute_plan()` call keeps strict validation; only on tools already in the registry —
+an unknown tool is still a hard error; and only before expansion — an *expanded* plan
+carrying an undeclared arg is a skill bug and must keep failing loudly. Because a plan
+they touch could never have validated, they cannot turn a passing plan into a clarify.
+
+Neither has a native counterpart yet; `runtimes.native.status` reflects that.
+
 `_hallucinated_filename` flags invented **inputs** only. It deliberately skips two
 things, and both exclusions are load-bearing:
 

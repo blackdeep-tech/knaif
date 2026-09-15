@@ -14,7 +14,11 @@ from .core_tools import CORE_TOOL_DEFS
 from .evaluator import compute_metrics, run_eval
 from .executor import HANDLERS as _EXECUTOR_HANDLERS
 from .handler_api import HandlerContext
-from .nl_clarify_gate import nl_clarify_gate, required_args_clarify
+from .nl_clarify_gate import (
+    nl_clarify_gate,
+    required_args_clarify,
+    unsupported_args_clarify,
+)
 from .planner import (
     _VALID_FILE_TYPES,
     StemAmbiguousError,
@@ -370,15 +374,19 @@ class CommandAgent:
         normalize_plan(payload, self.registry)
         apply_defaults(payload, self.registry)
 
-        # Missing-required-arg clarify gate (before structural validation): when
-        # the model omits a required arg the user must supply, ask rather than
-        # hard-error. Only fires on absent args, so well-formed plans are
+        # Arg-shape clarify gates (before structural validation): when the model
+        # omits a required arg the user must supply, or puts an arg on a known
+        # tool that the tool cannot express, ask rather than hard-error. Both
+        # fire only on plans that could never validate, so well-formed plans are
         # untouched. Needs an utterance (NL path); direct execute_plan calls in
         # tests with deliberately-partial args still hit normal validation.
         if utterance is not None:
-            missing = required_args_clarify(payload.get("plan", []), self.registry)
-            if missing is not None:
-                q = missing[0]["args"]["question"]
+            plan_steps = payload.get("plan", [])
+            gated = required_args_clarify(plan_steps, self.registry) or unsupported_args_clarify(
+                plan_steps, self.registry
+            )
+            if gated is not None:
+                q = gated[0]["args"]["question"]
                 return [
                     {
                         "tool": "clarify",

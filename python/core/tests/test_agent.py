@@ -1483,3 +1483,64 @@ def test_from_registry_inherits_core_tools(tmp_path):
     agent = CommandAgent.from_registry(registry, tool_map={}, root=tmp_path)
     assert "clarify" in agent.registry
     assert "done" in agent.registry
+
+
+# ── unsupported-arg clarify gate (NL path) ────────────────────────────────────
+
+
+def _volume_chain_plan(extra: dict) -> dict:
+    """The ffmpeg_134 shape: a valid first step, then adjust_volume with an arg
+    the tool does not declare (the model expressing a capability we don't have)."""
+    return {
+        "plan": [
+            {
+                "tool": "extract_audio",
+                "args": {"inputs": ["clip.mp3"], "audio_format": "wav", "output": "audio.wav"},
+            },
+            {"tool": "adjust_volume", "args": {"inputs": ["audio.wav"], **extra}},
+        ]
+    }
+
+
+def test_unsupported_arg_on_nl_path_clarifies(tmp_path):
+    """A capability the inventory cannot express → clarify, not a validation error.
+
+    Regression for ffmpeg_134 ("lower the sample rate to 22050 Hz"): the model
+    puts target_sample_rate on adjust_volume, which used to raise
+    "unsupported args" and score the row `error`.
+    """
+    (tmp_path / "clip.mp3").touch()
+    agent = _nl_gate_agent(tmp_path)
+    results = agent.execute_plan(
+        _volume_chain_plan({"normalize": True, "target_sample_rate": 22050}),
+        utterance="convert clip.mp3 to wav and lower the sample rate to 22050 Hz",
+        dry_run=True,
+    )
+    assert len(results) == 1
+    assert results[0]["tool"] == "clarify"
+    assert results[0]["result"]["status"] == "clarification_needed"
+    assert "target_sample_rate" in results[0]["result"]["question"]
+
+
+def test_unsupported_arg_without_utterance_still_errors(tmp_path):
+    """Direct execute_plan (no utterance) keeps strict validation — the gate is
+    an NL-path affordance, not a relaxation of the plan contract."""
+    (tmp_path / "clip.mp3").touch()
+    agent = _nl_gate_agent(tmp_path)
+    with pytest.raises(ValueError, match="unsupported args"):
+        agent.execute_plan(
+            _volume_chain_plan({"normalize": True, "target_sample_rate": 22050}),
+            dry_run=True,
+        )
+
+
+def test_supported_args_unaffected_by_gate(tmp_path):
+    """A well-formed plan is untouched — the gate only fires on undeclared args."""
+    (tmp_path / "clip.mp3").touch()
+    agent = _nl_gate_agent(tmp_path)
+    results = agent.execute_plan(
+        _volume_chain_plan({"normalize": True}),
+        utterance="convert clip.mp3 to wav and normalize it",
+        dry_run=True,
+    )
+    assert [r["tool"] for r in results] != ["clarify"]
