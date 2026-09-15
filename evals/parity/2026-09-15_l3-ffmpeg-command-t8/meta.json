@@ -1,0 +1,41 @@
+{
+  "purpose": "L3 behavioral parity — ffmpeg command mode, T8 evidence rebuild after the unsupported-arg clarify gate (Python-only) and the two prompt routing fixes. Backend recorded as vulkan: the 2026-09-10 run was cuda and 2026-09-14 recorded none, so this series was not backend-controlled.",
+  "captured": "2026-09-15",
+  "git_sha": "b39b17ddc29e7c62f30ea2708ecbbf5d624d8d7e",
+  "git_branch": "feat/reject-clarify-taxonomy",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills\\ffmpeg\\data\\eval.jsonl",
+    "rows_compared": 326,
+    "sha256": "b1e7b21e5496237929c55a425c6d5da945c1cd3e7252602d70cc960cd16cdf60"
+  },
+  "model": {
+    "path": "C:\\Work\\Knaif\\knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "sha256": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe",
+    "sha256": "47a9f1c22e7f12c40b4229782c7e49ee968d2aab3af1012007084da8583e9756"
+  },
+  "backend": "vulkan",
+  "native_n_gpu_layers": null,
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs llama-cpp-python), so this is a standing property of the comparison, not a misconfiguration — see `backend_attribution.json` next to this file.",
+  "entry_points": {
+    "native": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe run S --dry-run --model knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "python": "uv run knaif-cli run --dry-run --backend llama-cpp --model knaif-qwen3-4b-v1",
+    "stage": "rendered command argv (shipped dry-run path)"
+  },
+  "result": {
+    "counts": {
+      "match": 254,
+      "mismatch": 43,
+      "decline-divergence": 5,
+      "not-comparable": 24,
+      "native-not-implemented": 0
+    },
+    "equivalence_rate": 0.84106,
+    "threshold": 1.0,
+    "passed": false
+  }
+}
