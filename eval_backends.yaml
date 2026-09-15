@@ -78,8 +78,12 @@ lanes:
   native-cli:
     kind: native_cli
     binary: target/release/knaif.exe
-    model_path: models/knaif-qwen3-4b-v1-q4_k_m.gguf
-    public_name: knaif-qwen3-4b-v1
+    # Repointed to sft-v4 on 2026-09-15 with T7's re-lock. `eval-accept-native` grades this
+    # lane against `max(S2 floor, accepted python score - 0.02)`, and the accepted Python
+    # score is now sft-v4's — so measuring v1 here would compare two different models and the
+    # verdict would mean nothing. No `public_name`: sft-v4 is an unpublished internal build,
+    # and claiming `knaif-qwen3-4b-v1` would be false. Restore one when T9 publishes it.
+    model_path: models/qwen3-4b-sft-v4-flat-q4.gguf
     timeout_s: 180
 
 backends:
