@@ -405,27 +405,30 @@ class CommandAgent:
         # Expanders receive the intent args and forward them to internal steps,
         # so resolving here means every expanded step sees the full filename.
         # Terminal tools (clarify/reject/done) carry no file paths — skipped.
-        if self.sandbox is not None:
-            clean_intents: list[dict[str, Any]] = []
-            for intent_step in intent_plan:
-                if intent_step.get("tool") in _TERMINAL_TOOLS:
-                    clean_intents.append(intent_step)
-                else:
-                    try:
-                        resolved_args = resolve_stems(intent_step.get("args", {}), self.sandbox)
-                        clean_intents.append({**intent_step, "args": resolved_args})
-                    except (StemNotFoundError, StemAmbiguousError) as exc:
-                        q = str(exc)
-                        return [
-                            {
-                                "tool": "clarify",
-                                "args": {"question": q},
-                                "result": {"status": "clarification_needed", "question": q},
-                                "output": None,
-                                "duration_ms": 0.0,
-                            }
-                        ]
-            intent_plan = clean_intents
+        # Open/CLI mode resolves too, against root (= cwd). Gating this on a sandbox left
+        # `knaif run ffmpeg "compress clip_4k"` rendering `-i clip_4k` verbatim, and paired
+        # with an empty guard listing it refused the file instead. Native never had the gap.
+        resolution_dir = self._resolution_dir()
+        clean_intents: list[dict[str, Any]] = []
+        for intent_step in intent_plan:
+            if intent_step.get("tool") in _TERMINAL_TOOLS:
+                clean_intents.append(intent_step)
+            else:
+                try:
+                    resolved_args = resolve_stems(intent_step.get("args", {}), resolution_dir)
+                    clean_intents.append({**intent_step, "args": resolved_args})
+                except (StemNotFoundError, StemAmbiguousError) as exc:
+                    q = str(exc)
+                    return [
+                        {
+                            "tool": "clarify",
+                            "args": {"question": q},
+                            "result": {"status": "clarification_needed", "question": q},
+                            "output": None,
+                            "duration_ms": 0.0,
+                        }
+                    ]
+        intent_plan = clean_intents
 
         # NL clarify gate: check that every file-bearing input was concretely
         # named (or stem-referenced) in the utterance.  Runs after stem
@@ -1049,7 +1052,7 @@ class CommandAgent:
             payload.get("plan") or [], user_utterance, self._output_capable
         )
         hallucinated = self._hallucinated_filename(
-            payload.get("plan") or [], user_utterance, self._sandbox_filenames()
+            payload.get("plan") or [], user_utterance, self._listed_filenames()
         )
         if hallucinated:
             return {
@@ -1261,18 +1264,29 @@ class CommandAgent:
             for container, key in targets:
                 container[key] = out
 
-    def _sandbox_filenames(self) -> frozenset[str]:
-        """Lowercased names of the files currently in the sandbox, for the guard.
+    def _resolution_dir(self) -> Path:
+        """The directory paths resolve against: the sandbox when configured, else root.
 
-        Read at gate time rather than cached: the sandbox changes under a running agent
+        `root` defaults to `Path.cwd()`, so this is open/CLI mode's working directory —
+        the same rule native has always applied (`sandbox.unwrap_or(current_dir())`,
+        apps/cli/src/main.rs). Both callers below MUST use it: the guard's stem exemption
+        and stem resolution have to look at one directory, or the guard admits a name the
+        resolver then refuses, or refuses one it would have resolved.
+        """
+        return self.sandbox if self.sandbox is not None else self.root
+
+    def _listed_filenames(self) -> frozenset[str]:
+        """Lowercased names of the files in `_resolution_dir()`, for the guard.
+
+        Read at gate time rather than cached: the directory changes under a running agent
         (a chain writes into it), and a stale listing would reject a file that is there.
         Non-recursive and files-only, matching what stem resolution globs. Any OS error
         yields an empty set, which restores the strict rule rather than failing the plan.
         """
-        if self.sandbox is None:
-            return frozenset()
         try:
-            return frozenset(p.name.lower() for p in self.sandbox.iterdir() if p.is_file())
+            return frozenset(
+                p.name.lower() for p in self._resolution_dir().iterdir() if p.is_file()
+            )
         except OSError:
             return frozenset()
 

@@ -1544,3 +1544,77 @@ def test_supported_args_unaffected_by_gate(tmp_path):
         dry_run=True,
     )
     assert [r["tool"] for r in results] != ["clarify"]
+
+
+# ── open/CLI mode: no sandbox, paths resolve against root (= cwd) ─────────────
+#
+# Native has always done this: `let base = sandbox.unwrap_or(current_dir())`, and both the
+# clarify gate's stem exemption and stem resolution read `base` (apps/cli/src/main.rs).
+# Python gated BOTH on `sandbox is not None`, so `knaif run ffmpeg "compress clip_4k"`
+# refused a file that was sitting right there. No eval can catch it — the harness always
+# passes a sandbox — which is why this is a test and not a corpus row.
+
+
+def _open_mode_agent(root):
+    """No sandbox. `root` defaults to cwd in production; pinned here for hermeticity."""
+    return CommandAgent.from_skill(_FFMPEG_SKILL, sandbox=None, root=root)
+
+
+def test_open_mode_lists_root_for_the_stem_exemption(tmp_path):
+    (tmp_path / "clip_4k.mp4").touch()
+    agent = _open_mode_agent(tmp_path)
+    assert agent._listed_filenames() == frozenset({"clip_4k.mp4"})
+
+
+def test_open_mode_does_not_call_a_real_file_invented(tmp_path):
+    """The reported defect, at the stage that owns it.
+
+    The hallucinated-filename guard runs inside `infer`, not `execute_plan`, and is handed
+    the agent's own listing — so the defect is the *composition*: an empty listing turns the
+    stem exemption off and `clip_4k.mp4` reads as invented. Composed here exactly as
+    `infer` composes it (agent.py: `_hallucinated_filename(plan, utterance,
+    self._listed_filenames())`), because that pairing is the thing that was wrong.
+    """
+    (tmp_path / "clip_4k.mp4").touch()
+    agent = _open_mode_agent(tmp_path)
+    plan = [{"tool": "compress_video", "args": {"inputs": ["clip_4k.mp4"]}}]
+    assert agent._hallucinated_filename(plan, "compress clip_4k", agent._listed_filenames()) is None
+
+
+def test_open_mode_resolves_a_bare_stem(tmp_path):
+    """Fixing the listing alone would be worse than the bug: the guard would stop firing
+    while stem resolution stayed off, so `clip_4k` would render verbatim — acting on an
+    ambiguous reference instead of asking. Both gates move together or neither does."""
+    (tmp_path / "clip_4k.mp4").touch()
+    agent = _open_mode_agent(tmp_path)
+    results = agent.execute_plan(
+        {"plan": [{"tool": "compress_video", "args": {"inputs": ["clip_4k"]}}]},
+        utterance="compress clip_4k",
+        dry_run=True,
+    )
+    assert results[0]["tool"] != "clarify", results[0].get("result")
+    rendered = json.dumps(results)
+    assert "clip_4k.mp4" in rendered, "the bare stem was never substituted"
+
+
+def test_open_mode_still_clarifies_an_unresolvable_stem(tmp_path):
+    """Resolution failing is still a question, not a verbatim command."""
+    agent = _open_mode_agent(tmp_path)
+    results = agent.execute_plan(
+        {"plan": [{"tool": "compress_video", "args": {"inputs": ["nope_4k"]}}]},
+        utterance="compress nope_4k",
+        dry_run=True,
+    )
+    assert results[0]["tool"] == "clarify"
+
+
+def test_open_mode_still_catches_an_invented_filename(tmp_path):
+    """The guard must keep its job: a name the user never said and no file backs."""
+    agent = _open_mode_agent(tmp_path)
+    results = agent.execute_plan(
+        {"plan": [{"tool": "compress_video", "args": {"inputs": ["invented.mp4"]}}]},
+        utterance="compress my video",
+        dry_run=True,
+    )
+    assert results[0]["tool"] == "clarify"
+    assert "invented.mp4" in results[0]["result"]["question"]
