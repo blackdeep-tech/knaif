@@ -164,3 +164,14 @@ python/training/cache/
 python/training/output/
 python/training/adapters/
 python/training/merged/
+# The chat datasets belong with them: `build_dataset.py` rebuilds one in seconds from
+# skills/*/data/train.jsonl. They were listed at line ~129 under the pre-restructure
+# `training/` path, which is exactly the silent-stop-matching bug the comment there warns
+# about — four of those six entries were re-added above, these two were missed, so
+# union_chat.jsonl has been showing up untracked ever since.
+#
+# Keeping one is worse than not having it: each row bakes in the RETRIEVED system prompt,
+# so a dataset built before a prompt.yaml edit trains the next model against a prompt that
+# no longer exists. Regenerate, never reuse.
+python/training/union_chat.jsonl
+python/training/*_chat.jsonl
