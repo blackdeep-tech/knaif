@@ -218,7 +218,7 @@ check-py: lint-py type-check-py test-py gen-skills-check
 # (`check-native` is fmt + clippy only) and so a failure names the layer rather than arriving as
 # an anonymous cargo test. `just test-native` remains the broader workspace run.
 check-contracts:
-    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py -q
+    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py -q
     cargo test -p knaif-core --test parity
     cargo test -p knaif-llm --test generation
     cargo test -p knaif-cli --test executor_semantics
