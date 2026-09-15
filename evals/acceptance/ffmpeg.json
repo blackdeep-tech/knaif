@@ -4,7 +4,7 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "66674a326ae2b40a6ff02e79b9e71e58c81a661cfcb620f586307f30f01a0c04",
+        "bundle": "9c64d5573914c907970b6cd7f3068f28aae7c2d93a4e402c7a069603835fe8c3",
         "contracts": "f8edfcce8d26339b4c7bd1a33ba1e0410cf4cf59b54a3e40e18f134f69cf3a40",
         "python_core": "fcc1fbd1b3e7109d04cef664ae57319ab4c59814cf99b697b4ed788906a83135",
         "grading": "55397d3f26d01d476a034b933880f094f36895d041a6b015d8b8be4eddeccf3c",
@@ -17,7 +17,7 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "66674a326ae2b40a6ff02e79b9e71e58c81a661cfcb620f586307f30f01a0c04",
+        "bundle": "9c64d5573914c907970b6cd7f3068f28aae7c2d93a4e402c7a069603835fe8c3",
         "contracts": "f8edfcce8d26339b4c7bd1a33ba1e0410cf4cf59b54a3e40e18f134f69cf3a40",
         "python_core": "fcc1fbd1b3e7109d04cef664ae57319ab4c59814cf99b697b4ed788906a83135",
         "grading": "55397d3f26d01d476a034b933880f094f36895d041a6b015d8b8be4eddeccf3c",
