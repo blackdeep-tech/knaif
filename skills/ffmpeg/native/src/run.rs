@@ -44,6 +44,31 @@ pub enum ProbeMode {
     Execute,
 }
 
+/// Is this input one `extract_audio` must skip? Port of `BuildRecipesStep`'s skip.
+///
+/// ffmpeg cannot extract audio from a file that has none: it exits with "Output file does not
+/// contain any stream", and one silent video in a folder of ten takes the whole batch down. The
+/// probe already answered this, so building the command anyway discards a fact we hold.
+///
+/// Scoped to `extract_audio` on measurement, not on principle: `adjust_volume` and `strip_audio`
+/// both succeed on a real silent file, so skipping there would drop work that completes today.
+pub fn skips_silent_input(mode: Option<&str>, has_audio: bool) -> bool {
+    mode == Some("extract_audio") && !has_audio
+}
+
+/// The message when every input was skipped. Byte-identical to Python's, because it reaches the
+/// user on both runtimes and two spellings of one refusal is how the two drift apart.
+pub fn no_audio_error(skipped: &[String]) -> String {
+    if skipped.len() == 1 {
+        format!("No audio to extract: {} has no audio track.", skipped[0])
+    } else {
+        format!(
+            "No audio to extract — none of these files has an audio track: {}.",
+            skipped.join(", ")
+        )
+    }
+}
+
 /// Probe one input per [`ProbeMode`]: real `ffprobe` for an existing file; a [`dummy_probe`]
 /// fallback in dry-run; a hard error in execute mode. Port of the `inspect_media` probe policy.
 fn probe_input(path: &Path, data: &FfmpegData, mode: ProbeMode) -> anyhow::Result<Probe> {
@@ -122,11 +147,29 @@ pub fn expand(
     // overwrite rather than an error.
     let mut recipes = Vec::with_capacity(inputs.len());
     let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::with_capacity(inputs.len());
+    let mut skipped: Vec<String> = Vec::new();
     for input in &inputs {
         // Probe and render the RESOLVED path — checking one representation and reading another
         // is not a boundary (see resolve_input_in_sandbox; fix review R1).
         let input_path = resolve_input_in_sandbox(input, sandbox)?;
         let probe = probe_input(&input_path, data, mode)?;
+        // ffmpeg cannot extract audio from a file that has none: it exits with "Output file does
+        // not contain any stream", and one silent video in a folder of ten takes the whole batch
+        // down. The probe already answered this, so building the command anyway discards a fact
+        // we hold. Port of `BuildRecipesStep`'s skip.
+        //
+        // Scoped to `extract_audio` on measurement, not on principle: `adjust_volume` and
+        // `strip_audio` both succeed on a real silent file, so skipping there would drop work
+        // that currently completes.
+        if skips_silent_input(resolved.options.mode.as_deref(), probe.has_audio) {
+            skipped.push(
+                input_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| input_path.to_string_lossy().into_owned()),
+            );
+            continue;
+        }
         let recipe = build_one_recipe(
             &probe,
             resolved.platform.as_ref(),
@@ -137,6 +180,15 @@ pub fn expand(
         )?;
         outs.push((input_path.clone(), std::path::PathBuf::from(&recipe.output)));
         recipes.push(recipe);
+    }
+    // Skipping every input is not success with zero results: an empty command list executes
+    // cleanly and reports done, telling the user the work happened.
+    if recipes.is_empty() && !skipped.is_empty() {
+        anyhow::bail!("{}", no_audio_error(&skipped));
+    }
+    // Returning fewer files than asked for without saying why reads as a tool that lost a file.
+    if !skipped.is_empty() {
+        eprintln!("note: skipped {} (no audio track)", skipped.join(", "));
     }
     crate::engine::disambiguate_outputs(&mut outs);
     let mut commands = Vec::with_capacity(recipes.len());
@@ -1521,5 +1573,43 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    // ── a silent input must not fail the batch it is in ──────────────────────
+    //
+    // Mirrors `skills/ffmpeg/python/tests/test_silent_input_batch.py`. Tested at this level
+    // rather than through `expand_dry_run` deliberately: dry-run stubs a missing file with
+    // `dummy_probe`, which reports `has_audio: true`, so a test written that way would pass
+    // without ever exercising the skip — and on a machine without ffprobe it would silently
+    // stop testing anything at all.
+
+    #[test]
+    fn extract_audio_skips_a_silent_input() {
+        assert!(skips_silent_input(Some("extract_audio"), false));
+        assert!(!skips_silent_input(Some("extract_audio"), true));
+    }
+
+    #[test]
+    fn other_modes_keep_silent_inputs() {
+        // Measured on a real silent file: both succeed, so skipping would drop real work.
+        for mode in ["adjust_volume", "strip_audio", "convert", "compress"] {
+            assert!(
+                !skips_silent_input(Some(mode), false),
+                "{mode} dropped a silent input"
+            );
+        }
+        assert!(!skips_silent_input(None, false));
+    }
+
+    #[test]
+    fn the_no_audio_message_matches_python_byte_for_byte() {
+        assert_eq!(
+            no_audio_error(&["clip_no_audio.mp4".to_string()]),
+            "No audio to extract: clip_no_audio.mp4 has no audio track."
+        );
+        assert_eq!(
+            no_audio_error(&["a.mp4".to_string(), "b.mp4".to_string()]),
+            "No audio to extract — none of these files has an audio track: a.mp4, b.mp4."
+        );
     }
 }

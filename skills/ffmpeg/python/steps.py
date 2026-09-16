@@ -111,6 +111,31 @@ class BuildRecipesStep(Step):
         quality_profile = args.get("quality_profile") or None
         options = args.get("options") or {}
 
+        # ffmpeg cannot extract audio from a file that has none: it exits with "Output file
+        # does not contain any stream", and one silent video in a folder of ten takes the whole
+        # batch down. `inspect_media` already probed for this, so building the command anyway
+        # discards a fact we hold rather than lacking one.
+        #
+        # Scoped to `extract_audio` on measurement, not on principle: `adjust_volume` and
+        # `strip_audio` both succeed on a real silent file (ffmpeg treats them as no-ops), so
+        # skipping there would drop work that currently completes.
+        skipped: list[str] = []
+        if options.get("mode") == "extract_audio":
+            kept = []
+            for p in probes:
+                if p.get("has_audio") is False:
+                    skipped.append(str(p.get("file", "")))
+                else:
+                    kept.append(p)
+            if not kept:
+                names = ", ".join(Path(f).name for f in skipped) or "the input"
+                raise ValueError(
+                    f"No audio to extract: {names} has no audio track."
+                    if len(skipped) == 1
+                    else f"No audio to extract — none of these files has an audio track: {names}."
+                )
+            probes = kept
+
         recipes = [
             _build_one_recipe(p, platform_profile, quality_profile, options, sandbox=ctx.sandbox)
             for p in probes
@@ -118,7 +143,12 @@ class BuildRecipesStep(Step):
         # Only the batch knows whether two inputs land on one output path, and every command
         # carries -y, so an unresolved clash is a silent overwrite rather than an error.
         recipes = disambiguate_outputs(recipes)
-        return {"count": len(recipes), "recipes": recipes}
+        out = {"count": len(recipes), "recipes": recipes}
+        # Returning fewer files than asked for without saying why reads as a tool that lost a
+        # file. Only present when something was actually dropped.
+        if skipped:
+            out["skipped"] = skipped
+        return out
 
 
 class RenderPreviewCommandStep(Step):

@@ -209,6 +209,7 @@ The `success` verifier grades the produced output file against these fields (all
 | `encoder` | `str` | Exact encoder library name (`"libx264"`, `"libvpx-vp9"`) |
 | `max_width` | `int` | Maximum output width in pixels |
 | `max_height` | `int` | Maximum output height in pixels |
+| `duration_s` | `float` | Expected output length in seconds, ±0.5. The criterion for every row whose utterance states a length — *"cut clip.mp4 from 2 seconds to 5 seconds"* was graded on container and flags, both of which the untouched 10-second source satisfies. The tolerance is deliberately the same number `output_diff` uses: a stream copy cuts at the nearest keyframe, so an honest 3-second trim can land at 2.6s, and a tighter bound would fail correct plans for something the user never asked about. Fails closed when the probe reports no duration. |
 | `max_size_kb` | `int` | Maximum output size in KiB, read from ffprobe's `format.size`. The criterion for *"compress to under N"* rows, which could otherwise only assert a container — and an untouched source satisfies its own container, so the row could not fail on the one thing it asks for. Fails closed when the probe reports no size. |
 | `filters` | `list[str]` | Substrings expected in filter arguments (e.g. `["scale", "vf"]`) |
 | `flags` | `list[str]` | Substrings expected as ffmpeg CLI flags (e.g. `["-movflags", "-ss"]`) |

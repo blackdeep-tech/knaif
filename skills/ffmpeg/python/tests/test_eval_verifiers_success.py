@@ -596,3 +596,69 @@ def test_success_max_size_kb_triggers_the_file_probe(tmp_path: Path):
     result = success(out, {"max_size_kb": 500}, tmp_path)
     assert result.score == pytest.approx(0.0)
     assert "artifact_file_missing_or_not_produced" in result.failed
+
+
+# ── duration_s: the criterion 20 trim rows needed and none had ───────────────
+
+
+def test_success_duration_within_tolerance_passes(tmp_path: Path):
+    """20 plan rows state a length in the utterance and none asserted it.
+
+    "cut clip.mp4 from 2 seconds to 5 seconds" was graded `{container, flags}` — and the
+    untouched 10-second source satisfies both. A regression that stopped trimming entirely
+    would have passed every one of those rows.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(duration="3.02")):
+        result = success(out, {"duration_s": 3.0}, tmp_path)
+    assert result.score == pytest.approx(1.0)
+    assert any("duration_s" in m for m in result.matched), result.matched
+
+
+def test_success_duration_outside_tolerance_fails(tmp_path: Path):
+    """The untouched source is what this has to reject."""
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(duration="10.0")):
+        result = success(out, {"duration_s": 3.0}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert any("10" in f for f in result.failed), result.failed
+
+
+def test_success_duration_tolerance_is_generous_enough_for_keyframes(tmp_path: Path):
+    """±0.5s, matching `output_diff`'s existing `duration_s` tolerance.
+
+    A stream copy cuts at the nearest keyframe, so an honest 3-second trim can land at 2.6s
+    or 3.4s. A tighter bound would fail correct plans for a reason the user never asked about.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    for got in ("2.55", "3.45"):
+        with _mock_ffprobe(_probe(duration=got)):
+            assert success(out, {"duration_s": 3.0}, tmp_path).score == pytest.approx(1.0), got
+    with _mock_ffprobe(_probe(duration="3.6")):
+        assert success(out, {"duration_s": 3.0}, tmp_path).score == pytest.approx(0.0)
+
+
+def test_success_duration_unreadable_fails_rather_than_passes(tmp_path: Path):
+    """Fails closed, like every other file criterion here."""
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    probe = _probe()
+    probe["format"].pop("duration", None)
+    with _mock_ffprobe(probe):
+        assert success(out, {"duration_s": 3.0}, tmp_path).score == pytest.approx(0.0)
+
+
+def test_success_duration_triggers_the_file_probe(tmp_path: Path):
+    """It must be a FILE field, or a row whose only criterion is a duration scores 1.0
+    without ever opening the output — the cannot-fail row again, wearing a criterion."""
+    out = _mock_output(artifact_path=None)
+    result = success(out, {"duration_s": 3.0}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert "artifact_file_missing_or_not_produced" in result.failed
