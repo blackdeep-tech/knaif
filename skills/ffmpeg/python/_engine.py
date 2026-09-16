@@ -741,6 +741,36 @@ def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return recipes
 
 
+#: Characters a filename may not contain on Windows. ``*`` and ``?`` are deliberately absent:
+#: they are this skill's own output grammar (``videos/*.mp4``), expanded in
+#: :func:`_resolve_output_target`, and stripping them would break a documented feature to fix
+#: an unrelated bug. ``/`` and ``\`` are absent because they are structure, not characters.
+_ILLEGAL_IN_FILENAME = '<>:"|'
+_ILLEGAL_REPLACEMENT = "-"
+
+#: A leading drive letter is the one legitimate colon in a path (``C:/out/clip.mp4``), and CLI
+#: mode has no sandbox to confine writes to, so absolute outputs are real there.
+_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:(?=[\\/])")
+
+
+def _legal_output_path(raw: str) -> str:
+    """Make a model-supplied ``output`` a string the filesystem will actually accept.
+
+    The model writes filenames out of the utterance, and `ffmpeg_268` named one after the time
+    range it was given: ``clip_trimmed_00:00:00.mp4``. Colons are legal on Linux and illegal on
+    Windows, so ffmpeg refused to open it — *Error opening output files: Invalid argument* — and
+    the chain died at step 1 with nothing written. Both runtimes produce it, so this is the skill
+    trusting model output as a filename rather than a native port defect.
+
+    **Unconditional, not per-platform.** Sanitising only on Windows would make the same plan
+    render different names on different machines, which breaks L3 parity across runners and makes
+    an eval result depend on where it ran. A colon in a filename is a bad idea everywhere.
+    """
+    drive = _DRIVE_PREFIX.match(raw)
+    head, tail = (raw[: drive.end()], raw[drive.end() :]) if drive else ("", raw)
+    return head + "".join(_ILLEGAL_REPLACEMENT if c in _ILLEGAL_IN_FILENAME else c for c in tail)
+
+
 def _resolve_output_target(
     raw_output: str, *, input_path: Path, mode: str, options: dict[str, Any]
 ) -> Path:
@@ -757,6 +787,9 @@ def _resolve_output_target(
     A genuine filename (``renamed.mp4``) is returned untouched, so the single-file case is
     unchanged.
     """
+    # Before anything reads it as a path: the model supplied this string, and it is not
+    # guaranteed to be a legal filename. See `_legal_output_path`.
+    requested, raw_output = raw_output, _legal_output_path(raw_output)
     out = Path(raw_output)
     ext = _output_extension(mode, options)
 
@@ -764,7 +797,7 @@ def _resolve_output_target(
     # no directory this skill can pick, and creating a literal `out*` is not the answer.
     if any("*" in part for part in out.parts[:-1]):
         raise ValueError(
-            f"Unrecognised output {raw_output!r}. A '*' may only stand for the file name, "
+            f"Unrecognised output {requested!r}. A '*' may only stand for the file name, "
             "as in 'videos/*.mp4'."
         )
 
@@ -774,7 +807,7 @@ def _resolve_output_target(
         stem_ext = out.suffix.lstrip(".")
         if "*" in stem_ext:  # `*.*` - the extension is not a pattern this skill can read
             raise ValueError(
-                f"Unrecognised output {raw_output!r}. A '*' may only stand for the file name."
+                f"Unrecognised output {requested!r}. A '*' may only stand for the file name."
             )
         pattern = out.name[: -(len(stem_ext) + 1)] if stem_ext else out.name
         name = pattern.replace("*", input_path.stem)

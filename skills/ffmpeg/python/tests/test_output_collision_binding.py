@@ -205,3 +205,39 @@ def test_multi_input_producer_rename_still_rebinds_downstream(agent):
     joined = concat["result"]["command"][-1]
     assert Path(joined).name != "clip.mp4"
     assert _rendered(results)[0]["input"] == joined
+
+
+def test_a_chain_link_survives_an_illegal_output_name(agent):
+    """`ffmpeg_268#4` — the row that costs ffmpeg its L4 `extract_audio` floor.
+
+    The model named the output after the time range it was given,
+    ``clip_trimmed_00:00:00.mp4``, and then referenced that same string as the next step's
+    input. Colons are illegal in a Windows filename, so ffmpeg refused to open it — *Error
+    opening output files: Invalid argument* — and the chain died at step 1 having written
+    nothing. Both runtimes produce it, so it is the skill trusting a model string as a
+    filename, not a native port defect.
+
+    Sanitising the output **alone** is not the fix and is arguably worse: step 1 would write
+    ``clip_trimmed_00-00-00.mp4`` while step 2 still read ``clip_trimmed_00:00:00.mp4``,
+    silently unlinking the chain. The declared name binds, exactly as it does for a rename —
+    which is why this belongs here with the other binding rules rather than in the engine.
+    """
+    plan = _link(
+        agent,
+        [
+            {
+                "tool": "trim_video",
+                "args": {
+                    "input": "clip.mp4",
+                    "start": "00:00:00",
+                    "output": "clip_trimmed_00:00:00.mp4",
+                },
+            },
+            {"tool": "extract_audio", "args": {"inputs": ["clip_trimmed_00:00:00.mp4"]}},
+        ],
+        "make a new video from the first 3 seconds of clip.mp4 and also save the audio",
+    )
+    produced = _rendered(agent.execute_plan({"plan": plan}, dry_run=True, confirmed=True))
+    assert ":" not in Path(produced[0]["output"]).name, produced[0]["output"]
+    # The link is the point: step 2 must read what step 1 actually wrote.
+    assert produced[1]["input"] == produced[0]["output"]

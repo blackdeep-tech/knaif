@@ -56,7 +56,7 @@ from typing import Any
 
 from knaif.agent import _FILENAME_RE, _TERMINAL_TOOLS
 
-from ._engine import next_free_output
+from ._engine import _legal_output_path, next_free_output
 
 #: Args that name what a step writes. ``output_path`` is the internal spelling used once
 #: intents have expanded; ``output`` is what the model emits.
@@ -154,6 +154,59 @@ def _respell(original: str, chosen: Path) -> str:
     return (parent / chosen.name).as_posix()
 
 
+def _bind_legal_output_names(plan: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Rewrite outputs the filesystem would reject, and rebind the steps that read them.
+
+    `ffmpeg_268` named its output after the time range it was given —
+    ``clip_trimmed_00:00:00.mp4`` — and then referenced that same string as the next step's
+    input. Colons are legal on Linux and illegal on Windows, so ffmpeg refused to open it
+    (*Error opening output files: Invalid argument*) and the chain died at step 1 having
+    written nothing.
+
+    **Rebinding is the whole point, not a detail.** Sanitising the output alone leaves step 1
+    writing ``clip_trimmed_00-00-00.mp4`` while step 2 still reads the colon spelling, which
+    unlinks the chain silently — a worse failure than the loud one it replaces. This is the
+    module's binding rule applied to a second cause: *a name an earlier step declares it will
+    write binds, for every later step, to what that step actually wrote.*
+
+    Only a name a step **declares as its output** is rewritten. An input nobody produces is
+    left exactly as written, so a real file whose name contains one of these characters — which
+    Windows cannot have but Linux can — stays reachable. That also keeps the pass decidable
+    from the plan alone, with no filesystem lookup, so both runtimes agree without consulting
+    a disk.
+    """
+    renames: list[dict[str, str]] = []
+    for idx, step in enumerate(plan):
+        if step.get("tool") in _TERMINAL_TOOLS:
+            continue
+        args = step.get("args") or {}
+        for key in _OUTPUT_KEYS:
+            raw = args.get(key)
+            if not _is_filename(raw):
+                continue
+            legal = _legal_output_path(str(raw))
+            if legal == raw:
+                continue
+            args[key] = legal
+            # Strictly after the producer, exactly as `rebind_colliding_outputs` scopes its
+            # own substitution: the producer keeps reading whatever it reads.
+            for later in plan[idx + 1 :]:
+                if later.get("tool") in _TERMINAL_TOOLS:
+                    continue
+                largs = later.get("args") or {}
+                for container, k in _input_refs(largs):
+                    if str(container[k]) == raw:
+                        container[k] = legal
+            renames.append(
+                {
+                    "step": str(step.get("tool") or ""),
+                    "requested": Path(str(raw)).name,
+                    "used": Path(legal).name,
+                }
+            )
+    return renames
+
+
 def rebind_colliding_outputs(
     plan: list[dict[str, Any]], sandbox: Any = None
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
@@ -164,7 +217,10 @@ def rebind_colliding_outputs(
     can tell the user what happened. Silently overwriting and hard-refusing are both wrong
     answers here — ``ffmpeg_175`` expects a *plan*, because the user asked for a copy.
     """
-    substitutions: list[dict[str, str]] = []
+    # Before anything resolves a path: a name the filesystem would reject is not a collision
+    # candidate, it is not a valid path at all. Runs first so the walk below sees the names
+    # that will actually be written.
+    substitutions: list[dict[str, str]] = _bind_legal_output_names(plan)
     sandbox = Path(sandbox) if sandbox is not None else None
 
     # Every path the plan reads, and every path it declares it will write. Both are spoken

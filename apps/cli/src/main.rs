@@ -741,11 +741,21 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     }
     let payload = built?;
 
-    let steps = payload
+    let mut steps = payload
         .get("plan")
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
+    // A name the filesystem would reject is not a path at all, so it is rewritten before any
+    // step reads one — and every later step that referenced it is rebound, or the chain quietly
+    // unlinks. Scoped to ffmpeg because that is exactly where Python applies it (only ffmpeg
+    // overrides `Skill.resolve_output_collisions`); extending it to documents here would create
+    // the runtime divergence this pass exists to avoid.
+    if args.skill == "ffmpeg" {
+        for (requested, used) in knaif_skill_ffmpeg::binding::bind_legal_output_names(&mut steps) {
+            eprintln!("note: {requested:?} is not a valid file name here — writing {used:?}");
+        }
+    }
     let total = match decide_steps(&steps) {
         StepDecision::Empty => {
             if model.is_none() {

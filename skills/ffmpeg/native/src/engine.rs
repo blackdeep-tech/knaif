@@ -957,6 +957,44 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
     }
 }
 
+/// Characters a filename may not contain on Windows. `*` and `?` are deliberately absent: they
+/// are this skill's own output grammar (`videos/*.mp4`), expanded in [`resolve_output_target`],
+/// and stripping them would break a documented feature to fix an unrelated bug. `/` and `\` are
+/// absent because they are structure, not characters.
+const ILLEGAL_IN_FILENAME: &[char] = &['<', '>', ':', '"', '|'];
+const ILLEGAL_REPLACEMENT: char = '-';
+
+/// Make a model-supplied `output` a string the filesystem will actually accept.
+/// Port of `_legal_output_path`.
+///
+/// The model writes filenames out of the utterance, and `ffmpeg_268` named one after the time
+/// range it was given: `clip_trimmed_00:00:00.mp4`. Colons are legal on Linux and illegal on
+/// Windows, so ffmpeg refused to open it - *Error opening output files: Invalid argument* - and
+/// the chain died at step 1 with nothing written.
+///
+/// **Unconditional, not per-platform.** Sanitising only on Windows would make the same plan
+/// render different names on different machines, which breaks L3 parity across runners and makes
+/// an eval result depend on where it ran. A colon in a filename is a bad idea everywhere.
+///
+/// A leading drive letter is the one legitimate colon in a path (`C:/out/clip.mp4`), and CLI mode
+/// has no sandbox to confine writes to, so absolute outputs are real there.
+pub fn legal_output_path(raw: &str) -> String {
+    let mut chars = raw.chars();
+    let drive = matches!((chars.next(), chars.next(), chars.next()),
+        (Some(a), Some(':'), Some(sep)) if a.is_ascii_alphabetic() && (sep == '/' || sep == '\\'));
+    let (head, tail) = if drive { raw.split_at(2) } else { ("", raw) };
+    let mut out = String::with_capacity(raw.len());
+    out.push_str(head);
+    out.extend(tail.chars().map(|c| {
+        if ILLEGAL_IN_FILENAME.contains(&c) {
+            ILLEGAL_REPLACEMENT
+        } else {
+            c
+        }
+    }));
+    out
+}
+
 pub fn resolve_output_target(
     raw: &str,
     input: &Path,
@@ -964,7 +1002,10 @@ pub fn resolve_output_target(
     opts: &Options,
     container: &str,
 ) -> anyhow::Result<PathBuf> {
-    let out = PathBuf::from(raw);
+    // Before anything reads it as a path: the model supplied this string, and it is not
+    // guaranteed to be a legal filename. See [`legal_output_path`].
+    let cleaned = legal_output_path(raw);
+    let out = PathBuf::from(&cleaned);
     let ext = match mode {
         "extract_audio" => opts.audio_format.as_deref().unwrap_or("mp3"),
         "thumbnail" => opts.image_format.as_deref().unwrap_or("jpg"),
@@ -2312,6 +2353,55 @@ mod trim_frames_tests {
             outs[0].1.file_name().and_then(|s| s.to_str()),
             Some("clip.mkv")
         );
+    }
+
+    #[test]
+    fn a_timestamp_derived_output_name_is_a_legal_filename() {
+        // `ffmpeg_268#4` - the row that costs ffmpeg its L4 `extract_audio` floor. The model
+        // named the output after the time range: `clip_trimmed_00:00:00.mp4`. Colons are legal
+        // on Linux and illegal on Windows, so ffmpeg refused to open it and the chain died at
+        // step 1 having written nothing. Python produces it too - this is the skill trusting a
+        // model string as a filename, not a port defect.
+        let opts = Options::default();
+        let got = resolve_output_target(
+            "clip_trimmed_00:00:00.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4",
+        )
+        .unwrap();
+        assert_eq!(
+            got.file_name().and_then(|s| s.to_str()),
+            Some("clip_trimmed_00-00-00.mp4")
+        );
+    }
+
+    #[test]
+    fn the_wildcard_output_vocabulary_survives_sanitising() {
+        // `*` is illegal on Windows but it is this skill's own output grammar.
+        let opts = Options::default();
+        let got =
+            resolve_output_target("*.mp4", Path::new("/sb/clip.mp4"), "convert", &opts, "mp4")
+                .unwrap();
+        assert_eq!(got.file_name().and_then(|s| s.to_str()), Some("clip.mp4"));
+    }
+
+    #[test]
+    fn a_drive_letter_is_the_one_legitimate_colon() {
+        // CLI mode has no sandbox, so an absolute output is real there.
+        let opts = Options::default();
+        let got = resolve_output_target(
+            "C:/out/clip_00:00:05.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4",
+        )
+        .unwrap();
+        let s = got.to_string_lossy().replace('\\', "/");
+        assert!(s.starts_with("C:/out/"), "{s}");
+        assert!(s.ends_with("clip_00-00-05.mp4"), "{s}");
     }
 
     #[test]
