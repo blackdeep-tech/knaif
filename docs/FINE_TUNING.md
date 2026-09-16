@@ -150,6 +150,35 @@ uv run python -m knaif.evalsuite run --skill ffmpeg --verifier success \
    shared across tools (retrieval down-weights by document frequency). See the retrieval-miss
    audit and `docs/plans/2026-07-02-retrieval-overhaul.md`.
 
+11. **A prompt edit silently invalidates the dataset, and nothing fails when it does.**
+   `build_dataset.py` calls `agent.build_prompt()` once per row (§3b), so every training row
+   carries a **frozen copy** of `skills/<skill>/prompt.yaml` as it stood at build time. Nothing
+   re-checks it afterwards: edit the prompt and the weights were tuned against text the model is
+   no longer served, with no test, gate, or snapshot registering the change.
+   This is the current state, not a hypothetical — ffmpeg's prompt has been rewritten three times
+   (`c16c404`, `0b2bf3f`, `5e3b089`) since the shipped `sft-v3` model was trained, so **the
+   deployed model has never seen the prompt it is served.** The rebuilt v4 dataset does match
+   today's prompt; the next prompt edit will break that just as quietly.
+   Note the direction carefully before concluding skew is damage: T7 moved ffmpeg from four unmet
+   thresholds to ACCEPTED 31/31 **with no retrain**, purely by prompt edits. The hazard is not
+   that skew is bad, it is that a training experiment which also edits the prompt has changed two
+   variables and can attribute the result to neither. Rebuild the dataset first, or say plainly
+   that the comparison measures prompt + weights together.
+   To check before trusting a run, diff the static header (everything before the
+   retrieval-varying `Available tools:` list) of a built row against a fresh `build_prompt`:
+
+   ```bash
+   uv run python -c "
+   import json
+   from knaif.agent import CommandAgent
+   cut = lambda s: s[: s.index('Available tools:')]
+   today = cut(CommandAgent.from_skill('skills/ffmpeg', sandbox='sandbox').build_prompt('x')[0])
+   rows = (json.loads(l)['messages'][0]['content'] for l in open('python/training/union_chat.jsonl', encoding='utf-8'))
+   built = {cut(s) for s in rows if 'media workflow intent parser' in s}
+   print('in sync' if built == {today} else 'SKEWED — rebuild the dataset')"
+   ```
+
+
 ## 5. What we already know — outcomes (don't re-litigate these)
 
 **Works:**

@@ -25,6 +25,7 @@ Ordered by severity:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -89,6 +90,32 @@ def test_three_way_collision_terminates(engine):
     )
     outs = [r["output"] for r in got]
     assert len(set(outs)) == 3, outs
+
+
+def test_a_batch_name_says_which_input_produced_it(engine):
+    """`audio_mp4_5.mp3` — observed in `2026-09-15_l4-ffmpeg-t8`, from `clip_no_audio.mp4`.
+
+    Six fixture videos extracted to one literal `audio.mp3` produced `audio.mp3`,
+    `audio_mov.mp3`, `audio_mp4.mp3`, `audio_mp4_2.mp3` … The suffix was the *source
+    extension*, which five of the six share — so it distinguished nothing and the counter did
+    all the work. The user is left with six files and no way to tell which input made which.
+
+    The source stem is what differs here, so it is what the name carries.
+    """
+    got = engine.disambiguate_outputs(
+        [
+            _recipe(f"/sb/{name}", "/sb/audio.mp3")
+            for name in ("clip.mov", "clip2.mp4", "clip_4k.mp4", "clip_no_audio.mp4")
+        ]
+    )
+    outs = [Path(r["output"]).name for r in got]
+    assert len(set(outs)) == 4, outs
+    assert outs[0] == "audio.mp3", outs
+    for name, out in zip(("clip2", "clip_4k", "clip_no_audio"), outs[1:], strict=True):
+        assert out == f"audio_{name}.mp3", outs
+    assert not any(
+        re.search(r"_\d+\.", o) for o in outs
+    ), f"a counter carries no information: {outs}"
 
 
 # ── 4. one seconds format, both runtimes ─────────────────────────────────────

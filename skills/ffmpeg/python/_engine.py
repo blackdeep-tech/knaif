@@ -677,36 +677,67 @@ def _destination_name(input_path: Path, ext: str) -> str:
     return f"{input_path.stem}.{ext}"
 
 
+def _batch_suffixes(input_path: Path, out_stem: str) -> list[str]:
+    """The parts of an input's name that can tell two colliding outputs apart, best first.
+
+    Two batch shapes collide, and they are distinguished by different things:
+
+    * **One literal filename for many inputs** — six fixture videos extracted to ``audio.mp3``.
+      The source *stems* differ and the extensions mostly do not, so the stem is the answer.
+    * **A destination directory** — ``clip.mp4`` and ``clip.mov`` into ``converted/`` both take
+      the output stem ``clip``, and only the extension is left.
+
+    Using the extension for both is what produced ``audio_mp4_5.mp3``: five of six inputs were
+    `.mp4`, so the suffix distinguished nothing and a counter did all the work.
+    """
+    stem, ext = input_path.stem, input_path.suffix.lstrip(".").lower()
+    suffixes: list[str] = []
+    if stem and stem != out_stem:
+        suffixes.append(stem)
+    if ext:
+        suffixes.append(ext)
+    # Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
+    # `audio.mp3` share a stem AND an extension with each other but not with the output.
+    if stem and ext and stem != out_stem:
+        suffixes.append(f"{stem}_{ext}")
+    return suffixes
+
+
 def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Give every recipe in a batch its own output path.
 
     A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
     render `converted/clip.mp4` — and every command carries `-y`, so the second conversion
-    silently destroyed the first. The distinguishing part is the source extension, which is
-    why it is what gets restored; a counter is the fallback for a genuine repeat.
+    silently destroyed the first. Whatever part of the source name actually differs is what
+    gets restored (see `_batch_suffixes`); a counter is the fallback for a genuine repeat, and
+    only a genuine repeat, because a counter tells the user nothing.
 
     Doing it here rather than per file is deliberate: only the batch knows whether there is a
     clash at all, and a lone `clip.mp4 -> converted/` should stay `clip.mp4`, not become
     `clip_mp4.mkv` because some other input might have existed.
     """
-    seen: dict[str, int] = {}
+    seen: set[str] = set()
     for recipe in recipes:
         out = recipe.get("output")
         if not out:
             continue
         if out not in seen:
-            seen[out] = 1
+            seen.add(out)
             continue
         path = Path(out)
-        source_ext = Path(recipe.get("input", "")).suffix.lstrip(".").lower()
-        candidate = path.with_name(f"{path.stem}_{source_ext}{path.suffix}") if source_ext else path
-        n = 1
-        while str(candidate) in seen:
-            n += 1
-            stem = f"{path.stem}_{source_ext}_{n}" if source_ext else f"{path.stem}_{n}"
-            candidate = path.with_name(f"{stem}{path.suffix}")
+        suffixes = _batch_suffixes(Path(recipe.get("input", "")), path.stem)
+        tried = [path.with_name(f"{path.stem}_{s}{path.suffix}") for s in suffixes]
+        candidate = next((c for c in tried if str(c) not in seen), None)
+        if candidate is None:
+            # Nothing in the source name is left to say. Count off the most specific candidate
+            # so the walk still terminates.
+            base = tried[-1] if tried else path
+            candidate, n = base, 1
+            while str(candidate) in seen:
+                n += 1
+                candidate = base.with_name(f"{base.stem}_{n}{base.suffix}")
         recipe["output"] = str(candidate)
-        seen[str(candidate)] = 1
+        seen.add(str(candidate))
     return recipes
 
 

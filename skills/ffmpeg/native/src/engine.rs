@@ -863,12 +863,47 @@ fn destination_name(input: &Path, ext: &str) -> String {
     format!("{stem}.{ext}")
 }
 
+/// The parts of an input's name that can tell two colliding outputs apart, best first.
+/// Port of `_batch_suffixes`.
+///
+/// Two batch shapes collide, and they are distinguished by different things: one literal
+/// filename for many inputs (six videos into `audio.mp3` - the source STEMS differ) versus a
+/// destination directory (`clip.mp4` and `clip.mov` into `converted/` both take the output
+/// stem, so only the EXTENSION is left). Using the extension for both is what produced
+/// `audio_mp4_5.mp3`: five of six inputs were `.mp4`, so the suffix distinguished nothing and
+/// a counter did all the work.
+fn batch_suffixes(input: &Path, out_stem: &str) -> Vec<String> {
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let ext = input
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mut suffixes = Vec::new();
+    if !stem.is_empty() && stem != out_stem {
+        suffixes.push(stem.to_string());
+    }
+    if !ext.is_empty() {
+        suffixes.push(ext.clone());
+    }
+    // Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
+    // `audio.mp3` share a stem AND an extension with each other but not with the output.
+    if !stem.is_empty() && !ext.is_empty() && stem != out_stem {
+        suffixes.push(format!("{stem}_{ext}"));
+    }
+    suffixes
+}
+
 /// Give every command in a batch its own output path. Port of `disambiguate_outputs`.
 ///
 /// A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
 /// render `converted/clip.mp4` - and every command carries `-y`, so the second conversion
-/// silently destroyed the first. Only the batch can see the clash: a lone `clip.mp4` must
-/// stay `clip.mp4` rather than gain a suffix because some other input might have existed.
+/// silently destroyed the first. Whatever part of the source name actually differs is what gets
+/// restored (see [`batch_suffixes`]); a counter is the fallback for a genuine repeat, and only a
+/// genuine repeat, because a counter tells the user nothing.
+///
+/// Only the batch can see the clash: a lone `clip.mp4` must stay `clip.mp4` rather than gain a
+/// suffix because some other input might have existed.
 pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
     let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     for (input, out) in outputs.iter_mut() {
@@ -885,11 +920,6 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_string();
-        let source_ext = input
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
         let build = |name: String| -> PathBuf {
             let file = if ext.is_empty() {
                 name
@@ -898,20 +928,30 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
             };
             out.with_file_name(file)
         };
-        let mut candidate = if source_ext.is_empty() {
-            build(stem.clone())
-        } else {
-            build(format!("{stem}_{source_ext}"))
+        let tried: Vec<PathBuf> = batch_suffixes(input, &stem)
+            .into_iter()
+            .map(|s| build(format!("{stem}_{s}")))
+            .collect();
+        let candidate = match tried.iter().find(|c| !seen.contains(*c)) {
+            Some(c) => c.clone(),
+            None => {
+                // Nothing in the source name is left to say. Count off the most specific
+                // candidate so the walk still terminates.
+                let base = tried.last().cloned().unwrap_or_else(|| out.clone());
+                let base_stem = base
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                let mut n = 1;
+                let mut candidate = base;
+                while seen.contains(&candidate) {
+                    n += 1;
+                    candidate = build(format!("{base_stem}_{n}"));
+                }
+                candidate
+            }
         };
-        let mut n = 1;
-        while seen.contains(&candidate) {
-            n += 1;
-            candidate = if source_ext.is_empty() {
-                build(format!("{stem}_{n}"))
-            } else {
-                build(format!("{stem}_{source_ext}_{n}"))
-            };
-        }
         seen.insert(candidate.clone());
         *out = candidate;
     }
@@ -2272,6 +2312,23 @@ mod trim_frames_tests {
             outs[0].1.file_name().and_then(|s| s.to_str()),
             Some("clip.mkv")
         );
+    }
+
+    #[test]
+    fn a_batch_name_says_which_input_produced_it() {
+        // `audio_mp4_5.mp3` - observed in `2026-09-15_l4-ffmpeg-t8`. Six fixture videos into
+        // one literal `audio.mp3` suffixed with the SOURCE EXTENSION, which five of the six
+        // share, so it distinguished nothing and the counter did all the work.
+        let mut outs: Vec<(PathBuf, PathBuf)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
+            .iter()
+            .map(|n| (PathBuf::from("/sb").join(n), PathBuf::from("/sb/audio.mp3")))
+            .collect();
+        disambiguate_outputs(&mut outs);
+        let names: Vec<String> = outs
+            .iter()
+            .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["audio.mp3", "audio_clip2.mp3", "audio_clip_4k.mp3"]);
     }
 
     #[test]
