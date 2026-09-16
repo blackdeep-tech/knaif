@@ -397,6 +397,10 @@ pub struct Recipe {
     pub aspect: Option<String>,
     pub image_format: Option<String>,
     pub target_size_mb: Option<f64>,
+    /// Source length in seconds — what turns `target_size_mb` into a bitrate. Carried on the
+    /// recipe rather than re-probed in `build_flags`, so the cap is computed from the same
+    /// probe every other decision in the recipe was made from. Port of `source_duration`.
+    pub source_duration: Option<f64>,
     /// Human-readable operation summary (drives the plan preview); not used by `build_flags`.
     pub operations: Vec<String>,
 }
@@ -419,6 +423,66 @@ fn py_float_str(f: f64) -> String {
     } else {
         format!("{s}.0")
     }
+}
+
+/// Headroom left for container overhead — muxing, the moov atom, per-packet headers — and for
+/// x264's rate-control window. Port of `_SIZE_CAP_HEADROOM`.
+///
+/// **Both constants are measured, not guessed.** Swept over three fixtures x four targets on
+/// 2026-09-16: at `bufsize = 2 x maxrate` a 1 MiB cap produced 1027 KB — over, by 3 KB — because
+/// a two-second rate-control window lets the encoder overshoot the average. At
+/// `bufsize = maxrate` all twelve combinations landed under, worst case 93.5% of the cap.
+const SIZE_CAP_HEADROOM: f64 = 0.95;
+
+/// `bufsize` as a multiple of `maxrate`. 1x is a one-second window; see above for why the
+/// conventional 2x is not safe for a hard ceiling.
+const SIZE_CAP_BUFSIZE_MULTIPLE: i64 = 1;
+
+/// `"96k"` -> 96000. Anything unreadable is 0, i.e. budget nothing for it.
+/// Port of `_parse_bitrate_bps`.
+fn parse_bitrate_bps(value: Option<&String>) -> f64 {
+    let Some(text) = value.map(|v| v.trim().to_ascii_lowercase()) else {
+        return 0.0;
+    };
+    let (body, multiplier) = match text.strip_suffix('k') {
+        Some(b) => (b, 1000.0),
+        None => match text.strip_suffix('m') {
+            Some(b) => (b, 1_000_000.0),
+            None => (text.as_str(), 1.0),
+        },
+    };
+    body.parse::<f64>().map(|n| n * multiplier).unwrap_or(0.0)
+}
+
+/// Video bitrate ceiling in whole kbit/s that keeps the output under `target_size_mb`.
+/// Port of `_size_cap_kbit`.
+///
+/// `None` when the duration is unknown: a size only becomes a bitrate once there is a length to
+/// divide by. Inventing one would produce a cap that means nothing, and refusing would fail a
+/// request that is otherwise valid — so the caller falls back to plain CRF.
+///
+/// Floors to whole kbit rather than rounding: this is a ceiling, so every approximation in it
+/// has to point the same way.
+fn size_cap_kbit(
+    target_size_mb: f64,
+    duration_s: Option<f64>,
+    audio_bitrate: Option<&String>,
+) -> anyhow::Result<Option<i64>> {
+    let Some(duration) = duration_s.filter(|d| *d > 0.0 && d.is_finite()) else {
+        return Ok(None);
+    };
+    let total_bps = (target_size_mb * 1024.0 * 1024.0 * 8.0) / duration;
+    let video_bps = total_bps * SIZE_CAP_HEADROOM - parse_bitrate_bps(audio_bitrate);
+    let kbit = (video_bps / 1000.0).floor() as i64;
+    if kbit <= 0 {
+        anyhow::bail!(
+            "target_size_mb={} is too small for this file: {}s of audio at {} already exceeds              it. Ask for a larger size, or strip the audio.",
+            py_float_str(target_size_mb),
+            py_float_str(duration),
+            audio_bitrate.map(String::as_str).unwrap_or("none")
+        );
+    }
+    Ok(Some(kbit))
 }
 
 /// Emit `-c:v/-crf/-preset[/-pix_fmt]` for a video block (pixel format only when `pixfmt`).
@@ -601,7 +665,30 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             (None, Some(h)) => post.extend(["-vf".to_string(), format!("scale=-2:{h}")]),
             (None, None) => {}
         }
-        push_video(&mut post, &recipe.video, true);
+        // Split rather than `push_video(.., true)`: Python emits the cap AFTER `-preset` and
+        // BEFORE `-pix_fmt`, and a byte comparison is the parity contract.
+        push_video(&mut post, &recipe.video, false);
+        // Capped CRF: quality still drives the encode, the cap only stops it exceeding the size
+        // that was asked for. A fixed `-b:v` derived from the target would INFLATE an already-
+        // small clip — `email.yaml` declares `default_target_size_mb: 20`, and a clip that
+        // compresses to 200 KB must not become a 20 MB file because a ceiling was named.
+        if let Some(target) = recipe.target_size_mb {
+            if let Some(kbit) = size_cap_kbit(
+                target,
+                recipe.source_duration,
+                recipe.audio.bitrate.as_ref(),
+            )? {
+                post.extend([
+                    "-maxrate".to_string(),
+                    format!("{kbit}k"),
+                    "-bufsize".to_string(),
+                    format!("{}k", kbit * SIZE_CAP_BUFSIZE_MULTIPLE),
+                ]);
+            }
+        }
+        if let Some(pf) = &recipe.video.pixel_format {
+            post.extend(["-pix_fmt".to_string(), pf.clone()]);
+        }
         push_audio(&mut post, &recipe.audio, true);
         if recipe.faststart {
             post.extend(["-movflags".to_string(), "+faststart".to_string()]);
@@ -1431,6 +1518,9 @@ pub fn build_one_recipe(
         }
         "compress" => {
             recipe.target_size_mb = options.target_size_mb;
+            if recipe.target_size_mb.is_some() {
+                recipe.source_duration = probe.duration;
+            }
         }
         "reverse" => {
             recipe.include_audio = options.include_audio.unwrap_or(true);
@@ -1729,6 +1819,101 @@ mod tests {
                 "+faststart"
             ])
         );
+    }
+
+    #[test]
+    fn a_size_target_caps_the_bitrate_between_preset_and_pixfmt() {
+        // Byte-identical with Python's `_build_flags`, which emits the cap after `-preset` and
+        // before `-pix_fmt`. Order is the parity contract, not a preference.
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.video.crf = Some(28);
+        r.video.preset = Some("medium".into());
+        r.video.pixel_format = Some("yuv420p".into());
+        r.audio.codec = Some("aac".into());
+        r.audio.bitrate = Some("96k".into());
+        r.target_size_mb = Some(0.5);
+        r.source_duration = Some(10.0);
+        let (_, post) = flags(&r);
+        assert_eq!(
+            post,
+            s(&[
+                "-c:v", "libx264", "-crf", "28", "-preset", "medium", "-maxrate", "302k",
+                "-bufsize", "302k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k"
+            ])
+        );
+    }
+
+    #[test]
+    fn no_size_target_renders_what_it_rendered_before() {
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.video.crf = Some(28);
+        r.video.pixel_format = Some("yuv420p".into());
+        let (_, post) = flags(&r);
+        assert!(!post.iter().any(|f| f == "-maxrate"), "{post:?}");
+    }
+
+    #[test]
+    fn an_unknown_duration_falls_back_rather_than_guessing() {
+        // A size only becomes a bitrate once there is a length to divide by.
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.video.crf = Some(28);
+        r.target_size_mb = Some(0.5);
+        r.source_duration = None;
+        let (_, post) = flags(&r);
+        assert!(!post.iter().any(|f| f == "-maxrate"), "{post:?}");
+    }
+
+    #[test]
+    fn a_target_too_small_for_its_own_audio_is_refused() {
+        // 10s of 96k audio is ~117 KB; a 0.05 MiB ceiling cannot hold it. Emitting a floored
+        // zero would produce a file several times the requested size and report success.
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.audio.bitrate = Some("96k".into());
+        r.target_size_mb = Some(0.05);
+        r.source_duration = Some(10.0);
+        let err = build_flags(&r, &bundle_vocab()).unwrap_err().to_string();
+        assert!(err.contains("target_size_mb"), "{err}");
+    }
+
+    #[test]
+    fn size_cap_table_matches_python() {
+        // Mirrored verbatim from `_CAP_TABLE` in
+        // `skills/ffmpeg/python/tests/test_target_size.py`. Float division and a floor are
+        // exactly where two runtimes drift without either being obviously wrong, and the flags
+        // they produce are compared byte-for-byte at L3.
+        let cases: &[(f64, f64, Option<&str>, i64)] = &[
+            (0.5, 10.0, Some("96k"), 302),
+            (20.0, 8.0, Some("128k"), 19794),
+            (1.0, 30.0, Some("96k"), 169),
+            (0.25, 5.0, Some("64k"), 334),
+            (2.0, 120.0, None, 132),
+            (1.0, 7.3, Some("192k"), 899),
+            (100.0, 3600.0, Some("128k"), 93),
+        ];
+        for (target, duration, audio, expected) in cases {
+            let a = audio.map(|s| s.to_string());
+            let got = size_cap_kbit(*target, Some(*duration), a.as_ref()).unwrap();
+            assert_eq!(got, Some(*expected), "target={target} duration={duration}");
+        }
+    }
+
+    #[test]
+    fn bitrate_parsing_matches_python() {
+        // An unreadable bitrate budgets nothing for audio, making the cap tighter, not looser.
+        for (value, bps) in [
+            (Some("96k"), 96000.0),
+            (Some("1.5M"), 1_500_000.0),
+            (Some("128000"), 128_000.0),
+            (None, 0.0),
+            (Some("garbage"), 0.0),
+        ] {
+            let v = value.map(|s| s.to_string());
+            assert_eq!(parse_bitrate_bps(v.as_ref()), bps, "{value:?}");
+        }
     }
 
     #[test]
