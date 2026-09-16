@@ -1784,7 +1784,37 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
 /// `$KNAIF_NO_CUDA_NUDGE` suppresses the *offer* for anyone who has decided not to install the
 /// payload and does not want to be told again. It does not suppress the stale/interrupted report:
 /// that one is about a payload they already have.
+/// Can this *build* actually use a downloaded CUDA payload?
+///
+/// Two independent facts decide it, and [`knaif_models::cuda_offer`] can see neither — it reads
+/// the install receipt in `~/.knaif/backends`, which is empty in both failing cases below:
+///
+/// * **`cuda_compiled_in`** — `just eval-native` builds `llama,cuda,pdfium` and the release `cuda`
+///   kind builds `llama,dynamic-backends,cuda`. The backend is already there (static in the first,
+///   staged beside the exe in the second), so the offer told a CUDA-capable binary to install CUDA.
+/// * **`can_load_payloads`** — without `dynamic-backends`, `load_dynamic_backends` is a no-op and
+///   `~/.knaif/backends` is never scanned. Following the advice downloads ~668 MB that is never
+///   `dlopen`ed.
+///
+/// Both mistakes reach the user as "CUDA didn't work", which the `DriverTooOld` branch already
+/// calls the least debuggable outcome available; that branch exists precisely to avoid handing
+/// someone a payload that cannot load, and these two cases are the same error from the other side.
+///
+/// Taken as parameters rather than read from `cfg!` inside, so every combination is testable in
+/// the default (feature-free) test build — the configurations that are wrong are exactly the ones
+/// CI never compiles.
+fn cuda_payload_is_worth_offering(cuda_compiled_in: bool, can_load_payloads: bool) -> bool {
+    can_load_payloads && !cuda_compiled_in
+}
+
 fn print_cuda_offer() {
+    // Nothing below is worth saying if this build could not use the payload anyway. This also
+    // silences `NeedsReinstall`, deliberately: in a build that cannot load payloads the receipt is
+    // irrelevant, and in a CUDA build a skipped payload changes nothing — CUDA still works, and
+    // `knaif backend install cuda` would not be the fix in either case.
+    if !cuda_payload_is_worth_offering(cfg!(feature = "cuda"), cfg!(feature = "dynamic-backends")) {
+        return;
+    }
     let Ok(store) = resolve_backend_manifest_path().and_then(|p| BackendStore::open(&p)) else {
         return;
     };
@@ -2539,5 +2569,32 @@ mod tests {
         assert!(last.contains("steps 1-2 had already completed"), "{last}");
         assert!(last.contains("it was the last step"), "{last}");
         assert!(!last.contains("4-3"), "{last}");
+    }
+
+    // ── the CUDA offer is about THIS build, not just the payload receipt ─────────
+
+    #[test]
+    fn a_build_with_cuda_compiled_in_is_never_offered_the_payload() {
+        // `just eval-native` and the release `cuda` kind both compile the CUDA backend in
+        // (`llama,cuda,pdfium` and `llama,dynamic-backends,cuda`). The receipt in
+        // `~/.knaif/backends` is empty in both cases, so `cuda_offer` says NotInstalled and the
+        // CLI told a CUDA-capable binary to go install CUDA.
+        assert!(!cuda_payload_is_worth_offering(true, true));
+        assert!(!cuda_payload_is_worth_offering(true, false));
+    }
+
+    #[test]
+    fn a_build_that_cannot_dlopen_a_payload_is_never_offered_one() {
+        // `load_dynamic_backends` is a no-op without `dynamic-backends`, so `~/.knaif/backends`
+        // is never scanned. Following the advice downloads ~668 MB that is never loaded — the
+        // same "CUDA didn't work" outcome `DriverTooOld` exists to avoid.
+        assert!(!cuda_payload_is_worth_offering(false, false));
+    }
+
+    #[test]
+    fn the_shipped_cpu_and_vulkan_artifacts_are_still_offered_the_payload() {
+        // The whole point of the opt-in payload: `llama,dynamic-backends[,vulkan]` can load it
+        // and does not already have it. Suppressing this case would make the feature unreachable.
+        assert!(cuda_payload_is_worth_offering(false, true));
     }
 }
