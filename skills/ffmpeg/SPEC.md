@@ -48,7 +48,7 @@ Implemented model-visible tools:
 
 ```text
 prepare_for_platform
-compress_video
+compress_video       # optional: target_size_mb (a CEILING - see Size targets below)
 convert_video
 resize_video          # optional: fit (crop|pad|stretch), aspect ("aw:ah")
 trim_video
@@ -63,6 +63,36 @@ adjust_volume
 clarify
 reject
 ```
+
+### Size targets
+
+`compress_video`'s `target_size_mb` is a **ceiling, not a target**. It is rendered as x264
+capped CRF — the quality profile's `-crf` still drives the encode, and `-maxrate`/`-bufsize`
+stop the result exceeding the size that was asked for. A small clip therefore stays small: a
+200 KB file does not grow to fill a 20 MB ceiling.
+
+**The platform profiles' `default_target_size_mb` is deliberately NOT wired to this.**
+`email.yaml` declares `20` as an attachment cap, and applying it automatically was measured
+and rejected on 2026-09-16: a 20 MiB ceiling gives a 20-minute video 36 kbit/s and a 27-minute
+one 2 kbit/s, and past roughly 28 minutes it cannot hold 96k of audio at all, so the refusal
+below would turn a `plan` into an `error` for a size the user never asked for.
+
+The line is between a requirement and an aspiration. An explicit `target_size_mb` is the user
+saying "under 500 KB", and refusing an impossible one beats silently producing 3 MB. A profile
+default is a hint attached to a destination, and must never refuse a request on its own
+authority. Wiring it would need a bitrate floor — cap while the result stays watchable, skip
+otherwise — and a fixture longer than ten seconds to test against; every corpus fixture today
+sits in the range where the cap is inert, so the eval cannot see this failure at all.
+
+The cap needs the source duration — a size only becomes a bitrate once there is a length to
+divide by. When the duration is unknown the encode falls back to plain CRF rather than guessing.
+When the requested size cannot even hold the audio track, the request is refused with a message
+saying so, because silently emitting a floored bitrate would produce a file several times the
+requested size while reporting success.
+
+Both constants (5% headroom, `bufsize = maxrate`) are measured; see `_SIZE_CAP_HEADROOM` in
+`python/_engine.py`.
+
 
 13 model-visible media intent tools (+ clarify/reject control tools from core).
 

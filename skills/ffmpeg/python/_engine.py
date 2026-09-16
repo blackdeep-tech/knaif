@@ -1072,6 +1072,10 @@ def _build_one_recipe(
         recipe.pop("audio", None)
     if mode == "compress" and options.get("target_size_mb") is not None:
         recipe["target_size_mb"] = options["target_size_mb"]
+        # The duration is what turns a size into a bitrate, and `_build_flags` sees only the
+        # recipe. Carried here rather than re-probed there, so the cap is computed from the
+        # same probe every other decision in this recipe was made from.
+        recipe["source_duration"] = probe.get("duration")
     if mode == "reverse":
         recipe["include_audio"] = options.get("include_audio", True)
         recipe["has_audio"] = probe.get("has_audio", False)
@@ -1099,6 +1103,68 @@ _ENCODER_CODEC_MAP: dict[str, str] = dict(_VOCAB["encoder_codec_map"])
 
 def _codec_from_encoder(encoder: str) -> str:
     return _ENCODER_CODEC_MAP.get(encoder, encoder)
+
+
+#: Headroom left for container overhead — muxing, the moov atom, per-packet headers — and for
+#: x264's rate-control window. A cap that budgeted 100% of the target for the streams would be
+#: exceeded by exactly that overhead, which is the one outcome a ceiling may not have.
+#:
+#: **Both constants are measured, not guessed.** Swept over three fixtures x four targets on
+#: 2026-09-16: at `bufsize = 2 x maxrate` a 1 MiB cap produced 1027 KB — over, by 3 KB — because
+#: a two-second rate-control window lets the encoder overshoot the average. At `bufsize = maxrate`
+#: all twelve combinations landed under, worst case 93.5% of the cap. 0.95 rather than 0.97 keeps
+#: margin for sources not in that sweep: undershooting costs some quality, overshooting makes the
+#: ceiling a lie.
+_SIZE_CAP_HEADROOM = 0.95
+
+#: `bufsize` as a multiple of `maxrate`. 1x is a one-second rate-control window; see above for
+#: why the conventional 2x is not safe for a hard ceiling.
+_SIZE_CAP_BUFSIZE_MULTIPLE = 1
+
+
+def _parse_bitrate_bps(value: Any) -> int:
+    """``"96k"`` -> 96000. Anything unreadable is 0, i.e. budget nothing for it."""
+    if value is None:
+        return 0
+    text = str(value).strip().lower()
+    multiplier = 1
+    if text.endswith("k"):
+        multiplier, text = 1000, text[:-1]
+    elif text.endswith("m"):
+        multiplier, text = 1_000_000, text[:-1]
+    try:
+        return int(float(text) * multiplier)
+    except ValueError:
+        return 0
+
+
+def _size_cap_kbit(target_size_mb: float, duration_s: Any, audio_bitrate: Any) -> int | None:
+    """Video bitrate ceiling, in whole kbit/s, that keeps the output under *target_size_mb*.
+
+    Returns ``None`` when the duration is unknown, because a size only becomes a bitrate once
+    there is a length to divide by. Inventing one would produce a cap that means nothing, and
+    refusing would fail a request that is otherwise valid — so the caller falls back to plain
+    CRF, exactly what it rendered before.
+
+    Floors to whole kbit rather than rounding: this is a ceiling, so every approximation in it
+    has to point the same way.
+    """
+    try:
+        duration = float(duration_s)
+    except (TypeError, ValueError):
+        return None
+    if duration <= 0:
+        return None
+    total_bps = (float(target_size_mb) * 1024 * 1024 * 8) / duration
+    video_bps = total_bps * _SIZE_CAP_HEADROOM - _parse_bitrate_bps(audio_bitrate)
+    kbit = int(video_bps // 1000)
+    if kbit <= 0:
+        raise ValueError(
+            f"target_size_mb={target_size_mb:g} is too small for this file: "
+            f"{duration:g}s of audio at {audio_bitrate} already exceeds it. "
+            "Ask for a larger size, or strip the audio."
+        )
+    return kbit
 
 
 def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -1279,6 +1345,23 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             post += ["-crf", str(video["crf"])]
         if video.get("preset"):
             post += ["-preset", video["preset"]]
+        # Capped CRF: quality still drives the encode, the cap only stops it exceeding the
+        # size that was asked for. A fixed `-b:v` derived from the target would INFLATE an
+        # already-small clip — `email.yaml` declares `default_target_size_mb: 20`, and a clip
+        # that compresses to 200 KB must not become a 20 MB file because a ceiling was named.
+        if recipe.get("target_size_mb") is not None:
+            kbit = _size_cap_kbit(
+                recipe["target_size_mb"],
+                recipe.get("source_duration"),
+                (recipe.get("audio") or {}).get("bitrate"),
+            )
+            if kbit is not None:
+                post += [
+                    "-maxrate",
+                    f"{kbit}k",
+                    "-bufsize",
+                    f"{kbit * _SIZE_CAP_BUFSIZE_MULTIPLE}k",
+                ]
         if video.get("pixel_format"):
             post += ["-pix_fmt", video["pixel_format"]]
         audio = recipe.get("audio", {})
