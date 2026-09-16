@@ -1193,9 +1193,15 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             # renderer is how the two runtimes drift apart on a byte comparison.
             post += ["-vframes", str(trim["frames"])]
         elif trim.get("duration") is not None:
+            # `-t` is a LENGTH, already relative to the seek point. Correct after `-i`.
             post += ["-t", str(trim["duration"])]
         elif trim.get("end") is not None:
-            post += ["-to", str(trim["end"])]
+            # `-to` goes BEFORE `-i`, with `-ss`. As an OUTPUT option it is relative to the
+            # seek point, so `-ss 2 -i in.mp4 -to 5` is five seconds starting at two — not the
+            # range 2->5. Measured on a real 10s file: 5.000s the old way, 3.000s this way.
+            # Every range trim this engine rendered was wrong, and nothing saw it until
+            # `duration_s` was added to the corpus.
+            pre += ["-to", str(trim["end"])]
 
     if mode == "reverse":
         post += ["-vf", "reverse"]
@@ -1218,12 +1224,14 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         else:
             post += ["-an"]
     elif mode == "extract_audio":
-        # Optional trim-while-extract: -ss before -i (fast seek), -to after.
+        # Optional trim-while-extract. Both bounds are INPUT options: see the `trim` arm —
+        # a `-to` after `-i` is relative to the seek point, which made `ffmpeg_119`
+        # ("just the audio from 3 to 5 seconds") render five seconds of audio.
         trim = recipe.get("trim", {})
         if trim.get("start") is not None:
             pre += ["-ss", str(trim["start"])]
         if trim.get("end") is not None:
-            post += ["-to", str(trim["end"])]
+            pre += ["-to", str(trim["end"])]
         post += ["-vn", "-c:a", _audio_encoder_for(recipe.get("audio_format", "mp3"))]
         bitrate = (recipe.get("audio") or {}).get("bitrate")
         if bitrate:

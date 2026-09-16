@@ -162,9 +162,17 @@ def test_mixed_timestamp_spellings_are_still_the_same_instant(engine, tmp_path: 
 
 
 def test_a_real_range_is_untouched(engine, tmp_path: Path) -> None:
+    """Both bounds are INPUT options — `-to` after `-i` means a length, not an end.
+
+    This test used to assert only that `-to` was present with the right value, so it stayed
+    green while every range trim rendered the wrong duration. Position is the thing that was
+    wrong, so position is what it checks.
+    """
     cmd = _cmd(engine, tmp_path, start="00:00:02", end="00:00:07")
     assert "-vframes" not in cmd
     assert "-to" in cmd and cmd[cmd.index("-to") + 1] == "00:00:07"
+    assert cmd.index("-to") < cmd.index("-i"), cmd
+    assert cmd.index("-ss") < cmd.index("-i"), cmd
 
 
 def test_a_zero_duration_is_also_one_frame(engine, tmp_path: Path) -> None:

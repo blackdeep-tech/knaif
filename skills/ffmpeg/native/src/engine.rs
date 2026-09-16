@@ -523,7 +523,11 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
     let mut pre: Vec<String> = Vec::new();
     let mut post: Vec<String> = Vec::new();
 
-    // Trim: fast-seek before -i; duration/end after -i (then falls through to the encode arm).
+    // Trim: `-ss`/`-to` are INPUT options; only `-t`/`-vframes` go after `-i`.
+    //
+    // `-to` after `-i` is relative to the seek point, so `-ss 2 -i in.mp4 -to 5` is five
+    // seconds starting at two, not the range 2->5. Measured on a real 10s file: 5.000s that
+    // way, 3.000s this way. Every range trim was wrong until `duration_s` exposed it.
     if mode == "trim" {
         if let Some(from_end) = recipe.trim.start_from_end {
             // -sseof takes a negative offset from the end of the input.
@@ -536,9 +540,10 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             // stops at whichever arrives first, so the command would mean neither request.
             post.extend(["-vframes".to_string(), frames.to_string()]);
         } else if let Some(dur) = &recipe.trim.duration {
+            // `-t` is a LENGTH, already relative to the seek point. Correct after `-i`.
             post.extend(["-t".to_string(), dur.clone()]);
         } else if let Some(end) = &recipe.trim.end {
-            post.extend(["-to".to_string(), end.clone()]);
+            pre.extend(["-to".to_string(), end.clone()]);
         }
     }
 
@@ -552,11 +557,13 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             post.push("-an".to_string());
         }
     } else if mode == "extract_audio" {
+        // Both bounds are INPUT options: see the `trim` arm. A `-to` after `-i` made
+        // `ffmpeg_119` ("just the audio from 3 to 5 seconds") render five seconds of audio.
         if let Some(start) = &recipe.trim.start {
             pre.extend(["-ss".to_string(), start.clone()]);
         }
         if let Some(end) = &recipe.trim.end {
-            post.extend(["-to".to_string(), end.clone()]);
+            pre.extend(["-to".to_string(), end.clone()]);
         }
         let fmt = recipe.audio_format.as_deref().unwrap_or("mp3");
         post.extend([
@@ -2326,10 +2333,22 @@ mod trim_frames_tests {
 
     #[test]
     fn a_real_range_is_untouched() {
+        // `-to` moved to `pre` when the range-trim bug was fixed: after `-i` it is relative to
+        // the seek point, so `-ss 2 -i in.mp4 -to 5` rendered five seconds instead of three.
+        // This test asserted only that `-to` existed, so it was green throughout the defect.
         let t = normalize_trim(s(Some("00:00:02")), None, s(Some("00:00:07")), None).unwrap();
         assert_eq!(t.frames, None);
-        let (_, post) = trim_flags(t);
-        assert_eq!(post, vec!["-to".to_string(), "00:00:07".to_string()]);
+        let (pre, post) = trim_flags(t);
+        assert_eq!(
+            pre,
+            vec![
+                "-ss".to_string(),
+                "00:00:02".to_string(),
+                "-to".to_string(),
+                "00:00:07".to_string()
+            ]
+        );
+        assert!(post.is_empty(), "{post:?}");
     }
 
     // ── argument vocabulary: mirrors skills/ffmpeg/python/tests/test_arg_vocabulary.py ──
