@@ -1,0 +1,41 @@
+{
+  "purpose": "L3 after the illegal-filename binding fix, batch naming, the CUDA-offer fix and target_size_mb. Backend recorded as CUDA: this binary is llama,cuda,pdfium with no vulkan compiled, so the delta is comparable to 2026-09-10 (cuda) and NOT to 2026-09-15 (vulkan).",
+  "captured": "2026-09-16",
+  "git_sha": "3019c6a2af640d4ddb1ef99aa3a9140e9c50433c",
+  "git_branch": "feat/reject-clarify-taxonomy",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills\\ffmpeg\\data\\eval.jsonl",
+    "rows_compared": 326,
+    "sha256": "280fd3fd6882cd22a231c8da5075a92b6946d45bd785bdd99e7ce2a20fe4aa01"
+  },
+  "model": {
+    "path": "C:\\Work\\Knaif\\knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "sha256": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe",
+    "sha256": "14b9e9bdfae3828386679b9cef26d39db57d9c08b0341d595cdc88bf18250aa0"
+  },
+  "backend": "cuda",
+  "native_n_gpu_layers": null,
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs llama-cpp-python), so this is a standing property of the comparison, not a misconfiguration — see `backend_attribution.json` next to this file.",
+  "entry_points": {
+    "native": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe run S --dry-run --model knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "python": "uv run knaif-cli run --dry-run --backend llama-cpp --model knaif-qwen3-4b-v1",
+    "stage": "rendered command argv (shipped dry-run path)"
+  },
+  "result": {
+    "counts": {
+      "match": 248,
+      "mismatch": 47,
+      "decline-divergence": 5,
+      "not-comparable": 26,
+      "native-not-implemented": 0
+    },
+    "equivalence_rate": 0.826667,
+    "threshold": 1.0,
+    "passed": false
+  }
+}
