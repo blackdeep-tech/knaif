@@ -537,3 +537,62 @@ def test_success_filter_absent_from_the_whole_chain_still_fails(tmp_path: Path):
     result = success(out, {"filters": ["transpose"]}, tmp_path)
     assert result.score == pytest.approx(0.0)
     assert any("transpose" in f for f in result.failed)
+
+
+# ── max_size_kb: the criterion "compress to under N" actually needs ───────────
+
+
+def test_success_max_size_kb_satisfied_passes(tmp_path: Path):
+    """`ffmpeg_020` and `ffmpeg_093` ask for a SIZE and could only assert a container.
+
+    "compress clip_ctr.mp4 to under 500 KB" was graded `{"container": "mp4", "video_codec":
+    "h264"}` — which the untouched 1.6 MB source satisfies. The row could not fail on the one
+    thing it asks for, so a plan that compressed nothing scored the same as one that worked.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(size="210901")):  # the gold's real output: 206 KB
+        result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(1.0)
+    assert any("max_size_kb" in m for m in result.matched), result.matched
+
+
+def test_success_max_size_kb_exceeded_fails(tmp_path: Path):
+    """The whole point: an output that did not shrink must score zero on this criterion."""
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(size="1658334")):  # the untouched source: 1619 KB
+        result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert any("1619" in f or "1618" in f for f in result.failed), result.failed
+
+
+def test_success_max_size_kb_unreadable_size_fails_rather_than_passes(tmp_path: Path):
+    """A missing `format.size` must not be read as "small enough".
+
+    Every other file criterion here fails closed when the probe cannot answer; a size check
+    that silently passed would reintroduce exactly the cannot-fail row it exists to remove.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    probe = _probe()
+    probe["format"].pop("size", None)
+    with _mock_ffprobe(probe):
+        result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+
+
+def test_success_max_size_kb_triggers_the_file_probe(tmp_path: Path):
+    """It must be a FILE field: a size criterion alone has to fetch the artifact.
+
+    If `max_size_kb` were not in `_FILE_FIELDS`, a row whose only criterion is a size would
+    take the command-text-only path, find no criteria to check, and score 1.0 without ever
+    looking at the output — the cannot-fail row again, wearing a criterion.
+    """
+    out = _mock_output(artifact_path=None)
+    result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert "artifact_file_missing_or_not_produced" in result.failed

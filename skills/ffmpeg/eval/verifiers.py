@@ -414,6 +414,7 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
         "no_audio",
         "max_width",
         "max_height",
+        "max_size_kb",
         "frames",
     }
     has_file_criteria = any(k in criteria for k in _FILE_FIELDS)
@@ -463,6 +464,25 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
             matched.append(f"frames={want}")
         else:
             failed.append(f"frames: expected {want}, got {got}")
+
+    if "max_size_kb" in criteria:
+        # `ffmpeg_020` / `ffmpeg_093` ask for a size and could only assert a container, which
+        # the untouched 1.6 MB source satisfies — so the row could not fail on the one thing
+        # it asks for. Read from `format.size` rather than the encoder settings: "under 500 KB"
+        # is a claim about the file, and a CRF that usually lands there is not the same claim.
+        want_kb = float(criteria["max_size_kb"])
+        raw = fmt.get("size")
+        try:
+            got_kb = int(raw) / 1024
+        except (TypeError, ValueError):
+            # Fails closed, like every other file criterion here. A size check that passed on
+            # an unreadable probe would reintroduce the cannot-fail row it exists to remove.
+            failed.append("max_size_kb: could not read a size from the output")
+        else:
+            if got_kb <= want_kb:
+                matched.append(f"max_size_kb<={want_kb:g} (got {got_kb:.0f} KB)")
+            else:
+                failed.append(f"max_size_kb: expected <={want_kb:g} KB, got {got_kb:.0f} KB")
 
     if "container" in criteria:
         containers = [n.strip() for n in fmt.get("format_name", "").lower().split(",")]
