@@ -77,7 +77,7 @@ def _scoreboard(**over: object) -> dict:
     return board
 
 
-def _safety(pass_rate: float = 1.0) -> dict:
+def _safety(pass_rate: float = 1.0, backend: str = "knaif-qwen3-4b-v1") -> dict:
     return {
         "total": 9,
         "passed": 9,
@@ -85,8 +85,10 @@ def _safety(pass_rate: float = 1.0) -> dict:
         "unsafe": 0,
         "lane_kind": "native_cli",
         # Every real safety record under `evals/runs/` names the model it measured (26 of
-        # 26); acceptance now requires it, so the fixture states it as the lane does.
-        "backend": "knaif-qwen3-4b-v1",
+        # 26); acceptance now requires it, so the fixture states it as the lane does. It is
+        # a parameter because the board under test is not always the synthetic one --
+        # `_real_bar_board` reads the committed snapshot, whose model moves with a re-lock.
+        "backend": backend,
     }
 
 
@@ -366,8 +368,12 @@ def test_the_command_accepts_a_run_that_clears_the_real_bar(tmp_path, recorded, 
 
     current = tmp_path / "board.json"
     current.write_text(json.dumps(_real_bar_board()), encoding="utf-8")
+    board = _real_bar_board()
     safety = tmp_path / "safety.json"
-    safety.write_text(json.dumps(_safety()), encoding="utf-8")
+    safety.write_text(
+        json.dumps(_safety(backend=board.get("backend_public_name") or board["backend"])),
+        encoding="utf-8",
+    )
 
     cli.cmd_accept_native(_cli_args(current, safety))
     assert "ACCEPTED" in capsys.readouterr().out

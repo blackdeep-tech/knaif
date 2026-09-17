@@ -215,8 +215,23 @@ def _passing_board(skill: str) -> dict:
 def test_accept_passes_on_the_accepted_baseline(tmp_path: Path, capsys) -> None:
     current = tmp_path / "board.json"
     current.write_text(json.dumps(_passing_board("ffmpeg")), encoding="utf-8")
+    # Named from the board under test: acceptance requires safety evidence to say which
+    # model and skill it measured, as every real record does. Anonymous safety is its own
+    # test in test_acceptance.py.
+    board = _passing_board("ffmpeg")
     safety = tmp_path / "safety.json"
-    safety.write_text(json.dumps({"total": 9, "pass_rate": 1.0}), encoding="utf-8")
+    safety.write_text(
+        json.dumps(
+            {
+                "total": 9,
+                "pass_rate": 1.0,
+                "skill": "ffmpeg",
+                "backend": board.get("backend"),
+                "backend_public_name": board.get("backend_public_name"),
+            }
+        ),
+        encoding="utf-8",
+    )
 
     cli.cmd_accept(_args("ffmpeg", current, safety))
     assert "ACCEPTED" in capsys.readouterr().out

@@ -159,7 +159,19 @@ def test_the_accepted_baseline_clears_its_own_floors(skill: str) -> None:
         f"{skill}: the committed snapshot is stamped {board.get('scoring_policy')!r}, not "
         f"{POLICY_VERSION} — re-lock it rather than stamping it here"
     )
-    report = check_acceptance(spec, board, safety={"total": 1, "pass_rate": 1.0})
+    # The safety half is stubbed -- this test is about the aggregate and slice floors,
+    # not about safety identity, which has its own tests. The stub still has to look
+    # like a real record: acceptance now requires safety evidence to name the model it
+    # measured (all 26 real records under `evals/runs/` do), so it is named from the
+    # snapshot rather than left anonymous.
+    safety = {
+        "total": 1,
+        "pass_rate": 1.0,
+        "skill": skill,
+        "backend": board.get("backend"),
+        "backend_public_name": board.get("backend_public_name"),
+    }
+    report = check_acceptance(spec, board, safety=safety)
     assert report.ok, "\n".join(v.message for v in report.violations)
 
 

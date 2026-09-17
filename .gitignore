@@ -75,6 +75,11 @@ evals/**
 # Small (tens of KB) and diffable. Per-arm scoreboards stay ignored; `score.json` above is
 # still the conventional summary.
 !evals/**/review-*.md
+# A promotion/rejection verdict is the decision itself, not a note about it. T7 of the
+# reject/clarify plan requires it recorded in the run folder *before* the baseline moves,
+# precisely so the comparison cannot be re-derived from the moved baseline afterwards --
+# which makes it the one file in the folder that cannot be regenerated.
+!evals/**/PROMOTION_VERDICT.md
 !evals/**/comparison.json
 !evals/**/instrument_comparison.json
 # Retrieval baselines are a committed acceptance bar, not scratch — the CI gate
