@@ -1,0 +1,123 @@
+{
+  "verifier": "success",
+  "scoring_policy": 2,
+  "total": 1,
+  "outcome_accuracy": 1.0,
+  "avg_knaif_score": 1.0,
+  "avg_baseline_score": null,
+  "coverage": 1.0,
+  "unattempted": 0,
+  "by_outcome": {
+    "plan": 1
+  },
+  "time_to_artifact_ms": {
+    "count": 1,
+    "mean_ms": 37.928900001134025,
+    "p50_ms": 37.928900001134025,
+    "p95_ms": 37.928900001134025,
+    "max_ms": 37.928900001134025,
+    "total_s": 0.037928900001134025
+  },
+  "intent_metrics": {
+    "total": 1,
+    "tool_accuracy": 1.0,
+    "arg_accuracy": null,
+    "arg_checked": 0,
+    "schema_validity": 1.0,
+    "by_category": {
+      "speed": {
+        "correct": 1,
+        "total": 1
+      }
+    },
+    "clarify": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    "reject": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  },
+  "by_tag": {
+    "speed": {
+      "total": 1,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 1.0,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 1,
+        "mean_ms": 37.928900001134025,
+        "p50_ms": 37.928900001134025,
+        "p95_ms": 37.928900001134025,
+        "max_ms": 37.928900001134025,
+        "total_s": 0.037928900001134025
+      }
+    }
+  },
+  "rows": [
+    {
+      "id": "ffmpeg_282",
+      "utterance": "make clip_4k play at quarter speed",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "speed"
+      ],
+      "latency_ms": 37.928900001134025,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_4k.mp4 -vf setpts=4.0*PTS -af atempo=0.5,atempo=0.5 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_4k_speed.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "adjust_speed",
+            "args": {
+              "inputs": [
+                "clip_4k.mp4"
+              ],
+              "speed": 0.25
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "filter:setpts=4.0*PTS",
+        "container=mp4"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    }
+  ],
+  "backend": "frozen-control-plan-replay",
+  "source_run": "evals\\runs\\2026-09-17_audit-control-v1_success",
+  "source_plan": {
+    "plan": [
+      {
+        "tool": "adjust_speed",
+        "args": {
+          "inputs": [
+            "clip_4k.mp4"
+          ],
+          "speed": 0.25
+        }
+      }
+    ]
+  },
+  "before": {
+    "actual_outcome": "error",
+    "error": "command failed (exit 4294967262): ge [0.5 - 100]\n[fc#-1 @ 00000206e1cb3cc0] Error applying option 'tempo' to filter 'atempo': Result too large\nError opening output file C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\qwen3-4b-sft-v4-flat-q4\\ffmpeg_282__0\\clip_4k_speed.mp4.\nError opening output files: Result too large",
+    "knaif_score": null
+  }
+}

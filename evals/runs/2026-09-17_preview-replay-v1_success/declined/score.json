@@ -1,0 +1,343 @@
+{
+  "verifier": "success",
+  "scoring_policy": 2,
+  "total": 5,
+  "outcome_accuracy": 1.0,
+  "avg_knaif_score": 0.8699999999999999,
+  "avg_baseline_score": null,
+  "coverage": 1.0,
+  "unattempted": 0,
+  "by_outcome": {
+    "plan": 5
+  },
+  "time_to_artifact_ms": {
+    "count": 4,
+    "mean_ms": 32.47182499990231,
+    "p50_ms": 37.15660000125354,
+    "p95_ms": 37.614299999404466,
+    "max_ms": 37.614299999404466,
+    "total_s": 0.12988729999960924
+  },
+  "intent_metrics": {
+    "total": 5,
+    "tool_accuracy": 0.8,
+    "arg_accuracy": null,
+    "arg_checked": 0,
+    "schema_validity": 1.0,
+    "by_category": {
+      "complex": {
+        "correct": 4,
+        "total": 5
+      }
+    },
+    "clarify": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    "reject": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  },
+  "by_tag": {
+    "complex": {
+      "total": 5,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 0.8699999999999999,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 4,
+        "mean_ms": 32.47182499990231,
+        "p50_ms": 37.15660000125354,
+        "p95_ms": 37.614299999404466,
+        "max_ms": 37.614299999404466,
+        "total_s": 0.12988729999960924
+      }
+    },
+    "compress": {
+      "total": 5,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 0.8699999999999999,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 4,
+        "mean_ms": 32.47182499990231,
+        "p50_ms": 37.15660000125354,
+        "p95_ms": 37.614299999404466,
+        "max_ms": 37.614299999404466,
+        "total_s": 0.12988729999960924
+      }
+    },
+    "platform": {
+      "total": 5,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 0.8699999999999999,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 4,
+        "mean_ms": 32.47182499990231,
+        "p50_ms": 37.15660000125354,
+        "p95_ms": 37.614299999404466,
+        "max_ms": 37.614299999404466,
+        "total_s": 0.12988729999960924
+      }
+    },
+    "resize": {
+      "total": 1,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 0.6,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 1,
+        "mean_ms": 37.614299999404466,
+        "p50_ms": 37.614299999404466,
+        "p95_ms": 37.614299999404466,
+        "max_ms": 37.614299999404466,
+        "total_s": 0.037614299999404466
+      }
+    }
+  },
+  "rows": [
+    {
+      "id": "ffmpeg_118",
+      "utterance": "compress clip_ctr.mp4 and then prepare it for WhatsApp",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "complex",
+        "compress",
+        "platform"
+      ],
+      "latency_ms": 32.75179999945976,
+      "error": null,
+      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small_preview.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_ctr.mp4"
+              ],
+              "output": "clip_ctr_small.mp4"
+            }
+          },
+          {
+            "tool": "prepare_for_platform",
+            "args": {
+              "inputs": [
+                "clip_ctr_small.mp4"
+              ],
+              "platform": "whatsapp",
+              "preview": true
+            }
+          }
+        ]
+      },
+      "knaif_score": 0.75,
+      "knaif_matched": [
+        "container=mp4",
+        "video_codec=h264",
+        "audio_codec=aac"
+      ],
+      "knaif_failed": [
+        "max_width: expected <=1280, got 1920"
+      ],
+      "verifier_kind": "output",
+      "baseline_score": null,
+      "is_warmup": true
+    },
+    {
+      "id": "ffmpeg_118",
+      "utterance": "clip_ctr.mp4 komprimieren und fuer WhatsApp vorbereiten",
+      "utterance_idx": 1,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "complex",
+        "compress",
+        "platform"
+      ],
+      "latency_ms": 28.174199998829863,
+      "error": null,
+      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_ctr.mp4"
+              ],
+              "target": "whatsapp",
+              "quality": "visually_good",
+              "preview": true
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "container=mp4",
+        "video_codec=h264",
+        "audio_codec=aac",
+        "max_width=1280<=1280"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "ffmpeg_118",
+      "utterance": "\u043a\u043e\u043c\u043f\u0440\u0435\u0441\u0438\u0440\u0430\u0439 clip_ctr.mp4 \u0438 \u0433\u043e \u043f\u043e\u0434\u0433\u043e\u0442\u0432\u0438 \u0437\u0430 WhatsApp",
+      "utterance_idx": 2,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "complex",
+        "compress",
+        "platform"
+      ],
+      "latency_ms": 37.15660000125354,
+      "error": null,
+      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 28 -preset slow -maxrate 15842k -bufsize 15842k -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_ctr.mp4"
+              ],
+              "target": "whatsapp",
+              "target_size_mb": 20,
+              "preview": true
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "container=mp4",
+        "video_codec=h264",
+        "audio_codec=aac",
+        "max_width=1280<=1280"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "ffmpeg_118",
+      "utterance": "\u538b\u7f29clip_ctr.mp4\u7136\u540e\u4e3aWhatsApp\u51c6\u5907",
+      "utterance_idx": 3,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "complex",
+        "compress",
+        "platform"
+      ],
+      "latency_ms": 26.942200000121375,
+      "error": null,
+      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_ctr.mp4"
+              ],
+              "target": "whatsapp",
+              "quality": "visually_good",
+              "preview": true
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "container=mp4",
+        "video_codec=h264",
+        "audio_codec=aac",
+        "max_width=1280<=1280"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "ffmpeg_136",
+      "utterance": "compress clip_4k.mp4 to 1080p and then prepare for YouTube",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "complex",
+        "resize",
+        "compress",
+        "platform"
+      ],
+      "latency_ms": 37.614299999404466,
+      "error": null,
+      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb.mp4 -t 10 -vf scale=3840:2160 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb_preview.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_4k.mp4"
+              ],
+              "target_size_mb": 10,
+              "output": "clip_10mb.mp4"
+            }
+          },
+          {
+            "tool": "prepare_for_platform",
+            "args": {
+              "inputs": [
+                "clip_10mb.mp4"
+              ],
+              "platform": "youtube",
+              "preview": true
+            }
+          }
+        ]
+      },
+      "knaif_score": 0.6,
+      "knaif_matched": [
+        "container=mp4",
+        "video_codec=h264",
+        "audio_codec=aac"
+      ],
+      "knaif_failed": [
+        "max_width: expected <=1920, got 3840",
+        "max_height: expected <=1080, got 2160"
+      ],
+      "verifier_kind": "output",
+      "baseline_score": null
+    }
+  ]
+}

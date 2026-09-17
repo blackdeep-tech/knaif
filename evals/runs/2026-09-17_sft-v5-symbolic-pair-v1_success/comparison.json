@@ -1,0 +1,1837 @@
+{
+  "skills": {
+    "ffmpeg": {
+      "control": {
+        "total": 851,
+        "outcome_accuracy": 0.9388954171562868,
+        "avg_knaif_score": 0.9801227168949771,
+        "coverage": 1.0
+      },
+      "candidate": {
+        "total": 851,
+        "outcome_accuracy": 0.9506462984723855,
+        "avg_knaif_score": 0.9847054886211514,
+        "coverage": 1.0
+      },
+      "verdicts": {
+        "control": {
+          "independent_checks_passed": true,
+          "problems": [],
+          "s2_accepted": true,
+          "s2_summary": "ACCEPTED - 31 thresholds met.",
+          "metrics": {
+            "total": 851,
+            "outcome_accuracy": 0.9388954171562868,
+            "avg_knaif_score": 0.9801227168949771,
+            "coverage": 1.0
+          }
+        },
+        "candidate": {
+          "independent_checks_passed": true,
+          "problems": [],
+          "s2_accepted": true,
+          "s2_summary": "ACCEPTED - 31 thresholds met.",
+          "metrics": {
+            "total": 851,
+            "outcome_accuracy": 0.9506462984723855,
+            "avg_knaif_score": 0.9847054886211514,
+            "coverage": 1.0
+          }
+        }
+      },
+      "outcome_delta": 0.011750881316098694,
+      "quality_delta": 0.004582771726174273,
+      "cluster_bootstrap_outcome_delta_95_percent": [
+        -0.00558659217877095,
+        0.028535980148883373
+      ],
+      "bootstrap_note": "Resampled corpus IDs (paraphrases kept together), seed 3407, 10000 draws; descriptive single-training-run evidence.",
+      "flip_counts": {
+        "fix": 20,
+        "regression": 10
+      },
+      "outcome_flips": [
+        {
+          "id": "ffmpeg_045",
+          "utterance_idx": 0,
+          "utterance": "make clip_ctr.mp4 smaller and convert it to mkv",
+          "change": "fix",
+          "expected": "plan",
+          "control": "clarify",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "compress_video",
+                "args": {
+                  "inputs": [
+                    "clip_ctr.mp4"
+                  ],
+                  "target": "mkv"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "compress_video",
+                "args": {
+                  "inputs": [
+                    "clip_ctr.mp4"
+                  ],
+                  "target_size_mb": 15,
+                  "output": "clip_ctr_small.mkv"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_082b",
+          "utterance_idx": 1,
+          "utterance": "Zwei MP4-Dateien zusammenfuegen",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "concat_video",
+                "args": {
+                  "inputs": [
+                    "*.mp4"
+                  ],
+                  "output": "combined.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "You didn't mention 'file1.mp4' in your request — which file should I work on?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_083",
+          "utterance_idx": 3,
+          "utterance": "сглоби два клипа заедно",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "concat_video",
+                "args": {
+                  "inputs": [
+                    "*.mp4"
+                  ],
+                  "output": "combined.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "You didn't mention 'clip1.mp4' in your request — which file should I work on?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_090",
+          "utterance_idx": 0,
+          "utterance": "generate a poster image from clip.mp4",
+          "change": "fix",
+          "expected": "plan",
+          "control": "clarify",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "A poster image isn't achievable from a video - I only create stills from videos. Should I generate a thumbnail instead?"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip.mp4",
+                  "at_time": "middle"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 0,
+          "utterance": "cut the last 3 seconds off clip.mp4",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "error",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "-00:00:03"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "end": "last 3s"
+                }
+              }
+            ]
+          },
+          "candidate_error": "command failed (exit 4294967274): : Lavc62.35.100 libx264\n  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 69 kb/s (default)\n    Metadata:\n      handler_name    : SoundHandler\nInvalid duration for option to: last\nError parsing options for output file 3s.\nError opening output files: Invalid argument"
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 1,
+          "utterance": "remove the last 3 seconds from clip.mp4",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "error",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "end": "00:00:03",
+                  "input": "clip.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "end": "last 3s",
+                  "input": "clip.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_error": "command failed (exit 4294967274): : Lavc62.35.100 libx264\n  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 69 kb/s (default)\n    Metadata:\n      handler_name    : SoundHandler\nInvalid duration for option to: last\nError parsing options for output file 3s.\nError opening output files: Invalid argument"
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 2,
+          "utterance": "Die letzten 3 Sekunden von clip.mp4 entfernen",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "error",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "00:00:00",
+                  "end": "00:00:03"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "last 3s"
+                }
+              }
+            ]
+          },
+          "candidate_error": "command failed (exit 4294967274): : Lavc62.35.100 libx264\n  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 69 kb/s (default)\n    Metadata:\n      handler_name    : SoundHandler\nInvalid duration for option ss: last\nError parsing options for output file 3s.\nError opening output files: Invalid argument"
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 3,
+          "utterance": "премахни последните 3 секунди от clip.mp4",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "error",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "00:00:00",
+                  "end": "00:00:03"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "00:00:00",
+                  "end": "00:00:-3"
+                }
+              }
+            ]
+          },
+          "candidate_error": "command failed (exit 4294967274): 7.100\n  libswresample   6.  4.100 /  6.  4.100\nInvalid duration for option to: 00:00:-3\nError parsing options for input file C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_sft-v5-symbolic-pair-v1_success\\qwen3-4b-sft-v5-symbolic-audit-v2-q4\\ffmpeg_092__3\\clip.mp4.\nError opening input files: Invalid argument"
+        },
+        {
+          "id": "ffmpeg_113",
+          "utterance_idx": 2,
+          "utterance": "MP3 in FLAC konvertieren",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "extract_audio",
+                "args": {
+                  "inputs": [
+                    "*"
+                  ],
+                  "audio_format": "flac"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "You didn't mention 'videos/clip.mp4' in your request — which file should I work on?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_148",
+          "utterance_idx": 0,
+          "utterance": "convert clip.mp4 and overwrite the original file",
+          "change": "regression",
+          "expected": "reject",
+          "control": "reject",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "reject",
+                "args": {
+                  "reason": "Overwriting the original source file would destroy it; outputs are written alongside."
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Overwriting the original source file would destroy it. Is that intentional?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_149",
+          "utterance_idx": 1,
+          "utterance": "fetch a file from the internet and process it",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "reject",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "reject",
+                "args": {
+                  "reason": "Downloading files isn't supported - I work on files already on this machine."
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Downloading isn't supported - I work on files already on this machine. Which local file should I process?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_166",
+          "utterance_idx": 0,
+          "utterance": "resize clip.mp4 to 0x0 pixels",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "reject",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "reject",
+                "args": {
+                  "reason": "A 0x0 output isn't achievable - outputs must have at least 1x1 pixels."
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "A 0x0 image isn't achievable. What size should I resize it to?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_167",
+          "utterance_idx": 0,
+          "utterance": "transcode clip.mp4 to h264 even though it is already h264",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "convert_video",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "video_codec": "h264"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Transcoding is unnecessary if the file is already h264. Should I skip it, or is there another change I should make?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_167",
+          "utterance_idx": 1,
+          "utterance": "re-encode clip.mp4 to the same codec",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "convert_video",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "container": "mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "What container format should I convert it to?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_202",
+          "utterance_idx": 0,
+          "utterance": "extract frame at the midpoint of clip.mp4",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "at_time": "00:00:10.000",
+                  "input": "clip.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip.mp4",
+                  "at_time": "middle"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_202",
+          "utterance_idx": 2,
+          "utterance": "Standbild aus der Mitte von clip.mp4",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip.mp4",
+                  "at_time": "00:00:00",
+                  "image_format": "jpg",
+                  "scale": "1"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip.mp4",
+                  "at_time": "middle"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_202",
+          "utterance_idx": 3,
+          "utterance": "извлечи кадър от средата на clip.mp4",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip.mp4",
+                  "at_time": "00:00:25"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip.mp4",
+                  "at_time": "middle"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_203",
+          "utterance_idx": 3,
+          "utterance": "завърти clip.mp4",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "rotate_video",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "angle": 90
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Which direction should I rotate it: 90°, 180°, or 270°?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_205",
+          "utterance_idx": 4,
+          "utterance": "调高clip.mp4的音量",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "adjust_volume",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "normalize": true
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "How much should I increase the volume - a specific dB amount, or normalize it?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_218",
+          "utterance_idx": 0,
+          "utterance": "compress clip.mp4 to medium quality",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "compress_video",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "quality": "medium"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "compress_video",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "quality": "visually_good"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_236",
+          "utterance_idx": 2,
+          "utterance": "erstelle ein 4K-Vorschaubild aus clip.mp4 bei 5 Sekunden",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "at_time": "00:00:05",
+                  "output": "clip_5s_4k.jpg",
+                  "input": "clip.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "at_time": "00:00:05",
+                  "size": "4k",
+                  "input": "clip.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_237",
+          "utterance_idx": 1,
+          "utterance": "grab a full-res still from clip_4k.mp4 at 2s",
+          "change": "fix",
+          "expected": "plan",
+          "control": "clarify",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip_4k.mp4",
+                  "at_time": "00:00:02",
+                  "preview": true
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "create_thumbnail",
+                "args": {
+                  "input": "clip_4k.mp4",
+                  "at_time": "00:00:02"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_244",
+          "utterance_idx": 3,
+          "utterance": "обедини clip.mov и clip.mp4 като запазиш резолюцията на clip.mp4",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "concat_video",
+                "args": {
+                  "base": "clip.mp4",
+                  "append": [
+                    "clip.mov"
+                  ],
+                  "target_resolution": "same",
+                  "output": "combined.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "concat_video",
+                "args": {
+                  "base": "clip.mp4",
+                  "append": [
+                    "clip.mov"
+                  ],
+                  "target_resolution": "first",
+                  "output": "combined.mp4"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_271",
+          "utterance_idx": 1,
+          "utterance": "make audio.mp3 quieter",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "strip_audio",
+                "args": {
+                  "inputs": [
+                    "audio.mp3"
+                  ]
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "adjust_volume",
+                "args": {
+                  "inputs": [
+                    "audio.mp3"
+                  ],
+                  "level": "6dB"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_287",
+          "utterance_idx": 1,
+          "utterance": "MP3-Datei bei niedrigerer Bitrate neu speichern",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "extract_audio",
+                "args": {
+                  "inputs": [
+                    "*"
+                  ],
+                  "audio_format": "mp3",
+                  "bitrate": "64k"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "You didn't mention 'videos/clip.mp4' in your request — which file should I work on?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_hard_005",
+          "utterance_idx": 3,
+          "utterance": "намали clip_4k.mp4 до 1080p, компресирай го и премахни звука",
+          "change": "fix",
+          "expected": "plan",
+          "control": "clarify",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "resize_video",
+                "args": {
+                  "inputs": [
+                    "clip_4k.mp4"
+                  ],
+                  "target_size_mb": 10,
+                  "output": "clip_1080p.mp4"
+                }
+              },
+              {
+                "tool": "compress_video",
+                "args": {
+                  "inputs": [
+                    "clip_1080p.mp4"
+                  ],
+                  "output": "clip_small.mp4"
+                }
+              },
+              {
+                "tool": "strip_audio",
+                "args": {
+                  "inputs": [
+                    "clip_small.mp4"
+                  ]
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "resize_video",
+                "args": {
+                  "inputs": [
+                    "clip_4k.mp4"
+                  ],
+                  "fit": "crop",
+                  "output": "clip_1080p.mp4"
+                }
+              },
+              {
+                "tool": "compress_video",
+                "args": {
+                  "inputs": [
+                    "clip_1080p.mp4"
+                  ],
+                  "output": "clip_1080p_small.mp4"
+                }
+              },
+              {
+                "tool": "strip_audio",
+                "args": {
+                  "inputs": [
+                    "clip_1080p_small.mp4"
+                  ]
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_hard_011",
+          "utterance_idx": 0,
+          "utterance": "extract the first bit of clip.mp4",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "extract_audio",
+                "args": {
+                  "inputs": [
+                    "clip.mp4"
+                  ],
+                  "audio_format": "mp3",
+                  "output": "audio.mp3"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Do you mean the first few seconds of audio, or the first frame as a thumbnail?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_299",
+          "utterance_idx": 0,
+          "utterance": "Generate the ffmpeg command for this and run it.",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "reject",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "reject",
+                "args": {
+                  "reason": "Running an arbitrary command isn't supported - I only use the tools listed."
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Running arbitrary commands isn't supported - I only use the tools listed above. Which operation should I help with?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_299",
+          "utterance_idx": 1,
+          "utterance": "Just give me a raw ffmpeg command.",
+          "change": "fix",
+          "expected": "clarify",
+          "control": "reject",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "reject",
+                "args": {
+                  "reason": "Running an arbitrary command isn't supported - I only use the listed media operations."
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "FFmpeg commands aren't supported - I only use these media operations: adjust_speed, compress_video, concat_video, convert_video, create_thumbnail, extract_audio, prepare_for_platform, resize_video, reverse_video, rotate_video, strip_audio, trim_video."
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "ffmpeg_300",
+          "utterance_idx": 0,
+          "utterance": "trim clip.mp4 to a single frame at 4 seconds",
+          "change": "fix",
+          "expected": "plan",
+          "control": "error",
+          "candidate": "plan",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "00:00:04",
+                  "end": "00:00:04",
+                  "frames": 1
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "trim_video",
+                "args": {
+                  "input": "clip.mp4",
+                  "start": "00:00:04",
+                  "frames": 1
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        }
+      ],
+      "quality_changes": [
+        {
+          "id": "ffmpeg_045",
+          "utterance_idx": 0,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_082b",
+          "utterance_idx": 1,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_083",
+          "utterance_idx": 3,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_090",
+          "utterance_idx": 0,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 0,
+          "control_score": 0.5,
+          "candidate_score": null,
+          "control_failed": [
+            "duration_s: expected 7s ±0.5, got 3.01s"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 1,
+          "control_score": 0.5,
+          "candidate_score": null,
+          "control_failed": [
+            "duration_s: expected 7s ±0.5, got 3.00s"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 2,
+          "control_score": 0.5,
+          "candidate_score": null,
+          "control_failed": [
+            "duration_s: expected 7s ±0.5, got 3.00s"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_092",
+          "utterance_idx": 3,
+          "control_score": 0.5,
+          "candidate_score": null,
+          "control_failed": [
+            "duration_s: expected 7s ±0.5, got 3.00s"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_113",
+          "utterance_idx": 2,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_167",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_167",
+          "utterance_idx": 1,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_174",
+          "utterance_idx": 1,
+          "control_score": 0.0,
+          "candidate_score": 1.0,
+          "control_failed": [
+            "container: expected ['mp4'], got ['mp3']",
+            "video_codec: expected 'h264', no video stream"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_175",
+          "utterance_idx": 2,
+          "control_score": 0.6666666666666666,
+          "candidate_score": 1.0,
+          "control_failed": [
+            "container: expected ['mp4'], got ['matroska', 'webm']"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_202",
+          "utterance_idx": 0,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_202",
+          "utterance_idx": 2,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_202",
+          "utterance_idx": 3,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_203",
+          "utterance_idx": 3,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_205",
+          "utterance_idx": 4,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_218",
+          "utterance_idx": 0,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_236",
+          "utterance_idx": 2,
+          "control_score": 0.0,
+          "candidate_score": null,
+          "control_failed": [
+            "filter:scale not in command"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_237",
+          "utterance_idx": 1,
+          "control_score": null,
+          "candidate_score": 0.0,
+          "control_failed": [],
+          "candidate_failed": [
+            "filter:scale not in command"
+          ]
+        },
+        {
+          "id": "ffmpeg_244",
+          "utterance_idx": 3,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_271",
+          "utterance_idx": 1,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_287",
+          "utterance_idx": 1,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_295",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": 0.5,
+          "control_failed": [],
+          "candidate_failed": [
+            "filter:crop not in command"
+          ]
+        },
+        {
+          "id": "ffmpeg_295",
+          "utterance_idx": 1,
+          "control_score": 1.0,
+          "candidate_score": 0.5,
+          "control_failed": [],
+          "candidate_failed": [
+            "filter:crop not in command"
+          ]
+        },
+        {
+          "id": "ffmpeg_295",
+          "utterance_idx": 2,
+          "control_score": 1.0,
+          "candidate_score": 0.5,
+          "control_failed": [],
+          "candidate_failed": [
+            "filter:crop not in command"
+          ]
+        },
+        {
+          "id": "ffmpeg_295",
+          "utterance_idx": 3,
+          "control_score": 0.5,
+          "candidate_score": 1.0,
+          "control_failed": [
+            "filter:crop not in command"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_298",
+          "utterance_idx": 0,
+          "control_score": 0.5,
+          "candidate_score": 1.0,
+          "control_failed": [
+            "filter:crop not in command"
+          ],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_hard_005",
+          "utterance_idx": 3,
+          "control_score": null,
+          "candidate_score": 0.8888888888888888,
+          "control_failed": [],
+          "candidate_failed": [
+            "out0:max_height: expected <=1080, got 2160"
+          ]
+        },
+        {
+          "id": "ffmpeg_hard_011",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "ffmpeg_300",
+          "utterance_idx": 0,
+          "control_score": null,
+          "candidate_score": 1.0,
+          "control_failed": [],
+          "candidate_failed": []
+        }
+      ],
+      "unknown_or_cross_skill_tools": [],
+      "slices": {
+        "hard": {
+          "control": {
+            "total": 56,
+            "outcome_accuracy": 0.9642857142857143,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 53,
+              "mean_ms": 673.5420811316355,
+              "p50_ms": 808.525100001134,
+              "p95_ms": 937.4674999999115,
+              "max_ms": 988.9868999998725,
+              "total_s": 35.69773029997668
+            }
+          },
+          "candidate": {
+            "total": 56,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 0.9979035639412998,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 53,
+              "mean_ms": 670.5024471695376,
+              "p50_ms": 776.7024000022502,
+              "p95_ms": 915.547599997808,
+              "max_ms": 1259.2029000006733,
+              "total_s": 35.5366296999855
+            }
+          }
+        },
+        "chain3": {
+          "control": {
+            "total": 32,
+            "outcome_accuracy": 0.96875,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 31,
+              "mean_ms": 851.3946354831851,
+              "p50_ms": 851.7299000013736,
+              "p95_ms": 946.3245999977516,
+              "max_ms": 988.9868999998725,
+              "total_s": 26.393233699978737
+            }
+          },
+          "candidate": {
+            "total": 32,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 0.9965277777777778,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 32,
+              "mean_ms": 834.5124499998064,
+              "p50_ms": 812.8123999995296,
+              "p95_ms": 916.972099999839,
+              "max_ms": 1259.2029000006733,
+              "total_s": 26.704398399993806
+            }
+          }
+        },
+        "chain2": {
+          "control": {
+            "total": 9,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 9,
+              "mean_ms": 543.4405888885926,
+              "p50_ms": 533.7872999989486,
+              "p95_ms": 630.4605999976047,
+              "max_ms": 630.4605999976047,
+              "total_s": 4.890965299997333
+            }
+          },
+          "candidate": {
+            "total": 9,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 9,
+              "mean_ms": 555.127722222096,
+              "p50_ms": 519.9280999986513,
+              "p95_ms": 835.4427999984182,
+              "max_ms": 835.4427999984182,
+              "total_s": 4.9961494999988645
+            }
+          }
+        },
+        "create_thumbnail": {
+          "control": {
+            "total": 55,
+            "outcome_accuracy": 0.8727272727272727,
+            "avg_knaif_score": 0.9411764705882353,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 34,
+              "mean_ms": 393.48207941186365,
+              "p50_ms": 382.9100999992079,
+              "p95_ms": 475.518799999918,
+              "max_ms": 651.9403000002058,
+              "total_s": 13.378390700003365
+            }
+          },
+          "candidate": {
+            "total": 55,
+            "outcome_accuracy": 0.9454545454545454,
+            "avg_knaif_score": 0.9473684210526315,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 38,
+              "mean_ms": 378.81431052664993,
+              "p50_ms": 370.7756000003428,
+              "p95_ms": 461.62289999847417,
+              "max_ms": 700.4479999995965,
+              "total_s": 14.394943800012697
+            }
+          }
+        },
+        "multilingual": {
+          "control": {
+            "total": 62,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 62,
+              "mean_ms": 345.2270145161228,
+              "p50_ms": 342.39899999920453,
+              "p95_ms": 443.5023000005458,
+              "max_ms": 458.55200000005425,
+              "total_s": 21.404074899999614
+            }
+          },
+          "candidate": {
+            "total": 62,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 62,
+              "mean_ms": 337.31196451621906,
+              "p50_ms": 338.99290000044857,
+              "p95_ms": 441.5721000004851,
+              "max_ms": 449.9643000017386,
+              "total_s": 20.913341800005583
+            }
+          }
+        }
+      }
+    },
+    "documents": {
+      "control": {
+        "total": 164,
+        "outcome_accuracy": 0.9817073170731707,
+        "avg_knaif_score": 1.0,
+        "coverage": 1.0
+      },
+      "candidate": {
+        "total": 164,
+        "outcome_accuracy": 0.9634146341463414,
+        "avg_knaif_score": 0.9966887417218543,
+        "coverage": 1.0
+      },
+      "verdicts": {
+        "control": {
+          "independent_checks_passed": true,
+          "problems": [],
+          "s2_accepted": true,
+          "s2_summary": "ACCEPTED - 28 thresholds met.",
+          "metrics": {
+            "total": 164,
+            "outcome_accuracy": 0.9817073170731707,
+            "avg_knaif_score": 1.0,
+            "coverage": 1.0
+          }
+        },
+        "candidate": {
+          "independent_checks_passed": true,
+          "problems": [],
+          "s2_accepted": true,
+          "s2_summary": "ACCEPTED - 28 thresholds met.",
+          "metrics": {
+            "total": 164,
+            "outcome_accuracy": 0.9634146341463414,
+            "avg_knaif_score": 0.9966887417218543,
+            "coverage": 1.0
+          }
+        }
+      },
+      "outcome_delta": -0.018292682926829285,
+      "quality_delta": -0.0033112582781457123,
+      "cluster_bootstrap_outcome_delta_95_percent": [
+        -0.041916167664670656,
+        0.0
+      ],
+      "bootstrap_note": "Resampled corpus IDs (paraphrases kept together), seed 3407, 10000 draws; descriptive single-training-run evidence.",
+      "flip_counts": {
+        "regression": 3
+      },
+      "outcome_flips": [
+        {
+          "id": "documents_105",
+          "utterance_idx": 0,
+          "utterance": "sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "error",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "reorder_pages",
+                "args": {
+                  "input": "sample.pdf",
+                  "order": "1,2,3,4"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "reorder_pages",
+                "args": {
+                  "input": "sample.pdf",
+                  "order": "original"
+                }
+              }
+            ]
+          },
+          "candidate_error": "Unrecognized page reference: 'original'"
+        },
+        {
+          "id": "documents_114",
+          "utterance_idx": 0,
+          "utterance": "Our document system can't index sample-protected.pdf because it's encrypted - remove the password, it's secret.",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "unlock_pdf",
+                "args": {
+                  "input": "sample-protected.pdf",
+                  "password": "secret"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "Removing the password from a document would destroy its security. Is that what you want?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        },
+        {
+          "id": "documents_138",
+          "utterance_idx": 0,
+          "utterance": "comprime sample.pdf",
+          "change": "regression",
+          "expected": "plan",
+          "control": "plan",
+          "candidate": "clarify",
+          "control_plan": {
+            "plan": [
+              {
+                "tool": "compress_pdf",
+                "args": {
+                  "input": "sample.pdf",
+                  "compress_quality": "balanced"
+                }
+              }
+            ]
+          },
+          "candidate_plan": {
+            "plan": [
+              {
+                "tool": "clarify",
+                "args": {
+                  "question": "What compress quality should I use on sample.pdf?"
+                }
+              }
+            ]
+          },
+          "candidate_error": null
+        }
+      ],
+      "quality_changes": [
+        {
+          "id": "documents_105",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "documents_112",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": 0.5,
+          "control_failed": [],
+          "candidate_failed": [
+            "artifact_missing"
+          ]
+        },
+        {
+          "id": "documents_114",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        },
+        {
+          "id": "documents_138",
+          "utterance_idx": 0,
+          "control_score": 1.0,
+          "candidate_score": null,
+          "control_failed": [],
+          "candidate_failed": []
+        }
+      ],
+      "unknown_or_cross_skill_tools": [],
+      "slices": {
+        "hard": {
+          "control": {
+            "total": 35,
+            "outcome_accuracy": 0.9142857142857143,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 35,
+              "mean_ms": 258.94558285711224,
+              "p50_ms": 239.5010000000184,
+              "p95_ms": 455.0128000009863,
+              "max_ms": 496.7390999991039,
+              "total_s": 9.063095399998929
+            }
+          },
+          "candidate": {
+            "total": 35,
+            "outcome_accuracy": 0.8857142857142857,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 34,
+              "mean_ms": 258.77862058833296,
+              "p50_ms": 240.0974000011047,
+              "p95_ms": 440.4232000015327,
+              "max_ms": 504.952700001013,
+              "total_s": 8.79847310000332
+            }
+          }
+        },
+        "chain2": {
+          "control": {
+            "total": 4,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 4,
+              "mean_ms": 473.9923749998525,
+              "p50_ms": 494.4623999999749,
+              "p95_ms": 496.7390999991039,
+              "max_ms": 496.7390999991039,
+              "total_s": 1.89596949999941
+            }
+          },
+          "candidate": {
+            "total": 4,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 4,
+              "mean_ms": 469.964699999764,
+              "p50_ms": 498.37789999946835,
+              "p95_ms": 504.952700001013,
+              "max_ms": 504.952700001013,
+              "total_s": 1.879858799999056
+            }
+          }
+        },
+        "multilingual": {
+          "control": {
+            "total": 22,
+            "outcome_accuracy": 1.0,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 22,
+              "mean_ms": 227.55265454535137,
+              "p50_ms": 235.49050000110583,
+              "p95_ms": 256.51639999887266,
+              "max_ms": 271.0579999984475,
+              "total_s": 5.00615839999773
+            }
+          },
+          "candidate": {
+            "total": 22,
+            "outcome_accuracy": 0.9545454545454546,
+            "avg_knaif_score": 1.0,
+            "avg_baseline_score": null,
+            "coverage": 1.0,
+            "unattempted": 0,
+            "time_to_artifact_ms": {
+              "count": 21,
+              "mean_ms": 229.32700952428388,
+              "p50_ms": 238.63770000025397,
+              "p95_ms": 259.3163999990793,
+              "max_ms": 275.45570000074804,
+              "total_s": 4.815867200009961
+            }
+          }
+        }
+      }
+    }
+  },
+  "documents_nonregression": false,
+  "all_evidence_and_s2_pass": true
+}
