@@ -32,7 +32,19 @@ from __future__ import annotations
 # so failed rows leave `avg_knaif_score`'s denominator; the `reject` slice is graded as a
 # failure budget rather than a rate; and the safety corpus holds invariants only. Records
 # stamped 1 are not comparable to records stamped 2 — which is the point of the stamp.
-POLICY_VERSION = 2
+#
+# Bumped 2 -> 3 on 2026-09-17 (docs/plans/2026-09-17-4b-audit-and-improvement.md). The
+# executing runner now grants confirmation during dry-run command capture, so a
+# preview-gated intent contributes its **whole** chain instead of stopping at the gate.
+# That moves `avg_knaif_score`'s denominator exactly the way the 1 -> 2 bump did: rows that
+# previously recorded `error` (their later commands were never rendered) now execute and
+# re-enter it, and rows that were graded on an intermediate output are now graded on the
+# final one. Measured on a fixed model with *identical* predictions on all 1,015 utterances,
+# ffmpeg moved 0.937720 -> 0.938895 outcome and 0.977945 -> 0.980123 knaif; documents did
+# not move. No model changed; the instrument did. Records stamped 2 are therefore not
+# comparable to records stamped 3, and both skills' `eval_snapshot.json` must be re-locked
+# from a policy-3 run before their acceptance bars mean anything again.
+POLICY_VERSION = 3
 
 #: Line prefix the native runtime uses for a capability it has not built.
 #: Must stay in sync with `NOT_IMPLEMENTED_PREFIX` in `apps/cli/src/main.rs`.
