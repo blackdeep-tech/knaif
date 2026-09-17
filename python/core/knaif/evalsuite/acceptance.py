@@ -20,6 +20,8 @@ See ``docs/plans/2026-09-10-skill-quality-lifecycle.md`` (Workstream S2).
 
 from __future__ import annotations
 
+import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -45,6 +47,12 @@ NATIVE_COVERAGE_FLOOR = 1.0
 
 # These three restate `thresholds.L4` in contracts/release/native_status.yaml, which is
 # canonical. `python/core/tests/test_native_acceptance.py` fails if they drift apart.
+
+#: The Python S2 bar requires complete coverage for the same reason L4 does: the average it
+#: grades excludes unattempted rows, so a partial run reports a flattering number over
+#: whatever finished. Kept as its own name rather than reusing the native constant — these
+#: are two bars that happen to agree, and one moving should not silently move the other.
+ACCEPTANCE_COVERAGE_FLOOR = 1.0
 
 _DEFAULT_SKILLS_ROOT = Path("skills")
 
@@ -104,6 +112,21 @@ def load_acceptance(skill: str, root: Path | str | None = None) -> dict[str, Any
         raise ValueError(f"{path}: expected a mapping, got {type(spec).__name__}")
     spec.setdefault("slices", {})
     spec.setdefault("min_rate_rows", 16)
+    # Which skill this bar belongs to, so the checker can bind it to the evidence offered
+    # for it. The YAML does not repeat its own directory name, and without this the spec
+    # is anonymous: any skill's safety result could be handed to any skill's bar.
+    spec["skill"] = skill
+    # The population the bar is written over, counted from the corpus rather than taken
+    # from the run. `coverage` cannot supply this: it measures completeness *among the
+    # rows that came back*, so a run of 13 well-chosen utterances reports 1.0 honestly.
+    # Absent corpus -> unstamped rather than fatal; the checker treats it as unknown.
+    corpus = acceptance_path(skill, root).parent / "data" / "eval.jsonl"
+    if corpus.exists():
+        spec["expected_total"] = sum(
+            len(json.loads(line).get("utterances") or [])
+            for line in corpus.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
     return spec
 
 
@@ -156,6 +179,17 @@ def validate_acceptance(spec: dict[str, Any]) -> list[str]:
                     f"slices.{tag}: states both an `outcome_accuracy` floor and a "
                     "`max_failures` budget; only the rate would be checked"
                 )
+            # The same rule the aggregate floors are held to. Without it a slice floor of
+            # `.nan` validates clean and is then met by every measurement, zero included —
+            # the bar defeats itself, and the run it waves through looks fully checked.
+            rate = thresh.get("outcome_accuracy")
+            if rate is not None and (
+                isinstance(rate, bool)
+                or not isinstance(rate, (int, float))
+                or not math.isfinite(float(rate))
+                or not 0.0 <= float(rate) <= 1.0
+            ):
+                errors.append(f"slices.{tag}.outcome_accuracy: floor must be a number in [0, 1]")
             budget = thresh.get("max_failures")
             if budget is not None and (not isinstance(budget, int) or budget < 0):
                 errors.append(f"slices.{tag}.max_failures: must be a non-negative integer")
@@ -288,26 +322,86 @@ def score_safety(rows: list[Any], outcomes: list[str]) -> dict[str, Any]:
 # -- checking -----------------------------------------------------------------
 
 
+def _finite(value: Any) -> float | None:
+    """The recorded number, or None when it is absent or not a usable score.
+
+    Every threshold here is an ordered comparison, and NaN loses all of them — including
+    `<`, which is how a NaN score read as "floor met". A gate cannot be built out of
+    comparisons alone: what is compared has to be a number first. `inf` is rejected for
+    the same reason in reverse (it clears every floor while describing nothing), and a
+    non-numeric value is a malformed record rather than a passing one.
+
+    Callers treat None exactly as they treat a metric the run never reported — unknown,
+    therefore not evidence. That equivalence is the point: there is one way to be missing.
+    """
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _population(value: Any) -> int | None:
+    """A row count, or None when the record does not state one.
+
+    Stricter than `_finite` on purpose. A *score* may arrive as `"0.97"` — that is an
+    ordinary JSON round-trip and still a score. A *population* is written by the scorer as
+    `len(rows)`, so anything that is not already a whole number is a malformed record
+    rather than a small one. `-1`, `NaN` and `"9"` are all truthy, and truthiness was the
+    only thing standing between an empty corpus and a passing rate.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return int(value)
+    return None
+
+
 def _failures(entry: dict[str, Any]) -> int | None:
-    total, rate = entry.get("total"), entry.get("outcome_accuracy")
+    total, rate = _finite(entry.get("total")), _finite(entry.get("outcome_accuracy"))
     if total is None or rate is None:
         return None
-    return int(round(float(total) * (1.0 - float(rate))))
+    return int(round(total * (1.0 - rate)))
 
 
 def check_acceptance(
     spec: dict[str, Any],
     scoreboard: dict[str, Any],
     safety: dict[str, Any] | None = None,
+    *,
+    coverage_floor: float = ACCEPTANCE_COVERAGE_FLOOR,
+    validate_spec: bool = True,
 ) -> AcceptanceReport:
     """Grade *scoreboard* against a skill's S2 bar.
 
     *safety* is the result of running the skill's safety corpus, as
     ``{"total": N, "pass_rate": R}``. Passing ``None`` — i.e. never running it —
     is a violation, not an omission.
+
+    *coverage_floor* exists so the native lane can delegate here while keeping its own,
+    deliberately lowerable floor (L4e) — one gate, one place, not two coverage rules that
+    can disagree.
     """
     violations: list[Violation] = []
     checked = 0
+
+    # The bar before the run. `validate_acceptance` existed but nothing called it on the
+    # certifying path, so a threshold it would have rejected — `.nan`, a rate above 1 —
+    # was read as written and quietly met by any measurement.
+    checked += 1
+    for problem in validate_acceptance(spec) if validate_spec else ():
+        violations.append(
+            Violation(
+                "identity",
+                "acceptance_spec",
+                f"the bar itself is not valid, so nothing can be certified against it: "
+                f"{problem}",
+            )
+        )
 
     # Identity: an unidentified run, or one graded by a different verifier, cannot
     # certify this bar however good its numbers look.
@@ -356,12 +450,82 @@ def check_acceptance(
             )
         )
 
+    # Evidence integrity. A floor is a claim about a *population*, measured against
+    # *known* inputs. `avg_knaif_score` already excludes rows the run never attempted, so
+    # a partial run reports a flattering average over whatever it happened to finish —
+    # honest only while coverage is complete. The native gate has required this since L4;
+    # the Python gate did not, and would accept `coverage: 0.0` beside a passing average.
+    checked += 1
+    coverage = _finite(scoreboard.get("coverage"))
+    if coverage is None:
+        violations.append(
+            Violation(
+                "identity",
+                "coverage",
+                f"the run reports no usable coverage ({scoreboard.get('coverage')!r}); a "
+                "score over an unknown population cannot certify a bar",
+                coverage_floor,
+            )
+        )
+    elif float(coverage) + _EPS < coverage_floor:
+        violations.append(
+            Violation(
+                "identity",
+                "coverage",
+                f"coverage {float(coverage):.4f} < {coverage_floor:.4f} "
+                f"({scoreboard.get('unattempted')} row(s) unattempted); "
+                "an average over the rows that finished is not the bar",
+                coverage_floor,
+                float(coverage),
+            )
+        )
+
+    # The corpus the bar is written over, not the subset the run chose to attempt.
+    checked += 1
+    expected_total = spec.get("expected_total")
+    run_total = _finite(scoreboard.get("total"))
+    if expected_total is not None:
+        if run_total is None or int(run_total) != int(expected_total):
+            violations.append(
+                Violation(
+                    "identity",
+                    "total",
+                    f"the run scored {scoreboard.get('total')!r} of the "
+                    f"{expected_total} utterances this bar is written over; a score over "
+                    "part of the corpus is not that corpus's score",
+                    float(expected_total),
+                    run_total,
+                )
+            )
+
+    # The run's own record that its inputs had drifted. Grading against media that is not
+    # what the fixtures generated measures something, but not this corpus.
+    checked += 1
+    drifted = scoreboard.get("fixture_integrity") or []
+    if drifted:
+        violations.append(
+            Violation(
+                "identity",
+                "fixture_integrity",
+                f"the run recorded {len(drifted)} fixture integrity problem(s) "
+                f"({'; '.join(str(d) for d in drifted)[:160]}); it did not measure the "
+                "corpus it claims to",
+            )
+        )
+
     for metric, floor in (spec.get("aggregate") or {}).items():
         checked += 1
-        observed = scoreboard.get(metric)
+        observed = _finite(scoreboard.get(metric))
         if observed is None:
             violations.append(
-                Violation("aggregate", metric, f"{metric} not reported by the run", floor, None)
+                Violation(
+                    "aggregate",
+                    metric,
+                    f"{metric} not reported by the run as a usable score "
+                    f"({scoreboard.get(metric)!r})",
+                    floor,
+                    None,
+                )
             )
         elif float(observed) + _EPS < float(floor):
             violations.append(
@@ -385,10 +549,16 @@ def check_acceptance(
             continue
         if "outcome_accuracy" in thresh:
             floor = float(thresh["outcome_accuracy"])
-            observed = entry.get("outcome_accuracy")
+            observed = _finite(entry.get("outcome_accuracy"))
             if observed is None:
                 violations.append(
-                    Violation("slice", tag, f"slice {tag!r} reports no outcome_accuracy", floor)
+                    Violation(
+                        "slice",
+                        tag,
+                        f"slice {tag!r} reports no usable outcome_accuracy "
+                        f"({entry.get('outcome_accuracy')!r})",
+                        floor,
+                    )
                 )
             elif float(observed) + _EPS < floor:
                 violations.append(
@@ -403,10 +573,28 @@ def check_acceptance(
                 )
         else:
             budget = int(thresh["max_failures"])
+            slice_total = _population(entry.get("total"))
             failed = _failures(entry)
-            if failed is None:
+            if slice_total is None or slice_total <= 0:
+                # 0 rows produce 0 failures, which is inside every budget.
                 violations.append(
-                    Violation("slice", tag, f"slice {tag!r} reports no outcome_accuracy", budget)
+                    Violation(
+                        "slice",
+                        tag,
+                        f"required slice {tag!r} reports {entry.get('total')!r} rows; an "
+                        "empty slice cannot be within a failure budget",
+                        budget,
+                    )
+                )
+            elif failed is None:
+                violations.append(
+                    Violation(
+                        "slice",
+                        tag,
+                        f"slice {tag!r} reports no usable outcome_accuracy "
+                        f"({entry.get('outcome_accuracy')!r} over {entry.get('total')!r} rows)",
+                        budget,
+                    )
                 )
             elif failed > budget:
                 violations.append(
@@ -433,6 +621,107 @@ def check_acceptance(
             )
         )
     else:
+        # A rate is meaningless over an empty corpus, and a retained pass_rate beside
+        # `total: 0` is exactly what an accidentally-reused record looks like.
+        checked += 1
+        safety_total = _population(safety.get("total"))
+        if safety_total is None or safety_total <= 0:
+            violations.append(
+                Violation(
+                    "safety",
+                    "total",
+                    f"the safety result reports {safety.get('total')!r} rows; a pass rate "
+                    "needs a positive whole population to be a rate over",
+                    required_safety,
+                    None,
+                )
+            )
+
+        # Safety is not prompt- or model-independent: what the model is shown changes what
+        # it refuses, so a safety result is only evidence for the configuration that
+        # produced it.
+        #
+        # Compared as identifier *sets*, not as `backend == backend`, because `backend`
+        # does not mean the same thing on both records. An L4 scoreboard puts the lane
+        # there (`native-cli`) and the model in `backend_public_name`, while the safety
+        # record it is paired with puts the model in `backend`. Of the 26 real
+        # scoreboard/safety pairs under `evals/runs/`, a direct string comparison rejects
+        # 4 that name the same model — a gate that fails closed on legitimate evidence
+        # gets worked around, which is how the fail-open one survived. Disjoint is the
+        # only thing that can be called a mismatch; records that name nothing are left to
+        # the run's own identity checks.
+        # A safety pass is a claim about *this* skill's corpus. A paired run produces one
+        # result per skill on the same backend, at the same rate, minutes apart — so
+        # without this the 9-row corpus could certify the 11-row one and nothing in the
+        # numbers would look wrong.
+        checked += 1
+        bar_skill, safety_skill = spec.get("skill"), safety.get("skill")
+        if bar_skill and safety_skill and bar_skill != safety_skill:
+            violations.append(
+                Violation(
+                    "safety",
+                    "skill",
+                    f"the safety result is for {safety_skill!r}, but this bar is "
+                    f"{bar_skill!r}'s; one skill's refusals do not certify another's",
+                )
+            )
+
+        checked += 1
+        run_models = {
+            m for m in (scoreboard.get("backend"), scoreboard.get("backend_public_name")) if m
+        }
+        safety_models = {m for m in (safety.get("backend"), safety.get("backend_public_name")) if m}
+        # A shared eval key does not make two shipped models one model: when both records
+        # name a *public* model and the names differ, that is a stated contradiction and
+        # an overlap elsewhere cannot excuse it.
+        if run_models and not safety_models:
+            violations.append(
+                Violation(
+                    "safety",
+                    "backend",
+                    "the safety result names no model, so it cannot be shown to be about "
+                    f"the {sorted(run_models)} this bar is being applied to",
+                )
+            )
+
+        # Safety is not prompt-independent either — retrieval depth and example selection
+        # change what the model is shown, and therefore what it refuses. Both producers
+        # stamp it; compared only when both did.
+        checked += 1
+        run_prompt = scoreboard.get("prompt_config")
+        safety_prompt = safety.get("prompt_config")
+        if run_prompt and safety_prompt and run_prompt != safety_prompt:
+            violations.append(
+                Violation(
+                    "safety",
+                    "prompt_config",
+                    f"safety was measured under {safety_prompt} and the run under "
+                    f"{run_prompt}; a refusal is evidence for the prompt that produced it",
+                )
+            )
+
+        run_public = scoreboard.get("backend_public_name")
+        safety_public = safety.get("backend_public_name")
+        if run_public and safety_public and run_public != safety_public:
+            violations.append(
+                Violation(
+                    "safety",
+                    "backend",
+                    f"safety names the model {safety_public!r} and the run being accepted "
+                    f"names {run_public!r}; sharing an eval key does not reconcile that",
+                )
+            )
+        elif run_models and safety_models and not (run_models & safety_models):
+            violations.append(
+                Violation(
+                    "safety",
+                    "backend",
+                    f"safety was measured on {sorted(safety_models)} but the run being "
+                    f"accepted is {sorted(run_models)}; they name no model in common, so "
+                    "that is evidence about a different system",
+                )
+            )
+
         # A breach is its own violation, independent of the rate: if the bar is ever
         # loosened, "something dangerous would have run" must still fail on its own.
         breaches = safety.get("unsafe")
@@ -448,10 +737,15 @@ def check_acceptance(
                     float(breaches),
                 )
             )
-        observed = safety.get("pass_rate")
+        observed = _finite(safety.get("pass_rate"))
         if observed is None:
             violations.append(
-                Violation("safety", "pass_rate", "safety run reports no pass_rate", required_safety)
+                Violation(
+                    "safety",
+                    "pass_rate",
+                    f"safety run reports no usable pass_rate ({safety.get('pass_rate')!r})",
+                    required_safety,
+                )
             )
         elif float(observed) + _EPS < required_safety:
             violations.append(
@@ -489,10 +783,14 @@ def native_aggregate_floors(
     """
     floors = {k: float(v) for k, v in (spec.get("aggregate") or {}).items()}
     for metric in NATIVE_METRICS:
-        accepted = baseline.get(metric)
+        # A non-finite accepted score would make the raised floor non-finite too, and then
+        # every comparison against it is False — the lane would clear a bar that is not a
+        # number. Leave the S2 floor standing; `check_native_acceptance` reports the
+        # unusable baseline separately rather than quietly grading against less.
+        accepted = _finite(baseline.get(metric))
         if accepted is None:
             continue
-        floors[metric] = max(floors.get(metric, 0.0), float(accepted) - tolerance)
+        floors[metric] = max(floors.get(metric, 0.0), accepted - tolerance)
     return floors
 
 
@@ -523,6 +821,20 @@ def check_native_acceptance(
     """
     violations: list[Violation] = []
     checked = 0
+
+    # Validated here, on the untouched spec. The delegation at the end empties `aggregate`
+    # (checked in this function against the raised floors), and an emptied bar is not a
+    # valid one — so the delegated call must not re-run the validator on that copy.
+    checked += 1
+    for problem in validate_acceptance(spec):
+        violations.append(
+            Violation(
+                "identity",
+                "acceptance_spec",
+                f"the bar itself is not valid, so nothing can be certified against it: "
+                f"{problem}",
+            )
+        )
 
     # Identity with the frozen baseline. Checked before the numbers, because a mismatch
     # here means the numbers below are not comparable at all.
@@ -584,14 +896,14 @@ def check_native_acceptance(
 
     # Coverage (L4e): reported together with the score, or neither is reported.
     checked += 1
-    coverage = scoreboard.get("coverage")
+    coverage = _finite(scoreboard.get("coverage"))
     if coverage is None:
         violations.append(
             Violation(
                 "coverage",
                 "coverage",
-                "the run reports no coverage; a score over an unknown population cannot be "
-                "an acceptance result",
+                "the run reports no usable coverage; a score over an unknown population "
+                "cannot be an acceptance result",
                 coverage_floor,
                 None,
             )
@@ -614,29 +926,37 @@ def check_native_acceptance(
     floors = native_aggregate_floors(spec, baseline, tolerance)
     for metric, floor in floors.items():
         checked += 1
-        accepted = baseline.get(metric)
+        accepted = _finite(baseline.get(metric))
         if metric in NATIVE_METRICS and accepted is None:
             violations.append(
                 Violation(
                     "aggregate",
                     metric,
-                    f"{metric}: the accepted baseline does not report it, so there is "
-                    "nothing to be within tolerance of",
+                    f"{metric}: the accepted baseline reports no usable value "
+                    f"({baseline.get(metric)!r}), so there is nothing to be within "
+                    "tolerance of",
                     floor,
                     None,
                 )
             )
             continue
-        observed = scoreboard.get(metric)
+        observed = _finite(scoreboard.get(metric))
         why = (
             f"S2 floor {float((spec.get('aggregate') or {}).get(metric, 0.0)):.3f}; "
-            f"Python {float(accepted):.3f} - {tolerance:.2f} allowance"
+            f"Python {accepted:.3f} - {tolerance:.2f} allowance"
             if accepted is not None
             else f"S2 floor {floor:.3f}"
         )
         if observed is None:
             violations.append(
-                Violation("aggregate", metric, f"{metric} not reported by the run", floor, None)
+                Violation(
+                    "aggregate",
+                    metric,
+                    f"{metric} not reported by the run as a usable score "
+                    f"({scoreboard.get(metric)!r})",
+                    floor,
+                    None,
+                )
             )
         elif float(observed) + _EPS < floor:
             violations.append(
@@ -651,7 +971,13 @@ def check_native_acceptance(
 
     # Slices, safety and the scoring-policy stamp are the S2 bar unchanged. The aggregate
     # is emptied because it was just checked here against the raised floors.
-    delegated = check_acceptance({**spec, "aggregate": {}}, scoreboard, safety)
+    delegated = check_acceptance(
+        {**spec, "aggregate": {}},
+        scoreboard,
+        safety,
+        coverage_floor=coverage_floor,
+        validate_spec=False,
+    )
     return AcceptanceReport(
         violations=violations + list(delegated.violations),
         checked=checked + delegated.checked,

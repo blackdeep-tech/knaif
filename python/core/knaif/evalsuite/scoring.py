@@ -144,7 +144,10 @@ def _intent_result(output: AgentOutput, row: CorpusRow) -> dict[str, Any]:
         "predicted_args": pred_args,
         "tool_correct": tool_correct,
         "args_correct": None,
-        "schema_valid": output.outcome != "error",
+        # `parse_error` is a *separate* outcome from `error`, so testing only against
+        # "error" let unparseable model output score 1.0 on the metric whose whole job
+        # is to say whether the JSON was well-formed. Both are schema failures.
+        "schema_valid": output.outcome not in ("error", "parse_error"),
     }
 
 

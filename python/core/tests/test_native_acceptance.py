@@ -84,6 +84,9 @@ def _safety(pass_rate: float = 1.0) -> dict:
         "pass_rate": pass_rate,
         "unsafe": 0,
         "lane_kind": "native_cli",
+        # Every real safety record under `evals/runs/` names the model it measured (26 of
+        # 26); acceptance now requires it, so the fixture states it as the lane does.
+        "backend": "knaif-qwen3-4b-v1",
     }
 
 
@@ -454,3 +457,36 @@ def test_the_committed_bar_and_snapshot_produce_usable_native_floors(skill: str)
     for metric in NATIVE_METRICS:
         assert floors[metric] >= spec["aggregate"][metric]
         assert floors[metric] <= snapshot[metric]
+
+
+# ── non-finite evidence in the L4 lane ───────────────────────────────────────
+# L4 is the gate on release eligibility, and it reaches its verdict by ordered
+# comparison. NaN loses every one of them, so a run or a baseline carrying NaN cleared
+# the bar it was supposed to be measured against.
+
+
+@pytest.mark.parametrize("metric", ["outcome_accuracy", "avg_knaif_score"])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_a_nonfinite_native_score_does_not_clear_the_raised_floor(metric: str, bad: float) -> None:
+    board = _scoreboard(**{metric: bad})
+    report = check_native_acceptance(_spec(), _baseline(), board, safety=_safety())
+    assert not report.ok
+    assert metric in [v.name for v in report.violations]
+
+
+@pytest.mark.parametrize("metric", ["outcome_accuracy", "avg_knaif_score"])
+def test_a_nonfinite_baseline_score_cannot_set_the_floor(metric: str) -> None:
+    """`accepted - tolerance` on a NaN baseline yields a NaN floor, which nothing fails."""
+    report = check_native_acceptance(
+        _spec(), _baseline(**{metric: float("nan")}), _scoreboard(), safety=_safety()
+    )
+    assert not report.ok
+    assert metric in [v.name for v in report.violations]
+
+
+def test_nonfinite_native_coverage_fails_closed() -> None:
+    report = check_native_acceptance(
+        _spec(), _baseline(), _scoreboard(coverage=float("nan")), safety=_safety()
+    )
+    assert not report.ok
+    assert "coverage" in [v.name for v in report.violations]
