@@ -94,9 +94,30 @@ def test_documents_enum_values_canonical() -> None:
     assert not bad, "documents enum drift:\n" + "\n".join(bad)
 
 
-def test_ffmpeg_train_utterances_do_not_copy_eval_verbatim() -> None:
+#: Overlaps that exist today and are *not* a licence to add more. Each entry is a row id
+#: with the reason it is tolerated and what would retire it.
+#:
+#: documents_079 — "Do something with a file." Found by the 2026-09-17 audit, which is also
+#: what showed this test had never covered documents at all (it was hard-coded to ffmpeg
+#: while its safety-corpus sibling below was parametrised). It is a *clarify* row: no tool,
+#: no arguments and no transformation are memorised, so it cannot inflate a capability
+#: score the way a copied transformation would. It is not removed here because both places
+#: that hold it are frozen references — `eval.jsonl` backs the committed
+#: `eval_snapshot.json`, and `train.jsonl` reproduces the shipped model's `union_chat.jsonl`
+#: byte for byte. Retire it at the next documents corpus revision, rewording the *train*
+#: side, and delete this entry.
+#: Keyed by row id, valued by the *exact* normalised utterance and the outcome that makes
+#: it tolerable. Pinning the id alone would hand the exemption to whatever utterance that
+#: row holds next — including a transformation swapped in later under the same id.
+_KNOWN_EVAL_OVERLAPS: dict[str, dict[str, tuple[str, str]]] = {
+    "documents": {"documents_079": ("do something with a file", "clarify")},
+}
+
+
+@pytest.mark.parametrize("skill", ["ffmpeg", "documents"])
+def test_train_utterances_do_not_copy_eval_verbatim(skill: str) -> None:
     """Hard-focused training rows must stay adjacent to eval rows, not copy them."""
-    eval_path = ROOT / "skills/ffmpeg/data/eval.jsonl"
+    eval_path = ROOT / f"skills/{skill}/data/eval.jsonl"
     eval_utts: dict[str, str] = {}
     for line in eval_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -105,13 +126,32 @@ def test_ffmpeg_train_utterances_do_not_copy_eval_verbatim() -> None:
         for utterance in rec.get("utterances", []):
             eval_utts[_norm_utterance(utterance)] = rec["id"]
 
+    known = _KNOWN_EVAL_OVERLAPS.get(skill, {})
+    expected_outcome = {
+        json.loads(line)["id"]: json.loads(line).get("expected_outcome")
+        for line in eval_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
     bad: list[str] = []
-    for rec in _rows("ffmpeg"):
+    still_present: set[str] = set()
+    for rec in _rows(skill):
         key = _norm_utterance(rec["utterance"])
-        if key in eval_utts:
-            bad.append(f"{eval_utts[key]}: {rec['utterance']!r}")
+        row_id = eval_utts.get(key)
+        if row_id is None:
+            continue
+        exempt = known.get(row_id)
+        if exempt and exempt == (key, expected_outcome.get(row_id)):
+            still_present.add(row_id)
+            continue
+        bad.append(f"{row_id}: {rec['utterance']!r}")
 
-    assert not bad, "ffmpeg train row copies eval utterance(s):\n" + "\n".join(bad)
+    # A retired overlap must take its exemption with it, or the list quietly grants
+    # cover to the next row that happens to reuse the id.
+    assert still_present == set(known), (
+        f"{skill}: _KNOWN_EVAL_OVERLAPS is stale - no longer overlapping as recorded: "
+        f"{sorted(set(known) - still_present)}"
+    )
+    assert not bad, f"{skill} train row copies eval utterance(s):\n" + "\n".join(bad)
 
 
 # ── the reject/clarify taxonomy, in the weights ──────────────────────────────

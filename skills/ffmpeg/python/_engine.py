@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -1246,13 +1247,27 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         post += ["-an", "-c:v", "copy"]
     elif mode == "adjust_speed":
         speed = float(recipe.get("speed", 1.0))
+        if not math.isfinite(speed) or speed <= 0:
+            raise ValueError("Playback speed must be a finite positive number.")
         pts_factor = round(1.0 / speed, 6)
+        # FFmpeg accepts each atempo factor only in [0.5, 100]. Compose factors
+        # multiplicatively so e.g. quarter speed slows the audio as well as video.
+        remaining = speed
+        tempo_filters: list[str] = []
+        while remaining < 0.5:
+            tempo_filters.append("atempo=0.5")
+            remaining *= 2.0
+        while remaining > 100.0:
+            tempo_filters.append("atempo=100.0")
+            remaining /= 100.0
+        tempo_filters.append(f"atempo={remaining}")
+        tempo = ",".join(tempo_filters)
         # The tempo filter is the request and always applies; `setpts` retimes a video stream
         # an audio-only input does not have, and neither does the video encoder.
         if recipe.get("audio_only"):
-            post += ["-af", f"atempo={speed}"]
+            post += ["-af", tempo]
         else:
-            post += ["-vf", f"setpts={pts_factor}*PTS", "-af", f"atempo={speed}"]
+            post += ["-vf", f"setpts={pts_factor}*PTS", "-af", tempo]
             video = recipe.get("video", {})
             if video.get("encoder"):
                 post += ["-c:v", video["encoder"]]

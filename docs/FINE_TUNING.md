@@ -41,6 +41,30 @@ Wiring: `models.yaml` (`default:` + named entries) and each skill's
   `CUDA: illegal memory access`, **STOP — do not auto-retry** (it can crash the Windows
   display driver / TDR). A reboot clears it. A 1.7B LoRA (3 epochs, ~730 rows) ≈ 9 min; a 4B
   ≈ 19 min.
+- **VRAM: the allocator is capped to 80% of the card, by default.** `train_lora.py` and
+  `train_dpo.py` call `cap_allocator_to_device_memory()` (`python/training/_gpu.py`) before
+  loading anything. Override with `KNAIF_TRAIN_MEM_FRACTION`; `0` or `1` disables it.
+
+  **What it does not do:** it does not offload weights, quantize, or let a model fit that
+  otherwise would not. The whole base model is resident either way — a LoRA trains ~0.8% of
+  the parameters but reads all of them. What it bounds is how far the *caching allocator*
+  may grow before it has to reuse what it already holds.
+
+  **Why it is needed:** on WDDM — Windows, and WSL2 through the same driver — an allocation
+  the card cannot satisfy does not fail. The driver silently backs it with system RAM over
+  PCIe, so the run continues at a fraction of the speed with nothing in the log to notice.
+  Measured on the 16 GB RTX 5080, 2026-09-17, 4B bf16 LoRA, 762 rows, 288 steps:
+
+  | | dedicated | shared | step time | outcome |
+  |---|---|---|---|---|
+  | uncapped (v1) | 15.99 GB | **6.69 GB** | 15.3s → 17.5s, climbing | abandoned at step 2, no CUDA error |
+  | capped 0.8 (v2) | ≤12.8 GB | 0 | ~12.7s | all 288 steps, ~61 min |
+
+  So the cap turns a silent crawl into an honest `CUDA out of memory`. **If you hit that
+  OOM, lower batch/sequence/rank — do not raise the fraction**, which only buys back the
+  crawl. 0.8 clears the spill on a 16 GB card; it is not a tuned optimum, and no
+  cap-vs-throughput sweep has been run. Distinct from the `illegal memory access` above:
+  that one is a driver fault needing a reboot, this one has no error at all.
 - **Train venv:** `python/training/.venv/bin/python` (Unsloth, bf16 LoRA, `load_in_4bit=False`).
   After (re)building this venv, copy the Unsloth-cache guard into it so ad-hoc /
   REPL / notebook imports don't recreate `./unsloth_compiled_cache` in the repo root:

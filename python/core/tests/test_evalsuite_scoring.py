@@ -491,3 +491,23 @@ def test_first_row_marked_is_warmup(tmp_path: Path):
     sb = score_corpus(outputs, rows, {}, "cheap", tmp_path)
     assert sb["rows"][0].get("is_warmup") is True
     assert not sb["rows"][1].get("is_warmup")
+
+
+def test_schema_validity_counts_a_parse_failure_as_invalid(tmp_path: Path):
+    """A row the model never produced parseable JSON for is not schema-valid.
+
+    `parse_error` is its own outcome (the reject/clarify taxonomy split it out of the
+    generic `error` bucket) — and the schema-validity metric was derived as
+    `outcome != "error"`, so unparseable output scored 1.0 on the very metric that is
+    supposed to say whether the model emitted well-formed JSON. Outcome accuracy failed
+    the row correctly; only the auxiliary metric lied.
+    """
+    sb = score_corpus(
+        [_output(id="r001", outcome="parse_error", plan=None)],
+        [_row(id="r001", expected_outcome="plan")],
+        {"cheap": _perfect},
+        "cheap",
+        tmp_path,
+    )
+    assert sb["outcome_accuracy"] == pytest.approx(0.0)
+    assert sb["intent_metrics"]["schema_validity"] == pytest.approx(0.0)

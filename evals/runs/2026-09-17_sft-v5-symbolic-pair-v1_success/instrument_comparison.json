@@ -1,0 +1,74 @@
+{
+  "ffmpeg": {
+    "prediction_changes": [],
+    "outcome_changes": [
+      {
+        "id": "ffmpeg_282",
+        "utterance_idx": 0,
+        "before": "error",
+        "after": "plan"
+      }
+    ],
+    "quality_changes": [
+      {
+        "id": "ffmpeg_118",
+        "utterance_idx": 0,
+        "before": 0.75,
+        "after": 1.0,
+        "before_failed": [
+          "max_width: expected <=1280, got 1920"
+        ],
+        "after_failed": []
+      },
+      {
+        "id": "ffmpeg_282",
+        "utterance_idx": 0,
+        "before": null,
+        "after": 1.0,
+        "before_failed": [],
+        "after_failed": []
+      },
+      {
+        "id": "ffmpeg_hard_016",
+        "utterance_idx": 0,
+        "before": 0.5,
+        "after": 1.0,
+        "before_failed": [
+          "out1:output_not_produced"
+        ],
+        "after_failed": []
+      },
+      {
+        "id": "ffmpeg_hard_016",
+        "utterance_idx": 1,
+        "before": 0.5,
+        "after": 1.0,
+        "before_failed": [
+          "out1:output_not_produced"
+        ],
+        "after_failed": []
+      }
+    ],
+    "old_metrics": {
+      "outcome_accuracy": 0.9377203290246768,
+      "avg_knaif_score": 0.9779445397369926
+    },
+    "new_metrics": {
+      "outcome_accuracy": 0.9388954171562868,
+      "avg_knaif_score": 0.9801227168949771
+    }
+  },
+  "documents": {
+    "prediction_changes": [],
+    "outcome_changes": [],
+    "quality_changes": [],
+    "old_metrics": {
+      "outcome_accuracy": 0.9817073170731707,
+      "avg_knaif_score": 1.0
+    },
+    "new_metrics": {
+      "outcome_accuracy": 0.9817073170731707,
+      "avg_knaif_score": 1.0
+    }
+  }
+}

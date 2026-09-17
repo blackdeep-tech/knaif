@@ -67,6 +67,16 @@ evals/**
 !evals/**/score.json
 !evals/**/report.md
 !evals/**/review_log.json
+# A row-level review and the machine-readable comparison behind a promote/reject decision
+# are evidence, not scratch. The 2026-09-17 audit shipped a `report.md` whose verdict —
+# reject the candidate — is argued entirely in a sibling `review-v1.md`, with the per-row
+# deltas in `comparison.json`; both were ignored, so three committed files linked to a
+# document that existed on one machine. A decision nobody can re-read is not reviewable.
+# Small (tens of KB) and diffable. Per-arm scoreboards stay ignored; `score.json` above is
+# still the conventional summary.
+!evals/**/review-*.md
+!evals/**/comparison.json
+!evals/**/instrument_comparison.json
 # Retrieval baselines are a committed acceptance bar, not scratch — the CI gate
 # (test_retrieval_no_regression_vs_baseline, run by `just check`) reads one by path and
 # errors outright if it is missing. Same role as skills/*/data/eval_snapshot.json; ~1 KB.

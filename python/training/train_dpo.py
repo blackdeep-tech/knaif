@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -13,6 +14,9 @@ os.environ.setdefault("UNSLOTH_COMPILE_LOCATION", os.path.join(_HERE, "cache", "
 import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 from unsloth import FastLanguageModel  # noqa: E402
+
+sys.path.insert(0, _HERE)
+from _gpu import cap_allocator_to_device_memory  # noqa: E402
 
 MAX_SEQ = 3072
 TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
@@ -70,6 +74,10 @@ def main() -> None:
         f"[config] rows={len(rows)} base={args.base} rank={args.rank} alpha={alpha} "
         f"epochs={args.epochs} lr={args.lr} beta={args.beta}"
     )
+
+    # DPO holds the policy *and* a frozen reference model, so it sits closer to the
+    # spill threshold than SFT does. Cap before either is loaded.
+    cap_allocator_to_device_memory()
 
     policy, tok = FastLanguageModel.from_pretrained(
         args.base, max_seq_length=MAX_SEQ, dtype=torch.bfloat16, load_in_4bit=False

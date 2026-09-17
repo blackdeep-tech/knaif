@@ -326,6 +326,13 @@ seconds, so `"0"` and `"00:00:00"` are one instant.
 > entries in `data/eval.jsonl` say `-frames:v`; those are human reference commands, not what
 > the renderer emits.
 
+### Playback speed
+
+`adjust_speed` requires a finite positive multiplier. Audio tempo changes outside
+FFmpeg's per-filter range (0.5–100) are composed from multiple `atempo` filters;
+for example, 0.25× uses `atempo=0.5,atempo=0.5`. This applies to both video with
+audio and audio-only inputs, identically in Python and Rust.
+
 ## Prompt Rules
 
 `skills/ffmpeg/prompt.yaml` teaches the model to choose one or more public intent tools and provide flat args. Multiple distinct operations may appear in one plan, for example concatenate clips and then extract audio from the new output.

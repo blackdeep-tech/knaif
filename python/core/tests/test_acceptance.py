@@ -181,6 +181,9 @@ BOARD = {
     "verifier": "success",
     "scoring_policy": POLICY_VERSION,
     "total": 100,
+    "coverage": 1.0,
+    "unattempted": 0,
+    "fixture_integrity": [],
     "outcome_accuracy": 0.95,
     "avg_knaif_score": 0.99,
     "by_tag": {
@@ -189,6 +192,164 @@ BOARD = {
     },
 }
 SAFETY_OK = {"total": 9, "pass_rate": 1.0}
+
+# ── evidence integrity ───────────────────────────────────────────────────────
+# A floor is a claim about a population. The 2026-09-17 audit showed the gate would
+# accept an otherwise-passing scoreboard whose population was empty, whose fixtures were
+# recorded as corrupt, or whose aggregates were NaN — the last because every comparison
+# with NaN is False, so `observed + eps < floor` silently held. None of these proved a
+# historical run was wrong; they proved the gate could not tell.
+
+
+def test_incomplete_coverage_fails_closed() -> None:
+    """A score over a population the run never finished is not evidence."""
+    report = check_acceptance(
+        SPEC, {**BOARD, "coverage": 0.0, "unattempted": 100}, safety=SAFETY_OK
+    )
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["coverage"]
+
+
+def test_absent_coverage_fails_closed() -> None:
+    board = {k: v for k, v in BOARD.items() if k != "coverage"}
+    report = check_acceptance(SPEC, board, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["coverage"]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_aggregate_fails_closed(bad: float) -> None:
+    """NaN compares False against every floor; it must not read as 'met'."""
+    report = check_acceptance(SPEC, {**BOARD, "avg_knaif_score": bad}, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["avg_knaif_score"]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_nonfinite_slice_rate_fails_closed(bad: float) -> None:
+    """A slice is graded by the same comparison the aggregate is — and NaN beats it too."""
+    board = {
+        **BOARD,
+        "by_tag": {**BOARD["by_tag"], "convert": {"total": 50, "outcome_accuracy": bad}},
+    }
+    report = check_acceptance(SPEC, board, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["convert"]
+
+
+def test_nonfinite_max_failures_rate_fails_closed() -> None:
+    """`max_failures` converts a rate into a row count, and int(NaN) raises.
+
+    A gate that crashes is not a gate that rejected the run: the caller sees a traceback
+    from its own tooling, not a verdict, and the natural reaction is to work around it.
+    """
+    board = {
+        **BOARD,
+        "by_tag": {**BOARD["by_tag"], "chain2": {"total": 8, "outcome_accuracy": float("nan")}},
+    }
+    report = check_acceptance(SPEC, board, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["chain2"]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_nonfinite_safety_rate_fails_closed(bad: float) -> None:
+    """Safety is the one bar with no tolerance; it must not be cleared by a non-number."""
+    report = check_acceptance(SPEC, BOARD, safety={"total": 9, "pass_rate": bad})
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+@pytest.mark.parametrize("junk", ["n/a", [], {"v": 0.95}, None])
+@pytest.mark.parametrize("field", ["coverage", "outcome_accuracy"])
+def test_a_malformed_record_is_rejected_not_raised(field: str, junk: object) -> None:
+    """A gate that raises has not rejected the run — it has broken.
+
+    The caller sees a traceback from its own tooling rather than a verdict, and the
+    reasonable reaction is to route around the broken check. Every recorded value goes
+    through one reader, so "absent", "not a number" and "not numeric at all" land in the
+    same place instead of three.
+    """
+    report = check_acceptance(SPEC, {**BOARD, field: junk}, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == [field]
+
+
+def test_recorded_fixture_corruption_fails_closed() -> None:
+    """The run itself recorded that what it measured against had drifted."""
+    board = {**BOARD, "fixture_integrity": ["clip.mp4: content hash mismatch"]}
+    report = check_acceptance(SPEC, board, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["fixture_integrity"]
+
+
+def test_an_empty_safety_population_fails_closed() -> None:
+    """A retained pass_rate over zero rows certifies nothing."""
+    report = check_acceptance(SPEC, BOARD, safety={"total": 0, "pass_rate": 1.0})
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+def test_safety_measured_on_a_different_model_fails_closed() -> None:
+    """Safety is a claim about the model that ships, not about some other one."""
+    board = {**BOARD, "backend": "the-candidate"}
+    safety = {**SAFETY_OK, "backend": "some-other-model"}
+    report = check_acceptance(SPEC, board, safety=safety)
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+def test_matching_backends_still_pass() -> None:
+    board = {**BOARD, "backend": "the-candidate"}
+    safety = {**SAFETY_OK, "backend": "the-candidate"}
+    assert check_acceptance(SPEC, board, safety=safety).ok
+
+
+def test_the_native_lane_naming_split_is_not_a_mismatch() -> None:
+    """`backend` does not mean the same thing on both records in the L4 lane.
+
+    A native scoreboard records the *lane* in `backend` (`native-cli`) and the model in
+    `backend_public_name`; the safety record it is paired with records the *model* in
+    `backend`. Comparing the two strings directly rejects a run whose two halves name the
+    same model — 4 of the 26 real scoreboard/safety pairs in `evals/runs/` are that shape.
+    The records agree if any identifier they both carry agrees.
+    """
+    board = {**BOARD, "backend": "native-cli", "backend_public_name": "knaif-qwen3-4b-v1"}
+    safety = {**SAFETY_OK, "backend": "knaif-qwen3-4b-v1"}
+    report = check_acceptance(SPEC, board, safety=safety)
+    assert report.ok, report.summary()
+
+
+def test_another_skills_safety_result_cannot_certify_this_one() -> None:
+    """A safety pass is a claim about *this* corpus, and the records say which they ran.
+
+    `documents` has 9 safety rows and `ffmpeg` 11; a paired run produces both on the same
+    backend, at the same pass rate, minutes apart. Nothing in the evidence distinguished
+    them, so the smaller, easier corpus could certify the larger one.
+    """
+    spec = {**SPEC, "skill": "ffmpeg"}
+    safety = {**SAFETY_OK, "skill": "documents", "total": 9}
+    report = check_acceptance(spec, BOARD, safety=safety)
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+def test_the_skills_own_safety_result_passes() -> None:
+    spec = {**SPEC, "skill": "ffmpeg"}
+    assert check_acceptance(spec, BOARD, safety={**SAFETY_OK, "skill": "ffmpeg"}).ok
+
+
+def test_load_acceptance_stamps_the_skill_it_belongs_to() -> None:
+    """Without this the checker cannot bind a spec to the evidence offered for it."""
+    assert load_acceptance("ffmpeg", root=REPO_ROOT / "skills")["skill"] == "ffmpeg"
+
+
+def test_a_genuinely_different_model_is_still_caught() -> None:
+    board = {**BOARD, "backend": "native-cli", "backend_public_name": "knaif-qwen3-4b-v1"}
+    safety = {**SAFETY_OK, "backend": "some-other-model"}
+    report = check_acceptance(SPEC, board, safety=safety)
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
 
 
 def test_a_run_that_clears_everything_passes() -> None:
@@ -357,3 +518,95 @@ def test_every_plan_utterance_can_reach_a_file(skill: str) -> None:
         f"{skill}: these utterances expect a plan but name no file the plan could act on — "
         "they are clarify rows wearing a plan label:\n  " + "\n  ".join(unreachable)
     )
+
+
+# ── evidence must describe the whole corpus, and one consistent system ───────
+# Found by an independent adversarial audit of the hardening above (2026-09-17).
+# Each of these cleared the gate as first written.
+
+
+def test_a_subset_run_cannot_certify_the_whole_corpus() -> None:
+    """`coverage` is completeness *among returned rows*, not of the corpus.
+
+    Score 13 of 851 utterances perfectly, chosen to touch every required tag, and the
+    scorer honestly reports `coverage: 1.0` — it has no idea what it was not asked to run.
+    The population has to be pinned from outside the run.
+    """
+    spec = {**SPEC, "skill": "ffmpeg", "expected_total": 851}
+    report = check_acceptance(spec, {**BOARD, "total": 13}, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["total"]
+
+
+def test_the_full_corpus_passes() -> None:
+    spec = {**SPEC, "skill": "ffmpeg", "expected_total": 100}
+    assert check_acceptance(spec, BOARD, safety=SAFETY_OK).ok
+
+
+def test_load_acceptance_pins_the_corpus_population() -> None:
+    spec = load_acceptance("ffmpeg", root=REPO_ROOT / "skills")
+    assert spec["expected_total"] == _snapshot("ffmpeg")["total"]
+
+
+def test_conflicting_public_model_names_are_a_mismatch() -> None:
+    """Sharing an eval key does not make two different shipped models one model."""
+    board = {**BOARD, "backend": "cand", "backend_public_name": "knaif-qwen3-4b-v2"}
+    safety = {**SAFETY_OK, "backend": "cand", "backend_public_name": "knaif-qwen3-4b-v1"}
+    report = check_acceptance(SPEC, board, safety=safety)
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+@pytest.mark.parametrize("bad", [-1, 0, float("nan"), 2.5, "9"])
+def test_a_safety_population_must_be_a_positive_count(bad: object) -> None:
+    """`total: -1` is truthy, and truthiness was the whole test."""
+    report = check_acceptance(SPEC, BOARD, safety={**SAFETY_OK, "total": bad})
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+def test_an_empty_required_slice_is_not_a_passing_budget() -> None:
+    """0 rows produce 0 failures, which is within every budget."""
+    board = {**BOARD, "by_tag": {**BOARD["by_tag"], "chain2": {"total": 0, "outcome_accuracy": 0}}}
+    report = check_acceptance(SPEC, board, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.name for v in report.violations] == ["chain2"]
+
+
+@pytest.mark.parametrize(
+    "slices",
+    [
+        {"convert": {"outcome_accuracy": float("nan")}},
+        {"convert": {"outcome_accuracy": 1.5}},
+        {"convert": {"max_failures": -1}},
+    ],
+)
+def test_validate_rejects_an_unusable_slice_threshold(slices: dict) -> None:
+    """A bar written as NaN is met by every measurement, including zero."""
+    errors = validate_acceptance({**SPEC, "slices": slices})
+    assert errors, f"{slices} was accepted as a threshold"
+
+
+def test_safety_evidence_must_name_the_model_it_measured() -> None:
+    """Omitting the name was the way past the identity check."""
+    board = {**BOARD, "backend": "cand", "backend_public_name": "v2"}
+    report = check_acceptance(SPEC, board, safety={"total": 9, "pass_rate": 1.0})
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+def test_safety_measured_under_a_different_prompt_is_not_this_runs_evidence() -> None:
+    """What the model is shown changes what it refuses, and both records stamp it."""
+    board = {**BOARD, "backend": "cand", "prompt_config": {"top_k": 5, "examples": "selected"}}
+    safety = {**SAFETY_OK, "backend": "cand", "prompt_config": {"top_k": 99, "examples": "static"}}
+    report = check_acceptance(SPEC, board, safety=safety)
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["safety"]
+
+
+def test_a_bar_that_does_not_validate_cannot_certify_anything() -> None:
+    """The checker read thresholds the validator would have rejected, unasked."""
+    spec = {**SPEC, "slices": {"convert": {"outcome_accuracy": float("nan")}}}
+    report = check_acceptance(spec, BOARD, safety=SAFETY_OK)
+    assert not report.ok
+    assert [v.kind for v in report.violations] == ["identity"]

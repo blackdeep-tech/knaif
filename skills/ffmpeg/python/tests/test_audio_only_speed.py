@@ -103,3 +103,9 @@ def test_a_video_input_is_untouched_by_this(engine, tmp_path: Path) -> None:
     cmd = _cmd(engine, probe, tmp_path, speed=0.8)
     assert "-vf" in cmd and "setpts=1.25*PTS" in cmd, " ".join(cmd)
     assert cmd[-1].endswith(".mp4"), " ".join(cmd)
+
+
+@pytest.mark.parametrize("speed", [0.0, -1.0, float("nan"), float("inf")])
+def test_nonpositive_or_nonfinite_speed_is_rejected(engine, tmp_path: Path, speed) -> None:
+    with pytest.raises(ValueError, match="finite positive"):
+        _cmd(engine, _audio_probe(tmp_path), tmp_path, speed=speed)

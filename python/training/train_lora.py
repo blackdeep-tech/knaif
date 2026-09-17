@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 # Pin Unsloth's compiled cache under training/ (same convention as phase0_smoke.py).
@@ -34,6 +35,9 @@ from unsloth.chat_templates import train_on_responses_only  # noqa: E402  # isor
 import torch  # noqa: E402
 from datasets import Dataset  # noqa: E402
 from trl import SFTConfig, SFTTrainer  # noqa: E402
+
+sys.path.insert(0, _HERE)
+from _gpu import cap_allocator_to_device_memory  # noqa: E402
 
 # ── shared hyperparameters (identical for 1.7B and 4B) ──
 MAX_SEQ = 3072  # union prompts (header+tools+examples) reach ~2.1k tokens; headroom so
@@ -61,6 +65,8 @@ def main() -> None:
     args = ap.parse_args()
     alpha = args.alpha if args.alpha is not None else args.rank
     print(f"[config] rank={args.rank} alpha={alpha} epochs={args.epochs} lr={args.lr}")
+    # Before the first large allocation, or the cap has nothing left to bound.
+    cap_allocator_to_device_memory()
 
     model, tok = FastLanguageModel.from_pretrained(
         args.base,

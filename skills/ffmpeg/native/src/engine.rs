@@ -590,17 +590,35 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
         post.extend(["-an".to_string(), "-c:v".to_string(), "copy".to_string()]);
     } else if mode == "adjust_speed" {
         let speed = recipe.speed.unwrap_or(1.0);
+        anyhow::ensure!(
+            speed.is_finite() && speed > 0.0,
+            "Playback speed must be a finite positive number."
+        );
         let pts = ((1.0 / speed) * 1e6).round() / 1e6;
+        // Each atempo factor must lie in [0.5, 100]; their product is the speed.
+        // Keep the same spelling and factor order as the Python renderer.
+        let mut remaining = speed;
+        let mut tempo_filters = Vec::new();
+        while remaining < 0.5 {
+            tempo_filters.push("atempo=0.5".to_string());
+            remaining *= 2.0;
+        }
+        while remaining > 100.0 {
+            tempo_filters.push("atempo=100.0".to_string());
+            remaining /= 100.0;
+        }
+        tempo_filters.push(format!("atempo={}", py_float_str(remaining)));
+        let tempo = tempo_filters.join(",");
         // The tempo filter is the request and always applies; `setpts` retimes a video stream
         // an audio-only input does not have, and neither does the video encoder.
         if recipe.audio_only {
-            post.extend(["-af".to_string(), format!("atempo={}", py_float_str(speed))]);
+            post.extend(["-af".to_string(), tempo]);
         } else {
             post.extend([
                 "-vf".to_string(),
                 format!("setpts={}*PTS", py_float_str(pts)),
                 "-af".to_string(),
-                format!("atempo={}", py_float_str(speed)),
+                tempo,
             ]);
             push_video(&mut post, &recipe.video, false);
         }
@@ -1744,6 +1762,34 @@ mod tests {
         r.speed = Some(0.5);
         let (_, post) = flags(&r);
         assert_eq!(post, s(&["-vf", "setpts=2.0*PTS", "-af", "atempo=0.5"]));
+    }
+
+    #[test]
+    fn adjust_speed_composes_factors_outside_atempo_range() {
+        for (speed, filter) in [
+            (0.25, "atempo=0.5,atempo=0.5"),
+            (0.125, "atempo=0.5,atempo=0.5,atempo=0.5"),
+            (0.4, "atempo=0.5,atempo=0.8"),
+            (200.0, "atempo=100.0,atempo=2.0"),
+        ] {
+            for audio_only in [false, true] {
+                let mut r = recipe("adjust_speed");
+                r.speed = Some(speed);
+                r.audio_only = audio_only;
+                let (_, post) = flags(&r);
+                let index = post.iter().position(|arg| arg == "-af").unwrap();
+                assert_eq!(post[index + 1], filter);
+            }
+        }
+    }
+
+    #[test]
+    fn adjust_speed_rejects_nonpositive_or_nonfinite_factors() {
+        for speed in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            let mut r = recipe("adjust_speed");
+            r.speed = Some(speed);
+            assert!(build_flags(&r, &bundle_vocab()).is_err());
+        }
     }
 
     #[test]

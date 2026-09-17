@@ -1,0 +1,794 @@
+{
+  "verifier": "success",
+  "scoring_policy": 2,
+  "total": 20,
+  "outcome_accuracy": 1.0,
+  "avg_knaif_score": 0.9,
+  "avg_baseline_score": null,
+  "coverage": 1.0,
+  "unattempted": 0,
+  "by_outcome": {
+    "plan": 20
+  },
+  "time_to_artifact_ms": {
+    "count": 19,
+    "mean_ms": 322.75938421011426,
+    "p50_ms": 325.4888999981631,
+    "p95_ms": 405.7265000010375,
+    "max_ms": 410.7487000001129,
+    "total_s": 6.132428299992171
+  },
+  "intent_metrics": {
+    "total": 20,
+    "tool_accuracy": 1.0,
+    "arg_accuracy": null,
+    "arg_checked": 0,
+    "schema_validity": 1.0,
+    "by_category": {
+      "middle": {
+        "correct": 12,
+        "total": 12
+      },
+      "first": {
+        "correct": 2,
+        "total": 2
+      },
+      "last": {
+        "correct": 2,
+        "total": 2
+      },
+      "numeric": {
+        "correct": 4,
+        "total": 4
+      }
+    },
+    "clarify": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0
+    },
+    "reject": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0
+    }
+  },
+  "by_tag": {
+    "middle": {
+      "total": 12,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 1.0,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 11,
+        "mean_ms": 306.17894545436934,
+        "p50_ms": 319.7022999993351,
+        "p95_ms": 341.5296000021044,
+        "max_ms": 341.5296000021044,
+        "total_s": 3.3679683999980625
+      }
+    },
+    "first": {
+      "total": 2,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 1.0,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 2,
+        "mean_ms": 297.37794999891776,
+        "p50_ms": 272.7208999967843,
+        "p95_ms": 322.03500000105123,
+        "max_ms": 322.03500000105123,
+        "total_s": 0.5947558999978355
+      }
+    },
+    "last": {
+      "total": 2,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 0.0,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 2,
+        "mean_ms": 327.9030999983661,
+        "p50_ms": 321.21469999765395,
+        "p95_ms": 334.5914999990782,
+        "max_ms": 334.5914999990782,
+        "total_s": 0.6558061999967322
+      }
+    },
+    "numeric": {
+      "total": 4,
+      "outcome_accuracy": 1.0,
+      "avg_knaif_score": 1.0,
+      "avg_baseline_score": null,
+      "coverage": 1.0,
+      "unattempted": 0,
+      "time_to_artifact_ms": {
+        "count": 4,
+        "mean_ms": 378.4744499998851,
+        "p50_ms": 405.7265000010375,
+        "p95_ms": 410.7487000001129,
+        "max_ms": 410.7487000001129,
+        "total_s": 1.5138977999995404
+      }
+    }
+  },
+  "rows": [
+    {
+      "id": "thumbnail_probe_00",
+      "utterance": "Make cedar.mp4 a thumbnail taken halfway through.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 633.1113000014739,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "cedar.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 2.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null,
+      "is_warmup": true
+    },
+    {
+      "id": "thumbnail_probe_01",
+      "utterance": "I need the central frame of birch.mp4 as an image.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 341.5296000021044,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 4.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_02",
+      "utterance": "Grab a thumbnail from the halfway point in elm.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 292.9068000012194,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "elm.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 6.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_03",
+      "utterance": "Pick a still image from the middle of cedar.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 315.103499997349,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "cedar.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 2.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_04",
+      "utterance": "Save a poster frame at half the running time of birch.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 333.84060000025784,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 4.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_05",
+      "utterance": "Export the frame in the middle of elm.mp4 as a picture.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 334.4574999973702,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "elm.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 6.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_06",
+      "utterance": "Ein Vorschaubild von cedar.mp4 genau bei halber Filmlänge bitte.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 319.7022999993351,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "cedar.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 2.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_07",
+      "utterance": "Das Bild in der zeitlichen Mitte von birch.mp4 als Foto speichern.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 331.7210999994131,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 4.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_08",
+      "utterance": "Направи снимка от кадъра на половината от elm.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 319.0280000017083,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "at_time": "middle",
+              "input": "elm.mp4"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 6.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_09",
+      "utterance": "Плакатът за cedar.mp4 да е от средата на клипа.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 232.51969999910216,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "at_time": "middle",
+              "input": "cedar.mp4"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 2.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_10",
+      "utterance": "将birch.mp4播放到一半的画面保存为图片。",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 325.4888999981631,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 4.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_11",
+      "utterance": "为elm.mp4生成一张来自视频中间时刻的缩略图。",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "middle"
+      ],
+      "latency_ms": 221.67040000203997,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "elm.mp4",
+              "at_time": "middle"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 6.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_12",
+      "utterance": "Save the first frame of birch.mp4 as a picture.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "first"
+      ],
+      "latency_ms": 322.03500000105123,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 0 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "first"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_13",
+      "utterance": "Create a cover image using the beginning of elm.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "first"
+      ],
+      "latency_ms": 272.7208999967843,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm.mp4 -ss 0 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "elm.mp4",
+              "at_time": "first"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_14",
+      "utterance": "Take a screenshot of the last frame in cedar.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "last"
+      ],
+      "latency_ms": 334.5914999990782,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 3.9 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "cedar.mp4",
+              "at_time": "last"
+            }
+          }
+        ]
+      },
+      "knaif_score": 0.0,
+      "knaif_matched": [],
+      "knaif_failed": [
+        "frame MAE=72.6667; expected 3.966666666666667s"
+      ],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_15",
+      "utterance": "Give me a still image from the final instant of birch.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "last"
+      ],
+      "latency_ms": 321.21469999765395,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 7.9 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "last"
+            }
+          }
+        ]
+      },
+      "knaif_score": 0.0,
+      "knaif_matched": [],
+      "knaif_failed": [
+        "frame MAE=104.3333; expected 7.96s"
+      ],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_16",
+      "utterance": "Save a thumbnail at 1 second in cedar.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "numeric"
+      ],
+      "latency_ms": 369.469699999172,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 00:00:01 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "cedar.mp4",
+              "at_time": "00:00:01"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 1.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_17",
+      "utterance": "Take a still at 3 seconds from birch.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "numeric"
+      ],
+      "latency_ms": 405.7265000010375,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch.mp4 -ss 00:00:03 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\birch_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "birch.mp4",
+              "at_time": "00:00:03",
+              "image_format": "jpg"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 3.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_18",
+      "utterance": "Export a frame at 00:00:09 from elm.mp4.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "numeric"
+      ],
+      "latency_ms": 410.7487000001129,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm.mp4 -ss 00:00:09 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\elm_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "elm.mp4",
+              "at_time": "00:00:09",
+              "image_format": "jpg"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 9.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    },
+    {
+      "id": "thumbnail_probe_19",
+      "utterance": "Create a poster from cedar.mp4 at two seconds.",
+      "utterance_idx": 0,
+      "expected_outcome": "plan",
+      "actual_outcome": "plan",
+      "outcome_correct": true,
+      "tags": [
+        "numeric"
+      ],
+      "latency_ms": 327.95289999921806,
+      "error": null,
+      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar.mp4 -ss 00:00:02 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-prompt-candidate-v1_success\\fixtures\\cedar_thumb.jpg",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "cedar.mp4",
+              "at_time": "00:00:02"
+            }
+          }
+        ]
+      },
+      "knaif_score": 1.0,
+      "knaif_matched": [
+        "frame MAE=0.0000; expected 2.0s"
+      ],
+      "knaif_failed": [],
+      "verifier_kind": "output",
+      "baseline_score": null
+    }
+  ],
+  "probe_verifier": "v4: RGB MAE <= 4 against decoded PNG/JPEG reference; exact final decoded frame",
+  "video_specs": {
+    "cedar.mp4": [
+      4,
+      30
+    ],
+    "birch.mp4": [
+      8,
+      25
+    ],
+    "elm.mp4": [
+      12,
+      10
+    ]
+  },
+  "cases_sha256": "316c9c9e91240382207ff9321e172151d4dc2b8b9a8a099276f67d02a77cae4b",
+  "fixture_sha256": {
+    "birch.mp4": "fd41ed041089d24d08eb625d907b688c3fafc8234a45c20431e44faf220a5aa0",
+    "cedar.mp4": "f9f375a936e500e4a3d75865d416098920db048f0ea2d51a2e34837c046cd80a",
+    "elm.mp4": "2a58dbe68afdf22dfd05ebbfc2b2275c82ea2c4698fd83e784ac399f3b31f083"
+  },
+  "backend": "qwen3-4b-sft-v5-symbolic-audit-v2-q4",
+  "end_to_end_correct": 18
+}
