@@ -134,7 +134,9 @@ def run_corpus(
     """Run each corpus row through the agent pipeline, returning AgentOutput objects.
 
     When execute=True, iterates all utterances per row, runs the agent in dry_run
-    mode to get the command string, then executes it against the row's fixture file.
+    mode with confirmation granted to get the complete command chain, then executes
+    it against the row's fixture file. This evaluates the approved workflow; interactive
+    confirmation behavior is tested separately.
     sandbox and fixture_dir are required when execute=True.
 
     top_k overrides how many tools retrieval surfaces (None = the shipped default).
@@ -187,7 +189,10 @@ def run_corpus(
                             plan_payload,
                             utterance=utterance,
                             dry_run=True,
-                            confirmed=False,
+                            # Executing evals measure the completed workflow on copied
+                            # fixtures. Declining here truncates preview-enabled plans
+                            # before the full batch (and any subsequent intents).
+                            confirmed=execute,
                         )
                         # NL gate may have downgraded the plan to a clarify step.
                         if exec_results and exec_results[0].get("tool") == "clarify":

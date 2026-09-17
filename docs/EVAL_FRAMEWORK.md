@@ -384,6 +384,13 @@ skill's SPEC if you do it.
 The table above describes ffmpeg, which renders **one shell command string** per intent —
 so the runner can capture that string as the artifact, execute it, and probe the result.
 
+Executing Python evaluations grant confirmation during dry-run command capture, then
+execute the complete batch chain against copied fixtures. This measures the approved
+workflow, including intents after a preview gate; it does not test interactive consent.
+Declining that gate would grade a preview or an earlier intermediate output instead.
+Non-executing evaluations retain unconfirmed previews. Compare models using the same
+runner version; historical preview-truncated results are not matched controls.
+
 Not every skill works that way. A **plan-shaped** skill (documents is the reference case)
 executes through library calls, so there is no command to capture: `_extract_artifact`
 returns `None`, and any check that needs a produced file — `output_exists` above all —
