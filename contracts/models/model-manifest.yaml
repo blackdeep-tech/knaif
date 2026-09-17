@@ -57,6 +57,17 @@ models:
     base_model_license: Apache-2.0                      # upstream license (see NOTICE)
     skills: [ffmpeg, documents]
 
+  knaif-qwen3-4b-v2:                                   # public release v2 (from FT cycle sft-v4)
+    file: knaif-qwen3-4b-v2-q4_k_m.gguf
+    training_run: sft-v4-flat                           # reject/clarify taxonomy + the v4 rows
+    url: TODO                                           # filled by scripts/publish_model.py
+    sha256: TODO                                        # filled by scripts/publish_model.py
+    size_bytes: 2497280960
+    license: Apache-2.0
+    base_model: Qwen/Qwen3-4B
+    base_model_license: Apache-2.0
+    skills: [ffmpeg, documents]
+
   knaif-qwen3-1.7b-v1:
     file: knaif-qwen3-1.7b-v1-q6_k.gguf
     training_run: sft-v3-flat

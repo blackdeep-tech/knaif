@@ -29,6 +29,7 @@
 # artifact identity; the `path:` is what maps one to the other.
 #
 # The two promoted (shipped) models, whatever else is present:
+#   models/knaif-qwen3-4b-v2-q4_k_m.gguf   (public knaif-qwen3-4b-v2  — FT cycle sft-v4-flat, Q4_K_M)
 #   models/knaif-qwen3-4b-v1-q4_k_m.gguf   (public knaif-qwen3-4b-v1  — FT cycle sft-v3-flat, Q4_K_M)
 #   models/knaif-qwen3-1.7b-v1-q6_k.gguf   (public knaif-qwen3-1.7b-v1 — FT cycle sft-v3-flat, Q6_K)
 #
@@ -81,9 +82,9 @@ lanes:
     # Repointed to sft-v4 on 2026-09-15 with T7's re-lock. `eval-accept-native` grades this
     # lane against `max(S2 floor, accepted python score - 0.02)`, and the accepted Python
     # score is now sft-v4's — so measuring v1 here would compare two different models and the
-    # verdict would mean nothing. No `public_name`: sft-v4 is an unpublished internal build,
-    # and claiming `knaif-qwen3-4b-v1` would be false. Restore one when T9 publishes it.
-    model_path: models/qwen3-4b-sft-v4-flat-q4.gguf
+    # verdict would mean nothing. sft-v4 is being promoted as `knaif-qwen3-4b-v2`, so the file
+    # now carries its public name; the lane reads the path, not the manifest.
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
     timeout_s: 180
 
 backends:
@@ -248,9 +249,10 @@ backends:
   qwen3-4b-sft-v4-flat-f16:
     backend: llama_cpp
     options: {path: models/qwen3-4b-sft-v4-flat-f16.gguf, description: "Qwen3 4B SFT v4 flat union, f16", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
-  qwen3-4b-sft-v4-flat-q4:
+  qwen3-4b-sft-v4-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
-    options: {path: models/qwen3-4b-sft-v4-flat-q4.gguf, description: "Qwen3 4B SFT v4 flat union, Q4_K_M", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+    public_name: knaif-qwen3-4b-v2   # shipped name — reports label the arm with this, not the eval key
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "Qwen3 4B SFT v4 flat union, Q4_K_M (public: knaif-qwen3-4b-v2)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
 
   # matched-config re-eval of the untuned 4B default + old v1 4B-ft, for a clean 4B-v3 comparison on the 845 corpus
   qwen3-4b-base-q4-mt512:
@@ -356,6 +358,16 @@ backends:
   qwen3-1.7b-sft-v3-flat-q8:
     backend: llama_cpp
     options: {path: models/qwen3-1.7b-sft-v3-flat-q8.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q8_0 (diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # --- 1.7B-v4 retrain (the v2 release pair): same union_chat.jsonl, same flat recipe and
+  # the same config as sft-v3-flat above — only the BASE size differs from qwen3-4b-sft-v4-flat.
+  # Its control is qwen3-1.7b-sft-v3-flat-q6 (published as knaif-qwen3-1.7b-v1), which carries
+  # the OLD taxonomy: both v1 models came from training_run sft-v3-flat.
+  qwen3-1.7b-sft-v4-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v4-flat-f16.gguf, description: "Qwen3 1.7B SFT v4 flat union, f16", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v4-flat-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v4-flat-q6.gguf, description: "Qwen3 1.7B SFT v4 flat union, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
   # v1-union baseline at matched max_tokens=512 for a clean v3-flat vs v1 data-effect read (pass-3 Task 1/2)
   qwen3-1.7b-ft-f16-mt512:
     backend: llama_cpp

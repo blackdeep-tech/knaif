@@ -24,6 +24,18 @@
         "ffmpeg",
         "documents"
       ]
+    },
+    {
+      "base_model": "Qwen/Qwen3-4B",
+      "default": false,
+      "file": "knaif-qwen3-4b-v2-q4_k_m.gguf",
+      "id": "knaif-qwen3-4b-v2",
+      "license": "Apache-2.0",
+      "size_bytes": 2497280960,
+      "skills": [
+        "ffmpeg",
+        "documents"
+      ]
     }
   ],
   "platforms": {

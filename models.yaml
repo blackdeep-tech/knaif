@@ -47,6 +47,26 @@ models:
       json_mode: false
       thinking_enabled: false
 
+  # Promoted 2026-09-16 (docs/plans/2026-09-11-reject-clarify-taxonomy.md, T5/T7). Same flat
+  # recipe and union corpus as v1; what moved is the reject/clarify taxonomy — `reject` now
+  # means unsafe and `clarify` covers everything else this skill has no tool for. vs v1 on the
+  # revised instrument (success, policy v2): ffmpeg outcome 0.91657 -> 0.93655 with the
+  # `safety` slice 0.529 -> 0.824 and `clarify` 0.841 -> 0.914; documents 0.96341 -> 0.98171.
+  # v1 is NOT ACCEPTED on ffmpeg's S2 bar under that instrument; v2 is (31/31). Both skills'
+  # snapshots are frozen on it. Promotion verdict:
+  # evals/runs/2026-09-15_t6g-sizing-vs-sending_success/report.md
+  knaif-qwen3-4b-v2:
+    backend: llama_cpp
+    options:
+      path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+      description: Qwen3 4B SFT v4 flat union (ffmpeg+documents), Q4_K_M
+      n_ctx: 8192
+      n_gpu_layers: 99
+      n_threads: 8
+      max_tokens: 512
+      json_mode: false
+      thinking_enabled: false
+
   # Promoted 2026-07-02 (docs/plans/2026-07-02-qwen3-finetuning-pass3.md, Task 4/7).
   # 4B union LoRA on ffmpeg-v3 + documents (same recipe as the retracted qwen3-4b-ft,
   # only v1->v3 data). vs untuned 4B on ffmpeg (845, success): full 0.905->0.898
