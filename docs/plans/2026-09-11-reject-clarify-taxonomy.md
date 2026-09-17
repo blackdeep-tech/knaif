@@ -840,7 +840,14 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   public release number is a separate contiguous namespace and only moves if this ships.
   `models.yaml` is itself in the gate's evidence tuple, so promotion invalidates L3/L4 a second
   time — which is why T8 runs after it, not before.
-- [ ] **T6 — Measure twice: prompt-only first, then the retrained candidate.** *After* T5b has
+- [x] **T6 — Measure twice: prompt-only first, then the retrained candidate.** *(done 2026-09-15)*
+  Arms in `2026-09-15_t6g-sizing-vs-sending_success` (control `sft-v3` vs treatment `sft-v4`,
+  both skills, safety for each, per required slice) and the small model in
+  `2026-09-16_1.7b-v4-pair_success`. Verdict:
+  [`PROMOTION_VERDICT.md`](../../evals/runs/2026-09-15_t6g-sizing-vs-sending_success/PROMOTION_VERDICT.md)
+  — sft-v4 promoted; ffmpeg outcome +2.00 pp, documents +1.83 pp, all required slices clear on
+  v4 where v3 missed the corpus `safety` slice, safety 11/11 and 9/9 on both arms. The 1.7B is
+  a separate, still-open decision. *Original task text:* *After* T5b has
   landed, and **after `POLICY_VERSION` is bumped** (T7's bump moves here in everything but the
   commit): a scoreboard is stamped at scoring time, so records generated before the bump carry the
   old policy and are not comparable to anything measured after it. Every arm needs **the same
@@ -948,7 +955,20 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   Changing the safety block can move the whole reject/clarify balance, not just three rows —
   `clarify` is 199 ffmpeg utterances and `reject` 34, so a shift there swamps the three rows this
   started with.
-- [ ] **T7 — Re-lock (S5) — and only over a *passing* run, with promotion decided first.**
+- [x] **T7 — Re-lock (S5) — and only over a *passing* run, with promotion decided first.**
+  *(done 2026-09-17)* Verdict first, in
+  [`PROMOTION_VERDICT.md`](../../evals/runs/2026-09-15_t6g-sizing-vs-sending_success/PROMOTION_VERDICT.md);
+  then both snapshots written under **policy 3** in
+  [`2026-09-17_t7-relock-policy-v3_success`](../../evals/runs/2026-09-17_t7-relock-policy-v3_success/report.md).
+  ffmpeg **0.9388954172 / 0.9801227169**, documents **0.9817073171 / 1.0**, coverage 1.0 both,
+  safety 11/11 and 9/9, **S2 ACCEPTED both** (39 / 36 thresholds). Both `acceptance.yaml` moved
+  to `policy_version: 3` with the bump, as `outcomes.py` requires. The `edge` slice risk this
+  task flagged did not materialise: it sits at 0.8909 against its 0.78 floor. The policy bump
+  itself is *not* T6's — it is the executing-capture correction, which moves the denominator
+  the same way v1→v2 did. **Still open, and deliberately separate:** the model pointer. The
+  manifest carries `url: TODO` for `knaif-qwen3-4b-v2`, and `recommendations:` plus both
+  skills' `recommended_model:` still name v1 — gated on publishing the GGUF.
+  *Original task text:*
   **Order matters here, and the first draft had it backwards.** The promotion verdict — *candidate
   vs T6a's shipped-model control, both skills, per required slice* — is taken and **recorded in the
   run folder before anything is written to a snapshot**. Re-locking first and checking after is
