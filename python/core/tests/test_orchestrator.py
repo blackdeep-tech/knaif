@@ -495,3 +495,93 @@ def test_resync_console_handles_restores_stale_handle():
         assert wc.STDERR_HANDLE == msvcrt.get_osfhandle(2)
     finally:
         wc.STDOUT_HANDLE, wc.STDERR_HANDLE = saved_out, saved_err
+
+
+# ── timing parity with the native runtime (workbench T4 / D4) ─────────────────────────────
+#
+# Native emits, under $KNAIF_TIMING=1:
+#   [knaif-timing] prompt_decode (2442 tokens) = 234 ms
+#   [knaif-timing] generation (33 tokens) = 163 ms
+#   [knaif-timing] generate_plan TOTAL = 418 ms
+#
+# Python had only end-to-end latency, so "time" meant different things per runtime and the panel
+# could not be one table. llama.cpp keeps the same counters Python was missing; they are read
+# from `llama_perf_context`, not scraped from stderr.
+
+
+class _FakePerf:
+    """Mirrors llama_cpp.llama_perf_context_data's fields."""
+
+    t_start_ms = 0.0
+    t_load_ms = 954.0
+    t_p_eval_ms = 181.6
+    t_eval_ms = 162.2
+    n_p_eval = 28
+    n_eval = 27
+    n_reused = 0
+
+
+def test_perf_timings_mirror_the_native_field_names() -> None:
+    from knaif.orchestrator import perf_timings
+
+    t = perf_timings(_FakePerf(), wall_ms=600.0)
+    assert t["model_load_ms"] == 954.0
+    assert t["prompt_tokens"] == 28
+    assert t["prompt_decode_ms"] == 181.6
+    assert t["generation_tokens"] == 27
+    assert t["generation_ms"] == 162.2
+    assert t["generate_plan_total_ms"] == 600.0
+
+
+def test_perf_timings_report_nothing_rather_than_zero_when_nothing_ran() -> None:
+    """No tokens decoded means no figure. Zero would read as "instant", which is a claim."""
+    from knaif.orchestrator import perf_timings
+
+    class _Empty(_FakePerf):
+        t_p_eval_ms = 0.0
+        t_eval_ms = 0.0
+        n_p_eval = 0
+        n_eval = 0
+
+    t = perf_timings(_Empty(), wall_ms=5.0)
+    assert t["prompt_tokens"] is None
+    assert t["prompt_decode_ms"] is None
+    assert t["generation_tokens"] is None
+    assert t["generation_ms"] is None
+    # The wall figure is still real — it is the one thing that was measured.
+    assert t["generate_plan_total_ms"] == 5.0
+
+
+def test_a_sub_millisecond_decode_is_zero_not_missing() -> None:
+    """Measured on a repeat call: the KV cache is reused, so only ONE prompt token is decoded
+    and it takes under half a millisecond. That is a real measurement of a real event —
+    reporting it as `None` would hide the cache reuse that makes the number small.
+    """
+    from knaif.orchestrator import perf_timings
+
+    class _Warm(_FakePerf):
+        n_p_eval = 1
+        t_p_eval_ms = 0.0
+
+    t = perf_timings(_Warm(), wall_ms=132.0)
+    assert t["prompt_tokens"] == 1
+    assert t["prompt_decode_ms"] == 0.0
+
+
+def test_perf_timings_expose_reused_tokens_so_a_warm_run_looks_warm() -> None:
+    """D4c is only enforceable if "warm" is visible in the data rather than asserted in a label.
+
+    Measured across three identical calls: prompt tokens went 28 -> 1 -> 1 as llama.cpp reused
+    the prefix. A reader comparing the 132 ms repeat against native's 418 ms needs to see why.
+    """
+    from knaif.orchestrator import perf_timings
+
+    class _Reused(_FakePerf):
+        n_reused = 27
+
+    assert perf_timings(_Reused(), wall_ms=132.0)["reused_tokens"] == 27
+
+
+def test_last_timings_is_none_before_any_inference() -> None:
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
+    assert orch.last_timings is None

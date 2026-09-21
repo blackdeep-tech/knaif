@@ -314,7 +314,7 @@ Verified on the live CUDA binary, both cases:
 The second row is the defect: it used to record `CUDA0`. Five tests, written first, including one
 that pins the exact case where enumeration and reality disagree.
 
-### [ ] T3 — `workbench/runners.py` — one interface, two runtimes
+### [x] T3 — `workbench/runners.py` — one interface, two runtimes
 
 `PythonRunner` and `NativeRunner` returning the same `RunResult`: plan JSON, rendered commands,
 produced artifacts, outcome, timings, measured backend, raw stdout and stderr.
@@ -329,11 +329,65 @@ A note the tests pin: `agent.infer()` defaults to **`use_mock=True`**. A caller 
 gets canned plans such as `inputs: ['speed']` that read exactly like model failures. The runner
 always passes it explicitly.
 
-### [ ] T4 — Python timing parity
+**Done 2026-09-22.** `notebooks/shared/workbench/` holds `RunResult`, `Timings`,
+`NativeRunner` and `PythonRunner`; 8 tests, no GGUF needed — the parsers are what break, and the
+parsers are what is tested. The native timing regexes are pinned to a trace captured from the real
+binary, not to the format this plan quoted from memory.
+
+Two things only running it revealed:
+
+- **A dry run's commands are on stdout, not `running:` on stderr.** `parse_run_output` collects
+  `running:` lines, which a *real* run echoes — a dry run executes nothing, so it echoes nothing
+  and prints the rendered command on stdout instead. Reading only `running:` left the panel's
+  COMMAND section empty in exactly the mode the bench defaults to. `rendered_commands()` prefers
+  the echoed form and falls back to stdout, and renders nothing for a refusal.
+- **`process_overhead_ms` is real and large.** Measured end to end: `wall 1895 ms` against
+  `generate_plan TOTAL 418 ms` — ~1.48 s of process lifecycle, confirming D4b's estimate on the
+  shipped path rather than on a probe.
+
+`Timings` exposes `comparable_ms` (the generation window) and deliberately has **no** `time_ms`;
+a test asserts the absence, because D4c's rule is only worth having if it cannot be bypassed by
+autocomplete.
+
+Verified against the live CUDA binary: `convert clip.mp4 to mkv` → outcome `plan`, command
+`ffmpeg -y -i clip.mp4 -c copy clip_converted.mkv`, `CUDA0 {'CUDA0': 37}` — and with
+`force_cpu=True`, `CPU {'CPU': 37}` while enumeration still reported `CUDA0`.
+
+### [x] T4 — Python timing parity
 
 Instrument `orchestrator.py` for prompt-token count, generation-token count and their
 durations, exposed on the result and named to mirror native's fields so the panel is one table
 rather than two. Until it lands the panel labels Python "end-to-end only".
+
+**Done 2026-09-22.** The counters were already there — llama.cpp keeps them, and
+`llama_perf_context` exposes them through llama-cpp-python. No stderr scraping was needed, so the
+fd-capture in D2b is only about *placement* after all.
+
+`perf_timings()` maps them onto the native field names; `orchestrator.last_timings` carries the
+last call; `_python_timings()` in the runner turns that into a `Timings`. The private
+`llm._ctx.ctx` access is wrapped — a timing panel is worth having, it is not worth an exception on
+the inference path — and degrades to wall clock alone.
+
+**D4c is now confirmed rather than suspected.** Three identical calls on the live model:
+
+| | prompt | generation | reused | TOTAL |
+|---|---|---|---|---|
+| run 1 | 28 tok / 167 ms | 27 tok / 146 ms | 26 | 317 ms |
+| run 2 | **1 tok / 0.0 ms** | 28 tok / 130 ms | **28** | **134 ms** |
+| run 3 | 1 tok / 0.0 ms | 28 tok / 129 ms | 28 | 132 ms |
+
+The plan guessed prefix-cache reuse from a suspiciously low steady state; `n_p_eval` dropping
+28 → 1 is the proof. So `reused_tokens` is reported, and `warm` is **derived** from it (one
+decoded prompt token against a reused prefix) rather than asserted by the caller. A 132 ms repeat
+beside native's 418 ms now carries its own explanation.
+
+Two corrections this produced, both found by running it rather than by review:
+
+- **A duration is gated on its own count, not on whether it rounds to zero.** `0.0 or None` turned
+  a genuine sub-millisecond decode into "unmeasured", hiding the cache reuse that explains it.
+- **`add_dll_directory` is not enough on Windows; PATH is what works.** Not a defect —
+  `orchestrator.py:167-192` already does both, plus an ordered preload. Worth knowing because
+  importing `llama_cpp` *without* constructing an orchestrator fails confusingly.
 
 ### [ ] T5 — `workbench/inventory.py` — models, binaries, skills
 

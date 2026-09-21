@@ -1,0 +1,186 @@
+"""Tests for the workbench runner contract (docs/plans/2026-09-21-skill-prompt-workbench.md T3).
+
+The native runner is exercised through a fake subprocess, so CI needs no GGUF and no GPU — the
+parsing is what these tests are about, and the parsing is what breaks.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_SHARED = Path("notebooks") / "shared"
+if str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+
+from workbench.runners import (  # noqa: E402
+    RunResult,
+    Timings,
+    parse_native_timings,
+)
+
+# Captured verbatim from `KNAIF_TIMING=1 target/release-cuda/knaif.exe run ffmpeg --dry-run`
+# on 2026-09-22 (RTX 5080, knaif-qwen3-4b-v2-q4_k_m.gguf). Not invented: the whole point of the
+# timing panel is that these are the only cross-runtime-comparable numbers, so the parser is
+# pinned to output that actually occurred.
+_REAL_TIMING_TRACE = """\
+[knaif-timing] model load_from_file = 954 ms
+[knaif-timing] new_context = 17 ms
+[knaif-timing] prompt_decode (2442 tokens) = 234 ms
+[knaif-timing] generation (33 tokens) = 163 ms
+[knaif-timing] generate_plan TOTAL = 418 ms
+"""
+
+
+def test_native_timings_parse_from_a_real_trace() -> None:
+    t = parse_native_timings(_REAL_TIMING_TRACE)
+    assert t.model_load_ms == 954.0
+    assert t.prompt_tokens == 2442
+    assert t.prompt_decode_ms == 234.0
+    assert t.generation_tokens == 33
+    assert t.generation_ms == 163.0
+    assert t.generate_plan_total_ms == 418.0
+
+
+def test_native_timings_are_absent_not_zero_when_untimed() -> None:
+    """A run without KNAIF_TIMING has no numbers. Zero would be a measurement; None is the truth."""
+    t = parse_native_timings("load_tensors: layer 0 assigned to device CUDA0, is_swa = 0")
+    assert t.model_load_ms is None
+    assert t.generate_plan_total_ms is None
+    assert t.prompt_tokens is None
+
+
+def test_timings_refuse_a_single_cross_runtime_time() -> None:
+    """D4c: wall clock is not comparable across runtimes, so nothing exposes one number.
+
+    Native pays process start per run; Python keeps the orchestrator resident and reuses its
+    cache. `comparable_ms` is the generation window both runtimes can be held to.
+    """
+    native = Timings(wall_ms=1710.0, generate_plan_total_ms=418.0, model_load_ms=954.0, warm=False)
+    python = Timings(wall_ms=150.0, generate_plan_total_ms=397.0, warm=True)
+    assert native.comparable_ms == 418.0
+    assert python.comparable_ms == 397.0
+    # The wall figures differ by 11x and mean nothing against each other.
+    assert not hasattr(native, "time_ms")
+
+
+def test_run_result_carries_what_the_panel_renders() -> None:
+    r = RunResult(
+        runtime="native",
+        skill="ffmpeg",
+        utterance="convert clip.mp4 to mkv",
+        outcome="plan",
+        plan={"plan": [{"tool": "convert_video", "args": {}}]},
+        commands=["ffmpeg -i clip.mp4 out.mkv"],
+        artifacts=[],
+        timings=Timings(),
+        placement={"CUDA0": 37},
+        enumerated_device="CUDA0",
+        stdout="",
+        stderr="",
+    )
+    assert r.runtime == "native"
+    assert r.measured_backend == "CUDA0"
+    assert r.error is None
+
+
+def test_run_result_reports_the_device_that_ran_not_the_one_enumerated() -> None:
+    """The D2 defect, at the runner boundary: enumeration must never become the answer."""
+    r = RunResult(
+        runtime="native",
+        skill="ffmpeg",
+        utterance="convert clip.mp4 to mkv",
+        outcome="plan",
+        plan=None,
+        commands=[],
+        artifacts=[],
+        timings=Timings(),
+        placement={"CPU": 37},
+        enumerated_device="CUDA0",
+        stdout="",
+        stderr="",
+    )
+    assert r.measured_backend == "CPU"
+
+
+def test_dry_run_commands_come_from_stdout() -> None:
+    """`--dry-run` prints the rendered command on stdout; only a real run echoes `running:`.
+
+    Verified against target/release-cuda/knaif.exe on 2026-09-22: a dry run's entire stdout was
+    `ffmpeg -y -i clip.mp4 -c copy clip_converted.mkv`. Without this the panel's COMMAND section
+    is empty for exactly the mode the bench defaults to.
+    """
+    from workbench.runners import rendered_commands
+
+    stdout = "ffmpeg -y -i clip.mp4 -c copy clip_converted.mkv\n"
+    assert rendered_commands(stdout, echoed=[], outcome="plan") == [
+        "ffmpeg -y -i clip.mp4 -c copy clip_converted.mkv"
+    ]
+
+
+def test_echoed_commands_win_over_stdout() -> None:
+    """A real run echoes what it executed; that is the better source, so it is preferred."""
+    from workbench.runners import rendered_commands
+
+    assert rendered_commands("noise\n", echoed=["ffmpeg -i a.mp4 b.mkv"], outcome="plan") == [
+        "ffmpeg -i a.mp4 b.mkv"
+    ]
+
+
+def test_a_refusal_renders_no_command() -> None:
+    """reject/clarify print a message, not a command — treating it as one would be a lie."""
+    from workbench.runners import rendered_commands
+
+    assert rendered_commands("reject: unsafe request\n", echoed=[], outcome="reject") == []
+    assert rendered_commands("clarify: which file?\n", echoed=[], outcome="clarify") == []
+
+
+def test_warm_is_derived_from_cache_reuse_not_asserted() -> None:
+    """A repeat call decodes one prompt token against a reused prefix. That is the signal."""
+    from workbench.runners import _python_timings
+
+    class _Agent:
+        class orchestrator:  # noqa: N801
+            last_timings = {
+                "model_load_ms": None,
+                "prompt_tokens": 1,
+                "prompt_decode_ms": 0.0,
+                "generation_tokens": 28,
+                "generation_ms": 130.0,
+                "reused_tokens": 28,
+                "generate_plan_total_ms": 134.0,
+            }
+
+    t = _python_timings(_Agent(), 134.0)
+    assert t.warm is True
+    assert t.reused_tokens == 28
+    assert t.comparable_ms == 134.0
+
+
+def test_a_cold_call_is_not_reported_warm() -> None:
+    from workbench.runners import _python_timings
+
+    class _Agent:
+        class orchestrator:  # noqa: N801
+            last_timings = {
+                "prompt_tokens": 28,
+                "prompt_decode_ms": 167.0,
+                "generation_tokens": 27,
+                "generation_ms": 146.0,
+                "reused_tokens": 26,
+                "generate_plan_total_ms": 317.0,
+            }
+
+    assert _python_timings(_Agent(), 317.0).warm is False
+
+
+def test_timings_fall_back_to_wall_clock_when_uninstrumented() -> None:
+    """An ollama or mock agent has no counters; the panel still gets the one real number."""
+    from workbench.runners import _python_timings
+
+    class _Agent:
+        orchestrator = None
+
+    t = _python_timings(_Agent(), 500.0)
+    assert t.generate_plan_total_ms == 500.0
+    assert t.prompt_tokens is None

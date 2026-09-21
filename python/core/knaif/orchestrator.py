@@ -7,6 +7,7 @@ import os
 import site
 import sys
 import sysconfig
+import time
 import warnings
 from collections.abc import Iterator
 from pathlib import Path
@@ -76,6 +77,77 @@ class OllamaModelNotFoundError(RuntimeError):
     """
 
 
+def _perf_reset(llm: Any) -> None:
+    """Zero llama.cpp's counters so the next call is measured alone, not cumulatively."""
+    try:
+        import llama_cpp
+
+        llama_cpp.llama_perf_context_reset(llm._ctx.ctx)
+    except Exception:  # noqa: BLE001 — instrumentation must never break inference
+        pass
+
+
+def _read_perf(llm: Any, *, wall_ms: float) -> dict[str, float | int | None]:
+    """Counters after a call, or wall clock alone when they cannot be read.
+
+    Wrapped because this reaches into `llm._ctx.ctx`, a private handle whose shape is not a
+    llama-cpp-python API promise. A timing panel is worth having; it is not worth an exception
+    on the inference path, so a failure degrades to the one number that is always available.
+    """
+    try:
+        import llama_cpp
+
+        return perf_timings(llama_cpp.llama_perf_context(llm._ctx.ctx), wall_ms=wall_ms)
+    except Exception:  # noqa: BLE001
+        return {
+            "model_load_ms": None,
+            "prompt_tokens": None,
+            "prompt_decode_ms": None,
+            "generation_tokens": None,
+            "generation_ms": None,
+            "reused_tokens": None,
+            "generate_plan_total_ms": wall_ms,
+        }
+
+
+def perf_timings(data: Any, *, wall_ms: float) -> dict[str, float | int | None]:
+    """Map llama.cpp's perf counters onto the field names the native runtime reports.
+
+    Native emits, under `$KNAIF_TIMING=1`::
+
+        [knaif-timing] prompt_decode (2442 tokens) = 234 ms
+        [knaif-timing] generation (33 tokens) = 163 ms
+        [knaif-timing] generate_plan TOTAL = 418 ms
+
+    Python had only end-to-end latency, so "time" meant a different thing in each runtime and the
+    two could not share a table. These are the same counters, read from `llama_perf_context`
+    rather than scraped from a verbose trace.
+
+    **A count of zero is reported as `None`, not 0.** A model that decoded no prompt has no
+    prompt-decode figure; zero would read as a measurement that happened to be instant.
+    """
+    prompt_tokens = int(data.n_p_eval)
+    generation_tokens = int(data.n_eval)
+    return {
+        "model_load_ms": float(data.t_load_ms) or None,
+        # A duration is gated on ITS OWN COUNT, not on whether it rounds to zero. A repeat call
+        # decodes a single prompt token in under half a millisecond — a real measurement of a
+        # real event, and reporting it as `None` would hide the cache reuse that explains it.
+        "prompt_tokens": prompt_tokens or None,
+        "prompt_decode_ms": float(data.t_p_eval_ms) if prompt_tokens else None,
+        "generation_tokens": generation_tokens or None,
+        "generation_ms": float(data.t_eval_ms) if generation_tokens else None,
+        # How many tokens llama.cpp took from the KV cache instead of decoding. This is what
+        # makes a warm run legible: measured across three identical calls, prompt tokens went
+        # 28 -> 1 -> 1 while `n_reused` rose. Without it, a 132 ms repeat next to native's
+        # 418 ms reads as Python being three times faster, which is not what happened.
+        "reused_tokens": int(getattr(data, "n_reused", 0)) or None,
+        # Wall clock for this call. NOT comparable with the native runner's wall clock, which
+        # includes process start and a cold model load — see the workbench plan's D4c.
+        "generate_plan_total_ms": wall_ms,
+    }
+
+
 class InferenceOrchestrator:
     """
     Orchestrates model inference for command planning.
@@ -107,6 +179,9 @@ class InferenceOrchestrator:
         # tool-registry prompt can far exceed a few seconds, so this covers load + generate.
         self.request_timeout: float = float((model_config or {}).get("request_timeout", 120))
         self.llm: Any = None
+        #: Per-call timings from the last `infer()`, keyed to mirror the native runtime's
+        #: fields so both can be rendered in one table. `None` until something has run.
+        self.last_timings: dict[str, float | int | None] | None = None
         self._root = Path(root).resolve() if root else None
         self._verbose = verbose
 
@@ -336,6 +411,8 @@ class InferenceOrchestrator:
             if self.json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
             _max_tokens = int(self.model_config.get("max_tokens", max_tokens))
+            _perf_reset(self.llm)
+            _started = time.perf_counter()
             response = cast(
                 dict[str, Any],
                 self.llm.create_chat_completion(
@@ -348,6 +425,8 @@ class InferenceOrchestrator:
                     **kwargs,
                 ),
             )
+            _wall_ms = (time.perf_counter() - _started) * 1000
+            self.last_timings = _read_perf(self.llm, wall_ms=_wall_ms)
             _resync_win32_console_handles()
             return str(response["choices"][0]["message"]["content"])
 
