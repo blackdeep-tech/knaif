@@ -23,6 +23,33 @@ rust-version = "1.96"
 # "Name <email>" string where PEP 621 splits the two fields.
 authors = ["Blackdeep Technologies <knaif@blackdeep.tech>"]
 
+# One directory per build kind. Cargo's artifact path is `target/<profile>/<bin>` and features are
+# NOT part of it, so every feature set used to overwrite the same `target/release/knaif`. Worse,
+# llama-cpp-sys-2's build.rs hard-links its shared libs into `OUT_DIR.ancestors().nth(3)` — also
+# `target/<profile>/` — which is why switching kinds could panic with `hard_link … AlreadyExists`
+# and why a cpu package once shipped the leftover vulkan tree (portable-builds C1/C2).
+#
+# A profile moves both: the binary and the staged libs. `package.sh --profile release-<kind>`,
+# `just build-native-kind <kind>`, and `scripts/verify_build_profile.sh <kind>` all use these names.
+# Plain `release` is untouched and stays the default for an un-flagged build.
+#
+# Cost: a profile is a distinct unit key, so the FIRST build of each one compiles llama.cpp from
+# scratch (~15-30 min for cuda). After that, switching kinds costs nothing. `rm -rf
+# target/release-<kind>` is the targeted cleanup — `cargo clean` does not reliably remove it.
+#
+# See docs/plans/2026-09-21-per-backend-build-profiles.md.
+[profile.release-base]
+inherits = "release"
+
+[profile.release-cpu]
+inherits = "release"
+
+[profile.release-vulkan]
+inherits = "release"
+
+[profile.release-cuda]
+inherits = "release"
+
 [workspace.dependencies]
 # Internal crates (path deps; the whole graph builds from the workspace).
 knaif-core = { path = "native/crates/knaif-core" }
