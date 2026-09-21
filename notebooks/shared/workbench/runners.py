@@ -353,6 +353,11 @@ class PythonRunner:
             commands=[c for r in results for c in _commands_of(r)],
             artifacts=[self.work_dir / name for name in appeared],
             timings=_python_timings(self.agent, infer_ms),
+            # Measured at model load by an fd-2 capture, through the same parser the native
+            # side uses. Empty when the capture found nothing — unknown, never assumed CPU.
+            placement=dict(
+                getattr(getattr(self.agent, "orchestrator", None), "placement", {}) or {}
+            ),
             error=error,
         )
 

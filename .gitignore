@@ -190,3 +190,7 @@ python/training/merged/
 # no longer exists. Regenerate, never reuse.
 python/training/union_chat.jsonl
 python/training/*_chat.jsonl
+
+# Machine-local workbench config: which native build directories to offer in the selector.
+# Paths differ per machine and must never be committed (see docs/plans/2026-09-21-skill-prompt-workbench.md).
+workbench.local.yaml

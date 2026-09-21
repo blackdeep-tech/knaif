@@ -184,3 +184,30 @@ def test_timings_fall_back_to_wall_clock_when_uninstrumented() -> None:
     t = _python_timings(_Agent(), 500.0)
     assert t.generate_plan_total_ms == 500.0
     assert t.prompt_tokens is None
+
+
+def test_fd2_capture_catches_c_level_output_and_always_restores() -> None:
+    """llama.cpp writes past sys.stderr, so the descriptor itself has to be redirected."""
+    import os
+
+    from workbench.capture import capture_fd2
+
+    with capture_fd2() as captured:
+        os.write(2, b"load_tensors: layer   0 assigned to device CUDA0, is_swa = 0\n")
+    assert "CUDA0" in captured[0]
+
+    # The descriptor is usable again afterwards — losing a notebook's stderr would be worse
+    # than missing a reading.
+    os.write(2, b"")
+
+
+def test_fd2_capture_restores_even_when_the_block_raises() -> None:
+    import os
+
+    import pytest
+    from workbench.capture import capture_fd2
+
+    with pytest.raises(ValueError):
+        with capture_fd2():
+            raise ValueError("boom")
+    os.write(2, b"")

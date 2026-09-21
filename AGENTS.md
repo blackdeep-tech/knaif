@@ -415,3 +415,16 @@ records the verdict either way, so a failing L4 is evidence rather than an absen
 Notebooks in `notebooks/` are for cross-skill model experiments and authoring tools.
 Skill-specific notebooks live in `skills/<name>/notebooks/`. They are not the
 primary source of truth.
+
+**`notebooks/skill_workbench.ipynb` is the interactive entry point** — one utterance through
+either runtime, any model that resolves, a build picker labelled by what each binary reports,
+measured placement and timing, dry-run or real execution. Its logic lives in
+`notebooks/shared/workbench/` as ordinary modules with unit tests, because a bug inside a
+notebook cell is invisible to `just check`.
+
+It answers *"is this model or prompt worth taking further"*, and **nothing else**: no corpus, no
+floors, no safety gate. `just eval-accept` remains the bar and the workbench cannot move it. The
+per-skill testers under `skills/*/notebooks/` are superseded and marked as such.
+
+Selectors are `ipywidgets`, so the notebook is meant to be **run, not read** — widgets render
+nothing on GitHub.

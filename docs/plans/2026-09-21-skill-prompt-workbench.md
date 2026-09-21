@@ -1,6 +1,6 @@
 # A skill and prompt workbench — one notebook, both runtimes
 
-**Status:** Planning · **Created:** 2026-09-21 · **Completed:** —
+**Status:** Done · **Created:** 2026-09-21 · **Completed:** 2026-09-22
 
 **Goal:** One notebook at `notebooks/skill_workbench.ipynb` for exercising skills and prompts
 by hand: either runtime, any model on disk, a chosen compute backend, dry-run or real
@@ -389,46 +389,111 @@ Two corrections this produced, both found by running it rather than by review:
   `orchestrator.py:167-192` already does both, plus an ordered preload. Worth knowing because
   importing `llama_cpp` *without* constructing an orchestrator fails confusingly.
 
-### [ ] T5 — `workbench/inventory.py` — models, binaries, skills
+### [x] T5 — `workbench/inventory.py` — models, binaries, skills
 
 Resolve models per D3. Discover builds by scanning `target/release*/` — which now covers both
 plain `release` and every `release-<kind>` profile — plus any directories declared in
 `workbench.local.yaml`. Record for each its `--version` and its compiled feature set, read from
 `knaif backend list --json`. List skills from `list_skills()` with their `runtimes.native.status`.
 
-### [ ] T6 — `workbench/panel.py` — the output
+### [x] T6 — `workbench/panel.py` — the output
 
 Per run: outcome, plan JSON, rendered commands, artifacts produced (size, and for media an
 `ffprobe` summary), and a timing table. Side-by-side mode diffs the two runtimes' plans and
 commands and highlights the first divergence. Statistics across repeated runs of one utterance
 — n, mean, p50, p95 — because a single sample is not a latency measurement.
 
-### [ ] T7 — `notebooks/skill_workbench.ipynb`
+### [x] T7 — `notebooks/skill_workbench.ipynb`
 
 Config cell, selector cell, run cell, panel cell, side-by-side cell. Under 15 cells. A markdown
 header stating plainly what the bench does and does not certify.
 
-### [ ] T8 — Retire or repoint the old testers
+### [x] T8 — Retire or repoint the old testers
 
 Either delete the two skill testers or fix their `SKILL_DIR` and point their markdown at the
 workbench. Leaving them as they are is the worst option: they are what someone finds first, and
 they are wrong in a way that flatters nothing.
 
-### [ ] T9 — Tests and docs
+### [x] T9 — Tests and docs
 
 Unit tests for every `workbench/` module, with a mock runner on the native side so CI needs no
 GGUF. A row in `docs/SANDBOX.md` for the scratch directory. A line in `AGENTS.md` under
 *Notebooks* naming the workbench as the interactive entry point.
 
-## Open questions
+## What was built
 
-Two things the mockup raised that are **not decided**, and should be before T7:
+All eleven tasks landed; `just check` green at **2417 tests**.
 
-- **Real widgets, or a plain config cell?** The mockup draws `ipywidgets` dropdowns. That adds a
-  dependency, and widgets do not render for anyone reading the notebook on GitHub. A plain config
-  cell edited by hand is uglier, works everywhere, and needs nothing new.
-- **Is eight cells the right grain?** Selectors and run are separate so a dropdown can change
-  without re-scanning the inventory. They could be one cell; so could stats and the side-by-side.
+```
+notebooks/skill_workbench.ipynb        11 cells — run it, don't read it
+notebooks/shared/workbench/
+    inventory.py    models, builds, skills — what is actually here
+    selectors.py    the three dropdowns, Selection as plain data
+    runners.py      PythonRunner / NativeRunner -> one RunResult
+    panel.py        show / compare / stats
+    capture.py      fd-2 capture for llama.cpp's own output
+```
+
+**Verified by executing the notebook end to end**, twice, against the live model — not by
+reading it. Real output from that run:
+
+```
+models    41 resolved   3 published · 2 curated · 36 experimental
+builds    5
+          release-cuda    (llama, dynamic-backends, cuda, pdfium)
+          release-vulkan  (llama, dynamic-backends, vulkan, pdfium)
+          release         — unknown build (no `backend list --json`)
+skills    documents (native: in-progress) · ffmpeg (native: in-progress)
+
+PLAN                    outcome: plan
+  convert_video      inputs=['clip.mp4'] container=mkv
+TIME
+  prompt decode         2446 tok / 310 ms
+  generation            33 tok / 139 ms
+  generate_plan TOTAL   457 ms
+  reused from cache     32 tok
+  wall (NOT comparable) 467 ms cold
+
+n=5 · 'convert clip.mp4 to mkv' · python
+  generate_plan TOTAL   mean 115 ms   p50 116 ms   p95 117 ms
+  plans identical across all runs
+```
+
+Three older binaries reporting *"unknown build"* is the fallback working: they predate
+`backend list --json` and are listed rather than hidden.
+
+### One thing that does not work yet, stated plainly
+
+**The Python runner's placement reads "unknown" under `nbconvert`.** The fd-2 capture works in a
+plain process — verified, `{"CUDA0": 29}` — but returned nothing when the notebook was executed
+headlessly, so the panel says *"unknown — the load trace was not captured"* rather than guessing.
+Whether it works in a **live** Jupyter kernel is untested; a live kernel's fd 2 is a terminal
+rather than a consumed pipe, so it may well work. The native side is unaffected — it reads the
+subprocess output directly.
+
+### Decisions the build itself forced
+
+- **Percentiles are nearest-rank, not interpolated.** Every figure reported is one some run
+  actually took: p50 of [100, 200, 300, 400] is 200, not the interpolated 250 that never
+  happened. `mean` is the single derived number and is named so.
+- **A dry run's commands come from stdout**, not `running:` on stderr — a dry run executes
+  nothing, so it echoes nothing.
+- **`warm` is derived, not asserted** — one decoded prompt token against a reused prefix.
+
+## Settled: the notebook uses real widgets
+
+**Decided 2026-09-22 — `ipywidgets` dropdowns, not a hand-edited config cell.** The bench exists to
+be driven interactively; a config cell you edit and re-run is the thing the stale testers already
+do badly. `ipywidgets` is already a dependency (`python/core[notebook]`, and
+`test_notebook_runner.py` imports it), so this adds nothing new.
+
+The cost is accepted with eyes open: **widgets do not render on GitHub.** A reader browsing the
+`.ipynb` there sees empty output where the selector should be. The header cell therefore says the
+notebook is meant to be run, not read, and every cell must work when re-run top-to-bottom after a
+kernel restart — no state that only exists because a widget fired.
+
+Cell grain stays as drawn: selectors and run are separate, so changing a dropdown does not
+re-scan the inventory.
 
 A rendered mockup of the eight cells, the selector and the panel output exists as a published
 artifact — useful for judging the shape, but it is a drawing, not a spec. This plan is the spec.

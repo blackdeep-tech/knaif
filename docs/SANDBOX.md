@@ -31,3 +31,14 @@ Anything resolving a fixture path should go through the shared resolver
 (`_default_fixture_dir(sandbox, skill)` in `knaif/evalsuite/cli.py`) rather than joining
 `sandbox / "fixtures"` itself — that flat join is exactly the bug, and it previously
 appeared at four separate call sites.
+
+## `sandbox/workbench/` — the workbench's scratch directory
+
+Written by `notebooks/skill_workbench.ipynb`. A real (non-dry-run) execution provisions a **copy**
+of the fixtures it needs into here; `sandbox/fixtures/` is never written to.
+
+That is not tidiness. The executing verifiers grade the files that appear on disk, so a bench that
+overwrote a fixture would silently change what every later eval run measures — and the change
+would show up as a model regression, in a run that had nothing to do with the notebook.
+
+Safe to delete at any time; the next run recreates what it needs.
