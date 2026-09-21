@@ -102,7 +102,12 @@ enum ModelsAction {
 #[derive(Subcommand)]
 enum BackendAction {
     /// List the optional GPU backend payloads and whether they're installed here.
-    List,
+    List {
+        /// Emit JSON: the compiled feature set, the backends directory and the payload states.
+        /// Always answers, even on a build with no backend manifest.
+        #[arg(long)]
+        json: bool,
+    },
     /// Download a backend payload and install it where the runtime scans for it.
     Install { name: String },
     /// Verify an installed payload's files against the manifest checksums.
@@ -457,11 +462,86 @@ fn backend_bar() -> ProgressBar {
     bar
 }
 
+/// The cargo features this binary was compiled with.
+///
+/// The exe knows; until now it never said. `--version` is bare `CARGO_PKG_VERSION`, so nothing
+/// outside the build could tell a CUDA build from a Vulkan one — and a build DIRECTORY name is
+/// not evidence, since anyone can put a binary in one.
+fn built_with() -> Vec<&'static str> {
+    let mut features = Vec::new();
+    if cfg!(feature = "llama") {
+        features.push("llama");
+    }
+    if cfg!(feature = "dynamic-backends") {
+        features.push("dynamic-backends");
+    }
+    if cfg!(feature = "cuda") {
+        features.push("cuda");
+    }
+    if cfg!(feature = "vulkan") {
+        features.push("vulkan");
+    }
+    if cfg!(feature = "pdfium") {
+        features.push("pdfium");
+    }
+    features
+}
+
+/// Machine-readable `backend list`. **Always answers**, store or not: a static build has no
+/// backend manifest, and a consumer that has to special-case "this binary could not tell me"
+/// ends up guessing from the path instead. `store: None` reports an empty payload list and a
+/// null directory, which is the truth about such a build.
+///
+/// The key names are a parsed interface — see the tests that pin them.
+fn backend_list_json(store: Option<&BackendStore>) -> serde_json::Value {
+    let entries: Vec<serde_json::Value> = store
+        .map(|s| {
+            s.list()
+                .into_iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "name": e.name,
+                        "state": format!("{:?}", e.state),
+                        "platform_supported": e.platform_supported,
+                        "total_bytes": e.total_bytes,
+                        "description": e.description,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "built_with": built_with(),
+        // A compile-time fact, deliberately not read from the store: a static build has no store
+        // to read it from, and `false` is the answer that matters to a caller.
+        "dynamic_backends": cfg!(feature = "dynamic-backends"),
+        "backends_dir": store.map(|s| s.dir().display().to_string()),
+        "platform": store.map(|s| s.platform().to_string()),
+        "entries": entries,
+    })
+}
+
 fn cmd_backend(action: BackendAction) -> anyhow::Result<()> {
+    // `list --json` must answer even when the manifest cannot be resolved, so the store is
+    // optional for that one path and required for the rest.
+    if let BackendAction::List { json: true } = action {
+        let store = resolve_backend_manifest_path()
+            .and_then(|p| BackendStore::open(&p))
+            .ok();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&backend_list_json(store.as_ref()))?
+        );
+        return Ok(());
+    }
+
     let store = BackendStore::open(&resolve_backend_manifest_path()?)?;
     match action {
-        BackendAction::List => {
+        BackendAction::List { .. } => {
             let entries = store.list();
+            println!("Built with: {}", built_with().join(", "));
             if entries.is_empty() {
                 println!("No backend payloads in the manifest.");
                 return Ok(());
@@ -2606,5 +2686,60 @@ mod tests {
         // The whole point of the opt-in payload: `llama,dynamic-backends[,vulkan]` can load it
         // and does not already have it. Suppressing this case would make the feature unreachable.
         assert!(cuda_payload_is_worth_offering(false, true));
+    }
+
+    // ── `backend list --json` (workbench T2a) ──────────────────────────────────────────────
+    //
+    // The workbench parses this to label a build, so the KEY NAMES ARE AN INTERFACE. A build
+    // directory named `release-vulkan` holding a CUDA build must not be able to mislead an
+    // operator — the binary has the last word, and this is how it speaks.
+
+    #[test]
+    fn backend_list_json_always_carries_the_same_keys() {
+        // No store: a build with no backend manifest still answers, rather than failing. That is
+        // what lets the workbench parse ONE shape from every binary it finds.
+        let doc = backend_list_json(None);
+        for key in [
+            "built_with",
+            "dynamic_backends",
+            "backends_dir",
+            "platform",
+            "entries",
+        ] {
+            assert!(doc.get(key).is_some(), "missing key: {key}");
+        }
+        assert!(doc["entries"].as_array().is_some_and(|e| e.is_empty()));
+        assert!(doc["backends_dir"].is_null());
+    }
+
+    #[test]
+    fn backend_list_json_reports_the_compiled_feature_set() {
+        let doc = backend_list_json(None);
+        // `dynamic_backends` is a compile-time fact, never read from the store — a static build
+        // has no backend store at all, and would otherwise report nothing.
+        assert_eq!(doc["dynamic_backends"], cfg!(feature = "dynamic-backends"));
+
+        let features: Vec<String> = doc["built_with"]
+            .as_array()
+            .expect("built_with is an array")
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            features.contains(&"llama".to_string()),
+            cfg!(feature = "llama")
+        );
+        assert_eq!(
+            features.contains(&"cuda".to_string()),
+            cfg!(feature = "cuda")
+        );
+        assert_eq!(
+            features.contains(&"vulkan".to_string()),
+            cfg!(feature = "vulkan")
+        );
+        assert_eq!(
+            features.contains(&"pdfium".to_string()),
+            cfg!(feature = "pdfium")
+        );
     }
 }

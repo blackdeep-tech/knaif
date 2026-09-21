@@ -256,7 +256,7 @@ returned plan. `just check` green — 2369 tests, up two.
 scope here, and no caller needs it yet — but it is the same class of gap, so a workbench that
 later wants multi-turn parity will hit it.
 
-### [ ] T2a — `knaif backend list --json` (native, Rust)
+### [x] T2a — `knaif backend list --json` (native, Rust)
 
 Per D1e: print `built_with`, `dynamic_backends`, `backends_dir` and `entries` as JSON, always,
 including on a build with no backend store. A human `Built with: …` line stays in the default
@@ -266,12 +266,24 @@ The workbench parses this, so the key names are an interface — pin the shape w
 the happy path. **Native, TDD.** No model load, so it stays cheap enough to call on every
 inventory.
 
-### [ ] T2b — An ollama arm in `eval_backends.yaml`
+**Done 2026-09-21.** `built_with()` reads the `cfg!` flags; `backend_list_json()` answers even when
+the manifest cannot be resolved, so one shape parses from every binary. The human output gained a
+`Built with:` line. Two tests pin the key names and assert the reported features match `cfg!`.
+
+Proven on real binaries: `release-vulkan` reports `[llama, dynamic-backends, vulkan, pdfium]`,
+`release-cuda` reports `[llama, dynamic-backends, cuda, pdfium]`.
+
+### [x] T2b — An ollama arm in `eval_backends.yaml`
 
 Per D1c: the config has zero ollama stanzas today, so the inference row would have one entry. Add a
 working arm, greyed with its reason when ollama is unreachable.
 
-### [ ] T2 — Honest backend measurement in `native_lane`
+**Done 2026-09-21.** `ollama-qwen3-4b` pairs with the `qwen3-4b` llama.cpp arm — same model, same
+settings, different host — so "is this the model or our inference setup?" can be asked. 43 backends
+now parse. Confirmed it fails loudly rather than mocking: *"Cannot reach Ollama at
+http://localhost:11434. Is 'ollama serve' running?"*
+
+### [x] T2 — Honest backend measurement in `native_lane`
 
 Replace `detect_backend`'s enumeration regex with tensor-placement parsing; return a
 distribution such as `{"CUDA0": 36, "CPU": 0}` rather than a single string, keeping the
@@ -281,6 +293,26 @@ Verify against both `KNAIF_N_GPU_LAYERS=0` and the default. **Core, TDD.**
 Per D2b the parser stops being private to the lane: the Python runner calls the same function, so
 it lives where both reach it (`native_lane.py`, whose other consumer is the L4 lane), with the
 fd-level capture helper in `workbench/` beside its only caller.
+
+**Done 2026-09-21.** `parse_tensor_placement` counts layers per device from
+`load_tensors: layer N assigned to device X`; `summarize_placement` names the winner;
+`BackendMeasurement` carries the distribution and the enumerated device as separate fields.
+`detect_backend` returns it, and the lane now saves `compute_placement` and
+`compute_device_enumerated` beside the old scalar.
+
+The scalar `compute_backend` is kept so the 13 saved records that carry it stay readable — but it
+is now **derived from placement** instead of copied from the enumeration line, which is the fix
+rather than a compatibility shim.
+
+Verified on the live CUDA binary, both cases:
+
+| | summary | enumerated | placement |
+|---|---|---|---|
+| default | `CUDA0` | `CUDA0` | `{"CUDA0": 37}` |
+| `KNAIF_N_GPU_LAYERS=0` | **`CPU`** | `CUDA0` | `{"CPU": 37}` |
+
+The second row is the defect: it used to record `CUDA0`. Five tests, written first, including one
+that pins the exact case where enumeration and reality disagree.
 
 ### [ ] T3 — `workbench/runners.py` — one interface, two runtimes
 

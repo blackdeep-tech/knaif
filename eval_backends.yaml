@@ -112,6 +112,34 @@ backends:
                                  # (verified 2026-06-08). Keep false; thinking is off.
       thinking_enabled: false    # /no_think suppresses the <think> block
 
+  # ⚠️ OLLAMA IS NOT A SUPPORTED knaif RUNTIME, and this stanza does not make it one. The policy
+  # is recorded in native/crates/knaif-llm/src/lib.rs: "No Ollama backend — Ollama is confined to
+  # the Python dev/eval path." The native runtime has none, this file does not ship in the
+  # artifact, and nothing here is a product surface. It exists so the workbench and the eval
+  # suite can ASK A QUESTION, not so anyone can run knaif on Ollama.
+  #
+  # The SAME model through a different serving stack, so "does this prompt behave the same
+  # somewhere other than our llama.cpp build?" is a question that can be asked at all. Pairs with
+  # `qwen3-4b` above: same weights, same settings, different host.
+  #
+  # NOT a quality arm and not comparable on latency — Ollama keeps its own model resident, applies
+  # its own template, and its stanza cannot pin a quantisation the way a `path:` can. Use it to
+  # separate "the model does this" from "our inference setup does this".
+  #
+  # Needs a local Ollama: `ollama serve`, then `ollama pull qwen3:4b`. Unreachable or un-pulled,
+  # the arm fails loudly rather than mocking — the workbench greys it and says which.
+  ollama-qwen3-4b:
+    backend: ollama
+    model: qwen3:4b
+    ollama_url: http://localhost:11434
+    options:
+      description: Qwen3 4B via Ollama
+      max_tokens: 2048
+      json_mode: false           # Same reasoning as qwen3-4b: a JSON constraint from the first
+                                 # token cannot coexist with a thinking preamble.
+      thinking_enabled: false    # /no_think, matching the llama.cpp arm
+      request_timeout: 120       # Covers a cold model load plus a full tool-registry prompt
+
   # phi4-mini removed 2026-06-08: weakest of the three (66.8% outcome, 87.6%
   # knaif) and an over-refusal artifact — it rejected 47 legitimate plan rows
   # to win the safety tags. Not a viable utility backend. GGUF kept on disk;

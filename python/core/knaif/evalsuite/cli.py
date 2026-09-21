@@ -976,8 +976,9 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     print(f"  model       : {lane.model_path}")
     print(f"  fixtures    : {fixture_dir}")
     print(f"  sandbox     : {lane_sandbox}")
-    compute_backend = detect_backend(lane, args.skill, lane_sandbox)
-    print(f"  compute     : {compute_backend or 'UNKNOWN (the binary did not say)'}\n", flush=True)
+    measured = detect_backend(lane, args.skill, lane_sandbox)
+    compute_backend = measured.summary
+    print(f"  compute     : {measured.detail}\n", flush=True)
 
     outputs = run_native_corpus(
         lane,
@@ -995,7 +996,13 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["lane_entry_point"] = lane.entry_point
     # Left null rather than assumed when the binary does not say: two runs on different
     # compute backends are not comparable, and a record that guesses cannot be checked.
+    # Scalar kept so records written before 2026-09-21 stay readable, but now derived from
+    # where the layers LANDED rather than from llama.cpp's enumeration line — which named
+    # CUDA0 even when every layer ran on the CPU. The distribution is the honest field; a
+    # reader that only knows the scalar still gets a true answer.
     scoreboard["compute_backend"] = compute_backend
+    scoreboard["compute_placement"] = measured.placement
+    scoreboard["compute_device_enumerated"] = measured.enumerated
     scoreboard["binary_sha256"] = _sha256_file(lane.binary)
     scoreboard["model_sha256_prefix"] = _sha256_file(lane.model_path)[:16]
     scoreboard["git_sha"] = _git("rev-parse", "HEAD")

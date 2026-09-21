@@ -59,8 +59,76 @@ PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
 #: `run` echoes each command it executes as `running: <argv>` on stderr.
 _RUNNING_RE = re.compile(r"^running:\s*(.+)$", re.MULTILINE)
 
-#: llama.cpp's own device-assignment line, which names the backend the weights ran on.
+#: llama.cpp's device *enumeration* line. It names a device llama.cpp considered, NOT one the
+#: weights ran on — keep it as a separate fact, never as the answer. See `parse_tensor_placement`.
 _DEVICE_RE = re.compile(r"^llama_prepare_model_devices: using device (\S+)", re.MULTILINE)
+
+#: Where each layer actually landed. This is the honest signal: llama.cpp emits one line per
+#: layer, e.g. `load_tensors: layer   0 assigned to device CUDA0, is_swa = 0`.
+_PLACEMENT_RE = re.compile(
+    r"^load_tensors:\s+layer\s+\d+\s+assigned to device\s+([^,\s]+)", re.MULTILINE
+)
+
+
+def parse_tensor_placement(text: str) -> dict[str, int]:
+    """Count how many layers each device actually received.
+
+    The enumeration line is not evidence of anything running. Measured on an RTX 5080 with
+    `knaif-qwen3-4b-v2-q4_k_m.gguf` (2026-09-21)::
+
+        default              -> enumerated CUDA0, placement {"CUDA0": 37}
+        KNAIF_N_GPU_LAYERS=0 -> enumerated CUDA0, placement {"CPU": 37}
+
+    Same enumerated device, opposite reality. Recording the enumerated name made those two runs
+    look comparable when one never touched the GPU — and L3b's point is that a silent CPU->CUDA
+    change between runs is indistinguishable from whatever the runs were meant to compare.
+
+    Returns an empty mapping when the binary said nothing, which callers must treat as "unknown"
+    rather than "CPU".
+    """
+    placement: dict[str, int] = {}
+    for device in _PLACEMENT_RE.findall(text):
+        placement[device] = placement.get(device, 0) + 1
+    return placement
+
+
+@dataclass(frozen=True)
+class BackendMeasurement:
+    """What a run's weights actually ran on, and what the binary merely enumerated.
+
+    Two fields on purpose. `summary` is what gets saved as the scalar `compute_backend`, so
+    records written before 2026-09-21 stay readable — but it is now DERIVED FROM PLACEMENT
+    rather than copied from the enumeration line, which is why a CPU-only run stops recording
+    "CUDA0".
+    """
+
+    placement: dict[str, int]
+    enumerated: str | None
+
+    @property
+    def summary(self) -> str | None:
+        """The device that ran the most layers; `None` when the binary did not say."""
+        return summarize_placement(self.placement)
+
+    @property
+    def detail(self) -> str:
+        """One console line: what ran where, and what was merely offered."""
+        if not self.placement:
+            return "UNKNOWN (the binary did not say)"
+        layers = ", ".join(f"{d} {n}" for d, n in sorted(self.placement.items()))
+        if self.enumerated and self.enumerated != self.summary:
+            return f"{self.summary}  (layers: {layers}; enumerated: {self.enumerated})"
+        return f"{self.summary}  (layers: {layers})"
+
+
+def summarize_placement(placement: dict[str, int]) -> str | None:
+    """The device that ran the most layers, for the one-line summary and the saved scalar.
+
+    Ties break on name so the value is stable across runs; `None` when nothing is known.
+    """
+    if not placement:
+        return None
+    return max(sorted(placement), key=lambda device: placement[device])
 
 
 @dataclass(frozen=True)
@@ -225,7 +293,7 @@ def extract_failure(stdout: str, stderr: str) -> str:
     return "\n".join(line for line in lines[start:] if line.strip())[:500]
 
 
-def detect_backend(lane: LaneConfig, skill: str, cwd: Path) -> str | None:
+def detect_backend(lane: LaneConfig, skill: str, cwd: Path) -> BackendMeasurement:
     """Ask the binary which compute backend it loads the weights onto.
 
     Measured with one `--dry-run --verbose` probe rather than taken from an environment
@@ -234,7 +302,8 @@ def detect_backend(lane: LaneConfig, skill: str, cwd: Path) -> str | None:
     different FP accumulation flips near-ties, so a CPU→CUDA change between two runs is
     indistinguishable from whatever the runs were meant to compare.
 
-    Returns `None` when the binary does not say — an unanswered question, never a guess.
+    Returns a `BackendMeasurement` whose `placement` is empty when the binary did not say —
+    an unanswered question, never a guess.
     """
     try:
         proc = subprocess.run(
@@ -261,9 +330,13 @@ def detect_backend(lane: LaneConfig, skill: str, cwd: Path) -> str | None:
             timeout=lane.timeout_s,
         )
     except (subprocess.TimeoutExpired, OSError):
-        return None
-    match = _DEVICE_RE.search(f"{proc.stdout}\n{proc.stderr}")
-    return match.group(1) if match else None
+        return BackendMeasurement(placement={}, enumerated=None)
+    text = f"{proc.stdout}\n{proc.stderr}"
+    match = _DEVICE_RE.search(text)
+    return BackendMeasurement(
+        placement=parse_tensor_placement(text),
+        enumerated=match.group(1) if match else None,
+    )
 
 
 def _produced_files(work_dir: Path, before: set[str]) -> list[Path]:

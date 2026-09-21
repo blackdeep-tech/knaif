@@ -15,13 +15,16 @@ import pytest
 import yaml
 
 from knaif.evalsuite.native_lane import (
+    _DEVICE_RE,
     PLAN_DUMP_MARKER,
     LaneConfig,
     build_argv,
     extract_failure,
     load_lane,
     parse_run_output,
+    parse_tensor_placement,
     provision_fixtures,
+    summarize_placement,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -225,3 +228,62 @@ def test_a_failure_with_no_error_block_falls_back_to_the_tail() -> None:
     assert extract_failure("", "something unstructured went wrong").strip() == (
         "something unstructured went wrong"
     )
+
+
+# ── tensor placement (workbench T2 / D2) ──────────────────────────────────────────────────
+#
+# `llama_prepare_model_devices: using device X` is ENUMERATION — it names a device llama.cpp
+# considered, not one the weights ran on. Measured on an RTX 5080 with
+# knaif-qwen3-4b-v2-q4_k_m.gguf, 2026-09-21:
+#
+#   default              -> enumerated CUDA0, placement {"CUDA0": 37}
+#   KNAIF_N_GPU_LAYERS=0 -> enumerated CUDA0, placement {"CPU": 37}
+#
+# Same enumerated device, opposite reality. Two runs recorded as "CUDA0" would be presented as
+# comparable when one of them never touched the GPU.
+
+_TRACE_GPU = "\n".join(
+    f"load_tensors: layer {i:3d} assigned to device CUDA0, is_swa = 0" for i in range(37)
+)
+_TRACE_CPU = "\n".join(
+    f"load_tensors: layer {i:3d} assigned to device CPU, is_swa = 0" for i in range(37)
+)
+_ENUMERATION = (
+    "llama_prepare_model_devices: using device CUDA0 (NVIDIA GeForce RTX 5080) "
+    "(0000:01:00.0) - 14985 MiB free"
+)
+
+
+def test_placement_counts_layers_per_device() -> None:
+    assert parse_tensor_placement(f"{_ENUMERATION}\n{_TRACE_GPU}") == {"CUDA0": 37}
+
+
+def test_placement_sees_cpu_where_enumeration_says_cuda() -> None:
+    """The defect this replaces: every layer on the CPU, reported as CUDA0."""
+    text = f"{_ENUMERATION}\n{_TRACE_CPU}"
+    assert parse_tensor_placement(text) == {"CPU": 37}
+    # The enumerated device is kept, but as its own fact — never as the answer.
+    assert _DEVICE_RE.search(text).group(1) == "CUDA0"
+
+
+def test_placement_handles_a_split_across_devices() -> None:
+    mixed = "\n".join(
+        [
+            "load_tensors: layer   0 assigned to device CUDA0, is_swa = 0",
+            "load_tensors: layer   1 assigned to device CUDA0, is_swa = 0",
+            "load_tensors: layer   2 assigned to device CPU, is_swa = 0",
+        ]
+    )
+    assert parse_tensor_placement(mixed) == {"CUDA0": 2, "CPU": 1}
+
+
+def test_placement_is_empty_when_the_binary_did_not_say() -> None:
+    """An unanswered question, never a guess — the rule detect_backend already followed."""
+    assert parse_tensor_placement("ggml_cuda_init: found 1 CUDA devices") == {}
+
+
+def test_summary_names_the_device_that_ran_the_most_layers() -> None:
+    assert summarize_placement({"CUDA0": 37}) == "CUDA0"
+    assert summarize_placement({"CPU": 37}) == "CPU"
+    assert summarize_placement({"CUDA0": 2, "CPU": 1}) == "CUDA0"
+    assert summarize_placement({}) is None
