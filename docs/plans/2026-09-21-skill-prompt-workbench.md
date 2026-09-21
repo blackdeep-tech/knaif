@@ -50,12 +50,23 @@ A publish decision taken on that bench is taken on a prompt the model never ship
 
 Each was measured on this machine on 2026-09-21, not assumed.
 
-### D1 — The backend selector is a *binary picker*, because backend is a compile-time feature
+### D1 — "Backend" means three things, so the selector has three rows and never uses the word alone
 
+The word covers three unrelated axes in this repo, and conflating them is what made the first
+draft of this plan hard to review:
+
+| Row | What it picks | Scope |
+|---|---|---|
+| **Runtime** | who runs it — Python, native, or both | both |
+| **Inference** | what generates the tokens — `llama.cpp`, `ollama` | Python only |
+| **Compute** | which chip — i.e. *which build* | native only |
+
+Plus one lever that deliberately crosses both runtimes, below.
+
+**Compute is a build picker, because compute is a compile-time feature.**
 `apps/cli/Cargo.toml` declares `cuda = ["knaif-llm/cuda"]` and `vulkan = ["knaif-llm/vulkan"]`,
-and `knaif run --help` has no `--backend`. CUDA versus Vulkan is **two binaries**, each a full
-llama.cpp rebuild, not a runtime toggle. `target/release/knaif.exe` already has CUDA compiled
-in: `backend list` reports cuda as merely *available*, yet the runtime loads `CUDA0`.
+and `knaif run --help` has no `--backend`. CUDA versus Vulkan is **two builds**, each a full
+llama.cpp rebuild, not a runtime toggle.
 
 The dropdown therefore lists **builds that exist**, labelled by what each one reports. An
 abstract "Vulkan" entry that silently ran CUDA would be worse than no selector at all.
@@ -74,10 +85,49 @@ selector:
 
 Two levers do work per run, and both are offered:
 
-- **`KNAIF_N_GPU_LAYERS=0`** — verified: every layer moves to CPU (`load_tensors: layer N
-  assigned to device CPU`). A genuine CPU-versus-GPU toggle on any build.
-- **`KNAIF_BACKENDS_DIR`** — meaningful only for a `dynamic-backends` build (the shipped
-  installer variant). Offered when such a binary is registered, hidden otherwise.
+- **force CPU** — `KNAIF_N_GPU_LAYERS=0` natively, `n_gpu_layers=0` on the Python side. Verified:
+  every layer moves to CPU (`load_tensors: layer N assigned to device CPU`). **This is the one
+  control that crosses both runtimes**, and the exception to D1b, because a CPU-versus-GPU
+  comparison is worthless if only one side moves.
+- **backends dir** — `KNAIF_BACKENDS_DIR`, meaningful only for a `dynamic-backends` build. The
+  binary's own JSON reports `dynamic_backends: true`, so the selector reveals a path box
+  pre-filled with the reported directory and hides it otherwise. No config-schema growth: it is a
+  per-run field, not something `workbench.local.yaml` remembers.
+
+### D1b — Python's compute is *shown*, not chosen
+
+It was decided when the venv was built; changing it means rebuilding `llama-cpp-python`, which a
+notebook has no business doing. The panel states it as a fact beside the compute row. The force-CPU
+lever above is the single exception.
+
+### D1c — The inference row keeps a second real option
+
+With `mock` excluded (D1d) and **zero ollama stanzas** in `eval_backends.yaml` — the only mention
+is a comment at line 38 — the row would have had exactly one entry, which is a control that does
+nothing. An ollama arm is therefore added to the config, greyed with its reason when ollama is not
+reachable. It also answers a question worth being able to ask: does a prompt behave the same under
+a different serving stack?
+
+### D1d — No mock arm
+
+The mock planner emits canned plans (`inputs: ['speed']` and similar) that read exactly like model
+failures. In a bench built for judging models, that is a trap, not a feature. `agent.infer()`
+defaults to `use_mock=True`, which is the same trap one layer down — T3's runner always passes it
+explicitly.
+
+### D1e — A build is labelled by what it reports, never by its path or filename
+
+`--version` is bare `CARGO_PKG_VERSION`; nothing prints the compiled feature set, though the binary
+knows (`cfg!(feature = "cuda")`, `main.rs:1825`). So the native CLI gains **`backend list --json`**,
+printing `built_with`, `dynamic_backends`, `backends_dir` and `entries`. It **always emits**, with
+`dynamic_backends: false` and an empty `entries` on a static build, so the workbench parses one
+shape from every binary.
+
+It costs nothing — no model is loaded — so it runs on every inventory, and there is no cache to
+invalidate when a rebuild replaces a binary. A directory named `release-vulkan` holding a CUDA
+build cannot lie to the operator.
+
+Since the workbench parses it, the key names are interface: keep a test on the shape.
 
 ### D2 — The backend is *measured*, and the existing detector cannot do it
 
@@ -91,6 +141,17 @@ The workbench reads **`load_tensors: layer N assigned to device X`** instead and
 distribution. This reaches past the notebook — it is what the L4 lane records and what
 `docs/PERFORMANCE.md` numbers are attributed to — so the fix lands in `native_lane.py` and the
 notebook consumes it.
+
+### D2b — Python's placement is measured too, via an fd-level capture
+
+Symmetry is the point: a panel that measures one runtime and takes the other on trust cannot
+support a comparison. But `Llama(verbose=...)` ([`orchestrator.py:271`](../../python/core/knaif/orchestrator.py#L271))
+writes llama.cpp's load trace to **C-level stderr**, past `sys.stderr`, so Python's capture needs a
+file-descriptor redirect around model load — not a `contextlib.redirect_stderr`.
+
+The captured text then goes through the **same parser** as the native side, so both columns report a
+distribution produced by one piece of code. The capture runs once per `(model, n_gpu_layers)` per
+session and is cached; the redirect must not swallow the notebook's own output.
 
 ### D3 — Models come from `eval_backends.yaml`, filtered by what resolves
 
@@ -185,12 +246,31 @@ Add `registry_override` to `CommandAgent.infer_stream`, matching `infer`. Test: 
 utterance through both, with the same override, builds the same prompt. Without this the
 workbench cannot show the production prompt and fault (3) above stays true. **Core, TDD.**
 
+### [ ] T2a — `knaif backend list --json` (native, Rust)
+
+Per D1e: print `built_with`, `dynamic_backends`, `backends_dir` and `entries` as JSON, always,
+including on a build with no backend store. A human `Built with: …` line stays in the default
+output for anyone debugging a shipped binary.
+
+The workbench parses this, so the key names are an interface — pin the shape with a test, not just
+the happy path. **Native, TDD.** No model load, so it stays cheap enough to call on every
+inventory.
+
+### [ ] T2b — An ollama arm in `eval_backends.yaml`
+
+Per D1c: the config has zero ollama stanzas today, so the inference row would have one entry. Add a
+working arm, greyed with its reason when ollama is unreachable.
+
 ### [ ] T2 — Honest backend measurement in `native_lane`
 
 Replace `detect_backend`'s enumeration regex with tensor-placement parsing; return a
 distribution such as `{"CUDA0": 36, "CPU": 0}` rather than a single string, keeping the
 enumerated device as a separate field. Update the L4 lane's recorded value and its tests.
 Verify against both `KNAIF_N_GPU_LAYERS=0` and the default. **Core, TDD.**
+
+Per D2b the parser stops being private to the lane: the Python runner calls the same function, so
+it lives where both reach it (`native_lane.py`, whose other consumer is the L4 lane), with the
+fd-level capture helper in `workbench/` beside its only caller.
 
 ### [ ] T3 — `workbench/runners.py` — one interface, two runtimes
 
@@ -243,6 +323,19 @@ they are wrong in a way that flatters nothing.
 Unit tests for every `workbench/` module, with a mock runner on the native side so CI needs no
 GGUF. A row in `docs/SANDBOX.md` for the scratch directory. A line in `AGENTS.md` under
 *Notebooks* naming the workbench as the interactive entry point.
+
+## Open questions
+
+Two things the mockup raised that are **not decided**, and should be before T7:
+
+- **Real widgets, or a plain config cell?** The mockup draws `ipywidgets` dropdowns. That adds a
+  dependency, and widgets do not render for anyone reading the notebook on GitHub. A plain config
+  cell edited by hand is uglier, works everywhere, and needs nothing new.
+- **Is eight cells the right grain?** Selectors and run are separate so a dropdown can change
+  without re-scanning the inventory. They could be one cell; so could stats and the side-by-side.
+
+A rendered mockup of the eight cells, the selector and the panel output exists as a published
+artifact — useful for judging the shape, but it is a drawing, not a spec. This plan is the spec.
 
 ## What this is not
 
