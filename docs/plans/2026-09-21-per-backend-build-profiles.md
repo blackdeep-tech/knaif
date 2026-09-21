@@ -1,6 +1,6 @@
 # One directory per backend — cargo profiles for the native builds
 
-**Status:** Active — 6 of 8 tasks landed; T5 blocked on one open decision (see P5b) · **Created:** 2026-09-21 · **Completed:** —
+**Status:** Active — 7 of 9 tasks landed; T5 awaits an L4 re-run (see P6) · **Created:** 2026-09-21 · **Completed:** —
 
 **Goal:** Give each native build kind (`base` / `cpu` / `vulkan` / `cuda`) its own cargo profile,
 so its binary and its staged llama/ggml libraries live in their own directory instead of
@@ -121,6 +121,47 @@ What it buys, per kind, from then on:
 `rm -rf target/release-<kind>` is the targeted cleanup, matching RELEASE.md's existing advice to
 wipe directories directly rather than trust `cargo clean`.
 
+### P6 — `pdfium` is on for every functional kind, which is what unifies the feature sets
+
+The three sets differed in two ways, and both turned out to be cheap to remove:
+
+| | before | after |
+|---|---|---|
+| packaging `cuda` | `llama,dynamic-backends,cuda` | `llama,dynamic-backends,cuda,pdfium` |
+| `just native-cuda` | `llama,cuda,pdfium` | *the same build* |
+| the L4 eval lane | `llama,cuda,pdfium` | *the same build* |
+
+**`pdfium` costs almost nothing.** `pdfium-render` binds the PDFium runtime *dynamically*
+([`pdfium_backend.rs:17`](../../skills/documents/native/src/pdfium_backend.rs#L17) — search order
+`$KNAIF_PDFIUM_PATH`, the exe directory, then the system library), so no PDF engine is linked in.
+The artifact gains a code path that looks for a library, not the library.
+
+**`dynamic-backends` in a dev build is safe**, which was the thing to check before moving the
+wrappers onto it. `backend_dirs()` falls back to the compile-time-baked
+`llama_cpp_2::llama_backend::BACKENDS_DIR` when the exe's own directory holds no loadable backend,
+and `has_backend_libs` deliberately does not count `ggml-base` or `ggml.dll`. A run out of
+`target/release-<kind>/` therefore still finds `ggml-vulkan` / `ggml-cuda` in the build's out dir,
+and GPU offload is not silently lost.
+
+**Measured cost of the feature** (this machine, 2026-09-21): the binary grows from 10,478,080 B to
+15,743,488 B — **+5.3 MB** of `pdfium-render` and `image` code — and the packaged vulkan artifact
+goes from 27 MB to 29 MB compressed. That is the code path only; the PDFium engine is not in there.
+For scale, `ggml-vulkan.dll` in the same artifact is 58 MB.
+
+**What this does not do is make PDF OCR work.** The library still is not shipped, so the failure
+moves from *"rebuild with --features pdfium"* — useless to someone holding a downloaded binary — to
+*"put the PDFium runtime next to the executable"*, which is at least actionable. Shipping it is a
+separate decision, already taken: **an opt-in per-skill payload**, reusing the mechanism
+`knaif backend install cuda` already implements (sha256-pinned loose files, a version-bound install
+receipt, nothing added to the default download). That needs its own plan; this one only stops the
+capability being unreachable by construction.
+
+**A product gap this surfaced, recorded rather than fixed here:** the shipped artifact has never
+been able to OCR a PDF or run raster PDF compression. `feats_for_kind` never set `pdfium`, and
+`package.sh` stages no PDFium runtime — though its licence-staging comment already anticipates
+*"PDFium for pdfium builds"*. Ghostscript remains the user-installed route for compression, per the
+dependency-licence policy.
+
 ### P4 — `package.sh` takes `--profile`, defaulting to `release`
 
 Nothing about a hand-run `package.sh` changes unless the flag is passed. The justfile recipes pass
@@ -143,19 +184,15 @@ do not build the same thing:
 Putting both in `release-cuda` would place **two different feature sets in one directory**, which
 is precisely the defect this plan exists to remove. It would move the collision rather than fix it.
 
-### P5b — The invariant is one directory per feature set, and the dev wrappers are left alone
+### P5b — The invariant is one directory per feature set — RESOLVED by P6
 
 The rule the profiles encode is not "one per kind" but **one per distinct feature set**; `kind`
 happens to name a feature set for the packaging vocabulary. The dev wrappers name a different one,
 so they need either their own profiles or the same feature set as the kind they shadow.
 
-Deciding that is not on this plan's critical path, and guessing would mean either a seven-profile
-scheme or a change to what the release artifact contains. The wrappers are therefore **left exactly
-as they are**: still building into `target/debug/`, still clobbering each other there, which is a
-pre-existing and much smaller problem than the one being fixed.
-
-T5 hit the same question from the other side, and the two should be decided together — see its
-entry. **This is the one open decision this plan leaves behind.**
+**Resolved 2026-09-21 — see P6.** The three feature sets were collapsed into one per kind, so the
+wrappers, the eval lane and the packaged artifact now share a directory because they share a build.
+No extra profiles were needed.
 
 ## The work
 
@@ -266,7 +303,7 @@ for no correctness gain. So the container deliberately stays on the default `rel
 and names `--profile` as the supported way to move that root, and the volume note records why this
 script does not use one. One mechanism per environment, each documented where it lives.
 
-### [ ] T5 — Repoint the L4 lane — **BLOCKED on a decision, deliberately not done**
+### [ ] T5 — Repoint the L4 lane — **unblocked by P6; needs an L4 re-run**
 
 The intent was: point `eval_backends.yaml:81` (`binary: target/release/knaif.exe`) at the profile
 directory for the kind the lane measures.
@@ -295,9 +332,19 @@ Two further things surfaced and belong on the record rather than in a fix:
   `target/release/knaif.exe` and every path that names it keep working exactly as before. **L4 is
   not marked stale by this plan.**
 
-**The decision needed** is the same one as P5b: which feature set non-packaging builds should use,
-and therefore which directory they live in. Resolve that, and both T5 and the dev wrappers follow
-from it.
+**Unblocked 2026-09-21 by P6.** There is now exactly one `cuda` build, at
+`target/release-cuda/`, and the lane can point at it. What remains is not a decision but a cost:
+
+- The lane's binary changes shape — `dynamic-backends` instead of static, and `pdfium` present.
+  That is a different build from the one behind the accepted 2026-09-16 run, so **L4 must be
+  re-run before its verdict means anything again.** The re-run is already outstanding from the
+  reject/clarify work (its T8), so this joins that queue rather than creating a new one.
+- `target/release-cuda/` has to exist. `just build-native-kind cuda` builds it;
+  `KNAIF_CUDA_DEV_ARCHS=120-real` cuts it to this machine's GPU instead of the seven-arch release
+  list.
+
+Do T5 and the L4 re-run together, as one change with one verdict. Repointing the lane without
+re-running would leave `check-gate` describing a binary that no longer exists.
 
 ### [x] T6 — Docs
 
@@ -389,6 +436,36 @@ feature set (`llama,cuda,pdfium`) that matches no `release-<kind>` directory, so
 label it from the binary rather than infer a kind from where it sits.
 
 There is now a real Vulkan build to select: `target/release-vulkan/`.
+
+### [x] T9 — One feature set per kind
+
+Added while resolving P5b/P6, because the profiles are only honest if a kind names exactly one
+build.
+
+- `feats_for_kind` gained `pdfium` for `cpu` / `vulkan` / `cuda`. `base` stays featureless by
+  definition.
+
+Verified: all four kinds built and coexisting, `target/release/` untouched throughout.
+
+| profile | binary | emitted backend | build |
+|---|---:|---|---:|
+| `release-base` | 10,357,248 B | none | 32s |
+| `release-cpu` | 15,743,488 B | cpu variants | 21s (incremental) |
+| `release-vulkan` | 15,744,512 B | `ggml-vulkan.dll` | 19s (incremental) |
+| `release-cuda` | 15,731,712 B | `ggml-cuda.dll` | 4m 07s (`CUDAARCHS=120-real`) |
+
+The unified vulkan build packages and passes `smoke.sh` — 19 binaries, every import staged,
+`✓ self-contained`. `just check` green (2367 Python tests, full Rust suite, all contracts).
+- `just native-cuda` / `just native-vulkan` stopped passing their own feature list. They now call
+  `scripts/build_native_kind.sh <kind>` and run the binary out of `target/release-<kind>/`, so the
+  thing you test by hand is byte-identical to the thing that gets packaged. They also stop
+  producing debug builds in `target/debug/`, which was the smaller collision P5 first noticed.
+- The `cuda_arch` justfile variable no longer claims to drive the native build. It never could:
+  CMake reads `CUDAARCHS`, which `build_native_kind.sh` sets from `package.sh`'s release list.
+  `KNAIF_CUDA_DEV_ARCHS` is the dev shortcut.
+
+**Follow-on plan, not done here:** shipping the PDFium runtime as an opt-in per-skill payload.
+Decided in principle (reuse the `backend install` machinery); needs its own plan.
 
 ## What this is not
 

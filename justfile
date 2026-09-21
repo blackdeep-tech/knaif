@@ -1,8 +1,9 @@
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
-# CUDA compiler + target arch. `cuda_nvcc` is the Linux source build of llama-cpp-python;
-# `cuda_arch` also drives the native Rust `native-cuda` recipe (as CMAKE_CUDA_ARCHITECTURES).
-# Override on the command line, e.g.:  just cuda_arch=120 native-cuda ffmpeg ...
+# CUDA compiler + target arch for the PYTHON llama-cpp-python source build (`just install-cuda`).
+# The native Rust build no longer reads this: CMake takes its arch list from `CUDAARCHS`, which
+# scripts/build_native_kind.sh sets from package.sh's CUDA_RELEASE_ARCHS (one source of truth).
+# Shorten a native dev build with `KNAIF_CUDA_DEV_ARCHS=120-real` instead.
 # cuda_arch="native" builds for the GPU present at build time (needs CMake ≥3.24); pin a number
 # (e.g. 120 for Blackwell / RTX 50xx) to cross-build without the GPU visible.
 cuda_nvcc := "/usr/local/cuda/bin/nvcc"
@@ -350,11 +351,11 @@ native skill *args:
 # targets the local GPU by default (Blackwell / RTX 50xx = 120).
 [windows]
 native-cuda skill *args:
-    cd "{{invocation_directory()}}"; $env:CMAKE_CUDA_ARCHITECTURES = "{{cuda_arch}}"; cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,cuda,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    & (just _bash) scripts/build_native_kind.sh cuda; if($LASTEXITCODE){exit $LASTEXITCODE}; cd "{{invocation_directory()}}"; & "{{justfile_directory()}}/target/release-cuda/knaif.exe" run {{skill}} --model "{{MODEL}}" {{args}}
 
 [unix]
 native-cuda skill *args:
-    cd "{{invocation_directory()}}" && CMAKE_CUDA_ARCHITECTURES="{{cuda_arch}}" cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,cuda,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" cuda && cd "{{invocation_directory()}}" && "{{justfile_directory()}}/target/release-cuda/knaif" run {{skill}} --model "{{MODEL}}" {{args}}
 
 # Vulkan is the cross-vendor GPU backend (NVIDIA/AMD/Intel). Needs the Vulkan SDK, and must build
 # with the Ninja generator (this recipe forces it): the default Visual Studio/MSBuild generator
@@ -371,11 +372,11 @@ native-cuda skill *args:
 # native-cuda (lighter compile).
 [windows]
 native-vulkan skill *args:
-    cd "{{invocation_directory()}}"; $env:CMAKE_GENERATOR = "Ninja"; cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,vulkan,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    & (just _bash) scripts/build_native_kind.sh vulkan; if($LASTEXITCODE){exit $LASTEXITCODE}; cd "{{invocation_directory()}}"; & "{{justfile_directory()}}/target/release-vulkan/knaif.exe" run {{skill}} --model "{{MODEL}}" {{args}}
 
 [unix]
 native-vulkan skill *args:
-    cd "{{invocation_directory()}}" && CMAKE_GENERATOR="Ninja" cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,vulkan,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" vulkan && cd "{{invocation_directory()}}" && "{{justfile_directory()}}/target/release-vulkan/knaif" run {{skill}} --model "{{MODEL}}" {{args}}
 
 # Remove only the llama-cpp-sys build artifacts so the next GPU build reconfigures cleanly (e.g. to
 # switch a half-configured Vulkan build from the VS generator to Ninja). Rebuilds llama.cpp next run.

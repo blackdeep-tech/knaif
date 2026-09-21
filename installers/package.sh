@@ -101,14 +101,25 @@ VER="$(grep -A3 '\[workspace.package\]' Cargo.toml | grep -m1 '^version' | sed -
 
 # Cargo features for a functional kind. Functional kinds use `dynamic-backends` so the produced
 # backends are loadable libs (Option 3), not static-linked — that is what lets CUDA be opt-in.
+# `pdfium` is on for every functional kind. It is nearly free — pdfium-render binds the PDFium
+# runtime DYNAMICALLY, so no PDF engine is linked in and the artifact gains only the code path that
+# looks for one (`$KNAIF_PDFIUM_PATH`, then the exe dir, then the system lib). Shipping the library
+# itself is a separate decision: it will be an opt-in per-skill payload, the way the CUDA backend
+# already is. Until that lands the feature only improves the error message, which is the point —
+# "put the PDFium runtime next to the executable" beats "rebuild with --features pdfium" for
+# someone holding a downloaded binary.
+#
+# Turning it on here is also what makes ONE feature set per kind: the dev wrappers and the L4 eval
+# lane used to build `llama,<gpu>,pdfium` while packaging built `llama,dynamic-backends,<gpu>`, so
+# neither had a profile it could share. See docs/plans/2026-09-21-per-backend-build-profiles.md.
 feats_for_kind() {
   case "$1" in
     # No llama.cpp at all — the mock-only build. Empty on purpose: callers must omit
     # `--features` rather than pass an empty string.
     base)   echo "" ;;
-    cpu)    echo "llama,dynamic-backends" ;;
-    vulkan) echo "llama,dynamic-backends,vulkan" ;;
-    cuda)   echo "llama,dynamic-backends,cuda" ;;
+    cpu)    echo "llama,dynamic-backends,pdfium" ;;
+    vulkan) echo "llama,dynamic-backends,vulkan,pdfium" ;;
+    cuda)   echo "llama,dynamic-backends,cuda,pdfium" ;;
   esac
 }
 
