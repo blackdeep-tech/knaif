@@ -58,15 +58,29 @@ KIND=base
 # an artifact every user downloads, which is the thing the opt-in payload exists to avoid — so it is
 # reachable only by asking for it explicitly. Kept so a bisect or a comparison can still produce one.
 LEGACY_WINDOWS_CUDA_APP=0
+# Ask for a kind's cargo features and exit, without building or packaging anything. This is what
+# lets `just build-native-kind` use the SAME mapping instead of copying it into the justfile — the
+# drift this file's feats_for_kind comment warns about.
+PRINT_FEATS=""
+# Which cargo profile's output to package. Defaults to `release`, so an un-flagged run behaves
+# exactly as it always has. `just build-native-kind` builds into `release-<kind>` and passes the
+# matching value, which is what gives each kind its own binary and staged libs instead of the
+# whole vocabulary fighting over target/release/. See
+# docs/plans/2026-09-21-per-backend-build-profiles.md.
+PROFILE=""
 for a in "$@"; do
   case "$a" in
     --no-build)       NO_BUILD=1 ;;
     --kind=*)         KIND="${a#--kind=}" ;;
+    --profile=*)      PROFILE="${a#--profile=}" ;;
+    --print-feats=*)  PRINT_FEATS="${a#--print-feats=}" ;;
     --legacy-windows-cuda-app) LEGACY_WINDOWS_CUDA_APP=1 ;;
     base|cpu|vulkan|cuda) KIND="$a" ;;
-    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
+    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda] [--profile=<cargo profile>] [--print-feats=<kind>] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
   esac
 done
+PROFILE="${PROFILE:-release}"
+TARGET_DIR="target/$PROFILE"
 
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*) OS=windows; EXE=knaif.exe; LIB=dll; ARCHIVE=zip ;;
@@ -89,11 +103,23 @@ VER="$(grep -A3 '\[workspace.package\]' Cargo.toml | grep -m1 '^version' | sed -
 # backends are loadable libs (Option 3), not static-linked — that is what lets CUDA be opt-in.
 feats_for_kind() {
   case "$1" in
+    # No llama.cpp at all — the mock-only build. Empty on purpose: callers must omit
+    # `--features` rather than pass an empty string.
+    base)   echo "" ;;
     cpu)    echo "llama,dynamic-backends" ;;
     vulkan) echo "llama,dynamic-backends,vulkan" ;;
     cuda)   echo "llama,dynamic-backends,cuda" ;;
   esac
 }
+
+# --print-feats: answer and stop. Placed here because the answer IS feats_for_kind, and a caller
+# asking the question must not also trigger a build.
+if [ -n "$PRINT_FEATS" ]; then
+  case "$PRINT_FEATS" in
+    base|cpu|vulkan|cuda) feats_for_kind "$PRINT_FEATS"; exit 0 ;;
+    *) echo "ERROR: --print-feats needs base|cpu|vulkan|cuda, got '$PRINT_FEATS'" >&2; exit 1 ;;
+  esac
+fi
 
 # The release CUDA arch list. Kept in step with docs/RELEASE.md §3 — `test_cuda_arch_list.py`
 # asserts the two agree, because a fatbin that silently lost an arch is invisible until a user with
@@ -114,11 +140,11 @@ fi
 
 if [ "$NO_BUILD" -eq 0 ]; then
   if [ "$KIND" = base ]; then
-    echo "Building release binary (base build — no llama/GPU features)…"
-    cargo build --release -p knaif-cli
+    echo "Building release binary into target/$PROFILE (base build — no llama/GPU features)…"
+    cargo build --profile "$PROFILE" -p knaif-cli
   elif [ "$OS" = linux ]; then
     feats="$(feats_for_kind "$KIND")"
-    echo "Building '$KIND' release binary (--features $feats)…"
+    echo "Building '$KIND' binary into target/$PROFILE (--features $feats)…"
     # A CUDA build MUST carry the arch list, and CUDAARCHS is the only way in: CMake initialises
     # CMAKE_CUDA_ARCHITECTURES from that environment variable, and llama-cpp-sys-2 offers no
     # passthrough for it. Setting it here rather than leaving it to the caller is what makes the
@@ -137,15 +163,16 @@ if [ "$NO_BUILD" -eq 0 ]; then
       echo "  CUDAARCHS=$CUDAARCHS"
     fi
     # CMAKE_GENERATOR=Ninja is required for the Vulkan shader-gen step; harmless for cpu/cuda.
-    CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
+    CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --profile "$PROFILE" -p knaif-cli --features "$feats"
   else
-    echo "ERROR: a '$KIND' build needs the MSVC/C++ toolchain — compile it in a VS Developer shell:" >&2
-    echo "  cargo build --release -p knaif-cli --features $(feats_for_kind "$KIND")" >&2
-    echo "then re-run:  installers/package.sh --no-build --kind=$KIND" >&2
+    echo "ERROR: a '$KIND' build needs the MSVC/C++ toolchain. Build it with:" >&2
+    echo "  just build-native-kind $KIND" >&2
+    echo "(which enters the VS environment itself), then re-run:" >&2
+    echo "  installers/package.sh --no-build --kind=$KIND --profile=release-$KIND" >&2
     exit 1
   fi
 fi
-BIN="target/release/$EXE"
+BIN="$TARGET_DIR/$EXE"
 [ -f "$BIN" ] || { echo "ERROR: $BIN not found — build first." >&2; exit 1; }
 
 # Guard the one thing $BIN cannot tell us. Cargo overwrites target/release/knaif on every build, so
@@ -195,7 +222,7 @@ fi
 # Identify a build by the backends it actually emitted — the one property that separates the kinds.
 out_dir() {
   local kind="${1:-$KIND}" d be
-  for d in $(ls -dt target/release/build/llama-cpp-sys-2-*/out 2>/dev/null); do
+  for d in $(ls -dt "$TARGET_DIR"/build/llama-cpp-sys-2-*/out 2>/dev/null); do
     be="$d/backends"
     [ -d "$be" ] || continue
     case "$kind" in
@@ -373,7 +400,7 @@ verify_cuda_archs() {
     echo "       Built SASS: $(echo "$elf" | tr '\n' ' ')" >&2
     echo "       Built PTX:  $(echo "$ptx" | tr '\n' ' ')" >&2
     echo "       Changing CUDAARCHS needs a CLEAN build — cmake's always_configure(false) means an" >&2
-    echo "       incremental build keeps the old settings. Wipe target/release/build/llama-cpp-sys-2-*" >&2
+    echo "       incremental build keeps the old settings. Wipe $TARGET_DIR/build/llama-cpp-sys-2-*" >&2
     exit 1
   }
   echo "  verified fatbin archs: $(echo "$elf" | tr '\n' ' ')(SASS) $(echo "$ptx" | tr '\n' ' ')(PTX)"
@@ -438,7 +465,7 @@ if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 0 ]; then
   if [ "$OS" = linux ]; then PFX=lib; else PFX=; fi
   CUDA_LIB="${PFX}ggml-cuda.$LIB"
   [ -n "$OUT" ] && [ -f "$OUT/backends/$CUDA_LIB" ] || {
-    echo "ERROR: $CUDA_LIB not found under target/release/build/.../out/backends —" >&2
+    echo "ERROR: $CUDA_LIB not found under $TARGET_DIR/build/.../out/backends —" >&2
     echo "       build with --features $(feats_for_kind cuda) first." >&2
     [ "$OS" = windows ] && \
       echo "       On Windows that build must run in a VS Developer shell; then re-run with --no-build." >&2

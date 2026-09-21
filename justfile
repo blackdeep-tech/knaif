@@ -272,6 +272,41 @@ test-native:
 build-native:
     cargo build --workspace
 
+#   just build-native-kind cpu | vulkan | cuda | base
+#
+# Each kind gets the matching `release-<kind>` cargo profile. Without that, every feature set
+# overwrites the same target/release/knaif AND the same staged llama/ggml libs — the cause of the
+# `hard_link … AlreadyExists` kind-switch panic and of a cpu package once built from the leftover
+# vulkan tree (portable-builds C1/C2). Plain `release` is untouched.
+#
+# The feature set is read from installers/package.sh (`--print-feats`), never copied, so the two
+# cannot drift. On Windows the script locates Visual Studio and enters VsDevCmd.bat when cl.exe is
+# absent, so this does NOT need a "Developer PowerShell for VS".
+#
+# FIRST build of a kind compiles everything from scratch: ~1 min for cpu/base, ~15-30 min for cuda
+# (183 CUDA translation units). After that, switching between kinds costs nothing. To reclaim the
+# space: `rm -rf target/release-<kind>`.
+#
+# Build ONE native kind into its own directory: target/release-<kind>/
+[windows]
+build-native-kind kind="cpu":
+    & (just _bash) scripts/build_native_kind.sh {{kind}}
+
+[unix]
+build-native-kind kind="cpu":
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" {{kind}}
+
+#   just verify-build-kind cuda
+#
+# Assert a built kind got its own directory, binary and staged libs
+[windows]
+verify-build-kind kind="cpu":
+    & (just _bash) scripts/verify_build_profile.sh {{kind}}
+
+[unix]
+verify-build-kind kind="cpu":
+    bash "{{justfile_directory()}}/scripts/verify_build_profile.sh" {{kind}}
+
 # Assert every active skill bundle loads in BOTH runtimes (post-v1-ci C2).
 #
 # The bundle's YAML is read by two loaders in two languages, and a bundle that parses in
@@ -377,8 +412,10 @@ package *args:
     bash "{{justfile_directory()}}/installers/package.sh" {{args}}
 
 # Build a FUNCTIONAL release artifact (real llama.cpp inference) and package it into dist/.
-# kind = cpu | vulkan | cuda. RUN FROM A "Developer PowerShell for VS" (needs MSVC + cmake on
-# PATH; Vulkan also needs Ninja). Sets LIBCLANG_PATH to the default LLVM\bin if unset.
+# kind = cpu | vulkan | cuda. Builds via `just build-native-kind`, so it lands in its own
+# target/release-<kind>/ and does NOT need a "Developer PowerShell for VS" — the build script
+# locates Visual Studio and enters VsDevCmd.bat itself, and sets LIBCLANG_PATH, CMAKE_GENERATOR
+# and CUDAARCHS. package.sh is then pointed at that directory with --profile.
 #   just package-native vulkan    # THE RELEASE ARTIFACT: exe + core libs + CPU *and* Vulkan backends
 #                                 # (Option 3 / C5). Gets the plain name; forces the Ninja generator.
 #   just package-native cpu       # build kind only (a box with no Vulkan SDK) -> `-cpu` suffix.
@@ -396,28 +433,26 @@ package *args:
 # dynamic-backends. It is not one any more: package.sh emits the opt-in payload on both OSes, and
 # 1.1.0 publishes both payloads. The old shape survives only behind `--legacy-windows-cuda-app`.
 #
-# A cuda build must also carry CUDAARCHS, and on Windows THIS RECIPE is the only place that can set
-# it: package.sh refuses to build on Windows (no MSVC from bash), so its own CUDAARCHS export never
-# runs and the caller is the last line of defence. Left unset, ggml's default arch list fires and
-# package.sh's verify_cuda_archs rejects the result after the full ~183-TU compile. The list is read
-# out of package.sh rather than copied, so there is still one source of truth; an explicit CUDAARCHS
-# wins, and KNAIF_CUDA_DEV_ARCHS shortens the build exactly as it does on Linux.
+# A cuda build must also carry CUDAARCHS, and on Windows nothing else can set it: package.sh
+# refuses to build on Windows (no MSVC from bash), so its own CUDAARCHS export never runs. Left
+# unset, ggml's default arch list fires and package.sh's verify_cuda_archs rejects the result after
+# the full ~183-TU compile. scripts/build_native_kind.sh is now what sets it, reading the list out
+# of package.sh rather than copying it, so there is still one source of truth; an explicit
+# CUDAARCHS wins, and KNAIF_CUDA_DEV_ARCHS shortens the build exactly as it does on Linux.
 [windows]
 package-native kind="cpu":
-    $feats=@{cpu='llama,dynamic-backends';vulkan='llama,dynamic-backends,vulkan';cuda='llama,dynamic-backends,cuda'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
+    if('{{kind}}' -notin @('cpu','vulkan','cuda')){throw 'kind must be cpu|vulkan|cuda'}; & (just _bash) scripts/build_native_kind.sh {{kind}}; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}} --profile=release-{{kind}}
 
 [unix]
 package-native kind="cpu":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{kind}}" in
-      cpu) feats=llama,dynamic-backends;;
-      vulkan) feats=llama,dynamic-backends,vulkan;;
-      cuda) feats=llama,dynamic-backends,cuda;;
+      cpu|vulkan|cuda) ;;
       *) echo "kind must be cpu|vulkan|cuda" >&2; exit 1;;
     esac
-    CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
-    bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}}
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" {{kind}}
+    bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}} --profile=release-{{kind}}
 
 # Build the PUBLISHED Linux artifacts inside the floor-pinned container, so the glibc floor is
 # chosen rather than inherited from whichever machine ran the build. Docker is required here and

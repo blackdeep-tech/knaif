@@ -127,17 +127,32 @@ Nothing about a hand-run `package.sh` changes unless the flag is passed. The jus
 it; an operator following RELEASE.md step by step is unaffected. `BIN` and the `out_dir()` glob
 both derive from it.
 
-### P5 — The GPU dev wrappers move to the release profiles
+### P5 — ~~The GPU dev wrappers move to the release profiles~~ — WITHDRAWN, see P5b
 
-`just native-cuda` and `just native-vulkan` pass no `--release`, so they build into `target/debug/`
-today — and clobber each other there exactly as the release builds do. They move to
-`--profile release-<kind>`.
+The original decision was that `just native-cuda` / `just native-vulkan` — which pass no
+`--release` and so clobber each other in `target/debug/` — would move to `--profile release-<kind>`.
 
-This is a deliberate behaviour change: those two recipes exist for *real inference*, the thing a
-debug build of llama.cpp is worst at, and both already warn about a long first compile. The
-alternative — a parallel set of `dev-cuda` / `dev-vulkan` profiles — doubles the profile count to
-protect a build nobody wants. `just native-mock` stays on plain `dev`; it has no llama.cpp in it
-and nothing to collide with.
+**That is wrong, and implementing it is what showed why.** The dev wrappers and the packaging kinds
+do not build the same thing:
+
+| | feature set |
+|---|---|
+| `just native-cuda` | `llama,cuda,pdfium` — static, plus the documents rasterizer |
+| `just package-native cuda` | `llama,dynamic-backends,cuda` — loadable backends, no pdfium |
+
+Putting both in `release-cuda` would place **two different feature sets in one directory**, which
+is precisely the defect this plan exists to remove. It would move the collision rather than fix it.
+
+### P5b — The invariant is one directory per feature set, and the dev wrappers are left alone
+
+The rule the profiles encode is not "one per kind" but **one per distinct feature set**; `kind`
+happens to name a feature set for the packaging vocabulary. The dev wrappers name a different one,
+so they need either their own profiles or the same feature set as the kind they shadow.
+
+Deciding that is not on this plan's critical path, and guessing would mean either a seven-profile
+scheme or a change to what the release artifact contains. The wrappers are therefore **left exactly
+as they are**: still building into `target/debug/`, still clobbering each other there, which is a
+pre-existing and much smaller problem than the one being fixed. T9 records the choice.
 
 ## The work
 
@@ -183,13 +198,36 @@ The build needed the MSVC environment: **cmake is not on PATH outside a Develope
 VS-bundled copy lives under `Common7/IDE/CommonExtensions/Microsoft/CMake/`. T2 must locate it
 rather than assume the caller's shell is set up.
 
-### [ ] T2 — `just build-native-kind <kind>`
+### [x] T2 — `just build-native-kind <kind>`
 
 One recipe mapping kind → features → profile, reusing the same mapping `package.sh`'s
 `feats_for_kind` holds, so the two cannot drift. `package-native` calls it instead of its inline
-`cargo build`. `native-cuda` / `native-vulkan` gain `--profile release-<kind>` per P5.
+`cargo build`.
 
-### [ ] T3 — `package.sh --profile`
+**Done 2026-09-21.** The logic lives in
+[`scripts/build_native_kind.sh`](../../scripts/build_native_kind.sh) — one cross-platform bash
+script rather than a PowerShell twin — with `just build-native-kind` and `just verify-build-kind`
+as thin wrappers on both platforms.
+
+- **The feature map is read, not copied.** `package.sh` gained `--print-feats=<kind>`, which
+  answers from `feats_for_kind` and exits before any build. The justfile's inline PowerShell
+  hashtable and its bash `case` twin are both gone, and with them the drift the source comment
+  warned about. `base` gained an entry (empty on purpose — callers omit `--features`).
+- **Windows enters the VS environment itself.** Per T1's finding, the script locates Visual Studio
+  with `vswhere`, and when `cl.exe` is absent re-runs the build through `VsDevCmd.bat`. An existing
+  developer shell is used as-is; a `base` build skips the dance entirely, since it is pure Rust and
+  rustc finds the MSVC linker by itself. It also puts the Installer directory on `PATH` so
+  VsDevCmd stops printing its own `'vswhere.exe' is not recognized` noise.
+- `CUDAARCHS` and `CMAKE_GENERATOR=Ninja` moved out of the justfile one-liner into the script,
+  still reading the arch list out of `package.sh` rather than copying it.
+
+Measured: `base` 32s from scratch into `target/release-base/`; `cpu` re-entered and no-op'd in
+0.22s, confirming the profile wiring rather than a rebuild.
+
+**P5 was withdrawn while implementing this** — see P5b. `native-cuda` / `native-vulkan` are
+unchanged.
+
+### [x] T3 — `package.sh --profile`
 
 `BIN="target/$PROFILE/$EXE"` and `out_dir()`'s glob become
 `target/$PROFILE/build/llama-cpp-sys-2-*/out`. Default `release`, so the un-flagged path is
@@ -198,6 +236,17 @@ byte-identical to today.
 Keep both `exe_imports_llama` guards and the backend-sniffing `out_dir()`. They stop being the only
 thing standing between a release and a mislabelled artifact, but a guard that has fired in anger
 twice is not one to delete in the same change that removes its reason to fire.
+
+**Done 2026-09-21.** `--profile=<name>` defaults to `release`, and `TARGET_DIR="target/$PROFILE"`
+now backs `BIN`, the `out_dir()` glob and both error messages that name a build directory. The
+branch where `package.sh` builds for itself passes `--profile` through. Both guards kept.
+
+Verified end to end: `just build-native-kind cpu` then
+`package.sh --no-build --kind=cpu --profile=release-cpu` staged the core libs and 9 loadable
+backends out of `target/release-cpu/`, passed the self-contained check, and produced
+`dist/knaif-1.1.0-windows-x64-cpu.zip`. An unbuilt profile fails with a named path rather than
+silently packaging whatever sits in `target/release/`. `just check` green: 2367 Python tests, the
+full Rust suite, all contracts.
 
 ### [ ] T4 — `build-in-container.sh`
 
