@@ -240,11 +240,21 @@ script later.
 
 ## The work
 
-### [ ] T1 — `infer_stream` accepts a retrieved registry
+### [x] T1 — `infer_stream` accepts a retrieved registry
 
 Add `registry_override` to `CommandAgent.infer_stream`, matching `infer`. Test: the same
 utterance through both, with the same override, builds the same prompt. Without this the
 workbench cannot show the production prompt and fault (3) above stays true. **Core, TDD.**
+
+**Done 2026-09-21.** Two tests, written first and confirmed failing on the missing keyword:
+one asserting the prompt `infer_stream` builds under an override is identical to
+`build_prompt(..., registry_override=...)`, one guarding that the default still sends the whole
+registry. They assert what the *model receives*, which is the actual defect, rather than the
+returned plan. `just check` green — 2369 tests, up two.
+
+**Noted, not fixed:** `infer_stream` still does not take `history`, which `infer` does. Out of
+scope here, and no caller needs it yet — but it is the same class of gap, so a workbench that
+later wants multi-turn parity will hit it.
 
 ### [ ] T2a — `knaif backend list --json` (native, Rust)
 

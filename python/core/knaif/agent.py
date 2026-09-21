@@ -1455,6 +1455,7 @@ class CommandAgent:
         use_mock: bool = True,
         ollama_model: str = "mistral",
         max_tokens: int = 1024,
+        registry_override: dict[str, ToolDef] | None = None,
     ) -> Iterator[tuple[str, str]]:
         """
         Stream inference, yielding ("thinking", chunk) or ("plan", chunk) tuples.
@@ -1462,8 +1463,15 @@ class CommandAgent:
         Populates ``self.last_thinking`` as the thinking block streams in.
         After the iterator is exhausted, call
         ``agent.parse_plan(agent._clean_json(plan_acc))`` to get the plan dict.
+
+        ``registry_override`` mirrors :meth:`infer`: pass the *retrieved* subset so the model
+        sees the prompt it ships with. Production and the eval lane both retrieve before
+        prompting, so a caller that streams without it shows the model every tool — a
+        different prompt, and one the model reliably answers worse.
         """
-        system_msg, user_msg = self.build_prompt(user_utterance)
+        system_msg, user_msg = self.build_prompt(
+            user_utterance, registry_override=registry_override
+        )
 
         if use_mock:
             self.last_thinking = ""

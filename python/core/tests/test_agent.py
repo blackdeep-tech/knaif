@@ -1618,3 +1618,48 @@ def test_open_mode_still_catches_an_invented_filename(tmp_path):
     )
     assert results[0]["tool"] == "clarify"
     assert "invented.mp4" in results[0]["result"]["question"]
+
+
+def test_infer_stream_accepts_registry_override(agent):
+    """infer_stream must show the model the same prompt infer would.
+
+    Production and the eval lane both send a *retrieved subset* of the registry, not all of
+    it. Without this parameter a caller streaming a response shows the model every tool,
+    which is a different prompt from the one the model ships with — measured at 4 differing
+    plans in 14 corpus utterances. See docs/plans/2026-09-21-skill-prompt-workbench.md T1.
+    """
+    retrieved = {
+        name: agent.registry[name] for name in ("list_files", "done") if name in agent.registry
+    }
+    expected_system, expected_user = agent.build_prompt("list files", registry_override=retrieved)
+
+    seen: dict[str, tuple[str, str]] = {}
+    real_build_prompt = agent.build_prompt
+
+    def _spy(utterance, **kwargs):
+        built = real_build_prompt(utterance, **kwargs)
+        seen["prompt"] = built
+        return built
+
+    agent.build_prompt = _spy  # type: ignore[method-assign]
+    list(agent.infer_stream("list files", use_mock=True, registry_override=retrieved))
+
+    assert seen["prompt"] == (expected_system, expected_user)
+
+
+def test_infer_stream_without_override_shows_the_whole_registry(agent):
+    """The default is unchanged: no override means the full registry, as before."""
+    expected_system, expected_user = agent.build_prompt("list files")
+
+    seen: dict[str, tuple[str, str]] = {}
+    real_build_prompt = agent.build_prompt
+
+    def _spy(utterance, **kwargs):
+        built = real_build_prompt(utterance, **kwargs)
+        seen["prompt"] = built
+        return built
+
+    agent.build_prompt = _spy  # type: ignore[method-assign]
+    list(agent.infer_stream("list files", use_mock=True))
+
+    assert seen["prompt"] == (expected_system, expected_user)
