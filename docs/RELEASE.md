@@ -173,7 +173,7 @@ bundled redist). AppImage needs `libfuse2`/`libfuse2t64` + `appimagetool`.
   run once and are then cached, so a box that built successfully can later lose `libclang-dev` or the
   Vulkan `-dev` packages and still **`--no-build` package fine** — the failure only appears when
   something invalidates the crate's fingerprint (a changed env var, a `cargo build` that errored, a
-  wiped `target/release/build/llama-cpp-sys-2-*`) and forces a fresh compile. Two ways this bites:
+  wiped `target/<profile>/build/llama-cpp-sys-2-*`) and forces a fresh compile. Two ways this bites:
   - **`libclang-dev`** — bindgen `dlopen`s `libclang.so`; absent → *"Unable to find libclang"*.
   - **Vulkan `-dev`** (`libvulkan-dev glslc glslang-tools spirv-headers`) — cmake's `find_package`
     → *"Could NOT find Vulkan (missing: Vulkan_LIBRARY Vulkan_INCLUDE_DIR glslc)"*. The runtime
@@ -192,24 +192,34 @@ installers/linux/build-appimage.sh dist/staging/knaif-<ver>-linux-x64
 `package.sh` picks the features, stages the core libs + loadable backends beside the exe, and sets an
 **`$ORIGIN` RPATH** (patchelf) so the unpacked folder relocates.
 
-### Windows (compile first in a "Developer PowerShell for VS")
+### Windows
 
 ```bash
-CMAKE_GENERATOR=Ninja cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan
-installers/package.sh --no-build --kind=vulkan                        # -> dist/knaif-<ver>-windows-x64.zip
+just build-native-kind vulkan                                         # -> target/release-vulkan/
+installers/package.sh --no-build --kind=vulkan --profile=release-vulkan   # -> dist/knaif-<ver>-windows-x64.zip
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installers\windows\knaif.iss
 ```
 
 `just package-native vulkan` + `just installer` wrap the same steps.
 
+The build no longer needs a "Developer PowerShell for VS": `build-native-kind` locates Visual
+Studio and enters `VsDevCmd.bat` itself, and sets `CMAKE_GENERATOR` and `CUDAARCHS`. **Packaging
+still wants that shell** — see the `$VCToolsRedistDir` note below. Driving cargo by hand still
+needs it too.
+
 **Vulkan requires `CMAKE_GENERATOR=Ninja`** — the default MSBuild generator dies in
 `vulkan-shaders-gen` with `cannot find the batch label specified - VCEnd`.
 
-**Package each kind immediately after its own build.** Several feature sets coexist under
-`target/release/build/llama-cpp-sys-2-*/`, and cargo does not re-run a cached build script, so mtime
-does not identify which build is current. `out_dir()` resolves the right one by the backends it
-emitted — but only ever package the kind you just built, and never assume a rebuilt-but-cached kind
-refreshed anything.
+**Each kind now has its own directory**, so kinds no longer overwrite one another's binary or
+staged libs: `just build-native-kind <kind>` builds into `target/release-<kind>/`, and packaging
+points at it with `--profile=release-<kind>`. Several feature sets still coexist under
+`target/release-<kind>/build/llama-cpp-sys-2-*/`, and cargo does not re-run a cached build script,
+so mtime still does not identify which build is current — `out_dir()` continues to resolve the
+right one by the backends it emitted, and `just verify-build-kind <kind>` asserts it independently.
+
+Passing the matching `--profile` is what makes this hold. Package a kind out of plain
+`target/release/` and you are back to "whatever was linked last", which is what the guards below
+exist to catch.
 
 **Package from that same Developer shell, not just build from it.** `package.sh` stages the four
 VC++ runtime DLLs from `$VCToolsRedistDir`, which a Developer shell exports pointing at the redist
@@ -247,10 +257,14 @@ tree comes from the MSVC v14x **build tools** component in the VS Installer, not
 - **Changing `CUDAARCHS` or the generator needs a clean.** `always_configure(false)` means cmake will
   not reconfigure and an incremental build silently keeps the old settings. `cargo clean -p
   llama-cpp-sys-2` is the documented step, but it does **not** reliably remove the directory — wipe
-  `target/release/build/llama-cpp-sys-2-*` directly to be sure.
-- **Stale lib copies break `build.rs`.** If `target/release/lib{ggml,llama}*.so*` survive from a
-  previous feature set (possibly as dangling symlinks), build.rs's hard-link step panics with
-  `AlreadyExists`. Delete them before switching kinds.
+  `target/<profile>/build/llama-cpp-sys-2-*` directly to be sure — or, with the per-kind
+  profiles, `rm -rf target/release-<kind>` to start that kind from scratch.
+- **Stale lib copies break `build.rs`** — *fixed by the per-kind profiles, for builds that use
+  them.* If `target/<profile>/lib{ggml,llama}*.so*` survive from a **different feature set**
+  (possibly as dangling symlinks), build.rs's hard-link step panics with `AlreadyExists`. Building
+  each kind into its own `release-<kind>` directory means two kinds never share a destination, so
+  there is nothing to delete. The hazard returns the moment two feature sets are pointed at one
+  profile — a hand-run `cargo build --release` with differing `--features`, for instance.
 - **Memory.** llama.cpp's Vulkan `mul_mm` shader and nvcc are memory-hungry; on a ~7 GB box, 16
   parallel jobs OOM-kill `cc1plus`. Cap with `CARGO_BUILD_JOBS=<n>` — cmake-rs reads cargo's
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
@@ -270,7 +284,7 @@ six times the nvcc work of a single-arch build.
 To tell a slow build from a stuck one, watch objects rather than stdout:
 
 ```bash
-find target/release/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
+find target/release-cuda/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
 ```
 
 Two things worth knowing:

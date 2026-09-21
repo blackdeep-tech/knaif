@@ -57,8 +57,20 @@ and `knaif run --help` has no `--backend`. CUDA versus Vulkan is **two binaries*
 llama.cpp rebuild, not a runtime toggle. `target/release/knaif.exe` already has CUDA compiled
 in: `backend list` reports cuda as merely *available*, yet the runtime loads `CUDA0`.
 
-The dropdown therefore lists **binaries that exist**, labelled by what each one reports. An
+The dropdown therefore lists **builds that exist**, labelled by what each one reports. An
 abstract "Vulkan" entry that silently ran CUDA would be worse than no selector at all.
+
+**Two builds can now coexist**, which when this was written they could not: every feature set
+overwrote the same `target/release/knaif.exe` and the same staged llama/ggml libs. Each kind now
+builds into `target/release-<kind>/` via `just build-native-kind <kind>` — see
+[per-backend build profiles](2026-09-21-per-backend-build-profiles.md). Two consequences for the
+selector:
+
+- It registers **directories**, not bare exe paths. A `dynamic-backends` build is not
+  self-contained; its core libs sit beside it, so the directory is the unit.
+- The label comes from `knaif backend list --json`, not from the path. A profile directory names a
+  *kind*, and a kind names a feature set — but nothing stops someone pointing a hand-built binary
+  at the wrong directory, so the binary still has the last word.
 
 Two levers do work per run, and both are offered:
 
@@ -203,9 +215,10 @@ rather than two. Until it lands the panel labels Python "end-to-end only".
 
 ### [ ] T5 — `workbench/inventory.py` — models, binaries, skills
 
-Resolve models per D3. Discover binaries (`target/release`, `target/*/release`, plus a
-user-declared list), recording for each its `--version` string and whether it was built with
-`--features llama`. List skills from `list_skills()` with their `runtimes.native.status`.
+Resolve models per D3. Discover builds by scanning `target/release*/` — which now covers both
+plain `release` and every `release-<kind>` profile — plus any directories declared in
+`workbench.local.yaml`. Record for each its `--version` and its compiled feature set, read from
+`knaif backend list --json`. List skills from `list_skills()` with their `runtimes.native.status`.
 
 ### [ ] T6 — `workbench/panel.py` — the output
 
@@ -247,6 +260,10 @@ GGUF. A row in `docs/SANDBOX.md` for the scratch directory. A line in `AGENTS.md
   a recorded field, so saved L4 records keep their old shape and the reader tolerates both.
 - **Scope creep toward a mini-eval.** The corpus-scale question is answered elsewhere. If the
   workbench grows floors or verdicts, that is the signal it has gone wrong.
-- **Backend comparison needs builds that do not exist yet.** Only a CUDA binary is present; a
-  Vulkan comparison needs `just build-vulkan` first. The selector shows what is there and names
-  what is missing rather than pretending.
+- **Backend comparison needs builds that do not exist yet.** Less true than it was: kinds now
+  coexist, and `just build-native-kind <kind>` stands one up without a Developer PowerShell. The
+  selector still shows what is there and names what is missing rather than pretending.
+- **The eval lane's binary is a third feature set.** `target/release/knaif.exe` — what
+  `eval_backends.yaml` points at — was built `llama,cuda,pdfium`, which is neither a packaging kind
+  nor a dev wrapper. The workbench will happily register it; it just is not any `release-<kind>`
+  directory, and the label must come from the binary rather than from an assumed kind.

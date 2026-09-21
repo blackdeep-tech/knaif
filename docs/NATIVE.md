@@ -426,10 +426,36 @@ Component-model rationale: see the installer-component-model decision record.
 
 ## 10. Building from source
 
+**Each kind builds into its own directory.** `just build-native-kind <kind>` uses the matching
+`release-<kind>` cargo profile, so `target/release-cuda/` and `target/release-vulkan/` hold their
+own binary *and* their own staged `llama`/`ggml` libs. This is not tidiness: cargo's artifact path
+is `target/<profile>/<bin>` and features are not part of it, and `llama-cpp-sys-2` hard-links its
+shared libs into that same directory — so before the profiles, every feature set overwrote the
+last one. Switching kinds could panic with `hard_link … AlreadyExists`, and a `cpu` package was
+once built from a leftover `vulkan` tree. See
+[docs/plans/2026-09-21-per-backend-build-profiles.md](plans/2026-09-21-per-backend-build-profiles.md).
+
+```bash
+just build-native-kind cpu      # -> target/release-cpu/
+just build-native-kind vulkan   # -> target/release-vulkan/    (both coexist)
+just verify-build-kind vulkan   # assert the layout, and read the kind from what it emitted
+```
+
+On Windows this needs **no Developer PowerShell**: the script locates Visual Studio with `vswhere`
+and enters `VsDevCmd.bat` itself when `cl.exe` is absent, setting `LIBCLANG_PATH`,
+`CMAKE_GENERATOR` and `CUDAARCHS` for you.
+
+The first build of a kind compiles everything from scratch — about a minute for `base`/`cpu`,
+15-30 minutes for `cuda` (183 CUDA translation units). After that, switching between kinds costs
+nothing. To reclaim the space, delete the directory: `rm -rf target/release-<kind>` (`cargo clean`
+does not reliably remove it).
+
+The raw commands, if you would rather drive cargo yourself:
+
 ```bash
 # base (no inference) — no MSVC/C++ toolchain needed
-cargo build --release -p knaif-cli
-installers/package.sh --kind=base
+cargo build --profile release-base -p knaif-cli
+installers/package.sh --kind=base --profile=release-base
 ```
 
 **Linux — `package.sh` builds and packages in one step** (gcc + cmake + ninja + patchelf; Vulkan also
@@ -444,15 +470,24 @@ CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
 installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 ```
 
-**Windows — compile first in a "Developer PowerShell for VS"**, then package `--no-build`:
+**Windows — compile first, then package `--no-build`.** `just package-native <kind>` does both;
+these are the same steps by hand. No Developer PowerShell is needed for the `just` form.
 
 ```bash
-cargo build --release -p knaif-cli --features llama,dynamic-backends            # cpu
+just build-native-kind cpu      # or: vulkan, cuda
+installers/package.sh --no-build --kind=cpu --profile=release-cpu
+```
+
+Driving cargo directly instead — **from a "Developer PowerShell for VS"**, since nothing then sets
+up MSVC for you:
+
+```bash
+cargo build --profile release-cpu -p knaif-cli --features llama,dynamic-backends
 CMAKE_GENERATOR=Ninja \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan   # vulkan
+  cargo build --profile release-vulkan -p knaif-cli --features llama,dynamic-backends,vulkan
 CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda     # cuda payload
-installers/package.sh --no-build --kind=<cpu|vulkan|cuda>
+  cargo build --profile release-cuda -p knaif-cli --features llama,dynamic-backends,cuda
+installers/package.sh --no-build --kind=<cpu|vulkan|cuda> --profile=release-<kind>
 ```
 
 Release artifacts use **`dynamic-backends`** (§5.3). Drop it for a static single-exe dev build

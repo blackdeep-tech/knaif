@@ -119,8 +119,10 @@ export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 
 # Named volumes, not bind mounts: llama.cpp takes many minutes to compile and none of that should
 # depend on the host filesystem's semantics. The target volume is mounted AT /src/target so
-# package.sh finds its usual relative path — it looks for target/release/knaif and
-# target/release/build/llama-cpp-sys-2-*/out, so CARGO_TARGET_DIR would silently break it.
+# package.sh finds its usual relative path — it looks for target/<profile>/knaif and
+# target/<profile>/build/llama-cpp-sys-2-*/out, so CARGO_TARGET_DIR would silently break it.
+# (`--profile` is the supported way to move that root; see the note on volumes below for why this
+# script deliberately does not pass one.)
 #
 # ONE TARGET VOLUME PER KIND, and that is not tidiness. Each feature set gets its own
 # llama-cpp-sys-2 out dir, but every one of them HARD-LINKS its libraries into the same
@@ -130,6 +132,13 @@ export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 # therefore makes `--kind=cpu` after `--kind=vulkan` fail on a warm cache. Separate volumes make
 # that impossible while keeping each kind's cache warm. This is the containerised form of the
 # hazard package.sh already warns about: package each kind immediately after its own build.
+#
+# The host build solves the SAME hazard a different way — a `release-<kind>` cargo profile per kind
+# (docs/plans/2026-09-21-per-backend-build-profiles.md). This script deliberately does NOT pass
+# `--profile`: one volume per kind already gives each build a private `target/` tree, so profiles
+# would add a second layer of isolation on top of complete isolation, and every existing warm
+# volume would miss — each kind recompiling llama.cpp from scratch once, for no correctness gain.
+# One mechanism per environment, each documented where it lives.
 TARGET_VOL="knaif-target-$KIND"
 docker volume create knaif-cargo   >/dev/null
 docker volume create "$TARGET_VOL" >/dev/null
