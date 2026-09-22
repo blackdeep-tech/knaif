@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import panel
+from . import fixtures, panel
 from .runners import NativeRunner, PythonRunner
 from .selectors import Selection, python_agent
 
@@ -25,16 +25,17 @@ class _AgentCache:
     """
 
     def __init__(self) -> None:
-        self._key: tuple[str, bool, bool] | None = None
+        self._key: tuple[str, str, bool, bool] | None = None
         self._agent: Any = None
 
     def get(self, selection: Selection, *, root: Path, sandbox: Path, verbose: bool = False) -> Any:
         if selection.model is None:
             raise ValueError("no model selected")
-        # `verbose` is part of the key because it is decided AT LOAD: the trace it produces is
-        # the only place the layer placement is stated. Ticking the box therefore reloads once,
-        # which is the honest cost of asking a question that can only be answered during a load.
-        key = (selection.model.path, selection.force_cpu, verbose)
+        # Everything baked in AT LOAD belongs in this key. The skill is: the agent is built
+        # with `CommandAgent.from_skill`, so its registry and prompt are that skill's. `verbose`
+        # is too — the load trace is the only place the layer placement is stated. Changing
+        # either reloads once, which is the honest cost of a load-time question.
+        key = (selection.model.path, selection.skill, selection.force_cpu, verbose)
         if key != self._key:
             self._agent = python_agent(selection, root=root, sandbox=sandbox, verbose=verbose)
             self._key = key
@@ -87,9 +88,17 @@ def console(
 
         status.value = "<span style='color:#a16207'>running…</span>"
         run.disabled = True
+        # A real run writes files, so it needs its own copies to write over. Dry-run needs
+        # none — and a skill whose fixtures were never generated stays usable in dry-run.
+        note = ""
+        if not selection.dry_run:
+            _, note = fixtures.ensure(root, selection.skill, sandbox)
         try:
             results = []
             with out:
+                if note:
+                    print(note)
+                    print()
                 try:
                     if selection.wants_python:
                         agent = cache.get(

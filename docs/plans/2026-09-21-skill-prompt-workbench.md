@@ -514,6 +514,26 @@ every inference. Verbosity is for the load; it is switched off immediately after
 The notebook is now **9 cells, three of which you run**: setup, pick, run. The inventory summary
 sits below as the one optional cell, for when a model or build you expected is missing.
 
+### D5 was in the plan but not in the code — found by asking where the videos were
+
+`sandbox/workbench/` was empty and nothing copied anything into it, so **execute for real would
+have run with no input files**. The plan had stated the rule since the first draft; only the
+implementation was missing, which is the failure mode a written decision is worst at catching.
+
+`workbench/fixtures.py` now copies `sandbox/fixtures/<skill>/` into the scratch before any
+non-dry-run, and the console prints what it did. Copies, never links — the entire point is that
+writing to one cannot reach the source. **Every** fixture is copied, not only those an utterance
+names, matching the eval lane for the reason recorded there: copying only named inputs is
+stricter than what Python's verifiers see, and the difference gets scored against the runtime
+instead of against the harness.
+
+Verified end to end: `convert clip.mp4 to mkv` in execute mode → *"9 fixture(s) copied"* →
+`clip_converted.mkv  0.28 MB  aac 1920x1080 10.0s` in the scratch, with
+`sandbox/fixtures/ffmpeg/clip.mp4` byte-identical afterwards.
+
+A skill with no fixtures generated stays usable in dry-run and says so, naming
+`just eval-fixtures <skill>` rather than failing on a missing path.
+
 ### One thing that does not work yet, stated plainly
 
 **The Python runner's placement reads "unknown" under `nbconvert`.** The fd-2 capture works in a

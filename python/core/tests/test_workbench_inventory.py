@@ -193,3 +193,41 @@ def test_a_selection_describes_what_produced_a_result() -> None:
     line = Selection(runtime="python", model=entry, force_cpu=True).describe()
     assert "model=knaif-4b-v2" in line
     assert "force_cpu" in line
+
+
+# ── fixtures (D5) ─────────────────────────────────────────────────────────────────────────
+
+
+def test_fixtures_are_copied_into_the_scratch_not_used_in_place(tmp_path: Path) -> None:
+    """A real run must never write into sandbox/fixtures/.
+
+    The executing verifiers grade the files that appear on disk, so a bench that edited a
+    fixture would silently change what every later eval run measures — and the damage would
+    surface as a model regression in a run that had nothing to do with the notebook.
+    """
+    from workbench.fixtures import provision
+
+    fixtures = tmp_path / "fixtures" / "ffmpeg"
+    _write(fixtures / "clip.mp4", "original")
+    work = tmp_path / "scratch"
+
+    n = provision(fixtures, work)
+    assert n == 1
+    assert (work / "clip.mp4").is_file()
+
+    # Editing the copy must not reach the source.
+    (work / "clip.mp4").write_text("mangled", encoding="utf-8")
+    assert fixtures.joinpath("clip.mp4").read_text(encoding="utf-8") == "original"
+
+
+def test_provisioning_a_missing_fixture_dir_is_not_an_error(tmp_path: Path) -> None:
+    """A skill with no fixtures generated yet still has to be runnable in dry-run."""
+    from workbench.fixtures import provision
+
+    assert provision(tmp_path / "nope", tmp_path / "work") == 0
+
+
+def test_fixture_dir_is_named_per_skill(tmp_path: Path) -> None:
+    from workbench.fixtures import fixture_dir
+
+    assert fixture_dir(tmp_path, "ffmpeg") == tmp_path / "sandbox" / "fixtures" / "ffmpeg"
