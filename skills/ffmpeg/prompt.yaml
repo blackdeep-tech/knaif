@@ -78,6 +78,7 @@ system_header: |
       "balanced" / "ok" → quality: balanced
       "good" / "looking good" / "decent" → quality: visually_good
       "high" / "best" / "great" → quality: high_quality
+      "visually lossless" → quality: best_possible
       "lossless" → quality: lossless
 
 examples:

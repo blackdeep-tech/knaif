@@ -301,3 +301,68 @@ fn arg_gate_parity_cases() {
         }
     }
 }
+
+/// The shipped ffmpeg bundle's `quality` vocabulary, read by the runtime that ships it.
+///
+/// Two things are being proven, and neither is covered by the fixtures above — those build
+/// their registries from inline YAML strings and so never touch `skills/ffmpeg/tools.yaml`.
+///
+/// 1. **The shared anchor resolves in serde_yaml.** `quality` is accepted by ten tools, and
+///    the schema is written once under a `_shared_arg_schemas:` key and referenced with a
+///    YAML anchor. Both loaders skip a top-level entry with no `description:`, so the block
+///    declares no tool — but if serde_yaml handled the anchor differently from PyYAML, the
+///    native side would silently see *no* schema and go back to accepting anything.
+/// 2. **Both runtimes read the same vocabulary**, pinned to `profiles/quality/`. A profile is
+///    loaded by filename, so an enum value with no file restores the original bug: a name
+///    that passes validation and then fails deep in execution as `Unknown quality profile`.
+///
+/// Mirrors `test_the_vocabulary_is_exactly_the_profiles_on_disk` on the Python side.
+#[test]
+fn shipped_ffmpeg_quality_vocabulary_matches_the_profiles_on_disk() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let bundle = repo.join("skills/ffmpeg");
+    let registry = knaif_core::registry::load_registry(&bundle.join("tools.yaml")).unwrap();
+
+    let on_disk: std::collections::BTreeSet<String> =
+        std::fs::read_dir(bundle.join("profiles/quality"))
+            .expect("profiles/quality")
+            .filter_map(|e| {
+                let p = e.ok()?.path();
+                (p.extension()? == "yaml").then(|| p.file_stem()?.to_str().map(str::to_string))?
+            })
+            .collect();
+    assert!(!on_disk.is_empty(), "no quality profiles found");
+
+    let mut checked = 0;
+    for (name, tool) in &registry {
+        if !tool.optional_args.iter().any(|a| a == "quality") || tool.internal {
+            continue;
+        }
+        let schema = tool
+            .arg_schemas
+            .get("quality")
+            .unwrap_or_else(|| panic!("{name}: no quality schema — did the anchor resolve?"));
+        let declared: std::collections::BTreeSet<String> = schema
+            .enum_values
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name}: quality schema carries no enum"))
+            .iter()
+            .cloned()
+            .collect();
+        assert_eq!(
+            declared, on_disk,
+            "{name}: enum drifted from profiles/quality"
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 10,
+        "expected ten model-facing tools to accept a quality"
+    );
+
+    // `load_quality_profile` stays open on purpose: expansion routes a CRF spelling
+    // ("crf 20") through its quality slot, and a closed enum would reject knaif's own output.
+    assert!(!registry["load_quality_profile"]
+        .arg_schemas
+        .contains_key("quality"));
+}

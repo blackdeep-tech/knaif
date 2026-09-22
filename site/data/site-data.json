@@ -767,6 +767,19 @@
       "title": "FFmpeg",
       "tools": [
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Change the playback speed of one or more videos by a given multiplier (e.g. 2.0 for double speed, 0.5 for half speed).",
           "name": "adjust_speed",
           "optional_args": [
@@ -781,6 +794,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Increase or decrease the audio volume of one or more videos or audio files.",
           "name": "adjust_volume",
           "optional_args": [
@@ -796,6 +822,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Compress one or more videos to a smaller file size, optionally targeting a delivery channel (email).",
           "name": "compress_video",
           "optional_args": [
@@ -831,6 +870,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Convert one or more videos to a different container and/or codec.",
           "name": "convert_video",
           "optional_args": [
@@ -867,6 +919,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Extract the audio track from one or more videos into a chosen audio format.",
           "name": "extract_audio",
           "optional_args": [
@@ -885,6 +950,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Convert one or more videos so they are suitable for a target platform (WhatsApp, YouTube, etc.).",
           "name": "prepare_for_platform",
           "optional_args": [
@@ -898,6 +976,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Resize or crop one or more videos to a target width/height or aspect ratio.",
           "name": "resize_video",
           "optional_args": [
@@ -916,6 +1007,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Reverse a video (and optionally its audio) so it plays backwards. Re-encodes the full file and buffers it in RAM — keep clips short.",
           "name": "reverse_video",
           "optional_args": [
@@ -929,6 +1033,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Rotate or flip one or more videos by a fixed angle or axis.",
           "name": "rotate_video",
           "optional_args": [
@@ -944,6 +1061,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Remove the audio track from one or more videos, producing a silent video file.",
           "name": "strip_audio",
           "optional_args": [

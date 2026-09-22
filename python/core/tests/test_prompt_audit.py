@@ -81,6 +81,18 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     shell-execution rule the split had dropped, and T5b added `trim_video`'s frame count,
     paid for by removing a restatement of the chaining rule rather than raising this again.
 
+    Raised 15,000 → 15,100 on 2026-09-22, for one 49-char line teaching "visually lossless"
+    → ``best_possible``. Paying instead was the preferred move and was tried: every candidate
+    saving meant deleting a phrase the model is measured on ("looking good" is the wording of
+    an example in this very file), and HEAD had drifted to 14,956 — 44 chars of headroom, less
+    than the smallest useful sentence. What the line buys is not the observed bug, which the
+    ``quality`` alias table already absorbs deterministically, but the *silent* variant of it:
+    with `best_possible` absent from the phrase table, "visually lossless" reads as `lossless`,
+    a VALID enum value that no alias corrects and that means CRF 0 — a mathematically lossless
+    file, many times larger, delivered without complaint. A wrong answer nothing reports is
+    worse than the growth this ceiling guards against. **Unconfirmed by an eval arm**: the
+    1.7B instruction-following risk below is real and this change has not been measured on it.
+
     **Context is not what this guards.** Every qwen3 backend runs ``n_ctx: 8192``
     (``eval_backends.yaml``, ``contracts/runtime/generation.yaml``), and the model is sent
     the *retrieved* prompt — retrieval is on by default in both the product and eval paths.
@@ -91,8 +103,8 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     """
     system, _ = ffmpeg_agent.build_prompt("compress a video")
     assert (
-        len(system) < 15_000
-    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,000 ceiling"
+        len(system) < 15_100
+    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,100 ceiling"
 
 
 def test_ffmpeg_retrieved_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> None:

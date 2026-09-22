@@ -1,4 +1,55 @@
 # ─────────────────────────────────────────────────────────────────────────────
+# Shared arg schemas.
+#
+# Anchored rather than repeated: `quality` is accepted by ten tools, and ten copies of one
+# vocabulary is ten chances for it to drift from `profiles/quality/`. Both loaders skip a
+# top-level entry that has no `description:`, so this block defines without declaring a tool
+# (registry.py `skip top-level non-tool entries`, registry.rs `skip entries without a
+# description`), and YAML anchors are native to both parsers.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_shared_arg_schemas:
+  # A closed vocabulary, because the model is choosing from a list it was shown, and because
+  # a profile is loaded by FILENAME — an unknown value used to survive validation and fail
+  # four steps later as `Unknown quality profile`, reporting a word the model invented as a
+  # missing file. The enum values are the stems in `profiles/quality/`; a drift guard pins
+  # them to the directory in both directions (test_quality_vocabulary.py).
+  #
+  # NOT applied to `load_quality_profile`, which is internal and must stay open: expansion
+  # routes a CRF spelling ("crf 20") through its quality slot via `_quality_from_crf`, so
+  # closing it would reject knaif's own output.
+  quality: &quality_schema
+    type: enum
+    enum: [small_file, balanced, visually_good, high_quality, best_possible, lossless]
+    # Synonym → canonical. Matched case-insensitively, and the separator-insensitive pass in
+    # normalize_plan covers the spaced and hyphenated spellings, so each entry is listed once
+    # in its snake_case form.
+    #
+    # `visually_lossless` is the one that prompted all this: a real term of art (x264 CRF
+    # ~17-18) that the model built by blending the two adjacent values in prompt.yaml's phrase
+    # table. It is not a mistake to correct but a name to honour — `best_possible` is CRF 18
+    # and its own profile notes read "Visually transparent quality".
+    aliases:
+      visually_lossless: best_possible
+      perceptually_lossless: best_possible
+      near_lossless: best_possible
+      transparent: best_possible
+      visually_transparent: best_possible
+      # The qualitative phrases prompt.yaml already maps, restated so a model that echoes the
+      # ADJECTIVE instead of the profile name lands in the same place rather than at the gate.
+      small: small_file
+      smallest: small_file
+      tiny: small_file
+      normal: balanced
+      medium: balanced
+      default: balanced
+      good: visually_good
+      decent: visually_good
+      high: high_quality
+      best: high_quality
+      great: high_quality
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Intent-level tools (model-visible). Each is "destructive" because it
 # writes new output files; the workflow gates batch writes behind a
 # wait_for_confirmation step when preview is requested.
@@ -10,6 +61,8 @@ prepare_for_platform:
   required_args: [inputs, platform]
   optional_args: [quality, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:prepare}"]
     platform: "{utterance_after:for}"
@@ -20,6 +73,8 @@ compress_video:
   required_args: [inputs]
   optional_args: [target, target_size_mb, quality, crf, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:compress}"]
 
@@ -29,6 +84,8 @@ convert_video:
   required_args: [inputs]
   optional_args: [container, video_codec, audio_codec, quality, crf, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:convert}"]
 
@@ -38,6 +95,8 @@ resize_video:
   required_args: [inputs]
   optional_args: [width, height, keep_aspect_ratio, fit, aspect, quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:resize}"]
 
@@ -73,6 +132,8 @@ extract_audio:
   required_args: [inputs]
   optional_args: [audio_format, format, container, bitrate, quality, start, end, output]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:from}"]
 
@@ -99,6 +160,8 @@ reverse_video:
   required_args: [inputs]
   optional_args: [include_audio, quality, output]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:reverse}"]
 
@@ -108,6 +171,8 @@ strip_audio:
   required_args: [inputs]
   optional_args: [quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:strip}"]
 
@@ -118,6 +183,8 @@ adjust_speed:
   required_args: [inputs, speed]
   optional_args: [quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:speed}"]
     speed: "2.0"
@@ -130,6 +197,8 @@ adjust_volume:
   required_args: [inputs]
   optional_args: [level, normalize, quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:adjust}"]
 
@@ -140,6 +209,8 @@ rotate_video:
   required_args: [inputs]
   optional_args: [angle, flip, quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:rotate}"]
 
