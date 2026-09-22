@@ -165,10 +165,30 @@ def rendered_commands(stdout: str, *, echoed: list[str], outcome: str) -> list[s
     return [line.strip() for line in stdout.splitlines() if line.strip()]
 
 
-def _files_in(directory: Path) -> set[str]:
+def _files_in(directory: Path) -> dict[str, tuple[int, int]]:
+    """Every file under *directory*, with the stamp that says whether a run rewrote it.
+
+    Names alone are not enough. A second run of the same plan writes the same filenames, so
+    a set difference comes back empty and the panel reports no artifacts for a run that
+    produced exactly what the first one did — which reads as "nothing happened".
+    """
     if not directory.is_dir():
-        return set()
-    return {str(p.relative_to(directory)) for p in directory.rglob("*") if p.is_file()}
+        return {}
+    stamps: dict[str, tuple[int, int]] = {}
+    for p in directory.rglob("*"):
+        if not p.is_file():
+            continue
+        try:
+            st = p.stat()
+        except OSError:  # vanished between the walk and the stat — not an artifact
+            continue
+        stamps[str(p.relative_to(directory))] = (st.st_size, st.st_mtime_ns)
+    return stamps
+
+
+def _touched(before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]]) -> list[str]:
+    """Files the run created or rewrote, sorted. Untouched fixtures are left out."""
+    return sorted(name for name, stamp in after.items() if before.get(name) != stamp)
 
 
 class NativeRunner:
@@ -230,7 +250,12 @@ class NativeRunner:
         return env
 
     def run(self, utterance: str, *, dry_run: bool = True) -> RunResult:
-        from knaif.evalsuite.native_lane import _DEVICE_RE, parse_run_output, parse_tensor_placement
+        from knaif.evalsuite.native_lane import (
+            _DEVICE_RE,
+            extract_failure,
+            parse_run_output,
+            parse_tensor_placement,
+        )
 
         self.work_dir.mkdir(parents=True, exist_ok=True)
         before = _files_in(self.work_dir)
@@ -264,7 +289,7 @@ class NativeRunner:
         combined = f"{proc.stdout}\n{proc.stderr}"
         parsed = parse_run_output(proc.stdout, proc.stderr, proc.returncode)
         enumerated = _DEVICE_RE.search(combined)
-        appeared = sorted(_files_in(self.work_dir) - before)
+        appeared = _touched(before, _files_in(self.work_dir))
 
         return RunResult(
             runtime=self.runtime,
@@ -281,6 +306,12 @@ class NativeRunner:
             enumerated_device=enumerated.group(1) if enumerated else None,
             stdout=proc.stdout,
             stderr=proc.stderr,
+            # A verdict with no reason is a dead end: the panel would print `outcome: error`
+            # and the exit code would carry the only explanation out of the notebook. The
+            # eval lane already knows how to find it past llama.cpp's load trace.
+            error=(
+                extract_failure(proc.stdout, proc.stderr) if parsed["outcome"] == "error" else None
+            ),
         )
 
 
@@ -331,7 +362,7 @@ class PythonRunner:
         except Exception as exc:  # noqa: BLE001 — the bench reports failures, it does not raise
             error = f"{type(exc).__name__}: {exc}"
 
-        appeared = sorted(_files_in(self.work_dir) - before)
+        appeared = _touched(before, _files_in(self.work_dir))
         plan = payload.get("plan") or []
         outcome = (
             plan[0].get("tool")

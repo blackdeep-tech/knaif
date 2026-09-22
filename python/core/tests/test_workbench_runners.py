@@ -266,8 +266,8 @@ def test_verbosity_is_part_of_the_cache_key() -> None:
     built: list[bool] = []
     cache = _AgentCache()
     real = ui_module.python_agent
-    ui_module.python_agent = (
-        lambda sel, root, sandbox, verbose=False: built.append(verbose) or object()
+    ui_module.python_agent = lambda sel, root, sandbox, verbose=False: (
+        built.append(verbose) or object()
     )
     try:
         model = ModelEntry(name="a", path="models/a.gguf", resolved=True)
@@ -278,3 +278,127 @@ def test_verbosity_is_part_of_the_cache_key() -> None:
         assert built == [False, True], "verbose flips the load exactly once"
     finally:
         ui_module.python_agent = real
+
+
+def test_changing_the_skill_rebuilds_the_agent() -> None:
+    """The agent is built with `CommandAgent.from_skill`, so the skill is baked into its
+    registry and prompt. Leaving it out of the cache key meant switching the Skill dropdown
+    silently kept planning against the previous skill's tools.
+    """
+    from pathlib import Path as _Path
+
+    import workbench.ui as ui_module
+    from workbench.inventory import ModelEntry
+    from workbench.selectors import Selection
+    from workbench.ui import _AgentCache
+
+    built: list[str] = []
+    cache = _AgentCache()
+    real = ui_module.python_agent
+    ui_module.python_agent = lambda sel, root, sandbox, verbose=False: (
+        built.append(sel.skill) or object()
+    )
+    try:
+        model = ModelEntry(name="a", path="models/a.gguf", resolved=True)
+        here = _Path(".")
+        cache.get(Selection(model=model, skill="ffmpeg"), root=here, sandbox=here)
+        cache.get(Selection(model=model, skill="ffmpeg"), root=here, sandbox=here)
+        cache.get(Selection(model=model, skill="documents"), root=here, sandbox=here)
+        assert built == ["ffmpeg", "documents"]
+    finally:
+        ui_module.python_agent = real
+
+
+def _fake_proc(stdout: str, stderr: str, returncode: int):
+    class _Proc:
+        pass
+
+    proc = _Proc()
+    proc.stdout = stdout
+    proc.stderr = stderr
+    proc.returncode = returncode
+    return proc
+
+
+def test_a_failed_native_run_carries_the_reason(tmp_path, monkeypatch) -> None:
+    """`outcome: error` without a message is a dead end — the panel prints the verdict and the
+    reason is thrown away with the exit code. Observed on a 6-step ffmpeg chain that stopped
+    after 3 commands with nothing on screen to say why.
+    """
+    import subprocess as _subprocess
+
+    from workbench.runners import NativeRunner
+
+    stderr = (
+        "load_tensors: layer   0 assigned to device CUDA0, is_swa = 0\n"
+        "running: ffmpeg -y -i clip.mp4 -an -c:v copy clip_silent.mp4\n"
+        "Error: step 3 of 6 failed\n"
+        "Caused by:\n"
+        "    ffmpeg exited with status 234\n"
+    )
+    monkeypatch.setattr(_subprocess, "run", lambda *a, **kw: _fake_proc("", stderr, 1))
+
+    runner = NativeRunner("knaif.exe", "m.gguf", skill="ffmpeg", work_dir=tmp_path)
+    result = runner.run("cut clip.mp4", dry_run=False)
+
+    assert result.outcome == "error"
+    assert result.error is not None
+    assert "step 3 of 6 failed" in result.error
+    # The reason, not the tail of a llama.cpp load trace.
+    assert "load_tensors" not in result.error
+
+
+def test_a_successful_native_run_reports_no_error(tmp_path, monkeypatch) -> None:
+    import subprocess as _subprocess
+
+    from workbench.runners import NativeRunner
+
+    monkeypatch.setattr(
+        _subprocess,
+        "run",
+        lambda *a, **kw: _fake_proc("ffmpeg -y -i clip.mp4 out.mkv\n", "", 0),
+    )
+    runner = NativeRunner("knaif.exe", "m.gguf", skill="ffmpeg", work_dir=tmp_path)
+    result = runner.run("convert clip.mp4 to mkv")
+
+    assert result.outcome == "plan"
+    assert result.error is None
+
+
+def test_a_run_reports_a_file_it_overwrote(tmp_path, monkeypatch) -> None:
+    """An artifact list built from NEW NAMES ONLY goes empty on the second run of a plan.
+
+    Observed: a re-run of the same six-step chain wrote `Test1.mov` exactly as the first run
+    had, and the panel printed no ARTIFACTS section at all — reading as though the run had
+    produced nothing, when it had produced the same file again.
+    """
+    import subprocess as _subprocess
+
+    from workbench.runners import NativeRunner
+
+    stale = tmp_path / "Test1.mov"
+    stale.write_bytes(b"old")
+
+    def _run(*_a, **_kw):
+        stale.write_bytes(b"new, and a different size")
+        return _fake_proc("", "running: ffmpeg -y -i clip.mp4 Test1.mov\n", 0)
+
+    monkeypatch.setattr(_subprocess, "run", _run)
+    runner = NativeRunner("knaif.exe", "m.gguf", skill="ffmpeg", work_dir=tmp_path)
+    result = runner.run("trim clip.mp4", dry_run=False)
+
+    assert [p.name for p in result.artifacts] == ["Test1.mov"]
+
+
+def test_a_file_the_run_never_touched_is_not_an_artifact(tmp_path, monkeypatch) -> None:
+    """The fixtures live in the same directory. Listing them would drown the real output."""
+    import subprocess as _subprocess
+
+    from workbench.runners import NativeRunner
+
+    (tmp_path / "clip.mp4").write_bytes(b"fixture")
+
+    monkeypatch.setattr(_subprocess, "run", lambda *a, **kw: _fake_proc("", "", 0))
+    runner = NativeRunner("knaif.exe", "m.gguf", skill="ffmpeg", work_dir=tmp_path)
+
+    assert runner.run("convert clip.mp4 to mkv").artifacts == []
