@@ -826,14 +826,26 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-    // A name the filesystem would reject is not a path at all, so it is rewritten before any
-    // step reads one — and every later step that referenced it is rebound, or the chain quietly
-    // unlinks. Scoped to ffmpeg because that is exactly where Python applies it (only ffmpeg
-    // overrides `Skill.resolve_output_collisions`); extending it to documents here would create
-    // the runtime divergence this pass exists to avoid.
+    // Two plan-level naming repairs, in one pass and in this order: a name the filesystem would
+    // reject is not a path at all, so it is rewritten before anything resolves one, and only then
+    // is an output that would truncate its own input moved aside. Every later step referencing a
+    // rewritten name is rebound, or the chain quietly unlinks.
+    //
+    // Scoped to ffmpeg because that is exactly where Python applies it (only ffmpeg overrides
+    // `Skill.resolve_output_collisions`); extending it to documents here would create the runtime
+    // divergence this pass exists to avoid. This is the native half of that hook — the Python
+    // side reports the renames through `format_results`, so they are reported here too: a rename
+    // the user is not told about leaves them looking for a file that was never written.
     if args.skill == "ffmpeg" {
-        for (requested, used) in knaif_skill_ffmpeg::binding::bind_legal_output_names(&mut steps) {
+        let renames = knaif_skill_ffmpeg::binding::rebind_colliding_outputs(&mut steps, sandbox);
+        for (requested, used) in renames.illegal {
             eprintln!("note: {requested:?} is not a valid file name here — writing {used:?}");
+        }
+        for (requested, used) in renames.collisions {
+            eprintln!(
+                "note: {requested:?} would have been overwritten by the step that reads it, so \
+                 the result goes to {used:?}"
+            );
         }
     }
     let total = match decide_steps(&steps) {
