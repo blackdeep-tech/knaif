@@ -222,6 +222,17 @@ def optimize_plan(
     return [step for i, step in enumerate(plan) if i not in to_remove]
 
 
+def _canonical_enum_form(value: str) -> str:
+    """The spelling-insensitive key an enum value and an alias key are compared on.
+
+    Case, and the three separators a model picks between arbitrarily, carry no meaning
+    here: `bottom-center`, `bottom_center` and `bottom center` are one value written three
+    ways. Collapsing them to a single form makes the match bidirectional, so neither the
+    schema author nor the model has to guess which spelling the other used.
+    """
+    return re.sub(r"[\s_]+", "-", value.lower())
+
+
 def normalize_plan(
     payload: dict[str, Any],
     registry: dict[str, ToolDef] | None = None,
@@ -337,18 +348,22 @@ def normalize_plan(
                 continue
             if value in schema.enum:
                 continue
-            low = value.lower()
-            alias_map = {k.lower(): v for k, v in (schema.aliases or {}).items()}
-            if low in alias_map:
-                args[arg_name] = alias_map[low]
-                continue
             # Case- and separator-insensitive match: models emit snake_case or
             # spaced forms of hyphenated enums ("bottom_center" → "bottom-center").
             # Both sides are normalized to a single separator so the match is
             # bidirectional (hyphen↔underscore↔space).
-            target = re.sub(r"[\s_]+", "-", low)
+            #
+            # Alias KEYS are normalized the same way, and deliberately so: matching them
+            # exactly while enum values tolerated spacing was an asymmetry with no reason
+            # behind it, invisible only because every alias in the tree was a single word
+            # ("markdown", "jpeg"). A multi-word one ("visually lossless") exposes it.
+            target = _canonical_enum_form(value)
+            alias_map = {_canonical_enum_form(k): v for k, v in (schema.aliases or {}).items()}
+            if target in alias_map:
+                args[arg_name] = alias_map[target]
+                continue
             for enum_val in schema.enum:
-                if re.sub(r"[\s_]+", "-", enum_val.lower()) == target:
+                if _canonical_enum_form(enum_val) == target:
                     args[arg_name] = enum_val
                     break
 

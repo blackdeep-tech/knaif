@@ -710,15 +710,19 @@ pub fn normalize_plan(payload: &mut Value, registry: Option<&Registry>) {
             if enum_vals.contains(&value) {
                 continue;
             }
-            let low = value.to_lowercase();
+            // Alias keys are normalized the same way the enum values below are, and
+            // deliberately so: matching them exactly while enum values tolerated spacing was
+            // an asymmetry with no reason behind it, invisible only because every alias in the
+            // tree was a single word (`markdown`, `jpeg`). A multi-word one exposes it.
+            let target = sep_normalize(&value);
             if let Some(aliases) = &schema.aliases {
-                if let Some((_, canonical)) = aliases.iter().find(|(k, _)| k.to_lowercase() == low)
+                if let Some((_, canonical)) =
+                    aliases.iter().find(|(k, _)| sep_normalize(k) == target)
                 {
                     args.insert(name.clone(), Value::String(canonical.clone()));
                     continue;
                 }
             }
-            let target = sep_normalize(&low);
             if let Some(m) = enum_vals.iter().find(|e| sep_normalize(e) == target) {
                 args.insert(name.clone(), Value::String(m.clone()));
             }
@@ -1028,6 +1032,45 @@ convert:
             normalize_plan(&mut pe, Some(&r));
             assert_eq!(
                 pe["plan"][0]["args"]["to_format"],
+                json!(want),
+                "input {input}"
+            );
+        }
+    }
+
+    /// An alias KEY is matched on the same normalized form as an enum value.
+    ///
+    /// Pass 5's two halves used to disagree — enum values tolerated spacing and case while
+    /// alias keys were compared exactly after lowercasing. Both runtimes carried the same
+    /// asymmetry, so L2 parity never caught it: they agreed on being wrong. It stayed
+    /// invisible because every alias in the tree was a single word (`markdown`, `jpeg`),
+    /// which has no separator to get wrong; ffmpeg's `visually lossless` is the first
+    /// multi-word one. Mirrors `test_normalize_plan_alias_keys_are_separator_insensitive_too`.
+    #[test]
+    fn enum_alias_keys_are_separator_insensitive() {
+        const TOOLS3: &str = "\
+encode:
+  description: Encode
+  optional_args: [quality]
+  arg_schemas:
+    quality:
+      type: enum
+      enum: [best_possible, balanced]
+      aliases: {visually_lossless: best_possible}
+";
+        let r = load_registry_str(TOOLS3).unwrap();
+        for (input, want) in [
+            ("visually_lossless", "best_possible"), // exact, as before
+            ("visually lossless", "best_possible"), // space
+            ("visually-lossless", "best_possible"), // hyphen
+            ("Visually Lossless", "best_possible"), // case + separator
+            ("balanced", "balanced"),               // already valid, untouched
+            ("nonsense", "nonsense"),               // unknown left for validation
+        ] {
+            let mut p = json!({"plan": [{"tool": "encode", "args": {"quality": input}}]});
+            normalize_plan(&mut p, Some(&r));
+            assert_eq!(
+                p["plan"][0]["args"]["quality"],
                 json!(want),
                 "input {input}"
             );
