@@ -1094,6 +1094,8 @@ fn run_ffmpeg_step(
         eprintln!("running: {}", shell_join(cmd));
         let result = knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?;
         if result.status.success() {
+            // Exit 0 is not evidence of output: a trim past the end writes an empty container.
+            knaif_skill_ffmpeg::exec::require_streams(std::path::Path::new(&output))?;
             println!("✓ {output}");
         } else {
             failures += 1;

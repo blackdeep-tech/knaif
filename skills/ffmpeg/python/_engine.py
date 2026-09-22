@@ -670,6 +670,28 @@ def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict
     return {"start": start, "duration": duration, "end": end, "frames": None}
 
 
+def _trim_past_end(options: dict[str, Any], probe: dict[str, Any]) -> str | None:
+    """Why a trim cannot be answered on this input, or None when it can.
+
+    A start at or beyond the measured duration leaves ffmpeg no frame to write, and it exits 0
+    anyway with an empty container. Only a real probe may be read here — callers skip this in
+    dry-run, where a missing file carries `_dummy_probe`'s placeholder 60 s. A negative start is
+    a from-end offset, never a late start.
+    """
+    duration = probe.get("duration")
+    start = options.get("start")
+    start_s = _timestamp_seconds(start)
+    if not isinstance(duration, (int, float)) or start_s is None or start_s < 0:
+        return None
+    if start_s < duration:
+        return None
+    name = Path(str(probe.get("file", "the input"))).name
+    return (
+        f"Can't cut from {start}: {name} is only {duration:.1f}s long, so the cut would be "
+        "empty. Check which file this step should start from."
+    )
+
+
 def _output_extension(mode: str, options: dict[str, Any]) -> str:
     if mode == "extract_audio":
         return options.get("audio_format", "mp3")

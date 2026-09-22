@@ -33,6 +33,7 @@ from ._reporting import (
     _load_quality_hint,
     _preflight_trim_frames,
 )
+from .steps import require_streams
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent expanders.
@@ -986,6 +987,8 @@ class RunConcatStep(Step):
             }
 
         result = _deps.run_ffmpeg(cmd)
+        if result["returncode"] == 0:
+            require_streams(output)
         return {
             "mode": "execute",
             "count": 1,

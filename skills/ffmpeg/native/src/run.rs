@@ -170,6 +170,14 @@ pub fn expand(
             );
             continue;
         }
+        // A trim that starts at or past the end has no answer: ffmpeg would exit 0 with an empty
+        // file and the NEXT step would fail under another file's name. Real probes only — a
+        // dry-run's missing file carries a placeholder duration. Port of `BuildRecipesStep`.
+        if mode == ProbeMode::Execute {
+            if let Some(reason) = crate::engine::trim_past_end(&resolved.options, &probe) {
+                anyhow::bail!("{reason}");
+            }
+        }
         let recipe = build_one_recipe(
             &probe,
             resolved.platform.as_ref(),

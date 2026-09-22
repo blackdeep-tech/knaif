@@ -21,8 +21,33 @@ from ._engine import (
     _profiles_root,
     _render_command,
     _summarise_probe,
+    _trim_past_end,
     disambiguate_outputs,
 )
+
+
+def require_streams(output: str | Path | None) -> None:
+    """Fail when ffmpeg exited 0 but wrote a file with no audio and no video in it.
+
+    ffmpeg's exit code is not evidence of output: a trim past the end exits 0 with a 185-byte
+    container. Left alone, the chain carries on and the next step fails under that file's
+    name. A probe that errors for another reason is not this check's business.
+    """
+    if not output or not Path(output).is_file():
+        return
+    try:
+        probe = _deps.run_ffprobe(Path(output))
+    except _deps.FFmpegNotAvailable:
+        raise
+    except Exception:  # noqa: BLE001 — unprobeable is a different question
+        return
+    kinds = {s.get("codec_type") for s in probe.get("streams") or []}
+    if not kinds & {"audio", "video"}:
+        raise ValueError(
+            f"ffmpeg finished but {Path(output).name} has no audio or video in it — "
+            "the step produced nothing to work with."
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step handlers.
@@ -135,6 +160,14 @@ class BuildRecipesStep(Step):
                     else f"No audio to extract — none of these files has an audio track: {names}."
                 )
             probes = kept
+
+        # A trim that starts at or past the end has no answer: ffmpeg would exit 0 with an
+        # empty file and the NEXT step would fail under another file's name. Real probes only.
+        if options.get("mode") == "trim" and not (ctx.dry_run or ctx.skip_execution):
+            for p in probes:
+                reason = _trim_past_end(options, p)
+                if reason:
+                    raise ValueError(reason)
 
         recipes = [
             _build_one_recipe(p, platform_profile, quality_profile, options, sandbox=ctx.sandbox)
@@ -304,6 +337,8 @@ class RunBatchStep(Step):
                 # this needs to be right rather than observed.
                 Path(out).resolve().parent.mkdir(parents=True, exist_ok=True)
             res = _deps.run_ffmpeg(c["command"])
+            if res["returncode"] == 0:
+                require_streams(out)
             outputs.append(
                 {
                     "mode": "execute",

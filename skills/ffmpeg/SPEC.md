@@ -326,6 +326,24 @@ seconds, so `"0"` and `"00:00:00"` are one instant.
 > entries in `data/eval.jsonl` say `-frames:v`; those are human reference commands, not what
 > the renderer emits.
 
+### Empty outputs fail where they happen
+
+ffmpeg's exit code is not evidence of output. A trim that seeks past the end of its input
+exits 0 with a container holding no streams; left alone, the chain carries on and the *next*
+step fails naming a file the user never asked for. Two guards, on both runtimes, with
+identical messages:
+
+* **A trim starting at or past the input's measured duration is refused before it runs**:
+  *"Can't cut from 00:00:03: Test1.mov is only 2.0s long, so the cut would be empty."* Execute
+  mode only — in a dry run a missing file probes as a placeholder 60 s, which is not a
+  measurement. A negative start is a from-end offset and is never refused.
+* **An output with no audio and no video stream fails the step that wrote it**, whatever the
+  exit code (`require_streams`, after `run_batch` / `run_concat`).
+
+The trigger was a chain the model wired as a straight line — cutting `3–6 s` from a 2-second
+earlier output instead of from the source. The guard does not repair that plan; it makes it
+fail at the step that is wrong, saying why.
+
 ### Playback speed
 
 `adjust_speed` requires a finite positive multiplier. Audio tempo changes outside

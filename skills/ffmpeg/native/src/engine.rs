@@ -809,6 +809,33 @@ pub struct Probe {
     pub fps: Option<f64>,
 }
 
+/// Why a trim cannot be answered on this input, or `None` when it can. Port of
+/// `_engine._trim_past_end`; the message is byte-identical because both runtimes show it.
+///
+/// A start at or beyond the measured duration leaves ffmpeg no frame to write, and it exits 0
+/// anyway with an empty container. Only a REAL probe may be read here — callers skip this in
+/// dry-run, where a missing file carries [`dummy_probe`]'s placeholder 60 s. A negative start is a
+/// from-end offset, never a late start.
+pub fn trim_past_end(options: &Options, probe: &Probe) -> Option<String> {
+    if options.mode.as_deref() != Some("trim") {
+        return None;
+    }
+    let duration = probe.duration?;
+    let start = options.start.as_ref()?;
+    let start_s = timestamp_seconds(Some(start))?;
+    if start_s < 0.0 || start_s < duration {
+        return None;
+    }
+    let name = Path::new(&probe.file)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| probe.file.clone());
+    Some(format!(
+        "Can't cut from {start}: {name} is only {duration:.1}s long, so the cut would be empty. \
+         Check which file this step should start from."
+    ))
+}
+
 /// Deterministic placeholder probe for dry-run (no ffprobe / file needed). An audio extension
 /// (mp3, wav, …) probes as audio-only so audio ops don't render as video; everything else probes
 /// as 1080p H.264/AAC. Port of `_dummy_probe`.
@@ -2751,5 +2778,68 @@ mod trim_frames_tests {
     fn zero_duration_still_wins_over_from_end() {
         let got = normalize_trim(Some("-2".into()), Some("0".into()), None, None).unwrap();
         assert_eq!(got.frames, Some(1));
+    }
+}
+
+#[cfg(test)]
+mod trim_past_end_tests {
+    use super::*;
+
+    // Port of skills/ffmpeg/python/tests/test_empty_output_guards.py (the "before running" half).
+
+    fn trim(start: &str) -> Options {
+        Options {
+            mode: Some("trim".to_string()),
+            start: Some(start.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn probe(name: &str, duration: Option<f64>) -> Probe {
+        Probe {
+            file: format!("/sb/{name}"),
+            duration,
+            video_codec: Some("h264".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_start_past_the_end_is_refused_by_name_with_pythons_words() {
+        let got = trim_past_end(&trim("00:00:03"), &probe("Test1.mov", Some(2.0)));
+        assert_eq!(
+            got.as_deref(),
+            Some(
+                "Can't cut from 00:00:03: Test1.mov is only 2.0s long, so the cut would be \
+                 empty. Check which file this step should start from."
+            )
+        );
+    }
+
+    #[test]
+    fn a_start_exactly_at_the_end_is_refused() {
+        assert!(trim_past_end(&trim("2"), &probe("Test1.mov", Some(2.0))).is_some());
+    }
+
+    #[test]
+    fn a_start_inside_the_file_is_fine() {
+        assert!(trim_past_end(&trim("00:00:03"), &probe("clip_silent.mp4", Some(10.0))).is_none());
+    }
+
+    #[test]
+    fn a_from_end_start_is_not_a_late_start() {
+        assert!(trim_past_end(&trim("-2s"), &probe("clip.mp4", Some(10.0))).is_none());
+    }
+
+    #[test]
+    fn an_unknown_duration_is_not_a_reason_to_refuse() {
+        assert!(trim_past_end(&trim("00:00:03"), &probe("stream.ts", None)).is_none());
+    }
+
+    #[test]
+    fn other_modes_are_untouched() {
+        let mut options = trim("00:00:30");
+        options.mode = Some("extract_audio".to_string());
+        assert!(trim_past_end(&options, &probe("clip.mp4", Some(10.0))).is_none());
     }
 }

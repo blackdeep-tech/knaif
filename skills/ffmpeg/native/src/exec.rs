@@ -84,6 +84,44 @@ fn run_with_bin(bin: &str, argv: &[String]) -> anyhow::Result<Output> {
         })
 }
 
+/// Does this probe describe a file with anything in it? A video stream or an audio stream.
+pub fn has_streams(probe: &Probe) -> bool {
+    probe.has_audio || probe.video_codec.is_some() || probe.width.is_some()
+}
+
+/// Byte-identical to Python's `require_streams` message — it reaches the user on both runtimes.
+pub fn empty_output_error(name: &str) -> String {
+    format!(
+        "ffmpeg finished but {name} has no audio or video in it — the step produced nothing to \
+         work with."
+    )
+}
+
+/// Fail when ffmpeg exited 0 but wrote a file with no audio and no video. Port of
+/// `steps.require_streams`.
+///
+/// ffmpeg's exit code is not evidence of output: a trim past the end exits 0 with a 185-byte
+/// container, and the chain then fails one step later under that file's name. A missing ffprobe
+/// is an error (as in Python); any other probe failure is a different question and passes.
+pub fn require_streams(output: &Path) -> anyhow::Result<()> {
+    if !output.is_file() {
+        return Ok(());
+    }
+    let probe = match run_ffprobe(output) {
+        Ok(probe) => probe,
+        Err(e) if e.to_string().starts_with("ffprobe not found") => return Err(e),
+        Err(_) => return Ok(()),
+    };
+    if has_streams(&probe) {
+        return Ok(());
+    }
+    let name = output
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| output.to_string_lossy().into_owned());
+    anyhow::bail!("{}", empty_output_error(&name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +144,42 @@ mod tests {
         if std::env::var_os("KNAIF_FFMPEG_BIN").is_none() {
             assert_eq!(ffmpeg_bin(), "ffmpeg");
         }
+    }
+
+    #[test]
+    fn a_probe_with_no_streams_is_empty() {
+        // What ffprobe reports for the 185-byte container a past-the-end trim writes.
+        let empty = summarise_probe(
+            Path::new("Test2.mov"),
+            &serde_json::json!({"streams": [], "format": {"format_name": "mov,mp4"}}),
+        );
+        assert!(!has_streams(&empty));
+
+        let silent_video = summarise_probe(
+            Path::new("clip_silent.mp4"),
+            &serde_json::json!({"streams": [{"codec_type": "video", "codec_name": "h264",
+                                             "width": 1920, "height": 1080}]}),
+        );
+        assert!(has_streams(&silent_video));
+
+        let audio_only = summarise_probe(
+            Path::new("song.mp3"),
+            &serde_json::json!({"streams": [{"codec_type": "audio", "codec_name": "mp3"}]}),
+        );
+        assert!(has_streams(&audio_only));
+    }
+
+    #[test]
+    fn the_empty_output_message_matches_python() {
+        assert_eq!(
+            empty_output_error("Test2_intermediate.mov"),
+            "ffmpeg finished but Test2_intermediate.mov has no audio or video in it — the step \
+             produced nothing to work with."
+        );
+    }
+
+    #[test]
+    fn a_missing_output_is_not_this_checks_business() {
+        assert!(require_streams(Path::new("knaif-no-such-output-xyz.mov")).is_ok());
     }
 }
