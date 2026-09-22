@@ -211,3 +211,70 @@ def test_fd2_capture_restores_even_when_the_block_raises() -> None:
         with capture_fd2():
             raise ValueError("boom")
     os.write(2, b"")
+
+
+def test_the_agent_is_reused_until_the_selection_changes() -> None:
+    """A model load is ~1-2s and 2.3 GB of VRAM. Reloading per utterance would make the bench
+    slower than the eval suite it exists to shortcut.
+    """
+    from pathlib import Path as _Path
+
+    import workbench.ui as ui_module
+    from workbench.inventory import ModelEntry
+    from workbench.selectors import Selection
+    from workbench.ui import _AgentCache
+
+    built: list[tuple[str, bool]] = []
+    cache = _AgentCache()
+    real = ui_module.python_agent
+
+    def _fake(sel, root, sandbox, verbose=False):
+        built.append((sel.model.path, verbose))
+        return object()
+
+    ui_module.python_agent = _fake
+    try:
+        a = ModelEntry(name="a", path="models/a.gguf", resolved=True)
+        b = ModelEntry(name="b", path="models/b.gguf", resolved=True)
+        here = _Path(".")
+
+        cache.get(Selection(model=a), root=here, sandbox=here)
+        cache.get(Selection(model=a), root=here, sandbox=here)
+        assert built == [("models/a.gguf", False)], "same selection must not reload"
+
+        cache.get(Selection(model=b), root=here, sandbox=here)
+        assert len(built) == 2
+
+        # force CPU changes where the weights go, so it is a different load.
+        cache.get(Selection(model=b, force_cpu=True), root=here, sandbox=here)
+        assert len(built) == 3
+    finally:
+        ui_module.python_agent = real
+
+
+def test_verbosity_is_part_of_the_cache_key() -> None:
+    """The load trace is the ONLY place the layer placement is stated, and it is emitted during
+    the load. So ticking verbose reloads once — the honest cost of asking a load-time question.
+    """
+    from pathlib import Path as _Path
+
+    import workbench.ui as ui_module
+    from workbench.inventory import ModelEntry
+    from workbench.selectors import Selection
+    from workbench.ui import _AgentCache
+
+    built: list[bool] = []
+    cache = _AgentCache()
+    real = ui_module.python_agent
+    ui_module.python_agent = (
+        lambda sel, root, sandbox, verbose=False: built.append(verbose) or object()
+    )
+    try:
+        model = ModelEntry(name="a", path="models/a.gguf", resolved=True)
+        here = _Path(".")
+        cache.get(Selection(model=model), root=here, sandbox=here, verbose=False)
+        cache.get(Selection(model=model), root=here, sandbox=here, verbose=True)
+        cache.get(Selection(model=model), root=here, sandbox=here, verbose=True)
+        assert built == [False, True], "verbose flips the load exactly once"
+    finally:
+        ui_module.python_agent = real

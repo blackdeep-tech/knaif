@@ -156,7 +156,13 @@ def build_widgets(inventory: dict[str, Any], *, selection: Selection | None = No
     return _Handle()
 
 
-def python_agent(selection: Selection, *, root: Path | str = ".", sandbox: Path | str) -> Any:
+def python_agent(
+    selection: Selection,
+    *,
+    root: Path | str = ".",
+    sandbox: Path | str,
+    verbose: bool = False,
+) -> Any:
     """A `CommandAgent` wired to the selected model, through the production path."""
     from knaif import CommandAgent
     from knaif.orchestrator import InferenceOrchestrator
@@ -168,24 +174,32 @@ def python_agent(selection: Selection, *, root: Path | str = ".", sandbox: Path 
 
     from .capture import capture_fd2
 
-    # `verbose=True` is forced so llama.cpp prints its load trace, and fd 2 is captured because
-    # that trace never passes through sys.stderr. This is the ONLY way to learn where Python's
-    # layers actually landed — the same question, and the same parser, as the native side.
+    # `verbose` is the OPERATOR'S switch, not an inferred one. An earlier version probed whether
+    # an fd-2 capture worked and turned verbosity on when it thought so — but the probe wrote
+    # from Python while llama.cpp writes through a C `FILE*` bound at DLL load, so it reported
+    # success and then let the whole load trace into the cell with the checkbox unticked.
+    #
+    # So: off means llama-cpp-python suppresses the load entirely, and placement is unknown and
+    # says so. On means the trace is captured — parsed for placement AND shown in the panel's
+    # verbose section, where it was asked for, rather than sprayed above the plan.
+    config = {
+        "path": selection.model.path,
+        "n_ctx": 8192,
+        "n_gpu_layers": 0 if selection.force_cpu else 99,
+        "max_tokens": 2048,
+        "json_mode": False,
+        "thinking_enabled": False,
+        "verbose": verbose,
+    }
     with capture_fd2() as trace:
-        orchestrator = InferenceOrchestrator(
-            backend="llama_cpp",
-            model_config={
-                "path": selection.model.path,
-                "n_ctx": 8192,
-                "n_gpu_layers": 0 if selection.force_cpu else 99,
-                "max_tokens": 2048,
-                "json_mode": False,
-                "thinking_enabled": False,
-                "verbose": True,
-            },
-            root=root,
-        )
-    orchestrator.placement = parse_tensor_placement(trace[0] if trace else "")
+        orchestrator = InferenceOrchestrator(backend="llama_cpp", model_config=config, root=root)
+    load_trace = trace[0] if trace else ""
+    orchestrator.placement = parse_tensor_placement(load_trace)
+    orchestrator.load_trace = load_trace
+
+    # Verbosity was for the load. Left on, llama.cpp comments on every inference afterwards.
+    if getattr(orchestrator, "llm", None) is not None:
+        orchestrator.llm.verbose = False
 
     return CommandAgent.from_skill(
         Path(root) / "skills" / selection.skill, sandbox=sandbox, orchestrator=orchestrator

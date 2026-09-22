@@ -163,3 +163,104 @@ def test_percentiles_of_one_sample_say_n_equals_one() -> None:
 
 def test_percentiles_of_nothing_measured_is_empty_not_zero() -> None:
     assert percentiles([]) == {}
+
+
+# ── verbose ───────────────────────────────────────────────────────────────────────────────
+
+
+def _full(**kw):
+    from workbench.runners import RunResult, Timings
+
+    base = {
+        "runtime": "native",
+        "skill": "ffmpeg",
+        "utterance": "convert clip.mp4 to mkv",
+        "outcome": "plan",
+        "plan": {"plan": [{"tool": "convert_video", "args": {"container": "mkv"}}]},
+        "commands": ["ffmpeg -y -i clip.mp4 -c copy out.mkv"],
+        "artifacts": [],
+        "timings": Timings(generate_plan_total_ms=418.0),
+        "placement": {"CUDA0": 37},
+        "stdout": "ffmpeg -y -i clip.mp4 -c copy out.mkv\n",
+        "stderr": "load_tensors: layer 0 assigned to device CUDA0\n" * 50,
+    }
+    base.update(kw)
+    return RunResult(**base)
+
+
+def test_compact_shows_the_plan_the_command_where_and_when() -> None:
+    """Default view: what was decided, what it renders to, where it ran, how long."""
+    from workbench.panel import show
+
+    text = show(_full())
+    assert "PLAN" in text
+    assert "convert_video" in text
+    assert "COMMAND" in text
+    assert "WHERE IT RAN" in text
+    assert "TIME" in text
+
+
+def test_compact_hides_the_load_trace() -> None:
+    """The flood is the thing the checkbox exists to keep out of the way."""
+    from workbench.panel import show
+
+    text = show(_full())
+    assert "load_tensors" not in text
+    assert "STDERR" not in text
+
+
+def test_verbose_adds_the_raw_output_and_the_full_plan() -> None:
+    from workbench.panel import show
+
+    text = show(_full(), verbose=True)
+    assert "load_tensors" in text
+    assert "STDERR" in text
+    assert "STDOUT" in text
+    # The plan as JSON, not just the one-line-per-step summary.
+    assert '"container": "mkv"' in text
+
+
+def test_verbose_shows_a_whole_load_trace() -> None:
+    """A llama.cpp load is ~40k characters and states the layer placement in the MIDDLE.
+
+    An earlier 4,000-char cap kept the head and the tail and dropped exactly that. Verbose is
+    opt-in; when it is ticked, it shows the trace.
+    """
+    from workbench.panel import show
+
+    filler = "noise\n" * 3000
+    trace = filler + "load_tensors: layer 0 assigned to device CUDA0\n" + filler
+    text = show(_full(stderr=trace), verbose=True)
+    assert "load_tensors: layer 0" in text
+    assert "elided" not in text
+
+
+def test_a_pathological_trace_is_still_bounded() -> None:
+    """The guard survives for the genuinely absurd, and says how much it dropped."""
+    from workbench.panel import show
+
+    text = show(_full(stderr="x" * 2_000_000), verbose=True)
+    assert len(text) < 260_000
+    assert "elided" in text
+
+
+def test_a_truncated_trace_keeps_both_ends() -> None:
+    """A 41k-char load trace states the layer placement at the TOP and any failure at the
+    BOTTOM. Keeping only the tail hid exactly what verbose was ticked to see.
+    """
+    from workbench.panel import show
+
+    trace = "load_tensors: layer 0 assigned to device CUDA0\n" + ("x" * 50_000) + "\nfinal line\n"
+    text = show(_full(stderr=trace), verbose=True, limit=4000)
+    assert "load_tensors" in text, "the head must survive"
+    assert "final line" in text, "the tail must survive"
+    assert "elided" in text
+    assert len(text) < 30_000
+
+
+def test_an_unmeasured_placement_says_how_to_measure_it() -> None:
+    """ "Unknown" is only useful if it names the switch that would answer the question."""
+    from workbench.panel import show
+
+    text = show(_full(placement={}))
+    assert "verbose" in text.lower()

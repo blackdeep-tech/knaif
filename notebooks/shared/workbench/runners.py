@@ -358,6 +358,9 @@ class PythonRunner:
             placement=dict(
                 getattr(getattr(self.agent, "orchestrator", None), "placement", {}) or {}
             ),
+            # The model's load trace, captured rather than allowed into the cell. It belongs
+            # in the panel's verbose section — asked for, and below the plan.
+            stderr=str(getattr(getattr(self.agent, "orchestrator", None), "load_trace", "") or ""),
             error=error,
         )
 

@@ -427,4 +427,6 @@ floors, no safety gate. `just eval-accept` remains the bar and the workbench can
 per-skill testers under `skills/*/notebooks/` are superseded and marked as such.
 
 Selectors are `ipywidgets`, so the notebook is meant to be **run, not read** — widgets render
-nothing on GitHub.
+nothing on GitHub. **Open it with `uv run jupyter lab notebooks/skill_workbench.ipynb`**: the
+widget JavaScript ships in the venv and JupyterLab serves it locally, whereas VS Code's notebook
+renderer fetches it from a CDN and will prompt for permission to do so.

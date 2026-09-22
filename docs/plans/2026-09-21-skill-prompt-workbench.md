@@ -462,6 +462,58 @@ n=5 · 'convert clip.mp4 to mkv' · python
 Three older binaries reporting *"unknown build"* is the fallback working: they predate
 `backend list --json` and are listed rather than hidden.
 
+### Revised 2026-09-22 after the first real use
+
+Two things the drawing got wrong, found by someone actually opening it:
+
+- **There was nowhere to type.** The utterance lived in a code cell as `UTTERANCE = '...'` —
+  which is the same "edit a variable and re-run" flow the stale testers already do badly, and
+  the exact thing widgets were chosen to avoid. `workbench/ui.py` now provides a prompt box, a
+  Run button, a repeat count and an output area; the model stays loaded between runs, so trying
+  another phrasing costs inference only.
+- **The llama.cpp load trace buried the plan.** `verbose=True` is needed to read placement, but
+  with a failed fd-capture its output lands in the cell — tens of thousands of characters above
+  the thing you came to read. Verbosity is now gated on `capture_works()`, probed first: caught
+  and parsed, or not turned on at all. Placement then says unknown rather than being guessed.
+
+**Then the diagnostics cells went away too.** Putting them at the bottom still meant executing
+three more cells after every utterance, which is the same friction one step removed. Run now
+refreshes everything, and a **verbose** checkbox chooses how much:
+
+- **off** — plan, command, where it ran, how long. **458 characters**, measured. llama.cpp is
+  loaded with `verbose=False`, so there is no trace at all.
+- **on** — adds the full plan JSON and the whole load trace. **42,529 characters**, measured.
+
+Toggling it **re-renders what already ran** rather than paying for inference again.
+
+**The checkbox drives llama.cpp's verbosity directly — that took two corrections to get right.**
+
+The first attempt inferred it: a `capture_works()` probe decided whether an fd-2 capture would
+hold, and turned `verbose=True` on when it thought so. The probe wrote from Python with
+`os.write(2, …)`, which the redirect catches — but **llama.cpp writes through a C `FILE*` bound
+at DLL load**, which it does not. So the probe reported success and the whole 40,000-character
+trace went into the cell *with the box unticked*. The probe is deleted; a probe that lies is
+worse than no probe.
+
+Verbosity is now simply the operator's switch. Off means `verbose=False` at load, so
+llama-cpp-python suppresses it and there is nothing to capture or hide — placement then reads
+`unknown — tick verbose to read it from the load`, which names the switch that would answer it.
+On means the trace is captured, parsed for placement, **and** shown in the panel's verbose
+section, where it was asked for. `verbose` is part of the agent cache key, so ticking it reloads
+once: the honest cost of a question only a load can answer.
+
+The second correction was mine too: verbose first truncated to 4,000 characters, keeping the head
+and tail. A llama.cpp load states its layer placement in the **middle**, so that dropped precisely
+what the box was ticked to see. Verbose now shows the whole trace; the limit survives at 200,000
+only as a guard against the pathological, and says how much it dropped when it bites.
+
+Separately, `verbose=True` was also being left on *after* the load, so llama.cpp commented on
+every inference. Verbosity is for the load; it is switched off immediately afterwards. (Two
+`llama_context` lines still appear at model teardown, outside any run.)
+
+The notebook is now **9 cells, three of which you run**: setup, pick, run. The inventory summary
+sits below as the one optional cell, for when a model or build you expected is missing.
+
 ### One thing that does not work yet, stated plainly
 
 **The Python runner's placement reads "unknown" under `nbconvert`.** The fd-2 capture works in a
@@ -487,10 +539,30 @@ be driven interactively; a config cell you edit and re-run is the thing the stal
 do badly. `ipywidgets` is already a dependency (`python/core[notebook]`, and
 `test_notebook_runner.py` imports it), so this adds nothing new.
 
-The cost is accepted with eyes open: **widgets do not render on GitHub.** A reader browsing the
-`.ipynb` there sees empty output where the selector should be. The header cell therefore says the
-notebook is meant to be run, not read, and every cell must work when re-run top-to-bottom after a
-kernel restart — no state that only exists because a widget fired.
+Two costs, both accepted with eyes open:
+
+**Widgets do not render on GitHub.** A reader browsing the `.ipynb` there sees empty output where
+the selector should be. The header cell says the notebook is meant to be run, not read, and every
+cell works when re-run top-to-bottom after a kernel restart — no state that exists only because a
+widget fired.
+
+**Run it in JupyterLab, not VS Code.** ipywidgets has a Python half and a JavaScript half. The JS
+is already installed locally by the venv —
+`.venv/share/jupyter/labextensions/@jupyter-widgets/jupyterlab-manager` for JupyterLab and
+`.venv/share/jupyter/nbextensions/jupyter-js-widgets/` for Notebook 7 — and both serve it from
+there. **VS Code's notebook renderer uses neither**: it resolves widget scripts from a CDN via
+`jupyter.widgetScriptSources`, which ships empty, so it prompts with *"Widgets require us to
+download supporting files from a 3rd party website"*.
+
+Fetching JS from jsdelivr to drive a local bench sits badly against this project's posture, and
+it is unnecessary:
+
+```bash
+uv run jupyter lab notebooks/skill_workbench.ipynb
+```
+
+Nothing to download, nothing to configure. VS Code still works if you enable the CDN, but that is
+a preference, not a requirement.
 
 Cell grain stays as drawn: selectors and run are separate, so changing a dropdown does not
 re-scan the inventory.

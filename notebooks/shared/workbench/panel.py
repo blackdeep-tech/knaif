@@ -182,8 +182,35 @@ def describe_artifact(path: Path) -> str:
     return f"{line}  {' '.join(bits)}"
 
 
-def show(result: RunResult) -> str:
-    """One run, rendered."""
+def _both_ends(text: str, limit: int) -> str:
+    """Keep the head and the tail when truncating, never just one.
+
+    A llama.cpp load trace states the layer placement in its first lines and any failure in its
+    last. Keeping only the tail — the obvious choice for a log — hid exactly what `verbose` was
+    ticked to see.
+    """
+    text = text.rstrip()
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    elided = len(text) - (half * 2)
+    marker = f"\n\n        … {elided:,} characters elided …\n\n"
+    return text[:half] + marker + text[-half:]
+
+
+def show(result: RunResult, *, verbose: bool = False, limit: int = 200_000) -> str:
+    """One run, rendered.
+
+    Compact by default — the plan, the command it renders to, where it ran and how long. That is
+    what you come back to after each utterance, and burying it under a load trace is what the
+    verbose switch exists to prevent.
+
+    `verbose` appends the full plan as JSON and the raw stdout/stderr. It shows **all** of a
+    normal load trace — a llama.cpp load is ~40,000 characters and the layer placement sits in
+    the MIDDLE of it, so an earlier 4,000-character cap kept the head and tail and lost the one
+    thing worth reading. `limit` survives only as a guard against something pathological, and
+    when it does bite it keeps both ends and says how much it dropped.
+    """
     lines = [
         f"{result.skill} · {result.utterance!r}",
         "",
@@ -202,7 +229,7 @@ def show(result: RunResult) -> str:
     else:
         # Never guessed. The native runner reads this from the subprocess output; the Python
         # runner needs an fd-2 capture at model load, which is unavailable in some kernels.
-        lines.append("  measured            unknown — the load trace was not captured")
+        lines.append("  measured            unknown — tick verbose to read it from the load")
     if result.enumerated_device and result.enumerated_device != result.measured_backend:
         lines.append(f"  enumerated          {result.enumerated_device}  (not where it ran)")
     lines += ["", "TIME"]
@@ -210,6 +237,14 @@ def show(result: RunResult) -> str:
         lines.append(f"  {row[0]:<22}{row[1]}")
     if result.error:
         lines += ["", f"ERROR  {result.error}"]
+
+    if verbose:
+        lines += ["", "─" * 72, "", "PLAN (json)"]
+        lines.append(json.dumps(result.plan, indent=2)[:limit])
+        if result.stdout.strip():
+            lines += ["", "STDOUT", _both_ends(result.stdout, limit)]
+        if result.stderr.strip():
+            lines += ["", "STDERR", _both_ends(result.stderr, limit)]
     return "\n".join(lines)
 
 
