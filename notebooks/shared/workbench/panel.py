@@ -174,11 +174,17 @@ def describe_artifact(path: Path) -> str:
     except (OSError, subprocess.SubprocessError):
         return line
     fields = dict(piece.split("=", 1) for piece in proc.stdout.splitlines() if "=" in piece)
-    bits = [fields.get("codec_name", "?")]
+    # A container with no frames (a trim past the end, say) probes as `duration=N/A` and nothing
+    # else. That is a finding about the run, so say it — raising here would hide the plan too.
+    if "codec_name" not in fields:
+        return f"{line}  (no streams — empty output)"
+    bits = [fields["codec_name"]]
     if fields.get("width"):
         bits.append(f"{fields['width']}x{fields.get('height', '?')}")
-    if fields.get("duration"):
+    try:
         bits.append(f"{float(fields['duration']):.1f}s")
+    except (KeyError, ValueError):
+        pass
     return f"{line}  {' '.join(bits)}"
 
 
@@ -219,7 +225,18 @@ def show(result: RunResult, *, verbose: bool = False, limit: int = 200_000) -> s
     for step in (result.plan or {}).get("plan", []) or []:
         args = " ".join(f"{k}={v}" for k, v in (step.get("args") or {}).items())
         lines.append(f"  {step.get('tool'):<18} {args}")
-    if result.commands:
+    if result.executions:
+        # A real run: what ran and how each one ended. A failure is followed by the tool's own
+        # words, because "exit -22" alone sends you back to a terminal to find out why.
+        lines += ["", "EXECUTED"]
+        for run in result.executions:
+            mark = "✓" if run.ok else "✗"
+            lines.append(
+                f"  {mark} {f'exit {run.returncode}':<9} {run.command or '(command not recorded)'}"
+            )
+            for reason in (run.reason or "").splitlines():
+                lines.append(f"      │ {reason}")
+    elif result.commands:
         lines += ["", "COMMAND"] + [f"  {c}" for c in result.commands]
     if result.artifacts:
         lines += ["", "ARTIFACTS"] + [f"  {describe_artifact(p)}" for p in result.artifacts]

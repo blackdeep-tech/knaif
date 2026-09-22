@@ -42,6 +42,18 @@ class _AgentCache:
         return self._agent
 
 
+def _show(out: Any, text: str) -> None:
+    """Make *text* the Output widget's entire content, in one state write.
+
+    Deliberately not `with out: print(...)`. Capture routes each write through the frontend,
+    and VS Code's renderer showed every captured line twice — one run, printed twice, same
+    `_3` filenames in both copies. `clear_output(wait=True)` was no better: it only queues the
+    clear, and the queued clear was dropped. Replacing `outputs` outright leaves the frontend
+    nothing to interpret, so one run is one copy on every frontend.
+    """
+    out.outputs = ({"output_type": "stream", "name": "stdout", "text": text},) if text else ()
+
+
 def console(
     selection: Selection,
     *,
@@ -80,10 +92,9 @@ def console(
 
     def _go(_button: Any = None) -> None:
         text = box.value.strip()
-        out.clear_output(wait=True)
+        _show(out, "")
         if not text:
-            with out:
-                print("type something first")
+            _show(out, "type something first")
             return
 
         status.value = "<span style='color:#a16207'>running…</span>"
@@ -93,68 +104,52 @@ def console(
         note = ""
         if not selection.dry_run:
             _, note = fixtures.ensure(root, selection.skill, sandbox)
+        lines: list[str] = [note, ""] if note else []
         try:
             results = []
-            with out:
-                if note:
-                    print(note)
-                    print()
-                try:
-                    if selection.wants_python:
-                        agent = cache.get(
-                            selection, root=root, sandbox=sandbox, verbose=verbose.value
-                        )
-                        runner = PythonRunner(agent, skill=selection.skill, work_dir=sandbox)
-                        runs = [
-                            runner.run(text, dry_run=selection.dry_run) for _ in range(times.value)
-                        ]
-                        results.append(runs[0])
-                        print(panel.show(runs[0], verbose=verbose.value))
-                        if len(runs) > 1:
-                            print()
-                            print(panel.stats(runs))
+            try:
+                if selection.wants_python:
+                    agent = cache.get(selection, root=root, sandbox=sandbox, verbose=verbose.value)
+                    runner = PythonRunner(agent, skill=selection.skill, work_dir=sandbox)
+                    runs = [runner.run(text, dry_run=selection.dry_run) for _ in range(times.value)]
+                    results.append(runs[0])
+                    lines.append(panel.show(runs[0], verbose=verbose.value))
+                    if len(runs) > 1:
+                        lines += ["", panel.stats(runs)]
 
-                    if selection.wants_native:
-                        if selection.build is None or selection.model is None:
-                            print("\nnative: pick a build and a model")
-                        else:
-                            native = NativeRunner(
-                                binary=selection.build.path,
-                                model_path=root / selection.model.path,
-                                skill=selection.skill,
-                                work_dir=sandbox,
-                                force_cpu=selection.force_cpu,
-                                backends_dir=selection.backends_dir,
-                            ).run(text, dry_run=selection.dry_run)
-                            results.append(native)
-                            print()
-                            print(panel.show(native, verbose=verbose.value))
+                if selection.wants_native:
+                    if selection.build is None or selection.model is None:
+                        lines.append("\nnative: pick a build and a model")
+                    else:
+                        native = NativeRunner(
+                            binary=selection.build.path,
+                            model_path=root / selection.model.path,
+                            skill=selection.skill,
+                            work_dir=sandbox,
+                            force_cpu=selection.force_cpu,
+                            backends_dir=selection.backends_dir,
+                        ).run(text, dry_run=selection.dry_run)
+                        results.append(native)
+                        lines += ["", panel.show(native, verbose=verbose.value)]
 
-                    if len(results) == 2:
-                        print()
-                        print(panel.compare(*results))
-                except (
-                    Exception
-                ) as exc:  # noqa: BLE001 — a bench reports failures, it does not raise
-                    print(f"\n{type(exc).__name__}: {exc}")
+                if len(results) == 2:
+                    lines += ["", panel.compare(*results)]
+            except Exception as exc:  # noqa: BLE001 — a bench reports failures, it does not raise
+                lines.append(f"\n{type(exc).__name__}: {exc}")
             handle_results[:] = results
             status.value = f"<span style='color:#64748b'>{selection.describe()}</span>"
         finally:
+            _show(out, "\n".join(lines))
             run.disabled = False
 
     def _redraw(_change: Any = None) -> None:
         """Flip verbosity on what already ran, rather than paying for inference again."""
         if not handle_results:
             return
-        out.clear_output(wait=True)
-        with out:
-            for index, result in enumerate(handle_results):
-                if index:
-                    print()
-                print(panel.show(result, verbose=verbose.value))
-            if len(handle_results) == 2:
-                print()
-                print(panel.compare(*handle_results))
+        blocks = [panel.show(result, verbose=verbose.value) for result in handle_results]
+        if len(handle_results) == 2:
+            blocks.append(panel.compare(*handle_results))
+        _show(out, "\n\n".join(blocks))
 
     verbose.observe(_redraw, names="value")
     run.on_click(_go)

@@ -10,6 +10,7 @@ if str(_SHARED) not in sys.path:
     sys.path.insert(0, str(_SHARED))
 
 from workbench.panel import (  # noqa: E402
+    describe_artifact,
     first_divergence,
     percentiles,
     timing_rows,
@@ -264,3 +265,71 @@ def test_an_unmeasured_placement_says_how_to_measure_it() -> None:
 
     text = show(_full(placement={}))
     assert "verbose" in text.lower()
+
+
+def _fake_ffprobe(monkeypatch, stdout: str) -> None:
+    import subprocess
+
+    import workbench.panel as panel
+
+    monkeypatch.setattr(panel.shutil, "which", lambda _name: "ffprobe")
+    monkeypatch.setattr(
+        panel.subprocess,
+        "run",
+        lambda *a, **kw: subprocess.CompletedProcess(a, 0, stdout=stdout, stderr=""),
+    )
+
+
+def test_an_empty_container_is_reported_not_raised(tmp_path, monkeypatch) -> None:
+    # ffprobe prints `duration=N/A` for a container with no frames — e.g. a trim past the end.
+    # That raised inside the panel and hid the plan that produced the empty file.
+    empty = tmp_path / "Test2_intermediate.mov"
+    empty.write_bytes(b"x" * 185)
+    _fake_ffprobe(monkeypatch, "duration=N/A\n")
+
+    assert "no streams" in describe_artifact(empty)
+
+
+def test_an_unparsable_duration_is_left_out_not_raised(tmp_path, monkeypatch) -> None:
+    clip = tmp_path / "live.mkv"
+    clip.write_bytes(b"x" * 2048)
+    _fake_ffprobe(monkeypatch, "codec_name=h264\nwidth=640\nheight=360\nduration=N/A\n")
+
+    line = describe_artifact(clip)
+
+    assert "h264 640x360" in line
+    assert "N/A" not in line
+
+
+def test_a_normal_media_file_shows_codec_size_and_duration(tmp_path, monkeypatch) -> None:
+    clip = tmp_path / "Test1.mov"
+    clip.write_bytes(b"x" * 2048)
+    _fake_ffprobe(
+        monkeypatch,
+        "codec_name=h264\nwidth=1920\nheight=1080\nr_frame_rate=30/1\nduration=2.000000\n",
+    )
+
+    assert "h264 1920x1080 2.0s" in describe_artifact(clip)
+
+
+def test_a_real_run_shows_each_command_with_its_outcome() -> None:
+    from workbench.panel import show
+    from workbench.runners import Execution
+
+    text = show(
+        _full(
+            executions=[
+                Execution("ffmpeg -y -i clip.mp4 Test1.mov", 0, None),
+                Execution(
+                    "ffmpeg -y -i Test1.mov Test2.mov",
+                    -22,
+                    "Output file does not contain any stream",
+                ),
+            ]
+        )
+    )
+
+    assert "EXECUTED" in text
+    assert "✓ exit 0    ffmpeg -y -i clip.mp4 Test1.mov" in text
+    assert "✗ exit -22  ffmpeg -y -i Test1.mov Test2.mov" in text
+    assert "Output file does not contain any stream" in text

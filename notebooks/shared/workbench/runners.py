@@ -18,6 +18,7 @@ See docs/plans/2026-09-21-skill-prompt-workbench.md (D2, D4c, T3).
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import time
@@ -131,6 +132,9 @@ class RunResult:
     stdout: str = ""
     stderr: str = ""
     error: str | None = None
+    #: What a real run executed, command by command. Empty for a dry run, and for native,
+    #: whose `running:` echo carries no exit code.
+    executions: list[Execution] = field(default_factory=list)
 
     @property
     def measured_backend(self) -> str | None:
@@ -362,6 +366,15 @@ class PythonRunner:
         except Exception as exc:  # noqa: BLE001 — the bench reports failures, it does not raise
             error = f"{type(exc).__name__}: {exc}"
 
+        executions = executions_of(results, work_dir=self.work_dir)
+        failed = next((e for e in executions if not e.ok), None)
+        if error is None and failed is not None:
+            # A handler that records a non-zero exit and returns normally is still a failure,
+            # and the chain stops there — say so, with the tool's own words.
+            error = f"{failed.command or 'a command'} — exit {failed.returncode}"
+            if failed.reason:
+                error += f"\n{failed.reason}"
+
         appeared = _touched(before, _files_in(self.work_dir))
         plan = payload.get("plan") or []
         outcome = (
@@ -381,7 +394,8 @@ class PythonRunner:
             utterance=utterance,
             outcome=outcome,
             plan=payload,
-            commands=[c for r in results for c in _commands_of(r)],
+            commands=commands_of(results, work_dir=self.work_dir),
+            executions=executions,
             artifacts=[self.work_dir / name for name in appeared],
             timings=_python_timings(self.agent, infer_ms),
             # Measured at model load by an fd-2 capture, through the same parser the native
@@ -423,12 +437,105 @@ def _python_timings(agent: Any, wall_ms: float) -> Timings:
     )
 
 
-def _commands_of(result: dict[str, Any]) -> list[str]:
-    """Whatever a handler recorded as the command it ran, across the shapes in use."""
-    for key in ("command", "cmd", "rendered"):
-        value = result.get(key)
-        if isinstance(value, str) and value:
-            return [value]
-        if isinstance(value, list) and value:
-            return [" ".join(str(v) for v in value)]
-    return []
+@dataclass(frozen=True)
+class Execution:
+    """One external command a real run executed, and how it ended."""
+
+    command: str | None
+    returncode: int
+    #: The lines of the tool's stderr that say why, when it failed. `None` on success.
+    reason: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0
+
+
+def _dicts_in(value: Any, *, stop_at: str | None = None) -> Any:
+    """Every dict nested anywhere in a step result, depth first, in order.
+
+    With `stop_at`, a dict holding that key is yielded but not descended into — `run_concat`
+    records its exit code at the top AND in `outputs[0]`, and that is one run, not two.
+    """
+    if isinstance(value, dict):
+        yield value
+        if stop_at is not None and stop_at in value:
+            return
+        for child in value.values():
+            yield from _dicts_in(child, stop_at=stop_at)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _dicts_in(child, stop_at=stop_at)
+
+
+def _as_text(command: Any, work_dir: Path) -> str | None:
+    """An argv as one line, with the scratch directory stripped so the line is readable."""
+    if isinstance(command, list) and command:
+        parts = [str(c) for c in command]
+    elif isinstance(command, str) and command:
+        parts = [command]
+    else:
+        return None
+    prefix = str(work_dir.resolve()) + os.sep
+    parts = [p.replace(prefix, "") for p in parts]
+    return " ".join(f'"{p}"' if " " in p else p for p in parts)
+
+
+def commands_of(results: list[dict[str, Any]], *, work_dir: Path) -> list[str]:
+    """Every command a Python run rendered, once each, in order.
+
+    Handlers bury the argv inside their result (`result.commands[].command` for a batch), and
+    the same argv reappears on the step that runs it — so a flat key lookup finds nothing and a
+    naive walk finds everything twice.
+    """
+    seen: list[str] = []
+    for step in results:
+        for node in _dicts_in(step.get("result")):
+            text = _as_text(node.get("command"), work_dir)
+            if text and text not in seen:
+                seen.append(text)
+    return seen
+
+
+def _signed(returncode: int) -> int:
+    """Windows hands back a negative exit unsigned: 4294967274 is -22 (EINVAL)."""
+    return returncode - 2**32 if returncode >= 2**31 else returncode
+
+
+def _failure_reason(stderr: str, lines: int = 3) -> str | None:
+    """The last few lines of a tool's stderr that are not progress or a generic sign-off."""
+    noise = ("frame=", "size=", "conversion failed!")
+    kept = [
+        ln.strip()
+        for ln in (stderr or "").splitlines()
+        if ln.strip() and not ln.strip().lower().startswith(noise)
+    ]
+    return "\n".join(kept[-lines:]) or None
+
+
+def executions_of(results: list[dict[str, Any]], *, work_dir: Path) -> list[Execution]:
+    """What a real run executed, each command beside its exit code.
+
+    The argv and the exit code live on different steps (render, then run) and meet on the
+    `output` path. A dry run records no exit code, so it yields nothing — correctly.
+    """
+    argv_by_output: dict[str, Any] = {}
+    runs: list[Execution] = []
+    for step in results:
+        for node in _dicts_in(step.get("result")):
+            if node.get("command") and node.get("output"):
+                argv_by_output[str(node["output"])] = node["command"]
+        for node in _dicts_in(step.get("result"), stop_at="returncode"):
+            code = node.get("returncode")
+            if not isinstance(code, int) or node.get("mode") == "dry_run":
+                continue
+            code = _signed(code)
+            argv = node.get("command") or argv_by_output.get(str(node.get("output")))
+            runs.append(
+                Execution(
+                    command=_as_text(argv, work_dir),
+                    returncode=code,
+                    reason=None if code == 0 else _failure_reason(node.get("stderr_tail", "")),
+                )
+            )
+    return runs

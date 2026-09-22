@@ -402,3 +402,221 @@ def test_a_file_the_run_never_touched_is_not_an_artifact(tmp_path, monkeypatch) 
     runner = NativeRunner("knaif.exe", "m.gguf", skill="ffmpeg", work_dir=tmp_path)
 
     assert runner.run("convert clip.mp4 to mkv").artifacts == []
+
+
+# ── Python runner: what actually ran ────────────────────────────────────────────────────────
+#
+# Shapes copied from a real `execute_plan` of the 6-step Test1/Test2/Test3 chain (2026-09-22).
+# The argv sits on the render step, the exit code on the run step, and they meet on `output`.
+# Reading only top-level `command` keys found neither, so the panel showed no command and no
+# failure for a chain that stopped at step 5 with ffmpeg exit -22.
+
+
+def _render(work: Path, src: str, dst: str) -> dict:
+    cmd = ["ffmpeg", "-y", "-i", str(work / src), "-c:v", "libx264", str(work / dst)]
+    return {
+        "tool": "render_batch_commands",
+        "result": {
+            "count": 1,
+            "commands": [{"input": str(work / src), "output": str(work / dst), "command": cmd}],
+        },
+    }
+
+
+def _ran(work: Path, src: str, dst: str, returncode: int, stderr: str = "") -> dict:
+    return {
+        "tool": "run_batch",
+        "result": {
+            "mode": "execute",
+            "count": 1,
+            "outputs": [
+                {
+                    "mode": "execute",
+                    "input": str(work / src),
+                    "output": str(work / dst),
+                    "returncode": returncode,
+                    "stderr_tail": stderr,
+                }
+            ],
+        },
+    }
+
+
+_EMPTY_INPUT_STDERR = (
+    "  Duration: N/A, bitrate: N/A\n"
+    "Output #0, mov, to 'Test2.mov':\n"
+    "[out#0/mov @ 00000208ffa42600] Output file does not contain any stream\n"
+    "Error opening output file Test2.mov.\n"
+    "Error opening output files: Invalid argument\n"
+)
+
+
+def test_executions_pair_each_command_with_its_exit_code(tmp_path) -> None:
+    from workbench.runners import executions_of
+
+    results = [
+        _render(tmp_path, "clip.mp4", "Test1.mov"),
+        _ran(tmp_path, "clip.mp4", "Test1.mov", 0),
+        _render(tmp_path, "Test1.mov", "Test2.mov"),
+        _ran(tmp_path, "Test1.mov", "Test2.mov", 4294967274, _EMPTY_INPUT_STDERR),
+    ]
+
+    runs = executions_of(results, work_dir=tmp_path)
+
+    assert [(r.command, r.returncode) for r in runs] == [
+        ("ffmpeg -y -i clip.mp4 -c:v libx264 Test1.mov", 0),
+        # Windows reports a negative exit unsigned; -22 is EINVAL, 4294967274 is noise.
+        ("ffmpeg -y -i Test1.mov -c:v libx264 Test2.mov", -22),
+    ]
+    assert runs[0].reason is None
+    assert "Output file does not contain any stream" in runs[1].reason
+
+
+def test_a_dry_run_executes_nothing(tmp_path) -> None:
+    from workbench.runners import executions_of
+
+    dry = {
+        "tool": "run_batch",
+        "result": {
+            "mode": "dry_run",
+            "outputs": [{"mode": "dry_run", "output": "x", "command": ["ffmpeg", "-i", "a"]}],
+        },
+    }
+    assert executions_of([_render(tmp_path, "a.mp4", "b.mkv"), dry], work_dir=tmp_path) == []
+
+
+def test_python_commands_are_found_inside_step_results_once_each(tmp_path) -> None:
+    from workbench.runners import commands_of
+
+    dry = {
+        "tool": "run_batch",
+        "result": {
+            "mode": "dry_run",
+            "outputs": [
+                {
+                    "mode": "dry_run",
+                    "output": str(tmp_path / "b.mkv"),
+                    "command": [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        str(tmp_path / "a.mp4"),
+                        "-c:v",
+                        "libx264",
+                        str(tmp_path / "b.mkv"),
+                    ],
+                }
+            ],
+        },
+    }
+    # The render step and the dry-run step both carry the argv; it is one command.
+    assert commands_of([_render(tmp_path, "a.mp4", "b.mkv"), dry], work_dir=tmp_path) == [
+        "ffmpeg -y -i a.mp4 -c:v libx264 b.mkv"
+    ]
+
+
+class _FakeAgent:
+    registry: list = []
+    orchestrator = None
+
+    def __init__(self, results: list[dict]) -> None:
+        self._results = results
+
+    def infer(self, *_a, **_kw) -> dict:
+        return {"plan": [{"tool": "trim_video", "args": {}}]}
+
+    def execute_plan(self, *_a, **_kw) -> list[dict]:
+        return self._results
+
+
+def test_a_failed_ffmpeg_step_makes_the_python_run_an_error(tmp_path, monkeypatch) -> None:
+    from workbench.runners import PythonRunner
+
+    import knaif.registry
+
+    monkeypatch.setattr(knaif.registry, "retrieve_tools", lambda *_a, **_kw: [])
+    agent = _FakeAgent(
+        [
+            _render(tmp_path, "Test1.mov", "Test2.mov"),
+            _ran(tmp_path, "Test1.mov", "Test2.mov", 4294967274, _EMPTY_INPUT_STDERR),
+        ]
+    )
+
+    result = PythonRunner(agent, skill="ffmpeg", work_dir=tmp_path).run("x", dry_run=False)
+
+    assert result.outcome == "error"
+    assert "exit -22" in result.error
+    assert "does not contain any stream" in result.error
+    assert result.commands == ["ffmpeg -y -i Test1.mov -c:v libx264 Test2.mov"]
+
+
+def test_a_concat_is_one_execution_not_two(tmp_path) -> None:
+    """`run_concat` states its exit code at the top and again in `outputs[0]`."""
+    from workbench.runners import executions_of
+
+    concat = {
+        "tool": "run_concat",
+        "result": {
+            "mode": "execute",
+            "command": ["ffmpeg", "-y", "-f", "concat", "-i", "list.txt", "Test3.mov"],
+            "returncode": 0,
+            "outputs": [{"output": "Test3.mov", "returncode": 0, "stderr_tail": ""}],
+        },
+    }
+    runs = executions_of([concat], work_dir=tmp_path)
+    assert [(r.command, r.returncode) for r in runs] == [
+        ("ffmpeg -y -f concat -i list.txt Test3.mov", 0)
+    ]
+
+
+def _console(monkeypatch, tmp_path, results: list[dict]):
+    """The real console, with the model and the agent build stubbed out."""
+    import types
+
+    import pytest
+
+    widgets = pytest.importorskip("ipywidgets")
+    from workbench import ui
+
+    import knaif.registry
+
+    monkeypatch.setattr(knaif.registry, "retrieve_tools", lambda *_a, **_kw: [])
+    monkeypatch.setattr(ui, "python_agent", lambda *_a, **_kw: _FakeAgent(results))
+    selection = types.SimpleNamespace(
+        model=types.SimpleNamespace(path="m.gguf"),
+        skill="ffmpeg",
+        force_cpu=False,
+        dry_run=True,
+        wants_python=True,
+        wants_native=False,
+        describe=lambda: "python",
+    )
+    handle = ui.console(selection, root=tmp_path, sandbox=tmp_path)
+    out = next(w for w in handle.widget.children if isinstance(w, widgets.Output))
+    return handle, out
+
+
+def _text(out) -> str:
+    return "".join(o.get("text", "") for o in out.outputs)
+
+
+def test_one_run_is_printed_once(tmp_path, monkeypatch) -> None:
+    """Observed in VS Code: every line of ONE run twice (same `_3` names in both copies).
+
+    Capture (`with out: print(...)`) routes each write through the frontend, which doubled it.
+    The console now sets the widget's content in one state write.
+    """
+    handle, out = _console(monkeypatch, tmp_path, [])
+    handle.run("trim clip.mp4")
+
+    assert len(out.outputs) == 1
+    assert _text(out).count("PLAN ") == 1
+
+
+def test_a_second_run_replaces_the_first(tmp_path, monkeypatch) -> None:
+    handle, out = _console(monkeypatch, tmp_path, [])
+    handle.run("first utterance")
+    handle.run("second utterance")
+
+    assert "second utterance" in _text(out)
+    assert "first utterance" not in _text(out)
