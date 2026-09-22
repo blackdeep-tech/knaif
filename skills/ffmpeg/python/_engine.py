@@ -34,9 +34,14 @@ def _coerce_inputs(value: Any) -> list[str]:
 #: first candidate can itself be taken.
 _COLLISION_SUFFIX = "_converted"
 
+#: Suffix for the OTHER kind of collision repair: renaming a chained intermediate so the name
+#: the user asked for can stay on the step that actually produces what they described. Calling
+#: that file `_converted` would be a lie — it is the input to the conversion, not its result.
+_INTERMEDIATE_SUFFIX = "_intermediate"
 
-def next_free_output(requested: Path, taken: set[Path]) -> Path:
-    """First free ``<stem>_converted[_N]<.ext>``. **Never returns *requested* itself.**
+
+def next_free_output(requested: Path, taken: set[Path], suffix: str = _COLLISION_SUFFIX) -> Path:
+    """First free ``<stem><suffix>[_N]<.ext>``. **Never returns *requested* itself.**
 
     *taken* holds every path the caller has committed to — each input of the plan and each
     output the plan declares — and the filesystem is consulted on top of it.
@@ -59,10 +64,10 @@ def next_free_output(requested: Path, taken: set[Path]) -> Path:
         return candidate not in taken and not candidate.exists()
 
     stem, ext = requested.stem, requested.suffix
-    candidate = requested.with_name(f"{stem}{_COLLISION_SUFFIX}{ext}")
+    candidate = requested.with_name(f"{stem}{suffix}{ext}")
     n = 2
     while not is_free(candidate):
-        candidate = requested.with_name(f"{stem}{_COLLISION_SUFFIX}_{n}{ext}")
+        candidate = requested.with_name(f"{stem}{suffix}_{n}{ext}")
         n += 1
     return candidate
 

@@ -138,6 +138,9 @@ def test_a_collision_is_fixed_even_when_the_target_is_not_on_disk_yet(tmp_path: 
     told the user it had renamed the file to the same name it already had. It also made the
     outcome depend on whether the plan had been run before, since the first run created the
     file that the second run then noticed.
+
+    Asserted without naming a side: *that* the truncation is gone is this test's subject, and
+    *which* of the two names moves is settled by the direction tests at the end of the file.
     """
     (tmp_path / "clip.mp4").write_bytes(b"")
     plan = [
@@ -145,7 +148,7 @@ def test_a_collision_is_fixed_even_when_the_target_is_not_on_disk_yet(tmp_path: 
         _convert("clip_trimmed.mp4", "clip_trimmed.mp4"),
     ]
     plan, subs = rebind_colliding_outputs(plan, tmp_path)
-    assert plan[1]["args"]["output"] != "clip_trimmed.mp4"
+    assert plan[1]["args"]["output"] != plan[1]["args"]["inputs"][0], "still truncates its input"
     assert subs and subs[0]["requested"] != subs[0]["used"], "reported a rename that did not happen"
 
 
@@ -259,3 +262,96 @@ def test_a_per_file_mode_still_resolves_against_its_input(tmp_path: Path) -> Non
     assert (
         steps[0]["args"]["output"] != "a.mp4"
     ), "sub/a.mp4 -> a.mp4 resolves to the input itself for a per-file mode"
+
+
+# -- which name moves: the intermediate, or the destination --------------------
+#
+# A self-overwrite has two shapes, and they do not want the same repair.
+#
+#   ffmpeg_175   `convert clip.mp4 -> clip.mp4`, where `clip.mp4` is a file on disk. Nothing
+#                in the plan wrote it, so the output is the only name that CAN move.
+#
+#   a chain      `trim -> Test1.mov` feeding `convert Test1.mov -> Test1.mov`. Here the name
+#                the user asked for belongs to the LAST step of the branch — that is the file
+#                they described ("cut, then convert to mov lossless, name it Test1"). The
+#                intermediate is the file nobody named. Moving the destination instead leaves
+#                the user's name on the un-converted trim output, which is the wrong content
+#                under the right name: a silent wrong answer in place of a loud failure.
+#
+# The first shape is settled above. These cover the second.
+
+
+def _trim(src: str, out: str) -> dict:
+    return {"tool": "trim_video", "args": {"input": src, "start": "1", "end": "3", "output": out}}
+
+
+def test_a_chained_intermediate_moves_and_the_destination_keeps_its_name(tmp_path: Path) -> None:
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    plan = [_trim("clip.mp4", "Test1.mov"), _convert("Test1.mov", "Test1.mov")]
+    plan, subs = rebind_colliding_outputs(plan, tmp_path)
+
+    assert plan[1]["args"]["output"] == "Test1.mov", "the user's name left the file they named"
+    intermediate = plan[0]["args"]["output"]
+    assert intermediate != "Test1.mov"
+    assert plan[1]["args"]["inputs"] == [intermediate], "the chain came unlinked"
+    assert subs == [
+        {"step": "trim_video", "requested": "Test1.mov", "used": intermediate},
+    ]
+
+
+def test_a_step_after_the_destination_still_reads_the_destination(tmp_path: Path) -> None:
+    """Rebinding is scoped to the steps BETWEEN producer and consumer, inclusive.
+
+    After the consumer, `Test1.mov` means what the consumer wrote — it still exists, under
+    the name it was always going to have. Rewriting those references onto the intermediate
+    would feed the concat the un-converted file.
+    """
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    plan = [
+        _trim("clip.mp4", "Test1.mov"),
+        _convert("Test1.mov", "Test1.mov"),
+        {"tool": "create_thumbnail", "args": {"inputs": ["Test1.mov"]}},
+    ]
+    plan, _ = rebind_colliding_outputs(plan, tmp_path)
+    assert plan[2]["args"]["inputs"] == ["Test1.mov"]
+
+
+def test_the_two_branch_chain_that_found_this(tmp_path: Path) -> None:
+    """The whole utterance, as the model planned it.
+
+    "take clip.mp4, remove its audio, cut from 1-3s then convert to mov with lossless quality
+    and make a duplicate file with name Test1, cut from 3-6s then convert to mov with visually
+    lossless quality and make duplicate with file name Test2, at the end combine Test1 and
+    Test2 to file with name Test3"
+
+    `trim_video` takes neither `container` nor `quality`, so the trim->convert chain is forced,
+    not a model error. What the model got wrong is one thing only: it put the branch's final
+    name on both of its steps. Test1, Test2 and Test3 must all end up holding what was asked
+    for, and the concat must read the converted pair rather than the trims.
+    """
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    plan = [
+        {"tool": "strip_audio", "args": {"inputs": ["clip.mp4"], "output": "clip_silent.mp4"}},
+        _trim("clip_silent.mp4", "Test1.mov"),
+        _convert("Test1.mov", "Test1.mov"),
+        _trim("clip_silent.mp4", "Test2.mov"),
+        _convert("Test2.mov", "Test2.mov"),
+        {
+            "tool": "concat_video",
+            "args": {"base": "Test1.mov", "append": ["Test2.mov"], "output": "Test3.mov"},
+        },
+    ]
+    plan, _ = rebind_colliding_outputs(plan, tmp_path)
+
+    assert plan[2]["args"]["output"] == "Test1.mov"
+    assert plan[4]["args"]["output"] == "Test2.mov"
+    assert plan[5]["args"] == {
+        "base": "Test1.mov",
+        "append": ["Test2.mov"],
+        "output": "Test3.mov",
+    }, "the concat must join the converted files, under the names the user chose"
+    # And no step writes what it reads — the condition ffmpeg refuses outright.
+    for step in plan:
+        args = step["args"]
+        reads = {args.get("input"), *(args.get("inputs") or []), args.get("base")}
+        assert args.get("output") not in reads, step

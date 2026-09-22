@@ -25,6 +25,23 @@ case ``clip.mp4`` downstream can only mean what step 0 wrote. Restoring the oppo
 threader exists to fix — ``unlock_pdf`` then ``find_in_document`` reading the still-locked
 original.
 
+**Which of the two names moves.** The binding rule says what a later reference means; it does
+not say which side of a self-overwrite gets renamed, and the two shapes do not want the same
+answer:
+
+    A file the plan itself produced is an intermediate, so the PRODUCER's output moves. A
+    file that was already on disk cannot be renamed at all, so the CONSUMER's output moves.
+
+``ffmpeg_175`` is the second shape — nothing in the plan wrote ``clip.mp4``, so writing the
+copy to ``clip_converted.mp4`` is the only thing available. The first shape is ``trim ->
+Test1.mov`` feeding ``convert Test1.mov -> Test1.mov``, where ``trim_video`` takes neither
+``container`` nor ``quality`` and the chain is therefore forced. There the name is the user's
+and it belongs to the branch's last step, which is the file they described; the model's only
+error was putting it on the intermediate as well. Renaming the consumer there "works" — the
+plan runs and a later concat still joins the right files — but it leaves ``Test1.mov`` holding
+the un-converted trim output. That is the wrong content under the right name, reported to the
+user as a successful run, which is a worse failure than the one it replaces.
+
 **Why the reservation is an ordered walk and not a set.** A flat set of reserved names drops
 the position that makes the rule decidable. Step *i*'s inputs resolve through the table *as
 it stands before step i*; the rebinding it introduces applies to *i+1…n* only, which is what
@@ -56,7 +73,7 @@ from typing import Any
 
 from knaif.agent import _FILENAME_RE, _TERMINAL_TOOLS
 
-from ._engine import _legal_output_path, next_free_output
+from ._engine import _INTERMEDIATE_SUFFIX, _legal_output_path, next_free_output
 
 #: Args that name what a step writes. ``output_path`` is the internal spelling used once
 #: intents have expanded; ``output`` is what the model emits.
@@ -136,6 +153,30 @@ def _resolve_output(raw: str, out_base: Path | None) -> Path:
     if p.is_absolute():
         return p
     return (out_base / p) if out_base is not None else p.resolve()
+
+
+def _producer_of(
+    plan: list[dict[str, Any]], target: Path, *, before: int, sandbox: Path | None
+) -> tuple[int, str] | None:
+    """The step that declares it writes *target*, searched backwards from *before*.
+
+    Backwards because the binding rule is positional: when two earlier steps write the same
+    name, the one a step at *before* reads is the nearer of them. Returns ``(index, output
+    key)``, or ``None`` when nothing in the plan writes *target* — which is the case that
+    matters, since it is what distinguishes a chained intermediate from a file on disk.
+    """
+    for j in range(before - 1, -1, -1):
+        step = plan[j]
+        if step.get("tool") in _TERMINAL_TOOLS:
+            continue
+        args = step.get("args") or {}
+        out_base = _output_base(str(step.get("tool") or ""), args, sandbox)
+        for key in _OUTPUT_KEYS:
+            if not _is_filename(args.get(key)):
+                continue
+            if _resolve_output(str(args[key]), out_base) == target:
+                return j, key
+    return None
 
 
 def _respell(original: str, chosen: Path) -> str:
@@ -259,6 +300,49 @@ def rebind_colliding_outputs(
             reserved.add(requested)
             continue
 
+        # WHICH name moves depends on where the file being overwritten came from.
+        #
+        # A file this plan produced is a chained INTERMEDIATE, and the name on it is the one
+        # the user asked for — they described the branch's end product ("cut, then convert to
+        # mov lossless, name it Test1"), and the model put that name on every step of the
+        # branch rather than only its last. Move the intermediate and the user's name stays
+        # on the file that holds what they described. Move the destination instead and the
+        # name lands on the un-converted trim output: the wrong content under the right name,
+        # which is worse than the loud failure it replaces, because nothing reports it.
+        producer = _producer_of(plan, requested, before=idx, sandbox=sandbox)
+        if producer is not None:
+            prod_idx, prod_key = producer
+            prod_args = plan[prod_idx]["args"]
+            chosen = next_free_output(
+                requested,
+                plan_inputs | plan_outputs | reserved,
+                suffix=_INTERMEDIATE_SUFFIX,
+            )
+            prod_args[prod_key] = _respell(str(prod_args[prod_key]), chosen)
+            # Scoped to the producer's consumers — steps after the producer, up to and
+            # INCLUDING this one. Past this step the name means what this step writes, which
+            # is still `requested`; rewriting those would feed them the intermediate.
+            for later in plan[prod_idx + 1 : idx + 1]:
+                if later.get("tool") in _TERMINAL_TOOLS:
+                    continue
+                largs = later.get("args") or {}
+                for container, key in _input_refs(largs):
+                    if _resolve_input(str(container[key]), sandbox) == requested:
+                        container[key] = _respell(str(container[key]), chosen)
+            reserved.update({chosen, requested})
+            plan_outputs.add(chosen)
+            substitutions.append(
+                {
+                    "step": str(plan[prod_idx].get("tool") or ""),
+                    "requested": requested.name,
+                    "used": chosen.name,
+                }
+            )
+            continue
+
+        # Nothing in the plan wrote it, so it is a file on disk and the output is the only
+        # name that can move — `ffmpeg_175`, "create a lossless copy of clip.mp4".
+        #
         # `next_free_output` always advances past `requested`. The collision is already
         # established, so handing the same path back would leave the truncation in place
         # *and* report a rename that never happened. Whether the target exists on disk is
