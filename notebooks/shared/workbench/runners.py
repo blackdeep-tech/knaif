@@ -60,10 +60,10 @@ class Timings:
     prompt_decode_ms: float | None = None
     generation_tokens: int | None = None
     generation_ms: float | None = None
-    #: Tokens llama.cpp took from the KV cache instead of decoding. This is what makes a
-    #: warm run legible: measured across three identical Python calls, prompt tokens went
-    #: 28 -> 1 -> 1 while this rose to 28. A 132 ms repeat beside native's 418 ms is cache
-    #: reuse, not a faster runtime.
+    #: Prompt tokens taken from the KV cache instead of decoded, so `prompt_tokens` plus this
+    #: is the whole prompt. A resident Python model reuses the shared rules block across
+    #: utterances: measured, 847 decoded + 1658 reused against native's 2505 decoded. That is
+    #: cache reuse, not a shorter prompt or a faster runtime.
     reused_tokens: int | None = None
     generate_plan_total_ms: float | None = None
     #: Wall clock for the whole call, including process start for the native runner.
@@ -413,10 +413,11 @@ class PythonRunner:
 def _python_timings(agent: Any, wall_ms: float) -> Timings:
     """Read the orchestrator's per-call counters, falling back to wall clock alone.
 
-    `warm` is derived from the data rather than asserted: llama.cpp reuses the KV cache for a
-    repeated prompt prefix, so a second identical call decodes one prompt token instead of
-    hundreds. That is why a Python repeat can land below native's prompt decode alone, and the
-    panel must be able to say so.
+    `warm` is derived from the data rather than asserted: a resident model reuses the KV cache
+    for whatever prefix the prompt shares with the previous one — one token short of all of it
+    for an identical repeat, the ~1650-token rules block for a new ffmpeg utterance. Any reuse
+    means the model was resident and part of the prompt was never decoded, so the number is
+    not cold, and the panel must be able to say so.
     """
     raw = getattr(getattr(agent, "orchestrator", None), "last_timings", None)
     if not raw:
@@ -432,8 +433,8 @@ def _python_timings(agent: Any, wall_ms: float) -> Timings:
         generate_plan_total_ms=raw.get("generate_plan_total_ms", wall_ms),
         reused_tokens=reused,
         wall_ms=wall_ms,
-        # One decoded prompt token against a reused prefix is the signature of a warm call.
-        warm=bool(reused) and (prompt_tokens or 0) <= 1,
+        # Any prompt served from the cache means the model was resident: not a cold call.
+        warm=bool(reused),
     )
 
 

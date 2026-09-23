@@ -568,18 +568,64 @@ def test_a_sub_millisecond_decode_is_zero_not_missing() -> None:
     assert t["prompt_decode_ms"] == 0.0
 
 
-def test_perf_timings_expose_reused_tokens_so_a_warm_run_looks_warm() -> None:
+def test_reused_tokens_are_the_prompt_minus_what_was_decoded() -> None:
     """D4c is only enforceable if "warm" is visible in the data rather than asserted in a label.
 
-    Measured across three identical calls: prompt tokens went 28 -> 1 -> 1 as llama.cpp reused
-    the prefix. A reader comparing the 132 ms repeat against native's 418 ms needs to see why.
+    llama-cpp-python keeps the previous call's KV cache and decodes only the prompt after the
+    longest shared token prefix, so `n_p_eval` is the *uncached remainder*. Measured in the
+    workbench: a 2505-token ffmpeg prompt decoded 847 tokens on the Python lane — 1658 came from
+    the cache (the shared rules block alone is 1656) — while native, a fresh process, decoded
+    all 2505. Without the reused count that reads as Python sending a third of the prompt.
     """
     from knaif.orchestrator import perf_timings
 
-    class _Reused(_FakePerf):
-        n_reused = 27
+    class _PartlyCached(_FakePerf):
+        n_p_eval = 847
 
-    assert perf_timings(_Reused(), wall_ms=132.0)["reused_tokens"] == 27
+    t = perf_timings(_PartlyCached(), wall_ms=1715.0, total_prompt_tokens=2505)
+    assert t["prompt_tokens"] == 847
+    assert t["reused_tokens"] == 1658
+
+
+def test_reused_tokens_never_come_from_n_reused() -> None:
+    """`n_reused` counts reused *compute graphs*, not tokens (llama.h: "number of times a ggml
+    compute graph had been reused"). It rises by about one per generated token — the workbench
+    showed "reused from cache 251 tok" beside 253 generated tokens. It is not a cache figure.
+    """
+    from knaif.orchestrator import perf_timings
+
+    class _GraphReuse(_FakePerf):
+        n_reused = 251
+
+    assert perf_timings(_GraphReuse(), wall_ms=600.0)["reused_tokens"] is None
+    assert (
+        perf_timings(_GraphReuse(), wall_ms=600.0, total_prompt_tokens=28)["reused_tokens"] is None
+    )
+
+
+def test_infer_hands_the_full_prompt_length_to_the_timings(monkeypatch) -> None:
+    """The full prompt length is `usage.prompt_tokens` on the completion — the only place it is
+    known once the cache has shortened what llama.cpp decodes."""
+    import knaif.orchestrator as orchestrator_mod
+
+    seen: dict = {}
+
+    def _spy(llm, *, wall_ms, total_prompt_tokens=None):
+        seen["total"] = total_prompt_tokens
+        return {}
+
+    monkeypatch.setattr(orchestrator_mod, "_read_perf", _spy)
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
+    mock_llm = MagicMock()
+    mock_llm.create_chat_completion.return_value = {
+        "choices": [{"message": {"content": "ok"}}],
+        "usage": {"prompt_tokens": 2505, "completion_tokens": 253, "total_tokens": 2758},
+    }
+    orch.llm = mock_llm
+
+    orch.infer("sys", "usr")
+
+    assert seen["total"] == 2505
 
 
 def test_last_timings_is_none_before_any_inference() -> None:

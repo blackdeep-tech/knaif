@@ -381,6 +381,15 @@ The plan guessed prefix-cache reuse from a suspiciously low steady state; `n_p_e
 decoded prompt token against a reused prefix) rather than asserted by the caller. A 132 ms repeat
 beside native's 418 ms now carries its own explanation.
 
+**Corrected 2026-09-23 — the "reused" column above is not a cache figure.** It was read from
+`n_reused`, which llama.h defines as the number of times a *compute graph* was reused. It tracks
+generation (26/28/28 beside 27/28/28 generated tokens, and 26 on a cold run 1), not the KV cache.
+The `n_p_eval` 28 → 1 drop was right and is still the proof of prefix reuse. `reused_tokens` is
+now `usage.prompt_tokens − n_p_eval`, and `warm` is any reuse at all, not "one decoded token":
+a *different* ffmpeg utterance still reuses the ~1650-token rules block. Found when a Python run
+decoded 847 tokens beside native's 2505 for byte-identical prompts, which read as a prompt-parity
+bug; the panel had also labelled that run "cold" and repeated the original 711 ms model load.
+
 Two corrections this produced, both found by running it rather than by review:
 
 - **A duration is gated on its own count, not on whether it rounds to zero.** `0.0 or None` turned

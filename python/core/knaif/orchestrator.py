@@ -87,7 +87,9 @@ def _perf_reset(llm: Any) -> None:
         pass
 
 
-def _read_perf(llm: Any, *, wall_ms: float) -> dict[str, float | int | None]:
+def _read_perf(
+    llm: Any, *, wall_ms: float, total_prompt_tokens: int | None = None
+) -> dict[str, float | int | None]:
     """Counters after a call, or wall clock alone when they cannot be read.
 
     Wrapped because this reaches into `llm._ctx.ctx`, a private handle whose shape is not a
@@ -97,7 +99,11 @@ def _read_perf(llm: Any, *, wall_ms: float) -> dict[str, float | int | None]:
     try:
         import llama_cpp
 
-        return perf_timings(llama_cpp.llama_perf_context(llm._ctx.ctx), wall_ms=wall_ms)
+        return perf_timings(
+            llama_cpp.llama_perf_context(llm._ctx.ctx),
+            wall_ms=wall_ms,
+            total_prompt_tokens=total_prompt_tokens,
+        )
     except Exception:  # noqa: BLE001
         return {
             "model_load_ms": None,
@@ -110,7 +116,9 @@ def _read_perf(llm: Any, *, wall_ms: float) -> dict[str, float | int | None]:
         }
 
 
-def perf_timings(data: Any, *, wall_ms: float) -> dict[str, float | int | None]:
+def perf_timings(
+    data: Any, *, wall_ms: float, total_prompt_tokens: int | None = None
+) -> dict[str, float | int | None]:
     """Map llama.cpp's perf counters onto the field names the native runtime reports.
 
     Native emits, under `$KNAIF_TIMING=1`::
@@ -128,6 +136,7 @@ def perf_timings(data: Any, *, wall_ms: float) -> dict[str, float | int | None]:
     """
     prompt_tokens = int(data.n_p_eval)
     generation_tokens = int(data.n_eval)
+    reused = (total_prompt_tokens or 0) - prompt_tokens
     return {
         "model_load_ms": float(data.t_load_ms) or None,
         # A duration is gated on ITS OWN COUNT, not on whether it rounds to zero. A repeat call
@@ -137,11 +146,12 @@ def perf_timings(data: Any, *, wall_ms: float) -> dict[str, float | int | None]:
         "prompt_decode_ms": float(data.t_p_eval_ms) if prompt_tokens else None,
         "generation_tokens": generation_tokens or None,
         "generation_ms": float(data.t_eval_ms) if generation_tokens else None,
-        # How many tokens llama.cpp took from the KV cache instead of decoding. This is what
-        # makes a warm run legible: measured across three identical calls, prompt tokens went
-        # 28 -> 1 -> 1 while `n_reused` rose. Without it, a 132 ms repeat next to native's
-        # 418 ms reads as Python being three times faster, which is not what happened.
-        "reused_tokens": int(getattr(data, "n_reused", 0)) or None,
+        # How many prompt tokens came from the KV cache instead of being decoded: the full
+        # prompt (`usage.prompt_tokens`) minus `n_p_eval`. llama-cpp-python keeps the last
+        # call's cache and decodes only past the longest shared prefix, so without this a
+        # 2505-token prompt that decoded 847 reads as Python sending a third of the prompt.
+        # NOT `n_reused`: that counts reused compute graphs, about one per generated token.
+        "reused_tokens": reused if reused > 0 else None,
         # Wall clock for this call. NOT comparable with the native runner's wall clock, which
         # includes process start and a cold model load — see the workbench plan's D4c.
         "generate_plan_total_ms": wall_ms,
@@ -426,7 +436,11 @@ class InferenceOrchestrator:
                 ),
             )
             _wall_ms = (time.perf_counter() - _started) * 1000
-            self.last_timings = _read_perf(self.llm, wall_ms=_wall_ms)
+            self.last_timings = _read_perf(
+                self.llm,
+                wall_ms=_wall_ms,
+                total_prompt_tokens=(response.get("usage") or {}).get("prompt_tokens"),
+            )
             _resync_win32_console_handles()
             return str(response["choices"][0]["message"]["content"])
 

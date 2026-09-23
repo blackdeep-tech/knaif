@@ -157,6 +157,27 @@ def test_warm_is_derived_from_cache_reuse_not_asserted() -> None:
     assert t.comparable_ms == 134.0
 
 
+def test_a_partly_cached_call_is_warm() -> None:
+    """A different utterance still shares the rules block with the last one. Measured: 847 of a
+    2505-token prompt decoded, 1658 reused — and the panel called it "cold" and repeated the
+    original 711 ms model load, which that call never paid."""
+    from workbench.runners import _python_timings
+
+    class _Agent:
+        class orchestrator:  # noqa: N801
+            last_timings = {
+                "model_load_ms": 711.0,
+                "prompt_tokens": 847,
+                "prompt_decode_ms": 283.0,
+                "generation_tokens": 256,
+                "generation_ms": 1375.0,
+                "reused_tokens": 1658,
+                "generate_plan_total_ms": 1715.0,
+            }
+
+    assert _python_timings(_Agent(), 1716.0).warm is True
+
+
 def test_a_cold_call_is_not_reported_warm() -> None:
     from workbench.runners import _python_timings
 
@@ -167,7 +188,7 @@ def test_a_cold_call_is_not_reported_warm() -> None:
                 "prompt_decode_ms": 167.0,
                 "generation_tokens": 27,
                 "generation_ms": 146.0,
-                "reused_tokens": 26,
+                "reused_tokens": None,
                 "generate_plan_total_ms": 317.0,
             }
 
