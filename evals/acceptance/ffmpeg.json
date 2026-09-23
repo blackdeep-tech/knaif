@@ -4,27 +4,27 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "65e3e3b15c7a35ab1dfc77a4fe55c32c453803943e4d7b1bb21ea23e7c7677a5",
-        "contracts": "a7e71119b69fc933e3b384d6d10caf1bb07d949f2c7815615720581b158f5e55",
+        "bundle": "f274be0c0b17ce2b3b1329cf0fb73cb567b30d9bb1da944afbc969765eb1c3fd",
+        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "53180b58ef4992e1099e332db5bfefbba7332159c0312c6c30a48dc73ab2ecaa",
+        "native": "7500ee8756e0fccc9d7a0292a21507bc6dba37c8c08415251baba0c67595f924",
         "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
-        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
       }
     },
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "65e3e3b15c7a35ab1dfc77a4fe55c32c453803943e4d7b1bb21ea23e7c7677a5",
-        "contracts": "a7e71119b69fc933e3b384d6d10caf1bb07d949f2c7815615720581b158f5e55",
+        "bundle": "f274be0c0b17ce2b3b1329cf0fb73cb567b30d9bb1da944afbc969765eb1c3fd",
+        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "53180b58ef4992e1099e332db5bfefbba7332159c0312c6c30a48dc73ab2ecaa",
+        "native": "7500ee8756e0fccc9d7a0292a21507bc6dba37c8c08415251baba0c67595f924",
         "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
-        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
       }
     },
     "L3": {

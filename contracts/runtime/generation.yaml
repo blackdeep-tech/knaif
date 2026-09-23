@@ -67,11 +67,38 @@ settings:
   # enabled, that is a native code change, not a config change.
   thinking_enabled: false
 
+  # ── Compute config ─────────────────────────────────────────────────────────────────────
+  # docs/plans/2026-09-23-inference-config-parity.md. Both lanes fed the model identical token
+  # IDs and decoded greedily, yet disagreed: flash attention, the physical batch and KV-cache
+  # reuse change the ORDER of floating-point work, and on a borderline token that moved one
+  # decision from 68% to 20%. Across the corpus it flipped 1.2% of outcomes (net 0.00 pp) and
+  # explained ~80% of the Python/native divergence. These are the values that remove it.
+
+  # llama.cpp's AUTO policy: enabled where the device supports it, off otherwise. Native passes
+  # AUTO explicitly. llama-cpp-python 0.3.23 takes a bool only, so Python stanzas spell this
+  # `true` — the same thing on every device the eval lane runs on (CUDA and CPU support it).
+  flash_attn: auto
+
+  # Logical batch = n_ctx, so a prompt decodes in one pass (native has always done this).
+  n_batch: 8192
+
+  # Physical batch — the chunk llama.cpp actually computes. llama.cpp's default, now stated.
+  n_ubatch: 512
+
+  # No KV prefix carried from one call to the next. Native builds a fresh context per call; a
+  # Python eval that reused the previous row's prefix gave each row a batch layout that
+  # depended on its neighbour. The orchestrator's bare default keeps reuse for embedders (a
+  # repeated SDK call stays cheap); the stanzas below are what evals and shipping read.
+  reset_cache_per_call: true
+
 # The stanzas the settings above are asserted against. Keys are the stanza names in each
 # file; both must exist and must carry every setting.
 shipped_models:
   models.yaml:
     - knaif-qwen3-4b-v1
+    - knaif-qwen3-4b-v2
   eval_backends.yaml:
     - qwen3-4b-sft-v3-flat-q4
     - qwen3-1.7b-sft-v3-flat-q6
+    # The arm the committed snapshots are measured on (published as knaif-qwen3-4b-v2).
+    - qwen3-4b-sft-v4-flat-q4

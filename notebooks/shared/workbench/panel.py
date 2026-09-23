@@ -296,6 +296,14 @@ def show(result: RunResult, *, verbose: bool = False, limit: int = 200_000) -> s
     if result.artifacts:
         lines += ["", "ARTIFACTS"] + [f"  {describe_artifact(p)}" for p in result.artifacts]
     lines += ["", "WHERE IT RAN"]
+    if result.model:
+        lines.append(f"  model               {result.model}")
+    if result.config:
+        cfg = dict(result.config)
+        cold = cfg.pop("reset_cache_per_call", None)
+        shown = " ".join(f"{k}={v}" for k, v in cfg.items())
+        cache = {True: "  cold cache", False: "  cache reused"}.get(cold, "")
+        lines.append(f"  config              {shown}{cache}")
     if result.placement:
         lines.append(f"  measured            {result.measured_backend}  {result.placement}")
     else:

@@ -270,7 +270,7 @@ backends:
   qwen3-4b-sft-v3-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
     public_name: knaif-qwen3-4b-v1   # shipped name — reports label the arm with this, not the eval key
-    options: {path: models/knaif-qwen3-4b-v1-q4_k_m.gguf, description: "Qwen3 4B SFT v3 flat union, Q4_K_M (public: knaif-qwen3-4b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+    options: {path: models/knaif-qwen3-4b-v1-q4_k_m.gguf, description: "Qwen3 4B SFT v3 flat union, Q4_K_M (public: knaif-qwen3-4b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
   # --- 4B-v4 retrain (T6b): same flat recipe and same config as sft-v3-flat-q4 above,
   # only the union corpus moved (reject/clarify taxonomy + the 10 new clarify rows).
   # Compared against the frozen control evals/runs/2026-09-13_t6a-control-v4_success.
@@ -280,12 +280,19 @@ backends:
   qwen3-4b-sft-v4-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
     public_name: knaif-qwen3-4b-v2   # shipped name — reports label the arm with this, not the eval key
-    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "Qwen3 4B SFT v4 flat union, Q4_K_M (public: knaif-qwen3-4b-v2)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "Qwen3 4B SFT v4 flat union, Q4_K_M (public: knaif-qwen3-4b-v2)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
   # Inference-config parity T2 (docs/plans/2026-09-23-inference-config-parity.md): the SAME
   # weights and options as the arm above, varying only how llama.cpp is configured, to measure
   # how many answers change when nothing but the config does. Not promotion arms.
   #   -cold:      no KV prefix reuse across rows — isolates corpus-order dependence
-  #   -nativecfg: native's config — flash attention on, prompt batch = n_ctx, fresh per call
+  #   -nativecfg: native's config — flash attention on, prompt batch = n_ctx, fresh per call.
+  #               Since T4 the arm above carries this same config; kept as the T2 record.
+  #   -legacycfg: the config every snapshot up to 2026-09-23 was measured on (llama-cpp-python
+  #               defaults, KV prefix reused row to row) — the arm that reproduces them.
+  qwen3-4b-sft-v4-flat-q4-legacycfg:
+    backend: llama_cpp
+    public_name: knaif-qwen3-4b-v2
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "knaif-qwen3-4b-v2, pre-parity llama.cpp config", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: false, n_batch: 512, n_ubatch: 512, reset_cache_per_call: false}
   qwen3-4b-sft-v4-flat-q4-cold:
     backend: llama_cpp
     public_name: knaif-qwen3-4b-v2
@@ -382,7 +389,7 @@ backends:
   qwen3-1.7b-sft-v3-flat-q6:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
     public_name: knaif-qwen3-1.7b-v1   # shipped name — reports label the arm with this, not the eval key
-    options: {path: models/knaif-qwen3-1.7b-v1-q6_k.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q6_K (public: knaif-qwen3-1.7b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+    options: {path: models/knaif-qwen3-1.7b-v1-q6_k.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q6_K (public: knaif-qwen3-1.7b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
   # pass-3 Task 5 planner-diversity: control (ffmpeg+documents) vs +io, new keywords, same recipe
   qwen3-1.7b-v3b-control-q6:
     backend: llama_cpp

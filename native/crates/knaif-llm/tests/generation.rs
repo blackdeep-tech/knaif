@@ -64,3 +64,46 @@ fn native_cannot_express_the_settings_it_does_not_read() {
         "the /no_think suffix is gone but the contract still says thinking_enabled: false"
     );
 }
+
+#[test]
+fn native_compute_config_matches_the_contract() {
+    // docs/plans/2026-09-23-inference-config-parity.md: identical tokens and greedy decoding on
+    // both lanes still flipped 1.2% of eval outcomes, because llama.cpp was configured
+    // differently. These are pinned, not inherited, so a crate bump cannot move them silently.
+    let s = settings();
+    assert_eq!(
+        s["n_ubatch"].as_u64().expect("n_ubatch"),
+        u64::from(knaif_llm::N_UBATCH),
+        "knaif_llm::N_UBATCH disagrees with contracts/runtime/generation.yaml"
+    );
+    assert_eq!(
+        s["n_batch"].as_u64().expect("n_batch"),
+        u64::from(knaif_llm::N_CTX),
+        "native decodes the prompt in one batch (n_batch = n_ctx); the contract must say so"
+    );
+    assert_eq!(
+        s["flash_attn"].as_str(),
+        Some("auto"),
+        "native passes llama.cpp's AUTO policy; a different contract value needs a native change"
+    );
+    assert_eq!(
+        knaif_llm::FLASH_ATTN_AUTO,
+        -1,
+        "llama.h: LLAMA_FLASH_ATTN_TYPE_AUTO = -1"
+    );
+    assert_eq!(
+        s["reset_cache_per_call"].as_bool(),
+        Some(true),
+        "native builds a fresh context per call; the contract must not allow reuse"
+    );
+
+    let llama = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/llama.rs"))
+        .expect("read llama.rs");
+    for needle in [
+        "with_flash_attention_policy(crate::FLASH_ATTN_AUTO)",
+        "with_n_ubatch(crate::N_UBATCH)",
+        "with_n_batch(self.n_ctx)",
+    ] {
+        assert!(llama.contains(needle), "llama.rs no longer sets `{needle}`");
+    }
+}

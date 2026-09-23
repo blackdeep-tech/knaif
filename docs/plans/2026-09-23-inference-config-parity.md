@@ -1,6 +1,6 @@
 # Inference config parity — measure the noise floor, then make both lanes compute alike
 
-**Status:** Planning · **Created:** 2026-09-23 · **Last worked:** 2026-09-23 · **Completed:** —
+**Status:** In progress — T1–T5, T7 done; T6 (full-corpus re-measure) and T8 open · **Created:** 2026-09-23 · **Last worked:** 2026-09-24 · **Completed:** —
 **Owner:** core · **Ref:** found in the workbench; bears on T8 (L3/L4) of
 [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md) and on the open
 TODO *"The eval lane is not bitwise reproducible, and nothing says so"*
@@ -108,14 +108,14 @@ outcome differs, and the list of flipped rows. **C/D is the prediction test**: i
 config is enough, C and D should agree far more often than A and D do. Record everything in this
 file under *Results*.
 
-### - [ ] T3 — Pin the config in the contract
+### - [x] T3 — Pin the config in the contract
 
 Add `flash_attn`, `n_batch`, `n_ubatch` and `reset_cache_per_call` (or its native equivalent: a
 fresh context per call, which native already does) to `contracts/runtime/generation.yaml`, set to
 native's values. Extend `test_settings_parity.py` / `test_generation_settings.py` so a drift in
 either runtime fails `just check`.
 
-### - [ ] T4 — Set both runtimes explicitly
+### - [x] T4 — Set both runtimes explicitly
 
 - Python: `orchestrator.py` passes the contract values; the eval backends and `models.yaml`
   stanzas stop relying on llama-cpp-python defaults. The workbench's agent builder
@@ -123,17 +123,27 @@ either runtime fails `just check`.
 - Native: `knaif-llm/src/llama.rs` sets `with_flash_attention_policy` and `with_n_ubatch` instead
   of inheriting llama.cpp's defaults, which can change under a crate bump without notice.
 
-### - [ ] T5 — The workbench says which config it ran
+### - [x] T5 — The workbench says which config it ran
 
 The panel shows model file, runtime, build and the four settings above. Today a pasted panel cannot
 say which model the Python lane loaded, which slowed this investigation.
+
+**T3–T5, T7 done 2026-09-24.** Contract gained `flash_attn: auto`, `n_batch: 8192`,
+`n_ubatch: 512`, `reset_cache_per_call: true`, asserted on both sides; native sets
+`with_flash_attention_policy(FLASH_ATTN_AUTO)` and `with_n_ubatch(N_UBATCH)` from `knaif-llm`
+constants; the orchestrator defaults to the compute values (reuse stays an embedder default);
+`models.yaml` v1/v2 and the three pinned eval arms carry all four; the workbench builds its Python
+config from the contract and the panel prints model + config. A `-legacycfg` arm reproduces the
+pre-parity config. Verified on hardware: native, the shipped v2 stanza and the workbench all plan
+`strip_audio` for the utterance that started this, native's trace showing `flash_attn = auto` →
+enabled, `n_batch = 8192`, `n_ubatch = 512`.
 
 ### - [ ] T6 — Re-measure and apply the decision rule
 
 Python `eval-success` on both skills with the aligned config, against the snapshots. Apply the rule
 above. Any re-lock is its own commit, with the reason and the flip-rate evidence in the message.
 
-### - [ ] T7 — Docs
+### - [x] T7 — Docs
 
 `docs/INFERENCE.md` (the pinned settings and why), `docs/EVAL_FRAMEWORK.md` (the measured noise
 floor, and that a difference smaller than it is not a finding), and close or rewrite the TODO item

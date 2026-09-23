@@ -464,3 +464,32 @@ def test_every_audio_output_is_probed(tmp_path, monkeypatch) -> None:
         song = tmp_path / f"clip_audio{suffix}"
         song.write_bytes(b"x" * 2048)
         assert "aac 10.0s" in describe_artifact(song), suffix
+
+
+def test_the_panel_says_which_model_and_config_ran() -> None:
+    """A pasted panel could not say which model the Python lane loaded, which slowed the
+    investigation that found the config gap (2026-09-23)."""
+    from workbench.panel import show
+
+    python = RunResult(
+        **{
+            **_fan_out().__dict__,
+            "model": "knaif-qwen3-4b-v2-q4_k_m.gguf",
+            "config": {
+                "flash_attn": True,
+                "n_batch": 8192,
+                "n_ubatch": 512,
+                "reset_cache_per_call": True,
+            },
+        }
+    )
+    text = show(python)
+    assert "knaif-qwen3-4b-v2-q4_k_m.gguf" in text
+    assert "flash_attn=True" in text and "n_batch=8192" in text and "n_ubatch=512" in text
+    assert "cold" in text
+
+
+def test_a_run_without_a_recorded_config_says_so() -> None:
+    from workbench.panel import show
+
+    assert "config" not in show(_fan_out()).split("WHERE IT RAN", 1)[1].split("TIME", 1)[0]

@@ -5,26 +5,26 @@
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
         "bundle": "5ebfe52f83c180da9df7f018091e2008ae84d93b54e08b657d9c451d7df1c28d",
-        "contracts": "a7e71119b69fc933e3b384d6d10caf1bb07d949f2c7815615720581b158f5e55",
+        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "53180b58ef4992e1099e332db5bfefbba7332159c0312c6c30a48dc73ab2ecaa",
+        "native": "7500ee8756e0fccc9d7a0292a21507bc6dba37c8c08415251baba0c67595f924",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
       }
     },
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
         "bundle": "5ebfe52f83c180da9df7f018091e2008ae84d93b54e08b657d9c451d7df1c28d",
-        "contracts": "a7e71119b69fc933e3b384d6d10caf1bb07d949f2c7815615720581b158f5e55",
+        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "53180b58ef4992e1099e332db5bfefbba7332159c0312c6c30a48dc73ab2ecaa",
+        "native": "7500ee8756e0fccc9d7a0292a21507bc6dba37c8c08415251baba0c67595f924",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
       }
     }
   }

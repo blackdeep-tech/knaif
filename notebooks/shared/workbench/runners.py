@@ -141,6 +141,11 @@ class RunResult:
     #: The prompt of a confirmation gate that declined, stopping the chain there. None when
     #: every gate passed (or there was none).
     stopped_at: str | None = None
+    #: The GGUF this run loaded, by file name. None when not recorded.
+    model: str | None = None
+    #: The llama.cpp compute config it ran with (flash_attn, n_batch, n_ubatch,
+    #: reset_cache_per_call). Empty when not recorded.
+    config: dict[str, Any] = field(default_factory=dict)
 
     @property
     def measured_backend(self) -> str | None:
@@ -312,6 +317,16 @@ class NativeRunner:
             ),
             artifacts=[self.work_dir / name for name in appeared],
             timings=parse_native_timings(combined, wall_ms=wall_ms),
+            model=self.model_path.name,
+            # Native's are compiled-in constants (knaif-llm), pinned to the contract since
+            # inference-config parity T4. A binary built before that ran llama.cpp's defaults;
+            # the build picker's stale flag is what says which one this is.
+            config={
+                "flash_attn": "auto",
+                "n_batch": "n_ctx",
+                "n_ubatch": 512,
+                "reset_cache_per_call": True,
+            },
             placement=parse_tensor_placement(combined),
             enumerated_device=enumerated.group(1) if enumerated else None,
             stdout=proc.stdout,
@@ -418,7 +433,22 @@ class PythonRunner:
             error=error,
             model_plan=getattr(self.agent, "last_model_plan", None),
             stopped_at=_declined_gate(results),
+            **_python_model_and_config(self.agent),
         )
+
+
+_COMPUTE_KEYS = ("flash_attn", "n_batch", "n_ubatch", "reset_cache_per_call")
+
+
+def _python_model_and_config(agent: Any) -> dict[str, Any]:
+    """Which GGUF and compute config the Python lane's orchestrator was built with."""
+    options = getattr(getattr(agent, "orchestrator", None), "model_config", None) or {}
+    if not isinstance(options, dict) or not options.get("path"):
+        return {}
+    return {
+        "model": Path(str(options["path"])).name,
+        "config": {k: options[k] for k in _COMPUTE_KEYS if k in options},
+    }
 
 
 def _declined_gate(results: list[dict[str, Any]]) -> str | None:

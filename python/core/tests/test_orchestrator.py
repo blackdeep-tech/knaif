@@ -658,12 +658,13 @@ def test_flash_attn_and_n_ubatch_reach_llama_when_set(tmp_path):
     assert kwargs.call_args.kwargs["n_batch"] == 8192
 
 
-def test_unset_knobs_leave_the_library_defaults_alone(tmp_path):
-    """T1 changes nothing by itself: the existing snapshots were measured on the defaults."""
-    kwargs = _load_with(tmp_path, {})
-    assert "flash_attn" not in kwargs.call_args.kwargs
-    assert "n_ubatch" not in kwargs.call_args.kwargs
-    assert kwargs.call_args.kwargs["n_batch"] == 512
+def test_unset_knobs_take_the_contract_config(tmp_path):
+    """T4: the defaults are the contract's (contracts/runtime/generation.yaml), not
+    llama-cpp-python's — which were what made the Python lane compute differently from native."""
+    kwargs = _load_with(tmp_path, {"n_ctx": 8192})
+    assert kwargs.call_args.kwargs["flash_attn"] is True
+    assert kwargs.call_args.kwargs["n_ubatch"] == 512
+    assert kwargs.call_args.kwargs["n_batch"] == 8192
 
 
 def test_loading_by_model_path_does_not_crash(tmp_path):

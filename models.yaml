@@ -66,6 +66,11 @@ models:
       max_tokens: 512
       json_mode: false
       thinking_enabled: false
+      # Compute config — contracts/runtime/generation.yaml (inference-config parity).
+      flash_attn: true
+      n_batch: 8192
+      n_ubatch: 512
+      reset_cache_per_call: true
 
   # Promoted 2026-07-02 (docs/plans/2026-07-02-qwen3-finetuning-pass3.md, Task 4/7).
   # 4B union LoRA on ffmpeg-v3 + documents (same recipe as the retracted qwen3-4b-ft,
@@ -84,6 +89,11 @@ models:
       max_tokens: 512
       json_mode: false
       thinking_enabled: false
+      # Compute config — contracts/runtime/generation.yaml (inference-config parity).
+      flash_attn: true
+      n_batch: 8192
+      n_ubatch: 512
+      reset_cache_per_call: true
 
   # Mirrors the eval suite's active backend set (eval_backends.yaml): qwen3-4b +
   # gemma3-4b. Smaller/weaker models (qwen3-1.7b, phi4-mini) are intentionally

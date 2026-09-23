@@ -185,6 +185,30 @@ once after `just install`.
 just gpu-check      # exits non-zero if the installed build is CPU-only
 ```
 
+### Compute config — the same on both runtimes
+
+Python and native feed the model identical token IDs and decode greedily, and they still
+disagreed until 2026-09-24: how llama.cpp is *configured* changes the order of floating-point
+work, and on a borderline token that alone moved a decision from 68% to 20%. Across the eval
+corpus it flipped 1.2% of outcomes (net 0.00 pp) and explained ~80% of the Python/native
+divergence (`evals/runs/2026-09-23_config-parity-flip_cheap/report.md`). Both lanes now use the
+values in [`contracts/runtime/generation.yaml`](../contracts/runtime/generation.yaml):
+
+| Setting | Value | Python | Native |
+|---|---|---|---|
+| `flash_attn` | `auto` | `true` (llama-cpp-python 0.3.23 takes a bool; auto resolves to on for CUDA and CPU) | `LLAMA_FLASH_ATTN_TYPE_AUTO` |
+| `n_batch` | 8192 (= `n_ctx`) | stanza / orchestrator default | `n_ctx` |
+| `n_ubatch` | 512 | stanza / orchestrator default | `knaif_llm::N_UBATCH` |
+| `reset_cache_per_call` | `true` | eval + shipped stanzas | a fresh context per call |
+
+The orchestrator's *bare* default keeps KV-prefix reuse, so an SDK embedder's repeated calls stay
+cheap; everything that is evaluated or shipped sets `reset_cache_per_call: true`, because with
+reuse an eval row's arithmetic depended on the row before it. A drift in either runtime fails
+`just check` (`test_generation_settings.py`, `test_settings_parity.py`,
+`knaif-llm/tests/generation.rs`). `eval_backends.yaml` keeps a
+`qwen3-4b-sft-v4-flat-q4-legacycfg` arm that reproduces the pre-parity config, for comparing
+against snapshots measured before the change.
+
 ## Adding or changing backends
 
 Edit [`eval_backends.yaml`](../eval_backends.yaml) to add models or adjust options

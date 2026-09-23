@@ -309,11 +309,14 @@ class InferenceOrchestrator:
         n_threads = 8
         # Bound here, not only in the model_config branch: a load by `model_path=` hit it
         # unbound, and the broad except below turned the NameError into "no model".
-        n_batch = 512
-        # Only passed when set, so an unset key keeps llama-cpp-python's own default — the
-        # config the existing snapshots were measured on. See
-        # docs/plans/2026-09-23-inference-config-parity.md.
-        compute: dict[str, Any] = {}
+        n_batch: int | None = None
+        # The compute config both lanes share — contracts/runtime/generation.yaml, held to it by
+        # test_generation_settings.py (nothing reads the contract at runtime). llama-cpp-python's
+        # own defaults (flash attention off, batch 512) are what made this lane compute
+        # differently from native: same tokens, greedy on both sides, 1.2% of outcomes flipped.
+        # See docs/plans/2026-09-23-inference-config-parity.md.
+        flash_attn: Any = True
+        n_ubatch = 512
         model_name = "custom model"
 
         verbose = self._verbose
@@ -322,22 +325,25 @@ class InferenceOrchestrator:
             n_gpu_layers = model_config.get("n_gpu_layers", 10)
             n_ctx = model_config.get("n_ctx", 4096)
             n_threads = model_config.get("n_threads", 8)
-            # n_batch is the LOGICAL batch; compute is chunked by n_ubatch (default 512), so
-            # raising n_batch does NOT speed up prompt decode — measured on a 3938-token prompt:
-            # 512 -> 1721/1772 tok/s vs 8192 -> 1737/1857 tok/s, i.e. noise, while costing a much
-            # larger compute buffer. Left at the llama.cpp default deliberately. Overridable for
-            # experiments. See docs/PERFORMANCE.md §3.
-            n_batch = model_config.get("n_batch", 512)
-            # Flash attention and the physical batch change the order of floating-point work,
-            # and on a borderline token that alone flipped a plan (extract 0.68 -> strip 0.80).
-            # Native sets both differently from llama-cpp-python's defaults.
-            for key in ("flash_attn", "n_ubatch"):
-                if model_config.get(key) is not None:
-                    compute[key] = model_config[key]
+            # n_batch is the LOGICAL batch; compute is chunked by n_ubatch, so raising it does
+            # not speed prompt decode (measured on a 3938-token prompt: 512 -> 1721/1772 tok/s,
+            # 8192 -> 1737/1857, i.e. noise — docs/PERFORMANCE.md §3). It is n_ctx for parity,
+            # not speed: native decodes the prompt in one batch, and the batch layout changes
+            # the arithmetic enough to flip a borderline token.
+            n_batch = model_config.get("n_batch")
+            n_ubatch = model_config.get("n_ubatch", n_ubatch)
+            flash_attn = model_config.get("flash_attn", flash_attn)
             model_name = model_config.get("description", "custom model")
             verbose = model_config.get("verbose", self._verbose)
         elif model_path:
             actual_path = model_path
+
+        if n_batch is None:
+            n_batch = n_ctx
+        # The contract says `auto`; llama-cpp-python 0.3.23 takes a bool only, and auto resolves
+        # to enabled on every device the eval lane runs on (CUDA and CPU both support it).
+        if flash_attn == "auto":
+            flash_attn = True
 
         if not actual_path:
             warnings.warn(
@@ -368,7 +374,8 @@ class InferenceOrchestrator:
                 n_threads=n_threads,
                 n_gpu_layers=n_gpu_layers,
                 verbose=verbose,
-                **compute,
+                flash_attn=bool(flash_attn),
+                n_ubatch=n_ubatch,
             )
             if verbose:
                 print(

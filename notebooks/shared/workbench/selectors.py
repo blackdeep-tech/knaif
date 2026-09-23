@@ -156,6 +156,39 @@ def build_widgets(inventory: dict[str, Any], *, selection: Selection | None = No
     return _Handle()
 
 
+def python_model_config(
+    selection: Selection, *, root: Path | str = ".", verbose: bool = False
+) -> dict[str, Any]:
+    """The Python lane's llama.cpp config: the contract's, so the bench computes as evals and
+    shipping do.
+
+    Hand-built before, it had drifted (max_tokens 2048, and llama-cpp-python's compute defaults
+    — the config that made this lane disagree with native). `contracts/runtime/generation.yaml`
+    is the source; only the model and force-CPU come from the selectors.
+    """
+    import yaml
+
+    settings = yaml.safe_load(
+        (Path(root) / "contracts" / "runtime" / "generation.yaml").read_text(encoding="utf-8")
+    )["settings"]
+    if selection.model is None:
+        raise ValueError("no model selected — the Python runner needs one")
+    return {
+        "path": selection.model.path,
+        "n_ctx": settings["n_ctx"],
+        "n_gpu_layers": 0 if selection.force_cpu else 99,
+        "max_tokens": settings["max_tokens"],
+        "json_mode": settings["json_mode"],
+        "thinking_enabled": settings["thinking_enabled"],
+        # `auto` in the contract; llama-cpp-python 0.3.23 takes a bool (see the contract).
+        "flash_attn": settings["flash_attn"] in (True, "auto"),
+        "n_batch": settings["n_batch"],
+        "n_ubatch": settings["n_ubatch"],
+        "reset_cache_per_call": settings["reset_cache_per_call"],
+        "verbose": verbose,
+    }
+
+
 def python_agent(
     selection: Selection,
     *,
@@ -182,15 +215,7 @@ def python_agent(
     # So: off means llama-cpp-python suppresses the load entirely, and placement is unknown and
     # says so. On means the trace is captured — parsed for placement AND shown in the panel's
     # verbose section, where it was asked for, rather than sprayed above the plan.
-    config = {
-        "path": selection.model.path,
-        "n_ctx": 8192,
-        "n_gpu_layers": 0 if selection.force_cpu else 99,
-        "max_tokens": 2048,
-        "json_mode": False,
-        "thinking_enabled": False,
-        "verbose": verbose,
-    }
+    config = python_model_config(selection, root=root, verbose=verbose)
     with capture_fd2() as trace:
         orchestrator = InferenceOrchestrator(backend="llama_cpp", model_config=config, root=root)
     load_trace = trace[0] if trace else ""

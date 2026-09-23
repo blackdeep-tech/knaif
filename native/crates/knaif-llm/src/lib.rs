@@ -23,6 +23,17 @@ pub const MAX_TOKENS: i32 = 512;
 /// this value is held together with the config files.
 pub const N_CTX: u32 = 8192;
 
+/// Physical batch — the chunk llama.cpp computes at a time. llama.cpp's own default, set
+/// explicitly so a crate bump cannot change the arithmetic of every plan unnoticed. Canonical in
+/// `contracts/runtime/generation.yaml` (`n_ubatch`); see
+/// `docs/plans/2026-09-23-inference-config-parity.md`.
+pub const N_UBATCH: u32 = 512;
+
+/// llama.cpp's `LLAMA_FLASH_ATTN_TYPE_AUTO`: flash attention wherever the device supports it,
+/// off otherwise. Forcing it on would run attention on the CPU on a GPU without support, and the
+/// shipped binary runs on arbitrary GPUs. Canonical in `contracts/runtime/generation.yaml`.
+pub const FLASH_ATTN_AUTO: i32 = -1;
+
 #[cfg(feature = "llama")]
 mod llama;
 #[cfg(feature = "llama")]

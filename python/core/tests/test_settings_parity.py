@@ -125,6 +125,26 @@ def test_the_eval_backend_is_the_shipped_configuration(field: str) -> None:
     assert _eval_options()[field] == _python_options()[field]
 
 
+def test_native_pins_the_compute_config_instead_of_inheriting_it() -> None:
+    """Flash attention and the physical batch are set explicitly natively, from constants the
+    contract holds, so a llama-cpp-2 bump cannot move them without a failing test. Inherited,
+    a crate update could change the arithmetic of every plan and nothing would say so."""
+    src = _rust_source()
+    assert "with_flash_attention_policy(crate::FLASH_ATTN_AUTO)" in src
+    assert "with_n_ubatch(crate::N_UBATCH)" in src
+    assert "with_n_batch(self.n_ctx)" in src, "native no longer decodes the prompt in one batch"
+    assert _rust_const("N_UBATCH") == _eval_options()["n_ubatch"]
+    assert _eval_options()["n_batch"] == _rust_n_ctx_default()
+
+
+def test_both_runtimes_start_every_call_cold() -> None:
+    """Native builds a fresh context per call; the eval lane must not reuse a KV prefix
+    either, or a row's arithmetic depends on the row before it."""
+    assert "new_context(" in _rust_source()
+    assert _eval_options()["reset_cache_per_call"] is True
+    assert _python_options()["reset_cache_per_call"] is True
+
+
 def test_retrieval_top_k_agrees_across_runtimes() -> None:
     """`top_k` decides how much of the registry the model is shown.
 

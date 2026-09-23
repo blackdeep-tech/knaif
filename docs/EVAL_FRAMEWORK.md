@@ -410,6 +410,22 @@ Two rules follow for a plan-shaped skill:
 If a new skill's destructive rows all score suspiciously low on `output_exists`, this is
 the first thing to check.
 
+## The noise floor — how big a difference has to be to mean anything
+
+Measured 2026-09-24 (`evals/runs/2026-09-23_config-parity-flip_cheap/report.md`), same model,
+greedy decoding, first phrasings of both corpora (469 utterances):
+
+- **The same config twice changes nothing** — 0 flips. An eval run is deterministic; a row that
+  moves between two runs of one config moved because something else did.
+- **The llama.cpp compute config alone** (flash attention, batch layout, KV-prefix reuse) flipped
+  **1.2%** of ffmpeg outcomes, net 0.00 pp — rows move both ways.
+
+So an aggregate change smaller than about 1.2 pp, or a single-utterance move in a small slice,
+is not evidence on its own that a model, prompt or code change did anything. Both lanes have
+run one pinned compute config since then (`docs/INFERENCE.md`, *Compute config*), which removes
+that source between Python and native; it does not make a borderline decision less borderline.
+The rows that flipped are listed in the report as candidate training rows.
+
 ## Scoring model
 
 For each corpus row the engine produces:

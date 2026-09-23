@@ -23,6 +23,8 @@ from workbench.inventory import (  # noqa: E402
     scan_builds,
 )
 
+ROOT = Path(".").resolve()
+
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -286,3 +288,40 @@ def test_a_fresh_build_is_not_flagged_but_says_when_it_was_built(tmp_path: Path)
     assert entry.stale is False
     assert "stale" not in entry.label
     assert "built " in entry.label
+
+
+# ── the Python lane's llama.cpp config (inference-config parity T5) ───────────────────────
+
+
+def test_the_python_lane_computes_with_the_contract_config() -> None:
+    """The bench hand-built its config and had drifted: max_tokens 2048 against the contract's
+    512, and no compute settings at all, so it ran llama-cpp-python's defaults — the config that
+    made the Python lane disagree with native. It reads the contract now."""
+    import yaml
+    from workbench.selectors import Selection, python_model_config
+
+    contract = yaml.safe_load(
+        (ROOT / "contracts" / "runtime" / "generation.yaml").read_text(encoding="utf-8")
+    )["settings"]
+    model = ModelEntry(name="knaif-4b-v2", path="models/x.gguf", resolved=True)
+
+    config = python_model_config(Selection(model=model), root=ROOT)
+
+    assert config["path"] == "models/x.gguf"
+    for key in ("max_tokens", "n_ctx", "n_batch", "n_ubatch", "reset_cache_per_call"):
+        assert config[key] == contract[key], key
+    assert config["json_mode"] is contract["json_mode"]
+    assert config["thinking_enabled"] is contract["thinking_enabled"]
+    assert (
+        config["flash_attn"] is True
+    )  # the contract's `auto`, spelled for llama-cpp-python 0.3.23
+    assert config["n_gpu_layers"] == 99
+
+
+def test_force_cpu_is_the_only_thing_the_bench_varies() -> None:
+    from workbench.selectors import Selection, python_model_config
+
+    model = ModelEntry(name="m", path="models/x.gguf", resolved=True)
+    assert (
+        python_model_config(Selection(model=model, force_cpu=True), root=ROOT)["n_gpu_layers"] == 0
+    )
