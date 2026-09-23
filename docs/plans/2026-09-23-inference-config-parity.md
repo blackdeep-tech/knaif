@@ -72,12 +72,22 @@ Set now, before the measurement, so the result cannot choose its own threshold.
 
 ## Tasks
 
-### - [ ] T1 — Make the three knobs settable (no behaviour change)
+### - [x] T1 — Make the three knobs settable (no behaviour change)
 
 `InferenceOrchestrator` takes `flash_attn`, `n_ubatch` and `reset_cache_per_call` from
 `model_config`, defaulting to today's behaviour. `reset_cache_per_call` calls `llm.reset()` before
 each completion so no prefix is reused. Tests first: each key reaches `Llama(...)` / the call path;
 defaults unchanged.
+
+**Done 2026-09-23.** `flash_attn`/`n_ubatch` are passed to `Llama(...)` only when set; the reset
+runs before both `infer` and `infer_stream`. Also fixed: `n_batch` was unbound on a load by
+`model_path=`. Verified on the real v2 GGUF, same utterance, two calls each:
+
+| config | call 1 decoded | call 2 decoded / reused | step 2 |
+|---|---|---|---|
+| today | 2486 | 1 / 2485 | `extract_audio` |
+| `reset_cache_per_call` | 2486 | 2486 / — | `extract_audio` |
+| + `flash_attn`, `n_batch = 8192` | 2486 | 2486 / — | **`strip_audio`** (as native) |
 
 ### - [ ] T2 — Measure the flip rate
 

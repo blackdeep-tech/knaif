@@ -307,6 +307,13 @@ class InferenceOrchestrator:
         n_gpu_layers = 10
         n_ctx = 4096
         n_threads = 8
+        # Bound here, not only in the model_config branch: a load by `model_path=` hit it
+        # unbound, and the broad except below turned the NameError into "no model".
+        n_batch = 512
+        # Only passed when set, so an unset key keeps llama-cpp-python's own default — the
+        # config the existing snapshots were measured on. See
+        # docs/plans/2026-09-23-inference-config-parity.md.
+        compute: dict[str, Any] = {}
         model_name = "custom model"
 
         verbose = self._verbose
@@ -321,6 +328,12 @@ class InferenceOrchestrator:
             # larger compute buffer. Left at the llama.cpp default deliberately. Overridable for
             # experiments. See docs/PERFORMANCE.md §3.
             n_batch = model_config.get("n_batch", 512)
+            # Flash attention and the physical batch change the order of floating-point work,
+            # and on a borderline token that alone flipped a plan (extract 0.68 -> strip 0.80).
+            # Native sets both differently from llama-cpp-python's defaults.
+            for key in ("flash_attn", "n_ubatch"):
+                if model_config.get(key) is not None:
+                    compute[key] = model_config[key]
             model_name = model_config.get("description", "custom model")
             verbose = model_config.get("verbose", self._verbose)
         elif model_path:
@@ -355,6 +368,7 @@ class InferenceOrchestrator:
                 n_threads=n_threads,
                 n_gpu_layers=n_gpu_layers,
                 verbose=verbose,
+                **compute,
             )
             if verbose:
                 print(
@@ -395,6 +409,17 @@ class InferenceOrchestrator:
 
     # ── public API ────────────────────────────────────────────────────────────
 
+    def _maybe_reset_cache(self) -> None:
+        """Forget the previous call's prompt when `reset_cache_per_call` is set.
+
+        A resident model decodes only past the prefix a prompt shares with the last one, so in
+        an eval a row's batch layout — and on a borderline token its answer — depends on the row
+        before it. Resetting makes every call decode its whole prompt, as native's fresh context
+        per call does. Off by default: it costs one full prompt decode per call.
+        """
+        if self.model_config.get("reset_cache_per_call") and self.llm is not None:
+            self.llm.reset()
+
     def _apply_thinking(self, system: str) -> str:
         # Qwen3 honors a "/no_think" suffix in the system prompt to skip the
         # <think> block. No-op on other model families. llama.cpp has no native
@@ -421,6 +446,7 @@ class InferenceOrchestrator:
             if self.json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
             _max_tokens = int(self.model_config.get("max_tokens", max_tokens))
+            self._maybe_reset_cache()
             _perf_reset(self.llm)
             _started = time.perf_counter()
             response = cast(
@@ -506,6 +532,7 @@ class InferenceOrchestrator:
                     "Provide a valid model_config['path'] or model_path."
                 )
             _max_tokens = int(self.model_config.get("max_tokens", max_tokens))
+            self._maybe_reset_cache()
             stream = self.llm.create_chat_completion(
                 messages=[
                     {"role": "system", "content": self._apply_thinking(system)},

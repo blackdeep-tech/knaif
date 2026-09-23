@@ -631,3 +631,83 @@ def test_infer_hands_the_full_prompt_length_to_the_timings(monkeypatch) -> None:
 def test_last_timings_is_none_before_any_inference() -> None:
     orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
     assert orch.last_timings is None
+
+
+# ── inference config knobs (docs/plans/2026-09-23-inference-config-parity.md T1) ──────────
+
+
+def _load_with(tmp_path, config: dict) -> MagicMock:
+    """Load through a stubbed llama_cpp and return the `Llama` class mock, for its kwargs."""
+    model_file = tmp_path / "model.gguf"
+    model_file.write_bytes(b"fake")
+    mock_llama_cls = MagicMock()
+    mock_llama_module = MagicMock()
+    mock_llama_module.Llama = mock_llama_cls
+    with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
+        InferenceOrchestrator(backend="llama_cpp", model_config={"path": str(model_file), **config})
+    return mock_llama_cls
+
+
+def test_flash_attn_and_n_ubatch_reach_llama_when_set(tmp_path):
+    """Native runs flash attention at llama.cpp's default and prompt batch = n_ctx; Python ran
+    llama-cpp-python's defaults. On a borderline token that alone flipped the plan
+    (extract 0.68 -> strip 0.80). The lanes can only be aligned if both knobs are settable."""
+    kwargs = _load_with(tmp_path, {"flash_attn": True, "n_ubatch": 8192, "n_batch": 8192})
+    assert kwargs.call_args.kwargs["flash_attn"] is True
+    assert kwargs.call_args.kwargs["n_ubatch"] == 8192
+    assert kwargs.call_args.kwargs["n_batch"] == 8192
+
+
+def test_unset_knobs_leave_the_library_defaults_alone(tmp_path):
+    """T1 changes nothing by itself: the existing snapshots were measured on the defaults."""
+    kwargs = _load_with(tmp_path, {})
+    assert "flash_attn" not in kwargs.call_args.kwargs
+    assert "n_ubatch" not in kwargs.call_args.kwargs
+    assert kwargs.call_args.kwargs["n_batch"] == 512
+
+
+def test_loading_by_model_path_does_not_crash(tmp_path):
+    """`n_batch` was only bound inside the model_config branch, so a load by `model_path=`
+    raised NameError, which the broad except turned into a warning and no model."""
+    model_file = tmp_path / "model.gguf"
+    model_file.write_bytes(b"fake")
+    mock_llama_module = MagicMock()
+    with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
+        orch = InferenceOrchestrator(backend="llama_cpp", model_path=str(model_file))
+    assert orch.llm is mock_llama_module.Llama.return_value
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_reset_cache_per_call_clears_the_prefix_before_each_call(stream):
+    """With a model kept loaded, llama-cpp-python decodes only past the prefix a call shares
+    with the previous one, so a row's numerics depend on the row before it. Resetting first
+    makes every call decode its whole prompt, as native's fresh context per call does."""
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={"reset_cache_per_call": True})
+    order: list[str] = []
+    mock_llm = MagicMock()
+    mock_llm.reset.side_effect = lambda: order.append("reset")
+
+    def _complete(**kw):
+        order.append("complete")
+        if kw.get("stream"):
+            return iter([{"choices": [{"delta": {"content": "ok"}}]}])
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    mock_llm.create_chat_completion.side_effect = _complete
+    orch.llm = mock_llm
+
+    if stream:
+        list(orch.infer_stream("sys", "usr"))
+    else:
+        orch.infer("sys", "usr")
+
+    assert order == ["reset", "complete"]
+
+
+def test_the_cache_is_kept_by_default():
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
+    mock_llm = MagicMock()
+    mock_llm.create_chat_completion.return_value = {"choices": [{"message": {"content": "ok"}}]}
+    orch.llm = mock_llm
+    orch.infer("sys", "usr")
+    mock_llm.reset.assert_not_called()
