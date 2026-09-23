@@ -452,3 +452,15 @@ def test_an_audio_file_shows_its_codec_and_no_size(tmp_path, monkeypatch) -> Non
 
     assert "mp3 12.5s" in line
     assert "x" not in line.split("MB", 1)[1]
+
+
+def test_every_audio_output_is_probed(tmp_path, monkeypatch) -> None:
+    """`clip_audio.aac  0.11 MB` said nothing: only video suffixes and mp3/wav/m4a were probed,
+    so the file an extract_audio step wrote could not be checked from the panel."""
+    _fake_ffprobe(
+        monkeypatch, "codec_name=aac\ncodec_type=audio\nr_frame_rate=0/0\nduration=10.000000\n"
+    )
+    for suffix in (".aac", ".flac", ".ogg", ".opus"):
+        song = tmp_path / f"clip_audio{suffix}"
+        song.write_bytes(b"x" * 2048)
+        assert "aac 10.0s" in describe_artifact(song), suffix

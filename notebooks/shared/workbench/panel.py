@@ -145,13 +145,21 @@ def percentiles(samples: Sequence[float]) -> dict[str, float]:
     }
 
 
+#: Everything ffmpeg writes that ffprobe can describe. Audio outputs belong here as much as video:
+#: an extract_audio step's `.aac` was listed with a size and nothing else.
+_PROBED_SUFFIXES = frozenset(
+    {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
+    | {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
+)
+
+
 def describe_artifact(path: Path) -> str:
     """Size, plus an ffprobe one-liner for media — the point of a real run is the file."""
     if not path.is_file():
         return f"{path.name}  (gone)"
     size_mb = path.stat().st_size / 1_048_576
     line = f"{path.name}  {size_mb:.2f} MB"
-    if path.suffix.lower() not in {".mp4", ".mkv", ".mov", ".webm", ".avi", ".mp3", ".wav", ".m4a"}:
+    if path.suffix.lower() not in _PROBED_SUFFIXES:
         return line
     if not shutil.which("ffprobe"):
         return f"{line}  (ffprobe not installed)"
