@@ -10,14 +10,18 @@ Three rules the selectors depend on, each of which exists because the alternativ
   believed.
 * **Asking costs nothing.** The label call loads no model, so it runs on every inventory and
   there is no cache to go stale when a rebuild replaces a binary.
+* **A build older than the code it compiles says so.** A binary is judged against the newest
+  native source; offering a stale one silently made a fixed engine bug look unfixed.
 
 See docs/plans/2026-09-21-skill-prompt-workbench.md (D1e, D3, T5).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import subprocess
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +56,15 @@ class BuildEntry:
     dynamic_backends: bool = False
     backends_dir: str | None = None
     platform: str | None = None
+    #: The binary's modification time — when it was built, as far as the filesystem knows.
+    built_at: float | None = None
+    #: The newest native source changed after this build, repo-relative. None when fresh or
+    #: unknown.
+    newer_source: str | None = None
+
+    @property
+    def stale(self) -> bool:
+        return self.newer_source is not None
 
     @property
     def kind(self) -> str | None:
@@ -81,10 +94,16 @@ class BuildEntry:
     def label(self) -> str:
         where = self.path.parent.name
         if not self.features:
-            return f"{where}  —  unknown build (no `backend list --json`)"
-        shown = ", ".join(self.features)
-        flag = "  ⚠ directory name disagrees" if self.mislabelled else ""
-        return f"{where}  ({shown}){flag}"
+            text = f"{where}  —  unknown build (no `backend list --json`)"
+        else:
+            shown = ", ".join(self.features)
+            flag = "  ⚠ directory name disagrees" if self.mislabelled else ""
+            text = f"{where}  ({shown}){flag}"
+        if self.built_at is not None:
+            text += f"  built {time.strftime('%Y-%m-%d %H:%M', time.localtime(self.built_at))}"
+        if self.newer_source is not None:
+            text += f"  ⚠ stale — {self.newer_source} changed after this build"
+        return text
 
 
 def group_models(
@@ -173,8 +192,49 @@ def scan_builds(
     return found
 
 
-def describe_build(binary: Path, *, timeout_s: float = 20.0) -> BuildEntry:
-    """Ask a binary what it is. Never raises — an unrunnable build is listed as unknown."""
+#: What a native binary compiles, relative to the repo root. Skill YAML and data are read at
+#: runtime, so changing them needs no rebuild and must not mark a build stale.
+_NATIVE_SOURCE_GLOBS = (
+    "native/**/*.rs",
+    "native/**/Cargo.toml",
+    "apps/**/*.rs",
+    "apps/**/Cargo.toml",
+    "skills/*/native/**/*.rs",
+    "skills/*/native/**/Cargo.toml",
+    "Cargo.toml",
+    "Cargo.lock",
+)
+
+
+def newest_native_source(root: Path | str) -> tuple[Path, float] | None:
+    """The most recently modified native source file (repo-relative) and its mtime.
+
+    Modification time is a heuristic: a branch switch touches files without changing what a
+    build would produce, so this can flag a build that is in fact current. That errs the safe
+    way — a spurious rebuild costs seconds, a silently stale binary cost an afternoon.
+    """
+    root = Path(root)
+    newest: tuple[Path, float] | None = None
+    for pattern in _NATIVE_SOURCE_GLOBS:
+        for path in root.glob(pattern):
+            if "target" in path.relative_to(root).parts or not path.is_file():
+                continue
+            mtime = path.stat().st_mtime
+            if newest is None or mtime > newest[1]:
+                newest = (path.relative_to(root), mtime)
+    return newest
+
+
+def describe_build(
+    binary: Path,
+    *,
+    timeout_s: float = 20.0,
+    newest_source: tuple[Path, float] | None = None,
+) -> BuildEntry:
+    """Ask a binary what it is, and whether the code it compiles changed after it was built.
+
+    Never raises — an unrunnable build is listed as unknown.
+    """
     try:
         proc = subprocess.run(
             [str(binary), "backend", "list", "--json"],
@@ -184,9 +244,17 @@ def describe_build(binary: Path, *, timeout_s: float = 20.0) -> BuildEntry:
             errors="replace",
             timeout=timeout_s,
         )
-        return parse_build_label(binary, proc.stdout)
+        entry = parse_build_label(binary, proc.stdout)
     except (OSError, subprocess.SubprocessError):
-        return parse_build_label(binary, "")
+        entry = parse_build_label(binary, "")
+    try:
+        built_at: float | None = binary.stat().st_mtime
+    except OSError:
+        built_at = None
+    newer = None
+    if built_at is not None and newest_source is not None and newest_source[1] > built_at:
+        newer = newest_source[0].as_posix()
+    return dataclasses.replace(entry, built_at=built_at, newer_source=newer)
 
 
 def load_local_config(root: Path | str) -> dict[str, Any]:
@@ -237,8 +305,9 @@ def scan(root: Path | str = ".") -> dict[str, Any]:
     )
 
     local = load_local_config(root)
+    newest = newest_native_source(root)
     builds = [
-        describe_build(binary)
+        describe_build(binary, newest_source=newest)
         for binary in scan_builds(root, exe_name=exe_name, declared=local.get("binaries") or [])
     ]
 

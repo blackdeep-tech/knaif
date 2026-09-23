@@ -231,3 +231,58 @@ def test_fixture_dir_is_named_per_skill(tmp_path: Path) -> None:
     from workbench.fixtures import fixture_dir
 
     assert fixture_dir(tmp_path, "ffmpeg") == tmp_path / "sandbox" / "fixtures" / "ffmpeg"
+
+
+# ── stale builds ──────────────────────────────────────────────────────────────────────────
+
+
+def _aged(path: Path, mtime: float) -> Path:
+    import os
+
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_the_newest_native_source_is_found_and_yaml_is_ignored(tmp_path: Path) -> None:
+    """Only what the binary compiles counts. Skill YAML is read at runtime, so editing it needs
+    no rebuild and must not mark a build stale."""
+    from workbench.inventory import newest_native_source
+
+    _aged(_write(tmp_path / "native" / "crates" / "core" / "src" / "lib.rs", "x"), 1_000)
+    _aged(_write(tmp_path / "apps" / "cli" / "src" / "main.rs", "x"), 2_000)
+    _aged(_write(tmp_path / "skills" / "ffmpeg" / "native" / "src" / "engine.rs", "x"), 3_000)
+    _aged(_write(tmp_path / "skills" / "ffmpeg" / "native" / "Cargo.toml", "x"), 1_500)
+    _aged(_write(tmp_path / "skills" / "ffmpeg" / "tools.yaml", "x"), 9_000)
+
+    path, mtime = newest_native_source(tmp_path)
+
+    assert path == Path("skills/ffmpeg/native/src/engine.rs")
+    assert mtime == 3_000
+
+
+def test_a_build_older_than_the_source_is_flagged_with_the_file(tmp_path: Path) -> None:
+    """Workbench 2026-09-23: native kept writing `.matroska` after the engine was fixed,
+    because the picker offered a two-day-old `release-cuda` with nothing to say so."""
+    from workbench.inventory import describe_build
+
+    binary = _aged(_write(tmp_path / "target" / "release-cuda" / "knaif.exe", "x"), 1_000)
+    newest = (Path("skills/ffmpeg/native/src/engine.rs"), 3_000.0)
+
+    entry = describe_build(binary, newest_source=newest)
+
+    assert entry.built_at == 1_000
+    assert entry.stale is True
+    assert "stale" in entry.label
+    assert "skills/ffmpeg/native/src/engine.rs" in entry.label
+
+
+def test_a_fresh_build_is_not_flagged_but_says_when_it_was_built(tmp_path: Path) -> None:
+    from workbench.inventory import describe_build
+
+    binary = _aged(_write(tmp_path / "target" / "release-cuda" / "knaif.exe", "x"), 5_000)
+
+    entry = describe_build(binary, newest_source=(Path("apps/cli/src/main.rs"), 3_000.0))
+
+    assert entry.stale is False
+    assert "stale" not in entry.label
+    assert "built " in entry.label

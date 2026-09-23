@@ -539,6 +539,7 @@ def test_python_commands_are_found_inside_step_results_once_each(tmp_path) -> No
 class _FakeAgent:
     registry: list = []
     orchestrator = None
+    last_model_plan: dict | None = None
 
     def __init__(self, results: list[dict]) -> None:
         self._results = results
@@ -641,3 +642,61 @@ def test_a_second_run_replaces_the_first(tmp_path, monkeypatch) -> None:
 
     assert "second utterance" in _text(out)
     assert "first utterance" not in _text(out)
+
+
+def test_the_python_run_carries_the_model_plan_beside_the_executed_one(tmp_path, monkeypatch):
+    from workbench.runners import PythonRunner
+
+    import knaif.registry
+
+    monkeypatch.setattr(knaif.registry, "retrieve_tools", lambda *_a, **_kw: [])
+    agent = _FakeAgent([])
+    agent.last_model_plan = {"plan": [{"tool": "trim_video", "args": {"input": "a.mp4"}}]}
+
+    result = PythonRunner(agent, skill="ffmpeg", work_dir=tmp_path).run("x")
+
+    assert result.model_plan == {"plan": [{"tool": "trim_video", "args": {"input": "a.mp4"}}]}
+    assert result.plan == {"plan": [{"tool": "trim_video", "args": {}}]}
+
+
+class _RecordingAgent(_FakeAgent):
+    def execute_plan(self, *_a, **kw) -> list[dict]:
+        self.kwargs = kw
+        return self._results
+
+
+def test_a_dry_run_confirms_so_the_whole_chain_renders(tmp_path, monkeypatch) -> None:
+    """`confirmed=not dry_run` declined reverse's RAM gate on every dry run: the chain stopped
+    at a 10-second preview and never rendered the reverse or anything after it, while the
+    outcome still said `plan` (workbench, 2026-09-23). A dry run executes nothing, so yes."""
+    from workbench.runners import PythonRunner
+
+    import knaif.registry
+
+    monkeypatch.setattr(knaif.registry, "retrieve_tools", lambda *_a, **_kw: [])
+    agent = _RecordingAgent([])
+
+    PythonRunner(agent, skill="ffmpeg", work_dir=tmp_path).run("x", dry_run=True)
+
+    assert agent.kwargs["dry_run"] is True
+    assert agent.kwargs["confirmed"] is True
+
+
+def test_a_declined_gate_is_reported_not_swallowed(tmp_path, monkeypatch) -> None:
+    from workbench.runners import PythonRunner
+
+    import knaif.registry
+
+    monkeypatch.setattr(knaif.registry, "retrieve_tools", lambda *_a, **_kw: [])
+    agent = _FakeAgent(
+        [
+            {
+                "tool": "wait_for_confirmation",
+                "result": {"status": "declined", "prompt": "Reversing 1 clip(s) … Proceed?"},
+            }
+        ]
+    )
+
+    result = PythonRunner(agent, skill="ffmpeg", work_dir=tmp_path).run("x")
+
+    assert result.stopped_at == "Reversing 1 clip(s) … Proceed?"

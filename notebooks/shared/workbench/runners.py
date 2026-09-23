@@ -135,6 +135,12 @@ class RunResult:
     #: What a real run executed, command by command. Empty for a dry run, and for native,
     #: whose `running:` echo carries no exit code.
     executions: list[Execution] = field(default_factory=list)
+    #: The plan as the model emitted it, before core's rewrites (chain linking, source
+    #: threading). `plan` is what executed. None when the runtime does not report it (native).
+    model_plan: dict[str, Any] | None = None
+    #: The prompt of a confirmation gate that declined, stopping the chain there. None when
+    #: every gate passed (or there was none).
+    stopped_at: str | None = None
 
     @property
     def measured_backend(self) -> str | None:
@@ -360,8 +366,11 @@ class PythonRunner:
         error: str | None = None
         results: list[dict[str, Any]] = []
         try:
+            # Always confirmed. A real run was already confirmed by choosing it; a dry run
+            # executes nothing, and declining there stopped every chain at its first gate
+            # (reverse's RAM warning) with the rest silently unrendered.
             results = self.agent.execute_plan(
-                payload, utterance=utterance, dry_run=dry_run, confirmed=not dry_run
+                payload, utterance=utterance, dry_run=dry_run, confirmed=True
             )
         except Exception as exc:  # noqa: BLE001 — the bench reports failures, it does not raise
             error = f"{type(exc).__name__}: {exc}"
@@ -407,7 +416,22 @@ class PythonRunner:
             # in the panel's verbose section — asked for, and below the plan.
             stderr=str(getattr(getattr(self.agent, "orchestrator", None), "load_trace", "") or ""),
             error=error,
+            model_plan=getattr(self.agent, "last_model_plan", None),
+            stopped_at=_declined_gate(results),
         )
+
+
+def _declined_gate(results: list[dict[str, Any]]) -> str | None:
+    """The prompt of a confirmation gate that said no, if one did — the chain stopped there."""
+    for step in results:
+        result = step.get("result")
+        if (
+            step.get("tool") == "wait_for_confirmation"
+            and isinstance(result, dict)
+            and result.get("status") == "declined"
+        ):
+            return str(result.get("prompt") or "")
+    return None
 
 
 def _python_timings(agent: Any, wall_ms: float) -> Timings:

@@ -162,7 +162,7 @@ def describe_artifact(path: Path) -> str:
                 "-v",
                 "error",
                 "-show_entries",
-                "stream=codec_name,width,height,r_frame_rate:format=duration",
+                "stream=codec_name,codec_type,width,height,r_frame_rate:format=duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=0",
                 str(path),
@@ -173,19 +173,41 @@ def describe_artifact(path: Path) -> str:
         )
     except (OSError, subprocess.SubprocessError):
         return line
-    fields = dict(piece.split("=", 1) for piece in proc.stdout.splitlines() if "=" in piece)
+    # One dict per stream: `codec_name` opens each. A single dict over all of them let the audio
+    # stream's codec overwrite the video's (`clip.mkv  aac 1920x1080` for an h264 file).
+    streams: list[dict[str, str]] = []
+    duration: str | None = None
+    for piece in proc.stdout.splitlines():
+        if "=" not in piece:
+            continue
+        key, value = piece.split("=", 1)
+        if key == "duration":
+            duration = value
+        elif key == "codec_name" or not streams:
+            streams.append({key: value})
+        else:
+            streams[-1][key] = value
     # A container with no frames (a trim past the end, say) probes as `duration=N/A` and nothing
     # else. That is a finding about the run, so say it — raising here would hide the plan too.
-    if "codec_name" not in fields:
+    if not any("codec_name" in stream for stream in streams):
         return f"{line}  (no streams — empty output)"
-    bits = [fields["codec_name"]]
-    if fields.get("width"):
-        bits.append(f"{fields['width']}x{fields.get('height', '?')}")
+    video = next((st for st in streams if st.get("codec_type") == "video" or st.get("width")), None)
+    audio = next((st for st in streams if st.get("codec_type") == "audio"), None)
+    main = video or audio or streams[0]
+    bits = [main.get("codec_name", "?")]
+    if main.get("width"):
+        bits.append(f"{main['width']}x{main.get('height', '?')}")
     try:
-        bits.append(f"{float(fields['duration']):.1f}s")
-    except (KeyError, ValueError):
+        bits.append(f"{float(duration or ''):.1f}s")
+    except ValueError:
         pass
-    return f"{line}  {' '.join(bits)}"
+    text = f"{line}  {' '.join(bits)}"
+    if video is not None and audio is not None:
+        text += f"  audio {audio.get('codec_name', '?')}"
+    elif video is not None and any("codec_type" in st for st in streams):
+        # Only said when ffprobe reported stream types; otherwise it is not known.
+        text += "  no audio"
+    return text
 
 
 def _both_ends(text: str, limit: int) -> str:
@@ -202,6 +224,15 @@ def _both_ends(text: str, limit: int) -> str:
     elided = len(text) - (half * 2)
     marker = f"\n\n        … {elided:,} characters elided …\n\n"
     return text[:half] + marker + text[-half:]
+
+
+def _steps(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    return list((payload or {}).get("plan", []) or [])
+
+
+def _step_line(step: dict[str, Any]) -> str:
+    args = " ".join(f"{k}={v}" for k, v in (step.get("args") or {}).items())
+    return f"{step.get('tool'):<18} {args}"
 
 
 def show(result: RunResult, *, verbose: bool = False, limit: int = 200_000) -> str:
@@ -222,9 +253,18 @@ def show(result: RunResult, *, verbose: bool = False, limit: int = 200_000) -> s
         "",
         f"PLAN                    outcome: {result.outcome}",
     ]
-    for step in (result.plan or {}).get("plan", []) or []:
-        args = " ".join(f"{k}={v}" for k, v in (step.get("args") or {}).items())
-        lines.append(f"  {step.get('tool'):<18} {args}")
+    executed = _steps(result.plan)
+    said = _steps(result.model_plan) if result.model_plan is not None else None
+    rewritten = said is not None and said != executed
+    for i, step in enumerate(executed):
+        # A `*` marks a step core changed after the model emitted it.
+        changed = rewritten and (i >= len(said) or said[i] != step)
+        lines.append(f"{'*' if changed else ' '} {_step_line(step)}")
+    if rewritten:
+        # Shown only when it differs: a correct plan scrambled by core otherwise reads as a
+        # model failure, which is how a fan-out bug hid for an afternoon (2026-09-23).
+        lines += ["", "MODEL SAID              (before core rewrote the steps marked *)"]
+        lines += [f"  {_step_line(step)}" for step in said]
     if result.executions:
         # A real run: what ran and how each one ended. A failure is followed by the tool's own
         # words, because "exit -22" alone sends you back to a terminal to find out why.
@@ -238,6 +278,13 @@ def show(result: RunResult, *, verbose: bool = False, limit: int = 200_000) -> s
                 lines.append(f"      │ {reason}")
     elif result.commands:
         lines += ["", "COMMAND"] + [f"  {c}" for c in result.commands]
+    if result.stopped_at is not None:
+        # A declined gate ends the chain with outcome `plan` and no error, so without this the
+        # missing steps look like steps the model never planned.
+        lines += [
+            "",
+            f"STOPPED  a confirmation gate declined; later steps did not run: {result.stopped_at}",
+        ]
     if result.artifacts:
         lines += ["", "ARTIFACTS"] + [f"  {describe_artifact(p)}" for p in result.artifacts]
     lines += ["", "WHERE IT RAN"]

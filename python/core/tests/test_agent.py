@@ -1663,3 +1663,40 @@ def test_infer_stream_without_override_shows_the_whole_registry(agent):
     list(agent.infer_stream("list files", use_mock=True))
 
     assert seen["prompt"] == (expected_system, expected_user)
+
+
+# ── the model's own plan, kept beside the rewritten one ───────────────────────
+
+
+def test_infer_keeps_the_plan_the_model_emitted(agent, sandbox):
+    """`infer` rewrites the payload in place (chain linking, source threading), so without a
+    copy nothing downstream can show what the model actually said. The workbench read a
+    correct fan-out plan as a model failure for exactly that reason."""
+    import json as _json
+    from unittest.mock import MagicMock
+
+    emitted = {"plan": [{"tool": "list_files", "args": {"path": str(sandbox)}}]}
+    mock_orch = MagicMock()
+    mock_orch.infer.return_value = _json.dumps(emitted)
+    agent.orchestrator = mock_orch
+
+    payload = agent.infer("list files", use_mock=False)
+
+    assert agent.last_model_plan == emitted
+    # A copy, not an alias: a later in-place rewrite of the payload must not reach it.
+    payload["plan"][0]["args"]["path"] = "elsewhere"
+    assert agent.last_model_plan == emitted
+
+
+def test_last_model_plan_is_none_when_no_model_ran(agent):
+    """A pre-model refusal or an unparseable reply has no model plan to show — not a stale one."""
+    from unittest.mock import MagicMock
+
+    agent.last_model_plan = {"plan": [{"tool": "stale", "args": {}}]}
+    mock_orch = MagicMock()
+    mock_orch.infer.return_value = "TOTALLY INVALID {{{JSON"
+    agent.orchestrator = mock_orch
+
+    agent.infer("blah blah", use_mock=False)
+
+    assert agent.last_model_plan is None

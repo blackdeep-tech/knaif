@@ -62,6 +62,15 @@ Native **does not port it**: `knaif-core/src/clarify_gate.rs` ports `_link_chain
 only. The runtimes already disagree on both shapes — native runs the fan-out right (measured, T0)
 and presumably the unlock→find chain wrong — and no parity test covers it.
 
+**Native is missing a repair, not only a bug (measured 2026-09-23).** *"convert clip.mp4 to mkv
+then cut its audio, then take 2-4 seconds, then reverse, then crop it to 320x200"*: the model
+omitted `output` on `strip_audio` and `reverse_video` and pointed the trim at `clip.mkv` and the
+resize at the un-reversed trim. Python's linker + threader rebuilt the intended chain; native ran
+it literally — the silent file was written and never read, and the trim kept the audio. So T4
+is what makes native produce the requested video at all on sloppy "it" chains, and the
+"named once" rule must keep this case threaded (neither `clip.mkv` nor `clip_trimmed.mkv` is in
+the utterance).
+
 ## The rule
 
 > Rewrite a later reference to a producer's source **only when the user named that file at most
@@ -150,11 +159,19 @@ correct. A drop on a chain row means the model repeats a filename while meaning 
 file — read those rows before touching the rule. Record each run in `evals/INDEX.md`. Re-lock
 the ffmpeg snapshot only in its own commit, and only because T5 added rows.
 
-### - [ ] T7 — Workbench shows what the model said
+### - [x] T7 — Workbench shows what the model said
 
 The workbench prints the plan after deterministic rewriting, which is why this read as a model
 failure. Show the raw model plan beside the executed one, and mark the steps that were
 rewritten. The logic goes in `notebooks/shared/workbench/` with a unit test.
+
+**Done 2026-09-23, ahead of the rest of this plan** (it is a workbench fix and useful before
+the threading fix exists). `CommandAgent.infer` keeps `last_model_plan`, a deep copy of the
+parsed model plan taken before any rewrite; the Python runner carries it as
+`RunResult.model_plan`; the panel marks changed steps with `*` and adds a **MODEL SAID** section
+only when the two differ. Native does not report its pre-rewrite plan, so its lane shows no
+comparison — absent, not "the same". Pinned by
+`skills/ffmpeg/python/tests/test_model_plan_is_kept.py` on this plan's own fan-out.
 
 ### - [ ] T8 — Docs
 

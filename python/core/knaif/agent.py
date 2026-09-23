@@ -202,6 +202,9 @@ class CommandAgent:
         self.last_parse_error: str | None = None
         self.last_validation_error: str | None = None
         self.last_retried: bool = False
+        # The plan as the model emitted it (parsed), before `infer` links chain intermediates
+        # and threads reused sources in place. None when no model plan exists for the last call.
+        self.last_model_plan: dict[str, Any] | None = None
         # One corrective re-prompt on a parse/validation failure (validator-
         # feedback retry). Toggle off to measure the without-retry baseline.
         self.repair_invalid_plans: bool = True
@@ -981,6 +984,7 @@ class CommandAgent:
         self.last_parse_error = None
         self.last_validation_error = None
         self.last_retried = False
+        self.last_model_plan = None
         # Normalize here, not just in build_prompt: the same text grounds the
         # hallucinated-filename guard and chain-intermediate linking below, and
         # those must compare against the paths the model was actually shown.
@@ -1048,6 +1052,9 @@ class CommandAgent:
 
         # Only the "parse" kind yields a None payload, and it returned above.
         assert payload is not None
+        # Kept before the rewrites below, which mutate `payload` in place: without it nothing
+        # downstream can tell a model error from a correct plan that core changed.
+        self.last_model_plan = copy.deepcopy(payload)
         self._link_chain_intermediates(
             payload.get("plan") or [], user_utterance, self._output_capable
         )

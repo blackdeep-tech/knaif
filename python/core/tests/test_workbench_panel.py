@@ -333,3 +333,122 @@ def test_a_real_run_shows_each_command_with_its_outcome() -> None:
     assert "✓ exit 0    ffmpeg -y -i clip.mp4 Test1.mov" in text
     assert "✗ exit -22  ffmpeg -y -i Test1.mov Test2.mov" in text
     assert "Output file does not contain any stream" in text
+
+
+# ── the model's plan beside the executed one ──────────────────────────────────────────────
+
+
+def _fan_out(**kw) -> RunResult:
+    emitted = {
+        "plan": [
+            {"tool": "trim_video", "args": {"input": "silent.mp4", "output": "part1.mp4"}},
+            {"tool": "trim_video", "args": {"input": "silent.mp4", "output": "part2.mp4"}},
+        ]
+    }
+    executed = {
+        "plan": [
+            {"tool": "trim_video", "args": {"input": "silent.mp4", "output": "part1.mp4"}},
+            {"tool": "trim_video", "args": {"input": "part1.mp4", "output": "part2.mp4"}},
+        ]
+    }
+    return RunResult(
+        runtime="python",
+        skill="ffmpeg",
+        utterance="trim silent.mp4 twice",
+        outcome="plan",
+        plan=executed,
+        commands=[],
+        artifacts=[],
+        timings=Timings(),
+        **{"model_plan": emitted, **kw},
+    )
+
+
+def test_a_rewritten_plan_shows_what_the_model_said() -> None:
+    """A correct plan scrambled by core read as a model failure, because only the rewritten
+    one was on screen. When they differ, both are shown and the changed steps are marked."""
+    from workbench.panel import show
+
+    text = show(_fan_out())
+
+    assert "MODEL SAID" in text
+    model_section = text.split("MODEL SAID", 1)[1]
+    assert "input=silent.mp4 output=part2.mp4" in model_section
+    plan_section = text.split("MODEL SAID", 1)[0]
+    rewritten = [line for line in plan_section.splitlines() if "input=part1.mp4" in line]
+    assert rewritten and "*" in rewritten[0]
+    unchanged = [line for line in plan_section.splitlines() if "output=part1.mp4" in line]
+    assert unchanged and "*" not in unchanged[0]
+
+
+def test_an_unrewritten_plan_is_shown_once() -> None:
+    from workbench.panel import show
+
+    same = _fan_out()
+    result = RunResult(**{**same.__dict__, "model_plan": same.plan})
+
+    assert "MODEL SAID" not in show(result)
+
+
+def test_no_model_plan_means_no_comparison() -> None:
+    """Native does not report its pre-rewrite plan; absent is not "the same"."""
+    from workbench.panel import show
+
+    assert "MODEL SAID" not in show(_fan_out(model_plan=None))
+
+
+def test_a_run_stopped_at_a_gate_says_so() -> None:
+    from workbench.panel import show
+
+    stopped = RunResult(**{**_fan_out().__dict__, "stopped_at": "Proceed?"})
+
+    text = show(stopped)
+    assert "STOPPED" in text
+    assert "Proceed?" in text
+    assert "STOPPED" not in show(_fan_out())
+
+
+# Captured verbatim from `ffprobe` on sandbox/fixtures/ffmpeg/clip.mp4 (2026-09-23).
+_AV_PROBE = (
+    "codec_name=h264\ncodec_type=video\nwidth=1920\nheight=1080\nr_frame_rate=30/1\n"
+    "codec_name=aac\ncodec_type=audio\nr_frame_rate=0/0\nduration=10.000000\n"
+)
+
+
+def test_a_file_with_audio_shows_the_video_codec_first(tmp_path, monkeypatch) -> None:
+    """One dict over every stream let the audio stream's `codec_name` overwrite the video's:
+    the workbench listed `clip.mkv  aac 1920x1080` for an h264 file (2026-09-23)."""
+    clip = tmp_path / "clip.mkv"
+    clip.write_bytes(b"x" * 2048)
+    _fake_ffprobe(monkeypatch, _AV_PROBE)
+
+    line = describe_artifact(clip)
+
+    assert "h264 1920x1080 10.0s" in line
+    assert "audio aac" in line
+
+
+def test_a_silent_video_says_it_has_no_audio(tmp_path, monkeypatch) -> None:
+    """The point of `strip_audio`, visible without opening the file."""
+    clip = tmp_path / "clip_silent.mp4"
+    clip.write_bytes(b"x" * 2048)
+    _fake_ffprobe(
+        monkeypatch,
+        "codec_name=h264\ncodec_type=video\nwidth=1920\nheight=1080\nr_frame_rate=30/1\n"
+        "duration=10.000000\n",
+    )
+
+    assert "h264 1920x1080 10.0s  no audio" in describe_artifact(clip)
+
+
+def test_an_audio_file_shows_its_codec_and_no_size(tmp_path, monkeypatch) -> None:
+    song = tmp_path / "song.mp3"
+    song.write_bytes(b"x" * 2048)
+    _fake_ffprobe(
+        monkeypatch, "codec_name=mp3\ncodec_type=audio\nr_frame_rate=0/0\nduration=12.500000\n"
+    )
+
+    line = describe_artifact(song)
+
+    assert "mp3 12.5s" in line
+    assert "x" not in line.split("MB", 1)[1]
