@@ -692,6 +692,27 @@ def _trim_past_end(options: dict[str, Any], probe: dict[str, Any]) -> str | None
     )
 
 
+#: Operations that act on the picture and mean nothing for a sound.
+_PICTURE_MODES = {"resize": "resize", "rotate": "rotate"}
+
+
+def _needs_video(options: dict[str, Any], probe: dict[str, Any]) -> str | None:
+    """Why a picture operation cannot run on this input, or None when it can.
+
+    On an audio-only file ffmpeg ignores `-vf scale`/`transpose`, re-muxes the audio and exits 0,
+    so the step reports success having done nothing (workbench, 2026-09-23). Reverse, speed,
+    volume and trim all mean something for a sound and are not listed.
+    """
+    verb = _PICTURE_MODES.get(str(options.get("mode")))
+    if verb is None or probe.get("video_codec") or probe.get("width"):
+        return None
+    name = Path(str(probe.get("file", "the input"))).name
+    return (
+        f"Can't {verb} {name}: it has no video stream, only audio. "
+        "Check which file this step should start from."
+    )
+
+
 def _output_extension(mode: str, options: dict[str, Any]) -> str:
     if mode == "extract_audio":
         return options.get("audio_format", "mp3")

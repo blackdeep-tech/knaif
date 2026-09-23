@@ -16,6 +16,7 @@ from ._engine import (
     _crf_to_profile_name,
     _dummy_probe,
     _load_yaml,
+    _needs_video,
     _normalize_platform,
     _preview_output_for,
     _profiles_root,
@@ -168,6 +169,14 @@ class BuildRecipesStep(Step):
                 reason = _trim_past_end(options, p)
                 if reason:
                     raise ValueError(reason)
+
+        # A picture operation on a sound exits 0 having done nothing. A dry run's placeholder
+        # probe decides audio vs video from the extension, which is what this reads, so it
+        # holds there too.
+        for p in probes:
+            reason = _needs_video(options, p)
+            if reason:
+                raise ValueError(reason)
 
         recipes = [
             _build_one_recipe(p, platform_profile, quality_profile, options, sandbox=ctx.sandbox)

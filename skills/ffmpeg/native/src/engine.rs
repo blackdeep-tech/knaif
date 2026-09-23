@@ -809,6 +809,28 @@ pub struct Probe {
     pub fps: Option<f64>,
 }
 
+/// Why a picture operation (resize, rotate) cannot run on this input, or `None` when it can. Port of
+/// `_engine._needs_video`; the message is byte-identical. On an audio-only file ffmpeg ignores the
+/// video filter, re-muxes the audio and exits 0, so the step reports a success that did nothing.
+pub fn needs_video(options: &Options, probe: &Probe) -> Option<String> {
+    let verb = match options.mode.as_deref() {
+        Some("resize") => "resize",
+        Some("rotate") => "rotate",
+        _ => return None,
+    };
+    if probe.video_codec.as_deref().is_some_and(|c| !c.is_empty()) || probe.width.is_some() {
+        return None;
+    }
+    let name = Path::new(&probe.file)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "the input".to_string());
+    Some(format!(
+        "Can't {verb} {name}: it has no video stream, only audio. \
+         Check which file this step should start from."
+    ))
+}
+
 /// Why a trim cannot be answered on this input, or `None` when it can. Port of
 /// `_engine._trim_past_end`; the message is byte-identical because both runtimes show it.
 ///
@@ -2977,6 +2999,63 @@ mod trim_frames_tests {
     fn zero_duration_still_wins_over_from_end() {
         let got = normalize_trim(Some("-2".into()), Some("0".into()), None, None).unwrap();
         assert_eq!(got.frames, Some(1));
+    }
+}
+
+#[cfg(test)]
+mod needs_video_tests {
+    use super::*;
+
+    // Port of skills/ffmpeg/python/tests/test_video_only_operations.py.
+
+    fn audio_only() -> Probe {
+        Probe {
+            file: "/sb/clip_rev.mkv".into(),
+            audio_codec: Some("aac".into()),
+            has_audio: true,
+            duration: Some(2.0),
+            ..Default::default()
+        }
+    }
+
+    fn with_mode(m: &str) -> Options {
+        Options {
+            mode: Some(m.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_picture_operation_on_audio_only_says_why() {
+        for verb in ["resize", "rotate"] {
+            assert_eq!(
+                needs_video(&with_mode(verb), &audio_only()).as_deref(),
+                Some(
+                    format!(
+                        "Can't {verb} clip_rev.mkv: it has no video stream, only audio. \
+         Check which file this step should start from."
+                    )
+                    .as_str()
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn a_picture_operation_on_video_is_allowed() {
+        let video = Probe {
+            video_codec: Some("h264".into()),
+            width: Some(1920),
+            ..audio_only()
+        };
+        assert!(needs_video(&with_mode("resize"), &video).is_none());
+    }
+
+    #[test]
+    fn operations_that_mean_something_for_audio_are_left_alone() {
+        for m in ["reverse", "adjust_speed", "adjust_volume", "trim"] {
+            assert!(needs_video(&with_mode(m), &audio_only()).is_none(), "{m}");
+        }
     }
 }
 

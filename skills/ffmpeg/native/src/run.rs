@@ -178,6 +178,12 @@ pub fn expand(
                 anyhow::bail!("{reason}");
             }
         }
+        // A picture operation on a sound exits 0 having done nothing. Unlike the trim check this
+        // holds in a dry run too: the placeholder probe decides audio vs video from the extension,
+        // which is all this reads. Port of `BuildRecipesStep`.
+        if let Some(reason) = crate::engine::needs_video(&resolved.options, &probe) {
+            anyhow::bail!("{reason}");
+        }
         let recipe = build_one_recipe(
             &probe,
             resolved.platform.as_ref(),
