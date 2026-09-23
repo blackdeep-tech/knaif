@@ -89,7 +89,7 @@ runs before both `infer` and `infer_stream`. Also fixed: `n_batch` was unbound o
 | `reset_cache_per_call` | 2486 | 2486 / — | `extract_audio` |
 | + `flash_attn`, `n_batch = 8192` | 2486 | 2486 / — | **`strip_audio`** (as native) |
 
-### - [ ] T2 — Measure the flip rate
+### - [x] T2 — Measure the flip rate
 
 Plan-level runs of the **whole** ffmpeg and documents eval corpora with v2, cheap verifier (plan
 outcome only — this measures decisions, not execution), saved under `evals/runs/` with `INDEX.md`
@@ -154,4 +154,24 @@ rule; otherwise the publish can proceed on the existing evidence while T3–T7 l
 
 ## Results
 
-*(filled in by T2 and T6)*
+### T2 — 2026-09-24
+
+Full write-up: `evals/runs/2026-09-23_config-parity-flip_cheap/report.md`. Population: 469 first
+phrasings (326 ffmpeg + 143 documents) — the `cheap` verifier runs only each row's first
+utterance, which the run design missed; T6 covers the rest.
+
+| Pair | ffmpeg decision / outcome flips | documents |
+|---|---|---|
+| A vs A2 (same config twice) | 0 / 0 | 0 / 0 |
+| A vs B (cold cache) | 7 / 1 | 2 / 1 |
+| A vs C (native's config) | 11 / **4 (1.23%)**, net 0.00 pp | 2 / 0 |
+| A vs D (native) | 14 | 2 |
+| C vs D | **3** | **0** |
+
+Safety 100% in A, B and C (ffmpeg 11/11, documents 9/9). All three predictions held.
+
+**Rule applied: the existing evaluations and the v2 verdict stand** — largest outcome flip rate
+1.23% against the smallest decision margin 1.83 pp (documents, v2 over v1), and a net shift of
+0.00 pp from moving to native's config. Next: T3–T5. The margin is ~1.5× the noise, not 10×, so
+T6's full-corpus `success` re-measure on the aligned config is still required, and slices within
+1–2 utterances of a floor are settled there.
