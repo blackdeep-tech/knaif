@@ -1241,6 +1241,24 @@ pub fn assert_in_sandbox(p: &Path, sandbox: Option<&Path>) -> anyhow::Result<()>
     knaif_skill_api::sandbox::assert_in_sandbox(p, sandbox)
 }
 
+/// The container for an output that keeps its input's kind: the input's own extension, lowercased.
+/// Port of `_engine._same_container_as`. ffprobe names demuxers, not extensions — `.mkv` and
+/// `.webm` both probe as `matroska,webm` — so taking the probe name wrote
+/// `clip_reversed.matroska` (ffmpeg: "Unable to choose an output format") and turned
+/// `.mp4`/`.m4a` into `.mov`. The probe name is only a fallback for an extensionless input.
+fn same_container_as(input_path: &Path, probe: &Probe) -> Option<String> {
+    if let Some(ext) = input_path.extension().and_then(|e| e.to_str()) {
+        if !ext.is_empty() {
+            return Some(ext.to_lowercase());
+        }
+    }
+    let probed = probe.container.as_deref().filter(|s| !s.is_empty())?;
+    Some(match probed {
+        "matroska" => "mkv".to_string(),
+        other => other.to_string(),
+    })
+}
+
 /// Build a fully-resolved [`Recipe`] from a probe + optional platform/quality profiles + options.
 /// Faithful port of `_build_one_recipe`: fallback chains for container/codecs/dims/bitrate, the
 /// audio-only + gif + single-codec-container edge cases, the operations summary, output-path
@@ -1264,18 +1282,34 @@ pub fn build_one_recipe(
         .clone()
         .or_else(|| platform.map(|p| p.container.clone()))
         .unwrap_or_else(|| "mp4".to_string());
-    if mode == "reverse" && options.container.is_none() {
-        container = probe
-            .container
-            .clone()
-            .filter(|s| !s.is_empty())
-            .or_else(|| {
-                input_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(String::from)
-            })
-            .unwrap_or(container);
+    // Operations that EDIT a file keep the container they were given (owner decision 2026-09-23 —
+    // "convert to mkv, then crop" came back as an mp4); compress/platform deliver, and stay mp4.
+    // An explicit output name wins, since `clip_trimmed.mkv` was being rendered with the mp4-only
+    // faststart flag. ogg is theora-only with no theora encoder in vocab, so it cannot be kept.
+    // Port of the `_EDIT_MODES` block in `_build_one_recipe`.
+    const EDIT_MODES: [&str; 7] = [
+        "trim",
+        "resize",
+        "rotate",
+        "strip_audio",
+        "adjust_speed",
+        "adjust_volume",
+        "reverse",
+    ];
+    if EDIT_MODES.contains(&mode.as_str()) && options.container.is_none() {
+        let from_output = options
+            .output_path
+            .as_deref()
+            .and_then(|o| Path::new(o).extension())
+            .and_then(|e| e.to_str())
+            .map(str::to_lowercase)
+            .filter(|e| vocab.video_containers.contains(e));
+        let kept = from_output.or_else(|| same_container_as(&input_path, probe));
+        if let Some(kept) = kept {
+            if vocab.video_containers.contains(&kept) && kept != "ogg" {
+                container = kept;
+            }
+        }
     }
 
     let mut video_encoder = options
@@ -1322,13 +1356,7 @@ pub fn build_one_recipe(
         container = options
             .container
             .clone()
-            .or_else(|| probe.container.clone().filter(|s| !s.is_empty()))
-            .or_else(|| {
-                input_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(String::from)
-            })
+            .or_else(|| same_container_as(&input_path, probe))
             .unwrap_or(container);
         audio_codec = audio_encoder_for(vocab, &container);
         // A lossless codec ignores a bitrate target and should not carry one.
@@ -1425,6 +1453,16 @@ pub fn build_one_recipe(
                 }
             }
         }
+    } else if container == "webm"
+        && options.video_encoder.is_none()
+        && !video_encoder.is_empty()
+        && !["vp8", "vp9", "av1"].contains(&codec_from_encoder(vocab, &video_encoder))
+    {
+        // The same restriction holds when ENCODING: `-c:v libx264` into webm is refused outright.
+        // Reached once operations that keep their input's container (a reverse of `clip.webm`)
+        // started writing `.webm` instead of `.matroska`. Port of the `elif` in
+        // `_build_one_recipe`; an encoder the caller named is theirs to get wrong.
+        video_encoder = "libvpx-vp9".to_string();
     }
 
     // Stream-copy into a container that can't hold the source audio codec → re-encode instead.
@@ -2056,6 +2094,167 @@ mod tests {
         assert!(r.output.ends_with("video_compressed.mp4"));
         assert!(r.operations.iter().any(|o| o == "ensure_yuv420p"));
         assert!(r.operations.iter().any(|o| o == "enable_faststart"));
+    }
+
+    /// A probe as `summarise_probe` stores it: the first entry of ffprobe's `format_name`.
+    fn probe_of(file: &str, format_name: &str, video: bool) -> Probe {
+        Probe {
+            file: file.into(),
+            container: format_name.split(',').next().map(String::from),
+            video_codec: video.then(|| "h264".into()),
+            audio_codec: Some("aac".into()),
+            has_audio: true,
+            width: video.then_some(1280),
+            height: video.then_some(720),
+            duration: Some(2.0),
+            fps: None,
+        }
+    }
+
+    fn reversed_name(probe: &Probe, container: Option<&str>) -> String {
+        let opts = Options {
+            mode: Some("reverse".into()),
+            container: container.map(String::from),
+            ..Default::default()
+        };
+        let r = build_one_recipe(probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        Path::new(&r.output)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn reverse_keeps_the_input_extension_not_the_demuxer_name() {
+        // Workbench 2026-09-23: `clip_trimmed.mkv` reversed to `clip_trimmed_reversed.matroska`
+        // and ffmpeg could not choose an output format. Mirrors Python's
+        // skills/ffmpeg/python/tests/test_output_container_from_input.py.
+        let mov = "mov,mp4,m4a,3gp,3g2,mj2";
+        let cases = [
+            ("clip.mkv", "matroska,webm", "clip_reversed.mkv"),
+            ("clip.webm", "matroska,webm", "clip_reversed.webm"),
+            ("clip.mp4", mov, "clip_reversed.mp4"),
+            ("clip.mov", mov, "clip_reversed.mov"),
+            ("clip.MKV", "matroska,webm", "clip_reversed.mkv"),
+            ("clip", "matroska,webm", "clip_reversed.mkv"),
+        ];
+        for (file, format_name, expected) in cases {
+            assert_eq!(
+                reversed_name(&probe_of(file, format_name, true), None),
+                expected
+            );
+        }
+        let mkv = probe_of("clip.mkv", "matroska,webm", true);
+        assert_eq!(reversed_name(&mkv, Some("mp4")), "clip_reversed.mp4");
+    }
+
+    #[test]
+    fn reversing_a_webm_encodes_vp9_not_h264() {
+        // Mirrors Python's test_reversing_a_webm_encodes_vp9_not_h264: `-c:v libx264` into
+        // webm is refused by ffmpeg ("Conversion failed!", verified on a real VP9 clip).
+        let mut probe = probe_of("clip.webm", "matroska,webm", true);
+        probe.video_codec = Some("vp9".into());
+        probe.audio_codec = Some("opus".into());
+        let opts = Options {
+            mode: Some("reverse".into()),
+            ..Default::default()
+        };
+        let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        assert_eq!(r.video.encoder.as_deref(), Some("libvpx-vp9"));
+        assert_eq!(r.audio.codec.as_deref(), Some("libopus"));
+
+        let explicit = Options {
+            mode: Some("reverse".into()),
+            video_encoder: Some("libaom-av1".into()),
+            ..Default::default()
+        };
+        let r = build_one_recipe(&probe, None, None, &explicit, &bundle_vocab(), None).unwrap();
+        assert_eq!(r.video.encoder.as_deref(), Some("libaom-av1"));
+    }
+
+    /// Build a recipe for `mode` on `file` and return (container, output file name, faststart).
+    fn edit_of(file: &str, format_name: &str, opts: Options) -> (String, String, bool) {
+        let r = build_one_recipe(
+            &probe_of(file, format_name, true),
+            None,
+            None,
+            &opts,
+            &bundle_vocab(),
+            None,
+        )
+        .unwrap();
+        let name = Path::new(&r.output)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        (r.container.unwrap_or_default(), name, r.faststart)
+    }
+
+    fn mode(m: &str) -> Options {
+        Options {
+            mode: Some(m.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_edit_keeps_the_input_container() {
+        // Owner decision 2026-09-23; mirrors Python's test_an_edit_keeps_the_input_container.
+        // "convert clip.mp4 to mkv then … crop it" came back as an mp4.
+        for m in [
+            "trim",
+            "resize",
+            "rotate",
+            "strip_audio",
+            "adjust_speed",
+            "adjust_volume",
+        ] {
+            for ext in ["mkv", "mov", "avi", "webm"] {
+                let file = format!("clip.{ext}");
+                let (container, name, faststart) = edit_of(&file, "matroska,webm", mode(m));
+                assert_eq!(container, ext, "{m} on {file}");
+                assert!(name.ends_with(&format!(".{ext}")), "{m} on {file}: {name}");
+                assert!(!faststart, "{m} on {file}: mp4-only faststart");
+            }
+        }
+    }
+
+    #[test]
+    fn an_edit_of_an_ogg_falls_back_to_mp4() {
+        let (container, _, _) = edit_of("clip.ogg", "ogg", mode("resize"));
+        assert_eq!(container, "mp4");
+    }
+
+    #[test]
+    fn an_explicit_output_extension_decides_an_edits_container() {
+        let opts = Options {
+            output_path: Some("clip_trimmed.mkv".into()),
+            ..mode("trim")
+        };
+        let (container, _, faststart) = edit_of("clip.mp4", "mov,mp4,m4a", opts);
+        assert_eq!(container, "mkv");
+        assert!(!faststart);
+    }
+
+    #[test]
+    fn a_delivery_operation_still_defaults_to_mp4() {
+        let (container, _, _) = edit_of("clip.mkv", "matroska,webm", mode("compress"));
+        assert_eq!(container, "mp4");
+    }
+
+    #[test]
+    fn audio_only_volume_keeps_m4a() {
+        let opts = Options {
+            mode: Some("adjust_volume".into()),
+            level: Some("2.0".into()),
+            ..Default::default()
+        };
+        let probe = probe_of("song.m4a", "mov,mp4,m4a,3gp,3g2,mj2", false);
+        let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        assert_eq!(r.container.as_deref(), Some("m4a"));
+        assert!(r.output.ends_with(".m4a"), "{}", r.output);
     }
 
     #[test]

@@ -232,6 +232,28 @@ Handlers derive new output paths instead of overwriting originals. Common suffix
 - `_thumb`
 - `_preview`
 
+### Which container an output gets
+
+When the request names no container:
+
+| Operation | Output container |
+|---|---|
+| **Edits** — `trim_video`, `resize_video`, `rotate_video`, `strip_audio`, `adjust_speed`, `adjust_volume`, `reverse_video` | the extension of an explicit `output`, else **the input's own extension** (`clip.mkv` → `clip_resized.mkv`) |
+| **Delivery** — `compress_video`, `prepare_for_platform` | `mp4`, or the platform profile's container |
+| `convert_video` | the requested container, or the `output` extension |
+
+An edit changes a file, not its format: before 2026-09-23 every edit defaulted to `mp4`, so
+*"convert clip.mp4 to mkv, then crop it"* came back as an mp4. The extension is used, not
+ffprobe's format name — `.mkv` and `.webm` both probe as `matroska,webm`, and taking that name
+wrote `clip_reversed.matroska`, which ffmpeg cannot mux. Two containers need care:
+
+- **webm** accepts only VP8/VP9/AV1 video and Opus/Vorbis audio, so an edit of a webm encodes
+  with `libvpx-vp9` and `libopus` unless an encoder was named explicitly.
+- **ogg** video is theora-only and `vocab.yaml` has no theora encoder, so an edit of an `.ogg`
+  falls back to `mp4` rather than write a file ffmpeg would refuse.
+
+The mp4-only `-movflags +faststart` is applied only when the container really is mp4.
+
 ## Safety And Reliability
 
 - The model never emits FFmpeg flags or shell commands.

@@ -863,6 +863,33 @@ def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) ->
     return input_path.with_name(f"{input_path.stem}{suffix}.{container}")
 
 
+# ffprobe names demuxers, not extensions: `.mkv` and `.webm` both probe as `matroska,webm`,
+# and `_summarise_probe` keeps the first entry. Only consulted for an extensionless input.
+_DEMUXER_EXTENSION = {"matroska": "mkv"}
+
+# Operations that EDIT a file rather than deliver it: with no container asked for, they write
+# the container they were given (owner decision 2026-09-23 — "convert to mkv, then crop"
+# came back as an mp4). compress and prepare_for_platform are about delivery and keep mp4.
+_EDIT_MODES = frozenset(
+    {"trim", "resize", "rotate", "strip_audio", "adjust_speed", "adjust_volume", "reverse"}
+)
+# ogg video is theora-only and vocab.yaml has no theora encoder, so an edit cannot keep it.
+_UNKEEPABLE_CONTAINERS = frozenset({"ogg"})
+
+
+def _same_container_as(input_path: Path, probe: dict[str, Any]) -> str:
+    """The container for an output that keeps its input's kind: the input's own extension.
+
+    Taking ffprobe's name instead wrote `clip_reversed.matroska` for a `.mkv` (ffmpeg: "Unable
+    to choose an output format") and turned `.mp4`/`.m4a` into `.mov`.
+    """
+    suffix = input_path.suffix.lstrip(".").lower()
+    if suffix:
+        return suffix
+    probed = probe.get("container") or ""
+    return _DEMUXER_EXTENSION.get(probed, probed)
+
+
 def _build_one_recipe(
     probe: dict[str, Any],
     platform_profile: dict[str, Any] | None,
@@ -874,8 +901,14 @@ def _build_one_recipe(
     input_path = Path(probe["file"])
 
     container = options.get("container") or (platform_profile or {}).get("container", "mp4")
-    if mode == "reverse" and not options.get("container"):
-        container = probe.get("container") or input_path.suffix.lstrip(".") or container
+    if mode in _EDIT_MODES and not options.get("container"):
+        # An explicit output name says what it is (`clip_trimmed.mkv` was rendered with the
+        # mp4-only `-movflags +faststart`); otherwise the input's own container.
+        kept = _container_from_output(options.get("output_path")) or _same_container_as(
+            input_path, probe
+        )
+        if kept in _VIDEO_CONTAINERS and kept not in _UNKEEPABLE_CONTAINERS:
+            container = kept
     video_encoder = options.get("video_encoder") or (platform_profile or {}).get(
         "video_encoder", "libx264"
     )
@@ -908,12 +941,7 @@ def _build_one_recipe(
         mode in _AUDIO_APPLICABLE_MODES and not probe.get("video_codec") and not probe.get("width")
     )
     if audio_only:
-        container = (
-            options.get("container")
-            or probe.get("container")
-            or input_path.suffix.lstrip(".")
-            or container
-        )
+        container = options.get("container") or _same_container_as(input_path, probe) or container
         audio_codec = _audio_encoder_for(container)
         # A lossless codec ignores a bitrate target and should not carry one (same rule as
         # the container-mandated path below).
@@ -987,6 +1015,17 @@ def _build_one_recipe(
             remux = False
             copy_audio = False
             video_encoder = options.get("video_encoder") or _CONTAINER_VIDEO_ENCODER[container]
+    # The same restriction holds when ENCODING: `-c:v libx264` into webm is refused outright
+    # ("Conversion failed!"). Reached once operations that keep their input's container (a
+    # reverse of `clip.webm`) started writing `.webm` instead of `.matroska`. An encoder the
+    # caller named is theirs to get wrong.
+    elif (
+        video_encoder
+        and not options.get("video_encoder")
+        and container in _COMPATIBLE_VIDEO
+        and _codec_from_encoder(video_encoder) not in _COMPATIBLE_VIDEO[container]
+    ):
+        video_encoder = _CONTAINER_VIDEO_ENCODER[container]
 
     # When stream-copy was requested but the source audio codec is incompatible
     # with the target container, fall back to the container's default encoder.
