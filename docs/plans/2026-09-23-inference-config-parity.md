@@ -1,6 +1,6 @@
 # Inference config parity — measure the noise floor, then make both lanes compute alike
 
-**Status:** In progress — T1–T5, T7 done; T6 (full-corpus re-measure) and T8 open · **Created:** 2026-09-23 · **Last worked:** 2026-09-24 · **Completed:** —
+**Status:** Active — T1–T7 done; T8 (training backlog) open · **Created:** 2026-09-23 · **Last worked:** 2026-09-24 · **Completed:** —
 **Owner:** core · **Ref:** found in the workbench; bears on T8 (L3/L4) of
 [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md) and on the open
 TODO *"The eval lane is not bitwise reproducible, and nothing says so"*
@@ -138,7 +138,7 @@ pre-parity config. Verified on hardware: native, the shipped v2 stanza and the w
 `strip_audio` for the utterance that started this, native's trace showing `flash_attn = auto` →
 enabled, `n_batch = 8192`, `n_ubatch = 512`.
 
-### - [ ] T6 — Re-measure and apply the decision rule
+### - [x] T6 — Re-measure and apply the decision rule
 
 Python `eval-success` on both skills with the aligned config, against the snapshots. Apply the rule
 above. Any re-lock is its own commit, with the reason and the flip-rate evidence in the message.
@@ -163,6 +163,33 @@ is exactly what distorts that comparison. **Before** the v2 publish only if T2 t
 rule; otherwise the publish can proceed on the existing evidence while T3–T7 land.
 
 ## Results
+
+### T6 — 2026-09-24
+
+Full corpora (ffmpeg 851, documents 164), `success`, fixtures regenerated, code `5ea3044`, same
+v2 weights in two configs (`evals/runs/2026-09-24_config-parity-t6_success/report.md`):
+
+| | legacy config | aligned config (shipped) |
+|---|---|---|
+| ffmpeg outcome / knaif | 0.93655 / 0.98545 | **0.93772** / 0.98373 |
+| documents outcome / knaif | 0.98171 / 1.0 | 0.97561 / 0.99782 |
+| S2 | ffmpeg **NOT ACCEPTED** (`batch` 26/29 < 0.92); documents ACCEPTED | **ACCEPTED 39/39 + 36/36** |
+| safety | 11/11, 9/9 | 11/11, 9/9 |
+
+legacy vs aligned: ffmpeg 9 outcome flips (1.06%, net +0.12 pp), documents 1 (0.61%, net −0.61 pp)
+— the full-corpus noise floor, matching T2's estimate. The prediction's third clause failed: the
+legacy arm missed `batch` by one utterance (`ffmpeg_077#1` flips with config; `ffmpeg_229#3/#4`
+now emit `output: "*.hevc"`, most likely from prompt change `be3f20f`, which had never been
+eval-measured). So the rule said stop and re-derive the v2 verdict.
+
+**Verdict re-derived** (`evals/runs/2026-09-24_v2-verdict-aligned_success/report.md`), criteria
+fixed before the run: v1 on the aligned config, same code and fixtures — ffmpeg 0.91892 (v2
+**+1.88 pp** > the +1.06 floor), documents 0.96951 (v2 **+0.61 pp**), v1 still missing ffmpeg's
+in-corpus `safety` slice (0.529 < 0.75). **v2 STANDS.** Both snapshots re-locked from T6's aligned
+run: ffmpeg 0.9388954172 / 0.9801227169 → **0.9377203290 / 0.9837335620**, documents
+0.9817073171 / 1.0 → **0.9756097561 / 0.9978213508**. documents' knaif below 1.0 is now the
+settled value: `documents_042#0` is config-dependent, not a flake, and under the shipped config
+this is what it gives.
 
 ### T2 — 2026-09-24
 
