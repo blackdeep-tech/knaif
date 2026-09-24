@@ -78,7 +78,11 @@
 lanes:
   native-cli:
     kind: native_cli
-    binary: target/release/knaif.exe
+    # The per-kind CUDA build (scripts/build_native_kind.sh cuda), repointed 2026-09-24. The old
+    # `target/release/` was last built 2026-09-16 and predates the pinned compute config and the
+    # 2026-09-23 engine fixes; the workbench's stale-build flag is what showed it. Grading that
+    # binary would have graded a build nobody ships.
+    binary: target/release-cuda/knaif.exe
     # Repointed to sft-v4 on 2026-09-15 with T7's re-lock. `eval-accept-native` grades this
     # lane against `max(S2 floor, accepted python score - 0.02)`, and the accepted Python
     # score is now sft-v4's — so measuring v1 here would compare two different models and the
