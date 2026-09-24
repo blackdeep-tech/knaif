@@ -1146,6 +1146,10 @@ fn run_documents_step(
 
     match preview(tool, step_args, base, sandbox, bundle)? {
         Preview::Read(result) => {
+            // Stderr, beside the plan dump, so stdout stays the human answer.
+            if let Some(line) = result_dump(plan_dump_enabled(), tool, &read_result_json(&result)) {
+                eprintln!("{line}");
+            }
             match result {
                 ReadResult::Inspection(i) => println!(
                     "{}: {} page(s), {} bytes, encrypted={}, text_layer={}",
@@ -1554,6 +1558,48 @@ fn plan_dump(enabled: bool, payload: &serde_json::Value) -> Option<String> {
     Some(format!(
         "{PLAN_DUMP_MARKER}{}",
         serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string())
+    ))
+}
+
+/// Marker for [`result_dump`]: one line per read-tool result, as data.
+const RESULT_DUMP_MARKER: &str = "===KNAIF-RESULT===";
+
+/// A documents read result in Python's shape (`skills/documents/python/steps.py`), which the
+/// documents verifier grades: `inspect_document` → format/size_bytes/encrypted/has_text_layer/pages;
+/// `extract_text` → pages + joined text; `find_in_document` → matches + count.
+fn read_result_json(result: &knaif_skill_documents::run::ReadResult) -> serde_json::Value {
+    use knaif_skill_documents::run::ReadResult;
+    match result {
+        ReadResult::Inspection(i) => serde_json::json!({
+            "format": i.format, "size_bytes": i.size_bytes, "encrypted": i.encrypted,
+            "has_text_layer": i.has_text_layer, "pages": i.pages,
+        }),
+        ReadResult::Text(records) => serde_json::json!({
+            "pages": records.iter().map(|r| serde_json::json!({"page": r.page, "text": r.text}))
+                .collect::<Vec<_>>(),
+            "text": records.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join("\n"),
+        }),
+        ReadResult::Matches(matches) => serde_json::json!({
+            "matches": matches.iter().map(|m| serde_json::json!({
+                "page": m.page, "snippet": m.snippet, "span": [m.span.0, m.span.1],
+            })).collect::<Vec<_>>(),
+            "count": matches.len(),
+        }),
+    }
+}
+
+/// One line: the marker, then `{"tool", "result"}` as compact JSON. Gated with the plan dump
+/// (`$KNAIF_DUMP_PLAN`) because the consumer is the same: the L4 lane, which grades data and could
+/// not read the prose answer a read tool prints (the 2026-09-24 documents run scored every
+/// inspect/extract/find row as `None`). Pure, so testable without process env.
+fn result_dump(enabled: bool, tool: &str, result: &serde_json::Value) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    let body = serde_json::json!({"tool": tool, "result": result});
+    Some(format!(
+        "{RESULT_DUMP_MARKER}{}",
+        serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string())
     ))
 }
 
@@ -2462,6 +2508,79 @@ mod tests {
     #[test]
     fn prompt_dump_is_none_when_disabled() {
         assert!(prompt_dump(false, "SYSTEM", "USER").is_none());
+    }
+
+    // ── read results as data, for the L4 lane ──────────────────────────────────────────────
+    // The 2026-09-24 documents L4 graded every inspect/extract/find row as `None`: native printed
+    // its answer as prose and the lane grades data. These pin the dump to Python's result shapes
+    // (skills/documents/python/steps.py), which the documents verifier reads.
+
+    #[test]
+    fn an_inspection_dumps_python_field_names() {
+        use knaif_skill_documents::run::ReadResult;
+        use knaif_skill_documents::text::Inspection;
+        let v = read_result_json(&ReadResult::Inspection(Inspection {
+            format: "png".into(),
+            size_bytes: 1396,
+            encrypted: false,
+            has_text_layer: false,
+            pages: 1,
+        }));
+        assert_eq!(
+            v,
+            serde_json::json!({"format": "png", "size_bytes": 1396, "encrypted": false,
+                               "has_text_layer": false, "pages": 1})
+        );
+    }
+
+    #[test]
+    fn extracted_text_dumps_pages_and_joined_text() {
+        use knaif_skill_documents::run::ReadResult;
+        use knaif_skill_documents::text::PageText;
+        let v = read_result_json(&ReadResult::Text(vec![
+            PageText {
+                page: 1,
+                text: "Alpha".into(),
+            },
+            PageText {
+                page: 3,
+                text: "Gamma".into(),
+            },
+        ]));
+        assert_eq!(v["text"], "Alpha\nGamma");
+        assert_eq!(
+            v["pages"],
+            serde_json::json!([{"page": 1, "text": "Alpha"}, {"page": 3, "text": "Gamma"}])
+        );
+    }
+
+    #[test]
+    fn matches_dump_their_count() {
+        use knaif_skill_documents::run::ReadResult;
+        use knaif_skill_documents::text::Match;
+        let v = read_result_json(&ReadResult::Matches(vec![Match {
+            page: 3,
+            snippet: "Gamma page three".into(),
+            span: (1, 6),
+        }]));
+        assert_eq!(v["count"], 1);
+        assert_eq!(
+            v["matches"],
+            serde_json::json!([{"page": 3, "snippet": "Gamma page three", "span": [1, 6]}])
+        );
+    }
+
+    #[test]
+    fn a_result_dump_is_one_marked_line_or_nothing() {
+        assert!(result_dump(false, "find_in_document", &serde_json::json!({"count": 0})).is_none());
+        let line = result_dump(true, "find_in_document", &serde_json::json!({"count": 0})).unwrap();
+        assert!(!line.contains('\n'));
+        let body: serde_json::Value =
+            serde_json::from_str(line.strip_prefix(RESULT_DUMP_MARKER).unwrap()).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({"tool": "find_in_document", "result": {"count": 0}})
+        );
     }
 
     #[test]

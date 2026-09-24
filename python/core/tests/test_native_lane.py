@@ -287,3 +287,54 @@ def test_summary_names_the_device_that_ran_the_most_layers() -> None:
     assert summarize_placement({"CPU": 37}) == "CPU"
     assert summarize_placement({"CUDA0": 2, "CPU": 1}) == "CUDA0"
     assert summarize_placement({}) is None
+
+
+# -- the 2026-09-24 documents L4: read results, and files that were modified -------------------
+
+
+def test_read_results_are_parsed_as_data() -> None:
+    """Read tools print prose; the documents verifier grades data. Native now dumps each read
+    result on one marked line, and the lane hands it to the verifier as an execution result."""
+    from knaif.evalsuite.native_lane import RESULT_DUMP_MARKER
+
+    stderr = (
+        '===KNAIF-PLAN==={"plan": [{"tool": "inspect_document", "args": {"input": "a.png"}}]}\n'
+        + RESULT_DUMP_MARKER
+        + '{"tool": "inspect_document", "result": {"format": "png", "pages": 1}}\n'
+    )
+    parsed = parse_run_output("png: 1 page(s)\n", stderr, 0)
+    assert parsed["results"] == [
+        {"tool": "inspect_document", "result": {"format": "png", "pages": 1}}
+    ]
+
+
+def test_a_run_with_no_result_dump_has_no_results() -> None:
+    assert parse_run_output("", "", 0)["results"] == []
+
+
+def test_the_result_dump_marker_matches_the_native_source() -> None:
+    from knaif.evalsuite.native_lane import RESULT_DUMP_MARKER
+
+    main_rs = (REPO_ROOT / "apps" / "cli" / "src" / "main.rs").read_text(encoding="utf-8")
+    assert f'const RESULT_DUMP_MARKER: &str = "{RESULT_DUMP_MARKER}";' in main_rs
+
+
+def test_a_file_the_run_rewrote_counts_as_produced(tmp_path: Path) -> None:
+    """An explicit output onto an existing file is a request the tools honour; counting only
+    NEW files graded it as `artifact_missing`."""
+    import os
+
+    from knaif.evalsuite.native_lane import _produced_files, _snapshot_files
+
+    kept = tmp_path / "kept.pdf"
+    kept.write_bytes(b"untouched")
+    rewritten = tmp_path / "out.md"
+    rewritten.write_bytes(b"old")
+    os.utime(rewritten, ns=(1_000_000_000, 1_000_000_000))
+    before = _snapshot_files(tmp_path)
+
+    rewritten.write_bytes(b"new content")
+    (tmp_path / "fresh.txt").write_bytes(b"x")
+
+    produced = {p.name for p in _produced_files(tmp_path, before)}
+    assert produced == {"out.md", "fresh.txt"}

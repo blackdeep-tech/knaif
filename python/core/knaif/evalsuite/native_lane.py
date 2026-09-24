@@ -55,6 +55,10 @@ from .runner import AgentOutput
 #: Marker `run` prefixes its plan envelope with under `$KNAIF_DUMP_PLAN` (see
 #: `PLAN_DUMP_MARKER` in `apps/cli/src/main.rs`). A test pins the two identical.
 PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
+#: One line per read-tool result, as data (`apps/cli` `result_dump`, gated with the plan dump).
+#: Read tools print prose; the documents verifier grades the result's fields, so without this
+#: every inspect/extract/find row scored `None` (2026-09-24 documents L4).
+RESULT_DUMP_MARKER = "===KNAIF-RESULT==="
 
 #: `run` echoes each command it executes as `running: <argv>` on stderr.
 _RUNNING_RE = re.compile(r"^running:\s*(.+)$", re.MULTILINE)
@@ -232,12 +236,18 @@ def parse_run_output(stdout: str, stderr: str, returncode: int) -> dict[str, Any
     makes coverage uncomputable (L4d).
     """
     plan: dict[str, Any] | None = None
+    results: list[dict[str, Any]] = []
     for line in stderr.splitlines():
         if line.startswith(PLAN_DUMP_MARKER):
             try:
                 plan = json.loads(line[len(PLAN_DUMP_MARKER) :])
             except ValueError:
                 plan = None
+        elif line.startswith(RESULT_DUMP_MARKER):
+            try:
+                results.append(json.loads(line[len(RESULT_DUMP_MARKER) :]))
+            except ValueError:
+                continue
 
     commands = [c.strip() for c in _RUNNING_RE.findall(stderr)]
     combined = f"{stdout}\n{stderr}"
@@ -252,7 +262,7 @@ def parse_run_output(stdout: str, stderr: str, returncode: int) -> dict[str, Any
         outcome = "error"
     else:
         outcome = "plan"
-    return {"plan": plan, "commands": commands, "outcome": outcome}
+    return {"plan": plan, "commands": commands, "outcome": outcome, "results": results}
 
 
 def build_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
@@ -339,9 +349,26 @@ def detect_backend(lane: LaneConfig, skill: str, cwd: Path) -> BackendMeasuremen
     )
 
 
-def _produced_files(work_dir: Path, before: set[str]) -> list[Path]:
-    """Files that appeared in *work_dir* during the run, oldest first."""
-    after = [p for p in work_dir.iterdir() if p.is_file() and p.name not in before]
+def _snapshot_files(work_dir: Path) -> dict[str, tuple[int, int]]:
+    """Each file's (mtime_ns, size) before a run — what `_produced_files` compares against."""
+    return {
+        p.name: (p.stat().st_mtime_ns, p.stat().st_size) for p in work_dir.iterdir() if p.is_file()
+    }
+
+
+def _produced_files(work_dir: Path, before: dict[str, tuple[int, int]]) -> list[Path]:
+    """Files the run created OR rewrote in *work_dir*, oldest first.
+
+    Rewritten counts: an explicit output onto an existing file is a request the tools honour,
+    and counting only new files graded it `artifact_missing` (2026-09-24 documents L4).
+    """
+    after = []
+    for p in work_dir.iterdir():
+        if not p.is_file():
+            continue
+        st = p.stat()
+        if before.get(p.name) != (st.st_mtime_ns, st.st_size):
+            after.append(p)
     return sorted(after, key=lambda p: p.stat().st_mtime)
 
 
@@ -371,7 +398,7 @@ def run_native_corpus(
                 shutil.rmtree(work_dir)
             work_dir.mkdir(parents=True)
             provision_fixtures(fixture_dir, work_dir)
-            before = {p.name for p in work_dir.iterdir() if p.is_file()}
+            before = _snapshot_files(work_dir)
 
             argv = build_argv(lane, skill, utterance)
             t0 = time.perf_counter()
@@ -391,7 +418,7 @@ def run_native_corpus(
                 if parsed["outcome"] == "error":
                     error = extract_failure(proc.stdout, proc.stderr)
             except subprocess.TimeoutExpired:
-                parsed = {"plan": None, "commands": [], "outcome": "error"}
+                parsed = {"plan": None, "commands": [], "outcome": "error", "results": []}
                 error = f"timed out after {lane.timeout_s:.0f}s"
             latency_ms = (time.perf_counter() - t0) * 1000
 
@@ -408,6 +435,7 @@ def run_native_corpus(
                     artifact_path=produced[-1] if produced else None,
                     artifact_paths=produced,
                     artifact_commands=parsed["commands"],
+                    execution_results=parsed["results"],
                     utterance_idx=utt_idx,
                 )
             )
