@@ -30,6 +30,7 @@ from ._engine import (
     _input_path,
     _input_paths,
     _lossless_compress,
+    _next_free,
     _output_dir,
     _output_path,
     _parse_page_range_specs,
@@ -177,7 +178,7 @@ class SplitPdfStep(Step):
         else:
             out_dir = _output_dir(args, ctx, input_path.parent)
             outputs = [
-                out_dir / f"{input_path.stem}-pages-{label.replace('-', '_')}.pdf"
+                _next_free(out_dir / f"{input_path.stem}-pages-{label.replace('-', '_')}.pdf")
                 for label, _pages in specs
             ]
         if ctx.dry_run:

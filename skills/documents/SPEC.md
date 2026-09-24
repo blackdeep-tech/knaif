@@ -125,6 +125,12 @@ planned but not built.
 - The model never emits raw library calls or shell commands.
 - All mutating tools are `destructive` at the registry layer.
 - Handlers derive new output paths instead of overwriting originals.
+- **A derived output name never overwrites an existing file.** If `<stem><suffix>` is taken
+  (`notes.md` for `convert notes.txt to markdown`, `doc-protected.pdf`, a split's
+  `doc-pages-1_2.pdf`), the output moves to the first free `<name>-1<ext>`, `-2`, … and the result
+  reports the name actually written. An explicit `output` is a request and is honoured even over
+  an existing file — the same rule as ffmpeg. Found 2026-09-24: both runtimes silently replaced
+  the existing file. Python `_engine._next_free`, native `run.rs` `next_free`.
 - Dry-run returns the planned operation and expected output path without writing files.
 - Document inputs are resolved and validated inside the sandbox.
 

@@ -8,7 +8,7 @@
         "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "7500ee8756e0fccc9d7a0292a21507bc6dba37c8c08415251baba0c67595f924",
+        "native": "6d2aec8f68281c0f0740c487ea8d2241f849e65d92b232d21d3c33f67e4060ed",
         "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
         "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
@@ -21,7 +21,7 @@
         "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "7500ee8756e0fccc9d7a0292a21507bc6dba37c8c08415251baba0c67595f924",
+        "native": "6d2aec8f68281c0f0740c487ea8d2241f849e65d92b232d21d3c33f67e4060ed",
         "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
         "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
@@ -47,14 +47,14 @@
       }
     },
     "L4": {
-      "run": "evals\\runs\\2026-09-24_l4-v2-aligned_success\\ffmpeg_native-cli_success.json",
-      "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet:",
-      "passed": false,
+      "run": "evals\\runs\\2026-09-24_l4-v2-aligned-rerun_success\\ffmpeg_native-cli_success.json",
+      "summary": "ACCEPTED - 45 thresholds met.",
+      "passed": true,
       "coverage": 1.0,
       "outcome_accuracy": 0.9283196239717979,
       "avg_knaif_score": 0.9714408233276158,
       "lane": "native-cli",
-      "model": null,
+      "model": "knaif-qwen3-4b-v2",
       "evidence": {
         "bundle": "f274be0c0b17ce2b3b1329cf0fb73cb567b30d9bb1da944afbc969765eb1c3fd",
         "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",

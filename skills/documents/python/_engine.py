@@ -55,13 +55,32 @@ def _input_paths(args: dict[str, Any], ctx: HandlerContext) -> list[Path]:
     return [_resolve_path(path, ctx.root, ctx.sandbox) for path in args["inputs"]]
 
 
+def _next_free(path: Path) -> Path:
+    """`path` if nothing is there, else `<stem>-1<suffix>`, `-2`, ... — the first free one.
+
+    For a name the plan did not choose. A derived default that already exists is someone's
+    file: `convert notes.txt to markdown` wrote `notes.md` over the user's own (2026-09-24 L4).
+    Mirrored in skills/documents/native/src/run.rs (`next_free`).
+    """
+    if not path.exists():
+        return path
+    n = 1
+    while True:
+        candidate = path.with_name(f"{path.stem}-{n}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
 def _output_path(input_path: Path, args: dict[str, Any], ctx: HandlerContext, suffix: str) -> Path:
     raw = args.get("output")
     if raw:
+        # An explicit output is a request, and honoured even over an existing file — the same
+        # rule as ffmpeg's collision pass. Only a name nobody asked for moves.
         return _resolve_path(raw, ctx.root, ctx.sandbox)
     if suffix.startswith("."):
-        return input_path.with_suffix(suffix)
-    return input_path.with_name(f"{input_path.stem}{suffix}")
+        return _next_free(input_path.with_suffix(suffix))
+    return _next_free(input_path.with_name(f"{input_path.stem}{suffix}"))
 
 
 def _output_dir(args: dict[str, Any], ctx: HandlerContext, default: Path) -> Path:
