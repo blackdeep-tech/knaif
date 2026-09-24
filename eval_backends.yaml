@@ -93,6 +93,22 @@ lanes:
     # Lost in the 2026-09-15 repoint, so the 2026-09-24 L4 run reported `None` and was refused.
     public_name: knaif-qwen3-4b-v2
     timeout_s: 180
+  # The other two per-kind builds a release ships, for the 2026-09-25 cross-backend check: a backend
+  # changes FP accumulation, which flips greedy near-ties, so each shipped kind is measured rather
+  # than assumed to plan like CUDA. Same model, same identity; only the binary differs.
+  native-cli-cpu:
+    kind: native_cli
+    binary: target/release-cpu/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    # CPU decodes a 4B model several times slower than a GPU.
+    timeout_s: 600
+  native-cli-vulkan:
+    kind: native_cli
+    binary: target/release-vulkan/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 180
 
 backends:
   # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".

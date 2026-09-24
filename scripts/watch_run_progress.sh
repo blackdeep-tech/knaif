@@ -83,9 +83,10 @@ while true; do
 
   # Every terminal state, not just the happy one: a watcher that only knows how success
   # looks stays silent through a crash, and silence reads identical to "still running".
-  if grep -qE 'coverage +:|SCORE WITHHELD|Traceback|^ERROR|error: ' "$LOG" 2>/dev/null; then
+  # `wrote N native plans` / `native returned` end a `flip_rate.py native` batch.
+  if grep -qE 'coverage +:|SCORE WITHHELD|Traceback|^ERROR|error: |^wrote [0-9]+ native plans|^native returned' "$LOG" 2>/dev/null; then
     printf '\n\n--- run finished ---\n'
-    grep -E 'coverage +:|SCORE WITHHELD|Outcome accuracy|Avg knaif score|Traceback|^ERROR' "$LOG" | tail -20
+    grep -E 'coverage +:|SCORE WITHHELD|Outcome accuracy|Avg knaif score|Traceback|^ERROR|^wrote [0-9]+ native plans|^native returned' "$LOG" | tail -20
     exit 0
   fi
 

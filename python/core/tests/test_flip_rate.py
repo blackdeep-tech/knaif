@@ -164,3 +164,58 @@ def test_outcome_flips_need_both_sides_graded() -> None:
     b = {("r", 0): fr.Result(plan=step, correct=None)}
     assert fr.compare(a, b).outcome_flips == []
     assert fr.compare(a, b).outcome_rate is None
+
+
+# ── progress while a native batch runs ────────────────────────────────────────────────────
+
+
+def _watcher_row_re():
+    import re
+
+    text = (ROOT / "scripts" / "watch_run_progress.sh").read_text(encoding="utf-8")
+    pattern = text.split("ROW_RE='", 1)[1].split("'", 1)[0]
+    return re.compile(pattern.replace("[:space:]", r"\s"))
+
+
+def test_a_progress_line_is_counted_by_the_watcher() -> None:
+    """A CPU plan batch runs for an hour; silent, it cannot be watched."""
+    line = fr.progress_line(
+        "ffmpeg_001", 2, [_step("trim_video", input="a.mp4")], 1234.5, "trim it"
+    )
+
+    assert _watcher_row_re().search(line)
+    assert line.split()[2] == "trim_video"  # the watcher tallies field 3
+
+
+def test_a_progress_line_names_a_clarify_reject_or_empty_plan() -> None:
+    assert (
+        fr.progress_line("x", 0, [_step("clarify", question="?")], 5, "u").split()[2] == "clarify"
+    )
+    assert fr.progress_line("x", 0, [], 5, "u").split()[2] == "empty"
+    assert fr.progress_line("x", 0, None, 5, "u").split()[2] == "none"
+
+
+def test_the_watcher_stops_when_a_native_batch_ends(tmp_path: Path) -> None:
+    """The watcher exits on eval-suite end markers; a plan batch ends with its own lines, and a
+    watcher that never exits reads as a run still going."""
+    import shutil
+    import subprocess
+
+    import pytest
+
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("no bash")
+    for tail in ("wrote 1 native plans to x.jsonl", "native returned 0 plans for 1 utterances"):
+        log = tmp_path / "run.log"
+        log.write_text(fr.progress_line("a", 0, [], 5, "u") + "\n" + tail + "\n", encoding="utf-8")
+        proc = subprocess.run(
+            [bash, str(ROOT / "scripts" / "watch_run_progress.sh"), log.as_posix(), "1"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env={**__import__("os").environ, "WATCH_INTERVAL": "0.2"},
+        )
+        assert proc.returncode == 0
+        assert "run finished" in proc.stdout
+        assert tail.split()[0] in proc.stdout

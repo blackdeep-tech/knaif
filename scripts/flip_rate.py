@@ -34,6 +34,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -187,6 +188,17 @@ def _print_report(label: str, r: Report, a: dict[Key, Result], b: dict[Key, Resu
             print(f"      B: {[s.get('tool') for s in b[key].plan]}")
 
 
+def progress_line(rid: str, idx: int, plan: Any, ms: float, utterance: str) -> str:
+    """One finished utterance, in the row format `scripts/watch_run_progress.sh` counts.
+
+    Field 3 is the first tool (the watcher tallies it), `empty` for `[]` and `none` when the
+    envelope carried no plan.
+    """
+    steps = _steps(plan) if plan is not None else None
+    tool = "none" if steps is None else (steps[0].get("tool") or "none") if steps else "empty"
+    return f"  [{rid}#{idx}]  OK    {tool}   {ms:.0f}ms  {utterance}"
+
+
 def _native(args: argparse.Namespace) -> int:
     corpus = REPO_ROOT / "skills" / args.skill / "data" / "eval.jsonl"
     utts = corpus_utterances(corpus)
@@ -198,7 +210,13 @@ def _native(args: argparse.Namespace) -> int:
     env = {**os.environ, "KNAIF_SKILLS_ROOT": str(REPO_ROOT / "skills")}
     cwd = REPO_ROOT / "sandbox" / "fixtures" / args.skill
     try:
-        proc = subprocess.run(
+        # Streamed, not captured: a CPU batch runs for an hour and must be watchable, so each
+        # envelope becomes one progress line. stderr (the device trace) always goes to a file:
+        # an unread PIPE deadlocks the stream once llama.cpp's trace fills it.
+        stderr_path = Path(args.stderr_log) if args.stderr_log else Path(name + ".stderr")
+        stderr_path.parent.mkdir(parents=True, exist_ok=True)
+        stderr_sink = stderr_path.open("w", encoding="utf-8")
+        proc = subprocess.Popen(
             [
                 str(Path(args.bin).resolve()),
                 "plan",
@@ -212,25 +230,43 @@ def _native(args: argparse.Namespace) -> int:
             ],
             cwd=cwd,
             env=env,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=stderr_sink,
             text=True,
             encoding="utf-8",
             errors="replace",
         )
-    finally:
-        os.unlink(name)
-    envelopes = []
-    for line in proc.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("{"):
+        envelopes = []
+        last = time.monotonic()
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
             try:
-                envelopes.append(json.loads(line))
+                envelope = json.loads(line)
             except ValueError:
                 continue
+            now = time.monotonic()
+            if len(envelopes) < len(utts):
+                rid, idx, utt = utts[len(envelopes)]
+                print(
+                    progress_line(rid, idx, envelope.get("plan"), (now - last) * 1000, utt),
+                    flush=True,
+                )
+            last = now
+            envelopes.append(envelope)
+        proc.wait()
+        stderr_sink.close()
+        stderr_tail = stderr_path.read_text(encoding="utf-8", errors="replace")[-2000:]
+        if not args.stderr_log:
+            stderr_path.unlink()
+    finally:
+        os.unlink(name)
     if len(envelopes) != len(utts):
         print(
             f"native returned {len(envelopes)} plans for {len(utts)} utterances "
-            f"(exit {proc.returncode}); stderr tail:\n{proc.stderr[-2000:]}",
+            f"(exit {proc.returncode}); stderr tail:\n{stderr_tail}",
             file=sys.stderr,
         )
         return 1
@@ -283,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     n.add_argument("--model", required=True)
     n.add_argument("--out", required=True)
     n.add_argument("--limit", type=int, help="first N utterances only (smoke test)")
+    n.add_argument("--stderr-log", help="keep the binary's stderr (device trace) here")
     c = sub.add_parser("compare", help="flip counts between two runs")
     c.add_argument("a", type=Path)
     c.add_argument("b", type=Path)
