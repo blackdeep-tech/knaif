@@ -89,6 +89,9 @@ lanes:
     # verdict would mean nothing. sft-v4 is being promoted as `knaif-qwen3-4b-v2`, so the file
     # now carries its public name; the lane reads the path, not the manifest.
     model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    # The model's shipped name, which the L4 identity gate compares against the baseline's.
+    # Lost in the 2026-09-15 repoint, so the 2026-09-24 L4 run reported `None` and was refused.
+    public_name: knaif-qwen3-4b-v2
     timeout_s: 180
 
 backends:
