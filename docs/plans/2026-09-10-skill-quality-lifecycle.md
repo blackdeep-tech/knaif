@@ -85,6 +85,8 @@ builds on `scripts/parity_check.py` and `contracts/parity/`
 >   prompt's own TOOL SCOPE rule contradicts.
 > - **Two decisions are open and belong to the owner**, not to more work: L3's pass bar (which
 >   may be unreachable while the runtimes link different llama.cpp builds), and those safety rows.
+>   **L3's bar decided 2026-09-25** ([release-1.2](2026-09-25-release-1.2.md) R0): zero port bugs
+>   (same plan, different commands), plus plan disagreement within a bound written before the run.
 
 **Goal:** Make skill quality a gated, evidenced property end to end — Python acceptance before
 porting, four verification layers across the port, and a release that cannot claim more than the

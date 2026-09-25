@@ -2,6 +2,10 @@
 
 **Status:** Planning · **Created:** 2026-09-21 · **Completed:** —
 
+> **Status note:** for knaif 1.2.0 the owner chose to **bundle** PDFium (2026-09-25,
+> [release-1.2](2026-09-25-release-1.2.md) R0), so it no longer gates OCR on this plan. The payload
+> tier itself stays open for later.
+
 **Goal:** A third delivery tier for skill dependencies: native libraries that knaif downloads on
 demand, sha256-pinned, into a directory outside the install. PDFium is the first case — it is what
 makes `documents` able to OCR a PDF or compress a scanned one, which the shipped artifact has never
