@@ -1,6 +1,6 @@
 # Chain source threading — stop rewriting inputs the user chose
 
-**Status:** Completed · **Created:** 2026-09-23 · **Last worked:** 2026-09-26 · **Completed:** 2026-09-26
+**Status:** Done · **Created:** 2026-09-23 · **Last worked:** 2026-09-26 · **Completed:** 2026-09-26
 **Owner:** core · **Ref:** found in the workbench
 ([2026-09-21-skill-prompt-workbench.md](2026-09-21-skill-prompt-workbench.md)); touches the T5b
 binding rule in [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md)
