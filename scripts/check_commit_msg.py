@@ -14,6 +14,14 @@ the path to the file git has staged as the message::
 
     python scripts/check_commit_msg.py .git/COMMIT_EDITMSG
 
+CI runs it over every commit of a pull request, because with merge commits an
+integration branch's commits land on ``main`` unchanged::
+
+    python scripts/check_commit_msg.py --range BASE..HEAD
+
+Merge commits in the range are skipped: they are not authored changes, and a
+release branch takes in ``main`` by merging.
+
 Messages git generates or rewrites itself are skipped, not rejected: merges,
 ``git revert``'s default subject, and ``fixup!``/``squash!``/``amend!`` commits
 destined for ``--autosquash``. Enforcing a shape on those would only teach
@@ -27,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 
 # Types, grouped as they are documented in CONTRIBUTING.md. Keep both lists in step.
@@ -106,13 +115,64 @@ def check(message: str) -> list[str]:
     return problems
 
 
+def _commits_in(rev_range: str) -> list[tuple[str, str]]:
+    """(sha, message) for each non-merge commit in ``rev_range``, oldest first."""
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], check=True, capture_output=True, text=True, encoding="utf-8"
+        ).stdout
+
+    shas = git("rev-list", "--reverse", "--no-merges", rev_range).split()
+    return [(sha, git("log", "-1", "--format=%B", sha)) for sha in shas]
+
+
+def _check_range(rev_range: str) -> int:
+    try:
+        commits = _commits_in(rev_range)
+    except subprocess.CalledProcessError as exc:
+        # A shallow checkout without the base lands here; never report zero commits as a pass.
+        print(f"could not list the commits in {rev_range}: {exc.stderr.strip()}", file=sys.stderr)
+        return 1
+
+    failed = 0
+    for sha, raw in commits:
+        problems = check(strip_comments(raw))
+        if not problems:
+            continue
+        failed += 1
+        subject = raw.strip().splitlines()[0] if raw.strip() else ""
+        print(f"{sha[:12]} {subject}", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+
+    if not failed:
+        print(f"{len(commits)} commit(s) in {rev_range} follow the convention")
+        return 0
+
+    print(f"\n{failed} of {len(commits)} commit(s) rejected.", file=sys.stderr)
+    _print_help()
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "message_file",
+        nargs="?",
         help="path to the file holding the commit message (git passes .git/COMMIT_EDITMSG)",
     )
+    source.add_argument(
+        "--range",
+        dest="rev_range",
+        metavar="BASE..HEAD",
+        help="check every non-merge commit in this git revision range instead",
+    )
     args = parser.parse_args(argv)
+
+    if args.rev_range:
+        return _check_range(args.rev_range)
 
     try:
         with open(args.message_file, encoding="utf-8") as handle:
@@ -128,6 +188,11 @@ def main(argv: list[str] | None = None) -> int:
     print("Commit message rejected:\n", file=sys.stderr)
     for problem in problems:
         print(f"  - {problem}", file=sys.stderr)
+    _print_help()
+    return 1
+
+
+def _print_help() -> None:
     print(
         "\n"
         "  Format:  type(scope): subject\n"
@@ -144,7 +209,6 @@ def main(argv: list[str] | None = None) -> int:
         "  See CONTRIBUTING.md -> Git conventions. To amend: git commit --amend\n",
         file=sys.stderr,
     )
-    return 1
 
 
 if __name__ == "__main__":

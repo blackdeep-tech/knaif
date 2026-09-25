@@ -169,9 +169,11 @@ Two merge methods, chosen by what the branch is:
 Either way the **PR title becomes the subject on the target** (the squash commit, or the
 merge commit, whose body is the PR description), so it must follow the commit convention.
 With a squash your branch's own commits can be as messy as you like. **With a merge commit
-they land on `main` unchanged**, so every one must follow the convention too — install the
-hooks (below), and never rebase a branch someone else has merged; bring `main`'s changes in
-by merging. `git log --first-parent main` shows one entry per merged PR.
+they land on `main` unchanged**, so every one must follow the convention too. CI's
+`pr-title` job lints the title **and every non-merge commit of the PR**
+(`python scripts/check_commit_msg.py --range BASE..HEAD` runs the same check locally), but
+install the hooks (below) so you hear about it at commit time. Never rebase a branch someone
+else has merged; bring `main`'s changes in by merging. `git log --first-parent main` shows one entry per merged PR.
 
 GitHub appends ` (#123)` to the squashed subject, so a title at the full 72 characters
 lands as 78 on `main`. Keep PR titles to **about 65 characters** to leave room for the

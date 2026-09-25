@@ -294,6 +294,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the range check below needs the PR's base commit.
+          fetch-depth: 0
       - name: Lint the PR title against the commit convention
         # Via env, never interpolated into the script body. A PR title is attacker-supplied
         # text on a public repo, and `${{ }}` inside `run:` would paste it straight into the
@@ -303,6 +306,15 @@ jobs:
         run: |
           printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title.txt"
           python3 scripts/check_commit_msg.py "$RUNNER_TEMP/pr-title.txt"
+      - name: Lint every commit of the PR against the commit convention
+        # A release or feature branch merges into main with a merge commit, so its commits
+        # land there unchanged; the title alone would let a bad one through. Merge commits
+        # in the range are skipped by the script.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 scripts/check_commit_msg.py --range "$BASE_SHA..$HEAD_SHA"
 
   # C2. The one job that needs BOTH toolchains, which is the whole point: it asserts that
   # every active skill bundle loads in the Python loader and the Rust one, and that the two
