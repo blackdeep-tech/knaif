@@ -20,8 +20,10 @@ Zero flips on the CUDA repeat: a native build is deterministic, so every CPU/Vul
 knaif 0.9967 (CUDA 0.9946, bar 0.9800), coverage 1.0. The acceptance record was restored to the CUDA
 evidence afterwards.
 
-**CPU ffmpeg full L4: PENDING** (~4 h at 8 threads; owner deferred it). Until it runs, the CPU build does
-not ship with v2 under this rule. Of the 37 CPU flips, 31 are rows CUDA got right and 6 rows it got wrong.
+**CPU ffmpeg full L4: PENDING** (~4 h at 8 threads; owner deferred it). There is no CPU release artifact
+to hold back: the release artifact is the `vulkan` kind, a superset carrying the same llama.cpp CPU backend,
+which it falls back to on any machine without a usable GPU (`docs/NATIVE.md` §5.3). So this measures the
+default artifact's no-GPU path, and until it passes that path is unmeasured for ffmpeg. Of the 37 CPU flips, 31 are rows CUDA got right and 6 rows it got wrong.
 About half are equivalent spellings (`h265`/`hevc`, `0:00:03`/`00:00:03`, a dropped redundant `quality`);
 some look worse (`ffmpeg_174#1` compresses to 500 MB instead of extracting mp3 at 500k; `ffmpeg_118#1/#2`
 email instead of WhatsApp; `ffmpeg_085b#0` resizes where CUDA asked), a few better (`ffmpeg_086#2`,
