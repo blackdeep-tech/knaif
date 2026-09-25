@@ -725,11 +725,12 @@ explicitly, e.g.
 (add `/TASKS=""` to skip PATH, winget deps, and the model download).
 
 **GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU. That
-covers every vendor, and it is enough for most users — **but not for NVIDIA users on the newest
-cards.** On Blackwell (RTX 50xx, sm_120) the Vulkan path generates at roughly CPU speed: ~5.7 tok/s
-against the CPU's ~5.9, measured on knaif's real workload ([PERFORMANCE.md](PERFORMANCE.md) §2).
-That is not a slower option, it is a product that reads as broken, so say so plainly in the release
-body rather than letting "Vulkan works everywhere" stand.
+covers every vendor and is usable on every NVIDIA card measured. Through 1.1.0 this section warned
+that Blackwell (RTX 50xx, sm_120) Vulkan ran at roughly CPU speed (~5.7 tok/s, 2026-07-07); the
+2026-09-25 re-measurement on the same RTX 5080 found Vulkan at ~72% of CUDA (146.8 vs 203.8 tok/s
+generation, [PERFORMANCE.md](PERFORMANCE.md) §2), so the release body no longer needs that warning.
+If a future measurement lists an architecture in `nudge.vulkan_inadequate_compute_caps`, say so
+plainly in the release body again.
 
 NVIDIA users install the CUDA backend with one command:
 
@@ -738,8 +739,9 @@ knaif backend install cuda
 ```
 
 ~668 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
-undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
-faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
+undoes it. It is faster on every NVIDIA card measured and genuinely optional (on an architecture
+listed in `nudge.vulkan_inadequate_compute_caps` it would be what makes the product usable; none is
+listed today). knaif offers it on first run when it detects an eligible GPU, and the
 Windows installer offers it as a task that is checked by default — the task renders only on a machine
 whose GPU and driver already qualify and that has no payload yet, so it is never shown to a user it
 cannot help. Setup blocks on the download, which the task description states.
