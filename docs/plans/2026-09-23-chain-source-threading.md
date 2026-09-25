@@ -1,6 +1,6 @@
 # Chain source threading — stop rewriting inputs the user chose
 
-**Status:** Planning · **Created:** 2026-09-23 · **Last worked:** 2026-09-23 · **Completed:** —
+**Status:** Active · **Created:** 2026-09-23 · **Last worked:** 2026-09-25 · **Completed:** —
 **Owner:** core · **Ref:** found in the workbench
 ([2026-09-21-skill-prompt-workbench.md](2026-09-21-skill-prompt-workbench.md)); touches the T5b
 binding rule in [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md)
@@ -89,10 +89,14 @@ Count on the normalized utterance, case-insensitive, matching the basename so `.
 **Accepted cost:** "unlock s.pdf, then search s.pdf for beta" reads the locked original and fails
 with the existing clear encrypted-file error. The user wrote that name; the error says why.
 
-**Open, decided in T2:** whether to also refuse a rewrite that changes the file's kind (video →
-image, as in "thumbnail of clip.mp4 and compress **it**"). It fixes a real wrong plan but adds a
-media-type notion to core, which must stay domain-agnostic — it would have to come from the
-tool registry, not from extensions hard-coded in `agent.py`.
+**Decided in T2 (owner, 2026-09-25): refuse a rewrite that changes the file's kind.** "Thumbnail
+of clip.mp4 and compress **it**" now compresses the video. Core stays domain-agnostic: each skill
+declares `file_kinds:` in `skill.yaml` (kind → extensions), both runtimes load it, and core only
+compares the kind of the producer's source with the kind of its declared output. A minted
+intermediate keeps the source's extension. An extension no kind lists is unrestricted. ffmpeg:
+video (with gif, which `convert_video` makes), audio, image, subtitle. documents: document, image.
+The rejected alternative, "the extension must match", would have broken "convert clip.mp4 to mkv
+then strip its audio".
 
 ## Tasks
 
@@ -106,7 +110,7 @@ runtime turned that plan into `trim part1.mp4 …`, `trim part2.mp4 …`, `rever
 `concat [part2_rev ×3]` and stopped at step 3. So the model handles fan-out; the threader is the
 whole defect, and T5's rows are regression guards, not training material.
 
-### - [ ] T1 — Failing tests first (core)
+### - [x] T1 — Failing tests first (core)
 
 In `test_chain_intermediate_linking.py`, RED before any change:
 
@@ -114,13 +118,23 @@ In `test_chain_intermediate_linking.py`, RED before any change:
 - thumbnail + compress with `clip.mp4` named twice survives unchanged
 - the five existing tests stay as they are and keep passing — they are the documents contract
 
-### - [ ] T2 — Implement the rule (Python core)
+### - [x] T2 — Implement the rule (Python core)
 
 Change `_forward_thread_reused_sources` in `python/core/knaif/agent.py` to take the utterance and
 apply the mention count. `_link_chain_intermediates` already has the utterance; pass it through.
 Decide the kind-change question here and record the decision in this file.
 
-### - [ ] T3 — Keep T5b true
+**Done 2026-09-25.** `_mention_count` counts whole-filename mentions
+(`(?<![A-Za-z0-9_.-])NAME(?![A-Za-z0-9_-]|\.[A-Za-z0-9_])`, case-insensitive, ASCII boundaries so
+unspaced CJK such as "为clip.mp4生成" still counts, so `./clip.mp4` and `clip.mp4,` count while `myclip.mp4` and `clip.mp4.bak` do
+not). The threader skips a source named more than once, and skips a declared output of another
+kind (`Skill.file_kinds` via `parse_file_kinds`, passed to `CommandAgent`). Tests:
+`test_chain_intermediate_linking.py` (named-once and kind sections), `test_skill_file_kinds.py`.
+A probe of all 40 multi-step gold plans in both skills' `train.jsonl` found that neither the old
+threader nor the new one rewrites any of them, so the corpus neither needs the threader nor is
+harmed by the rule.
+
+### - [x] T3 — Keep T5b true
 
 Re-run `skills/ffmpeg/python/tests/test_output_collision_binding.py`. Add a test for T5b's
 identity case under the new rule — step 0 writes `clip.mp4` from `clip.mp4`, a later step reads
@@ -128,14 +142,34 @@ identity case under the new rule — step 0 writes `clip.mp4` from `clip.mp4`, a
 longer holds for a repeated name, update the rule text in `_collisions.py` and in the taxonomy
 plan rather than working around it.
 
-### - [ ] T4 — Native port
+**Done 2026-09-25.** The identity case holds without threading. The later literal is a name step
+0 declared it will write, and `_collisions.py`'s binding rule settles it whether or not the
+user repeated it (`test_downstream_reference_follows_the_rename` repeats it,
+`…_when_named_once` does not). The old premise test assumed a repeated *different* source would
+be threaded; it is now two tests, one for the name said once (threaded) and one for the name
+said twice (kept). The rule text in `_collisions.py` and in the test module now gives the
+declared-output binding as the reason for one referent. Threading covers only the
+differently-named-source shape.
+
+### - [x] T4 — Native port
 
 Port the threader, with the new rule, into `knaif-core/src/clarify_gate.rs` after
 `link_chain_intermediates`, same order as Python. Add both new shapes plus unlock→find to the L2
 parity fixtures under `contracts/parity/` so the runtimes are held to one answer.
 `just check-contracts`, `just test-native`, `just check-native`.
 
-### - [ ] T5 — Corpus
+**Done 2026-09-25**, built on `origin/feat/native-parity` `73c6e9e` (the unmerged 2026-08-10 port
+of the pass), with both rules added. `knaif-core::clarify_gate` gains
+`forward_thread_reused_sources`, `mention_count` (a hand scan equal to Python's regex, pinned by a
+unit test against the same inputs), and `load_file_kinds` / `file_kinds_from_groups`.
+`apply_clarify_gate` takes the kinds, and the CLI's `PlanSession` loads them from `skill.yaml`.
+The L2 contract gains a `chain` registry and 16 cases: fan-out, named twice, named once with a
+minted or a declared output, a model-invented source, `./` and case repeats, trailing
+punctuation, longer names, a list reference, read-only and multi-source producers, a different
+kind, the same kind in another container, an unlisted extension, and no kinds. Cases may declare
+`file_kinds`. Both runtimes pass all of them.
+
+### - [x] T5 — Corpus
 
 Add fan-out rows to `skills/ffmpeg/data/eval.jsonl` with executing `success_criteria`:
 
@@ -143,6 +177,24 @@ Add fan-out rows to `skills/ffmpeg/data/eval.jsonl` with executing `success_crit
 - two trims of one file into two named clips
 
 Leave partial reverse out — it is unsupported, and a row would have to expect a clarify.
+
+**Done 2026-09-25**: `ffmpeg_301` (thumbnail, then compress, of `clip.mp4` named twice) and
+`ffmpeg_302` (two trims of `clip.mp4` into `part1.mp4` 0–2 s and `part2.mp4` 4–7 s). Each row has
+five utterances (English ×2, German, Bulgarian, Chinese), and every one repeats the filename.
+The `outputs` commands were rendered from the gold plans by the real engine, then executed on the
+fixture and graded with `grade_outputs`: 1.0 each. Swapped order scores 0.0 and 0.67. A compress
+fed the thumbnail (the old threader's plan) scores 0.75: 0.04 s long, no audio. Baselines are
+`validated_by: null`, pending review in the notebook.
+
+Writing the Chinese utterance exposed a hole in the named-once rule. Its `\w` boundary treats
+CJK as part of the name, so "为clip.mp4生成…压缩clip.mp4" counted zero mentions and would have been
+threaded. The boundary is now ASCII-only in both runtimes, pinned by a Python test, a Rust unit
+test and an L2 case (`a_name_against_unspaced_cjk_text_counts_as_a_mention`).
+
+**Until T6 re-locks the ffmpeg snapshot, four acceptance tests fail by design.** The corpus now
+has 861 utterances and the snapshot 851, and `check_acceptance` refuses a baseline over part of
+the corpus (`test_load_acceptance_pins_the_corpus_population` and the three that grade the
+accepted baseline). Do not open the PR before the T6 snapshot commit.
 
 ### - [ ] T6 — Evidence
 
@@ -173,10 +225,13 @@ only when the two differ. Native does not report its pre-rewrite plan, so its la
 comparison — absent, not "the same". Pinned by
 `skills/ffmpeg/python/tests/test_model_plan_is_kept.py` on this plan's own fan-out.
 
-### - [ ] T8 — Docs
+### - [x] T8 — Docs
 
 `docs/ARCHITECTURE.md` (chain linking step), the T5b paragraph in `_collisions.py`, and a line
 in `docs/TOOL_SCHEMA.md` if skill authors need to know that repeating a filename pins it.
+
+**Done 2026-09-25**: ARCHITECTURE.md (infer-time gate), TOOL_SCHEMA.md (`file_kinds:` and the
+repeated-name rule), `_collisions.py`.
 
 ## Sequencing
 

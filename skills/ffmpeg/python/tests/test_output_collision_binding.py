@@ -6,12 +6,13 @@ every rendered command carries ``-y``). That raises the binding question these
 tests settle: when the original input and the producer's requested output share a
 name, which file does a later ``"input": "clip.mp4"`` mean?
 
-**It has one referent, not two.** By the time recipes are rendered the reference is
-already bound: ``CommandAgent._forward_thread_reused_sources`` rewrites a later
-reference to a single-source producer's input onto that producer's ``output``, so a
-reference to the *original source* does not survive the optimizer at all (see
-``test_binding_premise_*`` below, and ``test_forward_threads_to_explicit_producer_output``
-in python/core/tests/test_chain_intermediate_linking.py). The rule:
+**It has one referent, not two.** The literal is a name an earlier step declared it
+will write, and that declaration binds it (the rule below) whether or not the user
+repeated the name. ``CommandAgent._forward_thread_reused_sources`` covers the other
+shape — a later reference to a *differently named* source — and only when the user
+named that source at most once; a repeated name is a fan-out and keeps the original
+(see ``test_binding_premise_*`` below, and the named-once tests in
+python/core/tests/test_chain_intermediate_linking.py). The rule:
 
     A name an earlier step declares it will write binds, for every later step, to
     what that step actually wrote. Collision handling SUBSTITUTES the old output
@@ -86,14 +87,31 @@ def _rendered(results: list[dict[str, Any]]) -> list[dict[str, str]]:
 # -- The premise: a downstream reference is bound before any recipe renders ----
 
 
-def test_binding_premise_reference_to_original_source_does_not_survive(agent):
-    """A later step naming the ORIGINAL source is rewritten to the producer's output.
+def test_binding_premise_a_source_named_once_is_threaded(agent):
+    """A later step naming a source the user said only once reads the producer's output.
 
-    This is why the identity case is not ambiguous: if a reference to the original
-    source survived anywhere, the same literal would have two possible meanings. It
-    does not survive - so in the identity case the literal can only mean the
-    producer's output. Implementing "leave a reference to the original source alone"
-    would break this and reintroduce the documents bug the forward-threader fixes.
+    The user wrote "it"; the model filled in the original name. Leaving that reference
+    alone would reintroduce the documents bug the forward-threader fixes.
+    """
+    plan = _link(
+        agent,
+        [
+            {
+                "tool": "convert_video",
+                "args": {"inputs": ["clip.mp4"], "output": "small.mp4", "container": "mp4"},
+            },
+            {"tool": "create_thumbnail", "args": {"inputs": ["clip.mp4"]}},
+        ],
+        "convert clip.mp4 to small.mp4 then make a thumbnail of it",
+    )
+    assert plan[1]["args"]["inputs"] == ["small.mp4"]
+
+
+def test_binding_premise_a_source_named_again_is_the_users_choice(agent):
+    """Named twice, the later reference is a fan-out and reads the original.
+
+    This does not reopen the identity case: there the later literal is also a name an
+    earlier step declared it will write, and that binding (below) decides it.
     """
     plan = _link(
         agent,
@@ -106,7 +124,7 @@ def test_binding_premise_reference_to_original_source_does_not_survive(agent):
         ],
         "convert clip.mp4 to small.mp4 then make a thumbnail of clip.mp4",
     )
-    assert plan[1]["args"]["inputs"] == ["small.mp4"]
+    assert plan[1]["args"]["inputs"] == ["clip.mp4"]
 
 
 def test_binding_premise_readonly_producer_leaves_the_reference_alone(agent):
@@ -157,6 +175,24 @@ def test_downstream_reference_follows_the_rename(agent):
     produced = _rendered(agent.execute_plan({"plan": plan}, dry_run=True, confirmed=True))
     # Both conjuncts are needed: the first alone is satisfied vacuously by the
     # un-renamed behaviour, where every path is still `clip.mp4`.
+    assert produced[1]["input"] == produced[0]["output"]
+    assert Path(produced[1]["input"]).name != "clip.mp4"
+
+
+def test_downstream_reference_follows_the_rename_when_named_once(agent):
+    """The identity case again, with "it": threading and the rename must agree."""
+    plan = _link(
+        agent,
+        [
+            {
+                "tool": "convert_video",
+                "args": {"inputs": ["clip.mp4"], "output": "clip.mp4", "container": "mp4"},
+            },
+            {"tool": "create_thumbnail", "args": {"inputs": ["clip.mp4"]}},
+        ],
+        "convert clip.mp4 to mp4 and then make a thumbnail of it",
+    )
+    produced = _rendered(agent.execute_plan({"plan": plan}, dry_run=True, confirmed=True))
     assert produced[1]["input"] == produced[0]["output"]
     assert Path(produced[1]["input"]).name != "clip.mp4"
 

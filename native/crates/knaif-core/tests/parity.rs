@@ -128,11 +128,35 @@ fn clarify_gate_parity_cases() {
             })
             .unwrap_or_default();
 
+        // `file_kinds` is written as a skill.yaml writes it (kind -> extensions); absent means
+        // no kinds, and threading is then unrestricted by kind.
+        let groups: Vec<(String, Vec<String>)> = case
+            .get("file_kinds")
+            .and_then(Value::as_object)
+            .map(|m| {
+                m.iter()
+                    .map(|(k, v)| {
+                        let exts = v
+                            .as_array()
+                            .unwrap_or_else(|| panic!("{name}: file_kinds.{k} is not a list"))
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect();
+                        (k.clone(), exts)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let file_kinds =
+            knaif_core::file_kinds_from_groups(groups).unwrap_or_else(|e| panic!("{name}: {e}"));
+
         let got = knaif_core::clarify_gate::apply_clarify_gate(
             case["plan"].clone(),
             case["utterance"].as_str().unwrap(),
             &output_capable,
             &known_files,
+            &file_kinds,
         );
         assert_eq!(
             got, case["expected_payload"],

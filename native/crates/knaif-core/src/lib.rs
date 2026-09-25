@@ -17,8 +17,8 @@ pub mod sandbox;
 pub mod skills;
 
 pub use clarify_gate::{
-    apply_clarify_gate, hallucinated_filename, output_capable_tools, required_args_clarify,
-    unsupported_args_clarify,
+    apply_clarify_gate, file_kinds_from_groups, hallucinated_filename, load_file_kinds,
+    output_capable_tools, required_args_clarify, unsupported_args_clarify, FileKinds,
 };
 pub use deps::{
     detect_skill_deps, load_external_tools, missing_required_message, parse_external_tools,
