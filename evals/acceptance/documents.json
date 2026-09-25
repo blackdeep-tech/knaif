@@ -5,7 +5,7 @@
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
         "bundle": "13763f9dfc07f1cb6b66a3a4e203a137b8e6125b2c160bd174d355cea6171b2c",
-        "contracts": "f85c834523e876ca840c6cb6fa3860b6b523b472ee260db6e329206a53674b3c",
+        "contracts": "cd792e402e1a5a4280e5f9af862d76e5efc4ec6fcc29443d3cd558607c89a348",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
         "native": "f5a03d25c53a9ce4f6d08f66300713bd0e5cce64b66e0bd5b5ba066f862ea09e",
@@ -18,7 +18,7 @@
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
         "bundle": "13763f9dfc07f1cb6b66a3a4e203a137b8e6125b2c160bd174d355cea6171b2c",
-        "contracts": "f85c834523e876ca840c6cb6fa3860b6b523b472ee260db6e329206a53674b3c",
+        "contracts": "cd792e402e1a5a4280e5f9af862d76e5efc4ec6fcc29443d3cd558607c89a348",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
         "native": "f5a03d25c53a9ce4f6d08f66300713bd0e5cce64b66e0bd5b5ba066f862ea09e",

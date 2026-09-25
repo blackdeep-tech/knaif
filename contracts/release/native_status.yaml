@@ -60,7 +60,7 @@ layers:
     invalidated_by: [contracts, python_core, bundle, native]
   L2:
     what: "Deterministic pipeline — parse/validate/defaults/expand/gate, ordered execution."
-    evidence: "contracts/parity/planner_cases.json + apps/cli/tests/executor_semantics.rs."
+    evidence: "contracts/parity/{planner,clarify_gate,chain_linking,expansion,documents_expansion}_cases.json + apps/cli/tests/executor_semantics.rs."
     invalidated_by: [contracts, python_core, bundle, native]
   L3:
     what: "Behavioral parity on the real corpus. Needs a GGUF."
