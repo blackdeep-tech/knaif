@@ -1,6 +1,6 @@
 # Chain source threading — stop rewriting inputs the user chose
 
-**Status:** Active · **Created:** 2026-09-23 · **Last worked:** 2026-09-25 · **Completed:** —
+**Status:** Completed · **Created:** 2026-09-23 · **Last worked:** 2026-09-26 · **Completed:** 2026-09-26
 **Owner:** core · **Ref:** found in the workbench
 ([2026-09-21-skill-prompt-workbench.md](2026-09-21-skill-prompt-workbench.md)); touches the T5b
 binding rule in [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md)
@@ -196,7 +196,7 @@ has 861 utterances and the snapshot 851, and `check_acceptance` refuses a baseli
 the corpus (`test_load_acceptance_pins_the_corpus_population` and the three that grade the
 accepted baseline). Do not open the PR before the T6 snapshot commit.
 
-### - [ ] T6 — Evidence
+### - [x] T6 — Evidence
 
 On current `main` code and on this branch, same model:
 
@@ -210,6 +210,26 @@ Pass bar: no regression against either snapshot on the existing rows, and the ne
 correct. A drop on a chain row means the model repeats a filename while meaning the transformed
 file — read those rows before touching the rule. Record each run in `evals/INDEX.md`. Re-lock
 the ffmpeg snapshot only in its own commit, and only because T5 added rows.
+
+**Done 2026-09-26** ([run](../../evals/runs/2026-09-25_chain-source-threading_success/), INDEX row).
+Same model (`knaif-qwen3-4b-v2`); control `release/1.2.0` @ `9b66e47` from a detached worktree,
+treatment @ `5df2047`.
+- Every plan and every score is identical on the shared utterances (ffmpeg 851/851, documents
+  164/164), so the rule changed no existing row. No row needed reading.
+- The 10 new utterances all score 1.0.
+- Control reproduces the committed ffmpeg snapshot exactly (0.93772 / 0.98373).
+- `eval-regression` is OK for both skills. ffmpeg's is gated on the control, whose population
+  matches; treatment equals it row for row.
+- Treatment is ACCEPTED on 39/39 (ffmpeg) and 36/36 (documents) thresholds. Safety is 11/11 and
+  9/9 on both arms, with 0 breaches.
+
+The ffmpeg snapshot is re-locked from the treatment arm (861 utt, 0.93844 / 0.98401) in its own
+commit.
+
+Environment lesson for any worktree-based control arm: the documents fixture generator shells
+out to `uv run`, which builds a separate venv inside the worktree, and there it silently wrote no
+PDF or Office fixtures. Setting `PYTHONPATH` does not reach it. The invalid first pass is kept
+in the run folder, and the documents control was re-run on byte-identical fixtures.
 
 ### - [x] T7 — Workbench shows what the model said
 
