@@ -11,7 +11,8 @@ someone runs the native binary against it. That is the drift this checks.
 It compares what each loader *reports*, not that each exits 0:
 
   discovery     the set of active skills, and that `status: stale` is filtered identically
-  runtimes:     which runtime implements a skill, and the crate name when native does
+  runtimes:     which runtime implements a skill: the crate when native is `supported`,
+                otherwise its status, as `knaif skills list` prints it
   external      each skill's declared external tools, and which are required
 
 Deliberately NOT a parity check. `just parity <skill>` pins both runtimes to one GGUF and
@@ -118,11 +119,22 @@ def python_skills(include_stale: bool, problems: list[str]) -> dict[str, str]:
         except Exception as exc:  # noqa: BLE001 - any loader failure is the finding
             problems.append(f"{name}: the Python loader raised {type(exc).__name__}: {exc}")
             continue
-        native = bundle.runtimes.get("native") or {}
-        crate = native.get("crate")
-        status = native.get("status")
-        found[name] = crate or status or "-"
+        found[name] = native_label(bundle.runtimes.get("native") or {})
     return found
+
+
+def native_label(native: dict) -> str:
+    """The `native:` column `knaif skills list` prints for a `runtimes.native` block.
+
+    Mirrors apps/cli `cmd_skills_list`: the crate only when the status is `supported`
+    (falling back to the word), otherwise the status itself, and `-` with no status. A
+    crate alone says nothing: status is the evidence-backed claim (`just check-gate`), and a
+    skill lowered to `in-progress` keeps its `crate:`.
+    """
+    status = native.get("status")
+    if status == "supported":
+        return native.get("crate") or "supported"
+    return status or "-"
 
 
 def python_external_tools(problems: list[str]) -> dict[str, dict[str, bool]]:
