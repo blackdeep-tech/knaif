@@ -679,9 +679,9 @@ into `~/.knaif/backends`.
     | Rule | Setting |
     |---|---|
     | Require PR before merging | on — 0 approvals, thread resolution required |
-    | Allowed merge methods | `squash`, `rebase` — merge commit removed |
+    | Allowed merge methods | `squash`, `rebase` — merge commit removed *(merge re-added 2026-09-25 for integration branches, [release-1.2](2026-09-25-release-1.2.md) R1)* |
     | Require status checks | **`ci` only**, strict (branch must be up to date) |
-    | Require linear history | on |
+    | Require linear history | on *(off since 2026-09-25, same reason)* |
     | Restrict deletions / block force pushes | on |
     | Bypass actors | **none — including the owner** |
 

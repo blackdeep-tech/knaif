@@ -281,9 +281,9 @@ jobs:
       - name: pre-commit run --all-files
         run: uv run pre-commit run --all-files --show-diff-on-failure
 
-  # PRs are squash-merged, so the PR TITLE becomes the commit subject on the target branch.
-  # Nothing checked it before: the commit-msg hook only ever sees the local commits that get
-  # squashed away.
+  # The PR TITLE becomes the commit subject on the target branch — the squash commit, or the
+  # merge commit for integration branches (CONTRIBUTING.md, "Pull requests"). Nothing checked
+  # it before: the commit-msg hook only ever sees the local commits.
   #
   # Reuses scripts/check_commit_msg.py rather than reimplementing the convention, so the
   # hook and CI cannot disagree — the script takes a file path, so the title is written to

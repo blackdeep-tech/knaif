@@ -756,7 +756,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
     the `main-guardrails` ruleset went on: **`ci` required and nothing else** (every other job
     is path-gated, and a *skipped* required check blocks a PR forever), strict up-to-date
     branches, squash/rebase only, linear history, no direct pushes, **no bypass actors at all**.
-    Settings recorded in full at C5 in the plan.
+    Settings recorded in full at C5 in the plan. **Changed 2026-09-25:** linear history removed
+    and merge commits allowed, for integration branches
+    ([release-1.2](plans/2026-09-25-release-1.2.md) R1); everything else unchanged.
   - **`release.json` refresh — decided and built** (2026-08-08):
     `.github/workflows/release-data.yml`. Neither of the two options on the table: **no bypass
     actor** (adding the Actions app would give every workflow in the repo unreviewed write
