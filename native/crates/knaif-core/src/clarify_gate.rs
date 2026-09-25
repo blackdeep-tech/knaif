@@ -20,7 +20,8 @@
 //! "make the video smaller" would pass `video.mp4`. That marker rule is the same one the stem
 //! resolver uses, so the guard cannot admit a name the resolver would then refuse.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use serde_json::{json, Value};
 
@@ -198,16 +199,19 @@ pub fn unsupported_args_clarify(payload: &Value, registry: &Registry) -> Option<
 /// Link chain intermediates, then return the plan unchanged or downgraded to a clarify.
 ///
 /// Ordering mirrors Python `infer`: `_link_chain_intermediates` runs first (so a downstream
-/// intermediate the producer didn't declare becomes that producer's `output` and is exempt),
-/// then the hallucinated-input-filename guard. A plan with no `plan` array is returned as-is.
+/// intermediate the producer didn't declare becomes that producer's `output` and is exempt, and
+/// a reused source is threaded onto its producer's output), then the hallucinated-input-filename
+/// guard. `file_kinds` is the skill's [`load_file_kinds`]. A plan with no `plan` array is
+/// returned as-is.
 pub fn apply_clarify_gate(
     mut payload: Value,
     utterance: &str,
     output_capable: &HashSet<String>,
     known_files: &HashSet<String>,
+    file_kinds: &FileKinds,
 ) -> Value {
     if let Some(steps) = payload.get_mut("plan").and_then(Value::as_array_mut) {
-        link_chain_intermediates(steps, utterance, output_capable);
+        link_chain_intermediates(steps, utterance, output_capable, file_kinds);
     }
     let Some(steps) = payload.get("plan").and_then(Value::as_array) else {
         return payload;
@@ -229,6 +233,7 @@ pub fn link_chain_intermediates(
     plan: &mut [Value],
     utterance: &str,
     output_capable: &HashSet<String>,
+    file_kinds: &FileKinds,
 ) {
     let u_lower = utterance.to_lowercase();
     let mut produced: HashSet<String> = HashSet::new();
@@ -272,6 +277,301 @@ pub fn link_chain_intermediates(
             .and_then(Value::as_str)
         {
             produced.insert(out.to_lowercase());
+        }
+    }
+
+    // Second pass, as Python does at the end of `_link_chain_intermediates`. The first pass only
+    // claims filenames nothing has produced yet; this one repoints a later step that reuses an
+    // earlier step's *source* rather than its result.
+    forward_thread_reused_sources(plan, utterance, output_capable, file_kinds);
+}
+
+/// A skill's `file_kinds:` as an extension → kind map (`mp4` → `video`).
+pub type FileKinds = HashMap<String, String>;
+
+/// Build a [`FileKinds`] map from `kind → extensions` groups, as `skill.yaml` writes them.
+///
+/// Port of Python `knaif.skill.parse_file_kinds`: extensions are lower-cased with any leading
+/// dot dropped, and one listed under two kinds is an error — the comparison would otherwise
+/// depend on which kind was read last.
+pub fn file_kinds_from_groups<I, E>(groups: I) -> Result<FileKinds, String>
+where
+    I: IntoIterator<Item = (String, E)>,
+    E: IntoIterator<Item = String>,
+{
+    let mut kinds = FileKinds::new();
+    for (kind, exts) in groups {
+        for ext in exts {
+            let key = ext.to_lowercase().trim_start_matches('.').to_string();
+            if let Some(prev) = kinds.get(&key) {
+                if *prev != kind {
+                    return Err(format!(
+                        "file_kinds lists '{key}' under both '{prev}' and '{kind}'"
+                    ));
+                }
+            }
+            kinds.insert(key, kind.clone());
+        }
+    }
+    Ok(kinds)
+}
+
+/// Read `file_kinds:` from a bundle's `skill.yaml`. A missing file or section means no kinds;
+/// a section that is not `kind → [extensions]`, or lists an extension twice, is an error, as
+/// it is when Python loads the skill.
+pub fn load_file_kinds(skill_yaml: &Path) -> Result<FileKinds, String> {
+    let Ok(text) = std::fs::read_to_string(skill_yaml) else {
+        return Ok(FileKinds::new());
+    };
+    let doc: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", skill_yaml.display()))?;
+    let Some(raw) = doc.get("file_kinds").filter(|v| !v.is_null()) else {
+        return Ok(FileKinds::new());
+    };
+    let map = raw
+        .as_mapping()
+        .ok_or("file_kinds must map a kind to a list of extensions")?;
+    let mut groups = Vec::new();
+    for (kind, exts) in map {
+        let kind = kind.as_str().ok_or("file_kinds: a kind must be a string")?;
+        let exts = exts
+            .as_sequence()
+            .ok_or_else(|| format!("file_kinds.{kind} must be a list of extensions"))?;
+        let exts: Vec<String> = exts
+            .iter()
+            .map(|e| match e {
+                serde_yaml::Value::String(s) => s.clone(),
+                other => serde_yaml::to_string(other)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string(),
+            })
+            .collect();
+        groups.push((kind.to_string(), exts));
+    }
+    file_kinds_from_groups(groups)
+}
+
+/// Basename of a path-ish string, lower-cased for comparison.
+fn basename_lower(value: &str) -> String {
+    value
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(value)
+        .to_lowercase()
+}
+
+/// Lower-cased extension of `value`'s basename, without the dot (`""` when none). Port of
+/// Python `_extension`.
+fn extension(value: &str) -> String {
+    let name = basename_lower(value);
+    match name.rfind('.') {
+        Some(dot) if dot > 0 => name[dot + 1..].to_string(),
+        _ => String::new(),
+    }
+}
+
+/// A character that can extend a filename token: ASCII letters and digits, plus `_`. Not
+/// Unicode `\w` — unspaced CJK ("为clip.mp4生成") would otherwise hide every mention.
+fn is_word(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// How many times the filename `name` appears in `utterance`, case-insensitively.
+///
+/// Port of Python `_mention_count`, whose pattern is
+/// `(?<![A-Za-z0-9_.-])NAME(?![A-Za-z0-9_-]|\.[A-Za-z0-9_])`: a match must stand alone as a
+/// filename, so `clip.mp4`
+/// inside `myclip.mp4` or `clip.mp4.bak` is not a mention, while `./clip.mp4` or `clip.mp4,`
+/// is. Scanned like a regex: on a match the search resumes after it, otherwise one character
+/// on, so the count agrees with `re.findall` for any name.
+fn mention_count(utterance: &str, name: &str) -> usize {
+    let u = utterance.to_lowercase();
+    let n = name.to_lowercase();
+    if n.is_empty() {
+        return 0;
+    }
+    let mut count = 0;
+    let mut i = 0;
+    while i < u.len() {
+        if u[i..].starts_with(&n) {
+            let before_ok = u[..i]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !(is_word(c) || c == '.' || c == '-'));
+            let mut after = u[i + n.len()..].chars();
+            let after_ok = match after.next() {
+                Some(c) if is_word(c) || c == '-' => false,
+                Some('.') => !after.next().is_some_and(is_word),
+                _ => true,
+            };
+            if before_ok && after_ok {
+                count += 1;
+                i += n.len();
+                continue;
+            }
+        }
+        i += u[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    count
+}
+
+/// Derive a chain-intermediate filename from `src`, avoiding names already `taken`.
+///
+/// Preserves the directory prefix and extension and inserts a `-chained` marker
+/// (`report.pdf` → `report-chained.pdf`). Port of Python `_intermediate_name`, including the
+/// numbered fallback so repeated transforms of one source do not collide.
+fn intermediate_name(src: &str, taken: &HashSet<String>) -> String {
+    let name = src.rsplit(['/', '\\']).next().unwrap_or(src);
+    let prefix = &src[..src.len() - name.len()];
+    let (stem, ext) = match name.rfind('.') {
+        Some(dot) if dot > 0 => (&name[..dot], &name[dot..]),
+        _ => (name, ""),
+    };
+    let mut n = 1usize;
+    loop {
+        let marker = if n == 1 {
+            "-chained".to_string()
+        } else {
+            format!("-chained{n}")
+        };
+        let candidate = format!("{prefix}{stem}{marker}{ext}");
+        if !taken.contains(&basename_lower(&candidate)) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Thread a **reused source filename** onto the transforming step's output.
+///
+/// Port of Python `_forward_thread_reused_sources`, the second pass of chain linking. The model
+/// sometimes emits a correct chain but points a later step at the ORIGINAL source rather than
+/// the file an earlier step produced from it (`unlock_pdf s.pdf` then `find_in_document s.pdf`
+/// searches the still-locked original). This pass repoints the later reference at the
+/// producer's `output`, minting one (`s-chained.pdf`) when the producer declares none.
+///
+/// It leaves the reference alone when:
+/// - the producer is read-only (not output-capable), or consumes several files or a glob;
+/// - **the user named the source more than once** — a repeated name is their choice, and a
+///   fan-out (several steps reading one file) must run as written;
+/// - **the producer's declared output is a different kind of file** from its source, per the
+///   skill's `file_kinds` (a thumbnail of a video). An unlisted extension is unrestricted.
+///
+/// See docs/plans/2026-09-23-chain-source-threading.md.
+fn forward_thread_reused_sources(
+    plan: &mut [Value],
+    utterance: &str,
+    output_capable: &HashSet<String>,
+    file_kinds: &FileKinds,
+) {
+    let mut produced: HashSet<String> = plan
+        .iter()
+        .filter_map(|s| s.get("args")?.get("output")?.as_str())
+        .map(basename_lower)
+        .collect();
+
+    for idx in 0..plan.len() {
+        let tool = plan[idx].get("tool").and_then(Value::as_str).unwrap_or("");
+        if TERMINAL_TOOLS.contains(&tool) || !output_capable.contains(tool) {
+            continue;
+        }
+        // Exactly one source file, or a single `output` cannot stand in for the batch.
+        let sources: Vec<String> = plan[idx]
+            .get("args")
+            .and_then(Value::as_object)
+            .map(|map| {
+                map.iter()
+                    .filter(|(k, _)| *k != "output")
+                    .flat_map(|(_, v)| string_values(v))
+                    .filter(|v| looks_like_filename(v) && !v.contains('*') && !v.contains('?'))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if sources.len() != 1 {
+            continue;
+        }
+        let src_base = basename_lower(&sources[0]);
+        if mention_count(utterance, &src_base) > 1 {
+            continue; // the user named it again: later references are theirs
+        }
+
+        // Later references to that same source, as (step index, arg key, list index).
+        let mut targets: Vec<(usize, String, Option<usize>)> = Vec::new();
+        for (offset, later) in plan.iter().enumerate().skip(idx + 1) {
+            let ltool = later.get("tool").and_then(Value::as_str).unwrap_or("");
+            if TERMINAL_TOOLS.contains(&ltool) {
+                continue;
+            }
+            let Some(map) = later.get("args").and_then(Value::as_object) else {
+                continue;
+            };
+            for (key, value) in map {
+                if key == "output" {
+                    continue;
+                }
+                match value {
+                    Value::String(s) if looks_like_filename(s) && basename_lower(s) == src_base => {
+                        targets.push((offset, key.clone(), None));
+                    }
+                    Value::Array(items) => {
+                        for (li, item) in items.iter().enumerate() {
+                            if item.as_str().is_some_and(|s| {
+                                looks_like_filename(s) && basename_lower(s) == src_base
+                            }) {
+                                targets.push((offset, key.clone(), Some(li)));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if targets.is_empty() {
+            continue;
+        }
+
+        // Reuse the producer's declared output — unless it is another kind of file — or mint an
+        // intermediate, which keeps the source's extension and so its kind.
+        let existing = plan[idx]
+            .get("args")
+            .and_then(|a| a.get("output"))
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let out = match existing {
+            Some(o) => {
+                let src_kind = file_kinds.get(&extension(&sources[0]));
+                let out_kind = file_kinds.get(&extension(&o));
+                if matches!((src_kind, out_kind), (Some(a), Some(b)) if a != b) {
+                    continue; // a different kind of file: the later step meant the source
+                }
+                o
+            }
+            None => {
+                let name = intermediate_name(&sources[0], &produced);
+                produced.insert(basename_lower(&name));
+                match plan[idx].get_mut("args").and_then(Value::as_object_mut) {
+                    Some(a) => {
+                        a.insert("output".into(), Value::String(name.clone()));
+                    }
+                    None => plan[idx]["args"] = json!({ "output": name.clone() }),
+                }
+                name
+            }
+        };
+        for (step_idx, key, list_idx) in targets {
+            let Some(args) = plan[step_idx].get_mut("args") else {
+                continue;
+            };
+            let slot = match list_idx {
+                Some(li) => args.get_mut(&key).and_then(|v| v.get_mut(li)),
+                None => args.get_mut(&key),
+            };
+            if let Some(slot) = slot {
+                *slot = Value::String(out.clone());
+            }
         }
     }
 }
@@ -420,7 +720,13 @@ mod tests {
     }
 
     fn gate(payload: Value, utterance: &str) -> Value {
-        apply_clarify_gate(payload, utterance, &HashSet::new(), &HashSet::new())
+        apply_clarify_gate(
+            payload,
+            utterance,
+            &HashSet::new(),
+            &HashSet::new(),
+            &FileKinds::new(),
+        )
     }
 
     fn files(names: &[&str]) -> HashSet<String> {
@@ -479,6 +785,7 @@ mod tests {
             "rotate clip.mp4 90 degrees then compress it",
             &capable,
             &HashSet::new(),
+            &FileKinds::new(),
         );
         assert_eq!(out["plan"][0]["tool"], "rotate_video");
         assert_eq!(out["plan"][0]["args"]["output"], "clip_rotated.mp4");
@@ -497,6 +804,7 @@ mod tests {
             "rotate clip.mp4 90 degrees then compress it",
             &HashSet::new(),
             &HashSet::new(),
+            &FileKinds::new(),
         );
         assert_eq!(out["plan"][0]["tool"], "clarify");
     }
@@ -524,6 +832,70 @@ mod tests {
         assert_eq!(gate(np.clone(), "x"), np);
     }
 
+    /// The named-once rule's counter, against what Python's `re.findall` gives for the same
+    /// pattern. The L2 contract covers these through whole plans; this pins the boundaries.
+    #[test]
+    fn mention_count_matches_python_boundaries() {
+        assert_eq!(mention_count("trim clip.mp4 and clip.mp4", "clip.mp4"), 2);
+        assert_eq!(mention_count("unlock ./s.pdf then s.pdf", "s.pdf"), 2);
+        assert_eq!(mention_count("Clip.MP4 then clip.mp4.", "clip.mp4"), 2);
+        assert_eq!(mention_count("clip.mp4, please", "clip.mp4"), 1);
+        assert_eq!(mention_count("myclip.mp4 and clip.mp4.bak", "clip.mp4"), 0);
+        assert_eq!(mention_count("clip.mp4-old and my-clip.mp4", "clip.mp4"), 0);
+        assert_eq!(mention_count("видео.mp4 и видео.mp4", "видео.mp4"), 2);
+        assert_eq!(mention_count("nothing here", "clip.mp4"), 0);
+        assert_eq!(
+            mention_count("为clip.mp4生成缩略图，并压缩clip.mp4", "clip.mp4"),
+            2
+        );
+        assert_eq!(mention_count("将clip.mp4剪切到5秒", "clip.mp4"), 1);
+    }
+
+    #[test]
+    fn intermediate_names_do_not_collide() {
+        let mut taken: HashSet<String> = HashSet::new();
+        let first = intermediate_name("dir/clip.mp4", &taken);
+        assert_eq!(first, "dir/clip-chained.mp4");
+        taken.insert(basename_lower(&first));
+        assert_eq!(
+            intermediate_name("dir/clip.mp4", &taken),
+            "dir/clip-chained2.mp4"
+        );
+    }
+
+    #[test]
+    fn file_kinds_normalise_and_refuse_a_duplicate() {
+        let kinds = file_kinds_from_groups(vec![
+            (
+                "video".to_string(),
+                vec!["MP4".to_string(), ".mkv".to_string()],
+            ),
+            ("image".to_string(), vec!["jpg".to_string()]),
+        ])
+        .unwrap();
+        assert_eq!(kinds["mp4"], "video");
+        assert_eq!(kinds["mkv"], "video");
+        let err = file_kinds_from_groups(vec![
+            ("video".to_string(), vec!["gif".to_string()]),
+            ("image".to_string(), vec!["gif".to_string()]),
+        ])
+        .unwrap_err();
+        assert!(err.contains("gif"), "{err}");
+    }
+
+    #[test]
+    fn active_skills_declare_file_kinds() {
+        let skills = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../skills");
+        let ffmpeg = load_file_kinds(&skills.join("ffmpeg/skill.yaml")).unwrap();
+        assert_eq!(ffmpeg["gif"], "video", "convert_video makes animated gifs");
+        assert_ne!(ffmpeg["jpg"], ffmpeg["mp4"]);
+        let documents = load_file_kinds(&skills.join("documents/skill.yaml")).unwrap();
+        assert_eq!(documents["docx"], documents["pdf"]);
+        assert!(load_file_kinds(Path::new("/no/such/skill.yaml"))
+            .unwrap()
+            .is_empty());
+    }
+
     #[test]
     fn looks_like_filename_matches_python_regex() {
         assert!(looks_like_filename("clip.mp4"));
@@ -547,6 +919,7 @@ mod tests {
             "downscale clip_4k to 1920x1080",
             &HashSet::new(),
             &files(&["clip.mp4", "clip_4k.mp4"]),
+            &FileKinds::new(),
         );
         assert_eq!(out["plan"][0]["tool"], "resize_video");
     }
@@ -562,6 +935,7 @@ mod tests {
             "join clip.mov and clip_4k together",
             &HashSet::new(),
             &files(&["clip.mov", "clip_4k.mp4"]),
+            &FileKinds::new(),
         );
         assert_eq!(out["plan"][0]["tool"], "clarify");
     }
@@ -576,6 +950,7 @@ mod tests {
             "make the video smaller",
             &HashSet::new(),
             &files(&["video.mp4"]),
+            &FileKinds::new(),
         );
         assert_eq!(out["plan"][0]["tool"], "clarify");
     }

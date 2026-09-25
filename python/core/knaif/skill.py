@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +35,8 @@ class Skill:
     pipeline_inject: list[str]  # injector names declared in pipeline: inject: [...]
     external_tools: tuple[dict[str, Any], ...]  # dependencies.external_tools (installer/preflight)
     runtimes: dict[str, Any]  # runtimes: metadata (which runtimes/crate implement the skill)
+    # file_kinds: as extension -> kind; chain threading never crosses kinds (see parse_file_kinds)
+    file_kinds: dict[str, str] = field(default_factory=dict)
     # OOP path (set when skill_class: is present in skill.yaml; None for legacy)
     tool_map: dict[str, Any] | None = None
     skill_instance: Any | None = None
@@ -85,6 +87,7 @@ class Skill:
         dependencies = manifest.get("dependencies") or {}
         external_tools = tuple(dependencies.get("external_tools") or [])
         runtimes = manifest.get("runtimes") or {}
+        file_kinds = parse_file_kinds(manifest.get("file_kinds"))
 
         skill_class_ref: str | None = manifest.get("skill_class")
         if not skill_class_ref:
@@ -129,9 +132,36 @@ class Skill:
             pipeline_inject=pipeline_inject,
             external_tools=external_tools,
             runtimes=runtimes,
+            file_kinds=file_kinds,
             tool_map=tool_map,
             skill_instance=skill_instance,
         )
+
+
+def parse_file_kinds(raw: Any) -> dict[str, str]:
+    """``file_kinds:`` (kind -> extensions) as an extension -> kind map.
+
+    The skill says which files are the same kind of thing (a video in another container)
+    and which are not (a thumbnail of that video). Core only compares the kinds: chain
+    threading never rewrites a reference onto a file of a different kind. Extensions are
+    lower-cased with any leading dot dropped; one listed under two kinds is an error,
+    since the comparison would then depend on which kind was read last. Absent means no
+    kinds, and an extension no kind lists is unrestricted.
+    """
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"file_kinds must map a kind to a list of extensions, got {raw!r}")
+    kinds: dict[str, str] = {}
+    for kind, exts in raw.items():
+        if not isinstance(exts, list):
+            raise ValueError(f"file_kinds.{kind} must be a list of extensions, got {exts!r}")
+        for ext in exts:
+            key = str(ext).lower().lstrip(".")
+            if key in kinds and kinds[key] != kind:
+                raise ValueError(f"file_kinds lists {key!r} under both {kinds[key]!r} and {kind!r}")
+            kinds[key] = str(kind)
+    return kinds
 
 
 def _deep_merge_manifest(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

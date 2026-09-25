@@ -229,8 +229,15 @@ two places:
 
 - **At infer time** (`CommandAgent.infer`, post-parse) — `_link_chain_intermediates()`
   first fills in an omitted step-1 `output` and points the consuming step at it, then
-  `_hallucinated_filename()` downgrades the plan to `clarify` if any filename-like
-  arg is absent from the utterance.
+  forward-threads a later reference to a producer's *source* onto that producer's output
+  (`unlock_pdf s.pdf` then "check if *it* contains beta" must search the unlocked copy).
+  Threading has two limits. It applies only when the user named that source **at most once**:
+  a name written again is the user's choice, and a fan-out (several steps reading one file)
+  runs as written. It never rewrites onto a file of a **different kind** (a thumbnail of a
+  video), per the skill's `file_kinds:`. Then `_hallucinated_filename()` downgrades the plan
+  to `clarify` if any filename-like arg is absent from the utterance. Native ports the whole
+  stage (`knaif_core::apply_clarify_gate`), held to Python by the L2 contract
+  `contracts/parity/clarify_gate_cases.json`.
 - **Before expansion** (`execute_plan`, after stem resolution) — `nl_clarify_gate()`
   clarifies when a required file input is under-specified and injection cannot resolve
   it, or when a tool's declared `grounded_args` (e.g. a password) hold a value the

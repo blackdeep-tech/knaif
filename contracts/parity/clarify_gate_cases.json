@@ -1,6 +1,6 @@
 {
   "_comment": "L2 clarify-gate contract. The gate is deterministic (no model), it fires on ~17% of the ffmpeg corpus in the native runtime, and nothing previously proved Python's equivalent fires on the same rows. Given (utterance, plan, registry) both runtimes must produce the same post-gate payload: the plan with chain intermediates bound to their producer, or a single clarify step. Consumed by python/core/tests/test_clarify_gate_parity.py and `clarify_gate_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
-  "_stage": "The stage is `link_chain_intermediates -> hallucinated-filename guard`, in that order. Python composes it in CommandAgent.infer; native in knaif_core::apply_clarify_gate. Comparing either half alone would violate Rule 2. A case may declare `sandbox_files`: the filenames present in the agent's sandbox at gate time. The guard exempts a value whose STEM the user named when that value is one of those files, so both runtimes must be given the same listing to agree. Absent means an empty sandbox — nothing can be confirmed, and the strict substring rule applies.",
+  "_stage": "The stage is `link_chain_intermediates -> hallucinated-filename guard`, in that order. Python composes it in CommandAgent.infer; native in knaif_core::apply_clarify_gate. Comparing either half alone would violate Rule 2. A case may declare `sandbox_files`: the filenames present in the agent's sandbox at gate time. The guard exempts a value whose STEM the user named when that value is one of those files, so both runtimes must be given the same listing to agree. Absent means an empty sandbox — nothing can be confirmed, and the strict substring rule applies. The link stage includes forward-threading: a later reference to a single-source producer's source is rewritten onto its output only when the user named that source at most once (whole-filename, case-insensitive), and never onto a file of a different kind. A case may declare `file_kinds` exactly as a skill.yaml does (kind -> extensions); absent means no kinds. See docs/plans/2026-09-23-chain-source-threading.md.",
   "_expected_values": "Produced by the reference runtime (Python CommandAgent._link_chain_intermediates then ._hallucinated_filename). DO NOT regenerate to make a failing test pass.",
   "_coverage": {
     "ubuntu": "CI",
@@ -8,7 +8,8 @@
     "macos": "unexercised"
   },
   "registries": {
-    "demo": "resize_video:\n  description: \"Resize a video.\"\n  required_args: [inputs]\n  optional_args: [height, output]\nstrip_audio:\n  description: \"Remove the audio track.\"\n  required_args: [inputs]\n  optional_args: [output]\nconcat_video:\n  description: \"Join several videos.\"\n  required_args: [inputs]\n  optional_args: [output]\ninspect_video:\n  description: \"Report a video's properties.\"\n  required_args: [inputs]\nwatermark_video:\n  description: \"Stamp a watermark on a video.\"\n  required_args: [inputs]\n  arg_schemas:\n    output: {type: string, help: \"where to write it\"}\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
+    "demo": "resize_video:\n  description: \"Resize a video.\"\n  required_args: [inputs]\n  optional_args: [height, output]\nstrip_audio:\n  description: \"Remove the audio track.\"\n  required_args: [inputs]\n  optional_args: [output]\nconcat_video:\n  description: \"Join several videos.\"\n  required_args: [inputs]\n  optional_args: [output]\ninspect_video:\n  description: \"Report a video's properties.\"\n  required_args: [inputs]\nwatermark_video:\n  description: \"Stamp a watermark on a video.\"\n  required_args: [inputs]\n  arg_schemas:\n    output: {type: string, help: \"where to write it\"}\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n",
+    "chain": "strip_audio:\n  description: \"Remove the audio track.\"\n  required_args: [inputs]\n  optional_args: [output]\ntrim_video:\n  description: \"Cut a time range.\"\n  required_args: [input]\n  optional_args: [start, end, output]\nreverse_video:\n  description: \"Play a video backwards.\"\n  required_args: [inputs]\n  optional_args: [output]\nconcat_video:\n  description: \"Join several videos.\"\n  required_args: [inputs]\n  optional_args: [output]\nconvert_video:\n  description: \"Change a video's container.\"\n  required_args: [inputs]\n  optional_args: [container, output]\ncompress_video:\n  description: \"Make a video smaller.\"\n  required_args: [inputs]\n  optional_args: [output]\ncreate_thumbnail:\n  description: \"Save one frame as an image.\"\n  required_args: [inputs]\n  optional_args: [output]\ninspect_video:\n  description: \"Report a video's properties.\"\n  required_args: [inputs]\nunlock_pdf:\n  description: \"Remove a PDF's password.\"\n  required_args: [input, password]\n  optional_args: [output]\nfind_in_document:\n  description: \"Search a document for text.\"\n  required_args: [input, query]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
   },
   "cases": [
     {
@@ -446,6 +447,913 @@
             "tool": "clarify",
             "args": {
               "question": "You didn't mention 'video.mp4' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "fan_out_over_a_repeated_name_is_kept",
+      "registry": "chain",
+      "utterance": "strip the audio from clip.mov and save it as silent.mp4, then trim silent.mp4 from 0 to 2 seconds as part1.mp4, then trim silent.mp4 from 2 to 4 seconds as part2.mp4, then reverse part2.mp4 as part2_rev.mp4, then trim silent.mp4 from 4 seconds to the end as part3.mp4, then concatenate part1.mp4, part2_rev.mp4 and part3.mp4 into result.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "silent.mp4",
+              "start": "0",
+              "end": "2",
+              "output": "part1.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "silent.mp4",
+              "start": "2",
+              "end": "4",
+              "output": "part2.mp4"
+            }
+          },
+          {
+            "tool": "reverse_video",
+            "args": {
+              "inputs": [
+                "part2.mp4"
+              ],
+              "output": "part2_rev.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "silent.mp4",
+              "start": "4",
+              "output": "part3.mp4"
+            }
+          },
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "part1.mp4",
+                "part2_rev.mp4",
+                "part3.mp4"
+              ],
+              "output": "result.mp4"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "silent.mp4",
+              "start": "0",
+              "end": "2",
+              "output": "part1.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "silent.mp4",
+              "start": "2",
+              "end": "4",
+              "output": "part2.mp4"
+            }
+          },
+          {
+            "tool": "reverse_video",
+            "args": {
+              "inputs": [
+                "part2.mp4"
+              ],
+              "output": "part2_rev.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "silent.mp4",
+              "start": "4",
+              "output": "part3.mp4"
+            }
+          },
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "part1.mp4",
+                "part2_rev.mp4",
+                "part3.mp4"
+              ],
+              "output": "result.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_file_named_twice_is_kept",
+      "registry": "chain",
+      "utterance": "make a thumbnail of clip.mp4 and compress clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.jpg"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "small.mp4"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.jpg"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "small.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_source_named_once_is_threaded_onto_a_minted_intermediate",
+      "registry": "chain",
+      "utterance": "unlock s.pdf with pass secret and check if it contains beta",
+      "plan": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "s.pdf",
+              "password": "secret"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "s.pdf",
+              "password": "secret",
+              "output": "s-chained.pdf"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s-chained.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_source_named_once_is_threaded_onto_the_declared_output",
+      "registry": "chain",
+      "utterance": "unlock s.pdf with pass secret into clear.pdf and check if it contains beta",
+      "plan": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "s.pdf",
+              "password": "secret",
+              "output": "clear.pdf"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "s.pdf",
+              "password": "secret",
+              "output": "clear.pdf"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "clear.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_model_invented_source_is_threaded",
+      "registry": "chain",
+      "utterance": "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "4",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "4",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "output": "clip_trimmed-chained.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_trimmed-chained.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_dot_slash_repeat_counts_as_the_same_name",
+      "registry": "chain",
+      "utterance": "unlock ./s.pdf with pass secret, then search s.pdf for beta",
+      "plan": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "./s.pdf",
+              "password": "secret"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "./s.pdf",
+              "password": "secret"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_repeat_differing_only_in_case_counts",
+      "registry": "chain",
+      "utterance": "unlock S.PDF with pass secret, then search s.pdf for beta",
+      "plan": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "s.pdf",
+              "password": "secret"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "unlock_pdf",
+            "args": {
+              "input": "s.pdf",
+              "password": "secret"
+            }
+          },
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "s.pdf",
+              "query": "beta"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_punctuation_still_counts_as_a_mention",
+      "registry": "chain",
+      "utterance": "compress clip.mp4, then make a thumbnail of clip.mp4.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "small.mp4"
+            }
+          },
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "small.mp4"
+            }
+          },
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_longer_name_containing_the_source_is_not_a_mention",
+      "registry": "chain",
+      "utterance": "compress clip.mp4 and then strip its audio, leave myclip.mp4 and clip.mp4.bak alone",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip-chained.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_list_reference_is_threaded",
+      "registry": "chain",
+      "utterance": "compress clip.mp4 then join it with outro.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "small.mp4"
+            }
+          },
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "clip.mp4",
+                "outro.mp4"
+              ],
+              "output": "joined.mp4"
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "small.mp4"
+            }
+          },
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "small.mp4",
+                "outro.mp4"
+              ],
+              "output": "joined.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_read_only_step_is_not_a_producer",
+      "registry": "chain",
+      "utterance": "inspect clip.mp4 and remove its audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "inspect_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "inspect_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_multi_source_producer_is_not_threaded",
+      "registry": "chain",
+      "utterance": "join a.mp4 and b.mp4 into ab.mp4 then compress it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "a.mp4",
+                "b.mp4"
+              ],
+              "output": "ab.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "a.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "concat_video",
+            "args": {
+              "inputs": [
+                "a.mp4",
+                "b.mp4"
+              ],
+              "output": "ab.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "a.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_different_kind_is_not_threaded_onto",
+      "registry": "chain",
+      "utterance": "make a thumbnail of clip.mp4 and compress it",
+      "file_kinds": {
+        "video": [
+          "mp4",
+          "mkv",
+          "mov"
+        ],
+        "image": [
+          "jpg",
+          "png"
+        ]
+      },
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.jpg"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.jpg"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "the_same_kind_in_another_container_is_threaded",
+      "registry": "chain",
+      "utterance": "convert clip.mp4 to mkv then strip its audio",
+      "file_kinds": {
+        "video": [
+          "mp4",
+          "mkv",
+          "mov"
+        ],
+        "image": [
+          "jpg",
+          "png"
+        ]
+      },
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "container": "mkv",
+              "output": "clip.mkv"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "container": "mkv",
+              "output": "clip.mkv"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mkv"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_unlisted_extension_is_unrestricted",
+      "registry": "chain",
+      "utterance": "make a thumbnail of clip.mp4 and compress it",
+      "file_kinds": {
+        "video": [
+          "mp4",
+          "mkv",
+          "mov"
+        ],
+        "image": [
+          "jpg",
+          "png"
+        ]
+      },
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.heic"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.heic"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "thumb.heic"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "without_kinds_the_different_kind_is_threaded",
+      "registry": "chain",
+      "utterance": "make a thumbnail of clip.mp4 and compress it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.jpg"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "thumb.jpg"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "thumb.jpg"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_name_against_unspaced_cjk_text_counts_as_a_mention",
+      "registry": "chain",
+      "utterance": "为clip.mp4生成缩略图，并压缩clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ]
             }
           }
         ]

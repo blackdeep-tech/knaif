@@ -148,3 +148,145 @@ def test_no_forward_thread_without_later_consumer():
     plan = [{"tool": "unlock_pdf", "args": {"input": "s.pdf", "password": "x"}}]
     CommandAgent._link_chain_intermediates(plan, "unlock s.pdf", {"unlock_pdf"})
     assert "output" not in plan[0]["args"]
+
+
+# ── the named-once rule (docs/plans/2026-09-23-chain-source-threading.md) ──────────
+# Threading repairs a model that filled in a name the user said only once ("check if
+# it contains beta"). When the user wrote the name again, that later step's input is
+# their choice: a fan-out, several steps reading one file, must reach execution as-is.
+
+_FANOUT_UTT = (
+    "strip the audio from clip.mov and save it as silent.mp4, then trim silent.mp4 from 0 "
+    "to 2 seconds as part1.mp4, then trim silent.mp4 from 2 to 4 seconds as part2.mp4, then "
+    "reverse part2.mp4 as part2_rev.mp4, then trim silent.mp4 from 4 seconds to the end as "
+    "part3.mp4, then concatenate part1.mp4, part2_rev.mp4 and part3.mp4 into result.mp4"
+)
+
+
+def _fanout_plan() -> list[dict]:
+    return [
+        {"tool": "strip_audio", "args": {"inputs": ["clip.mov"], "output": "silent.mp4"}},
+        {
+            "tool": "trim_video",
+            "args": {"input": "silent.mp4", "start": "0", "end": "2", "output": "part1.mp4"},
+        },
+        {
+            "tool": "trim_video",
+            "args": {"input": "silent.mp4", "start": "2", "end": "4", "output": "part2.mp4"},
+        },
+        {"tool": "reverse_video", "args": {"inputs": ["part2.mp4"], "output": "part2_rev.mp4"}},
+        {
+            "tool": "trim_video",
+            "args": {"input": "silent.mp4", "start": "4", "output": "part3.mp4"},
+        },
+        {
+            "tool": "concat_video",
+            "args": {"inputs": ["part1.mp4", "part2_rev.mp4", "part3.mp4"], "output": "result.mp4"},
+        },
+    ]
+
+
+def test_fan_out_over_a_repeated_name_survives_unchanged():
+    """The workbench bug: the threader cascaded silent → part1 → part2 down the plan."""
+    plan = _fanout_plan()
+    CommandAgent._link_chain_intermediates(plan, _FANOUT_UTT)
+    assert plan == _fanout_plan()
+
+
+def test_two_steps_over_a_file_named_twice_are_kept():
+    utt = "make a thumbnail of clip.mp4 and compress clip.mp4"
+    plan = [
+        {"tool": "create_thumbnail", "args": {"inputs": ["clip.mp4"], "output": "thumb.jpg"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip.mp4"], "output": "small.mp4"}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt)
+    assert plan[1]["args"]["inputs"] == ["clip.mp4"]
+
+
+def test_a_dot_slash_repeat_counts_as_the_same_name():
+    utt = "unlock ./s.pdf with pass x, then search s.pdf for beta"
+    plan = [
+        {"tool": "unlock_pdf", "args": {"input": "./s.pdf", "password": "x"}},
+        {"tool": "find_in_document", "args": {"input": "s.pdf", "query": "beta"}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt, {"unlock_pdf"})
+    assert plan[1]["args"]["input"] == "s.pdf"
+    assert "output" not in plan[0]["args"]
+
+
+def test_a_longer_name_containing_the_source_is_not_a_mention():
+    """`myclip.mp4` is not a second mention of `clip.mp4`, so "it" still threads."""
+    utt = "trim clip.mp4 to 2 seconds and resize it, keep myclip.mp4 as is"
+    plan = [
+        {"tool": "trim_video", "args": {"input": "clip.mp4", "end": "2"}},
+        {"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "height": 480}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt)
+    assert plan[1]["args"]["inputs"] == [plan[0]["args"]["output"]]
+
+
+def test_a_model_invented_source_is_still_threaded():
+    """Zero mentions is "at most once": the native-missing repair must keep working.
+
+    "trim clip.mp4, compress it, and remove the audio": the model pointed the last step at
+    the raw trim, a name the user never wrote, so the compression would be thrown away.
+    """
+    utt = "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio"
+    plan = [
+        {"tool": "trim_video", "args": {"input": "clip.mp4", "output": "clip_trimmed.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_trimmed.mp4"]}},
+        {"tool": "strip_audio", "args": {"inputs": ["clip_trimmed.mp4"]}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt)
+    assert plan[1]["args"]["output"] == "clip_trimmed-chained.mp4"
+    assert plan[2]["args"]["inputs"] == ["clip_trimmed-chained.mp4"]
+
+
+# ── the kind rule: never thread onto a file of a different kind ────────────────────
+# Kinds come from the skill (`file_kinds:` in skill.yaml, as extension -> kind); core only
+# compares them. An extension the skill does not list is unrestricted.
+_KINDS = {"mp4": "video", "mkv": "video", "jpg": "image", "png": "image"}
+
+
+def test_a_reference_is_not_threaded_onto_a_different_kind():
+    """ "make a thumbnail of clip.mp4 and compress it" must not compress the thumbnail."""
+    utt = "make a thumbnail of clip.mp4 and compress it"
+    plan = [
+        {"tool": "create_thumbnail", "args": {"inputs": ["clip.mp4"], "output": "thumb.jpg"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip.mp4"]}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt, None, _KINDS)
+    assert plan[1]["args"]["inputs"] == ["clip.mp4"]
+
+
+def test_a_reference_is_threaded_onto_the_same_kind_in_another_container():
+    """ "convert clip.mp4 to mkv then strip its audio" is the repair the rule must keep."""
+    utt = "convert clip.mp4 to mkv then strip its audio"
+    plan = [
+        {"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "output": "clip.mkv"}},
+        {"tool": "strip_audio", "args": {"inputs": ["clip.mp4"]}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt, None, _KINDS)
+    assert plan[1]["args"]["inputs"] == ["clip.mkv"]
+
+
+def test_an_unlisted_extension_is_unrestricted():
+    utt = "make a thumbnail of clip.mp4 and compress it"
+    plan = [
+        {"tool": "create_thumbnail", "args": {"inputs": ["clip.mp4"], "output": "thumb.heic"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip.mp4"]}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt, None, _KINDS)
+    assert plan[1]["args"]["inputs"] == ["thumb.heic"]
+
+
+def test_a_name_against_cjk_text_is_still_a_mention():
+    """Unspaced CJK ("为clip.mp4生成") must not hide a repeated name from the count."""
+    utt = "为clip.mp4生成缩略图，并压缩clip.mp4"
+    plan = [
+        {"tool": "create_thumbnail", "args": {"inputs": ["clip.mp4"]}},
+        {"tool": "compress_video", "args": {"inputs": ["clip.mp4"]}},
+    ]
+    CommandAgent._link_chain_intermediates(plan, utt)
+    assert plan[1]["args"]["inputs"] == ["clip.mp4"]
+    assert "output" not in plan[0]["args"]

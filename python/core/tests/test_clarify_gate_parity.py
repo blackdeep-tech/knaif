@@ -22,6 +22,7 @@ import pytest
 
 from knaif.agent import CommandAgent
 from knaif.registry import load_registry
+from knaif.skill import parse_file_kinds
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = REPO_ROOT / "contracts" / "parity" / "clarify_gate_cases.json"
@@ -46,6 +47,7 @@ def _apply_gate(
     utterance: str,
     output_capable: set[str],
     sandbox_files: list[str] | None = None,
+    file_kinds: dict[str, str] | None = None,
 ) -> dict:
     """The composed stage, exactly as `CommandAgent.infer` composes it.
 
@@ -53,10 +55,13 @@ def _apply_gate(
     value whose stem the user named when that value is one of these, so both runtimes have
     to be handed the same listing or they cannot agree — which is why the contract states
     it per case rather than leaving each harness to invent one.
+
+    *file_kinds* is the skill's `file_kinds:` as an extension -> kind map; chain threading
+    never rewrites a reference onto a file of another kind. Absent means no kinds.
     """
     payload = copy.deepcopy(payload)
     steps = payload.get("plan") or []
-    CommandAgent._link_chain_intermediates(steps, utterance, output_capable)
+    CommandAgent._link_chain_intermediates(steps, utterance, output_capable, file_kinds)
     hallucinated = CommandAgent._hallucinated_filename(steps, utterance, sandbox_files or [])
     if hallucinated:
         return {
@@ -82,6 +87,7 @@ def test_clarify_gate_matches_the_contract(case: dict, tmp_path: Path) -> None:
         case["utterance"],
         _output_capable(tmp_path, case["registry"]),
         case.get("sandbox_files"),
+        parse_file_kinds(case.get("file_kinds")),
     )
     assert got == case["expected_payload"]
 

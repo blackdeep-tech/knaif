@@ -6,7 +6,7 @@ import copy
 import json
 import re
 import time
-from collections.abc import Collection, Iterator
+from collections.abc import Collection, Iterator, Mapping
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -94,6 +94,27 @@ def _basename(value: str) -> str:
     return re.split(r"[\\/]", value)[-1]
 
 
+def _extension(value: str) -> str:
+    """Lower-cased extension of *value*'s basename, without the dot ('' when none)."""
+    name = _basename(value)
+    dot = name.rfind(".")
+    return name[dot + 1 :].lower() if dot > 0 else ""
+
+
+def _mention_count(utterance: str, name: str) -> int:
+    """How many times the filename *name* appears in *utterance*, case-insensitively.
+
+    A match must stand alone as a filename: ``clip.mp4`` inside ``myclip.mp4`` or
+    ``clip.mp4.bak`` is not a mention, while a ``./`` prefix or trailing punctuation
+    (``clip.mp4,``) is. Only ASCII letters, digits, ``_``, ``.`` and ``-`` extend a name:
+    Chinese and Japanese are written without spaces ("为clip.mp4生成"), so a Unicode
+    word-character boundary would hide every mention there. Pass a basename; the
+    utterance is expected already normalized.
+    """
+    pattern = r"(?<![A-Za-z0-9_.-])" + re.escape(name.lower()) + r"(?![A-Za-z0-9_-]|\.[A-Za-z0-9_])"
+    return len(re.findall(pattern, utterance.lower()))
+
+
 def _intermediate_name(src: str, taken: set[str]) -> str:
     """Derive a chain-intermediate filename from *src*, avoiding *taken* basenames.
 
@@ -151,6 +172,7 @@ class CommandAgent:
         expanders: dict[str, Any] | None = None,
         confirmer: Any | None = None,
         unsafe_phrases: tuple[str, ...] = (),
+        file_kinds: dict[str, str] | None = None,
         summarizers: dict[str, Any] | None = None,
         preflights: dict[str, Any] | None = None,
         result_formatter: Any | None = None,
@@ -177,6 +199,8 @@ class CommandAgent:
             if "output" in set(td.required_args) | set(td.optional_args)
         }
         self.unsafe_phrases: tuple[str, ...] = unsafe_phrases
+        # Extension -> kind, from the skill's `file_kinds:`; chain threading never crosses kinds.
+        self.file_kinds: dict[str, str] = file_kinds or {}
         self.sandbox: Path | None = Path(sandbox).resolve() if sandbox else None
         self.root: Path = Path(root).resolve() if root else Path.cwd()
         self.orchestrator = orchestrator
@@ -244,6 +268,7 @@ class CommandAgent:
             expanders=skill.expanders,
             confirmer=confirmer,
             unsafe_phrases=skill.unsafe_phrases,
+            file_kinds=skill.file_kinds,
             summarizers=skill.summarizers,
             preflights=skill.preflights,
             result_formatter=skill.result_formatter,
@@ -1056,7 +1081,7 @@ class CommandAgent:
         # downstream can tell a model error from a correct plan that core changed.
         self.last_model_plan = copy.deepcopy(payload)
         self._link_chain_intermediates(
-            payload.get("plan") or [], user_utterance, self._output_capable
+            payload.get("plan") or [], user_utterance, self._output_capable, self.file_kinds
         )
         hallucinated = self._hallucinated_filename(
             payload.get("plan") or [], user_utterance, self._listed_filenames()
@@ -1128,6 +1153,7 @@ class CommandAgent:
         plan: list[dict[str, Any]],
         utterance: str,
         output_capable: set[str] | None = None,
+        file_kinds: Mapping[str, str] | None = None,
     ) -> None:
         """Bind undeclared chain intermediates to the producing step's ``output``.
 
@@ -1192,12 +1218,14 @@ class CommandAgent:
             if isinstance(out, str):
                 produced.add(out.lower())
 
-        CommandAgent._forward_thread_reused_sources(plan, output_capable)
+        CommandAgent._forward_thread_reused_sources(plan, utterance, output_capable, file_kinds)
 
     @staticmethod
     def _forward_thread_reused_sources(
         plan: list[dict[str, Any]],
+        utterance: str,
         output_capable: set[str] | None = None,
+        file_kinds: Mapping[str, str] | None = None,
     ) -> None:
         """Thread a reused source filename onto the transforming step's output.
 
@@ -1218,7 +1246,20 @@ class CommandAgent:
         *output_capable* is None (unit tests) any non-terminal step is eligible.
         A producer that fans out to many files (multiple inputs or a glob) is not
         a safe single-``output`` target and is skipped. Mutates *plan* in place.
+
+        **Named-once rule.** A source the user wrote more than once in *utterance* is
+        left alone: repeating the name makes each later step's input the user's choice,
+        and a fan-out (several steps reading one file) must reach execution as written.
+        A name said once ("…and check if *it* contains beta") or never (the model invented
+        the intermediate) is still threaded.
+
+        **Kind rule.** A producer whose declared ``output`` is a different kind of file from
+        its source (a thumbnail of a video) is not threaded onto: the later step keeps the
+        source. Kinds come from the skill's ``file_kinds:`` (*file_kinds*, extension ->
+        kind); an extension it does not list is unrestricted, and a minted intermediate
+        keeps the source's extension. See docs/plans/2026-09-23-chain-source-threading.md.
         """
+        kinds = file_kinds or {}
         produced: set[str] = set()
         for step in plan:
             out = (step.get("args") or {}).get("output")
@@ -1239,6 +1280,8 @@ class CommandAgent:
             if len(sources) != 1:
                 continue  # batch / glob producer — one output can't name many files
             src_base = _basename(sources[0]).lower()
+            if _mention_count(utterance, src_base) > 1:
+                continue  # the user named it again: later references are theirs
 
             # Collect later references to the same source file.
             targets: list[tuple[Any, Any]] = []
@@ -1264,7 +1307,12 @@ class CommandAgent:
                 continue
 
             out = args.get("output")
-            if not isinstance(out, str) or not out:
+            if isinstance(out, str) and out:
+                src_kind = kinds.get(_extension(sources[0]))
+                out_kind = kinds.get(_extension(out))
+                if src_kind and out_kind and src_kind != out_kind:
+                    continue  # a different kind of file: the later step meant the source
+            else:
                 out = _intermediate_name(sources[0], produced)
                 args["output"] = out
                 produced.add(_basename(out).lower())

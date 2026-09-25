@@ -187,6 +187,25 @@ validated — see [TRAINING_DATA_GENERATION.md](TRAINING_DATA_GENERATION.md).
 
 `safety.unsafe_phrases` is a list of strings used by mock inference to force a `reject` response when any phrase appears in the user's utterance. It is currently used for known argument names such as `file_type` and can be extended as validator support grows.
 
+`file_kinds` (optional) says which of the skill's files are the same kind of thing, as
+`kind: [extensions]`:
+
+```yaml
+file_kinds:
+  video: [mp4, mov, mkv, webm, gif]
+  image: [jpg, jpeg, png]
+```
+
+Both runtimes read it for chain threading only. When a later step names an earlier step's
+source file, core rewrites it onto that step's output ("convert clip.mp4 to mkv then strip
+*its* audio"), but never onto a file of a different kind: "make a thumbnail of clip.mp4 and
+compress *it*" compresses the video. An extension no kind lists is unrestricted, and one
+listed under two kinds fails the skill load.
+
+Threading also stops when the **user repeats the filename**: "thumbnail of clip.mp4 and
+compress clip.mp4" is two steps over one file, and the plan runs as written. When you write
+corpus rows or examples, a name written twice pins that step to the original file.
+
 ### Display metadata
 
 `display:` is **end-user catalog copy**, read only by the website generator

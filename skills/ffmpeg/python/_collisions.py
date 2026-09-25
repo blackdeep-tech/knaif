@@ -17,13 +17,15 @@ exists. Collision handling therefore lives one level up, reached through
 
 There is no ambiguity to resolve, which is the part worth stating plainly: when the original
 input and a producer's requested output share a name, the surviving literal has **one**
-referent, because ``CommandAgent._forward_thread_reused_sources`` has already rewritten any
-later reference to the *original source* onto the producer's output before this runs. A
-reference to the pre-transform file does not survive the optimizer at all, so in the identity
-case ``clip.mp4`` downstream can only mean what step 0 wrote. Restoring the opposite reading
-("leave a reference to the original source alone") would reintroduce the documents bug that
-threader exists to fix — ``unlock_pdf`` then ``find_in_document`` reading the still-locked
-original.
+referent, because it is a name step 0 declared it will write, and the rule above binds such a
+name to what that step wrote. That holds whether or not the user repeated the name, so in the
+identity case ``clip.mp4`` downstream can only mean what step 0 wrote.
+
+``CommandAgent._forward_thread_reused_sources`` handles the other shape, a later reference to a
+*differently named* source (``unlock_pdf s.pdf -> clear.pdf`` then ``find_in_document s.pdf``),
+and only when the user named that source at most once: "check if *it* contains beta" is
+threaded onto ``clear.pdf``, while a name the user wrote again is a fan-out and keeps the
+original (docs/plans/2026-09-23-chain-source-threading.md).
 
 **Which of the two names moves.** The binding rule says what a later reference means; it does
 not say which side of a self-overwrite gets renamed, and the two shapes do not want the same

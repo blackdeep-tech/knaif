@@ -1301,6 +1301,8 @@ struct PlanSession {
     registry: knaif_core::Registry,
     overrides: knaif_core::PromptOverrides,
     output_capable: std::collections::HashSet<String>,
+    /// The skill's `file_kinds:` — chain threading never crosses kinds.
+    file_kinds: knaif_core::FileKinds,
     backend: Box<dyn knaif_llm::LlmBackend>,
     /// Repair only for a real model — the mock repeats its canned response, so a retry is pointless.
     repair: bool,
@@ -1315,11 +1317,14 @@ impl PlanSession {
         }
         let overrides = knaif_core::load_prompt_yaml(&bundle.join("prompt.yaml"));
         let output_capable = knaif_core::output_capable_tools(&registry);
+        let file_kinds =
+            knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
         let backend = knaif_llm::backend_for(model, verbose)?;
         Ok(Self {
             registry,
             overrides,
             output_capable,
+            file_kinds,
             backend,
             repair: model.is_some(),
         })
@@ -1401,8 +1406,13 @@ impl PlanSession {
         // same directory stem resolution uses two lines down — `sandbox` when configured, else
         // the cwd — so the guard cannot admit a name the resolver would then refuse.
         let known_files = listed_filenames(sandbox.unwrap_or(base));
-        let gated =
-            knaif_core::apply_clarify_gate(payload, &utterance, &self.output_capable, &known_files);
+        let gated = knaif_core::apply_clarify_gate(
+            payload,
+            &utterance,
+            &self.output_capable,
+            &known_files,
+            &self.file_kinds,
+        );
         // Extension-less stems (`clip_4k`, `silent_clip`) resolve against the working directory,
         // or become a clarify when it cannot decide — port of Python's `resolve_stems` call in
         // `CommandAgent._execute_steps`, applied at the same stage (N2). Without it native
