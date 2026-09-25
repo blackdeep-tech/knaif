@@ -4,11 +4,11 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "281eec75a05a09df8405892f3b991ca363a8c3b141cd98bb8c404d975b88bb84",
-        "contracts": "cd792e402e1a5a4280e5f9af862d76e5efc4ec6fcc29443d3cd558607c89a348",
+        "bundle": "d14e6df2a05d8e7af1f2127f717de4ca989a0312a07f3dfc35b20e8e3089f547",
+        "contracts": "5f74f70a7a683ebdd84e6d70832a4afbc22109ffc8a0ce4accb76e268b1aa14a",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "f5a03d25c53a9ce4f6d08f66300713bd0e5cce64b66e0bd5b5ba066f862ea09e",
+        "native": "37202e14444027e8070288d50c377d1e198ef96d75da0107bffb661348f40f12",
         "corpus": "2e92836621aa31ede7ab85458b5ede7a8377d1e52a6f949cd79b334a7a94e92e",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
         "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
@@ -17,11 +17,11 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "281eec75a05a09df8405892f3b991ca363a8c3b141cd98bb8c404d975b88bb84",
-        "contracts": "cd792e402e1a5a4280e5f9af862d76e5efc4ec6fcc29443d3cd558607c89a348",
+        "bundle": "d14e6df2a05d8e7af1f2127f717de4ca989a0312a07f3dfc35b20e8e3089f547",
+        "contracts": "5f74f70a7a683ebdd84e6d70832a4afbc22109ffc8a0ce4accb76e268b1aa14a",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "f5a03d25c53a9ce4f6d08f66300713bd0e5cce64b66e0bd5b5ba066f862ea09e",
+        "native": "37202e14444027e8070288d50c377d1e198ef96d75da0107bffb661348f40f12",
         "corpus": "2e92836621aa31ede7ab85458b5ede7a8377d1e52a6f949cd79b334a7a94e92e",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
         "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"

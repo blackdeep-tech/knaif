@@ -551,6 +551,14 @@ fn resolve_intent(
                     container = None;
                 }
             }
+            // The same mistake in the output NAME: `*.hevc` / `clip.h265`. ffmpeg picks its muxer
+            // from the extension, chooses a raw elementary stream, and fails (ffmpeg_229#4). The
+            // extension supplies the codec only when the plan names none, and is replaced by the
+            // container's below. Port of Python `_codec_from_output`.
+            let output_codec = codec_from_output(output.as_deref(), data);
+            if let (Some(oc), None) = (&output_codec, &video_codec) {
+                video_codec = Some(oc.clone());
+            }
             let container = container
                 .or_else(|| container_from_output(output.as_deref(), data))
                 .unwrap_or_else(|| "mp4".into());
@@ -559,8 +567,13 @@ fn resolve_intent(
             let remux = video_codec.is_none() && audio_codec.is_none() && q.is_none();
 
             options.mode = Some("convert".into());
-            options.container = Some(container);
             set_output(&mut options, args);
+            if let (Some(oc), Some(out)) = (&output_codec, &output) {
+                // By string, not Path: keep the caller's separators (`out/clip.hevc`).
+                options.output_path =
+                    Some(format!("{}.{container}", &out[..out.len() - oc.len() - 1]));
+            }
+            options.container = Some(container);
             if remux {
                 options.remux = true;
             }
@@ -818,6 +831,15 @@ fn ext_of(output: &str) -> Option<String> {
 fn container_from_output(output: Option<&str>, data: &FfmpegData) -> Option<String> {
     let ext = output.and_then(ext_of)?;
     data.vocab.video_containers.contains(&ext).then_some(ext)
+}
+
+/// `_codec_from_output`: the output extension iff it names a video codec (`clip.hevc`).
+fn codec_from_output(output: Option<&str>, data: &FfmpegData) -> Option<String> {
+    let ext = output.and_then(ext_of)?;
+    data.vocab
+        .video_encoder_map
+        .contains_key(&ext)
+        .then_some(ext)
 }
 
 /// `_audio_format_from_output`: the output extension iff it is a known audio extension.

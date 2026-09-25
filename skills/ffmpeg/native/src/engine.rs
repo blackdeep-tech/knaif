@@ -1065,10 +1065,16 @@ fn batch_suffixes(input: &Path, out_stem: &str) -> Vec<String> {
 ///
 /// Only the batch can see the clash: a lone `clip.mp4` must stay `clip.mp4` rather than gain a
 /// suffix because some other input might have existed.
+///
+/// **Every input of the batch is taken too, before any output is placed.** A same-folder pattern
+/// sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the `-y`
+/// conversion replaced it (ffmpeg_229#4, run for real). Reserving inputs up front is what makes
+/// the order of the batch irrelevant.
 pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
-    let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<String> =
+        outputs.iter().map(|(input, _)| path_key(input)).collect();
     for (input, out) in outputs.iter_mut() {
-        if seen.insert(out.clone()) {
+        if seen.insert(path_key(out)) {
             continue;
         }
         let stem = out
@@ -1093,7 +1099,7 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
             .into_iter()
             .map(|s| build(format!("{stem}_{s}")))
             .collect();
-        let candidate = match tried.iter().find(|c| !seen.contains(*c)) {
+        let candidate = match tried.iter().find(|c| !seen.contains(&path_key(c))) {
             Some(c) => c.clone(),
             None => {
                 // Nothing in the source name is left to say. Count off the most specific
@@ -1106,14 +1112,14 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
                     .to_string();
                 let mut n = 1;
                 let mut candidate = base;
-                while seen.contains(&candidate) {
+                while seen.contains(&path_key(&candidate)) {
                     n += 1;
                     candidate = build(format!("{base_stem}_{n}"));
                 }
                 candidate
             }
         };
-        seen.insert(candidate.clone());
+        seen.insert(path_key(&candidate));
         *out = candidate;
     }
 }
@@ -1124,6 +1130,23 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
 /// absent because they are structure, not characters.
 const ILLEGAL_IN_FILENAME: &[char] = &['<', '>', ':', '"', '|'];
 const ILLEGAL_REPLACEMENT: char = '-';
+
+/// A path as a comparison key: absolute, and case-folded on Windows, whose paths ignore case.
+/// Port of Python's `os.path.normcase(os.path.abspath(..))`.
+fn path_key(p: &Path) -> String {
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    let s = abs.to_string_lossy().into_owned();
+    if cfg!(windows) {
+        s.replace('/', "\\").to_lowercase()
+    } else {
+        s
+    }
+}
+
+/// Do two paths name one file? Port of Python `_same_file`.
+fn same_file(a: &Path, b: &Path) -> bool {
+    path_key(a) == path_key(b)
+}
 
 /// Make a model-supplied `output` a string the filesystem will actually accept.
 /// Port of `_legal_output_path`.
@@ -1396,10 +1419,18 @@ pub fn build_one_recipe(
 
     let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
         let out = resolve_output_target(raw, &input_path, &mode, options, &container)?;
-        if out.is_absolute() {
+        let out = if out.is_absolute() {
             out
         } else {
             input_path.parent().map(|p| p.join(&out)).unwrap_or(out)
+        };
+        // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
+        // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the derived
+        // name, as the plan-level collision handling does for a literal self-overwrite.
+        if same_file(&out, &input_path) {
+            derive_output_path(&input_path, &mode, vocab, options, &container)
+        } else {
+            out
         }
     } else {
         derive_output_path(&input_path, &mode, vocab, options, &container)
@@ -1657,6 +1688,40 @@ pub fn build_one_recipe(
 
 #[cfg(test)]
 mod tests {
+
+    /// `clip.mov -> *.mp4` must not land on the batch's other input `clip.mp4` (ffmpeg_229#4,
+    /// run for real: the `-y` conversion replaced it). Both orders.
+    #[test]
+    fn a_batch_output_never_lands_on_another_input() {
+        for order in [["clip.mp4", "clip.mov"], ["clip.mov", "clip.mp4"]] {
+            let mut outs: Vec<(PathBuf, PathBuf)> = order
+                .iter()
+                .map(|n| {
+                    let input = PathBuf::from("/sb").join(n);
+                    // What the pattern gives each: the self-case already took the derived name.
+                    let out = if *n == "clip.mp4" {
+                        PathBuf::from("/sb/clip_converted.mp4")
+                    } else {
+                        PathBuf::from("/sb/clip.mp4")
+                    };
+                    (input, out)
+                })
+                .collect();
+            disambiguate_outputs(&mut outs);
+            let names: Vec<String> = outs
+                .iter()
+                .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+                .collect();
+            assert!(
+                !names.iter().any(|n| order.contains(&n.as_str())),
+                "{order:?}: {names:?}"
+            );
+            assert_eq!(
+                names.len(),
+                names.iter().collect::<std::collections::HashSet<_>>().len()
+            );
+        }
+    }
     use super::*;
 
     fn vf(
