@@ -786,8 +786,9 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         );
     }
     // Tell an NVIDIA user about the opt-in CUDA payload, once, before the slow run rather than
-    // after it. A Blackwell user who runs first and reads later gets one CPU-speed request and may
-    // reasonably conclude the product is broken.
+    // after it. Where Vulkan measures at CPU speed (Blackwell did until a 2026-09 re-measurement), a
+    // user who runs first and reads later gets one CPU-speed request and may reasonably conclude the
+    // product is broken.
     //
     // `gpu.is_some()` is the "this build can actually infer" test. Offering a GPU backend to a
     // mock-only binary is noise — there is nothing for it to accelerate — and the CPU warning above

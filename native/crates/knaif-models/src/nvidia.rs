@@ -9,11 +9,13 @@
 //!
 //! ## Why the offer has two strengths
 //!
-//! CUDA is a **correctness** requirement on some NVIDIA hardware and an **optimisation** on the
-//! rest. On Blackwell (sm_120) the Vulkan fallback generates at CPU speed — measured 2026-07-14 on
-//! knaif's real workload, ~5.7 tok/s against a CPU's ~5.9 — so the payload is what makes the product
-//! work, and the offer says so. On Ampere the same message would be scaremongering: CUDA is faster
-//! and worth having, but Vulkan is perfectly usable.
+//! CUDA can be a **correctness** requirement on some NVIDIA hardware and an **optimisation** on the
+//! rest. Blackwell (sm_120) was the strong case from 2026-07-07: the Vulkan fallback generated at CPU
+//! speed there (~5.7 tok/s against a CPU's ~5.9), so the payload was what made the product work. On
+//! 2026-09-25 the same RTX 5080 measured Vulkan at 147 tok/s (CUDA 204, CPU 14.4) — likely a driver
+//! fix — so the list is empty today and every NVIDIA GPU gets the soft offer. The strong path stays
+//! for the next architecture that measures that way: on usable hardware the same message would be
+//! scaremongering.
 //!
 //! **The architecture list is data, not code.** The defect is in a llama.cpp/driver code path and
 //! may be fixed upstream, at which point a baked-in "Blackwell is broken" list would start lying in

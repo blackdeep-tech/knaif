@@ -68,20 +68,26 @@ backends:
     nudge:
       # Compute capabilities where the VULKAN FALLBACK IS INADEQUATE, not merely slower — i.e. where
       # this payload is what makes the product work rather than what makes it faster. Measured, never
-      # assumed: docs/PERFORMANCE.md §2, 2026-07-14, on knaif's real workload (Qwen3-4B q4_k_m,
-      # 3938-token ffmpeg prompt). On sm_120 Vulkan generates at ~5.7 tok/s against the CPU's ~5.9 —
-      # a user with the newest NVIDIA card runs the "GPU" artifact at CPU speed, which is not a
-      # slower option but a product that reads as broken. The sm_120 / coopmat2 path is the culprit.
+      # assumed (docs/PERFORMANCE.md §2).
+      #
+      # EMPTY since 2026-09-25. "12.0" (Blackwell) was listed from 2026-07-07: on an RTX 5080 Vulkan
+      # generated at ~5.7 tok/s against the CPU's ~5.9. Re-measured on the SAME RTX 5080 with the same
+      # llama-cpp-2 0.1.150, driver 616.92: Vulkan 147 tok/s generation / 8812 tok/s prompt, against
+      # CUDA 204 / 10129 and CPU 14.4 / 373. Vulkan is ~72% of CUDA there — slower, not broken — so
+      # Blackwell now gets the soft offer like everything else. Same crate both times, so the fix is
+      # most likely the driver (July's was not recorded).
       #
       # THIS IS DATA ON PURPOSE. The defect is in a llama.cpp/driver code path and may be fixed
       # upstream; a "Blackwell is broken" list baked into the code would then lie in the other
-      # direction with nothing to catch it. Re-measure each supported architecture when the
-      # llama.cpp pin moves, record it in PERFORMANCE.md, and edit this list.
+      # direction with nothing to catch it. Being data does not keep it fresh on its own: "12.0"
+      # stayed listed until someone re-measured. Re-measure each supported architecture when the
+      # llama.cpp pin OR the NVIDIA driver moves, record it (with the driver version) in
+      # PERFORMANCE.md, and edit this list.
       #
       # Everything NOT listed here gets the soft offer: CUDA is faster and optional. Note that
       # sm_86 is the only pre-Blackwell architecture ever measured — Turing, Ada and Hopper are
       # unverified, so the copy must not imply otherwise.
-      vulkan_inadequate_compute_caps: ["12.0"]
+      vulkan_inadequate_compute_caps: []
 
     platforms:
       linux-x64:

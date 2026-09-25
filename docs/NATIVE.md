@@ -211,7 +211,14 @@ and it is how `backend install` gets debugged. Two caveats that matter only on t
 - **Vulkan needs `CMAKE_GENERATOR=Ninja`** — on Windows from a VS Developer shell; on Linux
   `package.sh` sets it. See §10.
 
-### 5.4 Performance findings (RTX 5080, knaif-qwen3-4b-v1) — **the decisive result**
+### 5.4 Performance findings (RTX 5080, knaif-qwen3-4b-v1) — **2026-07-07, superseded for Vulkan**
+
+> **2026-09-25 re-measurement, same RTX 5080, same `llama-cpp-2` 0.1.150, driver 616.92:** CUDA
+> 10 129 / 203.8 tok/s (prompt / generation), **Vulkan 8 812 / 146.8 tok/s**, CPU 373 / 14.4 tok/s.
+> Vulkan is ~72% of CUDA on generation, no longer at CPU speed — conclusions 2, 3 and 5 below and the
+> "CUDA is required" recommendation in §5.5 no longer hold. Numbers and method:
+> [PERFORMANCE.md §2](PERFORMANCE.md#2-backend-cuda-vs-vulkan-vs-cpu). The table below is kept as the
+> record behind the original decision.
 
 Measured 2026-07-07. Full investigation and methodology:
 [docs/plans/2026-07-07-inference-backend-performance.md](plans/2026-07-07-inference-backend-performance.md).
@@ -241,24 +248,26 @@ Conclusions (all evidence-backed):
 
 ### 5.5 Backend recommendation (product)
 
-- **CUDA is required on NVIDIA hardware** — the only backend that makes `run`
-  responsive. Ship a CUDA artifact and select it when an NVIDIA GPU is present.
-- **Vulkan is the cross-vendor fallback** (AMD / Intel / no-CUDA), accepting it is slow
-  for LLM decode.
+- **CUDA is the fastest backend on NVIDIA hardware** and is selected whenever its payload is
+  installed. *(Until 2026-09-25 this read "CUDA is required on NVIDIA hardware"; that came from the
+  July Blackwell measurement, which no longer reproduces — §5.4.)*
+- **Vulkan is the default GPU backend** — the release artifact ships it, and it drives AMD, Intel and
+  NVIDIA cards. Measured usable on both NVIDIA architectures tried: ~as fast as CUDA on Ampere, ~72%
+  of CUDA on Blackwell.
 - **CPU** is the no-GPU last resort.
 - Consider `knaif-qwen3-1.7b-v1` for the Vulkan/CPU fallback paths to offset slower compute.
 - Do **not** invest in a Vulkan pipeline-cache patch for speed.
 
 **The first-run CUDA offer.** The default artifact ships CPU+Vulkan; CUDA is an opt-in payload, so
-something has to tell an NVIDIA user it exists — *before* their first slow run, not after. A Blackwell
-user who runs first and reads later gets one CPU-speed request and may reasonably conclude the
-product is broken.
+something has to tell an NVIDIA user it exists — *before* their first slow run, not after. Where
+Vulkan runs at CPU speed (Blackwell did, 2026-07-07 → re-measured fine 2026-09-25), a user who runs
+first and reads later gets one CPU-speed request and may reasonably conclude the product is broken.
 
 The offer has **two strengths**, because the two populations are genuinely different:
 
 | Population | Message | Why |
 |---|---|---|
-| Compute cap in `nudge.vulkan_inadequate_compute_caps` (today: `12.0`, Blackwell) | prominent, stated as *correctness* | Vulkan generates at ~CPU speed there (§5.4 / PERFORMANCE.md §2) — the payload is what makes the product work |
+| Compute cap in `nudge.vulkan_inadequate_compute_caps` (today: **empty**; `12.0` Blackwell was listed 2026-07-07 → 2026-09-25) | prominent, stated as *correctness* | for an architecture where Vulkan is *measured* to run at ~CPU speed — the payload is what makes the product work. None measures that way today (PERFORMANCE.md §2) |
 | Any other NVIDIA GPU | quiet, stated as *optional* | CUDA is faster, Vulkan is perfectly usable |
 | Driver below `requires.min_driver` | update hint, **no offer** | the payload would download and then fail to load, which reaches the user as "CUDA didn't work" |
 | No NVIDIA GPU, or already installed | nothing at all | an unsolicited GPU message on an AMD laptop is noise |
@@ -558,10 +567,10 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 - **macOS** — no installers/notarization; explicitly out for v1.
 - **Linux CPU floor** — the CPU artifact is glibc-linked; a static-musl floor build is a possible
   fast-follow (CUDA/Vulkan need glibc + the vendor driver regardless).
-- **Persistent daemon** — keep the model resident to make repeat CUDA calls near-instant
-  (low value for Vulkan; see §5.4/5.5).
-- **Vulkan decode speed** — investigate whether it is Blackwell/sm_120/coopmat2-specific;
-  revisit after llama.cpp updates.
+- **Persistent daemon** — keep the model resident to make repeat GPU calls near-instant
+  (the July "low value for Vulkan" reasoning assumed Vulkan's slow compute, which no longer holds).
+- **Vulkan decode speed** — *answered 2026-09-25*: Blackwell Vulkan is ~72% of CUDA on the same
+  crate as July, most likely a driver fix. Re-measure when the llama.cpp pin or the driver moves.
 - **Execution breadth** — native `run` supports ffmpeg + documents, including image watermark
   (documents; image-XObject with soft-mask alpha, covered by `overlay.rs` tests).
 - **Chain failure handling is stop-and-report, nothing more** — deliberately, and worth stating

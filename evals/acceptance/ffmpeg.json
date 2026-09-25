@@ -5,10 +5,10 @@
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
         "bundle": "f274be0c0b17ce2b3b1329cf0fb73cb567b30d9bb1da944afbc969765eb1c3fd",
-        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
+        "contracts": "c4e98cb51bb949b78ff655f6c75b74d53de57f1fdfca5fa2a57657fe7b6d9135",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "6d2aec8f68281c0f0740c487ea8d2241f849e65d92b232d21d3c33f67e4060ed",
+        "native": "a31fa04ca6f31eae2ec04375aa42463b30ad630daf257961876688f0042e8d09",
         "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
         "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
@@ -18,10 +18,10 @@
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
         "bundle": "f274be0c0b17ce2b3b1329cf0fb73cb567b30d9bb1da944afbc969765eb1c3fd",
-        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
+        "contracts": "c4e98cb51bb949b78ff655f6c75b74d53de57f1fdfca5fa2a57657fe7b6d9135",
         "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "6d2aec8f68281c0f0740c487ea8d2241f849e65d92b232d21d3c33f67e4060ed",
+        "native": "a31fa04ca6f31eae2ec04375aa42463b30ad630daf257961876688f0042e8d09",
         "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
         "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
         "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"

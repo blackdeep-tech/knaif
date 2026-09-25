@@ -15,11 +15,14 @@ the inference figure quoted there.
 > **⚠️ Never quote a latency number from this repo without naming the machine.** Most pre-2026-07-14
 > numbers were measured on an **RTX 5080** and don't say so. The project now runs on an **RTX 3070
 > Laptop**, 2.5–4× slower. Worse, one *conclusion* in those docs — ["CUDA is required on
-> NVIDIA"](#2-backend-cuda-vs-vulkan-vs-cpu) — turns out to be **true only on Blackwell**.
+> NVIDIA"](#2-backend-cuda-vs-vulkan-vs-cpu) — turned out to be **true only on Blackwell**, and since
+> the **2026-09-25** re-measurement not even there: Vulkan on the `5080` is now ~72% of CUDA (§2).
 
 Last measured 2026-07-14 (Qwen3-4B q4_k_m, ffmpeg skill prompt of **3938 tokens**, 32-token
 generation, `n_ctx = 8192`, fresh process, median of warm reps). **Linux CUDA payload added
-2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`.
+2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`. **`5080` backends
+re-measured 2026-09-25** (§2) — `knaif-qwen3-4b-v2`, the ffmpeg prompt at its current 2441 tokens,
+driver 616.92.
 
 ---
 
@@ -73,8 +76,11 @@ the committed record for this and most other runs. Link to the row, never to a r
 
 ## 2. Backend: CUDA vs Vulkan vs CPU
 
-**Headline: on Ampere, Vulkan is as fast as CUDA. On Blackwell, it collapses.** This reverses a
-shipped decision, so it is the most load-bearing fact here.
+**Headline: Vulkan is a usable GPU backend on both measured NVIDIA architectures.** On Ampere it is
+as fast as CUDA; on Blackwell it is ~72% of CUDA (2026-09-25). The July Blackwell "collapse" (Vulkan at
+CPU speed) no longer reproduces on the same card and the same llama.cpp crate — most likely a driver
+fix. This reversed a shipped decision twice, so it is the most load-bearing fact here: **always record
+the driver version with a Vulkan number.**
 
 ### `3070L` (Ampere) — all six runtime × backend cells
 
@@ -87,7 +93,28 @@ shipped decision, so it is the most load-bearing fact here.
 | **python** | **Vulkan** | 1879 tok/s | 72.9 tok/s | ~2520 ms |
 | python | CPU (honest, §4) | 38 tok/s | 6.7 tok/s | ~110 000 ms |
 
-### `5080` (Blackwell) — from [the 2026-07-07 investigation](plans/2026-07-07-inference-backend-performance.md), native only
+### `5080` (Blackwell) — **2026-09-25**, native, the current numbers
+
+RTX 5080, compute 12.0, **driver 616.92**, `llama-cpp-2` 0.1.150, `knaif-qwen3-4b-v2` q4_k_m, the
+ffmpeg prompt (now **2441 tokens**, down from 3938), 32-token generation, `run --dry-run`,
+`KNAIF_TIMING=1`, per-kind builds from `scripts/build_native_kind.sh` (`dynamic-backends`). Median of
+5 warm runs (CPU: 3) after one warm-up; placement checked (CUDA0 37 / Vulkan0 37 / CPU 37 layers). CPU
+at default threads (16 generation / 32 prompt).
+
+| Backend | prompt decode | generation | inference total | model load |
+|---|---:|---:|---:|---:|
+| CUDA | **10 129 tok/s** (241 ms) | **203.8 tok/s** (157 ms) | **419 ms** | 1006 ms |
+| Vulkan | 8 812 tok/s (277 ms) | 146.8 tok/s (218 ms) | 814 ms | 1278 ms |
+| CPU | 373 tok/s (6540 ms) | 14.4 tok/s (2217 ms) | 8845 ms | 1734 ms |
+
+- **Vulkan is ~87% of CUDA on prompt decode and ~72% on generation** — 26× July's 5.7 tok/s on the
+  same card. Blackwell was removed from `nudge.vulkan_inadequate_compute_caps` on this evidence.
+- Same `llama-cpp-2` 0.1.150 as July, so the llama.cpp version is not what changed. The driver is the
+  likely cause; July's driver version was not recorded, so that is an inference, not a proof.
+- Corpus-scale confirmation (2026-09-25, `evals/runs/2026-09-25_backend-parity-v2_plans`, 1015
+  utterances, plan-only): CUDA 0.46 s, Vulkan 0.78 s, CPU at 8 threads ~12 s per utterance.
+
+### `5080` (Blackwell) — **2026-07-07, SUPERSEDED** by the table above ([investigation](plans/2026-07-07-inference-backend-performance.md)), native only
 
 | Backend | prompt decode | generation | inference total |
 |---|---:|---:|---:|
@@ -130,6 +157,8 @@ that silently isn't the one you think you are benchmarking.
 
 ### What this means
 
+- *(2026-09-25: the Blackwell half of this no longer holds — see the current `5080` table. Kept
+  for the history of the decision.)*
 - **Vulkan's catastrophic generation speed was Blackwell-specific.** On the `5080` Vulkan
   generated at 5.7 tok/s — *tied with pure CPU*, absurd for a discrete GPU. On Ampere it runs at
   **88.6 tok/s: ~15× faster than CPU and within 3% of CUDA.** This **closes the open question**
@@ -149,7 +178,10 @@ The first launch after install will look hung. This does **not** contradict the 
 compute is fine and one-time *compilation* is the only cost. **Warm the cache at install time**, or
 the user's first request eats it.
 
-### ⚠️ The `5080` native CUDA numbers are suspect — do not derive a hardware ratio from them
+### ⚠️ The **2026-07-07** `5080` native CUDA numbers are suspect — do not derive a hardware ratio from them
+
+*(2026-09-25: resolved for current numbers — the `5080` now measures 203.8 tok/s CUDA generation,
+above the `3070L`'s 90.9, as expected of the faster card. The note below is about the July table.)*
 
 The `5080` table reports **80 tok/s** generation. The `3070L` measures **91 tok/s** — a laptop
 Ampere part beating a desktop Blackwell on memory-bound decode, which is not physically credible.
