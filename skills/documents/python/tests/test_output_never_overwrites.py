@@ -143,3 +143,43 @@ def test_office_conversion_never_replaces_a_same_stem_pdf(
     assert users_pdf.read_bytes() == b"%PDF-the user's own file"
     assert Path(result["output"]).read_bytes() == b"%PDF-converted"
     assert Path(result["output"]) != users_pdf
+
+
+# -- compress never hands back a bigger file -------------------------------------------------------
+# Found 2026-09-26 while strengthening documents grading: compress_pdf wrote a LARGER file for
+# both fixtures (sample.pdf 2227 -> 3952 bytes, sample-scanned.pdf 5707 -> 7689) and reported a
+# negative percentage. A result that is not smaller is not a compression; the input's own bytes
+# are kept instead, and the result says so (`kept_original`).
+
+
+@pytest.mark.parametrize("quality", ["small", "balanced", "high"])
+def test_compress_never_writes_a_larger_file(tmp_path: Path, quality: str) -> None:
+    # The committed contract fixture: a small text PDF, the case where every method grew it.
+    fixture = Path(__file__).parents[4] / "contracts" / "parity" / "fixtures" / "documents"
+    source = tmp_path / "sample.pdf"
+    source.write_bytes((fixture / "sample.pdf").read_bytes())
+
+    agent = CommandAgent.from_skill(DOCUMENTS_SKILL_DIR, sandbox=tmp_path, root=tmp_path)
+    results = agent.execute_plan(
+        {
+            "plan": [
+                {
+                    "tool": "compress_pdf",
+                    "args": {
+                        "input": "sample.pdf",
+                        "compress_quality": quality,
+                        "output": "out.pdf",
+                    },
+                }
+            ]
+        },
+        dry_run=False,
+        confirmed=True,
+    )
+    result = next(r["result"] for r in results if "new_size" in (r.get("result") or {}))
+
+    out = tmp_path / "out.pdf"
+    assert out.stat().st_size <= source.stat().st_size, result
+    if result["kept_original"]:
+        assert out.read_bytes() == source.read_bytes()
+        assert result["percent"] == 0.0 and result["text_preserved"] is True

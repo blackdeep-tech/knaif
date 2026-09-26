@@ -84,6 +84,31 @@ pub fn compress(
     Ok(method)
 }
 
+/// [`compress`], then never hand back a larger file: returns the method that ran and whether the
+/// input's own bytes were kept instead of its result.
+///
+/// Every method grew the documents fixtures (Ghostscript's overhead on a small text PDF took
+/// 2227 bytes to 3952; found 2026-09-26, both runtimes). Not smaller is not a compression, so the
+/// input is copied over the result — which also keeps its text where rasterizing would not. Port
+/// of the same rule in Python `RunCompressStep` (`method: "kept-original"`).
+pub fn compress_no_larger(
+    input: &Path,
+    output: &Path,
+    quality: &str,
+    profile: &CompressProfile,
+    gs: Option<&Path>,
+) -> anyhow::Result<(Method, bool)> {
+    let method = compress(input, output, quality, profile, gs)?;
+    let size = |p: &Path| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+    let original = size(input);
+    if original > 0 && size(output) >= original {
+        std::fs::copy(input, output)
+            .map_err(|e| anyhow::anyhow!("could not keep {}: {e}", input.display()))?;
+        return Ok((method, true));
+    }
+    Ok((method, false))
+}
+
 /// lopdf stream compression + object-stream save (keeps text/vectors). Port of `_lossless_compress`.
 fn lossless(input: &Path, output: &Path) -> anyhow::Result<()> {
     let mut doc = pdf::load(input)?;
@@ -188,6 +213,42 @@ mod tests {
         assert_eq!(choose_method("high", false), Method::Lossless);
         assert!(!Method::Rasterize.text_preserved());
         assert!(Method::Lossless.text_preserved());
+    }
+
+    /// compress_pdf wrote a LARGER file for both fixtures (found 2026-09-26; Python and native).
+    /// Not smaller is not a compression: the input's own bytes are kept, and the caller is told.
+    #[test]
+    fn compress_never_writes_a_larger_file() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../contracts/parity/fixtures/documents/sample.pdf");
+        let dir = std::env::temp_dir().join(format!("knaif_cmp_nolarger_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("sample.pdf");
+        std::fs::copy(&fixture, &input).unwrap();
+        let output = dir.join("out.pdf");
+        let profile = CompressProfile {
+            ghostscript_pdfsettings: "/ebook".into(),
+            lossless: Default::default(),
+            rasterize_fallback: crate::profile::RasterizeFallback {
+                dpi: 150,
+                jpeg_quality: 75,
+            },
+        };
+
+        let (_, kept) = compress_no_larger(&input, &output, "high", &profile, None).unwrap();
+
+        let (in_len, out_len) = (
+            std::fs::metadata(&input).unwrap().len(),
+            std::fs::metadata(&output).unwrap().len(),
+        );
+        assert!(out_len <= in_len, "{out_len} > {in_len}");
+        if kept {
+            assert_eq!(
+                std::fs::read(&output).unwrap(),
+                std::fs::read(&input).unwrap()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

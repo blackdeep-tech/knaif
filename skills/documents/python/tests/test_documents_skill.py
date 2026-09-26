@@ -1053,11 +1053,20 @@ def test_run_compress_small_without_ghostscript_rasterizes(
         _handler_context(tmp_path),
     )
 
+    # The raster backend ran, but on this small text PDF its result is LARGER than the input,
+    # so the step keeps the original (2026-09-26: compress never hands back a bigger file) —
+    # and with it the text the raster would have flattened.
     assert result["method"] == "rasterize-pillow"
-    assert result["text_preserved"] is False
-    assert result["warning"]
+    assert result["kept_original"] is True
+    assert result["text_preserved"] is True
     assert _execute("inspect_document", {"input": str(output)}, tmp_path)["pages"] == 3
-    assert "".join(_pdf_text_pages(output)).strip() == ""
+    assert "".join(_pdf_text_pages(output)).strip() != ""
+
+    # The raster backend itself still flattens: called directly, its output has no text.
+    flat = tmp_path / "flat.pdf"
+    handlers._rasterize_compress(Path(manifest["pdf"]), flat, dpi=72, jpeg_quality=40)
+    assert _execute("inspect_document", {"input": str(flat)}, tmp_path)["pages"] == 3
+    assert "".join(_pdf_text_pages(flat)).strip() == ""
 
 
 def test_protect_pdf_declares_password_grounded():

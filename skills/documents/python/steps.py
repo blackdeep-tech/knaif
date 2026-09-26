@@ -486,6 +486,15 @@ class RunCompressStep(Step):
         else:
             _lossless_compress(input_path, output_path)
         new_size = output_path.stat().st_size
+        kept_original = bool(original_size) and new_size >= original_size
+        if kept_original:
+            # Not smaller is not a compression: every method grew the fixtures (Ghostscript's
+            # overhead on a small text PDF, 2227 -> 3952 bytes). Keep the input's own bytes, which
+            # also keeps its text where the raster method would have flattened it. `method` still
+            # names the backend that ran; `kept_original` says its result was not used.
+            shutil.copyfile(input_path, output_path)
+            new_size = original_size
+            text_preserved, use_raster = True, False
         percent = ((original_size - new_size) / original_size * 100) if original_size else 0.0
         result = {
             "output": str(output_path),
@@ -494,6 +503,7 @@ class RunCompressStep(Step):
             "percent": percent,
             "method": method,
             "text_preserved": text_preserved,
+            "kept_original": kept_original,
         }
         if use_raster:
             result["warning"] = "Raster compression removes selectable text and vector content."
