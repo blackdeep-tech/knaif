@@ -32,9 +32,17 @@ from typing import Any
 
 import yaml
 
+from .outcomes import POLICY_VERSION
+
 STATUS_CONTRACT = Path("contracts/release/native_status.yaml")
 PLATFORMS_CONTRACT = Path("contracts/release/platforms.yaml")
 ACCEPTANCE_DIR = Path("evals/acceptance")
+MODEL_MANIFEST = Path("contracts/models/model-manifest.yaml")
+
+#: Evidence a measurement brings for itself; see `native_status.yaml`. `policy` and `model` are
+#: also derivable from the tree (the code's POLICY_VERSION, the manifest hash of the skill's
+#: `recommended_model`); `native_binary` only when a binary is handed to the gate.
+RUN_SCOPED = ("model", "native_binary", "policy")
 
 #: Ordered weakest → strongest, so a derived status is a max over satisfied ones.
 STATUS_ORDER = ("in-progress", "parity", "supported")
@@ -83,7 +91,9 @@ def _sha256_tree(root: Path, patterns: tuple[str, ...]) -> str:
     return h.hexdigest()
 
 
-def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
+def evidence_tuple(
+    skill: str, root: Path, native_binary: Path | None = None
+) -> dict[str, str | None]:
     """The fingerprint an acceptance record is bound to.
 
     Every member answers "could this change what a run would produce?". The four shared ones —
@@ -100,7 +110,7 @@ def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
         path = root / rel
         return _sha256_file(path) if path.is_file() else None
 
-    return {
+    tuple_: dict[str, str | None] = {
         # The skill's own declarative contract + handlers.
         "bundle": _tree(
             f"skills/{skill}",
@@ -133,7 +143,32 @@ def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
         "verifier": _tree(f"skills/{skill}/eval", ("*.py",)),
         # Effective generation settings, as a contract rather than as prose.
         "settings": _file("contracts/runtime/generation.yaml"),
+        # The rules that turn outcomes into a score. A record graded under another version is
+        # not comparable, whatever else held still.
+        "policy": str(POLICY_VERSION),
     }
+    # The GGUF the skill ships with, by the hash the manifest publishes. Absent (not None)
+    # when there is nothing to compare against — no recommended model, or `sha256: TODO`
+    # before upload — because a None here would read as "changed" against every record.
+    model = _recommended_model_sha(skill, root)
+    if model:
+        tuple_["model"] = model
+    # The built binary is not in the tree. Only a gate handed the artifact can check it.
+    if native_binary is not None:
+        tuple_["native_binary"] = _sha256_file(native_binary)
+    return tuple_
+
+
+def _recommended_model_sha(skill: str, root: Path) -> str | None:
+    """sha256 the model manifest publishes for this skill's `recommended_model`, if any."""
+    skill_yaml = root / "skills" / skill / "skill.yaml"
+    manifest = root / MODEL_MANIFEST
+    if not (skill_yaml.is_file() and manifest.is_file()):
+        return None
+    name = (yaml.safe_load(skill_yaml.read_text(encoding="utf-8")) or {}).get("recommended_model")
+    models = (yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}).get("models") or {}
+    sha = str((models.get(name) or {}).get("sha256") or "")
+    return sha if len(sha) == 64 and all(c in "0123456789abcdef" for c in sha.lower()) else None
 
 
 def load_status_contract(root: Path) -> dict[str, Any]:
@@ -178,21 +213,37 @@ def _layer_state(
         return LayerState(layer, "stale", f"changed since the run: {', '.join(sorted(drifted))}")
     if missing:
         return LayerState(layer, "stale", f"record does not pin: {', '.join(sorted(missing))}")
+    # A run-scoped key the record pins but this gate had nothing to compare with. It cannot make
+    # the layer stale, and it must not vanish either: that silence is the bug this closes.
+    unchecked = [
+        key
+        for key in depends
+        if key in RUN_SCOPED and key not in current and recorded.get(key) is not None
+    ]
+    note = f" [not checked here: {', '.join(unchecked)}]" if unchecked else ""
     # A run that recorded its own verdict is taken at its word. Recording a FAILED run as valid
     # evidence would let a status rest on a measurement that said "no" — the exact substitution
     # of "we ran it" for "it passed" this gate exists to prevent.
     if entry.get("passed") is False:
         return LayerState(
-            layer, "failing", entry.get("summary", "the recorded run did not meet its threshold")
+            layer,
+            "failing",
+            entry.get("summary", "the recorded run did not meet its threshold") + note,
         )
-    return LayerState(layer, "valid", entry.get("summary", ""))
+    return LayerState(layer, "valid", entry.get("summary", "") + note)
 
 
-def evaluate_skill(skill: str, root: Path, declared: str) -> SkillGate:
-    """Derive the status this skill's evidence actually supports, and compare with its claim."""
+def evaluate_skill(
+    skill: str, root: Path, declared: str, native_binary: Path | None = None
+) -> SkillGate:
+    """Derive the status this skill's evidence actually supports, and compare with its claim.
+
+    Pass *native_binary* (the packaged artifact under test) to check the binary a record
+    measured; without it the gate says it did not.
+    """
     contract = load_status_contract(root)
     record = load_acceptance_record(skill, root)
-    current = evidence_tuple(skill, root)
+    current = evidence_tuple(skill, root, native_binary)
 
     all_layers = list(contract["layers"])
     states = [_layer_state(name, record, current, contract) for name in all_layers]
@@ -303,11 +354,18 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
         f"{run_dir.name}: rate={result.get('equivalence_rate')} "
         f"threshold={result.get('threshold')} passed={result.get('passed')}"
     )
+    # The run's own model and binary, which only its meta knows (see `RUN_SCOPED`).
+    evidence = {
+        **evidence_tuple(skill, root),
+        "model": (meta.get("model") or {}).get("sha256"),
+        "native_binary": (meta.get("binary") or {}).get("sha256"),
+    }
     return record_layers(
         skill,
         root,
         {
             "L3": {
+                "evidence": evidence,
                 "run": str(run_dir.relative_to(root)) if run_dir.is_absolute() else str(run_dir),
                 "summary": summary,
                 "equivalence_rate": result.get("equivalence_rate"),

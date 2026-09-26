@@ -46,10 +46,14 @@ statuses:
 #
 # Two kinds of member. TREE-SCOPED ones (`contracts`, `python_core`, `bundle`, `corpus`,
 # `verifier`, `settings`, `native`, `grading`) are computed from the working tree by
-# `evidence_tuple`. RUN-SCOPED ones (`model`, `native_binary`, `policy`) cannot be: the GGUF and
-# the built binary are not in the tree, and which model a run used is a fact of that run. They
-# are carried in the fingerprint the measurement captures for itself, which is why a layer that
-# brings its own `evidence` keeps it rather than being re-stamped with the present tree's.
+# `evidence_tuple`. RUN-SCOPED ones (`model`, `native_binary`, `policy`) are facts of a run: L4
+# (`accept-native`) and L3 (`gate --record-parity`) record the GGUF sha256, the binary sha256 and
+# the scoring policy the run actually used, which is why a layer that brings its own `evidence`
+# keeps it rather than being re-stamped with the present tree's. The gate compares them against:
+# `policy` = the code's POLICY_VERSION; `model` = the manifest sha256 of the skill's
+# `recommended_model` (absent while it reads TODO); `native_binary` = the binary passed to
+# `gate --native-bin` (the packaged artifact). Without `--native-bin` the gate prints
+# "not checked here: native_binary" rather than skipping it in silence.
 # `_layer_state` skips any key the current tuple does not carry, so a tree-scoped key that is
 # named here and never computed would be silently ignored — `test_every_tree_scoped_dependency_is_computed`
 # is what stops that from happening quietly.

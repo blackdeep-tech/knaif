@@ -496,3 +496,45 @@ def test_nonfinite_native_coverage_fails_closed() -> None:
     )
     assert not report.ok
     assert "coverage" in [v.name for v in report.violations]
+
+
+def test_the_l4_record_pins_the_run_s_model_binary_and_policy(tmp_path, recorded) -> None:
+    """The record must carry what THIS run measured, not what the tree says now (release R2).
+
+    Without these, `native_status.yaml`'s `model` / `native_binary` / `policy` dependencies had
+    nothing to compare, and a record kept reading valid across a GGUF swap or a rebuild.
+    """
+    from knaif.evalsuite import cli
+
+    board = _real_bar_board(model_sha256="c" * 64, binary_sha256="d" * 64)
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(
+        json.dumps(_safety(backend=board.get("backend_public_name") or board["backend"])),
+        encoding="utf-8",
+    )
+
+    cli.cmd_accept_native(_cli_args(current, safety))
+    evidence = recorded["L4"]["evidence"]
+    assert evidence["model"] == "c" * 64
+    assert evidence["native_binary"] == "d" * 64
+    assert evidence["policy"] == str(POLICY_VERSION)
+    assert "native" in evidence and "corpus" in evidence  # the tree half is still there
+
+
+def test_an_l4_run_that_did_not_hash_its_model_pins_none(tmp_path, recorded) -> None:
+    """An old board (only `model_sha256_prefix`) must not borrow the tree's model hash."""
+    from knaif.evalsuite import cli
+
+    board = _real_bar_board(model_sha256_prefix="c" * 16, binary_sha256="d" * 64)
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(
+        json.dumps(_safety(backend=board.get("backend_public_name") or board["backend"])),
+        encoding="utf-8",
+    )
+
+    cli.cmd_accept_native(_cli_args(current, safety))
+    assert recorded["L4"]["evidence"]["model"] is None

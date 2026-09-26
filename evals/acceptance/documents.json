@@ -5,26 +5,30 @@
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
         "bundle": "13763f9dfc07f1cb6b66a3a4e203a137b8e6125b2c160bd174d355cea6171b2c",
-        "contracts": "cf983903058b8366d2f22ad3859dde8e240ceb824c9512a9f19aa4dcc7a4bb2c",
+        "contracts": "443f2f11aa4fd61a2549c211431b3363948a354980be85b9de15603dc0c886c6",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
         "native": "779e17f7313446a49dcdafbe91a5a5b5d903b33704b305356e9c01c055c422d2",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28",
+        "policy": "3",
+        "model": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
       }
     },
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
         "bundle": "13763f9dfc07f1cb6b66a3a4e203a137b8e6125b2c160bd174d355cea6171b2c",
-        "contracts": "cf983903058b8366d2f22ad3859dde8e240ceb824c9512a9f19aa4dcc7a4bb2c",
+        "contracts": "443f2f11aa4fd61a2549c211431b3363948a354980be85b9de15603dc0c886c6",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
         "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
         "native": "779e17f7313446a49dcdafbe91a5a5b5d903b33704b305356e9c01c055c422d2",
         "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
         "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28",
+        "policy": "3",
+        "model": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
       }
     },
     "L4": {

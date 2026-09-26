@@ -1004,7 +1004,10 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["compute_placement"] = measured.placement
     scoreboard["compute_device_enumerated"] = measured.enumerated
     scoreboard["binary_sha256"] = _sha256_file(lane.binary)
-    scoreboard["model_sha256_prefix"] = _sha256_file(lane.model_path)[:16]
+    # The full hash is L4 evidence (`native_status.yaml`: L4 is invalidated by `model`); the
+    # prefix is kept for readers of older boards.
+    scoreboard["model_sha256"] = _sha256_file(lane.model_path)
+    scoreboard["model_sha256_prefix"] = scoreboard["model_sha256"][:16]
     scoreboard["git_sha"] = _git("rev-parse", "HEAD")
     scoreboard["git_dirty"] = bool(_git("status", "--porcelain"))
     scoreboard["backend"] = lane.name
@@ -1082,7 +1085,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
         declared = _declared_native_status(skill, root)
         if declared is None:
             continue
-        gate = evaluate_skill(skill, root, declared)
+        native_bin = Path(args.native_bin) if getattr(args, "native_bin", None) else None
+        gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
         marks = "  ".join(
             f"{s.layer}:{ {'valid': 'ok', 'failing': 'FAIL', 'stale': 'STALE', 'pending': '-'}[s.state] }"
             for s in gate.layers
@@ -1629,11 +1633,24 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         )
     print(report.summary())
 
+    # The fingerprint this run was taken under: the tree as it is, plus what only the run knows
+    # — the GGUF and binary it measured and the policy it was graded by. A board too old to
+    # carry a full model hash pins None rather than borrowing the tree's, so it reads "does not
+    # pin: model" instead of passing for a model nobody checked.
+    from .gate import evidence_tuple
+
+    run_evidence = {
+        **evidence_tuple(args.skill, Path.cwd()),
+        "model": current.get("model_sha256"),
+        "native_binary": current.get("binary_sha256"),
+        "policy": str(current["scoring_policy"]) if current.get("scoring_policy") else None,
+    }
     path = record_layers(
         args.skill,
         Path.cwd(),
         {
             "L4": {
+                "evidence": run_evidence,
                 "run": str(current_path),
                 "summary": report.summary().splitlines()[0],
                 "passed": report.ok,
@@ -2168,6 +2185,14 @@ def build_parser() -> argparse.ArgumentParser:
         dest="record_parity",
         metavar="RUN_DIR",
         help="Record L3 evidence for --skill from a saved parity run directory.",
+    )
+    p_gate.add_argument(
+        "--native-bin",
+        default=None,
+        dest="native_bin",
+        metavar="PATH",
+        help="The binary under acceptance (the packaged artifact). Checks that L3/L4 records "
+        "measured THIS binary; without it the gate reports the binary as not checked.",
     )
 
     # regression

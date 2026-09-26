@@ -301,3 +301,112 @@ def test_every_tree_scoped_dependency_is_computed(tree: Path) -> None:
                 f"{layer}.invalidated_by names {key!r}, which evidence_tuple never computes "
                 f"and which is not declared run-scoped — it would be skipped in silence"
             )
+
+
+# ── run-scoped evidence: the model, the binary and the grading policy ─────────────────────────
+# `native_status.yaml` names all three under L3/L4 `invalidated_by`, and `_layer_state` skipped
+# them in silence because `evidence_tuple` never computed them: swapping the GGUF, rebuilding the
+# binary or moving POLICY_VERSION left an L4 record reading "valid" (release plan R2).
+
+_SHA_A = "a" * 64
+_SHA_B = "b" * 64
+
+
+def _with_manifest(tree: Path, sha: str) -> None:
+    (tree / "contracts" / "models").mkdir(parents=True, exist_ok=True)
+    (tree / "contracts" / "models" / "model-manifest.yaml").write_text(
+        yaml.safe_dump({"models": {"knaif-demo-v1": {"file": "demo.gguf", "sha256": sha}}}),
+        encoding="utf-8",
+    )
+    (tree / "skills" / "demo" / "skill.yaml").write_text(
+        "name: demo\nrecommended_model: knaif-demo-v1\n", encoding="utf-8"
+    )
+
+
+def _layer(tree: Path, name: str, **kw):
+    return next(
+        s for s in evaluate_skill("demo", tree, "supported", **kw).layers if s.layer == name
+    )
+
+
+def test_the_policy_is_part_of_the_evidence(tree: Path) -> None:
+    from knaif.evalsuite.outcomes import POLICY_VERSION
+
+    assert evidence_tuple("demo", tree)["policy"] == str(POLICY_VERSION)
+
+
+def test_the_recommended_model_is_part_of_the_evidence(tree: Path) -> None:
+    _with_manifest(tree, _SHA_A)
+    assert evidence_tuple("demo", tree)["model"] == _SHA_A
+
+
+def test_a_model_with_no_published_hash_pins_nothing(tree: Path) -> None:
+    """`sha256: TODO` (not uploaded yet) is not a hash; comparing against it would be noise."""
+    _with_manifest(tree, "TODO")
+    assert "model" not in evidence_tuple("demo", tree)
+
+
+def test_an_l4_run_on_a_different_gguf_is_stale(tree: Path) -> None:
+    """The plan's RED test: the same record with a different GGUF sha256 turns stale."""
+    _with_manifest(tree, _SHA_A)
+    _record_all(tree)
+    run = {**evidence_tuple("demo", tree), "model": _SHA_A}
+    record_layers("demo", tree, {"L4": {"summary": "run", "passed": True, "evidence": run}})
+    assert _layer(tree, "L4").state == "valid"
+
+    record_layers(
+        "demo",
+        tree,
+        {"L4": {"summary": "run", "passed": True, "evidence": {**run, "model": _SHA_B}}},
+    )
+    l4 = _layer(tree, "L4")
+    assert l4.state == "stale" and "model" in l4.detail
+
+
+def test_an_l4_run_under_another_policy_is_stale(tree: Path) -> None:
+    _record_all(tree)
+    run = {**evidence_tuple("demo", tree), "policy": "0"}
+    record_layers("demo", tree, {"L4": {"summary": "run", "passed": True, "evidence": run}})
+    l4 = _layer(tree, "L4")
+    assert l4.state == "stale" and "policy" in l4.detail
+
+
+def test_a_run_on_another_binary_is_stale_when_the_binary_is_given(tree: Path) -> None:
+    binary = tree / "knaif.exe"
+    binary.write_bytes(b"the shipped binary")
+    _record_all(tree)
+    run = {**evidence_tuple("demo", tree), "native_binary": _SHA_B}
+    record_layers("demo", tree, {"L4": {"summary": "run", "passed": True, "evidence": run}})
+
+    l4 = _layer(tree, "L4", native_binary=binary)
+    assert l4.state == "stale" and "native_binary" in l4.detail
+
+
+def test_an_unchecked_binary_is_said_out_loud(tree: Path) -> None:
+    """With no binary to compare against, the layer can stand, but not in silence."""
+    _record_all(tree)
+    run = {**evidence_tuple("demo", tree), "native_binary": _SHA_B}
+    record_layers("demo", tree, {"L4": {"summary": "run", "passed": True, "evidence": run}})
+    l4 = _layer(tree, "L4")
+    assert l4.state == "valid"
+    assert "native_binary" in l4.detail and "not checked" in l4.detail
+
+
+def test_an_l3_record_pins_the_parity_run_s_model_and_binary(tree: Path) -> None:
+    from knaif.evalsuite.gate import load_acceptance_record, record_from_parity_run
+
+    run = tree / "evals" / "parity" / "run1"
+    run.mkdir(parents=True)
+    (run / "meta.json").write_text(
+        json.dumps(
+            {
+                "model": {"sha256": _SHA_A},
+                "binary": {"sha256": _SHA_B},
+                "result": {"equivalence_rate": 0.9, "threshold": 0.8, "passed": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    record_from_parity_run("demo", tree, run)
+    evidence = load_acceptance_record("demo", tree)["layers"]["L3"]["evidence"]
+    assert evidence["model"] == _SHA_A and evidence["native_binary"] == _SHA_B
