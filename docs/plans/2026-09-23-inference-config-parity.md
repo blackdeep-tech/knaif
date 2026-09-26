@@ -1,6 +1,6 @@
 # Inference config parity — measure the noise floor, then make both lanes compute alike
 
-**Status:** Active — T1–T7 done; T8 (training backlog) open · **Created:** 2026-09-23 · **Last worked:** 2026-09-24 · **Completed:** —
+**Status:** Done — T1–T8 done · **Created:** 2026-09-23 · **Last worked:** 2026-09-26 · **Completed:** 2026-09-26
 **Owner:** core · **Ref:** found in the workbench; bears on T8 (L3/L4) of
 [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md) and on the open
 TODO *"The eval lane is not bitwise reproducible, and nothing says so"*
@@ -149,7 +149,12 @@ above. Any re-lock is its own commit, with the reason and the flip-rate evidence
 floor, and that a difference smaller than it is not a finding), and close or rewrite the TODO item
 on bitwise reproducibility with the real cause.
 
-### - [ ] T8 — Feed the fragile rows to training
+### - [x] T8 — Feed the fragile rows to training
+
+*Done 2026-09-26 as release-1.2 R3: the T2/T6 flips (with the backend-parity ones) became new
+paraphrase rows in `scripts/gen_train.py`, tagged `r3`, rather than a backlog list. See
+[release-1.2](2026-09-25-release-1.2.md) → R3.*
+
 
 T2's flipped rows are exactly the utterances where the model sits on a decision boundary
 (*"cut its audio"* → `extract_audio` vs `strip_audio` is the first known one). List them in

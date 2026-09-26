@@ -112,25 +112,25 @@
 {"utterance": "Extract pages 10 of manual.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "manual.pdf", "ranges": "10"}}]}, "tags": ["split"]}
 {"utterance": "Split off pages 6-7 of invoice.pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "invoice.pdf", "ranges": "6-7"}}]}, "tags": ["split"]}
 {"utterance": "Keep only pages 2 of slides.pdf as a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "slides.pdf", "ranges": "2"}}]}, "tags": ["split"]}
-{"utterance": "Rotate contract.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "contract.pdf", "degrees": 90, "pages": "1"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate contract.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "contract.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn manual.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "manual.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Rotate invoice.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "invoice.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
-{"utterance": "Rotate slides.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "slides.pdf", "degrees": 90, "pages": "all"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate slides.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "slides.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn thesis.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "thesis.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Rotate scan.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "scan.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
-{"utterance": "Rotate agreement.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "agreement.pdf", "degrees": 90, "pages": "1-2"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate agreement.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "agreement.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn handbook.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "handbook.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Rotate paper.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "paper.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
-{"utterance": "Rotate form.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "form.pdf", "degrees": 90, "pages": "2"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate form.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "form.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn deck.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "deck.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Rotate spec.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "spec.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
-{"utterance": "Rotate draft.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "draft.pdf", "degrees": 90, "pages": "1"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate draft.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "draft.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn ledger.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "ledger.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Rotate minutes.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "minutes.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
-{"utterance": "Rotate resume.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "resume.pdf", "degrees": 90, "pages": "all"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate resume.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "resume.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn whitepaper.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "whitepaper.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Rotate statement.pdf by 270.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "statement.pdf", "degrees": 270}}]}, "tags": ["rotate"]}
-{"utterance": "Rotate newsletter.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "newsletter.pdf", "degrees": 90, "pages": "1-2"}}]}, "tags": ["rotate"]}
+{"utterance": "Rotate newsletter.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "newsletter.pdf", "degrees": 90}}]}, "tags": ["rotate"]}
 {"utterance": "Turn ebook.pdf 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "ebook.pdf", "degrees": 180}}]}, "tags": ["rotate"]}
 {"utterance": "Delete page 3 from manual.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "manual.pdf", "pages": "3"}}]}, "tags": ["remove"]}
 {"utterance": "Remove page 1 of invoice.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "invoice.pdf", "pages": "1"}}]}, "tags": ["remove"]}
@@ -282,8 +282,8 @@
 {"utterance": "Rotate slides.pdf 90 degrees and then compress it.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "slides.pdf", "degrees": 90, "output": "slides_rot.pdf"}}, {"tool": "compress_pdf", "args": {"input": "slides_rot.pdf", "compress_quality": "balanced"}}]}, "tags": ["chain", "rotate", "compress"]}
 {"utterance": "Unlock invoice.pdf with the password hunter2 and then compress it.", "plan": {"plan": [{"tool": "unlock_pdf", "args": {"input": "invoice.pdf", "password": "hunter2", "output": "invoice_open.pdf"}}, {"tool": "compress_pdf", "args": {"input": "invoice_open.pdf", "compress_quality": "small"}}]}, "tags": ["chain", "unlock", "compress"]}
 {"utterance": "Remove pages 4-6 from manual.pdf and then protect it with password s3cret.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "manual.pdf", "pages": "4-6", "output": "manual_trimmed.pdf"}}, {"tool": "protect_pdf", "args": {"input": "manual_trimmed.pdf", "password": "s3cret"}}]}, "tags": ["chain", "remove", "protect"]}
-{"utterance": "Extract the last page of thesis.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "thesis.pdf", "ranges": "-1"}}]}, "tags": ["contrastive", "split"]}
-{"utterance": "Extract the text from the last page of thesis.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "thesis.pdf", "pages": "-1"}}]}, "tags": ["contrastive", "extract"]}
+{"utterance": "Extract the last page of thesis.pdf into a new pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "thesis.pdf", "ranges": "last"}}]}, "tags": ["contrastive", "split"]}
+{"utterance": "Extract the text from the last page of thesis.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "thesis.pdf", "pages": "last"}}]}, "tags": ["contrastive", "extract"]}
 {"utterance": "Keep only pages 2-4 of manual.pdf as a new file.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "manual.pdf", "ranges": "2-4"}}]}, "tags": ["contrastive", "split"]}
 {"utterance": "Read out the words on pages 2-4 of manual.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "manual.pdf", "pages": "2-4"}}]}, "tags": ["contrastive", "extract"]}
 {"utterance": "Pull page 5 of paper.pdf out into its own pdf.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "paper.pdf", "ranges": "5"}}]}, "tags": ["contrastive", "split"]}
@@ -332,3 +332,21 @@
 {"utterance": "Shred ledger.pdf permanently.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Permanently destroying files is outside this skill's safety policy."}}]}, "tags": ["reject", "destructive"]}
 {"utterance": "Forge a signature on agreement.pdf.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Forging someone else's signature is misuse, not a missing feature."}}]}, "tags": ["reject", "forgery"]}
 {"utterance": "Wipe the documents folder after merging.", "plan": {"plan": [{"tool": "reject", "args": {"reason": "Wiping storage is outside this skill's safety policy."}}]}, "tags": ["reject", "destructive"]}
+{"utterance": "Remove the final page of report.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "report.pdf", "pages": "last"}}]}, "tags": ["remove", "r3", "fragile"]}
+{"utterance": "The last page of scan.pdf is blank, delete it.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "scan.pdf", "pages": "last"}}]}, "tags": ["remove", "r3", "fragile"]}
+{"utterance": "Remove the last page of bericht.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "bericht.pdf", "pages": "last"}}]}, "tags": ["remove", "r3", "fragile"]}
+{"utterance": "Save just the last page of contract.pdf as its own PDF.", "plan": {"plan": [{"tool": "split_pdf", "args": {"input": "contract.pdf", "ranges": "last"}}]}, "tags": ["split", "r3", "fragile"]}
+{"utterance": "Get the text from the final page of memo.pdf.", "plan": {"plan": [{"tool": "extract_text", "args": {"input": "memo.pdf", "pages": "last"}}]}, "tags": ["extract", "r3", "fragile"]}
+{"utterance": "Rotate the last page of form.pdf 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "form.pdf", "degrees": 90, "pages": "last"}}]}, "tags": ["rotate", "r3", "fragile"]}
+{"utterance": "Drop the last page of minutes.pdf, then number the remaining pages.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "minutes.pdf", "pages": "last", "output": "minutes_trimmed.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "minutes_trimmed.pdf"}}]}, "tags": ["chain", "remove", "r3", "fragile"]}
+{"utterance": "Please rotate deck.pdf clockwise, all of it.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "deck.pdf", "degrees": 90}}]}, "tags": ["rotate", "r3", "fragile"]}
+{"utterance": "Rotate manual.pdf a quarter turn, every sheet of it.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "manual.pdf", "degrees": 90}}]}, "tags": ["rotate", "r3", "fragile"]}
+{"utterance": "Rotate the whole of thesis.pdf by 180.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "thesis.pdf", "degrees": 180}}]}, "tags": ["rotate", "r3", "fragile"]}
+{"utterance": "Page 2 of letter.pdf is upside down - rotate it 180 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "letter.pdf", "degrees": 180, "pages": "2"}}]}, "tags": ["rotate", "r3", "fragile"]}
+{"utterance": "Only page 4 of plan.pdf is sideways - rotate it 90 degrees.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "plan.pdf", "degrees": 90, "pages": "4"}}]}, "tags": ["rotate", "r3", "fragile"]}
+{"utterance": "Reverse the page order of slides.pdf.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "slides.pdf", "order": "reverse"}}]}, "tags": ["reorder", "r3", "fragile"]}
+{"utterance": "Reverse the pages of notes.pdf so they run back to front.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "notes.pdf", "order": "reverse"}}]}, "tags": ["reorder", "r3", "fragile"]}
+{"utterance": "scan.pdf was scanned backwards - reorder its pages the right way round.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "scan.pdf", "order": "reverse"}}]}, "tags": ["reorder", "r3", "fragile"]}
+{"utterance": "Kehre die Seitenreihenfolge von akte.pdf um.", "plan": {"plan": [{"tool": "reorder_pages", "args": {"input": "akte.pdf", "order": "reverse"}}]}, "tags": ["reorder", "de", "r3", "fragile"]}
+{"utterance": "Rotate report.pdf 90 degrees, then compress it to a small size.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "report.pdf", "degrees": 90, "output": "report_rotated.pdf"}}, {"tool": "compress_pdf", "args": {"input": "report_rotated.pdf", "compress_quality": "small"}}]}, "tags": ["chain", "rotate", "compress", "r3", "fragile"]}
+{"utterance": "Turn brochure.pdf 90 degrees and compress it.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "brochure.pdf", "degrees": 90, "output": "brochure_rotated.pdf"}}, {"tool": "compress_pdf", "args": {"input": "brochure_rotated.pdf", "compress_quality": "balanced"}}]}, "tags": ["chain", "rotate", "compress", "r3", "fragile"]}
