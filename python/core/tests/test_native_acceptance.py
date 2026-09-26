@@ -538,3 +538,28 @@ def test_an_l4_run_that_did_not_hash_its_model_pins_none(tmp_path, recorded) -> 
 
     cli.cmd_accept_native(_cli_args(current, safety))
     assert recorded["L4"]["evidence"]["model"] is None
+
+
+@pytest.mark.parametrize(
+    ("device", "os_id", "cell_backend"),
+    [
+        ("CUDA0", "linux-x64", "cuda"),
+        ("CPU", "windows-x64", "cpu"),
+        ("Vulkan0", "windows-x64", "vulkan"),
+    ],
+)
+def test_the_l4_verdict_lands_in_its_matrix_cell(tmp_path, recorded, device, os_id, cell_backend):
+    """One cell per model x OS x backend, so a later run cannot overwrite another's verdict."""
+    from knaif.evalsuite import cli
+
+    board = _real_bar_board(compute_backend=device, os=os_id)
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(
+        json.dumps(_safety(backend=board.get("backend_public_name") or board["backend"])),
+        encoding="utf-8",
+    )
+
+    cli.cmd_accept_native(_cli_args(current, safety))
+    assert recorded["L4"]["cell"] == f"{board['backend_public_name']}|{os_id}|{cell_backend}"

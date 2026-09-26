@@ -31,6 +31,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 @pytest.fixture
 def tree(tmp_path: Path) -> Path:
     """A miniature repo with the two contracts and one skill."""
+    return make_tree(tmp_path)
+
+
+def make_tree(tmp_path: Path) -> Path:
+    """Build the miniature repo. A plain function so other gate tests can share it."""
     (tmp_path / "contracts" / "release").mkdir(parents=True)
     (tmp_path / "contracts" / "runtime").mkdir(parents=True)
     (tmp_path / "contracts" / "parity").mkdir(parents=True)
@@ -408,5 +413,27 @@ def test_an_l3_record_pins_the_parity_run_s_model_and_binary(tree: Path) -> None
         encoding="utf-8",
     )
     record_from_parity_run("demo", tree, run)
-    evidence = load_acceptance_record("demo", tree)["layers"]["L3"]["evidence"]
+    cells = load_acceptance_record("demo", tree)["layers"]["L3"]["cells"]
+    evidence = cells["unknown-model"]["evidence"]  # this meta names no GGUF path
     assert evidence["model"] == _SHA_A and evidence["native_binary"] == _SHA_B
+
+
+def test_an_l3_record_is_keyed_by_the_model_it_measured(tree: Path) -> None:
+    from knaif.evalsuite.gate import load_acceptance_record, record_from_parity_run
+
+    _with_manifest(tree, _SHA_A)  # knaif-demo-v1 -> demo.gguf
+    run = tree / "evals" / "parity" / "run2"
+    run.mkdir(parents=True)
+    (run / "meta.json").write_text(
+        json.dumps(
+            {
+                "model": {"path": "models/demo.gguf", "sha256": _SHA_A},
+                "binary": {"sha256": _SHA_B},
+                "result": {"equivalence_rate": 0.9, "threshold": 0.8, "passed": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    record_from_parity_run("demo", tree, run)
+    l3 = load_acceptance_record("demo", tree)["layers"]["L3"]
+    assert "knaif-demo-v1" in l3["cells"]

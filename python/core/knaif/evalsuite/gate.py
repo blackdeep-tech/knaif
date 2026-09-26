@@ -32,6 +32,7 @@ from typing import Any
 
 import yaml
 
+from .matrix import CELL_LAYERS, load_matrix, required_cells
 from .outcomes import POLICY_VERSION
 
 STATUS_CONTRACT = Path("contracts/release/native_status.yaml")
@@ -233,6 +234,49 @@ def _layer_state(
     return LayerState(layer, "valid", entry.get("summary", "") + note)
 
 
+#: When cells disagree, the layer reads as its worst cell. A failure outranks staleness, which
+#: outranks absence: each is a stronger statement about why the claim cannot stand.
+_SEVERITY = ("failing", "stale", "pending", "valid")
+
+
+def _cells_state(
+    layer: str,
+    record: dict[str, Any] | None,
+    current: dict[str, str | None],
+    contract: dict[str, Any],
+    cells: list[str],
+) -> LayerState:
+    """A cell-keyed layer (the acceptance matrix): valid only when EVERY required cell is.
+
+    Each cell is judged exactly as a flat layer is — same staleness, same failing-vs-pending
+    distinction — so the matrix adds coverage without adding a second set of rules.
+    """
+    if not cells:
+        return LayerState(layer, "pending", "the acceptance matrix requires no cell for this layer")
+    entry = ((record or {}).get("layers") or {}).get(layer)
+    stored = entry.get("cells") if isinstance(entry, dict) else None
+    per_cell = {
+        cell: _layer_state(layer, {"layers": {layer: (stored or {}).get(cell)}}, current, contract)
+        for cell in cells
+    }
+    worst = min((s.state for s in per_cell.values()), key=_SEVERITY.index)
+    if worst == "valid":
+        return LayerState(layer, "valid", f"{len(cells)} cell(s) valid")
+    groups = []
+    for state in _SEVERITY[:-1]:
+        hit = [(cell, st) for cell, st in per_cell.items() if st.state == state]
+        if not hit:
+            continue
+        if state == "pending":  # "no evidence" says nothing per cell; the names are the news
+            groups.append(f"pending: {', '.join(cell for cell, _ in hit)}")
+        else:
+            groups.append(f"{state}: " + ", ".join(f"{c} ({st.detail})" for c, st in hit))
+    bad = "; ".join(groups)
+    if stored is None and entry:
+        bad = "record is not keyed by cell (pre-matrix); " + bad
+    return LayerState(layer, worst, bad)
+
+
 def evaluate_skill(
     skill: str, root: Path, declared: str, native_binary: Path | None = None
 ) -> SkillGate:
@@ -246,7 +290,15 @@ def evaluate_skill(
     current = evidence_tuple(skill, root, native_binary)
 
     all_layers = list(contract["layers"])
-    states = [_layer_state(name, record, current, contract) for name in all_layers]
+    matrix = load_matrix(root)
+    states = [
+        (
+            _cells_state(name, record, current, contract, required_cells(matrix, name))
+            if matrix is not None and name in CELL_LAYERS
+            else _layer_state(name, record, current, contract)
+        )
+        for name in all_layers
+    ]
     valid = {s.layer for s in states if s.state == "valid"}
 
     derived = "in-progress"
@@ -329,6 +381,17 @@ def record_layers(
     record = load_acceptance_record(skill, root) or {"skill": skill, "layers": {}}
     current = evidence_tuple(skill, root)
     for name, entry in layers.items():
+        # A cell-keyed entry (the acceptance matrix) lands in its own cell, so recording one
+        # model/OS/backend never overwrites another's verdict.
+        if entry.get("cell"):
+            cell = entry["cell"]
+            layer = record["layers"].get(name)
+            if not isinstance(layer, dict) or "cells" not in layer:
+                layer = {"cells": {}}
+            body = {k: v for k, v in entry.items() if k != "cell"}
+            layer["cells"][cell] = {**body, "evidence": entry.get("evidence") or current}
+            record["layers"][name] = layer
+            continue
         # A layer that brings its OWN fingerprint keeps it. The fingerprint belongs to the
         # measurement, not to the moment someone wrote it down: stamping the present tree onto
         # a saved run from before a planner change turned expired evidence back into valid
@@ -339,6 +402,19 @@ def record_layers(
         record["layers"][name] = {**entry, "evidence": captured or current}
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
+
+
+def _model_name(meta: dict[str, Any], root: Path) -> str:
+    """The public model a parity run measured: the manifest key whose `file` is its GGUF."""
+    path = (meta.get("model") or {}).get("path") or ""
+    filename = Path(path).name
+    manifest = root / MODEL_MANIFEST
+    if filename and manifest.is_file():
+        models = (yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}).get("models") or {}
+        for key, entry in models.items():
+            if (entry or {}).get("file") == filename:
+                return str(key)
+    return Path(filename).stem if filename else "unknown-model"
 
 
 def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
@@ -365,6 +441,7 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
         root,
         {
             "L3": {
+                "cell": _model_name(meta, root),
                 "evidence": evidence,
                 "run": str(run_dir.relative_to(root)) if run_dir.is_absolute() else str(run_dir),
                 "summary": summary,

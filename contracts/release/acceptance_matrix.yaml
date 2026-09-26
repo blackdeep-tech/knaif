@@ -1,0 +1,31 @@
+# The acceptance matrix: the cells a release must hold L3/L4 evidence for.
+#
+# The gate keys L3 evidence by model and L4 evidence by `model|os|backend`, and reports a skill
+# `supported` only when EVERY required cell is valid. Before this there was one L4 slot per
+# skill, and each `accept-native` overwrote it, so a CUDA pass recorded after a CPU failure read
+# as supported. See python/core/knaif/evalsuite/matrix.py and
+# docs/plans/2026-09-25-release-1.2.md (R0 coverage table, R2).
+#
+# `coverage`:
+#   full          L4 + safety measured from the packaged artifact, an `accept-native` verdict
+#                 required. Every model runs every full entry.
+#   not-measured  cannot be measured on the hardware available; stated in the release notes,
+#                 never required.
+#
+# `os` ids are `contracts/release/platforms.yaml` ids; `backend` is what the run's layers actually
+# landed on (`compute_backend`, folded to cuda | vulkan | cpu), not what the binary offered.
+
+current_release: "1.2.0"
+
+releases:
+  "1.2.0":
+    # Both ship together (R0). Model names are the public manifest keys.
+    models: [knaif-qwen3-4b-v2, knaif-qwen3-1.7b-v2]
+    entries:
+      # One RTX 5080 box for every entry, so an OS difference cannot hide behind a hardware one.
+      - { os: windows-x64, backend: cuda, coverage: full }     # installed CUDA payload
+      - { os: windows-x64, backend: vulkan, coverage: full }   # `vulkan` artifact
+      - { os: windows-x64, backend: cpu, coverage: full }      # `vulkan` artifact, GPU hidden
+      - { os: linux-x64, backend: cuda, coverage: full }       # CUDA payload, WSL2
+      - { os: linux-x64, backend: cpu, coverage: full }        # `vulkan` artifact; WSL has no NVIDIA Vulkan
+      - { os: linux-x64, backend: vulkan, coverage: not-measured }  # no Linux Vulkan GPU available

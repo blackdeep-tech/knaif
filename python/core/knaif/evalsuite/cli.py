@@ -1008,6 +1008,11 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     # prefix is kept for readers of older boards.
     scoreboard["model_sha256"] = _sha256_file(lane.model_path)
     scoreboard["model_sha256_prefix"] = scoreboard["model_sha256"][:16]
+    # Which matrix row this run is: an L4 verdict is filed under model x OS x backend, and a
+    # run under WSL is a Linux run however it was launched.
+    from .matrix import current_os
+
+    scoreboard["os"] = current_os()
     scoreboard["git_sha"] = _git("rev-parse", "HEAD")
     scoreboard["git_dirty"] = bool(_git("status", "--porcelain"))
     scoreboard["backend"] = lane.name
@@ -1638,7 +1643,15 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
     # carry a full model hash pins None rather than borrowing the tree's, so it reads "does not
     # pin: model" instead of passing for a model nobody checked.
     from .gate import evidence_tuple
+    from .matrix import backend_family, cell_key, current_os
 
+    # The matrix cell this verdict belongs to (contracts/release/acceptance_matrix.yaml). One
+    # per model x OS x backend, so recording this run cannot overwrite another cell's verdict.
+    cell = cell_key(
+        str(current.get("backend_public_name") or current.get("backend")),
+        str(current.get("os") or current_os()),
+        backend_family(current.get("compute_backend")) or "unknown",
+    )
     run_evidence = {
         **evidence_tuple(args.skill, Path.cwd()),
         "model": current.get("model_sha256"),
@@ -1650,6 +1663,7 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         Path.cwd(),
         {
             "L4": {
+                "cell": cell,
                 "evidence": run_evidence,
                 "run": str(current_path),
                 "summary": report.summary().splitlines()[0],
