@@ -1061,9 +1061,20 @@ def cmd_gate(args: argparse.Namespace) -> None:
         evaluate_skill,
         record_from_parity_run,
         record_layers,
+        write_release_record,
     )
 
     root = Path.cwd()
+
+    if getattr(args, "release_record", None):
+        # At the tag (release plan R7): keep what was true for this release, beside the live
+        # records that will go stale on main as the tree moves.
+        try:
+            out = write_release_record(root, args.release_record, skills=sorted(list_skills()))
+        except (FileExistsError, ValueError) as exc:
+            sys.exit(f"ERROR: {exc}")
+        print(f"  release record written: {out}")
+        return
 
     if args.record_contracts:
         # Called by `just check-contracts` AFTER the L1/L2 tests pass. Evidence is a side effect
@@ -2219,6 +2230,14 @@ def build_parser() -> argparse.ArgumentParser:
         dest="record_parity",
         metavar="RUN_DIR",
         help="Record L3 evidence for --skill from a saved parity run directory.",
+    )
+    p_gate.add_argument(
+        "--release-record",
+        default=None,
+        dest="release_record",
+        metavar="VERSION",
+        help="At the tag: copy the acceptance records and the gate's verdict to "
+        "evals/acceptance/releases/VERSION/. Written once; VERSION must be the matrix's release.",
     )
     p_gate.add_argument(
         "--native-bin",

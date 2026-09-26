@@ -231,6 +231,11 @@ check-contracts:
     uv run python "{{justfile_directory()}}/scripts/parity_check.py" --self-test
     uv run python -m knaif.evalsuite gate --record-contracts
 
+# At the tag: keep the acceptance records and the gate's verdict for this release under
+# evals/acceptance/releases/<version>/ (written once). e.g.: just release-record 1.2.0
+release-record version:
+    uv run python -m knaif.evalsuite gate --release-record {{version}}
+
 # G1/G2 — a skill may not claim a native status its evidence does not support. Reads
 # contracts/release/native_status.yaml; `supported` needs an L4 acceptance record, `parity`
 # needs an L3 run, and either goes stale when the tree moves underneath it. Also asserts the

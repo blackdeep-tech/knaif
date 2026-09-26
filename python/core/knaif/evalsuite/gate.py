@@ -453,3 +453,60 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
             }
         },
     )
+
+
+RELEASES_DIR = ACCEPTANCE_DIR / "releases"
+
+
+def write_release_record(root: Path, version: str, skills: list[str] | None = None) -> Path:
+    """Keep what was true for *version*: the acceptance records and the gate's verdict at the tag.
+
+    The live records under `evals/acceptance/` go stale on `main` as soon as the tree moves, as
+    they should; this copy is the answer to "what was true for 1.2.0?" (this module's docstring,
+    and release plan R2/R7). Written once — an existing release is never overwritten — and only
+    under the release the acceptance matrix names, since filing one release's evidence under
+    another's number would be a false statement about that release.
+    """
+    from .matrix import load_matrix
+
+    matrix = load_matrix(root)
+    if matrix is not None and matrix["current_release"] != version:
+        raise ValueError(
+            f"the acceptance matrix is for {matrix['current_release']}, not {version}; "
+            "record the release the evidence was gathered for"
+        )
+    out = root / RELEASES_DIR / version
+    if out.exists():
+        raise FileExistsError(f"{out} already exists; a release record is written once")
+
+    live = root / ACCEPTANCE_DIR
+    names = skills if skills is not None else sorted(p.stem for p in live.glob("*.json"))
+    out.mkdir(parents=True)
+    verdicts: dict[str, Any] = {}
+    for skill in names:
+        record = live / f"{skill}.json"
+        if record.is_file():
+            (out / record.name).write_bytes(record.read_bytes())
+        declared = _declared_status(skill, root)
+        gate = evaluate_skill(skill, root, declared or "in-progress")
+        verdicts[skill] = {
+            "declared": declared,
+            "derived": gate.derived,
+            "layers": {s.layer: {"state": s.state, "detail": s.detail} for s in gate.layers},
+        }
+    release = (matrix or {}).get("releases", {}).get(version) if matrix else None
+    doc = {"version": version, "skills": verdicts, "matrix": release}
+    (out / "release.json").write_text(
+        json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return out
+
+
+def _declared_status(skill: str, root: Path) -> str | None:
+    path = root / "skills" / skill / "skill.yaml"
+    if not path.is_file():
+        return None
+    doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    native = ((doc.get("runtimes") or {}).get("native")) or {}
+    status = native.get("status")
+    return str(status) if status else None

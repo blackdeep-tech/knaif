@@ -164,3 +164,64 @@ def test_the_repo_matrix_is_well_formed() -> None:
         assert entry["os"] in known_os, entry
         assert entry["backend"] in {"cuda", "vulkan", "cpu"}, entry
         assert entry["coverage"] in {"full", "not-measured"}, entry
+
+
+# ── release records: what was true for a release survives the live gate moving on ─────────────
+
+
+def test_a_release_record_keeps_the_evidence_and_the_verdict(tree: Path) -> None:
+    import json
+
+    from knaif.evalsuite.gate import write_release_record
+
+    # Declared before the evidence: the skill bundle is part of what the evidence pins.
+    (tree / "skills" / "demo" / "skill.yaml").write_text(
+        "name: demo\nruntimes:\n  native: { status: supported }\n", encoding="utf-8"
+    )
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    _l4(tree, MODEL, "windows-x64", "cpu", passed=True)
+    _l4(tree, MODEL, "windows-x64", "cuda", passed=True)
+
+    out = write_release_record(tree, "9.9.0", skills=["demo"])
+    assert out == tree / "evals" / "acceptance" / "releases" / "9.9.0"
+    copied = json.loads((out / "demo.json").read_text(encoding="utf-8"))
+    live = json.loads((tree / "evals" / "acceptance" / "demo.json").read_text(encoding="utf-8"))
+    assert copied == live
+    release = json.loads((out / "release.json").read_text(encoding="utf-8"))
+    assert release["version"] == "9.9.0"
+    assert release["skills"]["demo"]["derived"] == "supported"
+    assert release["matrix"]["models"] == [MODEL]
+
+
+def test_a_release_record_is_written_once(tree: Path) -> None:
+    from knaif.evalsuite.gate import write_release_record
+
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    write_release_record(tree, "9.9.0", skills=["demo"])
+    with pytest.raises(FileExistsError):
+        write_release_record(tree, "9.9.0", skills=["demo"])
+
+
+def test_a_release_record_names_the_matrix_s_release(tree: Path) -> None:
+    """Recording 1.2.0's evidence under 1.3.0 would be a false statement about 1.3.0."""
+    from knaif.evalsuite.gate import write_release_record
+
+    _matrix(tree)
+    with pytest.raises(ValueError, match="9.9.0"):
+        write_release_record(tree, "1.0.0", skills=["demo"])
+
+
+def test_the_live_gate_ignores_release_records(tree: Path) -> None:
+    from knaif.evalsuite.gate import write_release_record
+
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    _l4(tree, MODEL, "windows-x64", "cpu", passed=True)
+    _l4(tree, MODEL, "windows-x64", "cuda", passed=True)
+    write_release_record(tree, "9.9.0", skills=["demo"])
+    _write_py = tree / "python" / "core" / "knaif" / "planner.py"
+    _write_py.write_text("x = 2\n", encoding="utf-8")  # the tree moves on after the tag
+    assert _derived(tree) != "supported"  # live: stale
+    assert (tree / "evals" / "acceptance" / "releases" / "9.9.0" / "demo.json").is_file()
