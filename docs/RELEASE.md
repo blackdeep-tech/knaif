@@ -378,7 +378,7 @@ something someone remembers.
 
 ```bash
 # L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
-KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity"
+KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
 
 # L4 — the shipped path: the binary executing for real, graded on the files it produces.
 just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
@@ -398,6 +398,26 @@ with every required capability slice holding and safety at 100%. It writes its v
 `evals/acceptance/<skill>.json` either way, so a failing run is recorded as **failing** rather
 than left looking unmeasured, and `just check-gate` then derives the status that evidence
 supports.
+
+**Every cell of the acceptance matrix.** `contracts/release/acceptance_matrix.yaml` lists the
+release's models and its OS × backend entries. Each `accept-native` verdict is filed under
+`model|os|backend`: the run's public model, the OS it ran on, and the backend its layers
+actually landed on. `check-gate` reports `supported` only when **every** full-coverage cell holds
+a valid verdict, so run L4 and safety once per model per full entry. For the release candidate,
+pass the packaged binary, so the gate checks that the records measured *it*:
+
+```bash
+uv run python -m knaif.evalsuite gate --native-bin <unpacked artifact>/knaif[.exe]
+```
+
+Without `--native-bin` the gate prints "not checked here: native_binary" for every record
+instead of comparing.
+
+**L4 runs the packaged layout.** The lane's `binary:` must be the executable inside the unpacked
+artifact, with PDFium beside it. `eval-native` and `eval-safety-native` refuse a binary without
+it, and the lane never passes `$KNAIF_PDFIUM_PATH` to the binary, so OCR is measured with the
+library users actually get. `--allow-unpackaged` runs a developer build for diagnosis only. The
+result is marked `packaged_layout: false`, and `accept-native` refuses it.
 
 Two things it refuses, both deliberately: a scoreboard that did not come from the native lane
 (Python execution locates a failure, it never certifies one — L4b), and a safety result that did
@@ -553,6 +573,16 @@ cd dist && sha256sum knaif-<ver>-* > SHA256SUMS      # Linux
 ---
 
 ## 5. Publish (strict order)
+
+**At the tag, record what was true for the release** (before the tree moves on):
+
+```bash
+just release-record <ver>     # -> evals/acceptance/releases/<ver>/, written once
+```
+
+It copies each skill's acceptance record and the gate's verdict at that commit. The live records
+go stale on `main` as soon as anything changes, as they should. The copy is what answers "what
+was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release.
 
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release

@@ -32,6 +32,7 @@ from ._reporting import (
     _load_platform_summary,
     _load_quality_hint,
     _preflight_trim_frames,
+    _zero_length_end,
 )
 from .steps import require_streams
 
@@ -74,6 +75,14 @@ def _build_batch_block() -> list[dict[str, Any]]:
         },
         {"tool": "generate_report", "args": {"outputs": "$verifications"}, "output": "$report"},
     ]
+
+
+def _codec_from_output(output: Any) -> str | None:
+    """The video codec an output name spells as its extension (`clip.hevc`), else None."""
+    if not isinstance(output, str) or not output:
+        return None
+    ext = Path(output).suffix.lstrip(".").lower()
+    return ext if ext in _VIDEO_CODEC_ALIASES else None
 
 
 class PrepareForPlatformIntent(Intent):
@@ -243,8 +252,18 @@ class ConvertVideoIntent(Intent):
         ):
             video_codec = container.lower()
             container = None
+        # The same mistake in the output NAME: `*.hevc` / `clip.h265`. ffmpeg picks its muxer
+        # from the extension, chooses a raw elementary stream, and fails (ffmpeg_229#4). The
+        # extension supplies the codec only when the plan names none, and is replaced by the
+        # container's below.
+        output_codec = _codec_from_output(output)
+        if output_codec is not None and video_codec is None:
+            video_codec = output_codec
         if container is None:
             container = _container_from_output(output) or "mp4"
+        if output_codec is not None:
+            # By string, not Path: keep the caller's separators (`out/clip.hevc`).
+            output = f"{output[: -len(output_codec) - 1]}.{container}"
         audio_codec = args.get("audio_codec")
         crf = args.get("crf")
         quality = _quality_from_crf(crf, args.get("quality"))
@@ -403,7 +422,11 @@ class TrimVideoIntent(Intent):
             options["start"] = args["start"]
         if args.get("duration") is not None:
             options["duration"] = args["duration"]
-        if args.get("end") is not None:
+        # With a frame count, a zero-length `end` is the model filling both fields: the
+        # preflight above accepted it on that reading, so it is not rendered.
+        if args.get("end") is not None and not (
+            args.get("frames") is not None and _zero_length_end(args)
+        ):
             options["end"] = args["end"]
         # Forwarding this is what makes the frame count exist at all. Without it the arg was
         # declared in tools.yaml, rendered by the engine and validated by the preflight, and

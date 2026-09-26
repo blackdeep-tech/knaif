@@ -94,3 +94,92 @@ def test_a_suffixed_default_moves_too(tmp_path: Path) -> None:
 
     assert Path(result["output"]).name == "doc-protected-1.pdf"
     assert (tmp_path / "doc-protected.pdf").read_bytes() == b"someone else's file"
+
+
+# -- Office -> PDF: LibreOffice's own intermediate name ------------------------------------------
+# Found 2026-09-26 while strengthening documents grading: converting `sample.docx` to `conv.pdf`
+# deleted the user's unrelated `sample.pdf`. `soffice --outdir <output's folder>` writes
+# `<stem>.pdf` there first, silently replacing a file of that name, and the step then moved it to
+# the requested output. Both runtimes. The conversion now happens in a private directory.
+
+
+@pytest.fixture
+def fake_soffice(monkeypatch: pytest.MonkeyPatch):
+    """`soffice --convert-to pdf --outdir DIR INPUT` as it behaves: writes DIR/<stem>.pdf."""
+    import subprocess
+    import sys
+
+    sys.modules.pop("_skill_oop_documents_handlers", None)
+    from knaif.skill import Skill
+
+    Skill.load(DOCUMENTS_SKILL_DIR)
+    pkg = sys.modules["_skill_oop_documents_handlers"].__package__
+    steps = sys.modules[pkg + ".steps"]
+    deps = sys.modules[pkg + "._deps"]
+    monkeypatch.setattr(deps, "detect_external_tools", lambda: {"soffice": "soffice"})
+
+    def _run(argv, **kwargs):
+        outdir = Path(argv[argv.index("--outdir") + 1])
+        source = Path(argv[-1])
+        (outdir / f"{source.stem}.pdf").write_bytes(b"%PDF-converted")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(steps.subprocess, "run", _run)
+
+
+@pytest.mark.parametrize("output", ["conv.pdf", None])
+def test_office_conversion_never_replaces_a_same_stem_pdf(
+    tmp_path: Path, fake_soffice, output: str | None
+) -> None:
+    (tmp_path / "sample.docx").write_bytes(b"docx")
+    users_pdf = tmp_path / "sample.pdf"
+    users_pdf.write_bytes(b"%PDF-the user's own file")
+    args = {"input": "sample.docx", "to_format": "pdf"}
+    if output:
+        args["output"] = output
+
+    result = _run("convert_document", args, tmp_path)
+
+    assert users_pdf.read_bytes() == b"%PDF-the user's own file"
+    assert Path(result["output"]).read_bytes() == b"%PDF-converted"
+    assert Path(result["output"]) != users_pdf
+
+
+# -- compress never hands back a bigger file -------------------------------------------------------
+# Found 2026-09-26 while strengthening documents grading: compress_pdf wrote a LARGER file for
+# both fixtures (sample.pdf 2227 -> 3952 bytes, sample-scanned.pdf 5707 -> 7689) and reported a
+# negative percentage. A result that is not smaller is not a compression; the input's own bytes
+# are kept instead, and the result says so (`kept_original`).
+
+
+@pytest.mark.parametrize("quality", ["small", "balanced", "high"])
+def test_compress_never_writes_a_larger_file(tmp_path: Path, quality: str) -> None:
+    # The committed contract fixture: a small text PDF, the case where every method grew it.
+    fixture = Path(__file__).parents[4] / "contracts" / "parity" / "fixtures" / "documents"
+    source = tmp_path / "sample.pdf"
+    source.write_bytes((fixture / "sample.pdf").read_bytes())
+
+    agent = CommandAgent.from_skill(DOCUMENTS_SKILL_DIR, sandbox=tmp_path, root=tmp_path)
+    results = agent.execute_plan(
+        {
+            "plan": [
+                {
+                    "tool": "compress_pdf",
+                    "args": {
+                        "input": "sample.pdf",
+                        "compress_quality": quality,
+                        "output": "out.pdf",
+                    },
+                }
+            ]
+        },
+        dry_run=False,
+        confirmed=True,
+    )
+    result = next(r["result"] for r in results if "new_size" in (r.get("result") or {}))
+
+    out = tmp_path / "out.pdf"
+    assert out.stat().st_size <= source.stat().st_size, result
+    if result["kept_original"]:
+        assert out.read_bytes() == source.read_bytes()
+        assert result["percent"] == 0.0 and result["text_preserved"] is True

@@ -4,27 +4,31 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "13763f9dfc07f1cb6b66a3a4e203a137b8e6125b2c160bd174d355cea6171b2c",
-        "contracts": "f85c834523e876ca840c6cb6fa3860b6b523b472ee260db6e329206a53674b3c",
+        "bundle": "6c72fd387620ea4a787b9a8675ee277b16b6c8051522dbf06051ce97c78ece00",
+        "contracts": "32f301ef7165aef62feaaaa19556aea6c7fcb566bee4d8351e64137ca4cae9b0",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
-        "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "15531fb5464e5287ad755638b3ee5190f55403825b0a67ce0676acabf028c8b4",
-        "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
-        "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+        "grading": "c46e7ca1f83c6b8d49c0a6005a786b5e52553a7769146b3788102c0e58b5410f",
+        "native": "ed1d74bd66e6cbb07ae5333bddc9045860b01082ba5bb72520bca71db0a6a559",
+        "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+        "verifier": "5755efa468eb5bb7ebd5710b6470395ed330d22dd2a25573cd374ec7075be69b",
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28",
+        "policy": "3",
+        "model": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
       }
     },
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "13763f9dfc07f1cb6b66a3a4e203a137b8e6125b2c160bd174d355cea6171b2c",
-        "contracts": "f85c834523e876ca840c6cb6fa3860b6b523b472ee260db6e329206a53674b3c",
+        "bundle": "6c72fd387620ea4a787b9a8675ee277b16b6c8051522dbf06051ce97c78ece00",
+        "contracts": "32f301ef7165aef62feaaaa19556aea6c7fcb566bee4d8351e64137ca4cae9b0",
         "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
-        "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "15531fb5464e5287ad755638b3ee5190f55403825b0a67ce0676acabf028c8b4",
-        "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
-        "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+        "grading": "c46e7ca1f83c6b8d49c0a6005a786b5e52553a7769146b3788102c0e58b5410f",
+        "native": "ed1d74bd66e6cbb07ae5333bddc9045860b01082ba5bb72520bca71db0a6a559",
+        "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+        "verifier": "5755efa468eb5bb7ebd5710b6470395ed330d22dd2a25573cd374ec7075be69b",
+        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28",
+        "policy": "3",
+        "model": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
       }
     },
     "L4": {

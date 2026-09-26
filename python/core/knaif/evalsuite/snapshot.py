@@ -12,6 +12,22 @@ from typing import Any
 EXECUTING_VERIFIERS = frozenset({"success", "honest", "output_diff"})
 
 
+def snapshot_path(skill: str, model: str | None = None, root: Path | str = ".") -> Path:
+    """The accepted baseline a run of *model* is compared with.
+
+    `data/eval_snapshot.json` serves the model it holds (the 4B line) and callers that name no
+    model. Any other model's baseline is `data/eval_snapshot.<model>.json`, so locking the 1.7B
+    can never replace the 4B's, and each is gated against its own (release plan R2). A skill
+    with no snapshot at all starts with the default file.
+    """
+    data = Path(root) / "skills" / skill / "data"
+    default = data / "eval_snapshot.json"
+    if not model or not default.is_file():
+        return default
+    held = json.loads(default.read_text(encoding="utf-8")).get("backend_public_name")
+    return default if held in (None, model) else data / f"eval_snapshot.{model}.json"
+
+
 def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
     """
     Write a snapshot JSON — same format as the scoreboard, without per-row detail.

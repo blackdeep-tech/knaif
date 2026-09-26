@@ -68,6 +68,26 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # `apps/cli/src/main.rs` and `knaif.evalsuite.outcomes`; a test asserts all three agree.
 NOT_IMPLEMENTED_PREFIX = "not_implemented:"
 
+#: The line both CLIs prefix their post-gate plan with under `$KNAIF_DUMP_PLAN` (stderr). The same
+#: string in apps/cli/src/main.rs, knaif/app.py and evalsuite/native_lane.py; a test holds them
+#: together. It is what lets a command-mode row tell "different plans" from "same plan, different
+#: commands" — the second is a port bug, the first is not (release plan R0, L3's bar).
+PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
+
+
+def _dumped_plan(stderr: str) -> list[dict]:
+    """The plan steps a CLI dumped under `$KNAIF_DUMP_PLAN`, or [] when it dumped none."""
+    for line in strip_ansi(stderr).splitlines():
+        s = line.strip()
+        if s.startswith(PLAN_DUMP_MARKER):
+            try:
+                payload = json.loads(s[len(PLAN_DUMP_MARKER) :])
+            except json.JSONDecodeError:
+                return []
+            steps = payload.get("plan") if isinstance(payload, dict) else None
+            return steps if isinstance(steps, list) else []
+    return []
+
 
 # ── output parsing (pure) ─────────────────────────────────────────────────────
 
@@ -249,6 +269,7 @@ class Outcome:
     kind: str  # "commands" | "plan" | "clarify" | "reject" | "none" | "rendered-none" | "error"
     commands: list[list[str]] = field(default_factory=list)  # normalized argv per command
     plan: list[dict] = field(default_factory=list)  # plan steps (plan mode)
+    dumped_plan: list[dict] = field(default_factory=list)  # command mode: the plan that ran
     text: str = ""  # clarify/reject message or error detail
     raw: str = ""  # raw stdout+stderr, for the report on mismatch
 
@@ -269,7 +290,7 @@ class Outcome:
         return (self.kind,)
 
 
-def parse_native(stdout: str, stderr: str) -> Outcome:
+def _parse_native_body(stdout: str, stderr: str) -> Outcome:
     """Parse `knaif run <skill> --dry-run` output into an Outcome.
 
     Native prints each command as a bare shell-joined line to stdout; clarify/reject as
@@ -302,7 +323,7 @@ def parse_native(stdout: str, stderr: str) -> Outcome:
     return Outcome(kind, text=text, raw=stdout + stderr)
 
 
-def parse_python(stdout: str, stderr: str) -> Outcome:
+def _parse_python_body(stdout: str, stderr: str) -> Outcome:
     """Parse `knaif-cli run <skill> --dry-run` output into an Outcome.
 
     Python prints command items as `    $ ffmpeg …` and clarify/reject as
@@ -340,6 +361,20 @@ def parse_python(stdout: str, stderr: str) -> Outcome:
             raw=stdout + stderr,
         )
     return Outcome("none", text=detail, raw=stdout + stderr)
+
+
+def parse_native(stdout: str, stderr: str) -> Outcome:
+    """Parse `knaif run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
+    out = _parse_native_body(stdout, stderr)
+    out.dumped_plan = _dumped_plan(stderr)
+    return out
+
+
+def parse_python(stdout: str, stderr: str) -> Outcome:
+    """Parse `knaif-cli run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
+    out = _parse_python_body(stdout, stderr)
+    out.dumped_plan = _dumped_plan(stderr)
+    return out
 
 
 # ── row loading ───────────────────────────────────────────────────────────────
@@ -418,7 +453,9 @@ def _native_env() -> dict[str, str]:
     `-crf 22`, and Python renders `-crf 22`. Same weights, same prompt, greedy on both sides;
     only the accumulation differs.
     """
-    return dict(os.environ)
+    # `$KNAIF_DUMP_PLAN` makes `run` print the plan it executed, which is what separates a port
+    # bug (same plan, different commands) from plan disagreement (L3's bar, release plan R0).
+    return {**os.environ, "KNAIF_DUMP_PLAN": "1"}
 
 
 def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Path) -> Outcome:
@@ -641,7 +678,13 @@ def run_python(skill: str, python_model: str, utt: str, cwd: Path) -> Outcome:
         *utt.split(),
     ]
     proc = subprocess.run(
-        argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        argv,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={**os.environ, "KNAIF_DUMP_PLAN": "1"},  # the plan it ran; see `_native_env`
     )
     return parse_python(proc.stdout, proc.stderr)
 
@@ -745,7 +788,47 @@ def plan_equiv_modulo_defaults(
 #: DENOMINATOR — python renders no command for those intents, so there is nothing to compare —
 #: and reported separately, because a rate whose excluded rows are invisible is the shape of
 #: every misleading eval number this plan exists to prevent.
-_GATED_BUCKETS = ("match", "mismatch", "decline-divergence", "native-not-implemented")
+_GATED_BUCKETS = ("match", "mismatch", "decline-divergence", "native-not-implemented", "port-bug")
+
+
+def _plans_equivalent(
+    a: list[dict], b: list[dict], cwd: str | None, tool_defaults: dict[str, dict] | None
+) -> bool:
+    """Same plan: identical after canonicalization, or differing only by declared defaults."""
+    if tuple(canon_plan_step(x, cwd) for x in a) == tuple(canon_plan_step(x, cwd) for x in b):
+        return True
+    if tool_defaults is None:
+        return False
+    return plan_equiv_modulo_defaults(a, b, tool_defaults, cwd) is not None
+
+
+def l3_verdict(counts: dict[str, int], max_plan_disagreement: float) -> dict:
+    """L3 at the owner's bar (release plan R0): zero port bugs, bounded plan disagreement.
+
+    * `port-bug` (same plan, different commands) must be 0: a porting defect;
+    * `native-not-implemented` must be 0: a capability the port lacks is a port defect too;
+    * plan disagreement — `mismatch` (different plans) plus `decline-divergence` (clarify vs
+      reject) — over the gated rows must not exceed *max_plan_disagreement*, a bound written
+      before the run. The runtimes link different llama.cpp builds, so this is never zero.
+    A run with nothing to compare does not pass.
+    """
+    gated = sum(counts.get(k, 0) for k in _GATED_BUCKETS)
+    port_bugs = counts.get("port-bug", 0)
+    not_impl = counts.get("native-not-implemented", 0)
+    disagreement = counts.get("mismatch", 0) + counts.get("decline-divergence", 0)
+    rate = disagreement / gated if gated else 0.0
+    return {
+        "gated": gated,
+        "port_bugs": port_bugs,
+        "native_not_implemented": not_impl,
+        "plan_disagreement": disagreement,
+        "plan_disagreement_rate": round(rate, 6),
+        "max_plan_disagreement": max_plan_disagreement,
+        "passed": bool(gated)
+        and port_bugs == 0
+        and not_impl == 0
+        and rate <= max_plan_disagreement,
+    }
 
 
 def equivalence_rate(counts: dict[str, int]) -> tuple[int, float]:
@@ -776,7 +859,9 @@ def _git(*cmd: str) -> str:
         return ""
 
 
-def build_meta(args, rows: list[Row], entry_points: dict[str, str], counts, rate) -> dict:
+def build_meta(
+    args, rows: list[Row], entry_points: dict[str, str], counts, rate, verdict: dict
+) -> dict:
     """The provenance record for a saved run (L3b).
 
     Everything here answers "could this run be told apart from a different one?". The
@@ -824,11 +909,13 @@ def build_meta(args, rows: list[Row], entry_points: dict[str, str], counts, rate
             "misconfiguration — see `backend_attribution.json` next to this file."
         ),
         "entry_points": entry_points,
+        # L3's bar (release plan R0): the verdict is `l3_verdict`, written into the record so
+        # `gate --record-parity` reads the run's own answer. `equivalence_rate` stays as a
+        # descriptive number; it no longer passes or fails the run.
         "result": {
             "counts": dict(counts),
             "equivalence_rate": round(rate, 6),
-            "threshold": args.threshold,
-            "passed": rate >= args.threshold,
+            **verdict,
         },
     }
 
@@ -887,6 +974,18 @@ def compare(
         if native.kind == "commands" and native.commands != py.commands:
             return "match", "equivalent (paths differ: native relative, python absolute)"
         return "match", ""
+    # Same plan, different commands: the two runtimes agreed on WHAT to do and rendered it
+    # differently. That is a porting defect, never model noise, and L3 requires zero of them.
+    # Only decidable when both sides dumped the plan they ran; without it the row stays an
+    # ordinary mismatch rather than being called a port bug on a guess.
+    if (
+        native.kind == "commands"
+        and py.kind == "commands"
+        and native.dumped_plan
+        and py.dumped_plan
+        and _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
+    ):
+        return "port-bug", "same plan, different commands"
     # Both declined execution but chose different control tools (reject vs clarify): a softer
     # class than real command drift — usually a prompt/core-tool sync gap, not a wrong action.
     if native.kind in ("clarify", "reject") and py.kind in ("clarify", "reject"):
@@ -954,13 +1053,16 @@ def main() -> int:
         "as much as it measures the port. Recorded in meta.json.",
     )
     ap.add_argument(
-        "--threshold",
+        "--max-plan-disagreement",
         type=float,
-        default=1.0,
-        help="Minimum equivalence rate over gated rows (default 1.0 = every comparable row "
-        "must agree). Lower it only for a run that deliberately crosses inference backends, "
-        "where greedy argmax over different FP accumulation can flip a near-tie; the plan's "
-        "L3 release bar is 0.99.",
+        default=None,
+        dest="max_plan_disagreement",
+        metavar="RATE",
+        help="L3's bound on plan-level disagreement (different plans, or clarify vs reject) as a "
+        "fraction of gated rows. REQUIRED with --label and written BEFORE the run: a bound "
+        "chosen after seeing the result is not a bound. Port bugs (same plan, different "
+        "commands) and capabilities native lacks must be zero regardless (release plan R0). "
+        "Unlabelled dev runs default to 0.0.",
     )
     ap.add_argument(
         "--out", type=Path, help="Write the JSON report here (default: evals/parity/…)."
@@ -984,6 +1086,13 @@ def main() -> int:
 
     if args.self_test:
         return _self_test()
+    if args.label and args.max_plan_disagreement is None:
+        ap.error(
+            "--label makes this run evidence, so state --max-plan-disagreement RATE before it "
+            "runs (L3's bar: zero port bugs, plan disagreement within a pre-written bound)."
+        )
+    if args.max_plan_disagreement is None:
+        args.max_plan_disagreement = 0.0
 
     # Stream our own per-row output live (so a tee'd log / terminal shows verdicts as they happen,
     # not buffered until exit) — matters for the streaming batch path especially.
@@ -1088,6 +1197,7 @@ def main() -> int:
         "decline-divergence": 0,
         "not-comparable": 0,
         "native-not-implemented": 0,
+        "port-bug": 0,
     }
 
     def handle(idx: int, row: Row, native: Outcome, py: Outcome) -> None:
@@ -1107,6 +1217,7 @@ def main() -> int:
             "decline-divergence": "!",
             "not-comparable": "–",
             "native-not-implemented": "∅",
+            "port-bug": "✗✗",
         }[status]
         print(f"[{idx:>3}/{len(rows)}] {icon} {row.id:<16} {row.utterance[:52]}")
         if status != "match":
@@ -1166,9 +1277,11 @@ def main() -> int:
     elapsed = time.perf_counter() - t0
     total = len(rows)
     gated, rate = equivalence_rate(counts)
+    verdict = l3_verdict(counts, args.max_plan_disagreement)
     print("\n── summary ─────────────────────────────────────────")
     print(f"  equivalent              : {counts['match']}/{gated} gated rows = {rate:.4f}")
-    print(f"  mismatched (cmd drift)  : {counts['mismatch']}")
+    print(f"  port bugs               : {counts['port-bug']}  (same plan, different commands)")
+    print(f"  plans differ            : {counts['mismatch']}")
     print(f"  decline-divergence      : {counts['decline-divergence']}  (reject vs clarify)")
     print(f"  not-comparable          : {counts['not-comparable']}  (python renders no cmd)")
     print(
@@ -1234,7 +1347,7 @@ def main() -> int:
     )
     print(f"  report                  : {out}")
     if run_dir is not None:
-        meta = build_meta(args, rows, entry_points, counts, rate)
+        meta = build_meta(args, rows, entry_points, counts, rate, verdict)
         (run_dir / "meta.json").write_text(
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
@@ -1247,18 +1360,18 @@ def main() -> int:
             print("  WARNING: working tree dirty — the git SHA does not describe what ran")
         print(f"  NEXT                    : add a row to evals/INDEX.md for {run_dir.name}")
 
-    # L3a's threshold. **The default is 1.0, not the plan's 0.99, and that is deliberate.**
-    # The plan recorded that this harness "reports; it does not gate" — that was already out of
-    # date: any divergent row returned 1, i.e. it gated at 100%. Adopting 0.99 as the default
-    # would therefore have *loosened* a working gate, which is the opposite of the intent, so
-    # the bar stays where it is and `--threshold` makes a lower one available for the case that
-    # justified it: greedy argmax over different FP accumulation can flip a near-tie, so a run
-    # that crosses inference backends can legitimately expect a row or two of noise. Choosing
-    # that allowance is a decision to make per run, out loud, not a default to inherit.
-    ok = rate >= args.threshold
+    # L3's bar (owner, 2026-09-25; release plan R0). The old 1.0 equivalence rate was
+    # unreachable by construction: the runtimes link different llama.cpp builds, and even three
+    # native backends do not agree 100%. So the gate separates what the port owns from what the
+    # model owns: port bugs and missing capabilities must be zero; plan disagreement must stay
+    # within a bound the runner wrote down before the run (required with --label).
+    ok = verdict["passed"]
     print(
         f"  gate                    : {'PASS' if ok else 'FAIL'} "
-        f"({rate:.4f} {'>=' if ok else '<'} {args.threshold:.4f} required)"
+        f"(port bugs {verdict['port_bugs']}, not implemented "
+        f"{verdict['native_not_implemented']}, plan disagreement "
+        f"{verdict['plan_disagreement_rate']:.4f} <= {verdict['max_plan_disagreement']:.4f} "
+        "required)"
     )
     return 0 if ok else 1
 

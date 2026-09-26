@@ -1,0 +1,666 @@
+{
+  "_comment": "Golden parity fixtures for intent EXPANSION and command rendering — the layer below planner_cases.json. A fixed plan in, the rendered ffmpeg argv out, so no model is involved and this runs wherever the other contracts do. Consumed by python/core/tests/test_expansion_parity.py and skills/ffmpeg/native/tests/expansion_parity.rs. Argv is canonicalized with scripts/parity_check.py's canon_token: path tokens reduce to their basename, because native renders relative paths and Python resolves them against the sandbox — the same file either way, while a genuinely different filename still diverges. WHY THIS EXISTS: plan-envelope parity is blind to this layer. Both runtimes emitted the same correct two-step plan while native's `run` rendered only the first step (steps.first(), fixed 2026-08-10). The multi-step cases below are the regression.",
+  "sandbox": "contracts/parity/fixtures/ffmpeg",
+  "cases": [
+    {
+      "name": "single_step_convert",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mov",
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_converted.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_trim_then_extract_audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:03",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "extract_audio",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "audio_format": "mp3"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-to",
+          "00:00:03",
+          "-i",
+          "clip.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_trimmed.mp4",
+          "-vn",
+          "-c:a",
+          "libmp3lame",
+          "-b:a",
+          "128k",
+          "clip_trimmed_audio.mp3"
+        ]
+      ]
+    },
+    {
+      "name": "three_step_trim_resize_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:05",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "height": 720,
+              "output": "clip_720p.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_720p.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-to",
+          "00:00:05",
+          "-i",
+          "clip.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_trimmed.mp4",
+          "-vf",
+          "scale=-2:720",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_720p.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_720p.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "28",
+          "-preset",
+          "slow",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "96k",
+          "-movflags",
+          "+faststart",
+          "clip_720p_compressed.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_convert_then_strip_audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ],
+              "container": "mp4",
+              "output": "clip_converted.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_converted.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mov",
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_converted.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_converted.mp4",
+          "-an",
+          "-c:v",
+          "copy",
+          "clip_converted_silent.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "four_step_chain",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:04",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip_trimmed.mp4"
+              ],
+              "height": 480,
+              "output": "clip_480p.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_480p.mp4"
+              ],
+              "output": "clip_silent.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_silent.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-to",
+          "00:00:04",
+          "-i",
+          "clip.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_trimmed.mp4",
+          "-vf",
+          "scale=-2:480",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_480p.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_480p.mp4",
+          "-an",
+          "-c:v",
+          "copy",
+          "clip_silent.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_silent.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "28",
+          "-preset",
+          "slow",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "96k",
+          "-movflags",
+          "+faststart",
+          "clip_silent_compressed.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_speed_then_strip",
+      "plan": {
+        "plan": [
+          {
+            "tool": "adjust_speed",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "speed": 2.0,
+              "output": "clip_2x.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip_2x.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-vf",
+          "setpts=0.5*PTS",
+          "-af",
+          "atempo=2.0",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "clip_2x.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_2x.mp4",
+          "-an",
+          "-c:v",
+          "copy",
+          "clip_2x_silent.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "two_step_rotate_then_compress",
+      "plan": {
+        "plan": [
+          {
+            "tool": "rotate_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "angle": 90,
+              "output": "clip_rot.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip_rot.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-vf",
+          "transpose=1",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "25",
+          "-preset",
+          "medium",
+          "-c:a",
+          "aac",
+          "clip_rot.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip_rot.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "28",
+          "-preset",
+          "slow",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "96k",
+          "-movflags",
+          "+faststart",
+          "clip_rot_compressed.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "single_step_thumbnail",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "clip.mp4",
+              "at_time": "00:00:03"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:03",
+          "-vframes",
+          "1",
+          "clip_thumb.jpg"
+        ]
+      ]
+    },
+    {
+      "name": "codec_extension_on_a_batch_output_is_the_container_extension",
+      "_why": "ffmpeg_229#4: a codec written as the output extension ('*.hevc') made ffmpeg pick its raw hevc muxer and fail. The explicit video_codec (h264, the model's own) wins; the extension becomes the container's.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "container": "mp4",
+              "video_codec": "h264",
+              "output": "*.hevc"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-c:v",
+          "libx264",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_converted.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "codec_extension_supplies_the_codec_when_none_is_given",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "clip_small.h265"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-c:v",
+          "libx265",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_small.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "a_same_folder_pattern_never_writes_over_its_input",
+      "_why": "'*.mp4' for clip.mp4 resolved onto the input itself, which ffmpeg refuses. The derived name is used instead.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "container": "mp4",
+              "output": "*.mp4"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-c",
+          "copy",
+          "-movflags",
+          "+faststart",
+          "clip_converted.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "frames_with_a_zero_length_range",
+      "_why": "ffmpeg_161#0: start == end names an instant, not a length, so it does not conflict with a frame count. frames decides how much, start where; the empty -to is not rendered.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:00",
+              "frames": 1
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-i",
+          "clip.mp4",
+          "-vframes",
+          "1",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ]
+      ]
+    }
+  ]
+}

@@ -219,14 +219,22 @@ check-py: lint-py type-check-py test-py gen-skills-check
 # (`check-native` is fmt + clippy only) and so a failure names the layer rather than arriving as
 # an anonymous cargo test. `just test-native` remains the broader workspace run.
 check-contracts:
-    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py -q
+    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py python/core/tests/test_chain_linking_parity.py python/core/tests/test_expansion_parity.py python/core/tests/test_documents_expansion_parity.py -q
     cargo test -p knaif-core --test parity
+    cargo test -p knaif-core --test chain_linking_parity
+    cargo test -p knaif-skill-ffmpeg --test expansion_parity
+    cargo test -p knaif-skill-documents --test expansion_parity
     cargo test -p knaif-llm --test generation
     cargo test -p knaif-cli --test executor_semantics
     cargo test -p knaif-cli --test prompt_examples
     cargo test -p knaif-cli --bin knaif prompt_parity
     uv run python "{{justfile_directory()}}/scripts/parity_check.py" --self-test
     uv run python -m knaif.evalsuite gate --record-contracts
+
+# At the tag: keep the acceptance records and the gate's verdict for this release under
+# evals/acceptance/releases/<version>/ (written once). e.g.: just release-record 1.2.0
+release-record version:
+    uv run python -m knaif.evalsuite gate --release-record {{version}}
 
 # G1/G2 — a skill may not claim a native status its evidence does not support. Reads
 # contracts/release/native_status.yaml; `supported` needs an L4 acceptance record, `parity`
@@ -691,6 +699,14 @@ PARITY_MODEL := env_var_or_default("KNAIF_PARITY_MODEL", "models/knaif-qwen3-4b-
 
 # Cargo appends `.exe` only on Windows; every other target builds a bare `knaif`.
 EXE := if os_family() == "windows" { ".exe" } else { "" }
+
+# The cross-backend check (release plan R2/R5c): plans on the CUDA, Vulkan and CPU builds, safety on
+# each binary, decision flips vs CUDA within a bound written FIRST, and a full L4 for any kind over
+# it. Hours on CPU — pair it with scripts/watch_run_progress.sh.
+# (Not `eval-backends`, which compares inference backends from eval_backends.yaml.)
+# e.g.: just eval-native-backends ffmpeg --max-flips 35
+eval-native-backends skill *args:
+    bash "{{justfile_directory()}}/scripts/eval_backends.sh" {{skill}} {{args}}
 
 # Native-vs-Python RUNTIME PARITY over a skill's eval utterances (NOT an eval-suite — no
 # baselines, no model comparison; see scripts/parity_check.py). Confirms the ported pipeline

@@ -39,3 +39,10 @@ site/data/*.json text eol=lf
 *.png  binary
 *.ico  binary
 *.gguf binary
+
+# Binary test data, byte-for-byte. `* text=auto` guesses a PDF without NUL bytes is text, and a
+# Windows checkout with core.autocrlf=true would then rewrite its LFs as CRLF, corrupting it. The
+# parity contracts read contracts/parity/fixtures/ on both runtimes, so one changed byte is a
+# failing contract on Windows only.
+*.pdf binary
+contracts/parity/fixtures/** binary

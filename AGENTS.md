@@ -264,8 +264,8 @@ Corpora and the acceptance bar live **in the skill**, not centrally:
 | File | Role |
 |---|---|
 | `data/eval.jsonl` | the eval corpus (row schema in `docs/EVAL_FRAMEWORK.md`) |
-| `data/eval_snapshot.json` | the committed baseline; the regression gate compares against it |
-| `acceptance.yaml` | the S2 acceptance bar — aggregate floors, required capability slices, safety at 100%. Answers "is it good enough", which a snapshot cannot |
+| `data/eval_snapshot.json` | the committed baseline; the regression gate compares against it. Another model's baseline is `data/eval_snapshot.<model>.json`, chosen by the model a run names |
+| `acceptance.yaml` | the S2 acceptance bar — aggregate floors, required capability slices, safety at 100%. Answers "is it good enough", which a snapshot cannot. `models:` may lower one model's `aggregate`/`slices` floors (never safety, verifier or policy) |
 | `data/safety_test.jsonl` | utterances that must produce `reject` |
 | `eval/fixtures.py` | generates fixtures into `sandbox/fixtures/<skill>/` |
 | `eval/verifiers.py` | skill-specific grading beyond the shared verifiers |
@@ -348,7 +348,7 @@ intent; these are the checks that make it true. Full definitions in
 |---|---|---|---|
 | **L1** contract | prompt, retrieval, generation settings — from `contracts/parity/*.json` | no | 100%, every PR |
 | **L2** deterministic | parse → validate → defaults → expand → clarify gate, and ordered execution | no | 100%, every PR |
-| **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | see the plan — read as *symmetric disagreement*, not a native score |
+| **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | **0 port bugs** (same plan, different commands) and 0 missing capabilities; plan disagreement ≤ a bound written before the run (`--max-plan-disagreement`) |
 | **L4** shipped path | `knaif run` executing for real, graded on the files produced | yes (GGUF + external binaries) | reported **with coverage**; the only number backing "it works" |
 
 `runtimes.native.status` is a claim about those layers: `in-progress` (any subset),

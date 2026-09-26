@@ -36,6 +36,17 @@ the installers/licenses/ directory of every artifact.
   llama.cpp — Copyright (c) 2023-2024 The ggml authors, MIT License
       installers/licenses/llama.cpp-LICENSE.txt
 
+  PDFium (every inference-capable artifact) — Copyright The PDFium Authors,
+  BSD 3-Clause License; prebuilt by pdfium-binaries, Copyright (c) 2014-2025
+  Benoit Blanchon, MIT License. Build chromium/7999, pinned by sha256 in
+  contracts/release/pdfium.yaml. It incorporates Abseil, Anti-Grain Geometry,
+  fast_float, FreeType, ICU, Little CMS, libjpeg-turbo, OpenJPEG, libpng, LibTIFF,
+  LLVM libc, simdutf and zlib, each under its own permissive license.
+  Portions of this software are copyright (c) The FreeType Project
+  (www.freetype.org). All rights reserved. This software is based in part on
+  the work of the Independent JPEG Group.
+      licenses/PDFium/LICENSE, licenses/PDFium/licenses/*
+
   NVIDIA CUDA runtime (CUDA-enabled builds only) — NVIDIA Software License
   Agreement. CUDA support is an opt-in build; base artifacts do not include it.
       installers/licenses/NVIDIA-CUDA-EULA.txt

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -764,29 +765,38 @@ def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Doing it here rather than per file is deliberate: only the batch knows whether there is a
     clash at all, and a lone `clip.mp4 -> converted/` should stay `clip.mp4`, not become
     `clip_mp4.mkv` because some other input might have existed.
+
+    **Every input of the batch is taken too, before any output is placed.** A same-folder
+    pattern sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the
+    `-y` conversion replaced it (ffmpeg_229#4, run for real). Reserving inputs up front is what
+    makes the order of the batch irrelevant.
     """
-    seen: set[str] = set()
+
+    def key(p: str | Path) -> str:
+        return os.path.normcase(os.path.abspath(p))
+
+    seen: set[str] = {key(r["input"]) for r in recipes if r.get("input")}
     for recipe in recipes:
         out = recipe.get("output")
         if not out:
             continue
-        if out not in seen:
-            seen.add(out)
+        if key(out) not in seen:
+            seen.add(key(out))
             continue
         path = Path(out)
         suffixes = _batch_suffixes(Path(recipe.get("input", "")), path.stem)
         tried = [path.with_name(f"{path.stem}_{s}{path.suffix}") for s in suffixes]
-        candidate = next((c for c in tried if str(c) not in seen), None)
+        candidate = next((c for c in tried if key(c) not in seen), None)
         if candidate is None:
             # Nothing in the source name is left to say. Count off the most specific candidate
             # so the walk still terminates.
             base = tried[-1] if tried else path
             candidate, n = base, 1
-            while str(candidate) in seen:
+            while key(candidate) in seen:
                 n += 1
                 candidate = base.with_name(f"{base.stem}_{n}{base.suffix}")
         recipe["output"] = str(candidate)
-        seen.add(str(candidate))
+        seen.add(key(candidate))
     return recipes
 
 
@@ -868,6 +878,11 @@ def _resolve_output_target(
         return out / _destination_name(input_path, ext)
 
     return out
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """Do two paths name one file? Resolved and case-folded, since Windows paths ignore case."""
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
 
 
 def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) -> Path:
@@ -985,6 +1000,11 @@ def _build_one_recipe(
         if not out.is_absolute():
             out = input_path.parent / out
         output_path = out
+        # A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
+        # refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the
+        # derived name, as the plan-level collision handling does for a literal self-overwrite.
+        if _same_file(output_path, input_path):
+            output_path = _derive_output_path(input_path, mode, output_options)
     else:
         output_path = _derive_output_path(input_path, mode, output_options)
 

@@ -269,7 +269,8 @@ pub fn commit(
                 "-compressed.pdf",
             );
             assert_in_sandbox(&out, sandbox)?;
-            crate::compress::compress(&input, &out, &quality, &profile, gs.as_deref())?;
+            // Never a larger file: see `compress_no_larger`.
+            crate::compress::compress_no_larger(&input, &out, &quality, &profile, gs.as_deref())?;
             Ok(vec![out])
         }
         "ocr_document" => {

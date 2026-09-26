@@ -1,0 +1,16 @@
+# The PDFium build bundled beside the binary in every functional artifact (release plan R0/R2).
+#
+# Source: https://github.com/bblanchon/pdfium-binaries (prebuilt PDFium, BSD-3; packaging MIT).
+# Chosen 2026-09-26 by the owner: chromium/7999 is byte-identical to the pypdfium2 library every
+# accepted L4 run loaded through KNAIF_PDFIUM_PATH, so bundling it changes nothing that was
+# measured. pdfium-render 0.8.37 is compiled against the chromium/7543 API and runs on it.
+#
+# Each platform line is "<archive> <library path inside it> <sha256 of the archive>", kept on one
+# line so installers/fetch_pdfium.sh can read it with grep in a container that has no YAML parser.
+# Lives under contracts/ on purpose: the gate fingerprints contracts/**, so changing the bundled
+# PDFium invalidates the L1-L4 evidence, as a change to what OCR runs on should.
+
+version: "chromium/7999"
+win-x64: "pdfium-win-x64.tgz bin/pdfium.dll 55329d5cb5de8a379a2fc563106492d7f385a1f795d18970922c71f708f9fbb4"
+linux-x64: "pdfium-linux-x64.tgz lib/libpdfium.so c3af580f9df0fef9545b44115bc5ea440f286956b5f231df69fb373b8efc4f69"
+mac-arm64: "pdfium-mac-arm64.tgz lib/libpdfium.dylib e214ee33f22b2204daa765a545aee1e425d88448e6154dac95c6a06206b7437f"

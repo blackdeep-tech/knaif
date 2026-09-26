@@ -130,8 +130,53 @@ def load_acceptance(skill: str, root: Path | str | None = None) -> dict[str, Any
     return spec
 
 
+#: What a per-model override may name. Quality floors may differ by model size (release plan
+#: R0: the 1.7B's are written separately, before it is measured); the verifier, the policy and
+#: safety may not, because two models graded by different rules cannot share one bar file.
+MODEL_OVERRIDABLE = ("aggregate", "slices")
+
+
+def bar_for_model(spec: dict[str, Any], model: str | None) -> dict[str, Any]:
+    """The bar a run of *model* is graded against: the base spec plus that model's overrides.
+
+    Overrides replace per metric and per slice — a model that lowers one slice keeps every
+    other slice's base floor. Returns a new spec; *spec* is not mutated.
+    """
+    import copy
+
+    bar = copy.deepcopy(spec)
+    overrides = ((spec.get("models") or {}).get(model or "")) or {}
+    if overrides:
+        bar["aggregate"] = {**(spec.get("aggregate") or {}), **(overrides.get("aggregate") or {})}
+        bar["slices"] = {**(spec.get("slices") or {}), **(overrides.get("slices") or {})}
+    if model:
+        bar["model"] = model
+    return bar
+
+
 def validate_acceptance(spec: dict[str, Any]) -> list[str]:
-    """Return schema errors — an empty list means the spec is well formed."""
+    """Return schema errors — an empty list means the spec is well formed.
+
+    A `models:` block is checked twice over: each override may only name
+    `MODEL_OVERRIDABLE` keys, and the bar it produces is held to every rule the base is.
+    """
+    errors = _validate_bar(spec)
+    for model, overrides in (spec.get("models") or {}).items():
+        if not isinstance(overrides, dict):
+            errors.append(f"models.{model}: expected a mapping of floor overrides")
+            continue
+        for key in sorted(set(overrides) - set(MODEL_OVERRIDABLE)):
+            errors.append(
+                f"models.{model}.{key}: only {', '.join(MODEL_OVERRIDABLE)} may differ per "
+                "model; verifier, policy and safety are one bar for every model"
+            )
+        merged = bar_for_model(spec, model)
+        errors.extend(f"models.{model}: {e}" for e in _validate_bar(merged) if e not in errors)
+    return errors
+
+
+def _validate_bar(spec: dict[str, Any]) -> list[str]:
+    """Schema errors for one bar (the base, or a model's merged bar)."""
     errors: list[str] = []
 
     version = spec.get("policy_version")

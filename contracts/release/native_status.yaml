@@ -46,10 +46,14 @@ statuses:
 #
 # Two kinds of member. TREE-SCOPED ones (`contracts`, `python_core`, `bundle`, `corpus`,
 # `verifier`, `settings`, `native`, `grading`) are computed from the working tree by
-# `evidence_tuple`. RUN-SCOPED ones (`model`, `native_binary`, `policy`) cannot be: the GGUF and
-# the built binary are not in the tree, and which model a run used is a fact of that run. They
-# are carried in the fingerprint the measurement captures for itself, which is why a layer that
-# brings its own `evidence` keeps it rather than being re-stamped with the present tree's.
+# `evidence_tuple`. RUN-SCOPED ones (`model`, `native_binary`, `policy`) are facts of a run: L4
+# (`accept-native`) and L3 (`gate --record-parity`) record the GGUF sha256, the binary sha256 and
+# the scoring policy the run actually used, which is why a layer that brings its own `evidence`
+# keeps it rather than being re-stamped with the present tree's. The gate compares them against:
+# `policy` = the code's POLICY_VERSION; `model` = the manifest sha256 of the skill's
+# `recommended_model` (absent while it reads TODO); `native_binary` = the binary passed to
+# `gate --native-bin` (the packaged artifact). Without `--native-bin` the gate prints
+# "not checked here: native_binary" rather than skipping it in silence.
 # `_layer_state` skips any key the current tuple does not carry, so a tree-scoped key that is
 # named here and never computed would be silently ignored — `test_every_tree_scoped_dependency_is_computed`
 # is what stops that from happening quietly.
@@ -60,7 +64,7 @@ layers:
     invalidated_by: [contracts, python_core, bundle, native]
   L2:
     what: "Deterministic pipeline — parse/validate/defaults/expand/gate, ordered execution."
-    evidence: "contracts/parity/planner_cases.json + apps/cli/tests/executor_semantics.rs."
+    evidence: "contracts/parity/{planner,clarify_gate,chain_linking,expansion,documents_expansion}_cases.json + apps/cli/tests/executor_semantics.rs."
     invalidated_by: [contracts, python_core, bundle, native]
   L3:
     what: "Behavioral parity on the real corpus. Needs a GGUF."
@@ -74,16 +78,20 @@ layers:
       [contracts, python_core, bundle, corpus, model, native_binary, settings, verifier, policy,
        native, grading]
 
-# THE ACCEPTANCE THRESHOLD IS DELIBERATELY NOT STATED HERE, and that is a gap rather than a
-# design choice. L3's pass/fail rate is an open owner decision: the two runtimes link different
-# llama.cpp builds (llama-cpp-2 vs llama-cpp-python), and with prompts verified byte-identical
-# and both sides self-deterministic they still choose different tokens on near-ties — measured
-# 2026-09-10, see evals/parity/2026-09-10_l3-ffmpeg-command/. A rate bar may be unreachable by
-# construction, so the validator checks that evidence EXISTS and is CURRENT, and reports the
-# recorded rate rather than judging it. When the bar is settled, add it here and make the
-# validator enforce it.
+# L3's bar, settled by the owner 2026-09-25 (docs/plans/2026-09-25-release-1.2.md, R0). A rate
+# of 1.0 is unreachable by construction: the two runtimes link different llama.cpp builds
+# (llama-cpp-2 vs llama-cpp-python), and with prompts verified byte-identical and both sides
+# self-deterministic they still choose different tokens on near-ties (measured 2026-09-10,
+# evals/parity/2026-09-10_l3-ffmpeg-command/). So L3 separates what the port owns from what the
+# model owns. `scripts/parity_check.py` computes the verdict (`l3_verdict`) into meta.json, and
+# `gate --record-parity` records only a run judged this way.
 thresholds:
-  L3: null   # open — see above
+  L3:
+    rule: "port_bugs == 0 and native_not_implemented == 0 and plan_disagreement_rate <= bound"
+    port_bugs: "same plan on both sides, different rendered commands; must be 0"
+    native_not_implemented: "a capability native lacks; must be 0"
+    plan_disagreement: "different plans, or clarify vs reject, over gated rows"
+    bound: "--max-plan-disagreement, stated before the run (required with --label)"
   L4:
     rule: "native >= max(S2 floor, accepted python score - tolerance), per metric"
     tolerance: 0.02

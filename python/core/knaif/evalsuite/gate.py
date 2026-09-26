@@ -32,9 +32,18 @@ from typing import Any
 
 import yaml
 
+from .matrix import CELL_LAYERS, load_matrix, required_cells
+from .outcomes import POLICY_VERSION
+
 STATUS_CONTRACT = Path("contracts/release/native_status.yaml")
 PLATFORMS_CONTRACT = Path("contracts/release/platforms.yaml")
 ACCEPTANCE_DIR = Path("evals/acceptance")
+MODEL_MANIFEST = Path("contracts/models/model-manifest.yaml")
+
+#: Evidence a measurement brings for itself; see `native_status.yaml`. `policy` and `model` are
+#: also derivable from the tree (the code's POLICY_VERSION, the manifest hash of the skill's
+#: `recommended_model`); `native_binary` only when a binary is handed to the gate.
+RUN_SCOPED = ("model", "native_binary", "policy")
 
 #: Ordered weakest → strongest, so a derived status is a max over satisfied ones.
 STATUS_ORDER = ("in-progress", "parity", "supported")
@@ -83,7 +92,9 @@ def _sha256_tree(root: Path, patterns: tuple[str, ...]) -> str:
     return h.hexdigest()
 
 
-def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
+def evidence_tuple(
+    skill: str, root: Path, native_binary: Path | None = None
+) -> dict[str, str | None]:
     """The fingerprint an acceptance record is bound to.
 
     Every member answers "could this change what a run would produce?". The four shared ones —
@@ -100,7 +111,7 @@ def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
         path = root / rel
         return _sha256_file(path) if path.is_file() else None
 
-    return {
+    tuple_: dict[str, str | None] = {
         # The skill's own declarative contract + handlers.
         "bundle": _tree(
             f"skills/{skill}",
@@ -133,7 +144,32 @@ def evidence_tuple(skill: str, root: Path) -> dict[str, str | None]:
         "verifier": _tree(f"skills/{skill}/eval", ("*.py",)),
         # Effective generation settings, as a contract rather than as prose.
         "settings": _file("contracts/runtime/generation.yaml"),
+        # The rules that turn outcomes into a score. A record graded under another version is
+        # not comparable, whatever else held still.
+        "policy": str(POLICY_VERSION),
     }
+    # The GGUF the skill ships with, by the hash the manifest publishes. Absent (not None)
+    # when there is nothing to compare against — no recommended model, or `sha256: TODO`
+    # before upload — because a None here would read as "changed" against every record.
+    model = _recommended_model_sha(skill, root)
+    if model:
+        tuple_["model"] = model
+    # The built binary is not in the tree. Only a gate handed the artifact can check it.
+    if native_binary is not None:
+        tuple_["native_binary"] = _sha256_file(native_binary)
+    return tuple_
+
+
+def _recommended_model_sha(skill: str, root: Path) -> str | None:
+    """sha256 the model manifest publishes for this skill's `recommended_model`, if any."""
+    skill_yaml = root / "skills" / skill / "skill.yaml"
+    manifest = root / MODEL_MANIFEST
+    if not (skill_yaml.is_file() and manifest.is_file()):
+        return None
+    name = (yaml.safe_load(skill_yaml.read_text(encoding="utf-8")) or {}).get("recommended_model")
+    models = (yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}).get("models") or {}
+    sha = str((models.get(name) or {}).get("sha256") or "")
+    return sha if len(sha) == 64 and all(c in "0123456789abcdef" for c in sha.lower()) else None
 
 
 def load_status_contract(root: Path) -> dict[str, Any]:
@@ -178,24 +214,91 @@ def _layer_state(
         return LayerState(layer, "stale", f"changed since the run: {', '.join(sorted(drifted))}")
     if missing:
         return LayerState(layer, "stale", f"record does not pin: {', '.join(sorted(missing))}")
+    # A run-scoped key the record pins but this gate had nothing to compare with. It cannot make
+    # the layer stale, and it must not vanish either: that silence is the bug this closes.
+    unchecked = [
+        key
+        for key in depends
+        if key in RUN_SCOPED and key not in current and recorded.get(key) is not None
+    ]
+    note = f" [not checked here: {', '.join(unchecked)}]" if unchecked else ""
     # A run that recorded its own verdict is taken at its word. Recording a FAILED run as valid
     # evidence would let a status rest on a measurement that said "no" — the exact substitution
     # of "we ran it" for "it passed" this gate exists to prevent.
     if entry.get("passed") is False:
         return LayerState(
-            layer, "failing", entry.get("summary", "the recorded run did not meet its threshold")
+            layer,
+            "failing",
+            entry.get("summary", "the recorded run did not meet its threshold") + note,
         )
-    return LayerState(layer, "valid", entry.get("summary", ""))
+    return LayerState(layer, "valid", entry.get("summary", "") + note)
 
 
-def evaluate_skill(skill: str, root: Path, declared: str) -> SkillGate:
-    """Derive the status this skill's evidence actually supports, and compare with its claim."""
+#: When cells disagree, the layer reads as its worst cell. A failure outranks staleness, which
+#: outranks absence: each is a stronger statement about why the claim cannot stand.
+_SEVERITY = ("failing", "stale", "pending", "valid")
+
+
+def _cells_state(
+    layer: str,
+    record: dict[str, Any] | None,
+    current: dict[str, str | None],
+    contract: dict[str, Any],
+    cells: list[str],
+) -> LayerState:
+    """A cell-keyed layer (the acceptance matrix): valid only when EVERY required cell is.
+
+    Each cell is judged exactly as a flat layer is — same staleness, same failing-vs-pending
+    distinction — so the matrix adds coverage without adding a second set of rules.
+    """
+    if not cells:
+        return LayerState(layer, "pending", "the acceptance matrix requires no cell for this layer")
+    entry = ((record or {}).get("layers") or {}).get(layer)
+    stored = entry.get("cells") if isinstance(entry, dict) else None
+    per_cell = {
+        cell: _layer_state(layer, {"layers": {layer: (stored or {}).get(cell)}}, current, contract)
+        for cell in cells
+    }
+    worst = min((s.state for s in per_cell.values()), key=_SEVERITY.index)
+    if worst == "valid":
+        return LayerState(layer, "valid", f"{len(cells)} cell(s) valid")
+    groups = []
+    for state in _SEVERITY[:-1]:
+        hit = [(cell, st) for cell, st in per_cell.items() if st.state == state]
+        if not hit:
+            continue
+        if state == "pending":  # "no evidence" says nothing per cell; the names are the news
+            groups.append(f"pending: {', '.join(cell for cell, _ in hit)}")
+        else:
+            groups.append(f"{state}: " + ", ".join(f"{c} ({st.detail})" for c, st in hit))
+    bad = "; ".join(groups)
+    if stored is None and entry:
+        bad = "record is not keyed by cell (pre-matrix); " + bad
+    return LayerState(layer, worst, bad)
+
+
+def evaluate_skill(
+    skill: str, root: Path, declared: str, native_binary: Path | None = None
+) -> SkillGate:
+    """Derive the status this skill's evidence actually supports, and compare with its claim.
+
+    Pass *native_binary* (the packaged artifact under test) to check the binary a record
+    measured; without it the gate says it did not.
+    """
     contract = load_status_contract(root)
     record = load_acceptance_record(skill, root)
-    current = evidence_tuple(skill, root)
+    current = evidence_tuple(skill, root, native_binary)
 
     all_layers = list(contract["layers"])
-    states = [_layer_state(name, record, current, contract) for name in all_layers]
+    matrix = load_matrix(root)
+    states = [
+        (
+            _cells_state(name, record, current, contract, required_cells(matrix, name))
+            if matrix is not None and name in CELL_LAYERS
+            else _layer_state(name, record, current, contract)
+        )
+        for name in all_layers
+    ]
     valid = {s.layer for s in states if s.state == "valid"}
 
     derived = "in-progress"
@@ -278,6 +381,17 @@ def record_layers(
     record = load_acceptance_record(skill, root) or {"skill": skill, "layers": {}}
     current = evidence_tuple(skill, root)
     for name, entry in layers.items():
+        # A cell-keyed entry (the acceptance matrix) lands in its own cell, so recording one
+        # model/OS/backend never overwrites another's verdict.
+        if entry.get("cell"):
+            cell = entry["cell"]
+            layer = record["layers"].get(name)
+            if not isinstance(layer, dict) or "cells" not in layer:
+                layer = {"cells": {}}
+            body = {k: v for k, v in entry.items() if k != "cell"}
+            layer["cells"][cell] = {**body, "evidence": entry.get("evidence") or current}
+            record["layers"][name] = layer
+            continue
         # A layer that brings its OWN fingerprint keeps it. The fingerprint belongs to the
         # measurement, not to the moment someone wrote it down: stamping the present tree onto
         # a saved run from before a planner change turned expired evidence back into valid
@@ -290,31 +404,126 @@ def record_layers(
     return path
 
 
+def _model_name(meta: dict[str, Any], root: Path) -> str:
+    """The public model a parity run measured: the manifest key whose `file` is its GGUF."""
+    path = (meta.get("model") or {}).get("path") or ""
+    filename = Path(path).name
+    manifest = root / MODEL_MANIFEST
+    if filename and manifest.is_file():
+        models = (yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}).get("models") or {}
+        for key, entry in models.items():
+            if (entry or {}).get("file") == filename:
+                return str(key)
+    return Path(filename).stem if filename else "unknown-model"
+
+
 def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
     """Record L3 evidence from a saved parity run directory.
 
-    Reads the run's own `meta.json` rather than trusting the caller: the rate, the threshold and
+    Reads the run's own `meta.json` rather than trusting the caller: the verdict, the bound and
     whether it passed are facts of the run, and a record that restated them by hand could
     disagree with the artifact it cites.
     """
     meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
     result = meta.get("result") or {}
-    summary = (
-        f"{run_dir.name}: rate={result.get('equivalence_rate')} "
-        f"threshold={result.get('threshold')} passed={result.get('passed')}"
-    )
+    # L3's bar (native_status.yaml `thresholds.L3`): zero port bugs, zero capability gaps,
+    # plan disagreement within the run's pre-written bound. A run judged by the retired
+    # equivalence-rate threshold never counted port bugs, so its `passed` cannot stand for it.
+    judged = "port_bugs" in result
+    passed = bool(result.get("passed")) if judged else False
+    if judged:
+        summary = (
+            f"{run_dir.name}: port_bugs={result.get('port_bugs')} "
+            f"not_implemented={result.get('native_not_implemented')} "
+            f"plan_disagreement={result.get('plan_disagreement_rate')} "
+            f"<= {result.get('max_plan_disagreement')} passed={passed}"
+        )
+    else:
+        summary = (
+            f"{run_dir.name}: judged by the retired equivalence-rate bar "
+            f"(rate={result.get('equivalence_rate')}); re-run under the port-bug bar"
+        )
+    # The run's own model and binary, which only its meta knows (see `RUN_SCOPED`).
+    evidence = {
+        **evidence_tuple(skill, root),
+        "model": (meta.get("model") or {}).get("sha256"),
+        "native_binary": (meta.get("binary") or {}).get("sha256"),
+    }
     return record_layers(
         skill,
         root,
         {
             "L3": {
+                "cell": _model_name(meta, root),
+                "evidence": evidence,
                 "run": str(run_dir.relative_to(root)) if run_dir.is_absolute() else str(run_dir),
                 "summary": summary,
                 "equivalence_rate": result.get("equivalence_rate"),
-                "passed": result.get("passed"),
+                "port_bugs": result.get("port_bugs"),
+                "native_not_implemented": result.get("native_not_implemented"),
+                "plan_disagreement_rate": result.get("plan_disagreement_rate"),
+                "max_plan_disagreement": result.get("max_plan_disagreement"),
+                "passed": passed,
                 "backend": meta.get("backend"),
                 "git_sha": meta.get("git_sha"),
                 "git_dirty": meta.get("git_dirty"),
             }
         },
     )
+
+
+RELEASES_DIR = ACCEPTANCE_DIR / "releases"
+
+
+def write_release_record(root: Path, version: str, skills: list[str] | None = None) -> Path:
+    """Keep what was true for *version*: the acceptance records and the gate's verdict at the tag.
+
+    The live records under `evals/acceptance/` go stale on `main` as soon as the tree moves, as
+    they should; this copy is the answer to "what was true for 1.2.0?" (this module's docstring,
+    and release plan R2/R7). Written once — an existing release is never overwritten — and only
+    under the release the acceptance matrix names, since filing one release's evidence under
+    another's number would be a false statement about that release.
+    """
+    from .matrix import load_matrix
+
+    matrix = load_matrix(root)
+    if matrix is not None and matrix["current_release"] != version:
+        raise ValueError(
+            f"the acceptance matrix is for {matrix['current_release']}, not {version}; "
+            "record the release the evidence was gathered for"
+        )
+    out = root / RELEASES_DIR / version
+    if out.exists():
+        raise FileExistsError(f"{out} already exists; a release record is written once")
+
+    live = root / ACCEPTANCE_DIR
+    names = skills if skills is not None else sorted(p.stem for p in live.glob("*.json"))
+    out.mkdir(parents=True)
+    verdicts: dict[str, Any] = {}
+    for skill in names:
+        record = live / f"{skill}.json"
+        if record.is_file():
+            (out / record.name).write_bytes(record.read_bytes())
+        declared = _declared_status(skill, root)
+        gate = evaluate_skill(skill, root, declared or "in-progress")
+        verdicts[skill] = {
+            "declared": declared,
+            "derived": gate.derived,
+            "layers": {s.layer: {"state": s.state, "detail": s.detail} for s in gate.layers},
+        }
+    release = (matrix or {}).get("releases", {}).get(version) if matrix else None
+    doc = {"version": version, "skills": verdicts, "matrix": release}
+    (out / "release.json").write_text(
+        json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return out
+
+
+def _declared_status(skill: str, root: Path) -> str | None:
+    path = root / "skills" / skill / "skill.yaml"
+    if not path.is_file():
+        return None
+    doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    native = ((doc.get("runtimes") or {}).get("native")) or {}
+    status = native.get("status")
+    return str(status) if status else None

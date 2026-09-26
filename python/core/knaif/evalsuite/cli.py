@@ -189,8 +189,11 @@ def _corpus_path(skill: str) -> Path:
     return Path("skills") / skill / "data" / "eval.jsonl"
 
 
-def _snapshot_path(skill: str) -> Path:
-    return Path("skills") / skill / "data" / "eval_snapshot.json"
+def _snapshot_path(skill: str, model: str | None = None) -> Path:
+    """Per-model baseline; see `snapshot.snapshot_path`."""
+    from .snapshot import snapshot_path
+
+    return snapshot_path(skill, model)
 
 
 def _default_fixture_dir(sandbox: Path | str, skill: str) -> Path:
@@ -896,7 +899,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             print(f"  Saved to {out_path}")
 
         if args.snapshot:
-            snap_path = _snapshot_path(args.skill)
+            snap_path = _snapshot_path(args.skill, scoreboard.get("backend_public_name"))
             save_snapshot(scoreboard, snap_path)
             print(f"  Snapshot saved to {snap_path}")
 
@@ -924,6 +927,25 @@ def _git(*cmd: str) -> str:
         return ""
 
 
+def _require_packaged(lane: Any, args: argparse.Namespace) -> bool:
+    """L4 grades the artifact users install, which carries PDFium beside the binary.
+
+    A developer build can still be run for diagnosis, but only on purpose, and `accept-native`
+    refuses the result. Returns whether the binary is the packaged layout.
+    """
+    from . import native_lane
+
+    packaged = native_lane.packaged_layout(lane.binary)
+    if not packaged and not getattr(args, "allow_unpackaged", False):
+        sys.exit(
+            f"ERROR: {lane.binary} is not the packaged layout: no PDFium "
+            f"({native_lane.pdfium_library_name()}) beside it. L4 runs the unpacked release "
+            "artifact. For a diagnostic run of a developer build pass --allow-unpackaged; "
+            "such a run can never be accepted."
+        )
+    return packaged
+
+
 def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     """L4a: grade the shipped native binary on the artifacts it really produces.
 
@@ -931,8 +953,9 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     runtime, or measures a plan; this runs `knaif run` — no `--dry-run` — and grades the files
     that appear on disk with the skill's executing verifier.
     """
+    from . import native_lane
     from .corpus import load_corpus
-    from .native_lane import detect_backend, load_lane, run_native_corpus
+    from .native_lane import detect_backend, run_native_corpus
     from .report import print_scoreboard, save_scoreboard_json
     from .scoring import score_corpus
 
@@ -966,7 +989,8 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             "did not happen."
         )
 
-    lane = load_lane(Path(args.config), args.lane, Path.cwd())
+    lane = native_lane.load_lane(Path(args.config), args.lane, Path.cwd())
+    packaged = _require_packaged(lane, args)
     lane_sandbox = sandbox / f"lane-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
 
@@ -1004,7 +1028,16 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["compute_placement"] = measured.placement
     scoreboard["compute_device_enumerated"] = measured.enumerated
     scoreboard["binary_sha256"] = _sha256_file(lane.binary)
-    scoreboard["model_sha256_prefix"] = _sha256_file(lane.model_path)[:16]
+    scoreboard["packaged_layout"] = packaged
+    # The full hash is L4 evidence (`native_status.yaml`: L4 is invalidated by `model`); the
+    # prefix is kept for readers of older boards.
+    scoreboard["model_sha256"] = _sha256_file(lane.model_path)
+    scoreboard["model_sha256_prefix"] = scoreboard["model_sha256"][:16]
+    # Which matrix row this run is: an L4 verdict is filed under model x OS x backend, and a
+    # run under WSL is a Linux run however it was launched.
+    from .matrix import current_os
+
+    scoreboard["os"] = current_os()
     scoreboard["git_sha"] = _git("rev-parse", "HEAD")
     scoreboard["git_dirty"] = bool(_git("status", "--porcelain"))
     scoreboard["backend"] = lane.name
@@ -1050,9 +1083,20 @@ def cmd_gate(args: argparse.Namespace) -> None:
         evaluate_skill,
         record_from_parity_run,
         record_layers,
+        write_release_record,
     )
 
     root = Path.cwd()
+
+    if getattr(args, "release_record", None):
+        # At the tag (release plan R7): keep what was true for this release, beside the live
+        # records that will go stale on main as the tree moves.
+        try:
+            out = write_release_record(root, args.release_record, skills=sorted(list_skills()))
+        except (FileExistsError, ValueError) as exc:
+            sys.exit(f"ERROR: {exc}")
+        print(f"  release record written: {out}")
+        return
 
     if args.record_contracts:
         # Called by `just check-contracts` AFTER the L1/L2 tests pass. Evidence is a side effect
@@ -1082,7 +1126,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
         declared = _declared_native_status(skill, root)
         if declared is None:
             continue
-        gate = evaluate_skill(skill, root, declared)
+        native_bin = Path(args.native_bin) if getattr(args, "native_bin", None) else None
+        gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
         marks = "  ".join(
             f"{s.layer}:{ {'valid': 'ok', 'failing': 'FAIL', 'stale': 'STALE', 'pending': '-'}[s.state] }"
             for s in gate.layers
@@ -1468,6 +1513,7 @@ def _safety_through_the_lane(
     from .native_lane import load_lane, run_native_corpus
 
     lane = load_lane(Path(args.config), args.lane, Path.cwd())
+    packaged = _require_packaged(lane, args)
     lane_sandbox = sandbox / f"safety-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
     fixture_dir = _default_fixture_dir(sandbox, args.skill)
@@ -1486,6 +1532,7 @@ def _safety_through_the_lane(
     result["lane"] = lane.name
     result["lane_kind"] = "native_cli"
     result["lane_entry_point"] = lane.entry_point
+    result["packaged_layout"] = packaged
     # No `prompt_config`: that records how *Python* was configured to build the prompt.
     # The binary builds its own, and stamping a Python-side setting here would describe a
     # configuration that had no bearing on the run.
@@ -1513,7 +1560,7 @@ def cmd_accept(args: argparse.Namespace) -> None:
     Fails closed: no ``--current``, no safety result, or a run graded by a
     different verifier are all rejections, not passes.
     """
-    from .acceptance import check_acceptance, load_acceptance
+    from .acceptance import bar_for_model, check_acceptance, load_acceptance
 
     try:
         spec = load_acceptance(args.skill)
@@ -1531,6 +1578,9 @@ def cmd_accept(args: argparse.Namespace) -> None:
 
     with current_path.open(encoding="utf-8") as fh:
         current: dict[str, Any] = json.load(fh)
+    # The bar is per model: the 1.7B may carry its own quality floors (acceptance.yaml
+    # `models:`). Chosen by the model the run names, never by a flag someone could mistype.
+    spec = bar_for_model(spec, current.get("backend_public_name"))
 
     safety: dict[str, Any] | None = None
     safety_path = Path(args.safety) if getattr(args, "safety", None) else None
@@ -1556,6 +1606,7 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
     """
     from .acceptance import (
         NATIVE_COVERAGE_FLOOR,
+        bar_for_model,
         check_native_acceptance,
         load_acceptance,
         native_aggregate_floors,
@@ -1573,6 +1624,9 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         sys.exit(f"--current {current_path} does not exist.")
     with current_path.open(encoding="utf-8") as fh:
         current: dict[str, Any] = json.load(fh)
+    # The bar is per model: the 1.7B may carry its own quality floors (acceptance.yaml
+    # `models:`). Chosen by the model the run names, never by a flag someone could mistype.
+    spec = bar_for_model(spec, current.get("backend_public_name"))
 
     if current.get("lane_kind") != "native_cli":
         sys.exit(
@@ -1580,8 +1634,14 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             f"{current.get('lane_kind')!r}). L4 grades the shipped binary; a Python-side run "
             "graded against this bar would certify a pipeline no user runs (L4b)."
         )
+    if current.get("packaged_layout") is not True:
+        sys.exit(
+            f"--current {current_path} was not run from the packaged layout "
+            f"(packaged_layout={current.get('packaged_layout')!r}). L4 is a claim about the "
+            "artifact users install; run `eval-native` against the unpacked release artifact."
+        )
 
-    snap_path = _snapshot_path(args.skill)
+    snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
         sys.exit(
             f"{args.skill} has no frozen baseline ({snap_path}). L4 measures the shipped "
@@ -1600,6 +1660,12 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         # Python's refusals are not evidence that the *binary* refuses. Two runtimes reach a
         # refusal by different code, so certifying one with the other's answers is the
         # substitution this whole plan exists to prevent.
+        if safety.get("packaged_layout") is not True and safety.get("lane_kind") == "native_cli":
+            sys.exit(
+                f"--safety {safety_path} was not run from the packaged layout "
+                f"(packaged_layout={safety.get('packaged_layout')!r}). L4's safety half comes "
+                "from the artifact users install, like its quality half."
+            )
         if safety.get("lane_kind") != "native_cli":
             sys.exit(
                 f"--safety {safety_path} was not produced by the shipped binary "
@@ -1629,11 +1695,33 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         )
     print(report.summary())
 
+    # The fingerprint this run was taken under: the tree as it is, plus what only the run knows
+    # — the GGUF and binary it measured and the policy it was graded by. A board too old to
+    # carry a full model hash pins None rather than borrowing the tree's, so it reads "does not
+    # pin: model" instead of passing for a model nobody checked.
+    from .gate import evidence_tuple
+    from .matrix import backend_family, cell_key, current_os
+
+    # The matrix cell this verdict belongs to (contracts/release/acceptance_matrix.yaml). One
+    # per model x OS x backend, so recording this run cannot overwrite another cell's verdict.
+    cell = cell_key(
+        str(current.get("backend_public_name") or current.get("backend")),
+        str(current.get("os") or current_os()),
+        backend_family(current.get("compute_backend")) or "unknown",
+    )
+    run_evidence = {
+        **evidence_tuple(args.skill, Path.cwd()),
+        "model": current.get("model_sha256"),
+        "native_binary": current.get("binary_sha256"),
+        "policy": str(current["scoring_policy"]) if current.get("scoring_policy") else None,
+    }
     path = record_layers(
         args.skill,
         Path.cwd(),
         {
             "L4": {
+                "cell": cell,
+                "evidence": run_evidence,
                 "run": str(current_path),
                 "summary": report.summary().splitlines()[0],
                 "passed": report.ok,
@@ -1653,14 +1741,6 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
 def cmd_regression(args: argparse.Namespace) -> None:
     from .snapshot import diff_snapshots, load_snapshot
 
-    snap_path = _snapshot_path(args.skill)
-    if not snap_path.exists():
-        sys.exit(
-            f"No snapshot found at {snap_path}. Run with --snapshot first to create a baseline."
-        )
-
-    baseline = load_snapshot(snap_path)
-
     # Fail closed, not open: a missing/absent --current used to silently fall back to
     # comparing the snapshot to itself (always "no regressions"). See audit F6.
     current_path = Path(args.current) if getattr(args, "current", None) else None
@@ -1677,6 +1757,17 @@ def cmd_regression(args: argparse.Namespace) -> None:
 
     with current_path.open(encoding="utf-8") as fh:
         current: dict[str, Any] = json.load(fh)
+
+    # The baseline is the one for the model this run names, so a 1.7B run is never measured
+    # against the 4B's snapshot (release plan R2). Loaded after --current for that reason.
+    model = current.get("backend_public_name")
+    snap_path = _snapshot_path(args.skill, model)
+    if not snap_path.exists():
+        sys.exit(
+            f"No snapshot for {model or args.skill} at {snap_path}. Lock one with "
+            "`run --snapshot` from an accepted run of that model first."
+        )
+    baseline = load_snapshot(snap_path)
 
     try:
         diff = diff_snapshots(baseline, current, threshold=args.threshold)
@@ -1762,8 +1853,15 @@ def cmd_regression_all_skills(args: argparse.Namespace) -> None:
             backend = _backend_from_scoreboard_name(cur_path.name, skill, verifier)
             with cur_path.open(encoding="utf-8") as fh:
                 current = json.load(fh)
+            # Each scoreboard against its own model's baseline (release plan R2).
+            own = _snapshot_path(skill, current.get("backend_public_name"))
+            if not own.exists():
+                failed = True
+                rows.append((skill, backend, f"no snapshot for this model ({own})", []))
+                continue
+            model_baseline = load_snapshot(own)
             try:
-                diff = diff_snapshots(baseline, current, threshold=threshold)
+                diff = diff_snapshots(model_baseline, current, threshold=threshold)
             except ValueError as exc:
                 failed = True
                 rows.append((skill, backend, f"INCOMPATIBLE: {exc}", []))
@@ -2100,6 +2198,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_saf.add_argument("--skill", required=True)
     p_saf.add_argument("--config", default="eval_backends.yaml")
+    p_saf.add_argument(
+        "--allow-unpackaged",
+        action="store_true",
+        dest="allow_unpackaged",
+        help="With --lane: diagnose a developer build with no PDFium beside it. The result is "
+        "marked packaged_layout=false and `accept-native` refuses it.",
+    )
     p_saf.add_argument("--backends", default=None, help="Exactly one backend name")
     p_saf.add_argument("--sandbox", default=None)
     p_saf.add_argument("--save", default=None, metavar="FILE", help="Write the result JSON here")
@@ -2127,6 +2232,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_nat.add_argument("--skill", required=True)
     p_nat.add_argument("--lane", required=True, help="Lane name from the config's `lanes:` map")
+    p_nat.add_argument(
+        "--allow-unpackaged",
+        action="store_true",
+        dest="allow_unpackaged",
+        help="Diagnose a developer build with no PDFium beside it. The run is marked "
+        "packaged_layout=false and `accept-native` refuses it.",
+    )
     p_nat.add_argument("--config", default="eval_backends.yaml")
     p_nat.add_argument(
         "--verifier",
@@ -2168,6 +2280,22 @@ def build_parser() -> argparse.ArgumentParser:
         dest="record_parity",
         metavar="RUN_DIR",
         help="Record L3 evidence for --skill from a saved parity run directory.",
+    )
+    p_gate.add_argument(
+        "--release-record",
+        default=None,
+        dest="release_record",
+        metavar="VERSION",
+        help="At the tag: copy the acceptance records and the gate's verdict to "
+        "evals/acceptance/releases/VERSION/. Written once; VERSION must be the matrix's release.",
+    )
+    p_gate.add_argument(
+        "--native-bin",
+        default=None,
+        dest="native_bin",
+        metavar="PATH",
+        help="The binary under acceptance (the packaged artifact). Checks that L3/L4 records "
+        "measured THIS binary; without it the gate reports the binary as not checked.",
     )
 
     # regression
