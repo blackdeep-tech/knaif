@@ -6,7 +6,7 @@ import difflib
 from pathlib import Path
 from typing import Any
 
-from ._engine import _coerce_inputs, _load_yaml
+from ._engine import _coerce_inputs, _load_yaml, _timestamp_seconds
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summarizers — produce a short human-readable clause for each intent tool.
@@ -83,6 +83,13 @@ def _load_quality_hint(quality: str, skill_dir: Path) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _zero_length_end(args: dict[str, Any]) -> bool:
+    """Is `end` the same instant as `start` (or 0 when there is none)? Unparseable is False."""
+    end = _timestamp_seconds(args.get("end"))
+    start = _timestamp_seconds(args.get("start", 0))
+    return end is not None and start is not None and end == start
+
+
 def _preflight_trim_frames(args: dict[str, Any]) -> list[str]:
     """Refuse a frame count that cannot mean anything, instead of silently picking a half.
 
@@ -102,6 +109,11 @@ def _preflight_trim_frames(args: dict[str, Any]) -> list[str]:
         errors.append(f"'frames' must be at least 1, got {frames}.")
 
     conflicting = [k for k in ("end", "duration") if args.get(k) is not None]
+    if "end" in conflicting and _zero_length_end(args):
+        # `start == end` names an instant, not a length, so it does not compete with the
+        # count (ffmpeg_161#0 sent `start: 00:00:00, end: 00:00:00, frames: 1`). The trim
+        # expander drops such an `end`, so `frames` decides how much and `start` where.
+        conflicting.remove("end")
     if conflicting:
         named = " and ".join(repr(k) for k in conflicting)
         errors.append(

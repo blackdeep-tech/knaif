@@ -32,6 +32,7 @@ from ._reporting import (
     _load_platform_summary,
     _load_quality_hint,
     _preflight_trim_frames,
+    _zero_length_end,
 )
 from .steps import require_streams
 
@@ -421,7 +422,11 @@ class TrimVideoIntent(Intent):
             options["start"] = args["start"]
         if args.get("duration") is not None:
             options["duration"] = args["duration"]
-        if args.get("end") is not None:
+        # With a frame count, a zero-length `end` is the model filling both fields: the
+        # preflight above accepted it on that reading, so it is not rendered.
+        if args.get("end") is not None and not (
+            args.get("frames") is not None and _zero_length_end(args)
+        ):
             options["end"] = args["end"]
         # Forwarding this is what makes the frame count exist at all. Without it the arg was
         # declared in tools.yaml, rendered by the engine and validated by the preflight, and

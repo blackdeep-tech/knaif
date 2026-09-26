@@ -615,6 +615,19 @@ fn resolve_intent(
             options.duration = str_arg(args, "duration");
             options.end = str_arg(args, "end");
             options.frames = i64_arg(args, "frames");
+            // `start == end` names an instant, not a length, so it does not compete with a frame
+            // count (ffmpeg_161#0 sent `start: 00:00:00, end: 00:00:00, frames: 1`). Port of
+            // Python `_zero_length_end`: the `end` is dropped and `frames` decides how much.
+            let zero_length_end = {
+                let zero = "0".to_string();
+                let end = crate::engine::timestamp_seconds(options.end.as_ref());
+                let start =
+                    crate::engine::timestamp_seconds(Some(options.start.as_ref().unwrap_or(&zero)));
+                matches!((end, start), (Some(e), Some(s)) if e == s)
+            };
+            if options.frames.is_some() && zero_length_end {
+                options.end = None;
+            }
             // Port of `_preflight_trim_frames`. Without it the two runtimes hold opposite
             // answers to a decision the plan took explicitly: Python refuses `frames`
             // alongside a range, native silently dropped the range and rendered the count.
@@ -625,6 +638,7 @@ fn resolve_intent(
                 let conflicting: Vec<&str> = ["end", "duration"]
                     .into_iter()
                     .filter(|k| args.get(*k).is_some_and(|v| !v.is_null()))
+                    .filter(|k| !(*k == "end" && zero_length_end))
                     .collect();
                 if !conflicting.is_empty() {
                     anyhow::bail!(

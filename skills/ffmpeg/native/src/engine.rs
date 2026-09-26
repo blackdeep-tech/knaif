@@ -139,7 +139,7 @@ pub struct Trim {
 ///
 /// Comparing the strings would not do: `"0"` and `"00:00:00"` are the same instant and the
 /// model writes both.
-fn timestamp_seconds(value: Option<&String>) -> Option<f64> {
+pub(crate) fn timestamp_seconds(value: Option<&String>) -> Option<f64> {
     let mut text = value?.trim();
     if text.is_empty() {
         return None;

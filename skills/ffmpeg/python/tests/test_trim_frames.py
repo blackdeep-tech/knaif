@@ -243,3 +243,65 @@ def test_a_frame_count_with_a_start_still_works_through_the_agent() -> None:
     )
     assert "-vframes" in cmd and cmd[cmd.index("-vframes") + 1] == "2", " ".join(cmd)
     assert "-ss" in cmd, " ".join(cmd)
+
+
+# -- 3. a frame count alongside a zero-length range ---------------------------
+# `ffmpeg_161#0` (release plan R2): the model sent `start: 00:00:00, end: 00:00:00, frames: 1`,
+# and the conflict rule refused it. A zero-length range names an instant, not a length, so it
+# does not compete with the frame count: `frames` decides how much, `start` decides where.
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"start": "00:00:00", "end": "00:00:00"},
+        {"start": "0", "end": "00:00:00"},
+        {"end": "00:00:00"},
+        {"start": "00:00:04", "end": "4"},
+    ],
+)
+def test_frames_with_a_zero_length_range_is_accepted(skill, tmp_path: Path, bounds) -> None:
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    errors = skill.preflight(
+        "trim_video", {"input": "clip.mp4", "frames": 1, **bounds}, root=tmp_path, sandbox=tmp_path
+    )
+    assert errors == []
+
+
+def test_frames_with_a_real_range_is_still_refused(skill, tmp_path: Path) -> None:
+    errors = skill.preflight(
+        "trim_video",
+        {"input": "clip.mp4", "frames": 3, "start": "00:00:02", "end": "00:00:05"},
+        root=tmp_path,
+        sandbox=tmp_path,
+    )
+    assert any("frames" in e for e in errors)
+
+
+def test_frames_decide_the_length_of_a_zero_length_range(tmp_path: Path) -> None:
+    """Through the whole pipeline: the count is rendered, the empty range is not."""
+    from knaif.evalsuite.runner import _extract_artifacts
+
+    agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=tmp_path)
+    results = agent.execute_plan(
+        {
+            "plan": [
+                {
+                    "tool": "trim_video",
+                    "args": {
+                        "input": "clip.mp4",
+                        "start": "00:00:04",
+                        "end": "00:00:04",
+                        "frames": 3,
+                    },
+                }
+            ]
+        },
+        dry_run=True,
+        confirmed=False,
+    )
+    (command,) = _extract_artifacts(results)
+    cmd = command.split()
+    assert cmd[cmd.index("-vframes") + 1] == "3"
+    assert cmd[cmd.index("-ss") + 1] == "00:00:04"
+    assert "-to" not in cmd

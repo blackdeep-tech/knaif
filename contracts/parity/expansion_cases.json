@@ -617,6 +617,50 @@
           "clip_converted.mp4"
         ]
       ]
+    },
+    {
+      "name": "frames_with_a_zero_length_range",
+      "_why": "ffmpeg_161#0: start == end names an instant, not a length, so it does not conflict with a frame count. frames decides how much, start where; the empty -to is not rendered.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "00:00:00",
+              "end": "00:00:00",
+              "frames": 1
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "00:00:00",
+          "-i",
+          "clip.mp4",
+          "-vframes",
+          "1",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ]
+      ]
     }
   ]
 }
