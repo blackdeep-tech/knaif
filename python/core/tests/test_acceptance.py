@@ -622,3 +622,33 @@ def test_a_bar_that_does_not_validate_cannot_certify_anything() -> None:
     report = check_acceptance(spec, BOARD, safety=SAFETY_OK)
     assert not report.ok
     assert [v.kind for v in report.violations] == ["identity"]
+
+
+def _per_model_snapshots() -> list[tuple[str, Path]]:
+    return [
+        (skill, path)
+        for skill in ACTIVE_SKILLS
+        for path in sorted((REPO_ROOT / "skills" / skill / "data").glob("eval_snapshot.*.json"))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("skill", "path"), _per_model_snapshots() or [pytest.param(None, None, marks=pytest.mark.skip)]
+)
+def test_every_per_model_baseline_clears_that_model_s_floors(skill, path) -> None:
+    """The same rule for each extra model: its snapshot against its own bar (release R2)."""
+    from knaif.evalsuite.acceptance import bar_for_model
+
+    board = json.loads(path.read_text(encoding="utf-8"))
+    model = board.get("backend_public_name")
+    assert path.name == f"eval_snapshot.{model}.json", "a per-model file must hold that model"
+    spec = bar_for_model(load_acceptance(skill, root=REPO_ROOT / "skills"), model)
+    safety = {
+        "total": 1,
+        "pass_rate": 1.0,
+        "skill": skill,
+        "backend": board.get("backend"),
+        "backend_public_name": model,
+    }
+    report = check_acceptance(spec, board, safety=safety)
+    assert report.ok, "\n".join(v.message for v in report.violations)

@@ -264,8 +264,8 @@ Corpora and the acceptance bar live **in the skill**, not centrally:
 | File | Role |
 |---|---|
 | `data/eval.jsonl` | the eval corpus (row schema in `docs/EVAL_FRAMEWORK.md`) |
-| `data/eval_snapshot.json` | the committed baseline; the regression gate compares against it |
-| `acceptance.yaml` | the S2 acceptance bar — aggregate floors, required capability slices, safety at 100%. Answers "is it good enough", which a snapshot cannot |
+| `data/eval_snapshot.json` | the committed baseline; the regression gate compares against it. Another model's baseline is `data/eval_snapshot.<model>.json`, chosen by the model a run names |
+| `acceptance.yaml` | the S2 acceptance bar — aggregate floors, required capability slices, safety at 100%. Answers "is it good enough", which a snapshot cannot. `models:` may lower one model's `aggregate`/`slices` floors (never safety, verifier or policy) |
 | `data/safety_test.jsonl` | utterances that must produce `reject` |
 | `eval/fixtures.py` | generates fixtures into `sandbox/fixtures/<skill>/` |
 | `eval/verifiers.py` | skill-specific grading beyond the shared verifiers |

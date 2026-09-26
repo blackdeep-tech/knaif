@@ -189,8 +189,11 @@ def _corpus_path(skill: str) -> Path:
     return Path("skills") / skill / "data" / "eval.jsonl"
 
 
-def _snapshot_path(skill: str) -> Path:
-    return Path("skills") / skill / "data" / "eval_snapshot.json"
+def _snapshot_path(skill: str, model: str | None = None) -> Path:
+    """Per-model baseline; see `snapshot.snapshot_path`."""
+    from .snapshot import snapshot_path
+
+    return snapshot_path(skill, model)
 
 
 def _default_fixture_dir(sandbox: Path | str, skill: str) -> Path:
@@ -896,7 +899,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             print(f"  Saved to {out_path}")
 
         if args.snapshot:
-            snap_path = _snapshot_path(args.skill)
+            snap_path = _snapshot_path(args.skill, scoreboard.get("backend_public_name"))
             save_snapshot(scoreboard, snap_path)
             print(f"  Snapshot saved to {snap_path}")
 
@@ -1522,7 +1525,7 @@ def cmd_accept(args: argparse.Namespace) -> None:
     Fails closed: no ``--current``, no safety result, or a run graded by a
     different verifier are all rejections, not passes.
     """
-    from .acceptance import check_acceptance, load_acceptance
+    from .acceptance import bar_for_model, check_acceptance, load_acceptance
 
     try:
         spec = load_acceptance(args.skill)
@@ -1540,6 +1543,9 @@ def cmd_accept(args: argparse.Namespace) -> None:
 
     with current_path.open(encoding="utf-8") as fh:
         current: dict[str, Any] = json.load(fh)
+    # The bar is per model: the 1.7B may carry its own quality floors (acceptance.yaml
+    # `models:`). Chosen by the model the run names, never by a flag someone could mistype.
+    spec = bar_for_model(spec, current.get("backend_public_name"))
 
     safety: dict[str, Any] | None = None
     safety_path = Path(args.safety) if getattr(args, "safety", None) else None
@@ -1565,6 +1571,7 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
     """
     from .acceptance import (
         NATIVE_COVERAGE_FLOOR,
+        bar_for_model,
         check_native_acceptance,
         load_acceptance,
         native_aggregate_floors,
@@ -1582,6 +1589,9 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         sys.exit(f"--current {current_path} does not exist.")
     with current_path.open(encoding="utf-8") as fh:
         current: dict[str, Any] = json.load(fh)
+    # The bar is per model: the 1.7B may carry its own quality floors (acceptance.yaml
+    # `models:`). Chosen by the model the run names, never by a flag someone could mistype.
+    spec = bar_for_model(spec, current.get("backend_public_name"))
 
     if current.get("lane_kind") != "native_cli":
         sys.exit(
@@ -1590,7 +1600,7 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             "graded against this bar would certify a pipeline no user runs (L4b)."
         )
 
-    snap_path = _snapshot_path(args.skill)
+    snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
         sys.exit(
             f"{args.skill} has no frozen baseline ({snap_path}). L4 measures the shipped "
@@ -1684,14 +1694,6 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
 def cmd_regression(args: argparse.Namespace) -> None:
     from .snapshot import diff_snapshots, load_snapshot
 
-    snap_path = _snapshot_path(args.skill)
-    if not snap_path.exists():
-        sys.exit(
-            f"No snapshot found at {snap_path}. Run with --snapshot first to create a baseline."
-        )
-
-    baseline = load_snapshot(snap_path)
-
     # Fail closed, not open: a missing/absent --current used to silently fall back to
     # comparing the snapshot to itself (always "no regressions"). See audit F6.
     current_path = Path(args.current) if getattr(args, "current", None) else None
@@ -1708,6 +1710,17 @@ def cmd_regression(args: argparse.Namespace) -> None:
 
     with current_path.open(encoding="utf-8") as fh:
         current: dict[str, Any] = json.load(fh)
+
+    # The baseline is the one for the model this run names, so a 1.7B run is never measured
+    # against the 4B's snapshot (release plan R2). Loaded after --current for that reason.
+    model = current.get("backend_public_name")
+    snap_path = _snapshot_path(args.skill, model)
+    if not snap_path.exists():
+        sys.exit(
+            f"No snapshot for {model or args.skill} at {snap_path}. Lock one with "
+            "`run --snapshot` from an accepted run of that model first."
+        )
+    baseline = load_snapshot(snap_path)
 
     try:
         diff = diff_snapshots(baseline, current, threshold=args.threshold)
@@ -1793,8 +1806,15 @@ def cmd_regression_all_skills(args: argparse.Namespace) -> None:
             backend = _backend_from_scoreboard_name(cur_path.name, skill, verifier)
             with cur_path.open(encoding="utf-8") as fh:
                 current = json.load(fh)
+            # Each scoreboard against its own model's baseline (release plan R2).
+            own = _snapshot_path(skill, current.get("backend_public_name"))
+            if not own.exists():
+                failed = True
+                rows.append((skill, backend, f"no snapshot for this model ({own})", []))
+                continue
+            model_baseline = load_snapshot(own)
             try:
-                diff = diff_snapshots(baseline, current, threshold=threshold)
+                diff = diff_snapshots(model_baseline, current, threshold=threshold)
             except ValueError as exc:
                 failed = True
                 rows.append((skill, backend, f"INCOMPATIBLE: {exc}", []))

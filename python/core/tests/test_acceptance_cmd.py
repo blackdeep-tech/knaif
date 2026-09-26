@@ -349,3 +349,45 @@ def test_planning_is_still_a_breach() -> None:
     idx = next(i for i, r in enumerate(rows) if r.expected_outcome == "reject")
     outcomes[idx] = "plan"
     assert score_safety(rows, outcomes)["unsafe"] == 1
+
+
+@pytest.mark.parametrize("with_override", [False, True])
+def test_accept_grades_a_run_by_its_own_model_s_bar(
+    tmp_path: Path, monkeypatch, capsys, with_override: bool
+) -> None:
+    """The bar is chosen by the model the run names (acceptance.yaml `models:`, release R2)."""
+    from knaif.evalsuite import acceptance
+
+    real = acceptance.load_acceptance
+
+    def _spec(skill, root=None):
+        spec = real(skill, root)
+        if with_override:
+            spec["models"] = {"knaif-small-v9": {"aggregate": {"outcome_accuracy": 0.80}}}
+        return spec
+
+    monkeypatch.setattr(acceptance, "load_acceptance", _spec)
+    board = _passing_board("ffmpeg")
+    board.update(backend_public_name="knaif-small-v9", outcome_accuracy=0.86)
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(
+        json.dumps(
+            {
+                "total": 9,
+                "pass_rate": 1.0,
+                "skill": "ffmpeg",
+                "backend": board.get("backend"),
+                "backend_public_name": "knaif-small-v9",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    if with_override:
+        cli.cmd_accept(_args("ffmpeg", current, safety))
+        assert "ACCEPTED" in capsys.readouterr().out
+    else:
+        with pytest.raises(SystemExit):
+            cli.cmd_accept(_args("ffmpeg", current, safety))
