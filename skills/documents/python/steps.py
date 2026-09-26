@@ -408,23 +408,28 @@ class ConvertDocumentStep(Step):
             if not soffice:
                 raise DocumentsDependencyError("Install LibreOffice for Office-to-PDF conversion.")
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                [
-                    soffice,
-                    "--headless",
-                    "--convert-to",
-                    "pdf",
-                    "--outdir",
-                    str(output_path.parent),
-                    str(input_path),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            produced = output_path.parent / f"{input_path.stem}.pdf"
-            if produced != output_path:
-                produced.replace(output_path)
+            # Into a private directory, never the output's folder: soffice names its result
+            # `<stem>.pdf` and writes it over any file of that name, so `sample.docx -> conv.pdf`
+            # silently destroyed the user's own `sample.pdf` (found 2026-09-26).
+            import tempfile
+
+            with tempfile.TemporaryDirectory(prefix="knaif-soffice-") as private:
+                subprocess.run(
+                    [
+                        soffice,
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        private,
+                        str(input_path),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                produced = Path(private) / f"{input_path.stem}.pdf"
+                shutil.move(str(produced), str(output_path))
             return {"output": str(output_path)}
 
         raise NotImplementedError(
