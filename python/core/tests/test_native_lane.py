@@ -338,3 +338,58 @@ def test_a_file_the_run_rewrote_counts_as_produced(tmp_path: Path) -> None:
 
     produced = {p.name for p in _produced_files(tmp_path, before)}
     assert produced == {"out.md", "fresh.txt"}
+
+
+# ── L4 runs the packaged layout (release plan R2) ─────────────────────────────────────────────
+# The 2026-09 L4 scripts exported KNAIF_PDFIUM_PATH at pypdfium2's copy, which proved OCR works
+# with a library no user has. The lane now strips the override, and a binary with no PDFium
+# beside it is not a packaged artifact: every 1.2.0 artifact bundles it (R0).
+
+
+def test_the_lane_never_hands_the_binary_a_pdfium_override(monkeypatch) -> None:
+    from knaif.evalsuite.native_lane import _lane_env
+
+    monkeypatch.setenv("KNAIF_PDFIUM_PATH", "/somewhere/pypdfium2_raw")
+    env = _lane_env()
+    assert "KNAIF_PDFIUM_PATH" not in env
+    assert env["KNAIF_DUMP_PLAN"] == "1"
+
+
+def test_a_binary_with_pdfium_beside_it_is_the_packaged_layout(tmp_path) -> None:
+    from knaif.evalsuite.native_lane import packaged_layout, pdfium_library_name
+
+    binary = tmp_path / "knaif.exe"
+    binary.write_bytes(b"")
+    assert not packaged_layout(binary)
+    (tmp_path / pdfium_library_name()).write_bytes(b"")
+    assert packaged_layout(binary)
+
+
+def test_eval_native_refuses_an_unpackaged_binary(tmp_path, monkeypatch) -> None:
+    import argparse
+
+    import pytest
+
+    from knaif.evalsuite import cli, native_lane
+
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "clip.mp4").write_bytes(b"")
+    binary = tmp_path / "target" / "knaif.exe"
+    binary.parent.mkdir()
+    binary.write_bytes(b"")
+    lane = native_lane.LaneConfig(name="dev", binary=binary, model_path=tmp_path / "m.gguf")
+    monkeypatch.setattr(native_lane, "load_lane", lambda *a, **k: lane)
+    args = argparse.Namespace(
+        verifier="success",
+        corpus=None,
+        skill="ffmpeg",
+        sandbox=str(tmp_path / "sb"),
+        fixture_dir=str(fixtures),
+        config="eval_backends.yaml",
+        lane="dev",
+        allow_unpackaged=False,
+    )
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_native(args)
+    assert "PDFium" in str(exc.value.code) and "--allow-unpackaged" in str(exc.value.code)

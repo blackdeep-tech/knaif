@@ -413,6 +413,12 @@ uv run python -m knaif.evalsuite gate --native-bin <unpacked artifact>/knaif[.ex
 Without `--native-bin` the gate prints "not checked here: native_binary" for every record
 instead of comparing.
 
+**L4 runs the packaged layout.** The lane's `binary:` must be the executable inside the unpacked
+artifact, with PDFium beside it. `eval-native` and `eval-safety-native` refuse a binary without
+it, and the lane never passes `$KNAIF_PDFIUM_PATH` to the binary, so OCR is measured with the
+library users actually get. `--allow-unpackaged` runs a developer build for diagnosis only. The
+result is marked `packaged_layout: false`, and `accept-native` refuses it.
+
 Two things it refuses, both deliberately: a scoreboard that did not come from the native lane
 (Python execution locates a failure, it never certifies one — L4b), and a safety result that did
 not come from the binary (the two runtimes reach a refusal by different code, so one's answers

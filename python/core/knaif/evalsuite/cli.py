@@ -927,6 +927,25 @@ def _git(*cmd: str) -> str:
         return ""
 
 
+def _require_packaged(lane: Any, args: argparse.Namespace) -> bool:
+    """L4 grades the artifact users install, which carries PDFium beside the binary.
+
+    A developer build can still be run for diagnosis, but only on purpose, and `accept-native`
+    refuses the result. Returns whether the binary is the packaged layout.
+    """
+    from . import native_lane
+
+    packaged = native_lane.packaged_layout(lane.binary)
+    if not packaged and not getattr(args, "allow_unpackaged", False):
+        sys.exit(
+            f"ERROR: {lane.binary} is not the packaged layout: no PDFium "
+            f"({native_lane.pdfium_library_name()}) beside it. L4 runs the unpacked release "
+            "artifact. For a diagnostic run of a developer build pass --allow-unpackaged; "
+            "such a run can never be accepted."
+        )
+    return packaged
+
+
 def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     """L4a: grade the shipped native binary on the artifacts it really produces.
 
@@ -934,8 +953,9 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     runtime, or measures a plan; this runs `knaif run` — no `--dry-run` — and grades the files
     that appear on disk with the skill's executing verifier.
     """
+    from . import native_lane
     from .corpus import load_corpus
-    from .native_lane import detect_backend, load_lane, run_native_corpus
+    from .native_lane import detect_backend, run_native_corpus
     from .report import print_scoreboard, save_scoreboard_json
     from .scoring import score_corpus
 
@@ -969,7 +989,8 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             "did not happen."
         )
 
-    lane = load_lane(Path(args.config), args.lane, Path.cwd())
+    lane = native_lane.load_lane(Path(args.config), args.lane, Path.cwd())
+    packaged = _require_packaged(lane, args)
     lane_sandbox = sandbox / f"lane-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
 
@@ -1007,6 +1028,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["compute_placement"] = measured.placement
     scoreboard["compute_device_enumerated"] = measured.enumerated
     scoreboard["binary_sha256"] = _sha256_file(lane.binary)
+    scoreboard["packaged_layout"] = packaged
     # The full hash is L4 evidence (`native_status.yaml`: L4 is invalidated by `model`); the
     # prefix is kept for readers of older boards.
     scoreboard["model_sha256"] = _sha256_file(lane.model_path)
@@ -1491,6 +1513,7 @@ def _safety_through_the_lane(
     from .native_lane import load_lane, run_native_corpus
 
     lane = load_lane(Path(args.config), args.lane, Path.cwd())
+    packaged = _require_packaged(lane, args)
     lane_sandbox = sandbox / f"safety-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
     fixture_dir = _default_fixture_dir(sandbox, args.skill)
@@ -1509,6 +1532,7 @@ def _safety_through_the_lane(
     result["lane"] = lane.name
     result["lane_kind"] = "native_cli"
     result["lane_entry_point"] = lane.entry_point
+    result["packaged_layout"] = packaged
     # No `prompt_config`: that records how *Python* was configured to build the prompt.
     # The binary builds its own, and stamping a Python-side setting here would describe a
     # configuration that had no bearing on the run.
@@ -1610,6 +1634,12 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             f"{current.get('lane_kind')!r}). L4 grades the shipped binary; a Python-side run "
             "graded against this bar would certify a pipeline no user runs (L4b)."
         )
+    if current.get("packaged_layout") is not True:
+        sys.exit(
+            f"--current {current_path} was not run from the packaged layout "
+            f"(packaged_layout={current.get('packaged_layout')!r}). L4 is a claim about the "
+            "artifact users install; run `eval-native` against the unpacked release artifact."
+        )
 
     snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
@@ -1630,6 +1660,12 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         # Python's refusals are not evidence that the *binary* refuses. Two runtimes reach a
         # refusal by different code, so certifying one with the other's answers is the
         # substitution this whole plan exists to prevent.
+        if safety.get("packaged_layout") is not True and safety.get("lane_kind") == "native_cli":
+            sys.exit(
+                f"--safety {safety_path} was not run from the packaged layout "
+                f"(packaged_layout={safety.get('packaged_layout')!r}). L4's safety half comes "
+                "from the artifact users install, like its quality half."
+            )
         if safety.get("lane_kind") != "native_cli":
             sys.exit(
                 f"--safety {safety_path} was not produced by the shipped binary "
@@ -2162,6 +2198,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_saf.add_argument("--skill", required=True)
     p_saf.add_argument("--config", default="eval_backends.yaml")
+    p_saf.add_argument(
+        "--allow-unpackaged",
+        action="store_true",
+        dest="allow_unpackaged",
+        help="With --lane: diagnose a developer build with no PDFium beside it. The result is "
+        "marked packaged_layout=false and `accept-native` refuses it.",
+    )
     p_saf.add_argument("--backends", default=None, help="Exactly one backend name")
     p_saf.add_argument("--sandbox", default=None)
     p_saf.add_argument("--save", default=None, metavar="FILE", help="Write the result JSON here")
@@ -2189,6 +2232,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_nat.add_argument("--skill", required=True)
     p_nat.add_argument("--lane", required=True, help="Lane name from the config's `lanes:` map")
+    p_nat.add_argument(
+        "--allow-unpackaged",
+        action="store_true",
+        dest="allow_unpackaged",
+        help="Diagnose a developer build with no PDFium beside it. The run is marked "
+        "packaged_layout=false and `accept-native` refuses it.",
+    )
     p_nat.add_argument("--config", default="eval_backends.yaml")
     p_nat.add_argument(
         "--verifier",

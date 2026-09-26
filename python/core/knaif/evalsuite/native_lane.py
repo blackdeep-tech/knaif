@@ -454,5 +454,29 @@ def _lane_env() -> dict[str, str]:
 
     `$KNAIF_DUMP_PLAN` is the only addition; the rest of the parent environment is inherited so
     the binary sees the same PATH (ffmpeg!) and GPU configuration a user would have.
+
+    `$KNAIF_PDFIUM_PATH` is the one thing removed. It points the binary at a PDFium the user will
+    not have (the 2026-09 L4 scripts aimed it at pypdfium2's copy), and L4 is a claim about the
+    artifact users install, which carries PDFium beside the binary (release plan R2).
     """
-    return {**os.environ, "KNAIF_DUMP_PLAN": "1"}
+    env = {k: v for k, v in os.environ.items() if k != "KNAIF_PDFIUM_PATH"}
+    return {**env, "KNAIF_DUMP_PLAN": "1"}
+
+
+def pdfium_library_name() -> str:
+    """The PDFium file pdfium-render loads beside the executable on this platform."""
+    import sys
+
+    if sys.platform == "win32":
+        return "pdfium.dll"
+    return "libpdfium.dylib" if sys.platform == "darwin" else "libpdfium.so"
+
+
+def packaged_layout(binary: Path) -> bool:
+    """Is *binary* laid out as a shipped artifact: PDFium beside it?
+
+    Every 1.2.0 artifact bundles PDFium next to the executable (release plan R0), and a bare
+    `target/release*/` build does not, so this separates "the thing users install" from "a
+    developer build" without trusting a path name.
+    """
+    return (binary.parent / pdfium_library_name()).is_file()

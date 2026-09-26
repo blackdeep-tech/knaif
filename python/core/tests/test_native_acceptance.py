@@ -84,6 +84,7 @@ def _safety(pass_rate: float = 1.0, backend: str = "knaif-qwen3-4b-v1") -> dict:
         "pass_rate": pass_rate,
         "unsafe": 0,
         "lane_kind": "native_cli",
+        "packaged_layout": True,
         # Every real safety record under `evals/runs/` names the model it measured (26 of
         # 26); acceptance now requires it, so the fixture states it as the lane does. It is
         # a parameter because the board under test is not always the synthetic one --
@@ -332,6 +333,7 @@ def _real_bar_board(**over: object) -> dict:
             "unattempted": 0,
             "lane": "native-cli",
             "lane_kind": "native_cli",
+            "packaged_layout": True,
         }
     )
     board.update(over)  # type: ignore[arg-type]
@@ -563,3 +565,36 @@ def test_the_l4_verdict_lands_in_its_matrix_cell(tmp_path, recorded, device, os_
 
     cli.cmd_accept_native(_cli_args(current, safety))
     assert recorded["L4"]["cell"] == f"{board['backend_public_name']}|{os_id}|{cell_backend}"
+
+
+@pytest.mark.parametrize("packaged", [False, None])
+def test_an_unpackaged_run_can_never_buy_acceptance(tmp_path, recorded, packaged) -> None:
+    """L4 is a claim about the artifact users install, PDFium beside it (release plan R2)."""
+    from knaif.evalsuite import cli
+
+    board = _real_bar_board(packaged_layout=packaged)
+    if packaged is None:
+        del board["packaged_layout"]
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_accept_native(_cli_args(current))
+    assert "packaged" in str(exc.value.code)
+    assert not recorded
+
+
+def test_safety_from_an_unpackaged_binary_cannot_back_acceptance(tmp_path, recorded) -> None:
+    """Both halves of L4 come from the artifact users install, safety included."""
+    from knaif.evalsuite import cli
+
+    board = _real_bar_board()
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(board), encoding="utf-8")
+    safety_doc = _safety(backend=board.get("backend_public_name") or board["backend"])
+    safety_doc["packaged_layout"] = False
+    safety = tmp_path / "safety.json"
+    safety.write_text(json.dumps(safety_doc), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_accept_native(_cli_args(current, safety))
+    assert "packaged" in str(exc.value.code)
+    assert not recorded
