@@ -782,6 +782,12 @@ mkdir -p "$STAGE/licenses"
 cp installers/licenses/THIRD-PARTY-RUST.txt "$STAGE/licenses/"
 if [ "$KIND" != base ]; then
   cp installers/licenses/llama.cpp-LICENSE.txt "$STAGE/licenses/"
+  # PDFium beside the exe — the first place pdfium-render looks after $KNAIF_PDFIUM_PATH — and
+  # its packaging licence + 15 component notices under licenses/PDFium/. Every functional kind
+  # builds with `pdfium`, so every one ships the library: without it OCR and PDF rendering fail
+  # on a user's machine (release plan R0). Pinned by sha256 in contracts/release/pdfium.yaml.
+  bash installers/fetch_pdfium.sh "$OS-$ARCH" "$STAGE/bin" "$STAGE/licenses"
+  [ "$OS" = linux ] && set_origin_rpath "$STAGE/bin/libpdfium.so"
 fi
 if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ]; then
   # Hard failure, not a warning: we are redistributing NVIDIA's cudart/cublas/cublasLt, which their

@@ -44,6 +44,23 @@ esac
 echo "building '$KIND' into target/$PROFILE/"
 [ -n "$FEATS" ] && echo "  features: $FEATS" || echo "  features: (none — mock-only build)"
 
+# PDFium beside the exe, as the packaged artifact has it, so a dev build does OCR with the library
+# users get and no $KNAIF_PDFIUM_PATH. Staged BEFORE the build because every branch below ends in
+# `exec cargo`; it needs nothing from the build. Every functional kind builds with `pdfium`.
+if [ "$KIND" != base ]; then
+  case "$OS-$(uname -m)" in
+    windows-x86_64) PDFIUM_PLATFORM=win-x64 ;;
+    linux-x86_64) PDFIUM_PLATFORM=linux-x64 ;;
+    macos-arm64) PDFIUM_PLATFORM=mac-arm64 ;;
+    *) PDFIUM_PLATFORM="" ;;
+  esac
+  if [ -n "$PDFIUM_PLATFORM" ]; then
+    bash installers/fetch_pdfium.sh "$PDFIUM_PLATFORM" "target/$PROFILE"
+  else
+    echo "  (no pinned PDFium for $OS-$(uname -m); OCR needs KNAIF_PDFIUM_PATH)"
+  fi
+fi
+
 # The release CUDA arch list lives in package.sh and is asserted against docs/RELEASE.md by
 # test_cuda_arch_list.py. Read it rather than copy it. KNAIF_CUDA_DEV_ARCHS shortens a dev build;
 # an explicit CUDAARCHS always wins.
