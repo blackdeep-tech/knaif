@@ -700,6 +700,14 @@ PARITY_MODEL := env_var_or_default("KNAIF_PARITY_MODEL", "models/knaif-qwen3-4b-
 # Cargo appends `.exe` only on Windows; every other target builds a bare `knaif`.
 EXE := if os_family() == "windows" { ".exe" } else { "" }
 
+# The cross-backend check (release plan R2/R5c): plans on the CUDA, Vulkan and CPU builds, safety on
+# each binary, decision flips vs CUDA within a bound written FIRST, and a full L4 for any kind over
+# it. Hours on CPU — pair it with scripts/watch_run_progress.sh.
+# (Not `eval-backends`, which compares inference backends from eval_backends.yaml.)
+# e.g.: just eval-native-backends ffmpeg --max-flips 35
+eval-native-backends skill *args:
+    bash "{{justfile_directory()}}/scripts/eval_backends.sh" {{skill}} {{args}}
+
 # Native-vs-Python RUNTIME PARITY over a skill's eval utterances (NOT an eval-suite — no
 # baselines, no model comparison; see scripts/parity_check.py). Confirms the ported pipeline
 # renders identical ffmpeg commands on both runtimes for the same input. Both greedy-decode
