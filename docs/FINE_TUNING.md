@@ -37,10 +37,13 @@ Wiring: `models.yaml` (`default:` + named entries) and each skill's
 
 ## 2. Hardware & environment
 
-- **GPU:** RTX 5080, 16 GB, **Blackwell (sm_120)** on **WSL2**. ⚠️ Fragile: on any
-  `CUDA: illegal memory access`, **STOP — do not auto-retry** (it can crash the Windows
-  display driver / TDR). A reboot clears it. A 1.7B LoRA (3 epochs, ~730 rows) ≈ 9 min; a 4B
-  ≈ 19 min.
+- **GPU:** RTX 5080, 16 GB, **Blackwell (sm_120)**, trained **natively on Windows** since
+  2026-09 (sft-v4 onwards; WSL2 goes through the same WDDM driver, so everything below applies
+  to both). ⚠️ Fragile: on any `CUDA: illegal memory access`, **STOP — do not auto-retry** (it
+  can crash the Windows display driver / TDR). A reboot clears it.
+  Measured 2026-09-26 (sft-v6-flat, 828 rows, 3 epochs, 312 steps, cap 0.88): **4B 64 min**
+  (~12.4 s/step), **1.7B 27 min** (~5 s/step); merge + f16 convert + quantize under a minute
+  each. The older "1.7B ≈ 9 min, 4B ≈ 19 min" figures came from a different stack and ~730 rows.
 - **VRAM: the allocator is capped to 80% of the card, by default.** `train_lora.py` and
   `train_dpo.py` call `cap_allocator_to_device_memory()` (`python/training/_gpu.py`) before
   loading anything. Override with `KNAIF_TRAIN_MEM_FRACTION`; `0` or `1` disables it.
@@ -59,18 +62,34 @@ Wiring: `models.yaml` (`default:` + named entries) and each skill's
   |---|---|---|---|---|
   | uncapped (v1) | 15.99 GB | **6.69 GB** | 15.3s → 17.5s, climbing | abandoned at step 2, no CUDA error |
   | capped 0.8 (v2) | ≤12.8 GB | 0 | ~12.7s | all 288 steps, ~61 min |
+  | capped 0.88 (sft-v6, 2026-09-26) | ≤15.4 GB incl. ~1.1 GB desktop | ~1.25 GB, **flat** | ~12.4s | all 312 steps, 64 min |
+
+  The 0.88 row sized the cap from what was actually free (`torch.cuda.mem_get_info()`: 14.99 of
+  16.28 GiB, minus ~0.5 GB for the CUDA context outside the allocator). Its shared usage is not a
+  spill: it appeared within the first steps and never grew (the 1.7B held ~0.96 GB the same way).
+  It is most likely Unsloth's `use_gradient_checkpointing="unsloth"`, which parks activations in
+  pinned host memory on purpose (not confirmed). A spill looks like the uncapped row:
+  shared climbing and step time climbing with it. Sample `\GPU Adapter Memory(*)\Shared Usage`
+  (Windows performance counters) during a run to tell the two apart; nvidia-smi does not show it.
+  Raising the cap bought no speed (batch 1 is compute-bound), only headroom.
 
   So the cap turns a silent crawl into an honest `CUDA out of memory`. **If you hit that
   OOM, lower batch/sequence/rank — do not raise the fraction**, which only buys back the
   crawl. 0.8 clears the spill on a 16 GB card; it is not a tuned optimum, and no
   cap-vs-throughput sweep has been run. Distinct from the `illegal memory access` above:
   that one is a driver fault needing a reboot, this one has no error at all.
-- **Train venv:** `python/training/.venv/bin/python` (Unsloth, bf16 LoRA, `load_in_4bit=False`).
-  After (re)building this venv, copy the Unsloth-cache guard into it so ad-hoc /
-  REPL / notebook imports don't recreate `./unsloth_compiled_cache` in the repo root:
-  `cp python/training/sitecustomize.py python/training/.venv/lib/python*/site-packages/`
+- **Train venv:** `python/training/.venv` (Unsloth, bf16 LoRA, `load_in_4bit=False`; on Windows
+  with `triton-windows`). Its interpreter is `.venv/Scripts/python.exe` on Windows and
+  `.venv/bin/python` on Linux/WSL; the commands below use the Linux spelling.
+  After (re)building this venv, copy the Unsloth-cache guard into its `site-packages`
+  (`Lib/site-packages` on Windows, `lib/python*/site-packages` on Linux) so ad-hoc / REPL /
+  notebook imports don't recreate `./unsloth_compiled_cache` in the repo root.
 - **Core venv:** `uv run ...` (knaif + skills; for data build + eval).
-- **llama.cpp:** `~/tools/llama.cpp` (`convert_hf_to_gguf.py`, `build/bin/llama-quantize`).
+- **llama.cpp:** `~/tools/llama.cpp` (`convert_hf_to_gguf.py`, `build/bin/llama-quantize`, `.exe`
+  on Windows). Run `convert_hf_to_gguf.py` with `PYTHONPATH=~/tools/llama.cpp/gguf-py`.
+- **Merge needs the Hub reachable.** `merge_to_hf.py` (Unsloth) re-resolves the base model; with
+  `HF_HUB_OFFLINE=1` it logs "merged" but writes no checkpoint (seen 2026-09-17). Check that
+  `merged/<name>/` holds `*.safetensors` before converting.
 
 **Training is strictly optional and physically isolated — keep it that way.** Someone who
 runs `pip install knaif` must never acquire torch, Unsloth, or CUDA wheels; the library's
