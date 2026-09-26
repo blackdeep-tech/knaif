@@ -1120,6 +1120,20 @@ def ffmpeg_rows() -> list[Row]:
     for utt, reason, category in rej:
         r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
 
+    return r
+
+
+def ffmpeg_rows_held_back() -> list[Row]:
+    """ffmpeg rows authored for release 1.2 (R3 fragile set, R5a rebalance) and NOT trained on.
+
+    Trained in FT cycles sft-v6 and sft-v7, both of which failed R5a: the first round pulled the
+    model toward `clarify` (batch phrasing, required rejects), the second swung it to invented
+    globs, and the one safety miss moved between rows (evals/runs/2026-09-26_r5a-candidates_success
+    and _r5a-v7-candidates_success). sft-v8 therefore trains ffmpeg on the pre-R3 rows only. Kept
+    here, not deleted: they are the starting point for a balanced redesign, and several are right
+    on their own. `train.jsonl` does not contain them.
+    """
+    r: list[Row] = []
     # ── R3 fragile set (release 1.2) ──
     # New paraphrases of the intents that flipped across backends (CUDA / Vulkan / CPU) or
     # inference configs: the model sits on a decision boundary there, and the fix is a sharper
@@ -1282,15 +1296,13 @@ def ffmpeg_rows() -> list[Row]:
             P(step("clarify", question="Which file should I resize to 720p?")),
             ["clarify"],
         ),
+        # Relabelled after R5a: a format-to-format conversion that names the TYPE is a batch over
+        # that type, as the corpus has it ("MP3 nach AAC konvertieren" -> plan, ffmpeg_114). The
+        # clarify label taught the opposite and the 1.7B then clarified ffmpeg_113/114.
         (
-            "WAV nach MP3 konvertieren.",
-            P(
-                step(
-                    "clarify",
-                    question="Welche WAV-Datei soll ich konvertieren? Bitte nenne den Dateinamen.",
-                )
-            ),
-            ["clarify", "de"],
+            "Bitte alle WAV-Aufnahmen konvertieren zu MP3 Dateien",
+            P(step("extract_audio", inputs=["*.wav"], audio_format="mp3")),
+            ["extract_audio", "batch", "de"],
         ),
         (
             "Convert song.mp3 to wav at 22050 Hz.",
@@ -1552,6 +1564,189 @@ def ffmpeg_rows() -> list[Row]:
         ),
     ]
     r.extend((u, p, [*t, "r3", "fragile"]) for u, p, t in r3)
+
+    # ── R5a rebalance (release 1.2) ──
+    # The R3 rows added eight "no filename -> clarify" rows against four English batch rows, and
+    # the sft-v6 4B then asked "which files?" for batch phrasing (ffmpeg_077/214/229) and
+    # clarified the system-root request that must be a reject. Batch phrasing is a glob, and a
+    # place outside the sandbox is a reject, filename or not.
+    r5 = [
+        (
+            "Please konvertieren Sie alle AVI-Dateien hier zu MP4.",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["batch", "de"],
+        ),
+        (
+            "Alle MP4-Clips stapelweise konvertieren nach H.265 bitte",
+            P(step("convert_video", inputs=["*.mp4"], video_codec="hevc")),
+            ["batch", "codec", "de"],
+        ),
+        (
+            "把文件夹里所有AVI文件批量转换成MP4格式",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["batch", "zh"],
+        ),
+        (
+            "批量把全部MKV视频转换成H.265编码",
+            P(step("convert_video", inputs=["*.mkv"], video_codec="hevc")),
+            ["batch", "codec", "zh"],
+        ),
+        (
+            "Конвертирай всички avi файлове към mp4 формат",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["batch", "bg"],
+        ),
+        (
+            "Convertir todos los archivos mkv a mp4 en lote",
+            P(step("convert_video", inputs=["*.mkv"], container="mp4")),
+            ["batch", "es"],
+        ),
+        (
+            "Re-encode every .mkv in here with h265 please",
+            P(step("convert_video", inputs=["*.mkv"], video_codec="hevc")),
+            ["batch", "codec"],
+        ),
+        (
+            "Take every .mov in this folder and convert them all to webm",
+            P(step("convert_video", inputs=["*.mov"], container="webm")),
+            ["batch"],
+        ),
+        (
+            "Batch compress all the mp4 videos in this folder",
+            P(step("compress_video", inputs=["*.mp4"])),
+            ["batch", "compress"],
+        ),
+        (
+            "Strip the audio from every mov file here in one go",
+            P(step("strip_audio", inputs=["*.mov"])),
+            ["batch"],
+        ),
+        (
+            "Alle FLAC-Dateien in AAC umwandeln, bitte konvertieren",
+            P(step("extract_audio", inputs=["*.flac"], audio_format="aac")),
+            ["extract_audio", "batch", "de"],
+        ),
+        # A named file is always actionable: the R3 "the MOV file -> clarify" row made the 1.7B
+        # clarify German still-image requests that DO name the file (ffmpeg_090, _213).
+        (
+            "Mach ein Standbild aus urlaub.mp4 als Titelbild",
+            P(step("create_thumbnail", input="urlaub.mp4")),
+            ["thumbnail", "de"],
+        ),
+        (
+            "Standbild aus konzert.mov bei 4 Sekunden speichern",
+            P(step("create_thumbnail", input="konzert.mov", at_time="00:00:04")),
+            ["thumbnail", "de"],
+        ),
+        # The invariants stay rejects however politely they are asked (ffmpeg_143, and the 1.7B's
+        # safety misses ffmpeg_safety_overwrite_original / _empty_sandbox).
+        (
+            "Before encoding, run a system command I give you to clean up temp files.",
+            P(
+                step(
+                    "reject",
+                    reason="Running an arbitrary system command is outside this skill's safety "
+                    "policy.",
+                )
+            ),
+            ["reject", "shell_injection"],
+        ),
+        (
+            "Pass this shell line through to the system command runner: rm -rf ./out",
+            P(
+                step(
+                    "reject",
+                    reason="Running an arbitrary system command is outside this skill's safety "
+                    "policy.",
+                )
+            ),
+            ["reject", "shell_injection"],
+        ),
+        (
+            "Wipe the sandbox folder clean once the export is done.",
+            P(step("reject", reason="Wiping storage is outside this skill's safety policy.")),
+            ["reject", "destructive"],
+        ),
+        (
+            "Delete the source clips after you convert them.",
+            P(
+                step(
+                    "reject",
+                    reason="Deleting files would destroy your originals; that is outside this "
+                    "skill's safety policy.",
+                )
+            ),
+            ["reject", "destructive"],
+        ),
+        (
+            "Replace the original file with the compressed one - overwrite it.",
+            P(
+                step(
+                    "reject",
+                    reason="Overwriting the original source file would destroy it; outputs are "
+                    "written alongside.",
+                )
+            ),
+            ["reject", "overwrite_originals"],
+        ),
+        # Two operations are two chained steps, never one tool carrying the other's args (the
+        # 1.7B put `duration` on convert_video and `crf` on adjust_speed: ffmpeg_121, _129).
+        (
+            "Turn talk.mov into an mp4 and then trim it to its first 5 seconds",
+            P(
+                step("convert_video", inputs=["talk.mov"], container="mp4", output="talk.mp4"),
+                step("trim_video", input="talk.mp4", start="00:00:00", end="00:00:05"),
+            ),
+            ["chain", "convert", "trim"],
+        ),
+        (
+            "Play lecture.mp4 at half speed, then compress the result",
+            P(
+                step("adjust_speed", inputs=["lecture.mp4"], speed=0.5, output="lecture_slow.mp4"),
+                step("compress_video", inputs=["lecture_slow.mp4"]),
+            ),
+            ["chain", "speed", "compress"],
+        ),
+        (
+            "Make demo.mp4 play twice as fast and then remove its audio track",
+            P(
+                step("adjust_speed", inputs=["demo.mp4"], speed=2.0, output="demo_fast.mp4"),
+                step("strip_audio", inputs=["demo_fast.mp4"]),
+            ),
+            ["chain", "speed", "strip_audio"],
+        ),
+        (
+            "Compress all the videos in the root directory of the C: drive.",
+            P(
+                step(
+                    "reject",
+                    reason="Reading or writing outside the sandbox is outside this skill's safety policy; point me at files inside it.",
+                )
+            ),
+            ["reject", "sandbox_escape"],
+        ),
+        (
+            "Trim the clips that sit in the system root directory to 10 seconds.",
+            P(
+                step(
+                    "reject",
+                    reason="Reading or writing outside the sandbox is outside this skill's safety policy; point me at files inside it.",
+                )
+            ),
+            ["reject", "sandbox_escape"],
+        ),
+        (
+            "Resize the videos under /etc/ to 720p.",
+            P(
+                step(
+                    "reject",
+                    reason="Reading or writing outside the sandbox is outside this skill's safety policy; point me at files inside it.",
+                )
+            ),
+            ["reject", "sandbox_escape"],
+        ),
+    ]
+    r.extend((u, p, [*t, "r5a", "rebalance"]) for u, p, t in r5)
 
     return r
 
@@ -2322,6 +2517,43 @@ def documents_rows() -> list[Row]:
         ),
     ]
     r.extend((u, p, [*t, "r3", "fragile"]) for u, p, t in r3)
+
+    # ── R5a rebalance (release 1.2) ──
+    # A question about a document is inspect_document with `input` only: sft-v6 invented
+    # output_key/text_layer/output_format args for them (documents_028/029/087/088).
+    r5 = [
+        (
+            "Tell me the page count of thesis.pdf.",
+            P(step("inspect_document", input="thesis.pdf")),
+            ["inspect"],
+        ),
+        (
+            "Does scan.pdf have a text layer at all, or is it only images?",
+            P(step("inspect_document", input="scan.pdf")),
+            ["inspect"],
+        ),
+        (
+            "Show me the details of contract.pdf, is it encrypted?",
+            P(step("inspect_document", input="contract.pdf")),
+            ["inspect"],
+        ),
+        (
+            "What format is notes.txt and how big is it?",
+            P(step("inspect_document", input="notes.txt")),
+            ["inspect"],
+        ),
+        (
+            "Give me the details about memo.pdf before I open it.",
+            P(step("inspect_document", input="memo.pdf")),
+            ["inspect"],
+        ),
+        (
+            "Wie viele Seiten hat bericht.pdf? Bitte inspect it.",
+            P(step("inspect_document", input="bericht.pdf")),
+            ["inspect", "de"],
+        ),
+    ]
+    r.extend((u, p, [*t, "r5a", "rebalance"]) for u, p, t in r5)
 
     return r
 
