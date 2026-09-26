@@ -78,16 +78,20 @@ layers:
       [contracts, python_core, bundle, corpus, model, native_binary, settings, verifier, policy,
        native, grading]
 
-# THE ACCEPTANCE THRESHOLD IS DELIBERATELY NOT STATED HERE, and that is a gap rather than a
-# design choice. L3's pass/fail rate is an open owner decision: the two runtimes link different
-# llama.cpp builds (llama-cpp-2 vs llama-cpp-python), and with prompts verified byte-identical
-# and both sides self-deterministic they still choose different tokens on near-ties — measured
-# 2026-09-10, see evals/parity/2026-09-10_l3-ffmpeg-command/. A rate bar may be unreachable by
-# construction, so the validator checks that evidence EXISTS and is CURRENT, and reports the
-# recorded rate rather than judging it. When the bar is settled, add it here and make the
-# validator enforce it.
+# L3's bar, settled by the owner 2026-09-25 (docs/plans/2026-09-25-release-1.2.md, R0). A rate
+# of 1.0 is unreachable by construction: the two runtimes link different llama.cpp builds
+# (llama-cpp-2 vs llama-cpp-python), and with prompts verified byte-identical and both sides
+# self-deterministic they still choose different tokens on near-ties (measured 2026-09-10,
+# evals/parity/2026-09-10_l3-ffmpeg-command/). So L3 separates what the port owns from what the
+# model owns. `scripts/parity_check.py` computes the verdict (`l3_verdict`) into meta.json, and
+# `gate --record-parity` records only a run judged this way.
 thresholds:
-  L3: null   # open — see above
+  L3:
+    rule: "port_bugs == 0 and native_not_implemented == 0 and plan_disagreement_rate <= bound"
+    port_bugs: "same plan on both sides, different rendered commands; must be 0"
+    native_not_implemented: "a capability native lacks; must be 0"
+    plan_disagreement: "different plans, or clarify vs reject, over gated rows"
+    bound: "--max-plan-disagreement, stated before the run (required with --label)"
   L4:
     rule: "native >= max(S2 floor, accepted python score - tolerance), per metric"
     tolerance: 0.02

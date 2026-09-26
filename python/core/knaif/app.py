@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -19,6 +20,10 @@ import yaml
 from . import create_agent, list_skills
 from ._console import enable_utf8_console
 from .models import build_orchestrator, load_models_registry
+
+#: Prefixes the plan dump under $KNAIF_DUMP_PLAN. The same string as native `run`
+#: (apps/cli/src/main.rs) and scripts/parity_check.py; a test holds them together.
+PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -364,6 +369,11 @@ def run_cmd(
         click.echo(click.style(f"\nInference error: {exc}", fg="red"), err=True)
         sys.exit(1)
     _infer_ms = (time.perf_counter() - _t_infer) * 1000
+    # The same contract as native `run` under $KNAIF_DUMP_PLAN: the post-gate plan, one marker
+    # line on stderr. L3 reads both sides' plans from it to tell a port bug (same plan,
+    # different commands) from plan disagreement (release plan R0).
+    if os.environ.get("KNAIF_DUMP_PLAN"):
+        click.echo(PLAN_DUMP_MARKER + json.dumps(payload, ensure_ascii=False), err=True)
 
     # ── header ────────────────────────────────────────────────────────────────
     if not silent:

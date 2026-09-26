@@ -437,3 +437,45 @@ def test_an_l3_record_is_keyed_by_the_model_it_measured(tree: Path) -> None:
     record_from_parity_run("demo", tree, run)
     l3 = load_acceptance_record("demo", tree)["layers"]["L3"]
     assert "knaif-demo-v1" in l3["cells"]
+
+
+def test_a_parity_run_under_the_retired_rate_bar_is_not_passing_evidence(tree: Path) -> None:
+    """L3's bar is zero port bugs + a pre-written disagreement bound (release plan R0).
+
+    A run judged by the old equivalence-rate threshold says nothing about port bugs, so its
+    `passed: true` answers a question the bar no longer asks.
+    """
+    from knaif.evalsuite.gate import load_acceptance_record, record_from_parity_run
+
+    run = tree / "evals" / "parity" / "old"
+    run.mkdir(parents=True)
+    (run / "meta.json").write_text(
+        json.dumps({"result": {"equivalence_rate": 1.0, "threshold": 1.0, "passed": True}}),
+        encoding="utf-8",
+    )
+    record_from_parity_run("demo", tree, run)
+    cell = load_acceptance_record("demo", tree)["layers"]["L3"]["cells"]["unknown-model"]
+    assert cell["passed"] is False
+    assert "retired" in cell["summary"]
+
+
+def test_a_parity_run_under_the_new_bar_records_its_verdict(tree: Path) -> None:
+    from knaif.evalsuite.gate import load_acceptance_record, record_from_parity_run
+
+    run = tree / "evals" / "parity" / "new"
+    run.mkdir(parents=True)
+    verdict = {
+        "port_bugs": 0,
+        "native_not_implemented": 0,
+        "plan_disagreement": 3,
+        "plan_disagreement_rate": 0.02,
+        "max_plan_disagreement": 0.05,
+        "passed": True,
+    }
+    (run / "meta.json").write_text(
+        json.dumps({"result": {"equivalence_rate": 0.97, **verdict}}), encoding="utf-8"
+    )
+    record_from_parity_run("demo", tree, run)
+    cell = load_acceptance_record("demo", tree)["layers"]["L3"]["cells"]["unknown-model"]
+    assert cell["passed"] is True
+    assert cell["port_bugs"] == 0 and cell["max_plan_disagreement"] == 0.05

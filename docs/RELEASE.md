@@ -378,7 +378,7 @@ something someone remembers.
 
 ```bash
 # L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
-KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity"
+KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
 
 # L4 — the shipped path: the binary executing for real, graded on the files it produces.
 just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0

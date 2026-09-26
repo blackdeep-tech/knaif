@@ -420,16 +420,29 @@ def _model_name(meta: dict[str, Any], root: Path) -> str:
 def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
     """Record L3 evidence from a saved parity run directory.
 
-    Reads the run's own `meta.json` rather than trusting the caller: the rate, the threshold and
+    Reads the run's own `meta.json` rather than trusting the caller: the verdict, the bound and
     whether it passed are facts of the run, and a record that restated them by hand could
     disagree with the artifact it cites.
     """
     meta = json.loads((run_dir / "meta.json").read_text(encoding="utf-8"))
     result = meta.get("result") or {}
-    summary = (
-        f"{run_dir.name}: rate={result.get('equivalence_rate')} "
-        f"threshold={result.get('threshold')} passed={result.get('passed')}"
-    )
+    # L3's bar (native_status.yaml `thresholds.L3`): zero port bugs, zero capability gaps,
+    # plan disagreement within the run's pre-written bound. A run judged by the retired
+    # equivalence-rate threshold never counted port bugs, so its `passed` cannot stand for it.
+    judged = "port_bugs" in result
+    passed = bool(result.get("passed")) if judged else False
+    if judged:
+        summary = (
+            f"{run_dir.name}: port_bugs={result.get('port_bugs')} "
+            f"not_implemented={result.get('native_not_implemented')} "
+            f"plan_disagreement={result.get('plan_disagreement_rate')} "
+            f"<= {result.get('max_plan_disagreement')} passed={passed}"
+        )
+    else:
+        summary = (
+            f"{run_dir.name}: judged by the retired equivalence-rate bar "
+            f"(rate={result.get('equivalence_rate')}); re-run under the port-bug bar"
+        )
     # The run's own model and binary, which only its meta knows (see `RUN_SCOPED`).
     evidence = {
         **evidence_tuple(skill, root),
@@ -446,7 +459,11 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
                 "run": str(run_dir.relative_to(root)) if run_dir.is_absolute() else str(run_dir),
                 "summary": summary,
                 "equivalence_rate": result.get("equivalence_rate"),
-                "passed": result.get("passed"),
+                "port_bugs": result.get("port_bugs"),
+                "native_not_implemented": result.get("native_not_implemented"),
+                "plan_disagreement_rate": result.get("plan_disagreement_rate"),
+                "max_plan_disagreement": result.get("max_plan_disagreement"),
+                "passed": passed,
                 "backend": meta.get("backend"),
                 "git_sha": meta.get("git_sha"),
                 "git_dirty": meta.get("git_dirty"),

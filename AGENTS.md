@@ -348,7 +348,7 @@ intent; these are the checks that make it true. Full definitions in
 |---|---|---|---|
 | **L1** contract | prompt, retrieval, generation settings — from `contracts/parity/*.json` | no | 100%, every PR |
 | **L2** deterministic | parse → validate → defaults → expand → clarify gate, and ordered execution | no | 100%, every PR |
-| **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | see the plan — read as *symmetric disagreement*, not a native score |
+| **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | **0 port bugs** (same plan, different commands) and 0 missing capabilities; plan disagreement ≤ a bound written before the run (`--max-plan-disagreement`) |
 | **L4** shipped path | `knaif run` executing for real, graded on the files produced | yes (GGUF + external binaries) | reported **with coverage**; the only number backing "it works" |
 
 `runtimes.native.status` is a claim about those layers: `in-progress` (any subset),
