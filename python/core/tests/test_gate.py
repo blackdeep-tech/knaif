@@ -166,6 +166,27 @@ def test_the_verifier_implementation_is_hashed_not_its_name(tree: Path) -> None:
     assert "stale" in states
 
 
+def test_line_endings_do_not_change_the_evidence(tree: Path) -> None:
+    """A Windows checkout (`core.autocrlf=true`) holds CRLF where git and Linux CI hold LF, and a
+    freshly written file is LF until git next touches it. Hashing raw bytes made the same commit
+    fingerprint differently on each, so evidence recorded on one machine read as stale on another.
+    Source is hashed as git stores it: CRLF folded to LF."""
+    sources = [*tree.rglob("*.yaml"), *tree.rglob("*.py"), *tree.rglob("*.json")]
+
+    def rewrite(eol: bytes) -> dict:
+        for path in sources:
+            path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", eol))
+        return evidence_tuple("demo", tree)
+
+    assert rewrite(b"\n") == rewrite(b"\r\n")
+
+
+def test_a_real_content_change_still_changes_the_evidence(tree: Path) -> None:
+    before = evidence_tuple("demo", tree)
+    (tree / "contracts" / "runtime" / "generation.yaml").write_text("max_tokens: 257\r\n", "utf-8")
+    assert evidence_tuple("demo", tree)["settings"] != before["settings"]
+
+
 def test_the_evidence_tuple_covers_the_shared_members(tree: Path) -> None:
     keys = set(evidence_tuple("demo", tree))
     assert {"bundle", "contracts", "python_core", "corpus", "verifier", "settings"} <= keys

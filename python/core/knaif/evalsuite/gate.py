@@ -81,6 +81,14 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def _sha256_source(path: Path) -> str:
+    """Hash of a source file as git stores it: CRLF folded to LF. A Windows checkout
+    (`core.autocrlf=true`) holds CRLF where git and Linux CI hold LF, and a freshly written file
+    is LF until git next touches it, so raw bytes made one commit fingerprint differently per
+    machine and evidence recorded on one read as stale on another. Binaries use `_sha256_file`."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def _sha256_tree(root: Path, patterns: tuple[str, ...]) -> str:
     """Content hash of a directory subset — sorted by relative path so it is order-stable."""
     h = hashlib.sha256()
@@ -89,7 +97,7 @@ def _sha256_tree(root: Path, patterns: tuple[str, ...]) -> str:
         files.extend(p for p in root.glob(pattern) if p.is_file())
     for path in sorted(set(files), key=lambda p: p.relative_to(root).as_posix()):
         h.update(path.relative_to(root).as_posix().encode())
-        h.update(_sha256_file(path).encode())
+        h.update(_sha256_source(path).encode())
     return h.hexdigest()
 
 
@@ -110,7 +118,7 @@ def evidence_tuple(
 
     def _file(rel: str) -> str | None:
         path = root / rel
-        return _sha256_file(path) if path.is_file() else None
+        return _sha256_source(path) if path.is_file() else None
 
     tuple_: dict[str, str | None] = {
         # The skill's own declarative contract + handlers.
