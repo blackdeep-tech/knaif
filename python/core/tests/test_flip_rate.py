@@ -158,6 +158,39 @@ def test_compare_counts_decision_full_and_outcome_flips_over_shared_keys() -> No
     assert report.decision_rate == 1 / 3
 
 
+def test_a_canonical_decision_folds_spellings_the_engine_renders_identically() -> None:
+    """`h265`/`hevc`/`hvc1` map to one encoder and `0:00:03`/`00:00:03`/`3s` to one instant, so
+    the command is byte-identical; about half of sft-v4's 37 CPU-vs-CUDA flips were only this
+    (evals/runs/2026-09-25_backend-parity-v2_plans/report.md)."""
+    a = [_step("convert_video", inputs=["x.mp4"], video_codec="h265", container="mp4")]
+    b = [_step("convert_video", inputs=["x.mp4"], video_codec="hevc", container="mp4")]
+    assert fr.decision(a) != fr.decision(b)
+    assert fr.canonical(a) == fr.canonical(b)
+    t1 = [_step("trim_video", input="x.mp4", start="0:00:03", end="00:00:05")]
+    t2 = [_step("trim_video", input="x.mp4", start="00:00:03", end="5s")]
+    assert fr.canonical(t1) == fr.canonical(t2)
+
+
+def test_a_canonical_decision_still_separates_real_differences() -> None:
+    a = [_step("convert_video", inputs=["x.mp4"], video_codec="hevc")]
+    b = [_step("convert_video", inputs=["x.mp4"], video_codec="h264")]
+    assert fr.canonical(a) != fr.canonical(b)
+    t1 = [_step("trim_video", input="x.mp4", start="00:00:03")]
+    t2 = [_step("trim_video", input="x.mp4", start="00:00:04")]
+    assert fr.canonical(t1) != fr.canonical(t2)
+    # an unknown codec is compared as written, never folded into a known one
+    c = [_step("convert_video", inputs=["x.mp4"], video_codec="prores")]
+    assert fr.canonical(c) != fr.canonical(a)
+
+
+def test_compare_counts_canonical_flips() -> None:
+    a = {("r", 0): fr.Result(plan=[_step("convert_video", inputs=["x"], video_codec="h265")])}
+    b = {("r", 0): fr.Result(plan=[_step("convert_video", inputs=["x"], video_codec="hevc")])}
+    report = fr.compare(a, b)
+    assert report.decision_flips == [("r", 0)]
+    assert report.canonical_flips == []
+
+
 def test_outcome_flips_need_both_sides_graded() -> None:
     step = [_step("strip_audio")]
     a = {("r", 0): fr.Result(plan=step, correct=True)}
