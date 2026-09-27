@@ -82,6 +82,15 @@ evals/**
 !evals/**/PROMOTION_VERDICT.md
 !evals/**/comparison.json
 !evals/**/instrument_comparison.json
+# Pre-registered decision rules and frozen probes are the other half of a verdict: release 1.2's
+# R5a rules were written into each run's `run_all.sh` before training, and its fresh probes
+# (`probe_*.jsonl`, `gate_probe*.jsonl`, with their `.sha256`) were frozen before the runs they
+# judge. Ignored, a report could quote rules nobody else can check, and 1.3 could not reuse the
+# probe. Small (a few KB each).
+!evals/**/run_all.sh
+!evals/**/probe_*.jsonl
+!evals/**/gate_probe*.jsonl
+!evals/**/*.sha256
 # Retrieval baselines are a committed acceptance bar, not scratch — the CI gate
 # (test_retrieval_no_regression_vs_baseline, run by `just check`) reads one by path and
 # errors outright if it is missing. Same role as skills/*/data/eval_snapshot.json; ~1 KB.
