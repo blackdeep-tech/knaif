@@ -101,6 +101,17 @@ fi
 : "${LIBCLANG_PATH:=C:\\Program Files\\LLVM\\bin}"
 export LIBCLANG_PATH
 
+# Remap the builder's cargo home and checkout out of every embedded source path (Rust panic
+# locations, C/C++/CUDA `__FILE__`), or the binaries name whoever built them. See
+# scripts/path_hygiene.sh; package.sh checks the result. Changing these flags rebuilds once.
+# shellcheck source=path_hygiene.sh
+. "$ROOT/scripts/path_hygiene.sh"
+hygiene="$(path_hygiene_env "$(cygpath -w "${CARGO_HOME:-$HOME/.cargo}")" "$(cygpath -w "$ROOT")")"
+while IFS= read -r line; do
+  export "${line?}"
+done <<< "$hygiene"
+echo "  path hygiene: cargo home and checkout remapped (Rust, C/C++, CUDA)"
+
 # Only the llama kinds compile C++ and therefore need MSVC and cmake. A `base` build is pure Rust,
 # and rustc locates the MSVC linker by itself, so there is nothing to enter for.
 if [ -z "$FEATS" ]; then

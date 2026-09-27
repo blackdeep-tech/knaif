@@ -270,6 +270,26 @@ tree comes from the MSVC v14x **build tools** component in the VS Installer, not
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
   not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
 
+### Windows binaries must not carry the builder's home directory
+
+Rust embeds source paths as panic locations and C/C++/CUDA embed them through `__FILE__`, so every
+crate built out of the cargo registry carries `C:\Users\<name>\.cargo\registry\...` into the binary.
+The 1.1.0 Windows artifacts shipped about 1,200 of these strings, which name whoever built the
+release. The Linux artifacts, built in a container, carry none.
+
+`scripts/build_native_kind.sh` remaps the cargo home and the checkout on Windows
+(`scripts/path_hygiene.sh`: `--remap-path-prefix` for Rust, `/d1trimfile:` for cl and, through
+`-Xcompiler`, for nvcc), and `package.sh` refuses to package a tree that still contains the home
+directory (`scripts/check_no_local_paths.py`). Two consequences:
+
+- **Build with the script, not a bare `cargo build`**, or the guard fails the packaging step.
+- **The C flags reach CMake only on a fresh configure.** After first adopting them (or changing
+  them), clean the llama.cpp build once: `cargo clean -p llama-cpp-sys-2 --profile release-<kind>`.
+
+One build-directory path remains: llama.cpp compiles in its backend search folder
+(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`). It names the checkout's location,
+not a person.
+
 ### A Windows CUDA build takes about an hour, and shows nothing while it does
 
 Measured 2026-07-30: **54 minutes**, on 16 CPUs / 15.4 GB with `CARGO_BUILD_JOBS=4` and the default
