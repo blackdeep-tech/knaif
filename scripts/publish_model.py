@@ -31,6 +31,9 @@ Usage:
   # publish everything ready but not yet hosted:
   uv run --with huggingface_hub --with ruamel.yaml python scripts/publish_model.py --all
 
+  # stage for a release: pinned URLs now, `main` and the card untouched until the release:
+  uv run --with huggingface_hub --with ruamel.yaml python scripts/publish_model.py --all --revision staging-1.2.0
+
   # inspect without uploading or touching the manifest:
   uv run --with ruamel.yaml python scripts/publish_model.py --all --dry-run
 """
@@ -166,18 +169,26 @@ def _load_dotenv() -> None:
             break
 
 
-def _upload(file_path: Path, repo: str, path_in_repo: str) -> str:
-    """Upload the file to HF and return the resulting commit SHA (oid)."""
+def _upload(file_path: Path, repo: str, path_in_repo: str, revision: str | None = None) -> str:
+    """Upload the file to HF and return the resulting commit SHA (oid).
+
+    With *revision*, the commit lands on that branch (created if missing) instead of `main`: the
+    resolve URL it pins works as soon as the upload finishes, while `main` and the card stay as
+    they are until the release.
+    """
     from huggingface_hub import HfApi  # lazy: only needed for the real upload
 
     _load_dotenv()  # pick up HF_TOKEN from a gitignored .env if not already exported
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
     api = HfApi(token=token)  # token=None falls back to a prior `hf auth login`
+    if revision:
+        api.create_branch(repo, branch=revision, repo_type="model", exist_ok=True)
     commit = api.upload_file(
         path_or_fileobj=str(file_path),
         path_in_repo=path_in_repo,
         repo_id=repo,
         repo_type="model",
+        revision=revision,
     )
     return commit.oid
 
@@ -197,6 +208,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--repo", default=DEFAULT_REPO, help=f"HF repo id (default {DEFAULT_REPO})")
     ap.add_argument("--manifest", default=DEFAULT_MANIFEST, help="path to model-manifest.yaml")
+    ap.add_argument(
+        "--revision",
+        help="upload to this HF branch (created if missing) instead of main, e.g. staging-1.2.0",
+    )
     ap.add_argument("--dry-run", action="store_true", help="hash + report, no upload, no rewrite")
     args = ap.parse_args(argv)
 
@@ -253,12 +268,14 @@ def main(argv: list[str] | None = None) -> int:
         size = lp.stat().st_size
 
         if args.dry_run:
-            print(f"[dry-run] {name}: upload {lp} as {canonical} -> {args.repo}")
+            print(
+                f"[dry-run] {name}: upload {lp} as {canonical} -> {args.repo}@{args.revision or 'main'}"
+            )
             print(f"          sha256={sha} size_bytes={size}")
             continue
 
-        print(f"Uploading {lp} -> {args.repo}/{canonical} …")
-        oid = _upload(lp, args.repo, canonical)
+        print(f"Uploading {lp} -> {args.repo}@{args.revision or 'main'}/{canonical} …")
+        oid = _upload(lp, args.repo, canonical, revision=args.revision)
         url = resolve_url(args.repo, oid, canonical)
         text = updated_manifest(text, name, url=url, sha256=sha, size_bytes=size)
         published = True
