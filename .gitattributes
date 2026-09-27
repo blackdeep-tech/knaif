@@ -46,3 +46,9 @@ site/data/*.json text eol=lf
 # failing contract on Windows only.
 *.pdf binary
 contracts/parity/fixtures/** binary
+
+# Frozen eval probes are checked against a recorded sha256 of their LF bytes; a CRLF checkout would
+# make every hash check fail on Windows.
+evals/**/probe_*.jsonl     text eol=lf
+evals/**/gate_probe*.jsonl text eol=lf
+evals/**/*.sha256          text eol=lf
