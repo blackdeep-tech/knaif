@@ -109,6 +109,22 @@ lanes:
     model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
     public_name: knaif-qwen3-4b-v2
     timeout_s: 180
+  # Release 1.2.0 R5c: the UNPACKED release artifact (dist/knaif-1.2.0-windows-x64.zip, built from
+  # the freeze commit), one lane per model. The backend is chosen by the environment each run sets,
+  # not by the lane: the CUDA payload installed into $KNAIF_BACKENDS_DIR, Vulkan with it empty, CPU
+  # with the GPU hidden. The lane records where the layers actually landed.
+  r5c-win-4b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r5c-win-1.7b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
 
 backends:
   # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".

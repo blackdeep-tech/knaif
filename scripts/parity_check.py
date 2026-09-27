@@ -39,7 +39,7 @@ tool rather than for chains.
 Usage (normally via `just parity ffmpeg`, which builds native first):
     uv run python scripts/parity_check.py --skill ffmpeg \
         --native-bin target/debug/knaif.exe \
-        --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf \
+        --model-path models/knaif-qwen3-4b-v2-q4_k_m.gguf \
         --cwd sandbox/fixtures/ffmpeg [--limit N] [--tags audio,convert] [--skip-chains]
 
 Self-test the pure parsing/normalization (no models, no subprocesses):
@@ -1015,7 +1015,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--python-model",
-        default="knaif-qwen3-4b-v1",
+        default="knaif-qwen3-4b-v2",
         help="models.yaml NAME python loads (carries json_mode/thinking options); "
         "must map to the same GGUF as --model-path.",
     )

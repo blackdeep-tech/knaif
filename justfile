@@ -338,7 +338,7 @@ FEATS := env_var_or_default("KNAIF_FEATS", "llama,pdfium")
 
 # Default model for `just native`. A name resolves against the model store; a .gguf path is used
 # as-is. Override per-run with `KNAIF_MODEL=... just native ...` or an inline `--model` (last wins).
-MODEL := env_var_or_default("KNAIF_MODEL", "knaif-qwen3-4b-v1")
+MODEL := env_var_or_default("KNAIF_MODEL", "knaif-qwen3-4b-v2")
 
 # Run a skill through the native CLI with REAL local inference — the manual-testing twin of
 # `just cli`. Defaults to --model {{MODEL}}. Mirrors cli's shape:
@@ -691,11 +691,11 @@ eval-compare skill backends *args:
 cli skill *args:
     cd "{{invocation_directory()}}"; uv run knaif-cli run {{skill}} {{args}}
 
-# GGUF both runtimes load for the parity check — identical bytes. Native's `knaif-qwen3-4b-v1`
-# The manifest's `file` and Python's `knaif-qwen3-4b-v1` (models.yaml) both resolve to this file, but
+# GGUF both runtimes load for the parity check — identical bytes. Native's `knaif-qwen3-4b-v2`
+# The manifest's `file` and Python's `knaif-qwen3-4b-v2` (models.yaml) both resolve to this file, but
 # the harness pins BOTH to the path directly (native --model PATH, python --model-path PATH)
 # so weight identity is never in doubt. Override with KNAIF_PARITY_MODEL.
-PARITY_MODEL := env_var_or_default("KNAIF_PARITY_MODEL", "models/knaif-qwen3-4b-v1-q4_k_m.gguf")
+PARITY_MODEL := env_var_or_default("KNAIF_PARITY_MODEL", "models/knaif-qwen3-4b-v2-q4_k_m.gguf")
 
 # Cargo appends `.exe` only on Windows; every other target builds a bare `knaif`.
 EXE := if os_family() == "windows" { ".exe" } else { "" }
