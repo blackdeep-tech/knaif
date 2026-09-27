@@ -1254,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-cli"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1273,7 +1273,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-llm"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "knaif-models",
@@ -1296,7 +1296,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-models"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-skill-api"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "knaif-core",
@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-skill-documents"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "calamine",
@@ -1333,7 +1333,7 @@ dependencies = [
 
 [[package]]
 name = "knaif-skill-ffmpeg"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "glob",

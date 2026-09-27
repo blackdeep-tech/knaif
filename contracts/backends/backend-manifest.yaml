@@ -50,7 +50,7 @@
 # the loader refuses a payload stamped with a different one — an upgraded binary must not load the
 # previous release's ggml lib out of ~/.knaif/backends, which survives the upgrade and is scanned
 # first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
-knaif_version: "1.1.0"
+knaif_version: "1.2.0"
 
 backends:
   cuda:

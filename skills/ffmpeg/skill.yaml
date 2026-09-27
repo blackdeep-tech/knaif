@@ -15,7 +15,7 @@ tools: tools.yaml
 skill_class: handlers.FFmpegSkill
 prompt: prompt.yaml
 
-recommended_model: knaif-qwen3-4b-v1  # promoted 2026-07-02 (sft-v3 union LoRA; see models.yaml)
+recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 
 # Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
 runtimes:

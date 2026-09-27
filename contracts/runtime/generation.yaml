@@ -97,8 +97,11 @@ shipped_models:
   models.yaml:
     - knaif-qwen3-4b-v1
     - knaif-qwen3-4b-v2
+    - knaif-qwen3-1.7b-v2
   eval_backends.yaml:
     - qwen3-4b-sft-v3-flat-q4
     - qwen3-1.7b-sft-v3-flat-q6
     # The arm the committed snapshots are measured on (published as knaif-qwen3-4b-v2).
     - qwen3-4b-sft-v4-flat-q4
+    # The 1.7B v2 arm (published as knaif-qwen3-1.7b-v2).
+    - qwen3-1.7b-sft-v9-flat-q6
