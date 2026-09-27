@@ -19,6 +19,7 @@ from knaif.registry import DEFAULT_TOP_K
 
 from .acceptance import EXECUTING_VERIFIERS
 from .chain import run_command_chain
+from .redact import redact_local_paths
 from .runner import run_corpus
 
 
@@ -575,6 +576,8 @@ def cmd_score_external(args: argparse.Namespace) -> None:
     }
 
     score_file = results_dir / "score.json"
+    # score.json is the file a run folder commits; keep local paths out of it (AGENTS.md).
+    scoreboard = redact_local_paths(scoreboard)
     score_file.write_text(json.dumps(scoreboard, indent=2, ensure_ascii=False), encoding="utf-8")
     avg_str = f"{avg_knaif:.3f}" if avg_knaif is not None else "n/a"
     print(f"Scored {n} entries, avg={avg_str} → {score_file}", flush=True)

@@ -8,8 +8,11 @@ locations and C embeds them through `__FILE__`, so every crate compiled out of t
 check that makes it a failure instead of a discovery.
 
     python scripts/check_no_local_paths.py dist/staging/<dir> [--forbid PREFIX ...]
+    python scripts/check_no_local_paths.py --checkout FILE ...     (the pre-commit hook)
 
 Without --forbid, forbids this machine's home directory (none inside a container running as root).
+--checkout also forbids the checkout's own absolute path: right for files committed to the public
+repo, wrong for binaries, where llama.cpp compiles in its backend folder under the build tree.
 """
 
 from __future__ import annotations
@@ -47,22 +50,32 @@ def hits(data: bytes, prefixes: list[str]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("path", help="a staged artifact directory or a single file")
+    ap.add_argument("paths", nargs="+", help="artifact directories and/or files")
     ap.add_argument("--forbid", action="append", help="a prefix to forbid (repeatable)")
+    ap.add_argument(
+        "--checkout", action="store_true", help="also forbid this checkout's absolute path"
+    )
     args = ap.parse_args(argv)
 
     prefixes = args.forbid or forbidden_prefixes()
+    if args.checkout:
+        prefixes = [*prefixes, str(Path.cwd().resolve())]
     if not prefixes:
         print("check_no_local_paths: nothing to forbid here (container root); skipped")
         return 0
-    root = Path(args.path)
-    files = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+    files: list[Path] = []
+    for raw in args.paths:
+        root = Path(raw)
+        files += [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
     bad = [(f, n) for f in files if (n := hits(f.read_bytes(), prefixes))]
     if bad:
-        print("ERROR: staged files carry the builder's home directory (it names who built this):")
+        print("ERROR: these files carry a local path (a home directory names a person):")
         for f, n in bad:
             print(f"  {n:6d}  {f}")
-        print("Build with scripts/build_native_kind.sh, which remaps it (scripts/path_hygiene.sh).")
+        if args.checkout:
+            print("Write paths relative to the repo, or as <repo>/... and ~/... (AGENTS.md).")
+        else:
+            print("Build with scripts/build_native_kind.sh (scripts/path_hygiene.sh remaps it).")
         return 1
     print(f"check_no_local_paths: {len(files)} files, no builder home directory")
     return 0

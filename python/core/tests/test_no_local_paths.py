@@ -133,3 +133,46 @@ def test_a_path_with_a_space_is_refused_rather_than_split() -> None:
 def test_the_windows_build_applies_the_hygiene_flags() -> None:
     text = (ROOT / "scripts" / "build_native_kind.sh").read_text(encoding="utf-8")
     assert "path_hygiene.sh" in text and "path_hygiene_env" in text
+
+
+# ── the repo itself ────────────────────────────────────────────────────────────────────────
+
+
+def test_no_tracked_file_carries_this_machine_s_home_or_checkout() -> None:
+    """Eval runs used to record absolute fixture and model paths (`C:/.../knaif/sandbox/...`,
+    a home-directory model store), and the repo is public. Scrubbed to `<repo>` and `~` on
+    2026-09-27. Checked against wherever this test runs, so no username is written down here."""
+    home = Path.home()
+    prefixes = [str(ROOT)] + ([str(home)] if str(home) not in ("/", "/root") else [])
+    files = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True
+    ).stdout.split(b"\0")
+    bad = []
+    for name in filter(None, files):
+        path = ROOT / name.decode()
+        if not path.is_file() or path.suffix in {".png", ".jpg", ".ico", ".pdf", ".woff2", ".gguf"}:
+            continue
+        if n := guard.hits(path.read_bytes(), prefixes):
+            bad.append(f"{n} {name.decode()}")
+    assert not bad, "tracked files carry a local path (replace with <repo> or ~):\n" + "\n".join(
+        bad
+    )
+
+
+def test_checkout_mode_also_forbids_the_repo_path(tmp_path: Path, monkeypatch) -> None:
+    """The pre-commit hook form: several files, and the checkout's own path is forbidden too."""
+    monkeypatch.chdir(tmp_path)
+    clean = tmp_path / "a.json"
+    clean.write_text('{"p": "<repo>/sandbox/x.mp4"}', encoding="utf-8")
+    leaky = tmp_path / "b.json"
+    leaky.write_text(f'{{"p": "{tmp_path.as_posix()}/sandbox/x.mp4"}}', encoding="utf-8")
+
+    nobody = "C:/Users/nobody"
+    assert guard.main(["--forbid", nobody, str(clean), str(leaky)]) == 0
+    assert guard.main(["--forbid", nobody, "--checkout", str(clean)]) == 0
+    assert guard.main(["--forbid", nobody, "--checkout", str(clean), str(leaky)]) == 1
+
+
+def test_a_commit_hook_runs_the_checkout_check() -> None:
+    text = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    assert "check_no_local_paths.py --checkout" in text

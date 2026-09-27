@@ -1329,25 +1329,28 @@ def main() -> int:
             / f"parity_{args.skill}_{args.mode}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json"
         )
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Committed evidence in a public repo: rendered commands carry absolute fixture paths, so the
+    # checkout and home directory become <repo> and ~ (AGENTS.md, Public Output Hygiene).
+    from knaif.evalsuite.redact import redact_local_paths
+
+    report = {
+        "skill": args.skill,
+        "mode": args.mode,
+        "model": str(args.model_path),
+        "counts": counts,
+        "total": total,
+        "elapsed_s": round(elapsed, 1),
+        "rows": results,
+    }
     out.write_text(
-        json.dumps(
-            {
-                "skill": args.skill,
-                "mode": args.mode,
-                "model": str(args.model_path),
-                "counts": counts,
-                "total": total,
-                "elapsed_s": round(elapsed, 1),
-                "rows": results,
-            },
-            indent=2,
-            ensure_ascii=False,
-        ),
+        json.dumps(redact_local_paths(report, root=REPO_ROOT), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     print(f"  report                  : {out}")
     if run_dir is not None:
-        meta = build_meta(args, rows, entry_points, counts, rate, verdict)
+        meta = redact_local_paths(
+            build_meta(args, rows, entry_points, counts, rate, verdict), root=REPO_ROOT
+        )
         (run_dir / "meta.json").write_text(
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )

@@ -34,6 +34,7 @@ import yaml
 
 from .matrix import CELL_LAYERS, load_matrix, required_cells
 from .outcomes import POLICY_VERSION
+from .redact import redact_local_paths
 
 STATUS_CONTRACT = Path("contracts/release/native_status.yaml")
 PLATFORMS_CONTRACT = Path("contracts/release/platforms.yaml")
@@ -400,6 +401,8 @@ def record_layers(
         # correctly take the current one.
         captured = entry.get("evidence")
         record["layers"][name] = {**entry, "evidence": captured or current}
+    # Committed and public: no checkout or home paths (AGENTS.md, Public Output Hygiene).
+    record = redact_local_paths(record, root=root)
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 

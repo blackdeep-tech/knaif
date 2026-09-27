@@ -383,6 +383,33 @@ records the verdict either way, so a failing L4 is evidence rather than an absen
 6. Preview gates can use a `confirmer` callback through `ctx.confirm()`.
 7. Safety policy is driven by `tool_def.safety_category`, not hard-coded tool names.
 
+## Public Output Hygiene
+
+The GitHub repo, the Hugging Face model repo and every release asset are public. Anything
+committed, uploaded or packaged must not identify the machine or the person who produced it.
+The 1.1.0 Windows binaries embedded the builder's `C:\Users\<name>\...` path ~1,200 times, and
+eval runs committed absolute checkout paths into ~27 files; both went public unnoticed.
+
+1. **No local paths in committed files.** Write paths relative to the repo. Where an absolute
+   path must be shown, write `<repo>/...` or `~/...`. Never a home directory (it names a person),
+   never this checkout's absolute path. An eval tool or report that writes an absolute path is a
+   bug in that tool: fix the tool, don't hand-edit its output each time.
+2. **Examples use placeholders**, never a real username, email address or hostname: `<name>`,
+   `alice`, `C:/Users/<name>`.
+3. **Build published binaries only through the scripts.** Windows: `scripts/build_native_kind.sh`
+   (remaps paths, `scripts/path_hygiene.sh`) then `installers/package.sh`, which refuses a tree
+   that still carries the builder's home. Linux: the container (`just package-linux`). A bare
+   `cargo build` is fine for development and never for a release.
+4. **Check the exact bytes before any upload** (HF, GitHub release, PyPI):
+   `uv run python scripts/check_no_local_paths.py <files or dir>`. For a GGUF, also read its
+   `general.*` metadata.
+5. **The guards are not optional.** The `no-local-paths` pre-commit hook and
+   `test_no_local_paths.py` (in `just check`) enforce rule 1; never bypass them with `--no-verify`.
+   If one fires, remove the path; don't widen the check.
+6. **A leak in something already public goes to the owner first.** Report what leaked, where,
+   and since when. Do not rewrite shared history or replace published assets on your own:
+   replacing a release asset changes a sha256 that installed manifests pin.
+
 ## Key Files For Each Task
 
 | Task | Start here |

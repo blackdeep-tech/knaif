@@ -91,6 +91,14 @@ repos:
         pass_filenames: false
         files: ^(LICENSE|NOTICE|contracts/runtime/core_tools\.yaml|python/core/(LICENSE|NOTICE|knaif/core_tools\.yaml))$
 
+      # The repo is public. Blocks a staged file that carries the committer's home directory
+      # (it names them) or this checkout's absolute path (eval runs used to record both).
+      - id: no-local-paths
+        name: no home-directory or checkout paths in committed files
+        entry: uv run python scripts/check_no_local_paths.py --checkout
+        language: system
+        types: [text]
+
       - id: gen-skills-check
         name: README skill inventory is up to date
         entry: uv run python scripts/gen_skills.py --check
