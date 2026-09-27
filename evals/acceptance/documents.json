@@ -4,14 +4,14 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "3375558d0932ae634d4e9ce7f91b8a6b7ef6ec7d0b3c01003f9f9bf7adef4fa5",
-        "contracts": "2fbaee73f42cc410b6d6371263e6a16085701fcdb1bf7989853d10d4fea8768b",
-        "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
-        "grading": "c46e7ca1f83c6b8d49c0a6005a786b5e52553a7769146b3788102c0e58b5410f",
-        "native": "c0eef553480668ae61a3f67aee97aea6dff4624e9bc9901c75fb06d7e003015e",
-        "corpus": "e7684f794e2bdea7538f8576c20f5a40ce530bf647275d85e22ad3868610d2f6",
-        "verifier": "8d4498b7f04211b9a8f9165eb19775407b8c1251990df38c92609dccac141f86",
-        "settings": "91d04bdc8826062792d7968f3272d765e3a65ae21868b023df73e0e628b545ff",
+        "bundle": "f086989b9aa09fee4839bd0015bff2ffcfcca8832a4100b0dc77738e206c96b2",
+        "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
+        "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+        "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+        "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
         "policy": "3",
         "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
       }
@@ -19,14 +19,14 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "3375558d0932ae634d4e9ce7f91b8a6b7ef6ec7d0b3c01003f9f9bf7adef4fa5",
-        "contracts": "2fbaee73f42cc410b6d6371263e6a16085701fcdb1bf7989853d10d4fea8768b",
-        "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
-        "grading": "c46e7ca1f83c6b8d49c0a6005a786b5e52553a7769146b3788102c0e58b5410f",
-        "native": "c0eef553480668ae61a3f67aee97aea6dff4624e9bc9901c75fb06d7e003015e",
-        "corpus": "e7684f794e2bdea7538f8576c20f5a40ce530bf647275d85e22ad3868610d2f6",
-        "verifier": "8d4498b7f04211b9a8f9165eb19775407b8c1251990df38c92609dccac141f86",
-        "settings": "91d04bdc8826062792d7968f3272d765e3a65ae21868b023df73e0e628b545ff",
+        "bundle": "f086989b9aa09fee4839bd0015bff2ffcfcca8832a4100b0dc77738e206c96b2",
+        "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
+        "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+        "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+        "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
         "policy": "3",
         "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
       }

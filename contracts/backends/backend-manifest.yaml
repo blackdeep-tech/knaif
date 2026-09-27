@@ -94,9 +94,9 @@ backends:
         files:
           - name: libggml-cuda.so
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/libggml-cuda.so
-            sha256: "85d0bdb66c92e84ee206c3817673938bedf08a34833bf387311a6c8d188c07f5"
-            size_bytes: 162984592
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/libggml-cuda.so
+            sha256: "785f7460ea391067ca65eec3184ae99e18c8f4abb0e6b264ef3d571849076e78"
+            size_bytes: 162996880
           - name: libcudart.so.13
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/libcudart.so.13
@@ -119,7 +119,7 @@ backends:
           # the EULA; `test_backend_payload_manifest.py` asserts this list keeps up with it.
           - name: llama.cpp-LICENSE.txt
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/llama.cpp-LICENSE.txt
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/llama.cpp-LICENSE.txt
             sha256: "bffc7e34493908aeadebf13d831b189173e6d91e612352ada29192c0c44f37e6"
             size_bytes: 1259
           - name: NVIDIA-CUDA-EULA.txt
@@ -132,9 +132,9 @@ backends:
         files:
           - name: ggml-cuda.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/ggml-cuda.dll
-            sha256: "72193fa38c4afe439ace1768b653a4d74379374fafaeb5123855336e34167f7e"
-            size_bytes: 150217216
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/ggml-cuda.dll
+            sha256: "43dd6bc22e8d7c465cae10547e7acde3efa47d9bf5cadec2580d678502abb475"
+            size_bytes: 150257664
           - name: cudart64_13.dll
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cudart64_13.dll
@@ -158,29 +158,29 @@ backends:
           # same reason. Microsoft's Distributable List grants these files; see docs/PROVENANCE.md.
           - name: vcruntime140.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcruntime140.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/vcruntime140.dll
             sha256: "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
             size_bytes: 178616
           - name: vcruntime140_1.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcruntime140_1.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/vcruntime140_1.dll
             sha256: "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e"
             size_bytes: 50112
           - name: msvcp140.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/msvcp140.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/msvcp140.dll
             sha256: "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
             size_bytes: 643512
           - name: vcomp140.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcomp140.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/vcomp140.dll
             sha256: "95d4ce4a6802d1e18b5e0e1722cc30ea72ca7e033f83828f05c0b7b993fe7cbf"
             size_bytes: 212920
           # See the linux-x64 note: the licence texts are payload files, not release-page
           # attachments, because the page is not what lands on a user's disk.
           - name: llama.cpp-LICENSE.txt
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/llama.cpp-LICENSE.txt
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/llama.cpp-LICENSE.txt
             sha256: "bffc7e34493908aeadebf13d831b189173e6d91e612352ada29192c0c44f37e6"
             size_bytes: 1259
           - name: NVIDIA-CUDA-EULA.txt
