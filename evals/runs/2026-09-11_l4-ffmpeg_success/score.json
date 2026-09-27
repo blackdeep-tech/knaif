@@ -2220,7 +2220,7 @@
       ],
       "latency_ms": 3709.3924999935552,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mp4 -i clip2.mp4 -filter_complex [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_033__0\\\\merged.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mp4 -i clip2.mp4 -filter_complex [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_033__0\\\\merged.mp4\"",
       "plan": {
         "plan": [
           {
@@ -2255,7 +2255,7 @@
       ],
       "latency_ms": 3253.8830999983475,
       "error": null,
-      "artifact": "ffmpeg -y -i clip2.mp4 -i clip.mp4 -filter_complex [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_034__0\\\\output.mp4\"",
+      "artifact": "ffmpeg -y -i clip2.mp4 -i clip.mp4 -filter_complex [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_034__0\\\\output.mp4\"",
       "plan": {
         "plan": [
           {
@@ -4930,7 +4930,7 @@
       ],
       "latency_ms": 3792.7398000028916,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mp4 -i clip.mov -filter_complex [0:v]scale=1920:1080,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=30[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_082__0\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mp4 -i clip.mov -filter_complex [0:v]scale=1920:1080,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=30[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_082__0\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -20074,7 +20074,7 @@
       ],
       "latency_ms": 2591.4247000182513,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip_no_audio.mp4 -filter_complex anullsrc=r=44100:cl=stereo:d=10.0[_silence1];[0:v][0:a][1:v][_silence1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_215__0\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip_no_audio.mp4 -filter_complex anullsrc=r=44100:cl=stereo:d=10.0[_silence1];[0:v][0:a][1:v][_silence1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_215__0\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -21468,7 +21468,7 @@
       ],
       "latency_ms": 8613.093499996467,
       "error": null,
-      "artifact": "ffmpeg -y -i clip_4k.mp4 -i clip.mp4 -filter_complex [0:v]scale=3840:2160,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=3840:2160,fps=30[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_231__0\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip_4k.mp4 -i clip.mp4 -filter_complex [0:v]scale=3840:2160,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=3840:2160,fps=30[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_231__0\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22703,7 +22703,7 @@
       ],
       "latency_ms": 2880.5294999910984,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__0\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__0\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22739,7 +22739,7 @@
       ],
       "latency_ms": 2885.1182000071276,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__1\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__1\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22775,7 +22775,7 @@
       ],
       "latency_ms": 3002.1090999944136,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__2\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__2\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22811,7 +22811,7 @@
       ],
       "latency_ms": 2990.0669000053313,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__3\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_242__3\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22893,7 +22893,7 @@
       ],
       "latency_ms": 3676.0333999991417,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_243__1\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_243__1\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22930,7 +22930,7 @@
       ],
       "latency_ms": 3725.975700013805,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_243__2\\\\combined_1080p.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_243__2\\\\combined_1080p.mp4\"",
       "plan": {
         "plan": [
           {
@@ -22967,7 +22967,7 @@
       ],
       "latency_ms": 3625.5965000018477,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_243__3\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_243__3\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -23039,7 +23039,7 @@
       ],
       "latency_ms": 2839.8105000087526,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_244__1\\\\merged.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1280:720,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_244__1\\\\merged.mp4\"",
       "plan": {
         "plan": [
           {
@@ -23075,7 +23075,7 @@
       ],
       "latency_ms": 3636.289999994915,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_244__2\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mov -i clip.mp4 -filter_complex [0:v]scale=1920:1080,fps=25[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=25[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_244__2\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -23112,7 +23112,7 @@
       ],
       "latency_ms": 2974.1066000133287,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mp4 -i clip.mov -filter_complex [0:v]scale=1280:720,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=30[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_244__3\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mp4 -i clip.mov -filter_complex [0:v]scale=1280:720,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=1280:720,fps=30[v1];[1:a]aresample=44100[a1];[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_244__3\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -24362,7 +24362,7 @@
       ],
       "latency_ms": 4717.994400009047,
       "error": null,
-      "artifact": "ffmpeg -y -i clip.mp4 -i clip2.mp4 -i clip.mov -filter_complex [0:v]scale=1920:1080,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=30[v1];[1:a]aresample=44100[a1];[2:v]scale=1920:1080,fps=30[v2];[2:a]aresample=44100[a2];[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[outv][outa] -map [outv] -map [outa] \"C:\\\\Work\\\\Knaif\\\\knaif\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_252__0\\\\combined.mp4\"",
+      "artifact": "ffmpeg -y -i clip.mp4 -i clip2.mp4 -i clip.mov -filter_complex [0:v]scale=1920:1080,fps=30[v0];[0:a]aresample=44100[a0];[1:v]scale=1920:1080,fps=30[v1];[1:a]aresample=44100[a1];[2:v]scale=1920:1080,fps=30[v2];[2:a]aresample=44100[a2];[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\lane-native-cli\\\\ffmpeg_252__0\\\\combined.mp4\"",
       "plan": {
         "plan": [
           {
@@ -31822,7 +31822,7 @@
   ],
   "lane": "native-cli",
   "lane_kind": "native_cli",
-  "lane_entry_point": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe run <skill> --yes  --model knaif-qwen3-4b-v1-q4_k_m.gguf",
+  "lane_entry_point": "<repo>\\target\\release\\knaif.exe run <skill> --yes  --model knaif-qwen3-4b-v1-q4_k_m.gguf",
   "compute_backend": "CUDA0",
   "binary_sha256": "0fd47f073e3c28d697921a301199ad46ed1534cc9263cda6fe719459e2f3b9e8",
   "model_sha256_prefix": "6dd7779b2597b4c2",

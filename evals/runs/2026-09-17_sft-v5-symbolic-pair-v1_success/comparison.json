@@ -314,7 +314,7 @@
               }
             ]
           },
-          "candidate_error": "command failed (exit 4294967274): 7.100\n  libswresample   6.  4.100 /  6.  4.100\nInvalid duration for option to: 00:00:-3\nError parsing options for input file C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_sft-v5-symbolic-pair-v1_success\\qwen3-4b-sft-v5-symbolic-audit-v2-q4\\ffmpeg_092__3\\clip.mp4.\nError opening input files: Invalid argument"
+          "candidate_error": "command failed (exit 4294967274): 7.100\n  libswresample   6.  4.100 /  6.  4.100\nInvalid duration for option to: 00:00:-3\nError parsing options for input file <repo>\\sandbox\\2026-09-17_sft-v5-symbolic-pair-v1_success\\qwen3-4b-sft-v5-symbolic-audit-v2-q4\\ffmpeg_092__3\\clip.mp4.\nError opening input files: Invalid argument"
         },
         {
           "id": "ffmpeg_113",

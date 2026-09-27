@@ -136,7 +136,7 @@
       ],
       "latency_ms": 650.3811000002315,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -169,7 +169,7 @@
       ],
       "latency_ms": 330.2584000011848,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -201,7 +201,7 @@
       ],
       "latency_ms": 287.7340999984881,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -233,7 +233,7 @@
       ],
       "latency_ms": 329.9438000030932,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -265,7 +265,7 @@
       ],
       "latency_ms": 353.0009999994945,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -297,7 +297,7 @@
       ],
       "latency_ms": 334.2041000032623,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -329,7 +329,7 @@
       ],
       "latency_ms": 335.7030000006489,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -361,7 +361,7 @@
       ],
       "latency_ms": 329.7253000018827,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -393,7 +393,7 @@
       ],
       "latency_ms": 323.62560000183294,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -425,7 +425,7 @@
       ],
       "latency_ms": 235.61179999887827,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 2 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -457,7 +457,7 @@
       ],
       "latency_ms": 345.3196000009484,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 4 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -489,7 +489,7 @@
       ],
       "latency_ms": 234.94299999947543,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 6 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -521,7 +521,7 @@
       ],
       "latency_ms": 328.3636000014667,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 0 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 0 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -553,7 +553,7 @@
       ],
       "latency_ms": 268.0723000012222,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 0 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 0 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -585,7 +585,7 @@
       ],
       "latency_ms": 339.9207000002207,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 3.9 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 3.9 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -617,7 +617,7 @@
       ],
       "latency_ms": 332.2370999994746,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 7.9 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 7.9 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -649,7 +649,7 @@
       ],
       "latency_ms": 416.69359999650624,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 00:00:01 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 00:00:01 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -682,7 +682,7 @@
       ],
       "latency_ms": 413.499000002048,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 00:00:03 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch.mp4 -ss 00:00:03 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -715,7 +715,7 @@
       ],
       "latency_ms": 437.9086000008101,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 00:00:09 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm.mp4 -ss 00:00:09 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -748,7 +748,7 @@
       ],
       "latency_ms": 344.2079999986163,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 00:00:02 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar.mp4 -ss 00:00:02 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-candidate-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {

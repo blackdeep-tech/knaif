@@ -1,7 +1,7 @@
 {
   "skill": "ffmpeg",
   "mode": "plan",
-  "model": "C:\\Work\\Knaif\\knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+  "model": "<repo>\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
   "counts": {
     "match": 253,
     "mismatch": 57,
