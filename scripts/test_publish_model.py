@@ -237,3 +237,104 @@ def test_main_passes_the_revision_through(monkeypatch, tmp_path):
     assert rc == 0
     assert seen["revision"] == "staging-1.2.0"
     assert "/resolve/abc123/" in manifest.read_text(encoding="utf-8")
+
+
+# ── promotion: staging -> main at the release, manifest untouched ──────────────────────────
+
+
+class _Op:
+    def __init__(self, kind, **kw):
+        self.kind, self.kw = kind, kw
+
+
+def _fake_hub_with_commits(monkeypatch):
+    import types
+
+    class Api:
+        commits: list = []
+
+        def __init__(self, token=None):
+            pass
+
+        def create_commit(self, **kw):
+            Api.commits.append(kw)
+            return types.SimpleNamespace(oid="def456")
+
+    hub = types.SimpleNamespace(
+        HfApi=Api,
+        CommitOperationCopy=lambda **kw: _Op("copy", **kw),
+        CommitOperationAdd=lambda **kw: _Op("add", **kw),
+    )
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    return Api
+
+
+def test_promote_copies_the_staged_files_and_the_card_to_main_in_one_commit(monkeypatch, tmp_path):
+    """At the release, `main` gets the staged bytes and the card in one commit. The manifest keeps
+    its URLs pinned to the staging commits, so the frozen evidence stays valid."""
+    import publish_model
+
+    api = _fake_hub_with_commits(monkeypatch)
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(MANIFEST, encoding="utf-8")
+    card = tmp_path / "CARD.md"
+    card.write_text("# card\n", encoding="utf-8")
+
+    rc = publish_model.main(
+        [
+            "--promote",
+            "qwen3-4b-v3",
+            "qwen3-1.7b-sft-v3-flat-q6",
+            "--from-revision",
+            "staging-1.2.0",
+            "--manifest",
+            str(manifest),
+            "--card",
+            str(card),
+        ]
+    )
+
+    assert rc == 0
+    assert manifest.read_text(encoding="utf-8") == MANIFEST
+    (commit,) = api.commits
+    assert commit["revision"] == "main"
+    ops = [(op.kind, op.kw) for op in commit["operations"]]
+    assert (
+        "copy",
+        {
+            "src_path_in_repo": "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf",
+            "path_in_repo": "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf",
+            "src_revision": "staging-1.2.0",
+        },
+    ) in ops
+    assert (
+        "copy",
+        {
+            "src_path_in_repo": "knaif-qwen3-1.7b-sft-v3-flat-q6_k.gguf",
+            "path_in_repo": "knaif-qwen3-1.7b-sft-v3-flat-q6_k.gguf",
+            "src_revision": "staging-1.2.0",
+        },
+    ) in ops
+    assert ("add", {"path_in_repo": "README.md", "path_or_fileobj": str(card)}) in ops
+
+
+def test_promote_refuses_an_unknown_model(monkeypatch, tmp_path):
+    import publish_model
+
+    api = _fake_hub_with_commits(monkeypatch)
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(MANIFEST, encoding="utf-8")
+
+    rc = publish_model.main(
+        ["--promote", "nope", "--from-revision", "staging-1.2.0", "--manifest", str(manifest)]
+    )
+
+    assert rc == 2
+    assert api.commits == []
+
+
+def test_the_card_in_the_repo_is_the_one_promote_uploads_by_default():
+    import publish_model
+
+    assert publish_model.DEFAULT_CARD == "contracts/models/HF_MODEL_CARD.md"
+    assert (Path(__file__).resolve().parent.parent / publish_model.DEFAULT_CARD).is_file()

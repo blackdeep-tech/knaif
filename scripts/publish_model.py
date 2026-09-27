@@ -34,6 +34,9 @@ Usage:
   # stage for a release: pinned URLs now, `main` and the card untouched until the release:
   uv run --with huggingface_hub --with ruamel.yaml python scripts/publish_model.py --all --revision staging-1.2.0
 
+  # at the release, copy the staged files and the card to main (manifest untouched):
+  uv run --with huggingface_hub --with ruamel.yaml python scripts/publish_model.py       --promote knaif-qwen3-4b-v2 knaif-qwen3-1.7b-v2 --from-revision staging-1.2.0
+
   # inspect without uploading or touching the manifest:
   uv run --with ruamel.yaml python scripts/publish_model.py --all --dry-run
 """
@@ -49,6 +52,8 @@ from pathlib import Path
 
 DEFAULT_REPO = "blackdeep/knaif"
 DEFAULT_MANIFEST = "contracts/models/model-manifest.yaml"
+# The HF repo's README.md. Kept in the repo so the card cannot drift from the release it describes.
+DEFAULT_CARD = "contracts/models/HF_MODEL_CARD.md"
 
 
 def sha256_file(path: Path) -> str:
@@ -193,10 +198,43 @@ def _upload(file_path: Path, repo: str, path_in_repo: str, revision: str | None 
     return commit.oid
 
 
+def _promote(
+    repo: str, files: list[str], from_revision: str, to_revision: str, card: Path | None
+) -> str:
+    """Copy *files* from *from_revision* to *to_revision* and add *card* as README.md, in one
+    commit; return its oid. Server-side copies, so nothing is re-uploaded, and the manifest's URLs
+    stay pinned to the staging commits (keep that branch: the pins resolve through it)."""
+    from huggingface_hub import CommitOperationAdd, CommitOperationCopy, HfApi
+
+    _load_dotenv()
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    ops = [
+        CommitOperationCopy(src_path_in_repo=f, path_in_repo=f, src_revision=from_revision)
+        for f in files
+    ]
+    if card is not None:
+        ops.append(CommitOperationAdd(path_in_repo="README.md", path_or_fileobj=str(card)))
+    commit = HfApi(token=token).create_commit(
+        repo_id=repo,
+        repo_type="model",
+        revision=to_revision,
+        operations=ops,
+        commit_message=f"Release: {', '.join(files)} from {from_revision}",
+    )
+    return commit.oid
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sel = ap.add_mutually_exclusive_group(required=True)
     sel.add_argument("--name", help="manifest model key to publish, e.g. knaif-qwen3-4b-v1")
+    sel.add_argument(
+        "--promote",
+        nargs="+",
+        metavar="NAME",
+        help="copy these models' staged files (--from-revision) and the card to --revision "
+        "(default main) in one commit; the manifest is not touched",
+    )
     sel.add_argument(
         "--all",
         action="store_true",
@@ -212,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
         "--revision",
         help="upload to this HF branch (created if missing) instead of main, e.g. staging-1.2.0",
     )
+    ap.add_argument("--from-revision", help="with --promote: the staging branch to copy from")
+    ap.add_argument("--card", default=DEFAULT_CARD, help=f"model card (default {DEFAULT_CARD})")
     ap.add_argument("--dry-run", action="store_true", help="hash + report, no upload, no rewrite")
     args = ap.parse_args(argv)
 
@@ -222,6 +262,29 @@ def main(argv: list[str] | None = None) -> int:
     text = manifest_path.read_text(encoding="utf-8")
     specs = model_specs(text)
     models_dir = Path(args.models_dir)
+
+    if args.promote:
+        if not args.from_revision:
+            print("error: --promote needs --from-revision", file=sys.stderr)
+            return 2
+        unknown = [n for n in args.promote if n not in specs]
+        if unknown:
+            print(f"error: not in manifest: {', '.join(unknown)}", file=sys.stderr)
+            return 2
+        card = Path(args.card)
+        if not card.is_file():
+            print(f"error: --card not found: {card}", file=sys.stderr)
+            return 2
+        files = [specs[n]["file"] for n in args.promote]
+        target = args.revision or "main"
+        if args.dry_run:
+            print(f"[dry-run] {args.repo}@{target}: copy {files} from {args.from_revision}")
+            print(f"          + {card} as README.md")
+            return 0
+        oid = _promote(args.repo, files, args.from_revision, target, card)
+        print(f"Promoted {', '.join(args.promote)} to {args.repo}@{target} (commit {oid}).")
+        print("Manifest unchanged: its URLs stay pinned to the staging commits.")
+        return 0
 
     # Resolve (name, local_path, precomputed_sha) targets — the manifest is the source of truth,
     # so filenames are derived from it, never hand-typed.
