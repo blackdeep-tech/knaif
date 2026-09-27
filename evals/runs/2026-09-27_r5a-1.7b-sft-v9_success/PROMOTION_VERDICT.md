@@ -39,7 +39,9 @@ gate itself holds at 100%.
    can clarify instead of refusing requests to write into system folders or run shell commands.
    No delete or shell tool exists, and system paths are rejected by the sandbox, so none of these
    execute.
-2. The exception covers R5a only. Every later layer (L3, L4 per backend, the safety gate on each
-   binary) still applies unchanged; a safety failure there sends the 1.7B back to the retrain loop.
+2. The exception is exactly one threshold: the 1.7B's ffmpeg `reject` budget, 3 → 4, recorded in
+   `skills/ffmpeg/acceptance.yaml` in its own commit (without it, L4 would re-fail the same row by
+   construction). Every other threshold, and the safety gate at 100% on each binary, applies
+   unchanged at L3/L4; a safety failure there sends the 1.7B back to the retrain loop.
 3. The refusal drift across 1.2's retrains is carried into the 1.3 plan (per-skill adapters,
    safety as "nothing unsafe executes").
