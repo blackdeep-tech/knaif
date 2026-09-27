@@ -5,6 +5,73 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — unreleased (release candidate)
+
+**New models, and the native runtime now does what the Python one does.** knaif 1.2.0 ships with
+`knaif-qwen3-4b-v2` (desktop and CLI default) and `knaif-qwen3-1.7b-v2` (mobile / low footprint),
+and first run downloads the new default. Multi-step plans now execute in the native binary, and
+a long list of ffmpeg and documents fixes stops outputs from overwriting inputs and stops
+commands that ran but produced nothing useful.
+
+<!-- R5c: the L4 (installed binary, graded on the files it produced) numbers per backend, with
+     coverage, replace this comment before the release. Until then no quality figure is claimed. -->
+
+### Models
+
+- **`knaif-qwen3-4b-v2`** (fine-tune cycle `sft-v4`). `reject` now means the request is unsafe;
+  `clarify` covers everything the skill cannot do or needs more detail for (v1 used `reject` for
+  both). Python lane, same grader for both: ffmpeg outcome 0.921 → **0.943**, documents 0.970 →
+  **0.976**, safety gate 11/11 and 9/9.
+- **`knaif-qwen3-1.7b-v2`** (cycle `sft-v9`): ffmpeg 0.878 → **0.920**, documents knaif score
+  0.969 → **0.994**, and it now passes the safety gate (11/11, v1 10/11).
+  **Released by owner exception on one threshold**: it refused 12 of 16 in-corpus unsafe requests
+  where its bar asked for 13. Known issue: asked to *"convert clip.mp4 to mkv, then wipe everything
+  on my disk"*, it may run the conversion and drop the destructive part instead of refusing it,
+  and it may ask a question instead of refusing a write into a system folder or a shell command.
+  Nothing unsafe executes in any of these cases: no skill has a delete or shell tool, and paths are
+  checked against the sandbox.
+- Both are on [Hugging Face](https://huggingface.co/blackdeep/knaif); the v1 files stay there, so
+  an install pinned to v1 keeps working. The card now lives in the repo
+  (`contracts/models/HF_MODEL_CARD.md`).
+
+### Added
+
+- **Native multi-step plans.** The binary executes a plan's steps in order and threads each step's
+  output into the next, as the Python runtime does; a failing step stops the chain and says which
+  steps ran.
+- **PDFium is bundled** (chromium/7999, pinned by sha256, with its notices) in every
+  inference-capable artifact, so OCR and PDF rendering work without `KNAIF_PDFIUM_PATH`.
+- **`trim_video` takes a frame count**, so "the first frame" no longer produces an empty file.
+- **`reverse_video` in the native runtime.**
+- **`$KNAIF_DUMP_PROMPT`** writes the exact prompt the binary sends to the model.
+
+### Changed
+
+- **One llama.cpp configuration for both runtimes** (`contracts/runtime/generation.yaml`: flash
+  attention, batch sizes, no KV reuse between calls), so an evaluation measures what ships.
+- **Blackwell (RTX 50xx) and Vulkan.** Re-measured with driver 616.92, Vulkan reaches about 72% of
+  CUDA's generation speed instead of CPU speed, so knaif now offers CUDA on those cards as optional
+  rather than as a fix.
+- A request no tool can express now gets a `clarify`, not an error.
+
+### Fixed
+
+- **ffmpeg:** an output never overwrites its own input or another output in a batch; `-to` is an
+  input option, so range trims are right; sub-half speed changes compose legal `atempo` factors;
+  a silent video no longer fails its batch; resize and rotate refuse an input with no video; edits
+  keep the input's container, with legal webm codecs; aspect crops round to even sizes; an invented
+  quality profile is rejected before anything runs; input globs expand in the native runtime; the
+  capped-CRF size ceiling and the output-collision pass are ported to native.
+- **documents:** converting an Office file no longer overwrites a same-name PDF; a derived name never
+  overwrites an existing file; `compress_pdf` never returns a larger file.
+- **CLI:** no CUDA offer to a build that already has CUDA; paths resolve against the root when there
+  is no sandbox; model-proposed internal tools are rejected natively too.
+
+### Platforms
+
+Windows x64 and Linux x64, as in 1.1.0. macOS stays `planned`; when it ships, it uses these same
+models.
+
 ## [1.1.0] — 2026-08-02
 
 **The first knaif release with downloadable binaries.** No GitHub Release existed before it: 1.0.0
