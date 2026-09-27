@@ -658,6 +658,20 @@ def test_flash_attn_and_n_ubatch_reach_llama_when_set(tmp_path):
     assert kwargs.call_args.kwargs["n_batch"] == 8192
 
 
+def test_lora_path_reaches_llama_resolved(tmp_path):
+    """E2a (docs/plans/2026-09-26-policy-gate-and-skill-adapters.md): a skill adapter is applied
+    to the shared base at load, so an eval stanza can name one with `lora_path`."""
+    adapter = tmp_path / "skill-lora.gguf"
+    adapter.write_bytes(b"fake")
+    kwargs = _load_with(tmp_path, {"lora_path": str(adapter)})
+    assert kwargs.call_args.kwargs["lora_path"] == str(adapter)
+
+
+def test_no_lora_path_passes_none(tmp_path):
+    kwargs = _load_with(tmp_path, {"n_ctx": 8192})
+    assert kwargs.call_args.kwargs.get("lora_path") is None
+
+
 def test_unset_knobs_take_the_contract_config(tmp_path):
     """T4: the defaults are the contract's (contracts/runtime/generation.yaml), not
     llama-cpp-python's — which were what made the Python lane compute differently from native."""

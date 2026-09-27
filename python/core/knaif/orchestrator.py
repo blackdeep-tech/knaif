@@ -317,6 +317,8 @@ class InferenceOrchestrator:
         # See docs/plans/2026-09-23-inference-config-parity.md.
         flash_attn: Any = True
         n_ubatch = 512
+        # A skill LoRA applied to the shared base at load (policy-gate-and-skill-adapters E2a).
+        lora_path: str | None = None
         model_name = "custom model"
 
         verbose = self._verbose
@@ -333,6 +335,8 @@ class InferenceOrchestrator:
             n_batch = model_config.get("n_batch")
             n_ubatch = model_config.get("n_ubatch", n_ubatch)
             flash_attn = model_config.get("flash_attn", flash_attn)
+            if model_config.get("lora_path"):
+                lora_path = str(self._resolve_model_path(model_config["lora_path"]))
             model_name = model_config.get("description", "custom model")
             verbose = model_config.get("verbose", self._verbose)
         elif model_path:
@@ -376,6 +380,7 @@ class InferenceOrchestrator:
                 verbose=verbose,
                 flash_attn=bool(flash_attn),
                 n_ubatch=n_ubatch,
+                lora_path=lora_path,
             )
             if verbose:
                 print(
