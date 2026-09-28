@@ -99,18 +99,36 @@ def strip_ansi(text: str) -> str:
 _PATH_EXT = re.compile(r"\.[A-Za-z0-9]{1,4}$")
 
 
-def to_argv(line: str) -> list[str]:
-    """Tokenize one rendered command line into an argv.
+#: A backslash that separates path components — any backslash except an ffmpeg escape
+#: (`iw\,ih` in a filter, `\:` in drawtext, `\\` itself).
+_PATH_BACKSLASH = re.compile(r"\\(?![,:;'\[\]=\\])")
 
-    Backslashes are forward-slashed FIRST: on Windows Python emits `C:\\…` paths, and
-    shlex(posix=True) would otherwise consume the backslash as an escape. Forward slashes
-    are valid path separators for ffmpeg + std::path, so this is lossless for the file-path
-    domain (mirrors native's own normalize_path_separators).
+
+def _forward_path_separators(token: str) -> str:
+    """`C:\\w\\clip.mp4` -> `C:/w/clip.mp4`, leaving ffmpeg escapes (`\\,`) alone."""
+    return _PATH_BACKSLASH.sub("/", token)
+
+
+def to_argv(line: str, quoted: bool = False) -> list[str]:
+    """Tokenize one rendered command line into an argv, the way that side wrote it.
+
+    *quoted*: native's `shell_join` POSIX-quotes any token with a backslash or space and doubles
+    the backslash inside the quotes, so shlex(posix=True) recovers the exact argv. Python joins
+    the argv with spaces and escapes nothing, so its line is split with quotes honoured but
+    backslashes kept literal. Either way path separators are then forward-slashed (lossless for
+    ffmpeg + std::path), but ffmpeg's own escapes are not: the old blanket
+    `replace("\\\\", "/")` turned a filter's `iw\\,ih` into `/,` on one side and `//,` on the
+    other, and reported identical commands as port bugs (L3 2026-09-27, ffmpeg_293/294).
     """
     try:
-        return shlex.split(line.replace("\\", "/"), posix=True)
+        lexer = shlex.shlex(line, posix=True)
+        lexer.whitespace_split = True
+        if not quoted:
+            lexer.escape = ""
+        tokens = list(lexer)
     except ValueError:
         return []
+    return [_forward_path_separators(t) for t in tokens]
 
 
 def _is_ffmpeg_line(tokens: list[str]) -> bool:
@@ -272,6 +290,10 @@ class Outcome:
     dumped_plan: list[dict] = field(default_factory=list)  # command mode: the plan that ran
     text: str = ""  # clarify/reject message or error detail
     raw: str = ""  # raw stdout+stderr, for the report on mismatch
+    # Some step of the plan rendered no command ("(nothing to execute)"), so `commands` covers
+    # only part of it: Python's dry-run stops at a preview/confirmation (reverse_video) that
+    # native does not have. Its commands cannot be compared with a full render.
+    partial: bool = False
 
     def key(self, cwd: str | None = None) -> tuple:
         """Comparison key: commands/plan canonicalized; else just kind.
@@ -315,7 +337,7 @@ def _parse_native_body(stdout: str, stderr: str) -> Outcome:
         if low.startswith("reject:"):
             kind, text = "reject", s.split(":", 1)[1].strip()
             continue
-        tokens = to_argv(s)
+        tokens = to_argv(s, quoted=True)
         if _is_ffmpeg_line(tokens):
             cmds.append(tokens)
     if cmds:
@@ -348,7 +370,9 @@ def _parse_python_body(stdout: str, stderr: str) -> Outcome:
         elif "REJECT:" in s:
             kind, detail = "reject", s.split("REJECT:", 1)[1].strip()
     if cmds:
-        return Outcome("commands", cmds, raw=stdout + stderr)
+        return Outcome(
+            "commands", cmds, raw=stdout + stderr, partial="(nothing to execute)" in text
+        )
     if kind in ("clarify", "reject"):
         return Outcome(kind, text=detail, raw=stdout + stderr)
     # Python planned but its dry-run renders no ffmpeg line for compress/platform/thumbnail/
@@ -968,6 +992,17 @@ def compare(
     # limitation it was written for: every chain row would pass on its first command alone, and a
     # divergence in steps 2..n — precisely what the executor newly makes possible — would be
     # invisible. Chains now fall through to the same comparison as everything else.
+    # One side rendered only part of the plan (Python's dry-run stops at reverse_video's preview
+    # confirmation, native has none). With the same plan, the commands cannot be compared: not
+    # a port bug. With different plans it is still ordinary disagreement.
+    if native.partial or py.partial:
+        if (
+            native.dumped_plan
+            and py.dumped_plan
+            and _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
+        ):
+            return "not-comparable", "same plan; one side's dry-run renders only part of it"
+        return "mismatch", f"native={native.kind} python={py.kind} (one side partial)"
     if native.key(cwd) == py.key(cwd):
         # Equal actions, but flag when they only match after path normalization (native
         # emits relative paths, python absolute) so the representation gap stays visible.

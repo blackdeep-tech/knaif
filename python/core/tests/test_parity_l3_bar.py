@@ -93,6 +93,83 @@ def test_without_a_dump_a_mismatch_cannot_be_called_a_port_bug() -> None:
     assert status == "mismatch"
 
 
+# ── reading each side's command line the way it was written (L3 2026-09-27) ────────────────
+
+# The two renders of "crop clip.mp4 to a square" from the stopped R5c run. Both runtimes pass
+# `iw\,ih` to ffmpeg (L4 executed the row correctly on native). Native prints a POSIX-quoted
+# line (`shell_join` doubles a backslash inside quotes); Python prints the argv unquoted.
+CROP = r"crop=trunc(min(iw\,ih*1/1)/2)*2:trunc(min(ih\,iw*1/1)/2)*2"
+CROP_NATIVE = (
+    'ffmpeg -y -i clip.mp4 -vf "crop=trunc(min(iw\\\\,ih*1/1)/2)*2:trunc(min(ih\\\\,iw*1/1)/2)*2"'
+    " -c:a copy clip_resized.mp4"
+)
+CROP_PYTHON = r"ffmpeg -y -i C:\w\clip.mp4 -vf " + CROP + r" -c:a copy C:\w\clip_resized.mp4"
+CROP_PLAN = [
+    {"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "fit": "crop", "aspect": "1:1"}}
+]
+
+
+def test_an_ffmpeg_escape_survives_both_parsers() -> None:
+    """The tokenizer forward-slashed every backslash to cope with Windows paths, so the filter's
+    `\\,` became `/,` on Python's unquoted line and `//,` on native's quoted one: three rows of
+    identical commands reported as port bugs."""
+    nat = _native(CROP_NATIVE, CROP_PLAN)
+    py = _python(CROP_PYTHON, CROP_PLAN)
+    assert CROP in nat.commands[0]
+    assert CROP in py.commands[0]
+    status, _ = pc.compare(_row(), nat, py, strict=False, cwd="C:/w")
+    assert status == "match"
+
+
+def test_a_windows_path_is_still_forward_slashed() -> None:
+    assert pc.to_argv(r"ffmpeg -i C:\w\sub\clip.mp4 out.mp4") == [
+        "ffmpeg",
+        "-i",
+        "C:/w/sub/clip.mp4",
+        "out.mp4",
+    ]
+    assert pc.to_argv('ffmpeg -i "C:\\\\w\\\\clip.mp4" out.mp4', quoted=True) == [
+        "ffmpeg",
+        "-i",
+        "C:/w/clip.mp4",
+        "out.mp4",
+    ]
+
+
+CHAIN_PLAN = [
+    {"tool": "trim_video", "args": {"input": "clip.mp4", "start": "00:00:01", "end": "00:00:06"}},
+    {"tool": "reverse_video", "args": {"inputs": ["clip_trimmed.mp4"]}},
+]
+TRIM = "ffmpeg -y -ss 00:00:01 -to 00:00:06 -i clip.mp4 -c:v libx264 clip_trimmed.mp4"
+REVERSE = "ffmpeg -y -i clip_trimmed.mp4 -vf reverse clip_trimmed_reversed.mp4"
+
+
+def _python_partial_chain(plan: list[dict]):
+    """Python's dry-run of trim -> reverse: reverse stops at its preview/confirmation."""
+    out = (
+        "  • trim from 00:00:01 to 00:00:06 from clip.mp4\n"
+        f"    $ {TRIM}\n    dry-run\n"
+        "  • reverse clip_trimmed.mp4\n    (nothing to execute)\n    dry-run\n"
+    )
+    return pc.parse_python(out, _dump(plan))
+
+
+def test_a_chain_python_renders_only_in_part_is_not_comparable_when_the_plans_agree() -> None:
+    """ffmpeg_140: Python rendered the trim and printed "(nothing to execute)" for the reverse
+    (its dry-run stops at the preview confirmation); native rendered both. The same plan with
+    one side's commands cut short is not a port bug."""
+    nat = _native(TRIM + "\n" + REVERSE, CHAIN_PLAN)
+    status, _ = pc.compare(_row(), nat, _python_partial_chain(CHAIN_PLAN), strict=False, cwd="/w")
+    assert status == "not-comparable"
+
+
+def test_a_partial_python_chain_with_a_different_plan_is_still_disagreement() -> None:
+    other = [CHAIN_PLAN[0]]
+    nat = _native(TRIM + "\n" + REVERSE, CHAIN_PLAN)
+    status, _ = pc.compare(_row(), nat, _python_partial_chain(other), strict=False, cwd="/w")
+    assert status == "mismatch"
+
+
 def _counts(**over: int) -> dict[str, int]:
     base = {
         "match": 95,
