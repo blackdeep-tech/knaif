@@ -13,8 +13,29 @@ and first run downloads the new default. Multi-step plans now execute in the nat
 a long list of ffmpeg and documents fixes stops outputs from overwriting inputs and stops
 commands that ran but produced nothing useful.
 
-<!-- R5c: the L4 (installed binary, graded on the files it produced) numbers per backend, with
-     coverage, replace this comment before the release. Until then no quality figure is claimed. -->
+**Measured on the shipped binary.** Every number below comes from the packaged 1.2.0 binary
+running each request in a fresh process, executing for real and graded on the files it produced:
+ffmpeg 861 and documents 164 requests, complete coverage, the safety gate re-run on the binary.
+Each backend is accepted against the bar on its own (the model's floor, and its Python score
+minus 0.02, on outcome and knaif score, plus every required capability slice).
+
+| Model | OS · backend | ffmpeg outcome / knaif | documents outcome / knaif | Safety gate | Verdict |
+|---|---|---|---|---|---|
+| `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+<!-- R5c pending: 1.7B Windows CPU (T10); Linux CUDA and CPU for both models (T14, T15); the
+     release date in the heading. Fill before the release; remove this comment. -->
+
+Measured 2026-09-28 on an RTX 5080. The native and Python runtimes agree on every corpus request
+where both planned the same thing (0 port bugs; 0.00% ffmpeg and 0.70% documents plan disagreement,
+both models). The Windows installer was checked in a clean VM: an upgrade from 1.1.0 is refused
+while the CLI runs, then happens in place, and OCR works with the bundled PDFium.
+¹ Composed: the CUDA cell's results where the CPU plan was shown to match, and a real CPU run for
+the 60 ffmpeg and 4 documents requests where it did not.
+² See *Known issues*.
 
 ### Models
 
@@ -66,6 +87,27 @@ commands that ran but produced nothing useful.
   overwrites an existing file; `compress_pdf` never returns a larger file.
 - **CLI:** no CUDA offer to a build that already has CUDA; paths resolve against the root when there
   is no sandbox; model-proposed internal tools are rejected natively too.
+- **Native asks instead of guessing a file.** When the model names an input the request never
+  mentioned (e.g. "mov" for "convert the mov"), the native binary now asks which file was meant,
+  as the Python runtime does, instead of failing with "input not found". A clarifying question in
+  one step of a plan now ends the plan; the native binary used to run the next step on a file the
+  first never produced.
+
+### Known issues
+
+- **`knaif-qwen3-1.7b-v2` on Vulkan, ffmpeg batch requests:** one short of its bar (25 of 29 where
+  26 are required). The difference from CUDA is a single Chinese request ("批量将所有视频转换为HEVC",
+  batch-convert every video to HEVC), where Vulkan asks a question instead of planning the
+  conversion. Released by owner decision; CUDA and the 4B model clear the bar.
+- **`knaif-qwen3-1.7b-v2` and unsafe chained requests** (see *Models*): it may drop the destructive
+  half of a request instead of refusing it. Nothing unsafe runs.
+- **Native only, fixed in 1.2.1; none affects the evaluated corpora:**
+  - a password containing a backslash is asked for again instead of accepted;
+  - a rare combining character (Unicode Other_Alphabetic, e.g. U+0345) right after a file name
+    stops that name from being recognized;
+  - declining the confirmation of one step lets the next step run (the Python runtime stops), and
+    `reverse_video` has no preview before confirmation. Interactive use only; `--yes` is unaffected;
+  - a file name ending in a dot (`clip.`) follows Python 3.14's rule, where Python 3.10–3.13 differ.
 
 ### Platforms
 

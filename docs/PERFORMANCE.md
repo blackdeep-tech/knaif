@@ -22,7 +22,7 @@ Last measured 2026-07-14 (Qwen3-4B q4_k_m, ffmpeg skill prompt of **3938 tokens*
 generation, `n_ctx = 8192`, fresh process, median of warm reps). **Linux CUDA payload added
 2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`. **`5080` backends
 re-measured 2026-09-25** (§2) — `knaif-qwen3-4b-v2`, the ffmpeg prompt at its current 2441 tokens,
-driver 616.92.
+driver 616.92. **v2 end-to-end on the shipped binary added 2026-09-28** (§5).
 
 ---
 
@@ -276,6 +276,32 @@ Quality is machine-independent; speed is not. Distilled from
 - **1.7B-Q6 = the speed pick.** ~2.5 pt behind on full ffmpeg, 1 GB smaller, **~2× faster on both
   machines** (the ratio is hardware-invariant) — the better interactive default on the `3070L`.
 - **Gemma3-4B is not competitive** — worse quality *and* ~4× slower. Qwen3 is the base; settled.
+
+### v2 on the shipped path — `5080`, **2026-09-28** (knaif 1.2.0 release candidate)
+
+The packaged Windows binary, one **fresh process per request** executing for real (process start,
+model load, planning and the tool's own work all inside the wall time), RTX 5080,
+driver 616.92, 8 CPU threads. Quality is `success`-graded at complete coverage (ffmpeg 861,
+documents 164). Wall time is per request with a produced file (`time_to_artifact_ms`), p50 / p95.
+Source: `evals/runs/2026-09-28_r5c-windows_success` (T8, T9).
+
+| Model | Backend | ffmpeg outcome / knaif | documents outcome / knaif | ffmpeg p50 / p95 | documents p50 / p95 |
+|---|---|---:|---:|---:|---:|
+| `knaif-qwen3-4b-v2` | CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 2.8 s / 5.2 s | 1.9 s / 2.2 s |
+| `knaif-qwen3-4b-v2` | Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 3.3 s / 5.9 s | 2.4 s / 2.8 s |
+| `knaif-qwen3-4b-v2` | CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | — | — |
+| `knaif-qwen3-1.7b-v2` | CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 2.1 s / 4.2 s | 1.4 s / 1.7 s |
+| `knaif-qwen3-1.7b-v2` | Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 2.6 s / 5.0 s | 1.9 s / 2.2 s |
+<!-- R5c pending: 1.7B CPU (T10) and the Linux cells (T14/T15, `5080-WSL`). -->
+
+¹ Composed from the CUDA cell and a CPU re-run of the 64 requests whose CPU plan differs, so it has
+no whole-corpus wall time; the per-phase CPU figure above (§2, ~8.8 s inference) is the one to quote.
+
+- **These are end-to-end numbers, not inference numbers.** §2's 0.42 s (4B, CUDA) is inference
+  alone; a cold CLI request adds process start, backend and model load (~1 s on the `5080`, §2)
+  and the tool's own work. documents, where the tool work is light, sits in a narrow band
+  (p50 to p95 within ~0.4 s); ffmpeg's wider spread follows the encodes.
+- **The 1.7B is ~0.5–0.7 s faster per request on the same GPU**, at 2 points of ffmpeg outcome.
 
 ---
 

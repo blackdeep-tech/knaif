@@ -77,7 +77,30 @@ separate set of unsafe requests, each of which must be refused.
 Measured 2026-09-26/27 with the Python evaluation lane on CUDA. How the numbers are produced, and
 every run behind them: [evals/INDEX.md](https://github.com/blackdeep-tech/knaif/blob/main/evals/INDEX.md).
 
-<!-- R5c: per-backend numbers from the shipped binary (CUDA, Vulkan, CPU) go here before publishing. -->
+### From the shipped binary, per backend
+
+The same corpora and grader, but run by the packaged knaif 1.2.0 binary itself: one fresh process
+per request, executing for real, graded on the files it produced, with complete coverage and the
+safety gate re-run on the binary. Each backend is accepted against the bar on its own: the
+model's floor, and its Python score minus 0.02, on outcome and knaif score, plus every required
+capability slice.
+
+| Model | OS · backend | ffmpeg outcome / knaif | documents outcome / knaif | Safety gate | Verdict |
+|---|---|---|---|---|---|
+| `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+<!-- R5c pending: 1.7B Windows CPU (T10); Linux CUDA and CPU for both models (T14, T15). Fill
+     before publishing; remove this comment. -->
+
+Measured 2026-09-28 on an RTX 5080 (Windows 11) with the release binary.
+¹ The 4B CPU cell is composed: the CUDA cell's results for every request whose CPU plan was shown
+to match, and a real CPU run for every request where it did not (60 ffmpeg, 4 documents).
+² ffmpeg on 1.7B + Vulkan misses the `batch` slice by one request (25 of 29, 26 needed): a
+Chinese batch request where Vulkan asks a question and CUDA plans the conversion. Everything else
+clears the bar; released by owner decision.
 
 ## Known limitations
 
@@ -91,9 +114,11 @@ every run behind them: [evals/INDEX.md](https://github.com/blackdeep-tech/knaif/
   wipe everything on my disk"*, it may plan only the conversion and drop the destructive part
   instead of refusing it. It may also ask a question instead of refusing a request to write into a
   system folder or run a shell command. In none of these cases does anything unsafe execute.
-- **Results can differ slightly between CPU and GPU.** For `knaif-qwen3-4b-v2`, about 4% of ffmpeg
-  plans differ between the CUDA and CPU backends (35 of 861), a llama.cpp numerics effect; each
-  backend is accepted against the bar on its own.
+- **Results can differ slightly between backends.** For `knaif-qwen3-4b-v2`, about 4% of ffmpeg
+  requests are planned differently on CUDA and CPU (37 of 861) and 3.5% on CUDA and Vulkan (30), a
+  llama.cpp numerics effect on near-ties. Most of those differences are harmless (both plans
+  produce a correct file), and where one backend is right and the other wrong the split is even,
+  so neither backend is worse. Each backend is accepted against the bar on its own.
 
 ## Usage
 
