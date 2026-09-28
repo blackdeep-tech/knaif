@@ -1015,6 +1015,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         sandbox=lane_sandbox,
         limit=args.limit,
         verbose=args.verbose,
+        only=load_only(getattr(args, "only", None)),
     )
     scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, lane_sandbox)
 
@@ -1718,27 +1719,77 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         "native_binary": current.get("binary_sha256"),
         "policy": str(current["scoring_policy"]) if current.get("scoring_policy") else None,
     }
-    path = record_layers(
-        args.skill,
-        Path.cwd(),
-        {
-            "L4": {
-                "cell": cell,
-                "evidence": run_evidence,
-                "run": str(current_path),
-                "summary": report.summary().splitlines()[0],
-                "passed": report.ok,
-                "coverage": current.get("coverage"),
-                "outcome_accuracy": current.get("outcome_accuracy"),
-                "avg_knaif_score": current.get("avg_knaif_score"),
-                "lane": current.get("lane"),
-                "model": current.get("backend_public_name"),
-            }
-        },
+    entry = l4_record_entry(
+        current,
+        current_path,
+        summary=report.summary().splitlines()[0],
+        passed=report.ok,
+        cell=cell,
+        evidence=run_evidence,
     )
+    if entry.get("composed"):
+        print(f"  COMPOSED cell (not a full run): {entry['composed_from']}")
+    path = record_layers(args.skill, Path.cwd(), {"L4": entry})
     print(f"  recorded L4 evidence: {path}")
     if not report.ok:
         sys.exit(1)
+
+
+def load_only(path: str | None) -> set[tuple[str, int]] | None:
+    """`native --only FILE`: the `(id, utterance_idx)` pairs to run, or None for all."""
+    if not path:
+        return None
+    pairs = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {(str(rid), int(idx)) for rid, idx in pairs}
+
+
+def cmd_compose(args: argparse.Namespace) -> None:
+    """Compose an L4 cell: a measured board with another run's rows swapped in (R5c reuse)."""
+    from .compose import compose_cell
+    from .report import save_scoreboard_json
+
+    base = json.loads(Path(args.base).read_text(encoding="utf-8"))
+    replacements = json.loads(Path(args.replace).read_text(encoding="utf-8"))
+    board = compose_cell(
+        base,
+        replacements,
+        sources={"base": str(args.base), "replacements": str(args.replace), "note": args.note},
+    )
+    save_scoreboard_json(redact_local_paths(board), Path(args.out))
+    print(
+        f"composed {board['total']} rows ({len(board['composed_from']['replaced_rows'])} replaced)"
+        f" -> {args.out}: outcome {board['outcome_accuracy']:.4f}, knaif "
+        f"{board['avg_knaif_score'] if board['avg_knaif_score'] is None else round(board['avg_knaif_score'], 4)}"
+    )
+
+
+def l4_record_entry(
+    current: dict[str, Any],
+    current_path: Path,
+    *,
+    summary: str,
+    passed: bool,
+    cell: str,
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """The L4 cell entry `accept-native` files. A composed board (`evalsuite.compose`) carries
+    `composed` and its sources into the record, so reused evidence is never read as a full run."""
+    entry: dict[str, Any] = {
+        "cell": cell,
+        "evidence": evidence,
+        "run": str(current_path),
+        "summary": summary,
+        "passed": passed,
+        "coverage": current.get("coverage"),
+        "outcome_accuracy": current.get("outcome_accuracy"),
+        "avg_knaif_score": current.get("avg_knaif_score"),
+        "lane": current.get("lane"),
+        "model": current.get("backend_public_name"),
+    }
+    if current.get("composed"):
+        entry["composed"] = True
+        entry["composed_from"] = current.get("composed_from")
+    return entry
 
 
 def cmd_regression(args: argparse.Namespace) -> None:
@@ -2160,6 +2211,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Safety-corpus result JSON ({total, pass_rate}); omitting it fails the bar",
     )
 
+    # compose — a reused L4 cell (release plan R5c): a measured board + another run's rows
+    p_comp = sub.add_parser(
+        "compose",
+        help="Compose an L4 cell from a measured board and rows measured elsewhere (marked composed)",
+        description=(
+            "The base board's rows, with --replace's rows swapped in by (id, utterance_idx), "
+            "re-aggregated by the same code as a measured run. The cell takes the replacement "
+            "run's backend, OS and binary, and is marked `composed` with its sources, which "
+            "`accept-native` records. Use only under a reuse rule written before the run."
+        ),
+    )
+    p_comp.add_argument("--base", required=True, metavar="FILE", help="The measured cell's board")
+    p_comp.add_argument(
+        "--replace", required=True, metavar="FILE", help="The rows measured elsewhere"
+    )
+    p_comp.add_argument("--out", required=True, metavar="FILE")
+    p_comp.add_argument("--note", required=True, help="Which reuse rule this composition applies")
+
     # accept-native — L4d, the only check that can buy `supported`
     p_accn = sub.add_parser(
         "accept-native",
@@ -2252,6 +2321,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_nat.add_argument("--sandbox", default=None)
     p_nat.add_argument("--fixture-dir", default=None, dest="fixture_dir")
     p_nat.add_argument("--limit", type=int, default=None)
+    p_nat.add_argument(
+        "--only",
+        default=None,
+        metavar="FILE",
+        help="JSON list of [id, utterance_idx] to run, indices kept (a pre-drawn sample, or the "
+        "rows a composed cell re-grades). Not an acceptance run on its own: see `compose`.",
+    )
     p_nat.add_argument("--save", default=None, metavar="DIR")
     p_nat.add_argument("--verbose", action="store_true")
     p_nat.add_argument(
@@ -2454,6 +2530,7 @@ def main() -> None:
         "retrieval": cmd_retrieval,
         "accept": cmd_accept,
         "accept-native": cmd_accept_native,
+        "compose": cmd_compose,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,
