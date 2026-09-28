@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -60,7 +61,7 @@ class LayerState:
     """
 
     layer: str
-    state: str  # "valid" | "failing" | "stale" | "pending"
+    state: str  # "valid" | "excepted" | "failing" | "stale" | "pending"
     detail: str = ""
 
 
@@ -280,6 +281,14 @@ def _layer_state(
     # evidence would let a status rest on a measurement that said "no" — the exact substitution
     # of "we ran it" for "it passed" this gate exists to prevent.
     if entry.get("passed") is False:
+        waiver = _waiver_that_holds(entry)
+        if waiver is not None:
+            return LayerState(
+                layer,
+                "excepted",
+                f"{entry.get('summary')} — owner exception {waiver.get('date')}: "
+                f"{waiver.get('reason')}{note}",
+            )
         return LayerState(
             layer,
             "failing",
@@ -289,8 +298,61 @@ def _layer_state(
 
 
 #: When cells disagree, the layer reads as its worst cell. A failure outranks staleness, which
-#: outranks absence: each is a stronger statement about why the claim cannot stand.
-_SEVERITY = ("failing", "stale", "pending", "valid")
+#: outranks absence: each is a stronger statement about why the claim cannot stand. An owner's
+#: exception ranks just below a clean pass: it supports the claim, and it is always printed.
+_SEVERITY = ("failing", "stale", "pending", "excepted", "valid")
+
+#: The only thresholds an owner may waive: quality (an aggregate or a capability slice). Safety
+#: is never lowered, and an identity violation (wrong model, verifier, policy, coverage) means the
+#: run did not measure the thing at all, so there is nothing to accept.
+WAIVABLE_KINDS = frozenset({"aggregate", "slice"})
+
+
+def _unmet_kinds(summary: str) -> list[str]:
+    """The kinds a recorded verdict names (`[slice] ...`), in order; empty if it names none."""
+    return re.findall(r"\[(\w+)\]", summary)
+
+
+def _waiver_that_holds(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """The cell's owner exception, if it still applies: given for THIS verdict (its text quoted
+    verbatim, so a re-run's different miss is not covered), with a reason, over quality
+    thresholds only. Checked here too, not only when written, since the record is a file."""
+    waiver = entry.get("owner_exception")
+    summary = str(entry.get("summary") or "")
+    if not isinstance(waiver, dict) or waiver.get("waives") != summary:
+        return None
+    kinds = _unmet_kinds(summary)
+    if not kinds or not set(kinds) <= WAIVABLE_KINDS or not str(waiver.get("reason") or "").strip():
+        return None
+    return waiver
+
+
+def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, date: str) -> Path:
+    """Record the owner's decision to ship a cell that failed a quality threshold.
+
+    The verdict stays as measured (`passed: false`, its summary); the waiver sits beside it and
+    quotes the verdict it answers. Re-recording the cell replaces the whole entry, so a new
+    verdict needs a new decision. Refuses anything the gate would not honour.
+    """
+    record = load_acceptance_record(skill, root)
+    cells = (((record or {}).get("layers") or {}).get(layer) or {}).get("cells") or {}
+    entry = cells.get(cell)
+    if not isinstance(entry, dict) or entry.get("passed") is not False:
+        raise ValueError(f"{skill} {layer} {cell}: only a recorded failing verdict can be waived")
+    summary = str(entry.get("summary") or "")
+    kinds = _unmet_kinds(summary)
+    if not kinds or not set(kinds) <= WAIVABLE_KINDS:
+        raise ValueError(
+            f"{skill} {layer} {cell}: {summary!r} is not waivable; only "
+            f"{sorted(WAIVABLE_KINDS)} thresholds are, and the verdict must name them"
+        )
+    if not reason.strip():
+        raise ValueError("a waiver needs the reason for the decision")
+    entry["owner_exception"] = {"date": date, "reason": reason.strip(), "waives": summary}
+    path = root / ACCEPTANCE_DIR / f"{skill}.json"
+    record = redact_local_paths(record, root=root)
+    path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
 
 
 def _cells_state(
@@ -362,7 +424,7 @@ def evaluate_skill(
         )
         for name in all_layers
     ]
-    valid = {s.layer for s in states if s.state == "valid"}
+    valid = {s.layer for s in states if s.state in ("valid", "excepted")}
 
     derived = "in-progress"
     for status in STATUS_ORDER:

@@ -1080,6 +1080,34 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     return scoreboard
 
 
+#: How `gate` prints each layer state. EXCEPTED is not `ok`: an owner's exception supports the
+#: claim, and it must stay visible every time the gate runs.
+GATE_MARKS = {
+    "valid": "ok",
+    "excepted": "EXCEPTED",
+    "failing": "FAIL",
+    "stale": "STALE",
+    "pending": "-",
+}
+
+
+def cmd_waive(args: argparse.Namespace) -> None:
+    """Record the owner's exception for one failing cell (quality thresholds only)."""
+    from datetime import date as _date
+
+    from .gate import waive_cell
+
+    date = args.date or _date.today().isoformat()
+    try:
+        path = waive_cell(
+            args.skill, Path.cwd(), args.layer, args.cell, reason=args.reason, date=date
+        )
+    except ValueError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        sys.exit(2)
+    print(f"  owner exception recorded for {args.skill} {args.layer} {args.cell}: {path}")
+
+
 def cmd_gate(args: argparse.Namespace) -> None:
     """G1/G2: check (or record) that each skill's declared native status has evidence."""
     from .gate import (
@@ -1133,10 +1161,7 @@ def cmd_gate(args: argparse.Namespace) -> None:
             continue
         native_bin = Path(args.native_bin) if getattr(args, "native_bin", None) else None
         gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
-        marks = "  ".join(
-            f"{s.layer}:{ {'valid': 'ok', 'failing': 'FAIL', 'stale': 'STALE', 'pending': '-'}[s.state] }"
-            for s in gate.layers
-        )
+        marks = "  ".join(f"{s.layer}:{GATE_MARKS[s.state]}" for s in gate.layers)
         print(f"  {skill:<12} declared={declared:<12} evidence={gate.derived:<12} {marks}")
         for state in gate.layers:
             if state.detail and state.state != "valid":
@@ -2454,6 +2479,18 @@ def build_parser() -> argparse.ArgumentParser:
         "measured THIS binary; without it the gate reports the binary as not checked.",
     )
 
+    # waive — the owner's exception to one failing cell
+    p_waive = sub.add_parser(
+        "waive",
+        help="Record the owner's decision to ship a cell that failed a quality threshold "
+        "(the verdict stays failing; `gate` prints it as EXCEPTED)",
+    )
+    p_waive.add_argument("--skill", required=True)
+    p_waive.add_argument("--cell", required=True, help="model|os|backend, as `gate` prints it")
+    p_waive.add_argument("--layer", default="L4")
+    p_waive.add_argument("--reason", required=True, help="why the owner accepts it")
+    p_waive.add_argument("--date", default=None, help="the decision's date (default: today)")
+
     # regression
     p_reg = sub.add_parser("regression", help="Check current results against snapshot")
     p_reg.add_argument("--skill", default=None)
@@ -2612,6 +2649,7 @@ def main() -> None:
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,
+        "waive": cmd_waive,
     }
     dispatch[args.command](args)
 
