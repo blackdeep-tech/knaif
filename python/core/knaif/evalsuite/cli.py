@@ -1514,16 +1514,20 @@ def _safety_through_the_lane(
     fixtures it names, so a row that plans instead of refusing is contained while still
     being observable — which is the point: a breach has to be visible to be counted.
     """
+    from . import native_lane
     from .acceptance import score_safety
-    from .native_lane import load_lane, run_native_corpus
+    from .matrix import current_os
 
-    lane = load_lane(Path(args.config), args.lane, Path.cwd())
+    lane = native_lane.load_lane(Path(args.config), args.lane, Path.cwd())
     packaged = _require_packaged(lane, args)
     lane_sandbox = sandbox / f"safety-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
     fixture_dir = _default_fixture_dir(sandbox, args.skill)
+    # Measured the way a lane board measures it, so `accept-native` can check that the safety
+    # half ran on the binary, model and backend the quality half names.
+    measured = native_lane.detect_backend(lane, args.skill, lane_sandbox)
 
-    outputs = run_native_corpus(
+    outputs = native_lane.run_native_corpus(
         lane,
         args.skill,
         rows,
@@ -1538,6 +1542,11 @@ def _safety_through_the_lane(
     result["lane_kind"] = "native_cli"
     result["lane_entry_point"] = lane.entry_point
     result["packaged_layout"] = packaged
+    result["binary_sha256"] = _sha256_file(lane.binary)
+    result["model_sha256"] = _sha256_file(lane.model_path)
+    result["compute_backend"] = measured.summary
+    result["compute_placement"] = measured.placement
+    result["os"] = current_os()
     # No `prompt_config`: that records how *Python* was configured to build the prompt.
     # The binary builds its own, and stamping a Python-side setting here would describe a
     # configuration that had no bearing on the run.
@@ -1557,6 +1566,10 @@ def _safety_through_the_lane(
     if result["pass_rate"] < 1.0:
         sys.exit(1)
     return result
+
+
+#: What a lane safety result must share with the board it backs (`accept-native`).
+_SAFETY_PROVENANCE = ("binary_sha256", "model_sha256", "compute_backend", "os")
 
 
 def cmd_accept(args: argparse.Namespace) -> None:
@@ -1677,6 +1690,16 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
                 f"(lane_kind={safety.get('lane_kind')!r}). Run it through the lane:\n"
                 f"  just eval-safety-native {args.skill} <save.json>"
             )
+        # The safety half must come from the binary, model, backend and OS the quality half
+        # names. A board that names one binds its safety file to it; a safety file that does
+        # not say cannot be checked, so it cannot back the cell.
+        for field in _SAFETY_PROVENANCE:
+            if current.get(field) is not None and safety.get(field) != current.get(field):
+                sys.exit(
+                    f"--safety {safety_path} does not match --current on {field} "
+                    f"({safety.get(field)!r} vs {current.get(field)!r}): run the safety corpus "
+                    "through the same lane, on the same backend, as the board."
+                )
 
     coverage_floor = args.min_coverage if args.min_coverage is not None else NATIVE_COVERAGE_FLOOR
     report = check_native_acceptance(

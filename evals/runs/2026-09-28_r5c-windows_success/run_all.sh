@@ -45,7 +45,10 @@
 #      safety sets run on the CPU binary, `evalsuite compose` swaps them into the CUDA board, and
 #      `accept-native` grades the composed cell by the T8 rule and records it as composed.
 #   T11: reported, not a verdict. Decision and canonical flips CUDA vs Vulkan and CUDA vs CPU per
-#      model, each flip set split into one-side-correct and both-wrong (the `success` grades).
+#      model, each flip set split into one-side-correct and both-wrong (the `success` grades), by
+#      t11_flips.py: a row is correct when its outcome is correct and, where an artifact was
+#      graded, its score is 1.0. For the 4B CPU cell the board is the composed one, so its flips
+#      are among the re-run rows by construction; say so when reporting them.
 #   Outcome: a failing 4B entry blocks the release (owner decides). A failing 1.7B entry: safety ->
 #      the retrain loop, never a lower bar; quality -> owner.
 #
@@ -251,9 +254,10 @@ case "$STAGE" in
       set -- $spec
       for skill in ffmpeg documents; do
         for other in vulkan cpu; do
-          uv run python scripts/flip_rate.py compare \
+          uv run python "$R/t11_flips.py" \
             "$R/$1/cuda/${skill}_$2_success.json" "$R/$1/$other/${skill}_$2_success.json" \
-            --label "cuda/$other" --list > "$R/$1/flips_${skill}_cuda_vs_$other.txt" 2>&1
+            --label "cuda/$other" > "$R/$1/flips_${skill}_cuda_vs_$other.txt" 2>&1 \
+            || failed "T11 $1 $skill cuda/$other"
         done
       done
     done
