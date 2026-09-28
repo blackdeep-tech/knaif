@@ -81,12 +81,44 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def _without_native_status_claim(text: str) -> str:
+    """`skill.yaml` with the value of `runtimes.native.status` masked.
+
+    That value is the claim the evidence justifies (`in-progress` / `parity` / `supported`);
+    nothing reads it at run time. Hashed, flipping it to `supported` after R5c staled every L3/L4
+    record that justified the flip, so no skill could reach the one release-eligible status. Only
+    that line is masked: a top-level `status:` (which hides a skill from discovery) still counts.
+    """
+    out: list[str] = []
+    in_runtimes = in_native = False
+    native_indent = -1
+    for line in text.split("\n"):
+        stripped = line.lstrip(" ")
+        indent = len(line) - len(stripped)
+        if stripped and not stripped.startswith("#"):
+            if indent == 0:
+                in_runtimes = stripped.startswith("runtimes:")
+                in_native = False
+            elif in_runtimes and stripped.startswith("native:"):
+                in_native, native_indent = True, indent
+            elif in_native and indent <= native_indent:
+                in_native = False
+            elif in_native and stripped.startswith("status:"):
+                line = " " * indent + "status: <claim>"
+        out.append(line)
+    return "\n".join(out)
+
+
 def _sha256_source(path: Path) -> str:
     """Hash of a source file as git stores it: CRLF folded to LF. A Windows checkout
     (`core.autocrlf=true`) holds CRLF where git and Linux CI hold LF, and a freshly written file
     is LF until git next touches it, so raw bytes made one commit fingerprint differently per
-    machine and evidence recorded on one read as stale on another. Binaries use `_sha256_file`."""
-    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+    machine and evidence recorded on one read as stale on another. Binaries use `_sha256_file`.
+    A skill's `skill.yaml` is hashed without its native status claim (see above)."""
+    data = path.read_bytes().replace(b"\r\n", b"\n")
+    if path.name == "skill.yaml":
+        data = _without_native_status_claim(data.decode("utf-8")).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
 
 
 def _sha256_tree(root: Path, patterns: tuple[str, ...]) -> str:

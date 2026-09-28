@@ -166,6 +166,53 @@ def test_the_verifier_implementation_is_hashed_not_its_name(tree: Path) -> None:
     assert "stale" in states
 
 
+SKILL_YAML = (
+    "name: demo\n"
+    "status: active\n"
+    "runtimes:\n"
+    "  python:\n"
+    "    handlers: h.Demo\n"
+    "  native:\n"
+    "    status: in-progress\n"
+    "    crate: knaif-skill-demo\n"
+    "recommended_model: m-v1\n"
+)
+
+
+def test_the_native_status_claim_is_not_evidence(tree: Path) -> None:
+    """`runtimes.native.status` is the claim the evidence justifies, and it sat inside the bundle
+    fingerprint: flipping it to `supported` after R5c staled every L3/L4 record that justified the
+    flip, so a skill could never reach the only release-eligible status. Nothing reads it at run
+    time, so it is left out of the hash; every other line still counts."""
+    skill = tree / "skills" / "demo" / "skill.yaml"
+    skill.write_text(SKILL_YAML, encoding="utf-8")
+    before = evidence_tuple("demo", tree)["bundle"]
+
+    skill.write_text(
+        SKILL_YAML.replace("    status: in-progress", "    status: supported"), "utf-8"
+    )
+    assert evidence_tuple("demo", tree)["bundle"] == before
+
+    for old, new in (
+        ("status: active", "status: stale"),  # top-level: hides the skill from discovery
+        ("crate: knaif-skill-demo", "crate: other"),
+        ("recommended_model: m-v1", "recommended_model: m-v2"),
+    ):
+        skill.write_text(SKILL_YAML.replace(old, new), encoding="utf-8")
+        assert evidence_tuple("demo", tree)["bundle"] != before, f"{old} -> {new} must count"
+
+
+def test_claiming_supported_after_the_evidence_keeps_it_valid(tree: Path) -> None:
+    skill = tree / "skills" / "demo" / "skill.yaml"
+    skill.write_text(SKILL_YAML, encoding="utf-8")
+    _record_all(tree)
+    skill.write_text(
+        SKILL_YAML.replace("    status: in-progress", "    status: supported"), "utf-8"
+    )
+    gate = evaluate_skill("demo", tree, "supported")
+    assert gate.derived == "supported", [(s.layer, s.state) for s in gate.layers]
+
+
 def test_line_endings_do_not_change_the_evidence(tree: Path) -> None:
     """A Windows checkout (`core.autocrlf=true`) holds CRLF where git and Linux CI hold LF, and a
     freshly written file is LF until git next touches it. Hashing raw bytes made the same commit
