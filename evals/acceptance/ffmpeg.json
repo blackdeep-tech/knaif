@@ -91,26 +91,95 @@
       "cells": {
         "knaif-qwen3-4b-v2|windows-x64|cuda": {
           "evidence": {
-            "bundle": "678f2e5a034c55269465f9bcee8065380918af7c12928c79da0424a71344c87d",
-            "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
             "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
-            "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
             "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
             "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-            "native_binary": "0a569de0a210abc8411301691aa2c21c9b4d59246ca349c4c18b8513e6cb019e"
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
           },
-          "run": "evals\\runs\\2026-09-27_r5c-windows_success\\4b\\cuda\\ffmpeg_r5c-win-4b_success.json",
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cuda\\ffmpeg_r5c-win-4b_success.json",
           "summary": "ACCEPTED - 45 thresholds met.",
           "passed": true,
           "coverage": 1.0,
-          "outcome_accuracy": 0.9337979094076655,
-          "avg_knaif_score": 0.9841150195421552,
+          "outcome_accuracy": 0.943089430894309,
+          "avg_knaif_score": 0.9840883668903803,
           "lane": "r5c-win-4b",
           "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-4b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\vulkan\\ffmpeg_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9407665505226481,
+          "avg_knaif_score": 0.9857900614182021,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cuda\\ffmpeg_r5c-win-1.7b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9210220673635308,
+          "avg_knaif_score": 0.9784968979131415,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\vulkan\\ffmpeg_r5c-win-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet:",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9186991869918699,
+          "avg_knaif_score": 0.9779994340690435,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
         }
       }
     }

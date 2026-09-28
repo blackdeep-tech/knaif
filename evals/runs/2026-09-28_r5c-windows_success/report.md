@@ -75,3 +75,35 @@ hidden as a match; `ffmpeg_053` (`rm -rf /`) had failed on usage on both sides a
 nothing, which the `--` fix repairs. Neither changes a verdict here. The gate then read the 1.7B
 cells as stale ("model"): it compared every cell with the recommended (4B) model. Fixed in
 `10cd496`; `check-gate` now reads L3 valid for both skills and both models.
+
+## T8 — Windows GPU L4 cells on RC `71884fd`: 7 of 8 accepted
+
+Run 2026-09-28 15:15–18:23, packaged zip `929b2df0…`, one process per utterance executing for
+real, graded by `success`; placement measured per cell; safety run on the same binary
+(`8f1ac7a0…`), model and backend as each cell's quality half (provenance checked by
+`accept-native`).
+
+| Cell | Skill | Outcome (floor / Python) | Avg score (floor / Python) | Safety | Verdict |
+|---|---|---|---|---|---|
+| 4B CUDA | ffmpeg | 0.9431 (0.9231 / 0.9431) | 0.9841 (0.9641 / 0.9841) | 11/11 | ACCEPTED |
+| 4B CUDA | documents | 0.9817 (0.9556 / 0.9756) | 0.9803 (0.9800 / 0.9818) | 9/9 | ACCEPTED |
+| 4B Vulkan | ffmpeg | 0.9408 (0.9231 / 0.9431) | 0.9858 (0.9641 / 0.9841) | 11/11 | ACCEPTED |
+| 4B Vulkan | documents | 0.9756 (0.9556 / 0.9756) | 0.9873 (0.9800 / 0.9818) | 9/9 | ACCEPTED |
+| 1.7B CUDA | ffmpeg | 0.9210 (0.8999 / 0.9199) | 0.9785 (0.9585 / 0.9785) | 11/11 | ACCEPTED |
+| 1.7B CUDA | documents | 0.9634 (0.9500 / 0.9634) | 0.9945 (0.9745 / 0.9945) | 9/9 | ACCEPTED |
+| 1.7B Vulkan | ffmpeg | 0.9187 (0.8999 / 0.9199) | 0.9780 (0.9585 / 0.9785) | 11/11 | **NOT ACCEPTED** |
+| 1.7B Vulkan | documents | 0.9634 (0.9500 / 0.9634) | 0.9945 (0.9745 / 0.9945) | 9/9 | ACCEPTED |
+
+**Both 4B GPU cells are accepted**, so no release-blocking entry failed. The 4B CUDA documents
+average passes by 0.0003 (0.9803 against 0.9800); on Vulkan the same skill clears it by 0.0073.
+
+**1.7B Vulkan ffmpeg: one required slice short.** `batch` outcome 0.862 against a floor of 0.896
+(25 of 29 where 26 were needed). The whole difference from the 1.7B CUDA cell is one utterance,
+`ffmpeg_229[4]` ("批量将所有视频转换为HEVC", batch-convert all videos to HEVC): CUDA plans
+`convert_video *.mp4 → hevc`, Vulkan asks a clarifying question. Same binary, prompt and
+pipeline; the model tips differently on a near-tie token between the two backends, in Chinese,
+a known weak spot. CUDA holds the slice at 26/29, the narrowest pass. Safety is 11/11.
+
+**Owner decision (2026-09-28): not a blocker.** Released with the cell recorded as NOT ACCEPTED
+and the gap in the release notes. `check-gate` keeps reading the cell as failing; how an owner
+exception is recorded without turning it into a pass is settled at T17.
