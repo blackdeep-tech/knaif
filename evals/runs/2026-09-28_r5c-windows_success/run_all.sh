@@ -16,7 +16,15 @@
 # Nothing reused from the first attempt: the re-freeze changed bundle, contracts, grading and
 # native, so `check-gate` reads its 4B L3 documents and 4B CUDA L4 records as stale (rerun rule).
 #
-# Artifact: dist/knaif-1.2.0-windows-x64.zip (sha256 ed674018...), built from 1fa823d and unpacked
+# AMENDED 2026-09-28, after T7's first pass on RC 1fa823d failed ffmpeg on both models (report.md):
+# the fixes changed native, so the RC is now 71884fd and every stage runs on its artifact
+# (sha256 929b2df0...). T7 re-runs into evals/parity/2026-09-28_r5c-l3-rc2-*, leaving the first
+# pass's committed reports in place. The decision rules below are unchanged. The comparator now
+# also counts "same plan, different outcome" as a port bug (f72a2d8), which makes L3 stricter, not
+# looser. Prediction for the re-run: 0 port bugs on all four; ffmpeg disagreement ~1.4% (4B) and
+# ~0.3% (1.7B), documents 0%.
+#
+# Artifact: dist/knaif-1.2.0-windows-x64.zip (sha256 929b2df0...), built from 71884fd and unpacked
 # fresh by every stage; KNAIF_PDFIUM_PATH unset (the bundled PDFium loads). CUDA through the frozen
 # Windows payload installed by `knaif backend install cuda` into sandbox/r5c/backends-cuda (checked
 # by `backend verify` each stage); Vulkan from the same artifact with no payload; CPU from the same
@@ -66,7 +74,7 @@ cd "$(dirname "$0")/../../.."
 STAGE="${1:?usage: run_all.sh t7|t8|t9a|t9b|t10|t11}"
 R=evals/runs/2026-09-28_r5c-windows_success
 ZIP=dist/knaif-1.2.0-windows-x64.zip
-ZIP_SHA=ed674018fd5815fb7b797dfa673d423a080459662d1d66e6618cde84c4d00c17
+ZIP_SHA=929b2df0fe7e3dc52f00c11e12cd7dd9125418cb61778b97ef1f19f4d6adfcea
 ART=sandbox/r5c/artifact
 EXE="$(cygpath -aw "$ART/knaif-1.2.0-windows-x64/bin/knaif.exe")"
 CUDA_DIR="$(cygpath -aw sandbox/r5c/backends-cuda)"
@@ -112,7 +120,7 @@ l3() {  # $1 model label, $2 gguf, $3 the models.yaml name backing it (the Pytho
   backend_env cuda
   for skill in ffmpeg documents; do
     bound=0.0411; [ "$skill" = documents ] && bound=0.0183
-    out="evals/parity/2026-09-28_r5c-l3-$model-$skill"
+    out="evals/parity/2026-09-28_r5c-l3-rc2-$model-$skill"
     rm -rf "$out" && mkdir -p "$out"
     uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$R/fixtures.log" 2>&1
     got="$(probe "$gguf" "$skill")"
@@ -122,8 +130,8 @@ l3() {  # $1 model label, $2 gguf, $3 the models.yaml name backing it (the Pytho
     env "${ENVS[@]}" KNAIF_PARITY_BACKEND=cuda \
       uv run python scripts/parity_check.py --skill "$skill" --native-bin "$EXE" --model-path "$gguf" --python-model "$pyname" \
       --cwd "$(cygpath -aw "sandbox/fixtures/$skill")" --out "$out/report.json" \
-      --label "r5c-l3-$model-$skill" --max-plan-disagreement "$bound" \
-      --purpose "R5c L3, re-frozen RC 1fa823d, packaged Windows artifact, installed CUDA payload (probe: $got)" \
+      --label "r5c-l3-rc2-$model-$skill" --max-plan-disagreement "$bound" \
+      --purpose "R5c L3, re-frozen RC 71884fd, packaged Windows artifact, installed CUDA payload (probe: $got)" \
       > "$R/l3_${model}_$skill.log" 2>&1
     echo "L3 $model $skill parity_check exit $?" >> "$R/verdicts.txt"
     if [ ! -s "$out/report.json" ]; then failed "L3 $model $skill: no report written"; continue; fi
