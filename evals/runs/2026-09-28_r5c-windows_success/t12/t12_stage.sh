@@ -39,6 +39,9 @@
 #   was a 1.1.0 `run ffmpeg`, which exits at its tool check when ffmpeg is not on PATH, so nothing
 #   held the mutex and the 'refused while running' attempt upgraded instead. The holder is now a
 #   1.1.0 `run documents` at its first-run download prompt (reproduced on the host). Rules unchanged.
+# AMENDED again after the second pass (the refusal PASSED): the script's own mutex check kept a
+#   handle open, and Inno refuses while the mutex merely exists, so the upgrade after closing the
+#   CLI was refused too. The handle is now closed right after the check. Rules unchanged.
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 T=sandbox/r5c/t12

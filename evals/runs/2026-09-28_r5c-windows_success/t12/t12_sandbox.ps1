@@ -60,6 +60,7 @@ $holder = Start-Process $exe -ArgumentList 'run', 'documents', 'rotate', 'doc.pd
 Start-Sleep -Seconds 8
 $m = $null
 $held = [System.Threading.Mutex]::TryOpenExisting('knaif-cli-running', [ref]$m)
+if ($m) { $m.Dispose() }  # Inno checks that the mutex EXISTS: an open handle here would hold it
 Check 'cli_running_holds_mutex' ((-not $holder.HasExited) -and $held) "alive $(-not $holder.HasExited); mutex $held"
 
 # 4. Upgrade while it runs: setup must refuse (AppMutex) and change nothing.
