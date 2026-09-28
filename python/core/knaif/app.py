@@ -49,13 +49,18 @@ def rendered_argvs(results: list[dict[str, Any]]) -> list[list[str]]:
         r = result.get("result")
         if not isinstance(r, dict):
             continue
-        cmd = r.get("command")
-        if isinstance(cmd, list) and cmd:
-            argvs.append([str(a) for a in cmd])
-        for out in r.get("outputs") or []:
-            cmd = out.get("command") if isinstance(out, dict) else None
-            if isinstance(cmd, list) and cmd:
-                argvs.append([str(a) for a in cmd])
+        # One argv per command that runs. `run_concat` stores its single command both at the top
+        # level and in `outputs`, so the top level counts only when `outputs` carries none;
+        # reading both dumped every concat twice, and L3 read each as a port bug (R5c,
+        # 2026-09-28). Not de-duplicated by value: a batch may really run a command twice.
+        found = [
+            out["command"]
+            for out in r.get("outputs") or []
+            if isinstance(out, dict) and isinstance(out.get("command"), list) and out["command"]
+        ]
+        if not found and isinstance(r.get("command"), list) and r["command"]:
+            found = [r["command"]]
+        argvs.extend([str(a) for a in cmd] for cmd in found)
     return argvs
 
 

@@ -144,3 +144,44 @@ def test_the_cli_shows_the_model_the_retrieved_tools(runner, monkeypatch, comman
     assert said == utterance
     assert override is not None, "the CLI must pass the retrieved registry"
     assert set(override) == _expected_tools(agent, utterance)
+
+
+# ── the argv dump (L3 compares it) ────────────────────────────────────────────────────────
+
+
+def test_a_concat_command_is_dumped_once() -> None:
+    """`run_concat` stores its one command twice (top level and in `outputs`); ffmpeg runs once,
+    and the dump must say so. Dumped twice, every concat row read as a port bug in R5c L3
+    (2026-09-28: 9 of 9 ffmpeg port bugs)."""
+    from knaif.app import rendered_argvs
+
+    cmd = ["ffmpeg", "-y", "-i", "a.mp4", "-i", "b.mp4", "combined.mp4"]
+    results = [
+        {
+            "tool": "run_concat",
+            "result": {
+                "mode": "dry_run",
+                "outputs": [
+                    {"input": ["a.mp4", "b.mp4"], "output": "combined.mp4", "command": cmd}
+                ],
+                "command": cmd,
+            },
+        }
+    ]
+    assert rendered_argvs(results) == [cmd]
+
+
+def test_a_batch_that_really_runs_a_command_twice_is_dumped_twice() -> None:
+    """Commands are counted where they run, not de-duplicated by value."""
+    from knaif.app import rendered_argvs
+
+    cmd = ["ffmpeg", "-y", "-i", "a.mp4", "a_out.mp4"]
+    results = [{"tool": "run_batch", "result": {"outputs": [{"command": cmd}, {"command": cmd}]}}]
+    assert rendered_argvs(results) == [cmd, cmd]
+
+
+def test_a_result_with_only_a_top_level_command_is_dumped() -> None:
+    from knaif.app import rendered_argvs
+
+    cmd = ["ffmpeg", "-y", "-i", "a.mp4", "b.mp4"]
+    assert rendered_argvs([{"tool": "run_concat", "result": {"command": cmd}}]) == [cmd]
