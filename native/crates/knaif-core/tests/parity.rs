@@ -390,3 +390,37 @@ fn shipped_ffmpeg_quality_vocabulary_matches_the_profiles_on_disk() {
         .arg_schemas
         .contains_key("quality"));
 }
+
+/// L2: the NL-clarify-gate parity contract. Python runs `nl_clarify_gate` after stem
+/// resolution; native had no port until 2026-09-28, and the R5c L3 run found the fork (Python
+/// asked "Which mov did you mean?", native ran and failed with "input not found: mov").
+///
+/// See contracts/parity/nl_clarify_gate_cases.json and
+/// python/core/tests/test_nl_clarify_gate_parity.py.
+#[test]
+fn nl_clarify_gate_parity_cases() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../contracts/parity/nl_clarify_gate_cases.json");
+    let doc: Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixtures).expect("read fixtures")).unwrap();
+    let registries = doc["registries"].as_object().unwrap();
+
+    for case in doc["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let reg_yaml = registries[case["registry"].as_str().unwrap()]
+            .as_str()
+            .unwrap();
+        let registry =
+            load_registry_str(reg_yaml).unwrap_or_else(|e| panic!("{name}: registry {e}"));
+
+        let got = knaif_core::nl_clarify_gate(
+            case["plan"].clone(),
+            case["utterance"].as_str().unwrap(),
+            &registry,
+        );
+        assert_eq!(
+            got, case["expected_payload"],
+            "case {name}: post-gate payload differs"
+        );
+    }
+}

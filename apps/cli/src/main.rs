@@ -1026,13 +1026,17 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
-        ),
+        )
+        .map(|()| StepOutcome::Continue),
         _ => unreachable!("skill guarded above"),
-    }?;
-    Ok(StepOutcome::Continue)
+    }
 }
 
 /// ffmpeg dispatch: expand the intent → dry-run preview or confirmed subprocess execution.
+///
+/// An expansion that needs a clarify (an unknown platform) ends the plan, as a `clarify` step
+/// does: Python's executor stops at the first clarify leaf. Native used to print the question
+/// and run on, so a later step acted on a file this one never produced (R5c L3, `ffmpeg_136`).
 fn run_ffmpeg_step(
     bundle: &Path,
     tool: &str,
@@ -1040,7 +1044,7 @@ fn run_ffmpeg_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<StepOutcome> {
     let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
     let expansion = if dry_run {
@@ -1052,12 +1056,12 @@ fn run_ffmpeg_step(
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
             println!("clarify: {q}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
         }
     };
     if commands.is_empty() {
         println!("Nothing to do.");
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
     let dump = plan_dump_enabled();
     for cmd in &commands {
@@ -1071,7 +1075,7 @@ fn run_ffmpeg_step(
         for cmd in &commands {
             println!("{}", shell_join(cmd));
         }
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
 
     // Execution: every ffmpeg intent is `safety_category: destructive`, so it needs explicit
@@ -1079,7 +1083,7 @@ fn run_ffmpeg_step(
     let previews: Vec<String> = commands.iter().map(|c| shell_join(c)).collect();
     if !confirm_action(yes, &previews, "ffmpeg command")? {
         println!("Aborted (no changes made).");
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
 
     let mut failures = 0;
@@ -1122,7 +1126,7 @@ fn run_ffmpeg_step(
     if failures > 0 {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
-    Ok(())
+    Ok(StepOutcome::Continue)
 }
 
 /// documents dispatch: safe read tools print their result; destructive write tools preview the
@@ -1433,7 +1437,19 @@ impl PlanSession {
         // same path is already read rather than a new notion of where files live.
         let gated = resolve_plan_stems(gated, sandbox.unwrap_or(base));
         emit_plan_dump(plan_dump_enabled(), &gated);
-        Ok(gated)
+        // Then the NL clarify gate, as Python runs it right after `resolve_stems`: ask when the
+        // user never named an input the plan uses ("reverse the mov file" -> inputs ["mov"]), or
+        // when a grounded arg such as a password was invented. Without it native ran such plans
+        // and failed with "input not found" where Python asked (R5c L3, 2026-09-28).
+        //
+        // After the plan dump, not before: Python dumps its plan before `execute_plan`, where its
+        // gate runs, so the dumped plans stay comparable across runtimes (L3's "same plan") and
+        // across builds (R5c T9a), and a gate that fires shows as the run's clarify outcome.
+        Ok(knaif_core::nl_clarify_gate(
+            gated,
+            &utterance,
+            &self.registry,
+        ))
     }
 }
 

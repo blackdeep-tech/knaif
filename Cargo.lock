@@ -1276,6 +1276,7 @@ name = "knaif-core"
 version = "1.2.0"
 dependencies = [
  "anyhow",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -75,11 +75,18 @@ def _is_batch_utterance(utterance: str) -> bool:
 
 _OUTPUT_ARG_KEYS = frozenset({"output", "outputs"})
 
+#: `_PATH_ARG_KEYS` in a fixed order. The planner's set is a frozenset, whose iteration order
+#: changes from one process to the next, so with two unnamed inputs under different keys the
+#: question named either one at random. The native port walks this same order
+#: (contracts/parity/nl_clarify_gate_cases.json).
+_INPUT_ARG_ORDER = ("inputs", "input", "files", "src", "dst", "path", "base", "append")
+assert set(_INPUT_ARG_ORDER) == _PATH_ARG_KEYS
+
 
 def _input_tokens(step: dict[str, Any]) -> list[str]:
     args = step.get("args") or {}
     tokens: list[str] = []
-    for key in _PATH_ARG_KEYS:
+    for key in _INPUT_ARG_ORDER:
         if key not in args:
             continue
         val = args[key]

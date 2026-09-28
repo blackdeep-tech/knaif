@@ -1,0 +1,177 @@
+{
+  "_comment": "L2 NL-clarify-gate contract. Python runs `nl_clarify_gate` after stem resolution (CommandAgent._execute_steps); until 2026-09-28 native had no port of it, and the R5c L3 run found the fork: for an input the user never wrote (\"reverse the mov file\" -> inputs [\"mov\"]) Python asks \"Which mov did you mean?\" while native ran and failed with \"input not found: mov\". Given (utterance, plan, registry) both runtimes must produce the same payload: the plan unchanged, or a single clarify step. Consumed by python/core/tests/test_nl_clarify_gate_parity.py and `nl_clarify_gate_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
+  "_stage": "The gate with no host-supplied file listing (injected_files=None), which is how both CLIs run it: (1) every tool's grounded_args must appear in the utterance (checked even for batch utterances); (2) unless the utterance is a batch request, every input token (keys inputs, input, files, src, dst, path, base, append, in that order) must be named concretely: written as a filename in the utterance, or its stem written as an identifier carrying _ - or a digit. Globs, $chain references, paths containing / or \\, and outputs of earlier steps are exempt.",
+  "registries": {
+    "demo": "resize_video:\n  description: \"Resize a video.\"\n  required_args: [inputs]\n  optional_args: [height, output]\nreverse_video:\n  description: \"Reverse a video.\"\n  required_args: [inputs]\n  optional_args: [output]\ncreate_thumbnail:\n  description: \"Grab a still.\"\n  required_args: [input]\n  optional_args: [at_time, output]\ntrim_video:\n  description: \"Cut a video.\"\n  required_args: [input]\n  optional_args: [start, end, output]\nconcat_video:\n  description: \"Join videos.\"\n  optional_args: [inputs, base, append, output]\nprotect_pdf:\n  description: \"Password-protect a PDF.\"\n  required_args: [input, password]\n  optional_args: [output]\n  grounded_args: [password]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\n"
+  },
+  "cases": [
+    {
+      "name": "named_file_passes",
+      "registry": "demo",
+      "utterance": "resize clip.mp4 to 720p",
+      "plan": {"plan": [{"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "height": 720}}]},
+      "expected_payload": {"plan": [{"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "height": 720}}]}
+    },
+    {
+      "name": "bare_descriptor_clarifies",
+      "registry": "demo",
+      "utterance": "reverse the mov file",
+      "plan": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which mov did you mean?"}}]}
+    },
+    {
+      "name": "multiword_descriptor_clarifies",
+      "registry": "demo",
+      "utterance": "get a still image at 4s from the silent clip",
+      "plan": {"plan": [{"tool": "create_thumbnail", "args": {"input": "silent clip", "at_time": "00:00:04"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which silent clip did you mean?"}}]}
+    },
+    {
+      "name": "leading_article_is_dropped_from_the_question",
+      "registry": "demo",
+      "utterance": "get a still from the silent clip",
+      "plan": {"plan": [{"tool": "create_thumbnail", "args": {"input": "The silent clip"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which silent clip did you mean?"}}]}
+    },
+    {
+      "name": "article_only_token_falls_back_to_the_tool",
+      "registry": "demo",
+      "utterance": "reverse it",
+      "plan": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["a "]}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which file would you like to reverse video?"}}]}
+    },
+    {
+      "name": "invented_filename_whose_stem_the_user_did_not_write",
+      "registry": "demo",
+      "utterance": "grab a thumbnail from the 4K clip at 1 second",
+      "plan": {"plan": [{"tool": "create_thumbnail", "args": {"input": "4K_clip.mp4", "at_time": "00:00:01"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which 4K_clip.mp4 did you mean?"}}]}
+    },
+    {
+      "name": "structured_stem_written_in_the_utterance_passes",
+      "registry": "demo",
+      "utterance": "trim clip_4k to the first 5 seconds",
+      "plan": {"plan": [{"tool": "trim_video", "args": {"input": "clip_4k.mp4", "end": "5"}}]},
+      "expected_payload": {"plan": [{"tool": "trim_video", "args": {"input": "clip_4k.mp4", "end": "5"}}]}
+    },
+    {
+      "name": "stem_match_ignores_case",
+      "registry": "demo",
+      "utterance": "trim Clip_4K to the first 5 seconds",
+      "plan": {"plan": [{"tool": "trim_video", "args": {"input": "clip_4k.mp4", "end": "5"}}]},
+      "expected_payload": {"plan": [{"tool": "trim_video", "args": {"input": "clip_4k.mp4", "end": "5"}}]}
+    },
+    {
+      "name": "a_plain_word_is_not_a_stem",
+      "registry": "demo",
+      "utterance": "trim clip to the first 5 seconds",
+      "plan": {"plan": [{"tool": "trim_video", "args": {"input": "clip.mp4", "end": "5"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which clip.mp4 did you mean?"}}]}
+    },
+    {
+      "name": "inline_filename_match_is_case_sensitive",
+      "registry": "demo",
+      "utterance": "resize Clip.MP4 to 720p",
+      "plan": {"plan": [{"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "height": 720}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which clip.mp4 did you mean?"}}]}
+    },
+    {
+      "name": "batch_utterance_skips_the_input_check",
+      "registry": "demo",
+      "utterance": "reverse every mov in this folder",
+      "plan": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]},
+      "expected_payload": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]}
+    },
+    {
+      "name": "glob_is_exempt",
+      "registry": "demo",
+      "utterance": "resize the videos to 720p",
+      "plan": {"plan": [{"tool": "resize_video", "args": {"inputs": ["*.mp4"], "height": 720}}]},
+      "expected_payload": {"plan": [{"tool": "resize_video", "args": {"inputs": ["*.mp4"], "height": 720}}]}
+    },
+    {
+      "name": "path_with_a_separator_is_exempt",
+      "registry": "demo",
+      "utterance": "resize the video in media to 720p",
+      "plan": {"plan": [{"tool": "resize_video", "args": {"inputs": ["media/x.mp4", "media\\y.mp4"], "height": 720}}]},
+      "expected_payload": {"plan": [{"tool": "resize_video", "args": {"inputs": ["media/x.mp4", "media\\y.mp4"], "height": 720}}]}
+    },
+    {
+      "name": "chain_reference_is_exempt",
+      "registry": "demo",
+      "utterance": "reverse clip.mp4 and then resize it",
+      "plan": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["clip.mp4"]}}, {"tool": "resize_video", "args": {"inputs": ["$reversed"], "height": 720}}]},
+      "expected_payload": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["clip.mp4"]}}, {"tool": "resize_video", "args": {"inputs": ["$reversed"], "height": 720}}]}
+    },
+    {
+      "name": "an_earlier_step_s_output_is_exempt",
+      "registry": "demo",
+      "utterance": "trim clip.mp4 to 5 seconds then reverse it",
+      "plan": {"plan": [{"tool": "trim_video", "args": {"input": "clip.mp4", "end": "5", "output": "clip_trimmed.mp4"}}, {"tool": "reverse_video", "args": {"inputs": ["clip_trimmed.mp4"]}}]},
+      "expected_payload": {"plan": [{"tool": "trim_video", "args": {"input": "clip.mp4", "end": "5", "output": "clip_trimmed.mp4"}}, {"tool": "reverse_video", "args": {"inputs": ["clip_trimmed.mp4"]}}]}
+    },
+    {
+      "name": "a_step_s_own_output_does_not_exempt_its_input",
+      "registry": "demo",
+      "utterance": "reverse the video",
+      "plan": {"plan": [{"tool": "reverse_video", "args": {"inputs": ["video.mp4"], "output": "video.mp4"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which video.mp4 did you mean?"}}]}
+    },
+    {
+      "name": "the_first_unnamed_input_in_plan_order_is_asked_about",
+      "registry": "demo",
+      "utterance": "join clip.mp4 with the intro and the outro",
+      "plan": {"plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mp4", "intro", "outro"]}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which intro did you mean?"}}]}
+    },
+    {
+      "name": "input_keys_are_checked_in_contract_order",
+      "registry": "demo",
+      "utterance": "join the intro and the outro",
+      "plan": {"plan": [{"tool": "concat_video", "args": {"append": ["outro"], "base": "intro"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which intro did you mean?"}}]}
+    },
+    {
+      "name": "non_string_list_items_are_ignored",
+      "registry": "demo",
+      "utterance": "resize clip.mp4 to 720p",
+      "plan": {"plan": [{"tool": "resize_video", "args": {"inputs": [7, "clip.mp4"], "height": 720}}]},
+      "expected_payload": {"plan": [{"tool": "resize_video", "args": {"inputs": [7, "clip.mp4"], "height": 720}}]}
+    },
+    {
+      "name": "terminal_plan_is_untouched",
+      "registry": "demo",
+      "utterance": "reverse the mov file",
+      "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which file?"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "Which file?"}}]}
+    },
+    {
+      "name": "invented_password_clarifies",
+      "registry": "demo",
+      "utterance": "password-protect report.pdf",
+      "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "report.pdf", "password": "your_password"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "What password should I use?"}}]}
+    },
+    {
+      "name": "typed_password_passes_case_insensitively",
+      "registry": "demo",
+      "utterance": "protect report.pdf with the password Hunter2",
+      "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "report.pdf", "password": " hunter2 "}}]},
+      "expected_payload": {"plan": [{"tool": "protect_pdf", "args": {"input": "report.pdf", "password": " hunter2 "}}]}
+    },
+    {
+      "name": "grounded_args_are_checked_even_for_a_batch",
+      "registry": "demo",
+      "utterance": "protect all the pdfs",
+      "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "*.pdf", "password": "secret123"}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "What password should I use?"}}]}
+    },
+    {
+      "name": "a_non_string_grounded_value_is_not_grounded",
+      "registry": "demo",
+      "utterance": "protect report.pdf with 1234",
+      "plan": {"plan": [{"tool": "protect_pdf", "args": {"input": "report.pdf", "password": 1234}}]},
+      "expected_payload": {"plan": [{"tool": "clarify", "args": {"question": "What password should I use?"}}]}
+    }
+  ]
+}
