@@ -30,6 +30,34 @@ from .registry import retrieve_tools
 #: Prefixes the plan dump under $KNAIF_DUMP_PLAN. The same string as native `run`
 #: (apps/cli/src/main.rs) and scripts/parity_check.py; a test holds them together.
 PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
+#: One line per rendered ffmpeg command under $KNAIF_DUMP_PLAN: the exact argv as JSON. The
+#: display line joins with spaces and quotes nothing, so it cannot carry `silent clip.mp4` or a
+#: filter's escapes; L3 compares this instead. Same string as native `run` (a test holds it).
+ARGV_DUMP_MARKER = "===KNAIF-ARGV==="
+
+
+def rendered_argvs(results: list[dict[str, Any]]) -> list[list[str]]:
+    """The ffmpeg argv each intent rendered, in plan order: what the user is shown as `$ …`.
+
+    Taken from the batch steps (`run_batch`/`run_concat`), the same place the dry-run display
+    reads (`skills/ffmpeg/python/_reporting.py`); a preview render is not one of them.
+    """
+    argvs: list[list[str]] = []
+    for result in results:
+        if result.get("tool") not in ("run_batch", "run_concat"):
+            continue
+        r = result.get("result")
+        if not isinstance(r, dict):
+            continue
+        cmd = r.get("command")
+        if isinstance(cmd, list) and cmd:
+            argvs.append([str(a) for a in cmd])
+        for out in r.get("outputs") or []:
+            cmd = out.get("command") if isinstance(out, dict) else None
+            if isinstance(cmd, list) and cmd:
+                argvs.append([str(a) for a in cmd])
+    return argvs
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -425,6 +453,9 @@ def run_cmd(
     except ValueError as exc:
         click.echo(click.style(f"\n{exc}", fg="red"), err=True)
         sys.exit(1)
+    if os.environ.get("KNAIF_DUMP_PLAN"):
+        for argv in rendered_argvs(results):
+            click.echo(ARGV_DUMP_MARKER + json.dumps(argv, ensure_ascii=False), err=True)
 
     # The NL clarify gate (run inside execute_plan) can downgrade the plan to a
     # clarify/reject — e.g. an under-specified file or an ungrounded password

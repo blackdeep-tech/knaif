@@ -256,3 +256,91 @@ def test_the_marker_is_one_string_in_all_three_places() -> None:
     rust = (REPO / "apps" / "cli" / "src" / "main.rs").read_text(encoding="utf-8")
     assert f'const PLAN_DUMP_MARKER: &str = "{pc.PLAN_DUMP_MARKER}";' in rust
     assert app_marker == lane_marker == pc.PLAN_DUMP_MARKER
+
+
+# ── the exact argv, as data (Codex audit of 62f7cc1, 2026-09-28) ───────────────────────────
+# Display lines cannot carry every argv: Python joins with spaces and quotes nothing, so the
+# corpus's `silent clip.mp4` (ffmpeg_288) splits in two, and any backslash rule mangles either a
+# path or a filter escape. Both CLIs now dump each ffmpeg argv as JSON under $KNAIF_DUMP_PLAN,
+# and the comparator reads that when it is there.
+
+
+def _argv_dump(argv: list[str]) -> str:
+    return f"{pc.ARGV_DUMP_MARKER}{json.dumps(argv)}\n"
+
+
+def test_a_dumped_argv_is_taken_verbatim_over_the_display_line() -> None:
+    argv = ["ffmpeg", "-y", "-i", "silent clip.mp4", "-vf", CROP, "silent clip_thumb.jpg"]
+    nat = pc.parse_native("ffmpeg -y -i garbled\n", _dump(PLAN) + _argv_dump(argv))
+    py = pc.parse_python("  $ ffmpeg -y -i also garbled\n", _dump(PLAN) + _argv_dump(argv))
+    assert nat.commands == py.commands
+    assert "silent clip.mp4" in nat.commands[0] and CROP in nat.commands[0]
+    status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
+    assert status == "match"
+
+
+def test_dumped_windows_paths_compare_equal_and_filters_are_untouched() -> None:
+    win = ["ffmpeg", "-i", r"C:\w\[draft]\clip.mp4", "-vf", r"drawtext=text='Hi\!'", "out.mp4"]
+    fwd = ["ffmpeg", "-i", "C:/w/[draft]/clip.mp4", "-vf", r"drawtext=text='Hi\!'", "out.mp4"]
+    a = pc.parse_python("", _dump(PLAN) + _argv_dump(win))
+    b = pc.parse_native("", _dump(PLAN) + _argv_dump(fwd))
+    assert a.commands == b.commands
+    assert r"drawtext=text='Hi\!'" in a.commands[0]
+
+
+def test_a_hash_in_a_filename_is_not_a_comment() -> None:
+    assert pc.to_argv("ffmpeg -i clip#1.mp4 -c copy out.mp4") == [
+        "ffmpeg",
+        "-i",
+        "clip#1.mp4",
+        "-c",
+        "copy",
+        "out.mp4",
+    ]
+
+
+def test_a_partial_chain_still_compares_the_steps_both_rendered() -> None:
+    """Codex P1: "not comparable" must cover only the steps Python did not render. A trim that
+    renders differently is a port bug even when the reverse after it rendered nothing."""
+    other_trim = TRIM.replace("-c:v libx264", "-c:v libx265")
+    nat = _native(other_trim + "\n" + REVERSE, CHAIN_PLAN)
+    status, _ = pc.compare(_row(), nat, _python_partial_chain(CHAIN_PLAN), strict=False, cwd="/w")
+    assert status == "port-bug"
+
+
+def test_the_python_cli_dumps_each_argv(tmp_path: Path) -> None:
+    env = {**os.environ, "KNAIF_DUMP_PLAN": "1"}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "knaif.app",
+            "run",
+            "ffmpeg",
+            "convert",
+            "clip.mp4",
+            "to",
+            "mkv",
+            "--backend",
+            "mock",
+            "--dry-run",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        cwd=REPO,
+    )
+    dumps = [ln for ln in proc.stderr.splitlines() if ln.startswith(pc.ARGV_DUMP_MARKER)]
+    assert dumps, proc.stderr[-500:]
+    argv = json.loads(dumps[0][len(pc.ARGV_DUMP_MARKER) :])
+    assert argv[0] == "ffmpeg" and all(isinstance(a, str) for a in argv)
+
+
+def test_the_argv_marker_is_one_string_in_all_three_places() -> None:
+    from knaif.app import ARGV_DUMP_MARKER as app_marker
+
+    rust = (REPO / "apps" / "cli" / "src" / "main.rs").read_text(encoding="utf-8")
+    assert f'const ARGV_DUMP_MARKER: &str = "{pc.ARGV_DUMP_MARKER}";' in rust
+    assert app_marker == pc.ARGV_DUMP_MARKER

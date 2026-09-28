@@ -1059,6 +1059,12 @@ fn run_ffmpeg_step(
         println!("Nothing to do.");
         return Ok(());
     }
+    let dump = plan_dump_enabled();
+    for cmd in &commands {
+        if let Some(msg) = argv_dump(dump, cmd) {
+            eprintln!("{msg}");
+        }
+    }
 
     // Dry-run: print the copy-pasteable command line(s) and stop — no side effects.
     if dry_run {
@@ -1569,6 +1575,22 @@ fn plan_dump(enabled: bool, payload: &serde_json::Value) -> Option<String> {
     Some(format!(
         "{PLAN_DUMP_MARKER}{}",
         serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string())
+    ))
+}
+
+/// Marker for [`argv_dump`]: one line per rendered ffmpeg command, the exact argv as JSON.
+const ARGV_DUMP_MARKER: &str = "===KNAIF-ARGV===";
+
+/// One line: the marker, then the argv as a JSON array. Gated with the plan dump. L3 compares it
+/// instead of the display line, which cannot carry every argv once re-split (a space in a
+/// filename, a filter's `\,`). Pure, so testable without process env.
+fn argv_dump(enabled: bool, argv: &[String]) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{ARGV_DUMP_MARKER}{}",
+        serde_json::to_string(argv).unwrap_or_else(|_| "[]".to_string())
     ))
 }
 
@@ -2612,6 +2634,31 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(rest).expect("parses"),
             payload
+        );
+    }
+
+    #[test]
+    fn argv_dump_carries_the_exact_argv_on_one_line() {
+        // L3 compares this, not the display line: `shell_join` quotes for a shell, Python quotes
+        // nothing, and neither round-trips a space or a filter escape once re-split.
+        let argv: Vec<String> = [
+            "ffmpeg",
+            "-i",
+            "silent clip.mp4",
+            "-vf",
+            r"crop=trunc(min(iw\,ih*1/1)/2)*2",
+            "out.mp4",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert!(argv_dump(false, &argv).is_none(), "disabled → nothing");
+        let msg = argv_dump(true, &argv).expect("enabled → Some");
+        assert!(!msg.contains('\n'), "one line: {msg}");
+        let rest = msg.strip_prefix(ARGV_DUMP_MARKER).expect("marker prefix");
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(rest).expect("parses"),
+            argv
         );
     }
 

@@ -89,6 +89,43 @@ def _dumped_plan(stderr: str) -> list[dict]:
     return []
 
 
+#: One line per rendered ffmpeg command under `$KNAIF_DUMP_PLAN`: the exact argv as JSON. The
+#: display line cannot carry it (Python joins with spaces and quotes nothing, so `silent clip.mp4`
+#: splits in two), so the comparator prefers this. The same string in both CLIs; a test holds it.
+ARGV_DUMP_MARKER = "===KNAIF-ARGV==="
+
+
+def _canon_dumped_token(token: str) -> str:
+    """Forward-slash a path's separators; leave anything with `=` (a filter, an option value)
+    verbatim, since its backslashes are ffmpeg escapes (`iw\\,ih`, `\\!`), not separators."""
+    return token if "=" in token else token.replace("\\", "/")
+
+
+def _dumped_argvs(stderr: str) -> list[list[str]]:
+    """Every argv a CLI dumped under `$KNAIF_DUMP_PLAN`, in order; [] when it dumped none."""
+    argvs: list[list[str]] = []
+    for line in strip_ansi(stderr).splitlines():
+        s = line.strip()
+        if s.startswith(ARGV_DUMP_MARKER):
+            try:
+                argv = json.loads(s[len(ARGV_DUMP_MARKER) :])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(argv, list) and all(isinstance(a, str) for a in argv):
+                argvs.append([_canon_dumped_token(a) for a in argv])
+    return argvs
+
+
+def _with_dumped_argvs(out: Outcome, stderr: str) -> Outcome:
+    """Replace the commands parsed from display lines with the dumped argv, when there is one."""
+    argvs = _dumped_argvs(stderr)
+    if argvs:
+        out.commands = argvs
+        if out.kind in ("none", "commands"):
+            out.kind = "commands"
+    return out
+
+
 # ── output parsing (pure) ─────────────────────────────────────────────────────
 
 
@@ -99,14 +136,9 @@ def strip_ansi(text: str) -> str:
 _PATH_EXT = re.compile(r"\.[A-Za-z0-9]{1,4}$")
 
 
-#: A backslash that separates path components — any backslash except an ffmpeg escape
-#: (`iw\,ih` in a filter, `\:` in drawtext, `\\` itself).
-_PATH_BACKSLASH = re.compile(r"\\(?![,:;'\[\]=\\])")
-
-
 def _forward_path_separators(token: str) -> str:
-    """`C:\\w\\clip.mp4` -> `C:/w/clip.mp4`, leaving ffmpeg escapes (`\\,`) alone."""
-    return _PATH_BACKSLASH.sub("/", token)
+    """Display-line tokens get the same rule as dumped ones (`_canon_dumped_token`)."""
+    return _canon_dumped_token(token)
 
 
 def to_argv(line: str, quoted: bool = False) -> list[str]:
@@ -123,6 +155,7 @@ def to_argv(line: str, quoted: bool = False) -> list[str]:
     try:
         lexer = shlex.shlex(line, posix=True)
         lexer.whitespace_split = True
+        lexer.commenters = ""  # shlex.split's default; shlex.shlex would cut `clip#1.mp4`
         if not quoted:
             lexer.escape = ""
         tokens = list(lexer)
@@ -391,14 +424,14 @@ def parse_native(stdout: str, stderr: str) -> Outcome:
     """Parse `knaif run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
     out = _parse_native_body(stdout, stderr)
     out.dumped_plan = _dumped_plan(stderr)
-    return out
+    return _with_dumped_argvs(out, stderr)
 
 
 def parse_python(stdout: str, stderr: str) -> Outcome:
     """Parse `knaif-cli run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
     out = _parse_python_body(stdout, stderr)
     out.dumped_plan = _dumped_plan(stderr)
-    return out
+    return _with_dumped_argvs(out, stderr)
 
 
 # ── row loading ───────────────────────────────────────────────────────────────
@@ -1001,6 +1034,12 @@ def compare(
             and py.dumped_plan
             and _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
         ):
+            # Only the steps BOTH rendered are compared; the rest cannot be. A step both
+            # rendered differently is still a port bug (Codex audit, 2026-09-28).
+            n = min(len(native.commands), len(py.commands))
+            both = tuple(_canon_argv(c, cwd) for c in native.commands[:n])
+            if both != tuple(_canon_argv(c, cwd) for c in py.commands[:n]):
+                return "port-bug", "same plan, different commands on the steps both rendered"
             return "not-comparable", "same plan; one side's dry-run renders only part of it"
         return "mismatch", f"native={native.kind} python={py.kind} (one side partial)"
     if native.key(cwd) == py.key(cwd):
