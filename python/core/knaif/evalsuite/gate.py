@@ -198,13 +198,32 @@ def evidence_tuple(
 def _recommended_model_sha(skill: str, root: Path) -> str | None:
     """sha256 the model manifest publishes for this skill's `recommended_model`, if any."""
     skill_yaml = root / "skills" / skill / "skill.yaml"
-    manifest = root / MODEL_MANIFEST
-    if not (skill_yaml.is_file() and manifest.is_file()):
+    if not skill_yaml.is_file():
         return None
     name = (yaml.safe_load(skill_yaml.read_text(encoding="utf-8")) or {}).get("recommended_model")
+    return _manifest_model_sha(name, root)
+
+
+def _manifest_model_sha(name: Any, root: Path) -> str | None:
+    """sha256 the model manifest publishes for model *name*, if it publishes a real one."""
+    manifest = root / MODEL_MANIFEST
+    if not (isinstance(name, str) and manifest.is_file()):
+        return None
     models = (yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}).get("models") or {}
     sha = str((models.get(name) or {}).get("sha256") or "")
     return sha if len(sha) == 64 and all(c in "0123456789abcdef" for c in sha.lower()) else None
+
+
+def _current_for_cell(cell: str, current: dict[str, str | None], root: Path) -> dict[str, Any]:
+    """The fingerprint a cell is judged against: the tree's, with `model` being the GGUF the
+    cell NAMES (a cell key starts with the model's manifest name), not the skill's recommended
+    one. Judged against the recommended model, every other model's cells read "stale: model"
+    once recorded, and a cell measured on the wrong GGUF read valid (R5c T7, 2026-09-28)."""
+    cell_current = {k: v for k, v in current.items() if k != "model"}
+    sha = _manifest_model_sha(cell.split("|", 1)[0], root)
+    if sha:
+        cell_current["model"] = sha
+    return cell_current
 
 
 def load_status_contract(root: Path) -> dict[str, Any]:
@@ -280,6 +299,7 @@ def _cells_state(
     current: dict[str, str | None],
     contract: dict[str, Any],
     cells: list[str],
+    root: Path,
 ) -> LayerState:
     """A cell-keyed layer (the acceptance matrix): valid only when EVERY required cell is.
 
@@ -291,7 +311,12 @@ def _cells_state(
     entry = ((record or {}).get("layers") or {}).get(layer)
     stored = entry.get("cells") if isinstance(entry, dict) else None
     per_cell = {
-        cell: _layer_state(layer, {"layers": {layer: (stored or {}).get(cell)}}, current, contract)
+        cell: _layer_state(
+            layer,
+            {"layers": {layer: (stored or {}).get(cell)}},
+            _current_for_cell(cell, current, root),
+            contract,
+        )
         for cell in cells
     }
     worst = min((s.state for s in per_cell.values()), key=_SEVERITY.index)
@@ -331,7 +356,7 @@ def evaluate_skill(
     matrix = load_matrix(root)
     states = [
         (
-            _cells_state(name, record, current, contract, required_cells(matrix, name))
+            _cells_state(name, record, current, contract, required_cells(matrix, name), root)
             if matrix is not None and name in CELL_LAYERS
             else _layer_state(name, record, current, contract)
         )
