@@ -206,7 +206,7 @@
       "name": "documents",
       "recommended_model": "knaif-qwen3-4b-v2",
       "runtimes": {
-        "native": "in-progress",
+        "native": "supported",
         "python": true
       },
       "stage": "stable",
@@ -771,7 +771,7 @@
       "name": "ffmpeg",
       "recommended_model": "knaif-qwen3-4b-v2",
       "runtimes": {
-        "native": "in-progress",
+        "native": "supported",
         "python": true
       },
       "stage": "stable",
