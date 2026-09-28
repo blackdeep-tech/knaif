@@ -425,3 +425,32 @@ def test_no_command_and_no_dump_stays_a_match_on_the_outcome() -> None:
     py = pc.parse_python("ok\n", "")
     status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
     assert status == "match"
+
+
+# ── an exit status is an outcome (Codex follow-up review, 2026-09-28) ─────────────────────
+
+
+def test_a_failed_run_with_no_other_outcome_is_an_error() -> None:
+    nat = pc.parse_native("", "Error: input not found: report.docx\n" + _dump(DOC_PLAN), 1)
+    assert nat.kind == "error"
+    assert nat.dumped_plan == DOC_PLAN
+    assert pc.parse_python("", "Traceback ...\nValueError: bad\n" + _dump(DOC_PLAN), 1).kind == (
+        "error"
+    )
+
+
+def test_native_failing_after_the_dump_where_python_succeeds_is_a_port_bug() -> None:
+    nat = pc.parse_native("", "Error: step failed\n" + _dump(DOC_PLAN), 1)
+    status, _ = pc.compare(_row(), nat, _none_py(DOC_PLAN), strict=False, cwd="/w")
+    assert status == "port-bug"
+
+
+def test_a_clean_exit_keeps_its_parsed_outcome() -> None:
+    assert pc.parse_native("would convert -> report.pdf\n", _dump(DOC_PLAN), 0).kind == "none"
+    assert pc.parse_native("clarify: which file?\n", "", 1).kind == "clarify"
+
+
+def test_an_utterance_that_starts_with_a_dash_reaches_the_cli_as_text() -> None:
+    """`rm -rf /` (ffmpeg_053, a reject row) was passed word by word, so both CLIs read `-rf` as
+    an option and failed on usage: the row tested nothing on either side."""
+    assert pc.utterance_argv("rm -rf /") == ["--", "rm", "-rf", "/"]

@@ -66,6 +66,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RAW_EXCERPT_CHARS = 800
 
 
+def utterance_argv(utt: str) -> list[str]:
+    """The utterance as trailing CLI words, after `--` so none is read as an option: `rm -rf /`
+    passed bare made both CLIs fail on `-rf` before either saw the request (ffmpeg_053)."""
+    return ["--", *utt.split()]
+
+
 def raw_excerpt(text: str) -> str:
     """The first `RAW_EXCERPT_CHARS` of *text*, redacted BEFORE the cut: cut first, a local path
     straddling the cut survived as a prefix the redactor (it matches whole paths) could not see,
@@ -435,16 +441,25 @@ def _parse_python_body(stdout: str, stderr: str) -> Outcome:
     return Outcome("none", text=detail, raw=stdout + stderr)
 
 
-def parse_native(stdout: str, stderr: str) -> Outcome:
+def _failed(out: Outcome, stderr: str, returncode: int) -> Outcome:
+    """A run that exited non-zero with no other outcome failed; say so. Read as `none` it
+    matched a side that succeeded with the same plan (Codex follow-up review, 2026-09-28)."""
+    if returncode == 0 or out.kind != "none":
+        return out
+    last = next((line for line in reversed(stderr.splitlines()) if line.strip()), "")
+    return Outcome("error", text=f"exit {returncode}: {last.strip()}", raw=out.raw)
+
+
+def parse_native(stdout: str, stderr: str, returncode: int = 0) -> Outcome:
     """Parse `knaif run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
-    out = _parse_native_body(stdout, stderr)
+    out = _failed(_parse_native_body(stdout, stderr), stderr, returncode)
     out.dumped_plan = _dumped_plan(stderr)
     return _with_dumped_argvs(out, stderr)
 
 
-def parse_python(stdout: str, stderr: str) -> Outcome:
+def parse_python(stdout: str, stderr: str, returncode: int = 0) -> Outcome:
     """Parse `knaif-cli run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
-    out = _parse_python_body(stdout, stderr)
+    out = _failed(_parse_python_body(stdout, stderr), stderr, returncode)
     out.dumped_plan = _dumped_plan(stderr)
     return _with_dumped_argvs(out, stderr)
 
@@ -538,7 +553,7 @@ def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Pa
         "--dry-run",
         "--model",
         str(model_path),
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv,
@@ -549,7 +564,7 @@ def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Pa
         errors="replace",
         env=_native_env(),
     )
-    return parse_native(proc.stdout, proc.stderr)
+    return parse_native(proc.stdout, proc.stderr, proc.returncode)
 
 
 def parse_plan_json(stdout: str, stderr: str) -> Outcome:
@@ -704,7 +719,7 @@ def run_native_plan(native_bin: Path, skill: str, model_path: Path, utt: str, cw
         "--json",
         "--model",
         str(model_path),
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
@@ -723,7 +738,7 @@ def run_python_plan(skill: str, python_model: str, utt: str, cwd: Path) -> Outco
         "llama-cpp",
         "--model",
         python_model,
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
@@ -747,7 +762,7 @@ def run_python(skill: str, python_model: str, utt: str, cwd: Path) -> Outcome:
         "llama-cpp",
         "--model",
         python_model,
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv,
@@ -758,7 +773,7 @@ def run_python(skill: str, python_model: str, utt: str, cwd: Path) -> Outcome:
         errors="replace",
         env={**os.environ, "KNAIF_DUMP_PLAN": "1"},  # the plan it ran; see `_native_env`
     )
-    return parse_python(proc.stdout, proc.stderr)
+    return parse_python(proc.stdout, proc.stderr, proc.returncode)
 
 
 def _resolve_python_model_path(python_model: str) -> Path | None:
