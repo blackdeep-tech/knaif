@@ -149,3 +149,26 @@ Two notes for T17, neither changing a verdict:
 - An acceptance record keeps only the verdict's first line, so the 1.7B Vulkan ffmpeg record reads
   "1 of 45 thresholds unmet:" without naming the batch slice. The owner-exception record at T17
   should carry the unmet threshold.
+
+## T11 — Cross-backend flips (partial: 1.7B CUDA/CPU follows T10)
+
+Run 2026-09-28 with the committed `t11_flips.py` over the existing boards (reads JSON only). A
+flip is a row whose plans differ between the two backends (decision level, and canonical); each
+set is split by the `success` grade. "Only X correct" rows are where the backend decided the
+outcome for a user. Reports: `{4b,1.7b}/flips_<skill>_cuda_vs_<backend>.txt`.
+
+| Model / skill | Pair | Decision flips | Both correct | Only CUDA correct | Only other correct | Both wrong |
+|---|---|---|---|---|---|---|
+| 4B ffmpeg | CUDA / Vulkan | 30 | 20 | 5 | 4 | 1 |
+| 4B ffmpeg | CUDA / CPU (composed) | 37 | 25 | 5 | 5 | 2 |
+| 4B documents | CUDA / Vulkan | 4 | 1 | 0 | 2 | 1 |
+| 4B documents | CUDA / CPU (composed) | 1 | 0 | 0 | 0 | 1 |
+| 1.7B ffmpeg | CUDA / Vulkan | 10 | 3 | 4 | 2 | 1 |
+| 1.7B documents | CUDA / Vulkan | 0 | – | – | – | – |
+
+Canonical-level counts equal the decision-level ones except 4B ffmpeg CUDA/CPU (35: `ffmpeg_119#1`
+and `ffmpeg_096#2` differ in the decision only). Flips are 1–4% of rows and the one-side-correct
+sets are balanced (5/5, 5/4, 0/2, 4/2): no backend is systematically worse; they break near-ties
+differently. The 1.7B CUDA/Vulkan "only CUDA correct" set holds `ffmpeg_229#4`, the row behind
+that cell's batch-slice miss (T8). The 4B CPU board is composed, so its flips are exactly the
+re-run rows whose CPU plan still differs from CUDA's at the decision level.
