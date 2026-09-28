@@ -8,7 +8,10 @@
 R="${1:?usage: watch_run.sh <run folder>}"
 while true; do
   clear
-  f=$(ls -t "$R"/*.log "$R"/*/*/*.log 2>/dev/null | grep -v fixtures | head -1)
+  # The newest log at any depth (T9b's rows sit three folders down), skipping the helper logs
+  # that carry no rows.
+  f=$(find "$R" -name '*.log' ! -name 'fixtures*' ! -name '*_rerun.log' ! -name '*_compose.log' \
+    -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
   echo "== stage"
   tail -n 3 "$R/COMPLETE" 2>/dev/null
   echo "== verdicts"
