@@ -1053,13 +1053,16 @@ def compare(
     # Only decidable when both sides dumped the plan they ran; without it the row stays an
     # ordinary mismatch rather than being called a port bug on a guess.
     if (
-        native.kind == "commands"
-        and py.kind == "commands"
-        and native.dumped_plan
+        native.dumped_plan
         and py.dumped_plan
         and _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
     ):
-        return "port-bug", "same plan, different commands"
+        if native.kind == "commands" and py.kind == "commands":
+            return "port-bug", "same plan, different commands"
+        # Same plan, and one side asked, refused or failed where the other ran: a deterministic
+        # stage after the plan differs (R5c L3: Python's NL clarify gate had no native port, and
+        # four such rows were counted as model disagreement; Codex audit, 2026-09-28).
+        return "port-bug", f"same plan, different outcome (native={native.kind} python={py.kind})"
     # Both declined execution but chose different control tools (reject vs clarify): a softer
     # class than real command drift — usually a prompt/core-tool sync gap, not a wrong action.
     if native.kind in ("clarify", "reject") and py.kind in ("clarify", "reject"):

@@ -344,3 +344,33 @@ def test_the_argv_marker_is_one_string_in_all_three_places() -> None:
     rust = (REPO / "apps" / "cli" / "src" / "main.rs").read_text(encoding="utf-8")
     assert f'const ARGV_DUMP_MARKER: &str = "{pc.ARGV_DUMP_MARKER}";' in rust
     assert app_marker == pc.ARGV_DUMP_MARKER
+
+
+# ── same plan, different outcome (Codex audit of the R5c L3 run, 2026-09-28) ───────────────
+
+
+def test_same_plan_but_python_asks_and_native_runs_is_a_port_bug() -> None:
+    """R5c L3 counted these as model disagreement: both runtimes planned `reverse_video` on
+    "mov", Python's NL clarify gate asked, native had no such gate and ran. The plans agreed,
+    so the difference is the port's, whatever the two outcomes are."""
+    mov = [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]
+    nat = _native("ffmpeg -y -i mov -vf reverse mov_reversed.mp4", mov)
+    py = pc.parse_python("\n❓ CLARIFY: Which mov did you mean?\n", _dump(mov))
+    status, note = pc.compare(_row(), nat, py, strict=False, cwd="/w")
+    assert status == "port-bug"
+    assert "outcome" in note
+
+
+def test_different_plans_with_different_outcomes_stay_disagreement() -> None:
+    nat = _native(CMD_A, PLAN)
+    py = pc.parse_python("\n❓ CLARIFY: Which file?\n", _dump(OTHER_PLAN))
+    status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
+    assert status == "mismatch"
+
+
+def test_both_asking_the_same_plan_is_a_match() -> None:
+    mov = [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]
+    nat = pc.parse_native("clarify: Which mov did you mean?\n", _dump(mov))
+    py = pc.parse_python("\n❓ CLARIFY: Which mov did you mean?\n", _dump(mov))
+    status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
+    assert status == "match"
