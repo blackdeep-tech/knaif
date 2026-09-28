@@ -53,9 +53,10 @@ $exe = "$loc\bin\knaif.exe"
 $v = Version $exe
 Check 'installed_110_runs' ($v -match '^knaif 1\.1\.0') $v
 
-# 3. A running 1.1.0 CLI: a first run with no model asks "Download recommended model ...? [y/N]"
-#    in its own console window and waits there, holding the knaif-cli-running mutex.
-$holder = Start-Process $exe -ArgumentList 'run', 'ffmpeg', 'convert', 'a.mp4', 'to', 'mkv' -WorkingDirectory C:\t12 -PassThru
+# 3. A running 1.1.0 CLI: a first documents run with no model asks "Download recommended model ...? [y/N]"
+#    in its own console window and waits there, holding the knaif-cli-running mutex. (Not ffmpeg:
+#    with no ffmpeg on PATH, 1.1.0 stops at its tool check before the prompt; first pass, T12.)
+$holder = Start-Process $exe -ArgumentList 'run', 'documents', 'rotate', 'doc.pdf' -WorkingDirectory C:\t12 -PassThru
 Start-Sleep -Seconds 8
 $m = $null
 $held = [System.Threading.Mutex]::TryOpenExisting('knaif-cli-running', [ref]$m)

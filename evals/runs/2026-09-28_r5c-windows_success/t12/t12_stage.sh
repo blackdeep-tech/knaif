@@ -35,6 +35,10 @@
 # Not covered, by design: the CUDA component on a machine with an NVIDIA card (T8 installed the
 # payload with `backend install`); the wizard's task tree (a GUI check, only if the owner asks).
 # PREDICTION: every check passes; the OCR row takes 1-3 min on the Sandbox CPU.
+# AMENDED 2026-09-28 after the first pass (11/13; the OCR text check passed): its mutex holder
+#   was a 1.1.0 `run ffmpeg`, which exits at its tool check when ffmpeg is not on PATH, so nothing
+#   held the mutex and the 'refused while running' attempt upgraded instead. The holder is now a
+#   1.1.0 `run documents` at its first-run download prompt (reproduced on the host). Rules unchanged.
 set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 T=sandbox/r5c/t12
