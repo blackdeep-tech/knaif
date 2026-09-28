@@ -295,8 +295,11 @@ def _cells_state(
         for cell in cells
     }
     worst = min((s.state for s in per_cell.values()), key=_SEVERITY.index)
+    # A composed cell (evalsuite.compose) rests on reused evidence; it counts, and says so.
+    composed = [c for c in cells if ((stored or {}).get(c) or {}).get("composed")]
+    note = f" [composed, not a full run: {', '.join(composed)}]" if composed else ""
     if worst == "valid":
-        return LayerState(layer, "valid", f"{len(cells)} cell(s) valid")
+        return LayerState(layer, "valid", f"{len(cells)} cell(s) valid{note}")
     groups = []
     for state in _SEVERITY[:-1]:
         hit = [(cell, st) for cell, st in per_cell.items() if st.state == state]
@@ -309,7 +312,7 @@ def _cells_state(
     bad = "; ".join(groups)
     if stored is None and entry:
         bad = "record is not keyed by cell (pre-matrix); " + bad
-    return LayerState(layer, worst, bad)
+    return LayerState(layer, worst, bad + note)
 
 
 def evaluate_skill(

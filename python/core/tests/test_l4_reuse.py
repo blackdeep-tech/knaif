@@ -120,7 +120,7 @@ def test_a_composed_cell_takes_the_replacement_rows_and_rescores() -> None:
     assert out["total"] == 2
     assert out["composed"] is True
     assert out["composed_from"]["replaced_rows"] == [["a", 1]]
-    assert out["composed_from"]["base"] == "cuda.json"
+    assert out["composed_from"]["base"]["path"] == "cuda.json"
     assert out["compute_backend"] == "CPU", "the cell is the replacement's backend"
 
 
@@ -217,4 +217,172 @@ def test_compose_writes_a_composed_board(tmp_path: Path) -> None:
     board = json.loads(out.read_text(encoding="utf-8"))
     assert board["composed"] is True and board["outcome_accuracy"] == 1.0
     assert board["composed_from"]["note"].startswith("4B CPU cell")
-    assert board["composed_from"]["base"].endswith("cuda.json")
+    assert board["composed_from"]["base"]["path"].endswith("cuda.json")
+    assert len(board["composed_from"]["base"]["file_sha256"]) == 64, "the file composed from"
+    assert len(board["composed_from"]["replacements"]["file_sha256"]) == 64
+
+
+# ── hardening (Codex pre-freeze audit, 2026-09-28) ────────────────────────────────────────
+
+
+def test_composition_refuses_an_empty_replacement() -> None:
+    base = _board([_scored("a", 0, True, 1.0)])
+    with pytest.raises(ValueError, match="no rows"):
+        cmp.compose_cell(base, _board([]), sources={})
+
+
+def test_composition_refuses_a_duplicate_key_on_either_side() -> None:
+    base = _board([_scored("a", 0, True, 1.0), _scored("a", 1, True, 1.0)])
+    twice = _board([_scored("a", 1, True, 1.0), _scored("a", 1, False, 0.0)])
+    with pytest.raises(ValueError, match="duplicate"):
+        cmp.compose_cell(base, twice, sources={})
+    dup_base = _board([_scored("a", 0, True, 1.0), _scored("a", 0, False, 0.0)])
+    with pytest.raises(ValueError, match="duplicate"):
+        cmp.compose_cell(dup_base, _board([_scored("a", 0, True, 1.0)]), sources={})
+
+
+def test_composition_refuses_a_row_without_an_utterance_index() -> None:
+    """A missing index used to read as 0, silently replacing another utterance's row."""
+    base = _board([_scored("a", 0, True, 1.0)])
+    row = _scored("a", 0, True, 1.0)
+    del row["utterance_idx"]
+    with pytest.raises(ValueError, match="utterance_idx"):
+        cmp.compose_cell(base, _board([row]), sources={})
+
+
+def test_a_composed_cell_carries_both_sources_fingerprints() -> None:
+    base = _board([_scored("a", 0, True, 1.0)], git_sha="g-cuda", binary_sha256="bin-cuda")
+    repl = _board(
+        [_scored("a", 0, True, 1.0)],
+        git_sha="g-cpu",
+        binary_sha256="bin-cpu",
+        compute_backend="CPU",
+    )
+    out = cmp.compose_cell(
+        base,
+        repl,
+        sources={
+            "base": {"path": "cuda.json", "file_sha256": "f1"},
+            "replacements": {"path": "cpu.json", "file_sha256": "f2"},
+            "note": "rule",
+        },
+    )
+    src = out["composed_from"]
+    assert src["base"]["path"] == "cuda.json" and src["base"]["file_sha256"] == "f1"
+    assert src["base"]["git_sha"] == "g-cuda" and src["base"]["binary_sha256"] == "bin-cuda"
+    assert src["base"]["compute_backend"] == "CUDA0"
+    assert src["replacements"]["git_sha"] == "g-cpu"
+    assert src["replacements"]["binary_sha256"] == "bin-cpu"
+    assert src["note"] == "rule"
+
+
+def test_a_composed_cell_keeps_the_policy_its_rows_were_graded_under() -> None:
+    """Re-aggregating must not restamp today's policy onto rows graded under an older one."""
+    base = _board([_scored("a", 0, True, 1.0)], scoring_policy=1)
+    repl = _board([_scored("a", 0, True, 1.0)], scoring_policy=1)
+    assert cmp.compose_cell(base, repl, sources={})["scoring_policy"] == 1
+
+
+def test_a_composed_cell_reports_no_latency() -> None:
+    """Its rows ran on two backends; a mean over both describes neither."""
+    base = _board([_scored("a", 0, True, 1.0), _scored("a", 1, True, 1.0)])
+    repl = _board([_scored("a", 1, True, 1.0)], compute_backend="CPU")
+    out = cmp.compose_cell(base, repl, sources={})
+    assert out["time_to_artifact_ms"] is None
+    assert all(tag["time_to_artifact_ms"] is None for tag in out["by_tag"].values())
+
+
+def test_the_rerun_set_is_every_full_plan_difference_and_every_unplanned_row() -> None:
+    def planned(rid: str, idx: int, plan: list) -> dict:
+        row = _scored(rid, idx, True, 1.0)
+        row["plan"] = {"plan": plan}
+        return row
+
+    trim = {"tool": "trim_video", "args": {"input": "clip.mp4", "end": "5"}}
+    base = _board(
+        [
+            planned("same", 0, [trim]),
+            planned("file", 0, [trim]),
+            planned("prose", 0, [{"tool": "clarify", "args": {"question": "Which file?"}}]),
+            planned("tool", 0, [trim]),
+            planned("new", 0, [trim]),
+        ]
+    )
+    plans = {
+        ("same", 0): [trim],
+        ("file", 0): [{"tool": "trim_video", "args": {"input": "other.mp4", "end": "5"}}],
+        ("prose", 0): [{"tool": "clarify", "args": {"question": "Which video file?"}}],
+        ("tool", 0): [{"tool": "strip_audio", "args": {"inputs": ["clip.mp4"]}}],
+    }
+    rerun = cmp.rerun_set(base, plans)
+    assert rerun.flipped == [("file", 0), ("tool", 0)], "file args count; clarify wording does not"
+    assert rerun.unplanned == [("new", 0)]
+    assert rerun.keys == [("file", 0), ("new", 0), ("tool", 0)]
+
+
+def test_the_gate_names_a_composed_cell(tmp_path: Path) -> None:
+    from knaif.evalsuite.gate import evaluate_skill, record_layers
+    from knaif.evalsuite.matrix import cell_key
+
+    from .test_acceptance_matrix import MODEL, _contracts_and_l3, _matrix
+    from .test_gate import make_tree
+
+    tree = make_tree(tmp_path)
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    cpu = cell_key(MODEL, "windows-x64", "cpu")
+    record_layers(
+        "demo",
+        tree,
+        {"L4": {"cell": cpu, "summary": "ACCEPTED", "passed": True, "composed": True}},
+    )
+    record_layers(
+        "demo",
+        tree,
+        {"L4": {"cell": cell_key(MODEL, "windows-x64", "cuda"), "summary": "run", "passed": True}},
+    )
+    l4 = next(s for s in evaluate_skill("demo", tree, "supported").layers if s.layer == "L4")
+    assert l4.state == "valid"
+    assert "composed" in l4.detail and cpu in l4.detail
+
+
+def test_the_printed_scoreboard_says_composed() -> None:
+    import io
+
+    from knaif.evalsuite.report import print_scoreboard
+
+    base = _board([_scored("a", 0, True, 1.0)])
+    out = cmp.compose_cell(
+        base,
+        _board([_scored("a", 0, True, 1.0)], compute_backend="CPU"),
+        sources={"base": "cuda.json", "replacements": "cpu.json"},
+    )
+    buf = io.StringIO()
+    print_scoreboard(out, file=buf)
+    assert "COMPOSED" in buf.getvalue()
+
+
+def test_rerun_set_writes_an_only_file_the_native_lane_reads(tmp_path: Path, capsys) -> None:
+    import json
+
+    from knaif.evalsuite.cli import build_parser, cmd_rerun_set, load_only
+
+    row = _scored("a", 0, True, 1.0)
+    row["plan"] = {"plan": [{"tool": "strip_audio", "args": {"inputs": ["clip.mp4"]}}]}
+    base = tmp_path / "cuda.json"
+    base.write_text(json.dumps(_board([row, _scored("b", 1, True, 1.0)])), encoding="utf-8")
+    plans = tmp_path / "cpu.jsonl"
+    plans.write_text(
+        json.dumps({"id": "a", "utterance_idx": 0, "plan": [{"tool": "clarify", "args": {}}]})
+        + "\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "only.json"
+    args = build_parser().parse_args(
+        ["rerun-set", "--base", str(base), "--plans", str(plans), "--out", str(out)]
+    )
+    cmd_rerun_set(args)
+
+    assert load_only(str(out)) == {("a", 0), ("b", 1)}
+    printed = capsys.readouterr().out
+    assert "1 planned differently" in printed and "1 without a reused plan" in printed

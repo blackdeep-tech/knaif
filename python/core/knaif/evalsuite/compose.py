@@ -13,6 +13,8 @@ The result is scored by `aggregate_scored_rows` — the aggregation a measured r
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass, field
 from typing import Any
 
 from .scoring import aggregate_scored_rows
@@ -34,32 +36,88 @@ _FROM_REPLACEMENT = (
 _MUST_MATCH = ("model_sha256", "backend_public_name", "lane_kind", "verifier", "scoring_policy")
 
 
-def _key(row: dict[str, Any]) -> tuple[str, int]:
-    return (str(row["id"]), int(row.get("utterance_idx") or 0))
+#: What identifies a source board: the tree, binary and model it ran, and where and how it was
+#: graded. Both sources' fingerprints travel with the composed cell, so neither can be swapped out
+#: from under it without the record saying so.
+_FINGERPRINT = (
+    "git_sha",
+    "git_dirty",
+    "binary_sha256",
+    "model_sha256",
+    "scoring_policy",
+    "verifier",
+    "compute_backend",
+    "os",
+    "lane",
+    "total",
+)
+#: Control tools whose arguments are prose: two plans that both ask agree, whatever the wording
+#: (as `scripts/flip_rate.py` compares them).
+_PROSE_TOOLS = frozenset({"clarify", "reject", "done"})
+
+Key = tuple[str, int]
+
+
+def _key(row: dict[str, Any], side: str) -> Key:
+    idx = row.get("utterance_idx")
+    if not isinstance(idx, int) or isinstance(idx, bool):
+        raise ValueError(
+            f"cannot compose: {side} row {row.get('id')!r} has no utterance_idx; reading it as 0 "
+            "would replace another utterance's row"
+        )
+    return (str(row["id"]), idx)
+
+
+def _keyed(rows: list[dict[str, Any]], side: str) -> dict[Key, dict[str, Any]]:
+    out: dict[Key, dict[str, Any]] = {}
+    for row in rows:
+        key = _key(row, side)
+        if key in out:
+            raise ValueError(f"cannot compose: duplicate {side} row {list(key)}")
+        out[key] = row
+    return out
+
+
+def _source(given: Any, board: dict[str, Any]) -> dict[str, Any]:
+    described = dict(given) if isinstance(given, dict) else {"path": given}
+    return {**described, **{name: board.get(name) for name in _FINGERPRINT}}
 
 
 def compose_cell(
     base: dict[str, Any], replacements: dict[str, Any], *, sources: dict[str, Any]
 ) -> dict[str, Any]:
-    """*base* with *replacements*' rows swapped in, re-aggregated, and marked composed."""
-    for field in _MUST_MATCH:
-        if base.get(field) != replacements.get(field):
+    """*base* with *replacements*' rows swapped in, re-aggregated, and marked composed.
+
+    *sources* names the two boards (`base`, `replacements`: a path or a dict such as
+    `{"path", "file_sha256"}`) and the reuse rule applied (`note`).
+    """
+    for name in _MUST_MATCH:
+        if base.get(name) != replacements.get(name):
             raise ValueError(
-                f"cannot compose: {field} differs ({base.get(field)!r} vs "
-                f"{replacements.get(field)!r}); the rows would not describe one model and grader"
+                f"cannot compose: {name} differs ({base.get(name)!r} vs "
+                f"{replacements.get(name)!r}); the rows would not describe one model and grader"
             )
     if not (base.get("packaged_layout") and replacements.get("packaged_layout")):
         raise ValueError("cannot compose: both runs must come from the packaged layout")
+    if not replacements.get("rows"):
+        raise ValueError("cannot compose: the replacement board has no rows")
 
-    new_rows = {_key(r): r for r in replacements.get("rows") or []}
-    base_keys = {_key(r) for r in base.get("rows") or []}
-    missing = sorted(k for k in new_rows if k not in base_keys)
+    base_rows = _keyed(base.get("rows") or [], "base")
+    new_rows = _keyed(replacements["rows"], "replacement")
+    missing = sorted(k for k in new_rows if k not in base_rows)
     if missing:
         raise ValueError(f"cannot compose: replacement rows not in the base: {missing[:5]}")
 
-    rows = [new_rows.get(_key(r), r) for r in base.get("rows") or []]
+    rows = [new_rows.get(key, row) for key, row in base_rows.items()]
     board = aggregate_scored_rows(rows, [], str(base.get("verifier")))
-    for field in (
+    # The rows were graded under the sources' policy (checked equal above), not necessarily the
+    # one this code would stamp today.
+    board["scoring_policy"] = base.get("scoring_policy")
+    # The rows ran on two backends (or two OSes): a latency over both describes neither.
+    board["time_to_artifact_ms"] = None
+    for tag in board["by_tag"].values():
+        tag["time_to_artifact_ms"] = None
+    for name in (
         "lane_kind",
         "backend",
         "backend_public_name",
@@ -67,16 +125,59 @@ def compose_cell(
         "model_sha256_prefix",
         "packaged_layout",
     ):
-        if field in base:
-            board[field] = base[field]
-    for field in _FROM_REPLACEMENT:
-        if field in replacements:
-            board[field] = replacements[field]
+        if name in base:
+            board[name] = base[name]
+    for name in _FROM_REPLACEMENT:
+        if name in replacements:
+            board[name] = replacements[name]
     board["composed"] = True
     board["composed_from"] = {
-        **sources,
+        "note": sources.get("note"),
+        "base": _source(sources.get("base"), base),
+        "replacements": _source(sources.get("replacements"), replacements),
         "replaced_rows": [list(k) for k in sorted(new_rows)],
-        "base_compute_backend": base.get("compute_backend"),
-        "base_os": base.get("os"),
     }
     return board
+
+
+# ── which rows a composed cell must re-run ────────────────────────────────────────────────
+
+
+def _full_plan(plan: Any) -> tuple:
+    """The whole plan, file arguments included; prose tools compare by tool alone."""
+    steps = plan.get("plan") if isinstance(plan, dict) else plan
+    out: list[tuple[Any, ...]] = []
+    for step in steps or []:
+        tool = step.get("tool")
+        if tool in _PROSE_TOOLS:
+            out.append((tool,))
+        else:
+            args = step.get("args") or {}
+            out.append((tool, json.dumps(args, sort_keys=True)))
+    return tuple(out)
+
+
+@dataclass
+class RerunSet:
+    """The rows of a base board that reused plans cannot vouch for."""
+
+    flipped: list[Key] = field(default_factory=list)  # planned differently (full plan)
+    unplanned: list[Key] = field(default_factory=list)  # no reused plan at all
+
+    @property
+    def keys(self) -> list[Key]:
+        return sorted(self.flipped + self.unplanned)
+
+
+def rerun_set(base: dict[str, Any], plans: dict[Key, Any]) -> RerunSet:
+    """Every base row whose reused plan differs from the base's in full (not only in decision),
+    or that has no reused plan (a corpus row added since the plans were taken)."""
+    out = RerunSet()
+    for key, row in _keyed(base.get("rows") or [], "base").items():
+        if key not in plans:
+            out.unplanned.append(key)
+        elif _full_plan(row.get("plan")) != _full_plan(plans[key]):
+            out.flipped.append(key)
+    out.flipped.sort()
+    out.unplanned.sort()
+    return out

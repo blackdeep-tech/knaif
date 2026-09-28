@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import functools
+import hashlib
 import importlib.util
 import json
 import sys
@@ -1748,18 +1749,41 @@ def cmd_compose(args: argparse.Namespace) -> None:
     from .compose import compose_cell
     from .report import save_scoreboard_json
 
-    base = json.loads(Path(args.base).read_text(encoding="utf-8"))
-    replacements = json.loads(Path(args.replace).read_text(encoding="utf-8"))
+    def source(path: str) -> tuple[dict[str, Any], dict[str, str]]:
+        raw = Path(path).read_bytes()
+        return json.loads(raw), {"path": path, "file_sha256": hashlib.sha256(raw).hexdigest()}
+
+    base, base_src = source(args.base)
+    replacements, repl_src = source(args.replace)
     board = compose_cell(
         base,
         replacements,
-        sources={"base": str(args.base), "replacements": str(args.replace), "note": args.note},
+        sources={"base": base_src, "replacements": repl_src, "note": args.note},
     )
     save_scoreboard_json(redact_local_paths(board), Path(args.out))
     print(
         f"composed {board['total']} rows ({len(board['composed_from']['replaced_rows'])} replaced)"
         f" -> {args.out}: outcome {board['outcome_accuracy']:.4f}, knaif "
         f"{board['avg_knaif_score'] if board['avg_knaif_score'] is None else round(board['avg_knaif_score'], 4)}"
+    )
+
+
+def cmd_rerun_set(args: argparse.Namespace) -> None:
+    """The rows a composed cell must re-run: every base row whose reused plan differs in full, or
+    that has none. Written as a `native --only` file (R5c T9b)."""
+    from .compose import rerun_set
+
+    base = json.loads(Path(args.base).read_text(encoding="utf-8"))
+    plans = {}
+    for line in Path(args.plans).read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rec = json.loads(line)
+            plans[(str(rec["id"]), int(rec["utterance_idx"]))] = rec.get("plan")
+    rerun = rerun_set(base, plans)
+    Path(args.out).write_text(json.dumps([list(k) for k in rerun.keys]) + "\n", encoding="utf-8")
+    print(
+        f"{len(rerun.keys)} rows to re-run -> {args.out}: {len(rerun.flipped)} planned differently"
+        f" (full plan), {len(rerun.unplanned)} without a reused plan"
     )
 
 
@@ -2229,6 +2253,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_comp.add_argument("--out", required=True, metavar="FILE")
     p_comp.add_argument("--note", required=True, help="Which reuse rule this composition applies")
 
+    # rerun-set — which rows a composed cell cannot reuse (release plan R5c, T9b)
+    p_rr = sub.add_parser(
+        "rerun-set",
+        help="Rows a composed cell must re-run: reused plans that differ from the base, or none",
+        description=(
+            "Compares each row's plan on the base board with a reused plan (a flip_rate.py "
+            ".jsonl) in full, file arguments included, and lists every row that differs or has "
+            "no reused plan as a `native --only` file."
+        ),
+    )
+    p_rr.add_argument("--base", required=True, metavar="FILE", help="The measured cell's board")
+    p_rr.add_argument("--plans", required=True, metavar="FILE", help="Reused plans (.jsonl)")
+    p_rr.add_argument("--out", required=True, metavar="FILE", help="The `--only` file to write")
+
     # accept-native — L4d, the only check that can buy `supported`
     p_accn = sub.add_parser(
         "accept-native",
@@ -2531,6 +2569,7 @@ def main() -> None:
         "accept": cmd_accept,
         "accept-native": cmd_accept_native,
         "compose": cmd_compose,
+        "rerun-set": cmd_rerun_set,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,
