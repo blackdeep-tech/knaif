@@ -249,8 +249,13 @@ def _layer_state(
     record: dict[str, Any] | None,
     current: dict[str, str | None],
     contract: dict[str, Any],
+    cell: str | None = None,
 ) -> LayerState:
-    """Evidence for one layer: present and matching the tree, present but stale, or absent."""
+    """Evidence for one layer: present and matching the tree, present but stale, or absent.
+
+    *cell* is the matrix cell being judged (L3/L4). A cell is a measurement with a verdict, so
+    it must carry a literal true/false: anything else read as a pass before (Codex, 2026-09-28).
+    """
     if record is None:
         return LayerState(layer, "pending", "no acceptance record")
     entry = (record.get("layers") or {}).get(layer)
@@ -280,8 +285,12 @@ def _layer_state(
     # A run that recorded its own verdict is taken at its word. Recording a FAILED run as valid
     # evidence would let a status rest on a measurement that said "no" — the exact substitution
     # of "we ran it" for "it passed" this gate exists to prevent.
+    if cell is not None and not isinstance(entry.get("passed"), bool):
+        return LayerState(
+            layer, "failing", f"record carries no true/false verdict ({entry.get('passed')!r})"
+        )
     if entry.get("passed") is False:
-        waiver = _waiver_that_holds(entry)
+        waiver = _waiver_that_holds(entry, cell)
         if waiver is not None:
             return LayerState(
                 layer,
@@ -308,21 +317,44 @@ _SEVERITY = ("failing", "stale", "pending", "excepted", "valid")
 WAIVABLE_KINDS = frozenset({"aggregate", "slice"})
 
 
-def _unmet_kinds(summary: str) -> list[str]:
-    """The kinds a recorded verdict names (`[slice] ...`), in order; empty if it names none."""
-    return re.findall(r"\[(\w+)\]", summary)
+_UNMET_HEADER = re.compile(r"NOT ACCEPTED - (\d+) of \d+ thresholds unmet:")
 
 
-def _waiver_that_holds(entry: dict[str, Any]) -> dict[str, Any] | None:
-    """The cell's owner exception, if it still applies: given for THIS verdict (its text quoted
-    verbatim, so a re-run's different miss is not covered), with a reason, over quality
-    thresholds only. Checked here too, not only when written, since the record is a file."""
+def _unmet_kinds(summary: str) -> list[str] | None:
+    """The kind of every unmet threshold a recorded verdict names (`[slice] ...`), or None when
+    the summary does not account for all of them: the header's count must match the kinds
+    listed, and every bracket must be a well-formed kind. A summary that hides a miss (a
+    mangled `[safety ]`, a dropped line) must not be waivable (Codex, 2026-09-28)."""
+    header = _UNMET_HEADER.match(summary)
+    kinds = re.findall(r"\[(\w+)\] ", summary)
+    if header is None or not kinds:
+        return None
+    if int(header.group(1)) != len(kinds) or summary.count("[") != len(kinds):
+        return None
+    return kinds
+
+
+def _waivable(summary: str) -> bool:
+    kinds = _unmet_kinds(summary)
+    return kinds is not None and set(kinds) <= WAIVABLE_KINDS
+
+
+def _waiver_that_holds(entry: dict[str, Any], cell: str | None) -> dict[str, Any] | None:
+    """The cell's owner exception, if it still applies: given for THIS cell and THIS
+    measurement (its verdict quoted verbatim, its run and evidence the ones recorded, so a
+    re-run or a copy onto another cell is not covered), with a reason, over quality thresholds
+    only. Checked here too, not only when written, since the record is a file."""
     waiver = entry.get("owner_exception")
     summary = str(entry.get("summary") or "")
-    if not isinstance(waiver, dict) or waiver.get("waives") != summary:
+    if not isinstance(waiver, dict) or not _waivable(summary):
         return None
-    kinds = _unmet_kinds(summary)
-    if not kinds or not set(kinds) <= WAIVABLE_KINDS or not str(waiver.get("reason") or "").strip():
+    bound = (
+        waiver.get("waives") == summary
+        and waiver.get("cell") == cell
+        and waiver.get("run") == entry.get("run")
+        and waiver.get("evidence") == entry.get("evidence")
+    )
+    if not bound or not str(waiver.get("reason") or "").strip():
         return None
     return waiver
 
@@ -340,15 +372,21 @@ def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, da
     if not isinstance(entry, dict) or entry.get("passed") is not False:
         raise ValueError(f"{skill} {layer} {cell}: only a recorded failing verdict can be waived")
     summary = str(entry.get("summary") or "")
-    kinds = _unmet_kinds(summary)
-    if not kinds or not set(kinds) <= WAIVABLE_KINDS:
+    if not _waivable(summary):
         raise ValueError(
             f"{skill} {layer} {cell}: {summary!r} is not waivable; only "
             f"{sorted(WAIVABLE_KINDS)} thresholds are, and the verdict must name them"
         )
     if not reason.strip():
         raise ValueError("a waiver needs the reason for the decision")
-    entry["owner_exception"] = {"date": date, "reason": reason.strip(), "waives": summary}
+    entry["owner_exception"] = {
+        "date": date,
+        "reason": reason.strip(),
+        "waives": summary,
+        "cell": cell,
+        "run": entry.get("run"),
+        "evidence": entry.get("evidence"),
+    }
     path = root / ACCEPTANCE_DIR / f"{skill}.json"
     record = redact_local_paths(record, root=root)
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -378,6 +416,7 @@ def _cells_state(
             {"layers": {layer: (stored or {}).get(cell)}},
             _current_for_cell(cell, current, root),
             contract,
+            cell,
         )
         for cell in cells
     }

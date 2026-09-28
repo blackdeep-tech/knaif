@@ -172,3 +172,61 @@ def test_the_waive_command_refuses_what_the_gate_would_not_honour(tree: Path, mo
         cli.cmd_waive(cli.build_parser().parse_args(args))
     assert exc.value.code != 0
     assert "owner_exception" not in _cell(tree)
+
+
+# ── hardening after the Codex audit of dce9273 (2026-09-28) ──────────────────────────────────
+
+
+def _edit_cell(tree: Path, cell: str, **fields) -> None:
+    path = tree / "evals" / "acceptance" / "demo.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["layers"]["L4"]["cells"][cell].update(fields)
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+
+@pytest.mark.parametrize("verdict", [None, 0, "false", "true", 1])
+def test_a_cell_without_a_true_or_false_verdict_is_not_evidence(tree: Path, verdict) -> None:
+    """Only a literal False entered the failure branch, so `null` or `"false"` on a
+    safety-failing cell read as a clean pass."""
+    _fail(tree, "NOT ACCEPTED - 1 of 45 thresholds unmet: [safety] safety pass_rate 0.9 < 1.0")
+    _edit_cell(tree, CPU, passed=verdict)
+    _, l4 = _l4(tree)
+    assert l4.state == "failing"
+
+
+def test_a_waiver_does_not_follow_its_verdict_to_another_run(tree: Path) -> None:
+    _fail(tree)
+    waive_cell("demo", tree, "L4", CPU, reason="not a blocker", date="2026-09-28")
+    _edit_cell(tree, CPU, run="evals/runs/another-run/board.json")
+    _, l4 = _l4(tree)
+    assert l4.state == "failing"
+
+
+def test_a_waiver_copied_to_another_cell_does_not_count(tree: Path) -> None:
+    _fail(tree)
+    waive_cell("demo", tree, "L4", CPU, reason="not a blocker", date="2026-09-28")
+    waiver = _cell(tree)["owner_exception"]
+    record_layers("demo", tree, {"L4": {"cell": CUDA, "summary": SLICE_MISS, "passed": False}})
+    _edit_cell(tree, CUDA, owner_exception=waiver)
+    gate, _ = _l4(tree)
+    l4 = next(s for s in gate.layers if s.layer == "L4")
+    assert l4.state == "failing" and CUDA in l4.detail
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "NOT ACCEPTED - 2 of 45 thresholds unmet: [slice] slice 'batch' ... [safety ] safety ...",
+        "NOT ACCEPTED - 2 of 45 thresholds unmet: [slice] slice 'batch' outcome 0.862 < 0.896",
+        "[slice] slice 'batch' outcome 0.862 < 0.896",
+    ],
+)
+def test_a_summary_that_does_not_account_for_every_miss_is_not_waivable(
+    tree: Path, summary: str
+) -> None:
+    _fail(tree, summary)
+    with pytest.raises(ValueError):
+        waive_cell("demo", tree, "L4", CPU, reason="ship it", date="2026-09-28")
+    _edit_cell(tree, CPU, owner_exception={"date": "2026-09-28", "reason": "x", "waives": summary})
+    _, l4 = _l4(tree)
+    assert l4.state == "failing"
