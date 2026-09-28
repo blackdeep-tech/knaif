@@ -1,0 +1,47 @@
+{
+  "purpose": "R5c L3, re-frozen RC 71884fd, packaged Windows artifact, installed CUDA payload (probe: CUDA0)",
+  "captured": "2026-09-28",
+  "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+  "git_branch": "feat/r3-training-data",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills\\ffmpeg\\data\\eval.jsonl",
+    "rows_compared": 328,
+    "sha256": "2e92836621aa31ede7ab85458b5ede7a8377d1e52a6f949cd79b334a7a94e92e"
+  },
+  "model": {
+    "path": "<repo>\\models\\knaif-qwen3-4b-v2-q4_k_m.gguf",
+    "sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "<repo>\\sandbox\\r5c\\artifact\\knaif-1.2.0-windows-x64\\bin\\knaif.exe",
+    "sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+  },
+  "backend": "cuda",
+  "native_n_gpu_layers": null,
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs llama-cpp-python), so this is a standing property of the comparison, not a misconfiguration — see `backend_attribution.json` next to this file.",
+  "entry_points": {
+    "native": "<repo>\\sandbox\\r5c\\artifact\\knaif-1.2.0-windows-x64\\bin\\knaif.exe run S --dry-run --model knaif-qwen3-4b-v2-q4_k_m.gguf",
+    "python": "uv run knaif-cli run --dry-run --backend llama-cpp --model knaif-qwen3-4b-v2",
+    "stage": "rendered command argv (shipped dry-run path)"
+  },
+  "result": {
+    "counts": {
+      "match": 297,
+      "mismatch": 0,
+      "decline-divergence": 0,
+      "not-comparable": 31,
+      "native-not-implemented": 0,
+      "port-bug": 0
+    },
+    "equivalence_rate": 1.0,
+    "gated": 297,
+    "port_bugs": 0,
+    "native_not_implemented": 0,
+    "plan_disagreement": 0,
+    "plan_disagreement_rate": 0.0,
+    "max_plan_disagreement": 0.0411,
+    "passed": true
+  }
+}

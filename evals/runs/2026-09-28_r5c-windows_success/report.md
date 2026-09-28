@@ -46,3 +46,32 @@ a re-run of T7.
 
 Also found, not fixed (interactive only, the lanes run with `--yes`): declining the confirmation of
 one step lets native continue to the next, where Python stops.
+
+## T7 re-run on RC `71884fd` — PASS on all four
+
+Run 2026-09-28 14:06–15:02, packaged zip `929b2df0…` built from `71884fd`, installed CUDA
+payload, placement probed (CUDA0, all 37 layers, every part). Rules unchanged; the comparator
+now also counts "same plan, different outcome" as a port bug (`f72a2d8`) and compares the plans
+when neither side renders a command (`c8e041d`), so this run is held to a stricter instrument
+than the first pass.
+
+| L3 | Counts (match / mismatch / not comparable / port bug) | Plan disagreement | Verdict |
+|---|---|---|---|
+| 4B ffmpeg | 297 / 0 / 31 / 0 | 0.00% (bound 4.11%) | PASS |
+| 4B documents | 142 / 1 / 0 / 0 | 0.70% (bound 1.83%) | PASS |
+| 1.7B ffmpeg | 299 / 0 / 29 / 0 | 0.00% (bound 4.11%) | PASS |
+| 1.7B documents | 142 / 1 / 0 / 0 | 0.70% (bound 1.83%) | PASS |
+
+Reports: `evals/parity/2026-09-28_r5c-l3-rc2-*`. Prediction (written before the run): 0 port
+bugs, ffmpeg ~1.4% (4B) / ~0.3% (1.7B), documents ~0.7%. The ffmpeg disagreement came out lower,
+because all of the first pass's ffmpeg "mismatches" were the missing gate.
+
+The one documents disagreement on both models is `documents_057`: native plans
+`add_page_numbers` with `position: bottom-center`, Python with `position: bottom`.
+
+**After the run** (instrument only, nothing packaged): `875cd12` makes L3 read each CLI's exit
+status and pass the request after `--`. A scan of these four reports found no native failure
+hidden as a match; `ffmpeg_053` (`rm -rf /`) had failed on usage on both sides and so tested
+nothing, which the `--` fix repairs. Neither changes a verdict here. The gate then read the 1.7B
+cells as stale ("model"): it compared every cell with the recommended (4B) model. Fixed in
+`10cd496`; `check-gate` now reads L3 valid for both skills and both models.
