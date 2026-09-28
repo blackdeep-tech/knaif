@@ -50,6 +50,8 @@ check() { [ "$(sha256sum "$1" | cut -c1-64)" = "$2" ] || { echo "HASH MISMATCH: 
 check dist/knaif-1.2.0-windows-x64-setup.exe 76328a0b6395ef1c0f3bd83c637d7a134310908cad3b64324c963668e2b6d0c6
 check dist/knaif-1.2.0-windows-x64.zip 929b2df0fe7e3dc52f00c11e12cd7dd9125418cb61778b97ef1f19f4d6adfcea
 check "$T/in/knaif-1.1.0-windows-x64-setup.exe" b0e2c7e22197d0a189ba2bc1b28b82206d2c54c46d96a2d464dac342b94e5c4b
+# One Sandbox at a time: close any left open (its results are already on the host, in out/).
+for id in $(wsb list --raw 2>/dev/null | grep -oE '[0-9a-fA-F-]{36}'); do wsb stop --id "$id" >/dev/null 2>&1 || true; done
 rm -rf "$T/out"; mkdir -p "$T/in" "$T/out"
 cp dist/knaif-1.2.0-windows-x64-setup.exe dist/knaif-1.2.0-windows-x64.zip \
   sandbox/fixtures/documents/sample-scanned.pdf "$H/t12_sandbox.ps1" "$T/in/"
