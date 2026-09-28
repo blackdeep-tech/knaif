@@ -173,7 +173,7 @@
             "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
           },
           "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\vulkan\\ffmpeg_r5c-win-1.7b_success.json",
-          "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet:",
+          "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
           "passed": false,
           "coverage": 1.0,
           "outcome_accuracy": 0.9186991869918699,
