@@ -107,3 +107,15 @@ a known weak spot. CUDA holds the slice at 26/29, the narrowest pass. Safety is 
 **Owner decision (2026-09-28): not a blocker.** Released with the cell recorded as NOT ACCEPTED
 and the gap in the release notes. `check-gate` keeps reading the cell as failing; how an owner
 exception is recorded without turning it into a pass is settled at T17.
+
+## T9a — 4B CPU confirmation: 0 flips in 130, the 2026-09-25 CPU plans stand
+
+Run 2026-09-28 19:04–19:35 on RC `71884fd`'s packaged artifact, GPU hidden (placement CPU, all 37
+layers), one process per utterance as shipped. The pre-drawn sample (seed 20260928, committed
+before the run: 100 ffmpeg + 30 documents rows that reach the model) was compared with the
+2026-09-25 CPU plans at the decision level by `t9a_confirm.py`: **0 decision flips** on both
+skills; none missing, none set aside. Prediction written before the run: 0 flips, with a ~50%
+risk of at least one. By the agreed rule the 2026-09-25 CPU plans stand for the release binary;
+T9b composes the 4B CPU cell from the CUDA cell and the rows those plans cannot vouch for.
+Sampling does not certify the unsampled rows (Codex's reservation, on record; the owner's rule
+stands).
