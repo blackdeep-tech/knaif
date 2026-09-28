@@ -55,10 +55,50 @@ fn filename_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"(?-u)\b[\w\-]+\.[A-Za-z0-9]{2,4}\b").unwrap())
 }
 
-/// Python `_has_matching_stem_in_utterance`'s word pattern (Unicode word boundaries).
-fn stem_word_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\b[a-zA-Z0-9][a-zA-Z0-9_\-]*\b").unwrap())
+/// Python's `\w` for a `str` pattern: alphanumeric per `str.isalnum`, or `_`. Not the `regex`
+/// crate's Unicode `\w`, which also admits combining marks and not every numeric: `clip_4k` + a
+/// combining accent is a word end to Python and not to the crate, and a superscript `²` the
+/// reverse (Codex audit, 2026-09-28).
+fn py_is_word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Python's `str.isspace` (and `\s` for a `str` pattern): Unicode whitespace plus the four
+/// information separators U+001C–U+001F, which Rust's `char::is_whitespace` leaves out.
+fn py_is_space(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
+/// Python `str.strip()`.
+fn py_strip(s: &str) -> &str {
+    s.trim_matches(py_is_space)
+}
+
+/// The words `re.findall(r"\b[a-zA-Z0-9][a-zA-Z0-9_\-]*\b", utterance)` returns, with Python's
+/// word boundary: a match starts at an ASCII alphanumeric not preceded by a word character, runs
+/// greedily over `[A-Za-z0-9_-]`, and backs off to the last position that is a boundary.
+fn stem_words(utterance: &str) -> Vec<String> {
+    let chars: Vec<char> = utterance.chars().collect();
+    let is_word_at = |i: usize| i < chars.len() && py_is_word(chars[i]);
+    let boundary = |i: usize| (i > 0 && py_is_word(chars[i - 1])) != is_word_at(i);
+    let in_class = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-';
+    let mut words = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_ascii_alphanumeric() && boundary(i) {
+            let mut end = i + 1;
+            while end < chars.len() && in_class(chars[end]) {
+                end += 1;
+            }
+            if let Some(e) = (i + 1..=end).rev().find(|&e| boundary(e)) {
+                words.push(chars[i..e].iter().collect());
+                i = e;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    words
 }
 
 /// The gate. Returns *payload* unchanged, or with its plan replaced by one clarify step.
@@ -141,7 +181,7 @@ fn is_value_grounded(value: &Value, utterance: &str) -> bool {
     let Some(s) = value.as_str() else {
         return false;
     };
-    let s = s.trim();
+    let s = py_strip(s);
     !s.is_empty() && utterance.to_lowercase().contains(&s.to_lowercase())
 }
 
@@ -181,17 +221,23 @@ fn is_concretely_specified(token: &str, utterance: &str, inline: &HashSet<String
 /// structural marker and equals the token's `Path(...).stem`, ignoring case.
 fn has_matching_stem_in_utterance(token: &str, utterance: &str) -> bool {
     let stem = path_stem(token).to_lowercase();
-    stem_word_re().find_iter(utterance).any(|m| {
-        let word = m.as_str();
+    stem_words(utterance).iter().any(|word| {
         word.chars()
             .any(|c| c == '_' || c == '-' || c.is_ascii_digit())
             && word.to_lowercase() == stem
     })
 }
 
-/// Python `pathlib.Path(token).stem` for a token with no separator: `.` is empty, `..` stays
-/// whole, otherwise everything before the last dot unless that dot leads.
+/// Python `pathlib.Path(token).stem` (3.14, the pinned interpreter) for a token with no
+/// separator: `.` is empty, `..` stays whole, otherwise everything before the last dot unless
+/// that dot leads. On Windows a `WindowsPath` also drops a drive prefix (`C:clip.mp4` names
+/// `clip.mp4`), so this does too; a `PosixPath` keeps it.
 fn path_stem(token: &str) -> &str {
+    let token = if cfg!(windows) {
+        strip_drive(token)
+    } else {
+        token
+    };
     match token {
         "." => "",
         ".." => "..",
@@ -202,9 +248,19 @@ fn path_stem(token: &str) -> &str {
     }
 }
 
+/// `C:` from the front of a Windows drive-relative name.
+fn strip_drive(token: &str) -> &str {
+    let b = token.as_bytes();
+    if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
+        &token[2..]
+    } else {
+        token
+    }
+}
+
 /// Python `_clarify_question`: the token without a leading article, or the tool as a fallback.
 fn clarify_question(token: &str, tool: &str) -> String {
-    let body = strip_article(token).trim();
+    let body = py_strip(strip_article(token));
     if body.is_empty() {
         format!("Which file would you like to {}?", tool.replace('_', " "))
     } else {
@@ -214,7 +270,7 @@ fn clarify_question(token: &str, tool: &str) -> String {
 
 /// Python `_ARTICLE_RE = ^\s*(the|a|an)\s+` (case-insensitive), removed once.
 fn strip_article(token: &str) -> &str {
-    let rest = token.trim_start();
+    let rest = token.trim_start_matches(py_is_space);
     for article in ["the", "a", "an"] {
         let Some(head) = rest.get(..article.len()) else {
             continue;
@@ -223,8 +279,8 @@ fn strip_article(token: &str) -> &str {
             continue;
         }
         let after = &rest[article.len()..];
-        if after.starts_with(char::is_whitespace) {
-            return after.trim_start();
+        if after.starts_with(py_is_space) {
+            return after.trim_start_matches(py_is_space);
         }
     }
     token
@@ -250,6 +306,24 @@ mod tests {
         ] {
             assert_eq!(path_stem(token), stem, "{token:?}");
         }
+    }
+
+    #[test]
+    fn stem_words_follow_python_findall() {
+        assert_eq!(stem_words("trim clip_4k now"), ["trim", "clip_4k", "now"]);
+        assert_eq!(
+            stem_words("trim clip_4k\u{301} now"),
+            ["trim", "clip_4k", "now"]
+        );
+        assert_eq!(stem_words("trim \u{b2}clip_4k"), ["trim"]);
+        assert_eq!(stem_words("a-b- c_"), ["a-b", "c_"]);
+        assert_eq!(stem_words("\u{e9}clip_4k x"), ["x"]);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn a_windows_drive_is_not_part_of_the_stem() {
+        assert_eq!(path_stem("C:clip_4k.mp4"), "clip_4k");
     }
 
     #[test]

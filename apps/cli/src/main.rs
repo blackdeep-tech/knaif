@@ -1300,7 +1300,7 @@ fn build_plan(
     model: Option<&Path>,
     verbose: bool,
 ) -> anyhow::Result<serde_json::Value> {
-    PlanSession::new(root, skill, model, verbose)?.plan(utterance, base, sandbox)
+    PlanSession::new(root, skill, model, verbose)?.plan_for_run(utterance, base, sandbox)
 }
 
 /// A loaded planning session: the expensive per-run setup (skill registry, prompt overrides, and
@@ -1437,17 +1437,30 @@ impl PlanSession {
         // same path is already read rather than a new notion of where files live.
         let gated = resolve_plan_stems(gated, sandbox.unwrap_or(base));
         emit_plan_dump(plan_dump_enabled(), &gated);
-        // Then the NL clarify gate, as Python runs it right after `resolve_stems`: ask when the
-        // user never named an input the plan uses ("reverse the mov file" -> inputs ["mov"]), or
-        // when a grounded arg such as a password was invented. Without it native ran such plans
-        // and failed with "input not found" where Python asked (R5c L3, 2026-09-28).
-        //
-        // After the plan dump, not before: Python dumps its plan before `execute_plan`, where its
-        // gate runs, so the dumped plans stay comparable across runtimes (L3's "same plan") and
-        // across builds (R5c T9a), and a gate that fires shows as the run's clarify outcome.
+        Ok(gated)
+    }
+
+    /// [`Self::plan`], then the NL clarify gate: the plan `run` executes. Python runs that gate
+    /// in `execute_plan` right after `resolve_stems`, so it asks when the user never named an
+    /// input the plan uses ("reverse the mov file" -> inputs ["mov"]) or when a grounded arg such
+    /// as a password was invented. Without it native ran such plans and failed with "input not
+    /// found" where Python asked (R5c L3, 2026-09-28).
+    ///
+    /// Execution only, as in Python, whose `plan` command stops at `infer` and never applies it
+    /// (Codex audit, 2026-09-28): `plan` / `plan --batch` keep returning the ungated plan. And
+    /// after the plan dump, since Python dumps before `execute_plan`: the dumped plans stay
+    /// comparable across runtimes (L3's "same plan") and across builds (R5c T9a), and a gate
+    /// that fires shows as the run's clarify outcome.
+    fn plan_for_run(
+        &self,
+        utterance: &str,
+        base: &Path,
+        sandbox: Option<&Path>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let planned = self.plan(utterance, base, sandbox)?;
         Ok(knaif_core::nl_clarify_gate(
-            gated,
-            &utterance,
+            planned,
+            utterance,
             &self.registry,
         ))
     }

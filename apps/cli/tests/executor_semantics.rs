@@ -222,3 +222,30 @@ fn an_input_the_user_never_named_is_asked_about() {
         .expect("the plan is dumped");
     assert!(dumped.contains("reverse_video"), "{dumped}");
 }
+
+/// The NL clarify gate belongs to execution: `plan` returns the model's plan, as Python's `plan`
+/// command (which stops at `infer`) does. Codex audit of the port, 2026-09-28.
+#[test]
+fn plan_mode_does_not_apply_the_execution_gate() {
+    let plan = r#"{"plan": [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]}"#;
+    let out = Command::new(env!("CARGO_BIN_EXE_knaif"))
+        .args([
+            "plan",
+            "--skill",
+            "ffmpeg",
+            "--json",
+            "reverse the mov file",
+        ])
+        .env("KNAIF_LLM_BACKEND", "mock")
+        .env("KNAIF_LLM_MOCK_RESPONSE", plan)
+        .output()
+        .expect("run the knaif binary");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(stdout.contains("reverse_video"), "{stdout}");
+    assert!(!stdout.contains("clarify"), "{stdout}");
+}
