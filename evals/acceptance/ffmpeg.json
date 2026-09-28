@@ -32,42 +32,60 @@
       }
     },
     "L3": {
-      "run": "evals\\parity\\2026-09-15_l3-ffmpeg-command-t8",
-      "summary": "2026-09-15_l3-ffmpeg-command-t8: rate=0.84106 threshold=1.0 passed=False",
-      "equivalence_rate": 0.84106,
-      "passed": false,
-      "backend": "vulkan",
-      "git_sha": "b39b17ddc29e7c62f30ea2708ecbbf5d624d8d7e",
-      "git_dirty": true,
-      "evidence": {
-        "bundle": "9c64d5573914c907970b6cd7f3068f28aae7c2d93a4e402c7a069603835fe8c3",
-        "contracts": "f8edfcce8d26339b4c7bd1a33ba1e0410cf4cf59b54a3e40e18f134f69cf3a40",
-        "python_core": "fcc1fbd1b3e7109d04cef664ae57319ab4c59814cf99b697b4ed788906a83135",
-        "grading": "55397d3f26d01d476a034b933880f094f36895d041a6b015d8b8be4eddeccf3c",
-        "native": "a2d130dc9984ac186ec3e7aa20af1ff43f8c54d661ad449fb001dfb74b3f1e9e",
-        "corpus": "b1e7b21e5496237929c55a425c6d5da945c1cd3e7252602d70cc960cd16cdf60",
-        "verifier": "c275a30a20ac52801574080c44f325b06853108e98ebfa9cabcad2a0582ea5a5",
-        "settings": "c4fe2bef9b354fb476333eb02ead8f078f45068d6b506dfd1d5b8bceaa333fcc"
+      "cells": {
+        "knaif-qwen3-4b-v2": {
+          "evidence": {
+            "bundle": "678f2e5a034c55269465f9bcee8065380918af7c12928c79da0424a71344c87d",
+            "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
+            "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "0a569de0a210abc8411301691aa2c21c9b4d59246ca349c4c18b8513e6cb019e"
+          },
+          "run": "evals\\parity\\2026-09-27_r5c-l3-4b-ffmpeg",
+          "summary": "2026-09-27_r5c-l3-4b-ffmpeg: port_bugs=4 not_implemented=0 plan_disagreement=0.119205 <= 0.0411 passed=False",
+          "equivalence_rate": 0.86755,
+          "port_bugs": 4,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.119205,
+          "max_plan_disagreement": 0.0411,
+          "passed": false,
+          "backend": "cuda",
+          "git_sha": "8e97f5083a7dc051464751c6830a8056cb2a9e7c",
+          "git_dirty": true
+        }
       }
     },
     "L4": {
-      "run": "evals\\runs\\2026-09-24_l4-v2-final_success\\ffmpeg_native-cli_success.json",
-      "summary": "ACCEPTED - 45 thresholds met.",
-      "passed": true,
-      "coverage": 1.0,
-      "outcome_accuracy": 0.9283196239717979,
-      "avg_knaif_score": 0.9837335620354488,
-      "lane": "native-cli",
-      "model": "knaif-qwen3-4b-v2",
-      "evidence": {
-        "bundle": "f274be0c0b17ce2b3b1329cf0fb73cb567b30d9bb1da944afbc969765eb1c3fd",
-        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
-        "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
-        "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "6641acb54c311c25f1bbc1eef07c24ebeb27b59e425a9a9aea74fcb02d98312e",
-        "corpus": "70974debf914d679dd3101b6a0aa601266ee8004e6e9a5317f2874d9866d0949",
-        "verifier": "dd2743987f178833aec759dc885c39e3756514dff756d1052e70e6e54183c8f2",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+      "cells": {
+        "knaif-qwen3-4b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "678f2e5a034c55269465f9bcee8065380918af7c12928c79da0424a71344c87d",
+            "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
+            "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "0a569de0a210abc8411301691aa2c21c9b4d59246ca349c4c18b8513e6cb019e"
+          },
+          "run": "evals\\runs\\2026-09-27_r5c-windows_success\\4b\\cuda\\ffmpeg_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9337979094076655,
+          "avg_knaif_score": 0.9841150195421552,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        }
       }
     }
   }

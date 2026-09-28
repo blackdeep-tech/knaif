@@ -32,23 +32,60 @@
       }
     },
     "L4": {
-      "run": "evals\\runs\\2026-09-24_l4-v2-final_success\\documents_native-cli_success.json",
-      "summary": "ACCEPTED - 42 thresholds met.",
-      "passed": true,
-      "coverage": 1.0,
-      "outcome_accuracy": 0.9817073170731707,
-      "avg_knaif_score": 0.9945887445887446,
-      "lane": "native-cli",
-      "model": "knaif-qwen3-4b-v2",
-      "evidence": {
-        "bundle": "75ff8740d55d6a3a9657c37dadbc42f484fe521fc89bd35fab92c084c4e528eb",
-        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
-        "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
-        "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "6641acb54c311c25f1bbc1eef07c24ebeb27b59e425a9a9aea74fcb02d98312e",
-        "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
-        "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+      "cells": {
+        "knaif-qwen3-4b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "f086989b9aa09fee4839bd0015bff2ffcfcca8832a4100b0dc77738e206c96b2",
+            "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
+            "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "0a569de0a210abc8411301691aa2c21c9b4d59246ca349c4c18b8513e6cb019e"
+          },
+          "run": "evals\\runs\\2026-09-27_r5c-windows_success\\4b\\cuda\\documents_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9817073170731707,
+          "avg_knaif_score": 0.9803030303030303,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        }
+      }
+    },
+    "L3": {
+      "cells": {
+        "knaif-qwen3-4b-v2": {
+          "evidence": {
+            "bundle": "f086989b9aa09fee4839bd0015bff2ffcfcca8832a4100b0dc77738e206c96b2",
+            "contracts": "e57d672e876d83bebfd7e756abd36d108b29c243fa52be68ab4183b8d0afa4a8",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "54a9bf0bfa5eb5a5f8808d7f12e25c2274bad62dee2b41ae2caead6cd90db9a5",
+            "native": "ea3dcb6b4679287fde1a727b83c86635adc0fb4a19a36a477ea08639dad4b84c",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "0a569de0a210abc8411301691aa2c21c9b4d59246ca349c4c18b8513e6cb019e"
+          },
+          "run": "evals\\parity\\2026-09-27_r5c-l3-4b-documents",
+          "summary": "2026-09-27_r5c-l3-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
+          "equivalence_rate": 0.993007,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.006993,
+          "max_plan_disagreement": 0.0183,
+          "passed": true,
+          "backend": "cuda",
+          "git_sha": "8e97f5083a7dc051464751c6830a8056cb2a9e7c",
+          "git_dirty": true
+        }
       }
     }
   }
