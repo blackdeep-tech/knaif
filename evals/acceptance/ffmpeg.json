@@ -179,7 +179,12 @@
           "outcome_accuracy": 0.9186991869918699,
           "avg_knaif_score": 0.9779994340690435,
           "lane": "r5c-win-1.7b",
-          "model": "knaif-qwen3-1.7b-v2"
+          "model": "knaif-qwen3-1.7b-v2",
+          "owner_exception": {
+            "date": "2026-09-28",
+            "reason": "not a blocker (owner, R5c T8): one Chinese batch request, ffmpeg_229[4], flips on a CUDA/Vulkan near-tie; CUDA holds the slice; stated in the 1.2.0 release notes",
+            "waives": "NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)"
+          }
         },
         "knaif-qwen3-4b-v2|windows-x64|cpu": {
           "evidence": {
