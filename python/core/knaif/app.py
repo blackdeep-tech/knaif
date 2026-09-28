@@ -21,6 +21,12 @@ from . import create_agent, list_skills
 from ._console import enable_utf8_console
 from .models import build_orchestrator, load_models_registry
 
+# The model is shown the tools retrieval surfaces for the request, never the whole registry: the
+# eval lane and the native binary both prompt this way, and a CLI that skipped it planned with a
+# prompt nobody measured (L3 2026-09-27: 11.9% disagreement with native, where the lanes differ
+# by 1.97%).
+from .registry import retrieve_tools
+
 #: Prefixes the plan dump under $KNAIF_DUMP_PLAN. The same string as native `run`
 #: (apps/cli/src/main.rs) and scripts/parity_check.py; a test holds them together.
 PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
@@ -364,6 +370,7 @@ def run_cmd(
             use_mock=use_mock,
             ollama_model=model or "mistral",
             max_tokens=max_tokens,
+            registry_override=retrieve_tools(prompt_str, agent.registry),
         )
     except Exception as exc:  # noqa: BLE001
         click.echo(click.style(f"\nInference error: {exc}", fg="red"), err=True)
@@ -526,7 +533,11 @@ def plan_cmd(
     def _plan_one(agent: Any, utterance: str) -> dict[str, Any]:
         try:
             result: dict[str, Any] = agent.infer(
-                utterance, use_mock=use_mock, ollama_model=model or "mistral", max_tokens=max_tokens
+                utterance,
+                use_mock=use_mock,
+                ollama_model=model or "mistral",
+                max_tokens=max_tokens,
+                registry_override=retrieve_tools(utterance, agent.registry),
             )
             return result
         except Exception as exc:  # noqa: BLE001
