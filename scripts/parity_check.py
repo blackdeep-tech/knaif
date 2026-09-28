@@ -1057,6 +1057,17 @@ def compare(
                 return "port-bug", "same plan, different commands on the steps both rendered"
             return "not-comparable", "same plan; one side's dry-run renders only part of it"
         return "mismatch", f"native={native.kind} python={py.kind} (one side partial)"
+    # Neither side rendered a command (documents runs in-process), so the outcome says nothing
+    # about what was done: compare the plans both dumped. Counted as a match on the outcome alone,
+    # 133 of 143 4B documents rows never compared the plans (Codex audit, 2026-09-28).
+    if (
+        native.kind == "none"
+        and py.kind == "none"
+        and native.dumped_plan
+        and py.dumped_plan
+        and not _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
+    ):
+        return "mismatch", "no command on either side, different plans"
     if native.key(cwd) == py.key(cwd):
         # Equal actions, but flag when they only match after path normalization (native
         # emits relative paths, python absolute) so the representation gap stays visible.

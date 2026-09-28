@@ -388,3 +388,40 @@ def test_a_raw_excerpt_cut_mid_path_leaks_no_prefix_of_the_checkout() -> None:
     excerpt = pc.raw_excerpt(text)
     assert len(excerpt) <= pc.RAW_EXCERPT_CHARS
     assert root[:6].lower() not in excerpt.lower(), excerpt[-40:]
+
+
+# ── rows with no command on either side compare their plans (Codex audit, 2026-09-28) ─────
+#
+# documents runs in-process and renders no argv, so most rows are `none` on both sides. They
+# were counted as a match on the outcome alone: 133 of 143 4B documents "matches" never compared
+# the two plans.
+
+DOC_PLAN = [{"tool": "convert_document", "args": {"input": "report.docx", "format": "pdf"}}]
+DOC_OTHER = [{"tool": "convert_document", "args": {"input": "report.docx", "format": "txt"}}]
+
+
+def _none(plan: list[dict]):
+    return pc.parse_native("would convert -> report.pdf\n", _dump(plan))
+
+
+def _none_py(plan: list[dict]):
+    return pc.parse_python("ok\n", _dump(plan))
+
+
+def test_no_command_on_either_side_with_different_plans_is_disagreement() -> None:
+    nat, py = _none(DOC_PLAN), _none_py(DOC_OTHER)
+    assert nat.kind == py.kind == "none"
+    status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
+    assert status == "mismatch"
+
+
+def test_no_command_on_either_side_with_the_same_plan_is_a_match() -> None:
+    status, _ = pc.compare(_row(), _none(DOC_PLAN), _none_py(DOC_PLAN), strict=False, cwd="/w")
+    assert status == "match"
+
+
+def test_no_command_and_no_dump_stays_a_match_on_the_outcome() -> None:
+    nat = pc.parse_native("would convert -> report.pdf\n", "")
+    py = pc.parse_python("ok\n", "")
+    status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
+    assert status == "match"
