@@ -82,31 +82,25 @@ def _sha256_file(path: Path) -> str:
 
 
 def _without_native_status_claim(text: str) -> str:
-    """`skill.yaml` with the value of `runtimes.native.status` masked.
+    """`skill.yaml` as canonical JSON of its parsed content, `runtimes.native.status` masked.
 
     That value is the claim the evidence justifies (`in-progress` / `parity` / `supported`);
     nothing reads it at run time. Hashed, flipping it to `supported` after R5c staled every L3/L4
-    record that justified the flip, so no skill could reach the one release-eligible status. Only
-    that line is masked: a top-level `status:` (which hides a skill from discovery) still counts.
+    record that justified the flip, so no skill could reach the one release-eligible status.
+
+    Masked in the parsed document, at exactly that path, so flow style, anchors and quoting cannot
+    widen it (a line-based mask blanked a whole `native: {status: …, crate: …}` mapping; Codex
+    audit, 2026-09-28). Hashing the parsed content also means a comment-only edit no longer stales
+    evidence, which it never should have. Unparseable YAML is hashed as text.
     """
-    out: list[str] = []
-    in_runtimes = in_native = False
-    native_indent = -1
-    for line in text.split("\n"):
-        stripped = line.lstrip(" ")
-        indent = len(line) - len(stripped)
-        if stripped and not stripped.startswith("#"):
-            if indent == 0:
-                in_runtimes = stripped.startswith("runtimes:")
-                in_native = False
-            elif in_runtimes and stripped.startswith("native:"):
-                in_native, native_indent = True, indent
-            elif in_native and indent <= native_indent:
-                in_native = False
-            elif in_native and stripped.startswith("status:"):
-                line = " " * indent + "status: <claim>"
-        out.append(line)
-    return "\n".join(out)
+    try:
+        doc = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return text
+    native = (doc.get("runtimes") or {}).get("native") if isinstance(doc, dict) else None
+    if isinstance(native, dict) and "status" in native:
+        doc = {**doc, "runtimes": {**doc["runtimes"], "native": {**native, "status": "<claim>"}}}
+    return json.dumps(doc, sort_keys=True, ensure_ascii=False, default=str)
 
 
 def _sha256_source(path: Path) -> str:

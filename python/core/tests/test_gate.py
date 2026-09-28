@@ -202,6 +202,26 @@ def test_the_native_status_claim_is_not_evidence(tree: Path) -> None:
         assert evidence_tuple("demo", tree)["bundle"] != before, f"{old} -> {new} must count"
 
 
+def test_flow_style_and_anchors_cannot_hide_a_change(tree: Path) -> None:
+    """Codex audit 2026-09-28: a line-based mask blanked a whole flow mapping (`native: {status:
+    in-progress, crate: x}`), hiding the crate change. The claim is masked in the parsed document,
+    at exactly one path."""
+    skill = tree / "skills" / "demo" / "skill.yaml"
+    flow = "name: demo\nruntimes:\n  native: {status: in-progress, crate: a}\n"
+    skill.write_text(flow, encoding="utf-8")
+    before = evidence_tuple("demo", tree)["bundle"]
+    skill.write_text(flow.replace("in-progress", "supported"), encoding="utf-8")
+    assert evidence_tuple("demo", tree)["bundle"] == before
+    skill.write_text(flow.replace("crate: a", "crate: b"), encoding="utf-8")
+    assert evidence_tuple("demo", tree)["bundle"] != before
+
+    anchored = "name: demo\nlevel: &lvl in-progress\nruntimes:\n  native:\n    status: *lvl\n"
+    skill.write_text(anchored, encoding="utf-8")
+    before = evidence_tuple("demo", tree)["bundle"]
+    skill.write_text(anchored.replace("&lvl in-progress", "&lvl supported"), encoding="utf-8")
+    assert evidence_tuple("demo", tree)["bundle"] != before, "the anchor's other use still counts"
+
+
 def test_claiming_supported_after_the_evidence_keeps_it_valid(tree: Path) -> None:
     skill = tree / "skills" / "demo" / "skill.yaml"
     skill.write_text(SKILL_YAML, encoding="utf-8")
