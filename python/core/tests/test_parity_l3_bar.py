@@ -374,3 +374,17 @@ def test_both_asking_the_same_plan_is_a_match() -> None:
     py = pc.parse_python("\n❓ CLARIFY: Which mov did you mean?\n", _dump(mov))
     status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
     assert status == "match"
+
+
+# ── committed evidence carries no local path, even cut in half (R5c T7, 2026-09-28) ─────────
+
+
+def test_a_raw_excerpt_cut_mid_path_leaks_no_prefix_of_the_checkout() -> None:
+    r"""`raw` is kept to its first 800 characters. Cut before redaction, a checkout path that
+    straddled the cut survived as `C:\Work\Kn…`, which the redactor (it matches whole paths)
+    could no longer see: both 2026-09-28 ffmpeg reports carried four such prefixes."""
+    root = str(pc.REPO_ROOT)
+    text = "x" * (pc.RAW_EXCERPT_CHARS - 10) + rf'["ffmpeg", "-i", "{root}\clip.mp4"]'
+    excerpt = pc.raw_excerpt(text)
+    assert len(excerpt) <= pc.RAW_EXCERPT_CHARS
+    assert root[:6].lower() not in excerpt.lower(), excerpt[-40:]

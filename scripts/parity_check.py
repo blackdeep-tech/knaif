@@ -61,6 +61,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: How much of each side's raw output a report keeps.
+RAW_EXCERPT_CHARS = 800
+
+
+def raw_excerpt(text: str) -> str:
+    """The first `RAW_EXCERPT_CHARS` of *text*, redacted BEFORE the cut: cut first, a local path
+    straddling the cut survived as a prefix the redactor (it matches whole paths) could not see,
+    and both 2026-09-28 ffmpeg reports carried the start of the checkout path (AGENTS.md, Public
+    Output Hygiene)."""
+    from knaif.evalsuite.redact import redact_local_paths
+
+    return redact_local_paths(text, root=REPO_ROOT)[:RAW_EXCERPT_CHARS]
+
+
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 # The marker native prints for a capability it has not built, as distinct from a `reject:`
@@ -1314,14 +1329,14 @@ def main() -> int:
                     "commands": native.commands,
                     "plan": native.plan,
                     "text": native.text,
-                    "raw": native.raw[:800],
+                    "raw": raw_excerpt(native.raw),
                 },
                 "python": {
                     "kind": py.kind,
                     "commands": py.commands,
                     "plan": py.plan,
                     "text": py.text,
-                    "raw": py.raw[:800],
+                    "raw": raw_excerpt(py.raw),
                 },
             }
         )
