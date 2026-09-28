@@ -119,3 +119,33 @@ risk of at least one. By the agreed rule the 2026-09-25 CPU plans stand for the 
 T9b composes the 4B CPU cell from the CUDA cell and the rows those plans cannot vouch for.
 Sampling does not certify the unsampled rows (Codex's reservation, on record; the owner's rule
 stands).
+
+## T9b — 4B Windows CPU cell, composed: ACCEPTED on both skills
+
+Run 2026-09-28 21:46–22:05 on RC `71884fd`'s packaged artifact (binary `8f1ac7a0…`), GPU hidden
+(placement CPU, all 37 layers), one process per utterance, `success` verifier. `rerun-set`
+compared the 4B CUDA cell (T8) with the 2026-09-25 CPU plans on the full plan (every step field)
+and chose the rows the CPU plans cannot vouch for: **ffmpeg 60** (44 planned differently, 16 with no
+reused plan) and **documents 4** (1 + 3: `documents_020 083 084 105`). The plan's estimate (37 + 1)
+counted decision-level differences only; the full-plan rule is stricter. Those rows ran on the CPU,
+`compose` replaced them in the CUDA board, and `accept-native` graded the result with safety run on
+the CPU binary.
+
+| Cell | Skill | Outcome (floor / Python) | Avg score (floor / Python) | Safety | Verdict |
+|---|---|---|---|---|---|
+| 4B CPU (composed) | ffmpeg | 0.9419 (0.9231 / 0.9431) | 0.9857 (0.9641 / 0.9841) | 11/11 | ACCEPTED |
+| 4B CPU (composed) | documents | 0.9756 (0.9556 / 0.9756) | 0.9818 (0.9800 / 0.9818) | 9/9 | ACCEPTED |
+
+Coverage 861/861 and 164/164. The 60 re-run ffmpeg rows scored 0.883 outcome on their own (they
+are the rows where the backends plan differently, so the hard ones). The boards and the acceptance
+records carry `composed` with both sources' sha256 and provenance; `gate` names the cell "composed,
+not a full run".
+
+Two notes for T17, neither changing a verdict:
+
+- The 4B CUDA documents board (T8, the base here) records `git_dirty: true`: the report and plan
+  were being edited while T8 ran. The evidence fingerprints, not that flag, decide staleness, and
+  they match.
+- An acceptance record keeps only the verdict's first line, so the 1.7B Vulkan ffmpeg record reads
+  "1 of 45 thresholds unmet:" without naming the batch slice. The owner-exception record at T17
+  should carry the unmet threshold.

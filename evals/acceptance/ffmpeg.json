@@ -180,6 +180,303 @@
           "avg_knaif_score": 0.9779994340690435,
           "lane": "r5c-win-1.7b",
           "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cpu\\ffmpeg_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9419279907084785,
+          "avg_knaif_score": 0.9857182940516274,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T9b: 4B Windows CPU cell = the 4B CUDA cell + every row whose 2026-09-25 CPU plan differs in full or is missing, re-run on the CPU (T9a confirmed those plans)",
+            "base": {
+              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cuda/ffmpeg_r5c-win-4b_success.json",
+              "file_sha256": "7d7b76b70e879f99c3893c22e0bbf9a01b2f74cb12357b01be9f9db3b2b49ea1",
+              "git_sha": "4977b3b4330919c1c0b94f3215a5c8cb417f1ba6",
+              "git_dirty": false,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CUDA0",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 861
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cpu/rows/ffmpeg_r5c-win-4b_success.json",
+              "file_sha256": "a9b4fbd073e5cf659127acb8ed1624e7359799d6dee09037a43ec4922612b341",
+              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
+              "git_dirty": false,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 60
+            },
+            "replaced_rows": [
+              [
+                "ffmpeg_016",
+                0
+              ],
+              [
+                "ffmpeg_017",
+                0
+              ],
+              [
+                "ffmpeg_027",
+                0
+              ],
+              [
+                "ffmpeg_035",
+                0
+              ],
+              [
+                "ffmpeg_038",
+                0
+              ],
+              [
+                "ffmpeg_040",
+                0
+              ],
+              [
+                "ffmpeg_053",
+                0
+              ],
+              [
+                "ffmpeg_054",
+                0
+              ],
+              [
+                "ffmpeg_056",
+                0
+              ],
+              [
+                "ffmpeg_077",
+                1
+              ],
+              [
+                "ffmpeg_085b",
+                0
+              ],
+              [
+                "ffmpeg_086",
+                2
+              ],
+              [
+                "ffmpeg_090",
+                1
+              ],
+              [
+                "ffmpeg_094",
+                2
+              ],
+              [
+                "ffmpeg_096",
+                2
+              ],
+              [
+                "ffmpeg_118",
+                1
+              ],
+              [
+                "ffmpeg_118",
+                2
+              ],
+              [
+                "ffmpeg_118",
+                3
+              ],
+              [
+                "ffmpeg_119",
+                1
+              ],
+              [
+                "ffmpeg_124",
+                1
+              ],
+              [
+                "ffmpeg_131",
+                0
+              ],
+              [
+                "ffmpeg_133",
+                1
+              ],
+              [
+                "ffmpeg_134",
+                2
+              ],
+              [
+                "ffmpeg_139",
+                0
+              ],
+              [
+                "ffmpeg_148",
+                0
+              ],
+              [
+                "ffmpeg_161",
+                0
+              ],
+              [
+                "ffmpeg_166",
+                0
+              ],
+              [
+                "ffmpeg_167",
+                0
+              ],
+              [
+                "ffmpeg_167",
+                1
+              ],
+              [
+                "ffmpeg_174",
+                1
+              ],
+              [
+                "ffmpeg_190",
+                1
+              ],
+              [
+                "ffmpeg_202",
+                2
+              ],
+              [
+                "ffmpeg_203",
+                3
+              ],
+              [
+                "ffmpeg_209",
+                0
+              ],
+              [
+                "ffmpeg_229",
+                3
+              ],
+              [
+                "ffmpeg_232",
+                1
+              ],
+              [
+                "ffmpeg_243",
+                2
+              ],
+              [
+                "ffmpeg_244",
+                2
+              ],
+              [
+                "ffmpeg_244",
+                3
+              ],
+              [
+                "ffmpeg_264",
+                1
+              ],
+              [
+                "ffmpeg_264",
+                2
+              ],
+              [
+                "ffmpeg_268",
+                4
+              ],
+              [
+                "ffmpeg_271",
+                3
+              ],
+              [
+                "ffmpeg_275",
+                0
+              ],
+              [
+                "ffmpeg_284",
+                0
+              ],
+              [
+                "ffmpeg_295",
+                2
+              ],
+              [
+                "ffmpeg_296",
+                0
+              ],
+              [
+                "ffmpeg_301",
+                0
+              ],
+              [
+                "ffmpeg_301",
+                1
+              ],
+              [
+                "ffmpeg_301",
+                2
+              ],
+              [
+                "ffmpeg_301",
+                3
+              ],
+              [
+                "ffmpeg_301",
+                4
+              ],
+              [
+                "ffmpeg_302",
+                0
+              ],
+              [
+                "ffmpeg_302",
+                1
+              ],
+              [
+                "ffmpeg_302",
+                2
+              ],
+              [
+                "ffmpeg_302",
+                3
+              ],
+              [
+                "ffmpeg_302",
+                4
+              ],
+              [
+                "ffmpeg_hard_003",
+                3
+              ],
+              [
+                "ffmpeg_hard_008",
+                3
+              ],
+              [
+                "ffmpeg_hard_013",
+                1
+              ]
+            ]
+          }
         }
       }
     }
