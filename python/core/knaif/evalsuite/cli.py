@@ -1746,7 +1746,9 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
     entry = l4_record_entry(
         current,
         current_path,
-        summary=report.summary().splitlines()[0],
+        # One line (gate prints it inside a sentence), but every unmet threshold: a failing
+        # record that does not say what failed sends the reader to a log nobody committed.
+        summary=" ".join(line.strip() for line in report.summary().splitlines()),
         passed=report.ok,
         cell=cell,
         evidence=run_evidence,

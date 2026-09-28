@@ -423,6 +423,25 @@ def test_a_failing_run_is_recorded_as_failing_not_left_pending(tmp_path, recorde
     assert recorded["L4"]["passed"] is False
 
 
+def test_a_failing_record_names_every_unmet_threshold(tmp_path, recorded) -> None:
+    """The record is what `gate` prints for a failing cell. It kept only the verdict's first
+    line ("NOT ACCEPTED - 1 of 45 thresholds unmet:"), so the 1.7B Vulkan cell read as failing
+    without saying on what (R5c T8, 2026-09-28): the reason lived only in a local log."""
+    from knaif.evalsuite import cli
+
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(_real_bar_board(outcome_accuracy=0.5)), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(json.dumps(_safety()), encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        cli.cmd_accept_native(_cli_args(current, safety))
+    summary = recorded["L4"]["summary"]
+    assert summary.startswith("NOT ACCEPTED")
+    assert "outcome_accuracy" in summary
+    assert "\n" not in summary, "one line: gate prints it inside a sentence"
+
+
 def test_a_python_side_safety_result_cannot_certify_the_binary(tmp_path, recorded) -> None:
     """Two runtimes reach a refusal by different code; one's answers are not the other's
     evidence. The safety half of the L4 bar has to come from the lane."""
