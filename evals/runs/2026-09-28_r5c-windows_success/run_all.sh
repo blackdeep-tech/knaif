@@ -33,7 +33,9 @@
 #      (data/eval_snapshot.json), 1.7B sft-v9 (data/eval_snapshot.knaif-qwen3-1.7b-v2.json).
 #   T9a: the 2026-09-25 CPU plans stand for the release binary iff the sample (seed 20260928, drawn
 #      and committed before the run: t9a_sample_<skill>.json, rows with a 2026-09-25 CPU plan that
-#      reach the model) shows 0 DECISION flips against them, per t9a_confirm.py. A sampled row the
+#      reach the model) shows 0 DECISION flips against them, per t9a_confirm.py. Both sides are
+#      the plans each CLI reports after its deterministic gates (clarify gate, stem resolution),
+#      not raw model output; a difference those gates introduce counts as a flip too. A sampled row the
 #      binary rejects before inference (unsafe-phrase gate; plan mode never applies it) has no
 #      model decision and is set aside and reported. Any flip -> the full 4B CPU L4 (~4.3 h), as a
 #      separate approved run; T9b does not run.
@@ -75,6 +77,11 @@ git rev-parse HEAD > "$R/GIT_SHA.$STAGE"
 git status --porcelain --untracked-files=no > "$R/DIRTY_FILES.$STAGE"
 echo "START $STAGE $(date)" >> "$R/COMPLETE"
 abort() { echo "ABORTED $STAGE: $* $(date)" >> "$R/COMPLETE"; exit 1; }
+# A command that fails is recorded and fails the stage; its output is never graded. Every output
+# is deleted before its command runs, so a failed retry cannot pick up an earlier attempt's file
+# (Codex audit of e6fea79).
+FAILED=0
+failed() { echo "FAILED $STAGE: $* $(date)" | tee -a "$R/verdicts.txt" >> "$R/COMPLETE"; FAILED=1; }
 
 # The artifact is the zip's bytes: check the zip, unpack it fresh, check the payload install.
 echo "$ZIP_SHA  $ZIP" | sha256sum -c - > "$R/artifact.$STAGE.log" 2>&1 || abort "zip sha256 mismatch"
@@ -84,22 +91,41 @@ KNAIF_BACKENDS_DIR="$CUDA_DIR" "$EXE" backend verify cuda >> "$R/artifact.$STAGE
   || abort "installed CUDA payload does not verify"
 "$EXE" --version >> "$R/artifact.$STAGE.log" 2>&1
 
+# Where the binary actually puts the weights, measured the way the L4 lane measures it (one
+# `--dry-run --verbose` probe, `native_lane.detect_backend`), not taken from an env variable.
+probe() {  # $1 gguf, $2 skill -> prints the placement summary (CUDA0 / Vulkan0 / CPU)
+  env "${ENVS[@]}" uv run python -c "
+import sys
+from pathlib import Path
+from knaif.evalsuite.native_lane import LaneConfig, detect_backend
+lane = LaneConfig(name='probe', binary=Path(sys.argv[1]), model_path=Path(sys.argv[2]))
+print(detect_backend(lane, sys.argv[3], Path(sys.argv[4])).summary)
+" "$EXE" "$1" "$2" "$(cygpath -aw "sandbox/fixtures/$2")" 2>>"$R/probe.log"
+}
+
 l3() {  # $1 model label, $2 gguf, $3 the models.yaml name backing it (the Python side)
-  local model="$1" gguf bound skill out pyname="$3"
+  local model="$1" gguf bound skill out pyname="$3" got
   gguf="$(cygpath -aw "$2")"
+  backend_env cuda
   for skill in ffmpeg documents; do
     bound=0.0411; [ "$skill" = documents ] && bound=0.0183
     out="evals/parity/2026-09-28_r5c-l3-$model-$skill"
-    mkdir -p "$out"
+    rm -rf "$out" && mkdir -p "$out"
     uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$R/fixtures.log" 2>&1
-    KNAIF_BACKENDS_DIR="$CUDA_DIR" KNAIF_PARITY_BACKEND=cuda \
+    got="$(probe "$gguf" "$skill")"
+    echo "L3 $model $skill placement probe: $got" >> "$R/COMPLETE"
+    if [ "$got" != CUDA0 ]; then failed "L3 $model $skill: probe placed the model on '$got', not CUDA0"; continue; fi
+    # parity_check exits non-zero when the bound is missed; that is a verdict, read from the report.
+    env "${ENVS[@]}" KNAIF_PARITY_BACKEND=cuda \
       uv run python scripts/parity_check.py --skill "$skill" --native-bin "$EXE" --model-path "$gguf" --python-model "$pyname" \
       --cwd "$(cygpath -aw "sandbox/fixtures/$skill")" --out "$out/report.json" \
       --label "r5c-l3-$model-$skill" --max-plan-disagreement "$bound" \
-      --purpose "R5c L3, re-frozen RC 1fa823d, packaged Windows artifact, installed CUDA payload" \
+      --purpose "R5c L3, re-frozen RC 1fa823d, packaged Windows artifact, installed CUDA payload (probe: $got)" \
       > "$R/l3_${model}_$skill.log" 2>&1
+    echo "L3 $model $skill parity_check exit $?" >> "$R/verdicts.txt"
+    if [ ! -s "$out/report.json" ]; then failed "L3 $model $skill: no report written"; continue; fi
     uv run python -m knaif.evalsuite gate --skill "$skill" --record-parity "$out" \
-      >> "$R/l3_record.log" 2>&1
+      >> "$R/l3_record.log" 2>&1 || failed "L3 $model $skill: recording the parity run"
     echo "DONE L3 $model $skill $(date)" >> "$R/COMPLETE"
   done
 }
@@ -119,9 +145,14 @@ placement() {  # $1 board -> the compute_backend the lane measured
 
 # $1 model label, $2 lane, $3 backend, $4 board, $5 skill, $6 dir: safety on the binary + verdict.
 accept() {
-  local model="$1" lane="$2" backend="$3" board="$4" skill="$5" d="$6"
+  local model="$1" lane="$2" backend="$3" board="$4" skill="$5" d="$6" rc
+  rm -f "$d/${skill}_safety.json"
   env "${ENVS[@]}" uv run python -m knaif.evalsuite safety --skill "$skill" --lane "$lane" \
     --config eval_backends.yaml --save "$d/${skill}_safety.json" > "$d/${skill}_safety.log" 2>&1
+  rc=$?
+  if [ $rc -ne 0 ] && [ ! -s "$d/${skill}_safety.json" ]; then
+    failed "safety $model $backend $skill: exit $rc, no result"; return 1
+  fi
   {
     echo "=== $model $backend $skill (placement $(placement "$board"))"
     uv run python -m knaif.evalsuite accept-native --skill "$skill" \
@@ -136,29 +167,34 @@ cell() {  # $1 model label, $2 lane, $3 backend: the full cell
   mkdir -p "$d"
   backend_env "$backend"
   for skill in ffmpeg documents; do
-    uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$d/fixtures.log" 2>&1
-    env "${ENVS[@]}" uv run python -m knaif.evalsuite native --skill "$skill" --lane "$lane" \
-      --verifier success --verbose --config eval_backends.yaml --save "$d" > "$d/$skill.log" 2>&1
     board="$d/${skill}_${lane}_success.json"
+    rm -f "$board"
+    uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$d/fixtures.log" 2>&1
+    if ! env "${ENVS[@]}" uv run python -m knaif.evalsuite native --skill "$skill" --lane "$lane" \
+      --verifier success --verbose --config eval_backends.yaml --save "$d" > "$d/$skill.log" 2>&1 \
+      || [ ! -s "$board" ]; then
+      failed "L4 $model $backend $skill: the lane run failed (see $d/$skill.log)"; continue
+    fi
     got="$(placement "$board")"
     if [ "$got" != "$WANT" ]; then
       echo "VOID $model $backend $skill: ran on '$got', expected $WANT" >> "$R/verdicts.txt"
       echo "VOID $model $backend $skill $(date)" >> "$R/COMPLETE"
       continue
     fi
-    accept "$model" "$lane" "$backend" "$board" "$skill" "$d"
-    echo "DONE L4 $model $backend $skill $(date)" >> "$R/COMPLETE"
+    accept "$model" "$lane" "$backend" "$board" "$skill" "$d" \
+      && echo "DONE L4 $model $backend $skill $(date)" >> "$R/COMPLETE"
   done
 }
 
 only_run() {  # $1 dir, $2 lane, $3 skill, $4 only file: CPU rows from a pre-drawn list
   local d="$1" lane="$2" skill="$3" only="$4"
   mkdir -p "$d"
+  rm -f "$d/${skill}_${lane}_success.json"
   backend_env cpu
   uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$d/fixtures.log" 2>&1
   env "${ENVS[@]}" uv run python -m knaif.evalsuite native --skill "$skill" --lane "$lane" \
     --only "$only" --verifier success --verbose --config eval_backends.yaml --save "$d" \
-    > "$d/$skill.log" 2>&1
+    > "$d/$skill.log" 2>&1 || abort "$skill --only run failed (see $d/$skill.log)"
   [ "$(placement "$d/${skill}_${lane}_success.json")" = CPU ] \
     || abort "$skill sample did not run on the CPU"
 }
@@ -174,6 +210,7 @@ case "$STAGE" in
     ;;
   t9a)
     d="$R/4b/cpu-confirm"
+    rm -f "$d"/*_verdict.txt
     for skill in ffmpeg documents; do
       only_run "$d" r5c-win-4b "$skill" "$R/t9a_sample_$skill.json"
       uv run python "$R/t9a_confirm.py" "$d/${skill}_r5c-win-4b_success.json" \
@@ -184,8 +221,11 @@ case "$STAGE" in
     done
     ;;
   t9b)
-    grep -q "T9a ffmpeg exit 0" "$R/verdicts.txt" && grep -q "T9a documents exit 0" "$R/verdicts.txt" \
-      || abort "T9a did not confirm the 2026-09-25 CPU plans; the full CPU L4 runs instead"
+    # Only the latest T9a counts: every T9a run deletes and rewrites these verdict files.
+    for skill in ffmpeg documents; do
+      [ "$(tail -1 "$R/4b/cpu-confirm/${skill}_verdict.txt" 2>/dev/null)" = "VERDICT: the 2026-09-25 CPU plans stand" ] \
+        || abort "T9a ($skill) did not confirm the 2026-09-25 CPU plans; the full CPU L4 runs instead"
+    done
     d="$R/4b/cpu"
     mkdir -p "$d"
     backend_env cpu
@@ -220,4 +260,5 @@ case "$STAGE" in
     ;;
   *) abort "unknown stage $STAGE" ;;
 esac
+if [ "$FAILED" -ne 0 ]; then echo "FINISHED WITH FAILURES $STAGE $(date)" >> "$R/COMPLETE"; exit 1; fi
 echo "DONE $STAGE $(date)" >> "$R/COMPLETE"
