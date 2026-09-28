@@ -386,3 +386,48 @@ def test_rerun_set_writes_an_only_file_the_native_lane_reads(tmp_path: Path, cap
     assert load_only(str(out)) == {("a", 0), ("b", 1)}
     printed = capsys.readouterr().out
     assert "1 planned differently" in printed and "1 without a reused plan" in printed
+
+
+# ── rerun-set hardening (Codex audit of 65f0333) ──────────────────────────────────────────
+
+
+def _planned(rid: str, idx: int, plan: list) -> dict:
+    row = _scored(rid, idx, True, 1.0)
+    row["plan"] = {"plan": plan}
+    return row
+
+
+def test_the_full_plan_includes_every_step_field_not_only_tool_and_args() -> None:
+    step = {"tool": "trim_video", "args": {"input": "clip.mp4"}}
+    base = _board([_planned("a", 0, [{**step, "output": "$trimmed"}])])
+    assert cmp.rerun_set(base, {("a", 0): [step]}).flipped == [("a", 0)]
+
+
+def test_a_null_reused_plan_is_unplanned_not_equal() -> None:
+    base = _board([_planned("a", 0, [])])
+    rerun = cmp.rerun_set(base, {("a", 0): None})
+    assert rerun.unplanned == [("a", 0)] and rerun.flipped == []
+
+
+def test_reused_plans_refuse_duplicates_and_non_integer_indices(tmp_path: Path) -> None:
+    import json
+
+    from knaif.evalsuite.cli import load_plans
+
+    def write(*recs: dict) -> Path:
+        path = tmp_path / "p.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in recs), encoding="utf-8")
+        return path
+
+    plan = [{"tool": "clarify", "args": {}}]
+    assert load_plans(write({"id": "a", "utterance_idx": 0, "plan": plan})) == {("a", 0): plan}
+    with pytest.raises(ValueError, match="duplicate"):
+        load_plans(
+            write(
+                {"id": "a", "utterance_idx": 0, "plan": plan},
+                {"id": "a", "utterance_idx": 0, "plan": []},
+            )
+        )
+    for bad in (1.0, True, "0", None):
+        with pytest.raises(ValueError, match="utterance_idx"):
+            load_plans(write({"id": "a", "utterance_idx": bad, "plan": plan}))

@@ -1768,18 +1768,32 @@ def cmd_compose(args: argparse.Namespace) -> None:
     )
 
 
+def load_plans(path: Path) -> dict[tuple[str, int], Any]:
+    """A plans `.jsonl` (`scripts/flip_rate.py native`), keyed by `(id, utterance_idx)`. A
+    duplicate key or an index that is not an integer is refused: either would let one record
+    silently stand in for another."""
+    plans: dict[tuple[str, int], Any] = {}
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        idx = rec.get("utterance_idx")
+        if not isinstance(idx, int) or isinstance(idx, bool):
+            raise ValueError(f"{path}:{n}: utterance_idx {idx!r} is not an integer")
+        key = (str(rec["id"]), idx)
+        if key in plans:
+            raise ValueError(f"{path}:{n}: duplicate plan for {list(key)}")
+        plans[key] = rec.get("plan")
+    return plans
+
+
 def cmd_rerun_set(args: argparse.Namespace) -> None:
     """The rows a composed cell must re-run: every base row whose reused plan differs in full, or
     that has none. Written as a `native --only` file (R5c T9b)."""
     from .compose import rerun_set
 
     base = json.loads(Path(args.base).read_text(encoding="utf-8"))
-    plans = {}
-    for line in Path(args.plans).read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            rec = json.loads(line)
-            plans[(str(rec["id"]), int(rec["utterance_idx"]))] = rec.get("plan")
-    rerun = rerun_set(base, plans)
+    rerun = rerun_set(base, load_plans(Path(args.plans)))
     Path(args.out).write_text(json.dumps([list(k) for k in rerun.keys]) + "\n", encoding="utf-8")
     print(
         f"{len(rerun.keys)} rows to re-run -> {args.out}: {len(rerun.flipped)} planned differently"

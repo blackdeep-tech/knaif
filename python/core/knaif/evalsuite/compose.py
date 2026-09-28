@@ -143,17 +143,20 @@ def compose_cell(
 # ── which rows a composed cell must re-run ────────────────────────────────────────────────
 
 
-def _full_plan(plan: Any) -> tuple:
-    """The whole plan, file arguments included; prose tools compare by tool alone."""
+def _steps(plan: Any) -> list[dict[str, Any]] | None:
+    """A plan's steps, from a board row (`{"plan": [...]}`) or a plans file (`[...]`); None
+    when there is no plan at all, which is not the same as an empty one."""
     steps = plan.get("plan") if isinstance(plan, dict) else plan
+    return None if steps is None else list(steps)
+
+
+def _full_plan(steps: list[dict[str, Any]]) -> tuple:
+    """The whole plan, every step field included (file arguments, output bindings); prose tools
+    compare by tool alone."""
     out: list[tuple[Any, ...]] = []
-    for step in steps or []:
+    for step in steps:
         tool = step.get("tool")
-        if tool in _PROSE_TOOLS:
-            out.append((tool,))
-        else:
-            args = step.get("args") or {}
-            out.append((tool, json.dumps(args, sort_keys=True)))
+        out.append((tool,) if tool in _PROSE_TOOLS else (tool, json.dumps(step, sort_keys=True)))
     return tuple(out)
 
 
@@ -162,7 +165,7 @@ class RerunSet:
     """The rows of a base board that reused plans cannot vouch for."""
 
     flipped: list[Key] = field(default_factory=list)  # planned differently (full plan)
-    unplanned: list[Key] = field(default_factory=list)  # no reused plan at all
+    unplanned: list[Key] = field(default_factory=list)  # no plan on one side to compare
 
     @property
     def keys(self) -> list[Key]:
@@ -171,12 +174,15 @@ class RerunSet:
 
 def rerun_set(base: dict[str, Any], plans: dict[Key, Any]) -> RerunSet:
     """Every base row whose reused plan differs from the base's in full (not only in decision),
-    or that has no reused plan (a corpus row added since the plans were taken)."""
+    or that has no plan to compare on either side (a corpus row added since the plans were
+    taken, a null plan): nothing vouches for such a row, so it is re-run."""
     out = RerunSet()
     for key, row in _keyed(base.get("rows") or [], "base").items():
-        if key not in plans:
+        mine = _steps(row.get("plan"))
+        reused = _steps(plans.get(key))
+        if mine is None or reused is None:
             out.unplanned.append(key)
-        elif _full_plan(row.get("plan")) != _full_plan(plans[key]):
+        elif _full_plan(mine) != _full_plan(reused):
             out.flipped.append(key)
     out.flipped.sort()
     out.unplanned.sort()
