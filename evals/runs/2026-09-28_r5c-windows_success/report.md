@@ -172,3 +172,34 @@ sets are balanced (5/5, 5/4, 0/2, 4/2): no backend is systematically worse; they
 differently. The 1.7B CUDA/Vulkan "only CUDA correct" set holds `ffmpeg_229#4`, the row behind
 that cell's batch-slice miss (T8). The 4B CPU board is composed, so its flips are exactly the
 re-run rows whose CPU plan still differs from CUDA's at the decision level.
+
+## T12 — Windows installer, upgrade and clean room in Windows Sandbox: PASS (third pass)
+
+Run 2026-09-28 on RC `71884fd`'s frozen bytes (`-setup.exe` `76328a0b…`, zip `929b2df0…`) and
+the public 1.1.0 installer (`b0e2c7e2…`, as its SHA256SUMS lists), inside Windows Sandbox with no
+network, no vGPU and no developer tooling, so the host's own install was never touched. Rules and
+scripts: `t12/` (pre-registered `0d9aba0`); verdict by `t12/t12_grade.py`.
+
+| Check | Result |
+|---|---|
+| Clean room: the unpacked zip reports 1.2.0; `skills list` exits 0 naming ffmpeg + documents | PASS |
+| 1.1.0 installs silently: one Add/Remove row at 1.1.0; its binary runs | PASS |
+| A 1.1.0 CLI waiting at its first-run prompt holds `knaif-cli-running` | PASS |
+| 1.2.0 setup refuses while it runs (AppMutex: exit 1, nothing changed) | PASS |
+| With the CLI closed: upgrade exits 0; one row, now 1.2.0; same folder; no "already exists" prompt; binary 1.2.0 | PASS |
+| `{app}\bin` holds nothing the 1.2.0 zip lacks (`[InstallDelete]` ran) | PASS |
+| OCR row (`documents_077`) through the installed 1.2.0 with no `--model`: the 4B auto-selected, CPU ("No GPU detected"), bundled PDFium, Tesseract on PATH; 11 s | PASS |
+| The output PDF's text contains "Scanned image text" (host, as the documents verifier grades it) | PASS |
+
+**Two passes before it failed on the instrument, not the product** (both amendments committed
+before the next pass, rules unchanged):
+
+- Pass 1 (11/13): the mutex holder was a 1.1.0 `run ffmpeg`, which exits at its tool check when
+  ffmpeg is not on PATH, so nothing held the mutex and the "refused" attempt upgraded instead. Now a
+  1.1.0 `run documents` waiting at its download prompt (`eccdf6a`).
+- Pass 2 (10/13; the refusal PASSED): the script's own mutex check kept a handle open, and Inno
+  refuses while the mutex merely exists, so the upgrade after closing the CLI was refused too.
+  The handle is now closed after the check (`a7785fa`). This is how AppMutex is specified to work.
+
+Not covered, by design: the CUDA component on an NVIDIA machine (T8 installed the payload with
+`backend install`), and the wizard's task tree (a GUI check).
