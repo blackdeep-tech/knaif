@@ -229,8 +229,9 @@ the request behind the 1.7B Vulkan miss) and `ffmpeg_129[1]` (German, half speed
 The 1.7B CUDA cell holds these slices by the narrowest margins (batch 26/29 where 26 are needed),
 so a backend that flips one or two near-ties falls below. Across the corpus the CPU is not worse:
 of 42 requests the two backends plan differently, CUDA alone is right on 9 and the CPU alone on 11
-(T11 below). **Owner decision pending** (1.7B quality miss, not safety: the rules route it to the
-owner).
+(T11 below). **Owner decision (2026-09-29): waive it**, as for the Vulkan cell (a 1.7B quality
+miss, not safety, which the rules route to the owner). Recorded with `evalsuite waive`; the cell
+reads EXCEPTED and the known issue in the release notes covers Vulkan and CPU.
 
 T11, completed: 1.7B CUDA / CPU — ffmpeg 42 decision flips (both correct 14, only CUDA 9, only
 CPU 11, both wrong 8), documents 3 (both correct 2, both wrong 1). Reports:
