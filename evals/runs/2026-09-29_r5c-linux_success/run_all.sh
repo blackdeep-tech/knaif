@@ -62,6 +62,7 @@ cd "$(dirname "$0")/../../.."
 # let uv rebuild its .venv for Linux (a mis-quoted launch did exactly that for ~40 s, 2026-09-29).
 case "$PWD" in /mnt/*) echo "refusing to run from $PWD: use the WSL checkout" >&2; exit 2 ;; esac
 STAGE="${1:?usage: run_all.sh t14|t15|t15full <model>}"
+MODEL_ARG="${2:-}"  # read now: the preflight below reuses the positional parameters
 R=evals/runs/2026-09-29_r5c-linux_success
 TARBALL="$HOME/r5c/dist/knaif-1.2.0-linux-x64.tar.gz"
 TAR_SHA=4fbba4a97f5d4a2377887d11df428be2db3c8c67e2d0f393e19bdd175f4bb801
@@ -249,7 +250,7 @@ cpu_by_reuse() {
 
 case "$STAGE" in
   t15full)
-    case "${2:-}" in
+    case "$MODEL_ARG" in
       4b) cell 4b r5c-linux-4b cpu ;;
       1.7b) cell 1.7b r5c-linux-1.7b cpu ;;
       *) abort "usage: run_all.sh t15full 4b|1.7b" ;;
