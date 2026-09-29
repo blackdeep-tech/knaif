@@ -57,3 +57,20 @@ The contrast with T14 is the finding: on CUDA the two OSes plan identically (0 d
 1,025 requests per model), on the CPU they break ~3-5% of near-ties differently. The CPU backend is
 the one component each OS builds separately (a different compiler, and the ggml CPU variants each
 artifact carries), so its floating-point accumulation can differ where the GPU kernels do not.
+
+## T16 — Linux floor and clean room: PASS (10/10)
+
+Run 2026-09-29 from the Windows checkout with Docker Desktop, on the frozen `71884fd` Linux
+artifacts (tarball `4fbba4a9…`, AppImage `643f52f1…`), every step inside a container.
+Rules: `t16_floor_cleanroom.sh` (`d4fa778`, hardened after a Codex audit in `da54406`).
+
+- **Floor, both directions, each artifact:** runs on `ubuntu:22.04` (glibc 2.35); refuses on
+  `ubuntu:20.04` (glibc 2.31) for the right reason (`GLIBCXX_3.4.29`, `GLIBC_2.32` not found).
+- **Clean room** (`ubuntu:24.04`, only ffmpeg and CA certificates installed, no Python, no GPU):
+  the tarball reports 1.2.0; `knaif models pull knaif-qwen3-4b-v2` downloaded the model from its
+  pinned Hugging Face URL and `models verify` passed; with no `--model`, one real request per
+  skill through the tarball ("convert clip.mp4 to mkv" → `clip_converted.mkv`, "rotate sample.pdf
+  90 degrees" → `sample-rotated.pdf`) and through the AppImage (`--appimage-extract-and-run`: webm,
+  rotated PDF) each exited 0 with a video stream / a PDF.
+
+Checks: `t16/results.txt`.
