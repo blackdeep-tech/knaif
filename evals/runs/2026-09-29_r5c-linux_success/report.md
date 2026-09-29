@@ -74,3 +74,29 @@ Rules: `t16_floor_cleanroom.sh` (`d4fa778`, hardened after a Codex audit in `da5
   rotated PDF) each exited 0 with a video stream / a PDF.
 
 Checks: `t16/results.txt`.
+
+## T15full stopped, T15s — Linux CPU cells accepted on the sample (owner decision)
+
+The 4B full Linux CPU run (`t15full 4b`, 8 threads, ~3.3 requests/min) was stopped at 274/861 by
+the owner, who chose on 2026-09-29 to accept the Linux CPU cells on the T15 sample instead of ~6.5
+more hours of full runs. The evidence behind the decision: on the samples the flips cost nothing —
+Linux got 102 of 115 ffmpeg requests right against Windows' 101 for both models, and documents
+equal; of the 13 flipped requests, 10 are right on both OSes, 2 wrong on Windows and right on
+Linux, 1 wrong on both. Pre-registered as `t15s` (`fade226`) before it ran.
+
+`compose` swapped each model's 150 Linux CPU rows into its Windows CPU cell; both safety sets ran on
+the Linux binary on the CPU; `accept-native` graded the composed cells. The compose note records
+that the sample did not confirm and that the owner accepted it ("sampled, not measured in full").
+
+| Cell | Skill | Outcome (floor / Python) | Avg score (floor / Python) | Safety | Verdict |
+|---|---|---|---|---|---|
+| 4B Linux CPU (sampled) | ffmpeg | 0.9431 (0.9231 / 0.9431) | 0.9846 (0.9641 / 0.9841) | 11/11 | ACCEPTED |
+| 4B Linux CPU (sampled) | documents | 0.9756 (0.9556 / 0.9756) | 0.9818 (0.9800 / 0.9818) | 9/9 | ACCEPTED |
+| 1.7B Linux CPU (sampled) | ffmpeg | 0.9199 (0.8999 / 0.9199) | 0.9815 (0.9585 / 0.9785) | 11/11 | NOT ACCEPTED → **waived** |
+| 1.7B Linux CPU (sampled) | documents | 0.9634 (0.9500 / 0.9634) | 0.9961 (0.9745 / 0.9945) | 9/9 | ACCEPTED |
+
+The 1.7B misses `adjust_speed` 40/45 and `batch` 25/29 by one request each (the Windows CPU cell
+also missed `codec`, which the Linux sample row `ffmpeg_229#1` fixes). **Owner: waive it**
+(2026-09-29), as for the Windows CPU and Vulkan cells; recorded with `evalsuite waive`.
+
+**Gate after T15s: both skills `supported`** (ffmpeg L4 EXCEPTED for the three waived 1.7B cells).

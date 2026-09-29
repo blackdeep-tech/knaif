@@ -25,12 +25,12 @@ minus 0.02, on outcome and knaif score, plus every required capability slice).
 | `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Linux · CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CPU ³ | 0.943 / 0.985 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 | `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
 | `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
-<!-- R5c pending: Linux CPU for both models (T15); the
-     release date in the heading. Fill before the release; remove this comment. -->
+| `knaif-qwen3-1.7b-v2` | Linux · CPU ³ | 0.920 / 0.981 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: two slices short ² |
 
 Measured 2026-09-28/29 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2). The native and Python runtimes agree on every corpus request
 where both planned the same thing (0 port bugs; 0.00% ffmpeg and 0.70% documents plan disagreement,
@@ -39,6 +39,10 @@ while the CLI runs, then happens in place, and OCR works with the bundled PDFium
 ¹ Composed: the CUDA cell's results where the CPU plan was shown to match, and a real CPU run for
 the 60 ffmpeg and 4 documents requests where it did not.
 ² See *Known issues*.
+³ Sampled, not measured in full: the Windows CPU cell with a 150-request Linux CPU sample
+swapped in. The sample planned 3–5% of requests differently from Windows, none for the worse
+(Linux right as often as Windows or more often); accepting it instead of a full Linux CPU run
+was the owner's decision.
 
 ### Models
 
@@ -100,8 +104,8 @@ the 60 ffmpeg and 4 documents requests where it did not.
 
 - **`knaif-qwen3-1.7b-v2` on Vulkan and CPU, a few ffmpeg capability slices:** the 1.7B clears
   them by a single request on CUDA, and other backends break a near-tie the other way. Vulkan
-  misses `batch` (25 of 29, 26 required); the CPU misses `codec` (19/22), `adjust_speed` (40/45)
-  and `batch` (24/29). The whole gap is three requests where the model asks a question instead of
+  misses `batch` (25 of 29, 26 required); the Windows CPU misses `codec` (19/22), `adjust_speed`
+  (40/45) and `batch` (24/29), the Linux CPU `adjust_speed` (40/45) and `batch` (25/29). The whole gap is three requests where the model asks a question instead of
   planning: "re-encode all videos with h265", its Chinese twin ("批量将所有视频转换为HEVC"), and a
   German half-speed-plus-CRF request. Overall scores and the safety gate clear on every backend;
   the CPU's ffmpeg outcome is 0.918 against CUDA's 0.921. Released by owner decision; the 4B

@@ -268,8 +268,6 @@
           "model": "knaif-qwen3-1.7b-v2"
         },
         "knaif-qwen3-4b-v2|linux-x64|cpu": {
-          "passed": false,
-          "summary": "T15: the Linux CPU sample did not confirm the Windows CPU plans; the full Linux CPU L4 is required",
           "evidence": {
             "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
             "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
@@ -280,12 +278,193 @@
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
-            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/4b/cpu/documents_r5c-linux-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.975609756097561,
+          "avg_knaif_score": 0.9818082788671024,
+          "lane": "r5c-linux-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T15s: 4b Linux CPU cell = the 4b Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans (4B: 4 ffmpeg + 0 documents decision flips); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/base/4b/documents_r5c-win-4b_success.json",
+              "file_sha256": "adaf4aaf9c24fa136a7a334e32f36feeba8db263903ca33b4fb6f8d8ca484aed",
+              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
+              "git_dirty": true,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/4b/cpu/sample/documents_r5c-linux-4b_success.json",
+              "file_sha256": "583181db91bea05c53383ac3a3dd9a69e0e9e5d46d4ca742d87ba7201c7805e7",
+              "git_sha": "9b8fab5ee17e42c99a9dafd2f5de40d31cdb99c1",
+              "git_dirty": false,
+              "binary_sha256": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "linux-x64",
+              "lane": "r5c-linux-4b",
+              "total": 35
+            },
+            "replaced_rows": [
+              [
+                "documents_011",
+                0
+              ],
+              [
+                "documents_016",
+                0
+              ],
+              [
+                "documents_034",
+                0
+              ],
+              [
+                "documents_035",
+                0
+              ],
+              [
+                "documents_037",
+                0
+              ],
+              [
+                "documents_040",
+                0
+              ],
+              [
+                "documents_043",
+                0
+              ],
+              [
+                "documents_044",
+                0
+              ],
+              [
+                "documents_045",
+                0
+              ],
+              [
+                "documents_069",
+                0
+              ],
+              [
+                "documents_070",
+                0
+              ],
+              [
+                "documents_072",
+                0
+              ],
+              [
+                "documents_076",
+                0
+              ],
+              [
+                "documents_078",
+                0
+              ],
+              [
+                "documents_090",
+                0
+              ],
+              [
+                "documents_092",
+                0
+              ],
+              [
+                "documents_096",
+                0
+              ],
+              [
+                "documents_100",
+                0
+              ],
+              [
+                "documents_106",
+                0
+              ],
+              [
+                "documents_109",
+                0
+              ],
+              [
+                "documents_111",
+                0
+              ],
+              [
+                "documents_115",
+                0
+              ],
+              [
+                "documents_116",
+                0
+              ],
+              [
+                "documents_118",
+                0
+              ],
+              [
+                "documents_120",
+                0
+              ],
+              [
+                "documents_121",
+                0
+              ],
+              [
+                "documents_125",
+                0
+              ],
+              [
+                "documents_129",
+                0
+              ],
+              [
+                "documents_131",
+                0
+              ],
+              [
+                "documents_133",
+                1
+              ],
+              [
+                "documents_133",
+                2
+              ],
+              [
+                "documents_136",
+                0
+              ],
+              [
+                "documents_138",
+                1
+              ],
+              [
+                "documents_140",
+                1
+              ],
+              [
+                "documents_142",
+                0
+              ]
+            ]
           }
         },
         "knaif-qwen3-1.7b-v2|linux-x64|cpu": {
-          "passed": false,
-          "summary": "T15: the Linux CPU sample did not confirm the Windows CPU plans; the full Linux CPU L4 is required",
           "evidence": {
             "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
             "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
@@ -296,7 +475,190 @@
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
-            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/documents_r5c-linux-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9961368653421633,
+          "lane": "r5c-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T15s: 1.7b Linux CPU cell = the 1.7b Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans (1.7B: 6 ffmpeg + 3 documents decision flips); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/base/1.7b/documents_r5c-win-1.7b_success.json",
+              "file_sha256": "e3652659d49821177a9826e51e722bdb61a5157d5930e747a892ca34b560746b",
+              "git_sha": "fe3954bb25e451098b32ecd1b4338f9e32405d0d",
+              "git_dirty": true,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-1.7b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/sample/documents_r5c-linux-1.7b_success.json",
+              "file_sha256": "27cdacbc28d7c2cf6cf325296240c6bfe8e5c7f3dc2d2f8addd29ae1ae2be4ea",
+              "git_sha": "9b8fab5ee17e42c99a9dafd2f5de40d31cdb99c1",
+              "git_dirty": true,
+              "binary_sha256": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "linux-x64",
+              "lane": "r5c-linux-1.7b",
+              "total": 35
+            },
+            "replaced_rows": [
+              [
+                "documents_005",
+                0
+              ],
+              [
+                "documents_007",
+                0
+              ],
+              [
+                "documents_023",
+                0
+              ],
+              [
+                "documents_026",
+                0
+              ],
+              [
+                "documents_035",
+                0
+              ],
+              [
+                "documents_036",
+                0
+              ],
+              [
+                "documents_037",
+                0
+              ],
+              [
+                "documents_041",
+                0
+              ],
+              [
+                "documents_043",
+                0
+              ],
+              [
+                "documents_047",
+                0
+              ],
+              [
+                "documents_050",
+                0
+              ],
+              [
+                "documents_054",
+                0
+              ],
+              [
+                "documents_060",
+                0
+              ],
+              [
+                "documents_070",
+                0
+              ],
+              [
+                "documents_071",
+                0
+              ],
+              [
+                "documents_073",
+                0
+              ],
+              [
+                "documents_076",
+                0
+              ],
+              [
+                "documents_078",
+                0
+              ],
+              [
+                "documents_082",
+                0
+              ],
+              [
+                "documents_086",
+                0
+              ],
+              [
+                "documents_098",
+                0
+              ],
+              [
+                "documents_105",
+                0
+              ],
+              [
+                "documents_107",
+                0
+              ],
+              [
+                "documents_119",
+                0
+              ],
+              [
+                "documents_123",
+                0
+              ],
+              [
+                "documents_129",
+                0
+              ],
+              [
+                "documents_131",
+                0
+              ],
+              [
+                "documents_132",
+                1
+              ],
+              [
+                "documents_132",
+                2
+              ],
+              [
+                "documents_135",
+                1
+              ],
+              [
+                "documents_135",
+                2
+              ],
+              [
+                "documents_136",
+                1
+              ],
+              [
+                "documents_138",
+                0
+              ],
+              [
+                "documents_142",
+                1
+              ],
+              [
+                "documents_143",
+                1
+              ]
+            ]
           }
         }
       }
