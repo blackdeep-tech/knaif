@@ -1098,12 +1098,14 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
 
     from .gate import (
         CELL_LAYERS,
+        NATIVE_PATTERNS,
         RUN_SCOPED,
         binaries_by_os,
         evidence_tuple,
         load_acceptance_record,
         record_equivalence,
-        replacement_only,
+        text_only_change,
+        tree_at_commit,
     )
 
     root = Path.cwd()
@@ -1118,22 +1120,35 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         if not sep or not old or not new:
             refuse(f"--replace wants OLD=NEW, got {spec!r}")
         pairs.append((old, new))
-    # The whole native source tree the evidence fingerprints, as git stores it.
-    specs = [
-        ":(glob)native/crates/*/src/**/*.rs",
-        ":(glob)apps/cli/src/**/*.rs",
-        ":(glob)skills/*/native/src/**/*.rs",
-    ]
-    diff = subprocess.run(
-        ["git", "diff", "--unified=0", args.from_commit, "HEAD", "--", *specs],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-    ).stdout
-    if not replacement_only(diff, pairs):
-        refuse("the native source change is not only the declared replacements")
-    changed_files = sorted({ln[6:] for ln in diff.splitlines() if ln.startswith("+++ b/")})
+
+    def git(*cmd: str) -> str:
+        out = subprocess.run(
+            ["git", *cmd], capture_output=True, text=True, encoding="utf-8", check=True
+        )
+        return out.stdout
+
+    # The native source tree the evidence fingerprints, as git stores it.
+    specs = [f":(glob){p}" for p in NATIVE_PATTERNS]
+    # The mapping must describe committed trees: an uncommitted native change would enter the
+    # new fingerprint without ever being diffed (Codex, 2026-09-29).
+    if git("status", "--porcelain", "--", *specs).strip():
+        refuse("the native source tree has uncommitted changes; commit the text fix first")
+    # Modified files only: an added, deleted or renamed file is not a text fix, and --no-renames
+    # keeps a rename from hiding behind git's rename detection.
+    status = git("diff", "--name-status", "--no-renames", args.from_commit, "HEAD", "--", *specs)
+    changed_files = []
+    for line in status.splitlines():
+        kind, _, name = line.partition("\t")
+        if kind != "M":
+            refuse(f"{name}: {kind!r} is not a modification")
+        changed_files.append(name)
+    if not changed_files:
+        refuse(f"no native source change since {args.from_commit}")
+    for name in changed_files:
+        before = git("show", f"{args.from_commit}:{name}")
+        after = git("show", f"HEAD:{name}")
+        if not text_only_change(before, after, pairs):
+            refuse(f"{name}: not only the declared replacements inside strings or comments")
 
     # Every L3/L4 record must differ from the tree in `native` alone (run-scoped keys aside).
     natives: set[str] = set()
@@ -1156,7 +1171,14 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
                     natives.add(str(ev["native"]))
     if len(natives) != 1:
         refuse(f"expected one measured native fingerprint, found {len(natives)}")
+    measured = next(iter(natives))
+    # --from-commit must BE the measured source, and HEAD the source now in the tree: otherwise a
+    # later commit could hide a logic change from the diff above (Codex, 2026-09-29).
+    if tree_at_commit(root, args.from_commit, NATIVE_PATTERNS) != measured:
+        refuse(f"{args.from_commit} is not the source the records measured")
     new_native = evidence_tuple(sorted(list_skills())[0], root)["native"]
+    if tree_at_commit(root, "HEAD", NATIVE_PATTERNS) != new_native:
+        refuse("the native source in the tree is not HEAD's")
 
     old_bins = binaries_by_os([Path(p) for p in args.old_bin])
     new_bins = binaries_by_os([Path(p) for p in args.new_bin])
@@ -1174,7 +1196,7 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         "to_commit": head,
         "replacements": [list(p) for p in pairs],
         "changed_files": changed_files,
-        "fingerprints": {"native": {"from": natives.pop(), "to": new_native}},
+        "fingerprints": {"native": {"from": measured, "to": new_native}},
         "binaries": {os_: {"from": old_bins[os_], "to": new_bins[os_]} for os_ in sorted(old_bins)},
     }
     try:
@@ -1265,7 +1287,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
         print(f"  {skill:<12} declared={declared:<12} evidence={gate.derived:<12} {marks}")
         for state in gate.layers:
             # A green layer still prints what it could not check (Codex, 2026-09-29).
-            if state.detail and (state.state != "valid" or "not checked here" in state.detail):
+            shown = ("not checked here", "equivalent:")
+            if state.detail and (state.state != "valid" or any(t in state.detail for t in shown)):
                 print(f"       {state.layer}: {state.detail}")
         problems += gate.problems
 

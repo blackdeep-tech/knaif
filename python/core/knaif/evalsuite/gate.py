@@ -170,10 +170,7 @@ def evidence_tuple(
         ),
         # L3 and L4 are claims about the SHIPPED BINARY. Its sources were not fingerprinted at
         # all, so the native runtime could be rewritten under a record still reading "valid".
-        "native": _tree(
-            ".",
-            ("native/crates/*/src/**/*.rs", "apps/cli/src/**/*.rs", "skills/*/native/src/**/*.rs"),
-        ),
+        "native": _tree(".", NATIVE_PATTERNS),
         # The corpus the run graded.
         "corpus": _file(f"skills/{skill}/data/eval.jsonl"),
         # "success" is a moving target — hash what grades, not what it is called.
@@ -253,6 +250,7 @@ def _current_for_cell(
     root: Path,
     binaries: dict[str, str] | None = None,
     recorded_binary: Any = None,
+    equivalences: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The fingerprint a cell is judged against: the tree's, with `model` being the GGUF the
     cell NAMES (a cell key starts with the model's manifest name), not the skill's recommended
@@ -273,12 +271,37 @@ def _current_for_cell(
             if parts[1] in binaries:
                 cell_current["native_binary"] = binaries[parts[1]]
         elif binaries:
-            cell_current["native_binary"] = _pick_binary(binaries, recorded_binary)
+            cell_current["native_binary"] = _pick_binary(binaries, recorded_binary, equivalences)
     return cell_current
 
 
 #: Rebuilds the owner accepted as equivalent to a measured build (`evalsuite equivalence`).
 EQUIVALENCES = ACCEPTANCE_DIR / "equivalences.json"
+
+#: The native source tree the `native` fingerprint covers (see `evidence_tuple`).
+NATIVE_PATTERNS = (
+    "native/crates/*/src/**/*.rs",
+    "apps/cli/src/**/*.rs",
+    "skills/*/native/src/**/*.rs",
+)
+
+
+def _valid_equivalence(entry: Any) -> bool:
+    """Only the shape `evalsuite equivalence` writes may carry anything: an id, a `native` source
+    mapping and nothing else under `fingerprints`, and at least one binary mapping. A hand-added
+    `contracts`/`grading`/`model` mapping is ignored (Codex, 2026-09-29)."""
+    if not isinstance(entry, dict) or not entry.get("id"):
+        return False
+    fps = entry.get("fingerprints")
+    bins = entry.get("binaries")
+    if not isinstance(fps, dict) or set(fps) != {"native"}:
+        return False
+    native = fps["native"]
+    if not (isinstance(native, dict) and native.get("from") and native.get("to")):
+        return False
+    if not isinstance(bins, dict) or not bins:
+        return False
+    return all(isinstance(p, dict) and p.get("from") and p.get("to") for p in bins.values())
 
 
 def load_equivalences(root: Path) -> list[dict[str, Any]]:
@@ -286,45 +309,137 @@ def load_equivalences(root: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     doc = json.loads(path.read_text(encoding="utf-8"))
-    return list(doc.get("equivalences") or [])
+    return [e for e in (doc.get("equivalences") or []) if _valid_equivalence(e)]
 
 
-def _equivalent(key: str, recorded: Any, current: Any, entries: list[dict[str, Any]]) -> str | None:
-    """The id of an equivalence mapping exactly *recorded* to exactly *current* for *key*: a
-    binary (`native_binary`, any OS) or a source fingerprint (`native`, ...). Nothing else."""
+def _carrying_entry(
+    recorded: dict[str, Any], current: dict[str, Any], entries: list[dict[str, Any]]
+) -> str | None:
+    """The one equivalence that maps this record's measured build to the current one: its source
+    mapping takes the recorded `native` to the current, and (when a binary is checked) its binary
+    mapping takes the recorded binary to the given one. Both from the SAME entry, so two entries
+    cannot certify a source/binary pair neither vouches for (Codex, 2026-09-29)."""
+    rec_native, cur_native = recorded.get("native"), current.get("native")
+    if rec_native is None or rec_native == cur_native:
+        return None
+    check_binary = "native_binary" in current and recorded.get("native_binary") is not None
     for entry in entries:
-        if key == "native_binary":
-            pairs = (entry.get("binaries") or {}).values()
-        else:
-            pairs = [(entry.get("fingerprints") or {}).get(key) or {}]
-        if any(p.get("from") == recorded and p.get("to") == current for p in pairs):
-            return str(entry.get("id") or "unnamed")
+        native = entry["fingerprints"]["native"]
+        if native["from"] != rec_native or native["to"] != cur_native:
+            continue
+        if check_binary and not any(
+            p["from"] == recorded.get("native_binary") and p["to"] == current.get("native_binary")
+            for p in entry["binaries"].values()
+        ):
+            continue
+        return str(entry["id"])
     return None
 
 
-def replacement_only(diff: str, replacements: list[tuple[str, str]]) -> bool:
-    """True when a unified diff changes nothing but the declared text replacements: every removed
-    line is paired with an added line equal to it after the replacements, and nothing else is
-    added or removed. An empty diff is not a text fix."""
-    removed = [
-        ln[1:] for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")
-    ]
-    added = [ln[1:] for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
-    if not removed or len(removed) != len(added):
+def rust_text_spans(source: str) -> list[tuple[int, int]]:
+    """[start, end) spans of string literals and comments in Rust source: a small lexer covering
+    line and (nested) block comments, "..." with escapes, raw strings r#"..."#, byte strings and
+    char literals. Used to prove a replacement touches only text, never code."""
+    spans: list[tuple[int, int]] = []
+    i, n = 0, len(source)
+    while i < n:
+        c = source[i]
+        if source.startswith("//", i):
+            j = source.find("\n", i)
+            j = n if j == -1 else j
+            spans.append((i, j))
+            i = j
+        elif source.startswith("/*", i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                if source.startswith("/*", j):
+                    depth, j = depth + 1, j + 2
+                elif source.startswith("*/", j):
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+            spans.append((i, j))
+            i = j
+        elif (c in "rb" and re.match(r"b?r#*\"", source[i:])) and (
+            i == 0 or not (source[i - 1].isalnum() or source[i - 1] == "_")
+        ):
+            m = re.match(r"b?r(#*)\"", source[i:])
+            assert m is not None
+            close = '"' + m.group(1)
+            j = source.find(close, i + m.end())
+            j = n if j == -1 else j + len(close)
+            spans.append((i, j))
+            i = j
+        elif c == '"' or (c == "b" and source.startswith('b"', i)):
+            j = i + (2 if c == "b" else 1)
+            while j < n and source[j] != '"':
+                j += 2 if source[j] == "\\" else 1
+            spans.append((i, j + 1))
+            i = j + 1
+        elif c == "'":
+            m = re.match(r"'(\\.|\\u\{[0-9a-fA-F]+\}|[^\\'])'", source[i:])
+            i += m.end() if m else 1  # a char literal, or a lifetime / label tick
+        else:
+            i += 1
+    return spans
+
+
+def text_only_change(old: str, new: str, replacements: list[tuple[str, str]]) -> bool:
+    """True when *new* is *old* with the replacements applied, something did change, and every
+    replaced occurrence lies inside a string literal or comment of *old* (so a comparison or an
+    identifier in code can never pass as a text fix)."""
+    fixed = old
+    for a, b in replacements:
+        fixed = fixed.replace(a, b)
+    if fixed != new or old == new:
         return False
-    for old, new in zip(removed, added, strict=True):
-        fixed = old
-        for a, b in replacements:
-            fixed = fixed.replace(a, b)
-        if fixed != new or old == new:
-            return False
+    spans = rust_text_spans(old)
+    for a, _ in replacements:
+        start = 0
+        while (k := old.find(a, start)) != -1:
+            if not any(s <= k and k + len(a) <= e for s, e in spans):
+                return False
+            start = k + 1
     return True
+
+
+def _glob_regex(pattern: str) -> re.Pattern[str]:
+    out = ""
+    for part in re.split(r"(\*\*/|\*)", pattern):
+        out += "(?:.*/)?" if part == "**/" else "[^/]*" if part == "*" else re.escape(part)
+    return re.compile(out + r"\Z")
+
+
+def tree_at_commit(root: Path, commit: str, patterns: tuple[str, ...]) -> str:
+    """`_sha256_tree(root, patterns)` computed from *commit*'s tree instead of the checkout, so a
+    measured fingerprint can be tied to the commit it came from."""
+    import subprocess
+
+    names = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", commit],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    regexes = [_glob_regex(p) for p in patterns]
+    h = hashlib.sha256()
+    for name in sorted(n for n in names if any(r.match(n) for r in regexes)):
+        blob = subprocess.run(
+            ["git", "show", f"{commit}:{name}"], cwd=root, capture_output=True, check=True
+        ).stdout.replace(b"\r\n", b"\n")
+        h.update(name.encode())
+        h.update(hashlib.sha256(blob).hexdigest().encode())
+    return h.hexdigest()
 
 
 def record_equivalence(root: Path, entry: dict[str, Any]) -> Path:
     """Append *entry* to the equivalence record (ids are unique)."""
+    if not _valid_equivalence(entry):
+        raise ValueError("an equivalence maps `native` and at least one binary, nothing else")
     path = root / EQUIVALENCES
-    entries = load_equivalences(root)
+    raw = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    entries = list(raw.get("equivalences") or [])
     if any(e.get("id") == entry.get("id") for e in entries):
         raise ValueError(f"equivalence {entry.get('id')!r} is already recorded")
     entries.append(entry)
@@ -334,10 +449,20 @@ def record_equivalence(root: Path, entry: dict[str, Any]) -> Path:
     return path
 
 
-def _pick_binary(binaries: dict[str, str], recorded: Any) -> str:
-    """For a record that names no OS: the given binary it recorded, else one it did not (drift)."""
+def _pick_binary(
+    binaries: dict[str, str], recorded: Any, equivalences: list[dict[str, Any]] | None = None
+) -> str:
+    """For a record that names no OS: the given binary it recorded, else the given rebuild an
+    equivalence maps it to (so the answer does not depend on argument order), else one it did not
+    record (drift)."""
     given = list(binaries.values())
-    return str(recorded) if recorded in given else given[0]
+    if recorded in given:
+        return str(recorded)
+    for entry in equivalences or []:
+        for pair in entry["binaries"].values():
+            if pair["from"] == recorded and pair["to"] in given:
+                return str(pair["to"])
+    return given[0]
 
 
 def _current_for_flat(
@@ -345,6 +470,7 @@ def _current_for_flat(
     record: dict[str, Any] | None,
     current: dict[str, str | None],
     binaries: dict[str, str] | None,
+    equivalences: list[dict[str, Any]] | None = None,
 ) -> dict[str, str | None]:
     """A flat (pre-matrix) layer, given several binaries: judged against the one it recorded,
     exactly as a model-keyed cell is. Without this, a list of binaries dropped the check for
@@ -353,7 +479,7 @@ def _current_for_flat(
         return current
     entry = ((record or {}).get("layers") or {}).get(layer) or {}
     recorded = (entry.get("evidence") or {}).get("native_binary")
-    return {**current, "native_binary": _pick_binary(binaries, recorded)}
+    return {**current, "native_binary": _pick_binary(binaries, recorded, equivalences)}
 
 
 def load_status_contract(root: Path) -> dict[str, Any]:
@@ -394,26 +520,31 @@ def _layer_state(
 
     recorded = entry.get("evidence") or {}
     depends = (contract["layers"].get(layer) or {}).get("invalidated_by") or []
-    carried: list[str] = []
-    drifted = []
-    for key in depends:
-        if key in current and recorded.get(key) is not None and recorded.get(key) != current[key]:
-            via = _equivalent(key, recorded.get(key), current[key], equivalences or [])
-            if via:
-                carried.append(via)
-            else:
-                drifted.append(key)
-    # Source carried over by an equivalence, binary still the measured one: that binary was not
-    # built from this source. The rebuild the equivalence names is what ships with it.
+    # Results measured on an earlier build carry over only through ONE equivalence that maps
+    # both the measured source and the measured binary to what is here now.
+    via = _carrying_entry(recorded, current, equivalences or [])
+    carried: list[str] = [via] if via else []
+    drifted = [
+        key
+        for key in depends
+        if key in current
+        and recorded.get(key) is not None
+        and recorded.get(key) != current[key]
+        and not (via and key in ("native", "native_binary"))
+    ]
+    # Source carried over, binary still the measured one: that binary was not built from this
+    # source. The rebuild the equivalence names is what ships with it.
     if (
-        "native_binary" in current
+        not via
+        and "native_binary" in current
         and recorded.get("native_binary") == current.get("native_binary")
         and any(
-            _equivalent(k, recorded.get(k), current.get(k), equivalences or [])
-            for k in depends
-            if k != "native_binary" and recorded.get(k) != current.get(k)
+            e["fingerprints"]["native"]["from"] == recorded.get("native")
+            and e["fingerprints"]["native"]["to"] == current.get("native")
+            for e in (equivalences or [])
         )
     ):
+        drifted = [k for k in drifted if k != "native"]
         drifted.append("native_binary (the measured build, not the equivalent rebuild)")
     missing = [key for key in depends if key in current and recorded.get(key) is None]
     if drifted:
@@ -570,6 +701,7 @@ def _cells_state(
                 root,
                 binaries,
                 (((stored or {}).get(cell) or {}).get("evidence") or {}).get("native_binary"),
+                equivalences,
             ),
             contract,
             cell,
@@ -647,7 +779,7 @@ def evaluate_skill(
             else _layer_state(
                 name,
                 record,
-                _current_for_flat(name, record, current, binaries),
+                _current_for_flat(name, record, current, binaries, equivalences),
                 contract,
                 equivalences=equivalences,
             )
@@ -861,6 +993,10 @@ def write_release_record(
     live = root / ACCEPTANCE_DIR
     names = skills if skills is not None else sorted(p.stem for p in live.glob("*.json"))
     out.mkdir(parents=True)
+    # The equivalences the verdict leans on travel with it, or the frozen record would name an
+    # entry whose hashes and reason live only in a file that keeps changing (Codex, 2026-09-29).
+    if (root / EQUIVALENCES).is_file():
+        (out / EQUIVALENCES.name).write_bytes((root / EQUIVALENCES).read_bytes())
     verdicts: dict[str, Any] = {}
     for skill in names:
         record = live / f"{skill}.json"
