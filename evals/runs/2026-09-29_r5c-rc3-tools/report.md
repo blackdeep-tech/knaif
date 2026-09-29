@@ -40,6 +40,18 @@ Windows: against RC2 exactly three of the zip's 67 files differ — `knaif.exe` 
 "Identical" = same plan decision and same grade (outcome, knaif score) as the accepted run of the
 tested binary (Windows T8, Linux T14), per `sample_check.py`.
 
+## The gate
+
+Owner (2026-09-29): carry the L3/L4 results over on this evidence. `evalsuite equivalence` gained a
+`sampled` kind for it (`561ca29`, hardened after a Codex audit in `c11a1f0`): it maps the measured
+`native` source and each skill's `bundle` to HEAD, only when `skill.yaml` changed under
+`dependencies` and otherwise only native sources; it requires this run committed after its rules,
+every OS and skill equivalent exactly once, one START then DONE per stage, and each new binary to be
+the executable inside the artifact the run recorded. Recorded as `1.2.0-rc3-tools` (RC1 `71884fd` →
+HEAD). **The gate is green against the RC3 binaries** (both skills `supported`; every carried result
+marked `[equivalent: 1.2.0-rc3-tools (sampled)]`; the three owner-waived 1.7B cells EXCEPTED as
+before), and `just check` passes.
+
 ## Incidents (instrument, not artifact)
 
 - **An orphaned first attempt.** The rules were first committed into an ignored path (`evals/**`),
