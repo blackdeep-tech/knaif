@@ -8,7 +8,8 @@
 # budget (owner, 2026-09-28: one run at a time, 8 threads for heat):
 #
 #   bash run_all.sh t14   L4 CUDA cells in full: 4B, then 1.7B, both skills          ~1.5-2 h
-#   (t15, t16: stages and rules are added to this file, and committed, before they run)
+#   bash run_all.sh t15   CPU cells by reuse: 150-request sample per model, compose   ~1.25 h
+#   t16 (floor + clean room) runs from Windows with Docker: t16_floor_cleanroom.sh, ~20-30 min
 #
 # Artifact: knaif-1.2.0-linux-x64.tar.gz (sha256 4fbba4a9...), built from 71884fd in the container,
 # copied to ~/r5c/dist at T13, unpacked fresh by every stage into sandbox/r5c/artifact;
@@ -28,16 +29,32 @@
 #      and the Windows CUDA board of the same model and skill (the committed t11_flips.py; the
 #      Windows boards are read from the Windows checkout, `origin`).
 #
+#   T15 (written 2026-09-29, before T15 runs; the reuse rule accepted by the owner 2026-09-28):
+#      per model, the Linux binary on the CPU (GPU hidden, one process per request) runs a sample
+#      drawn and committed before the run (t15_sample_<model>_<skill>.json: 115 ffmpeg + 35
+#      documents, seed 20260929, requests that reach the model on Windows). t15_confirm.py
+#      compares its plans with the Windows CPU plans at the decision level (4B: the 2026-09-25 CPU
+#      plans, which T9a confirmed; 1.7B: the T10 board). 0 decision flips on BOTH skills -> the
+#      Windows CPU cell stands for Linux: `compose` swaps the 150 Linux rows into the Windows CPU
+#      board (copied into base/ first, with its sha256), both safety sets run on the Linux binary
+#      on the CPU, and `accept-native` grades the composed Linux CPU cell by the T14 rule. Any
+#      flip, or a sampled row missing -> that model's full Linux CPU L4 instead, as a separate
+#      approved run; nothing is composed for it. The composed 1.7B cell carries T10's three
+#      slice misses unless the Linux rows change them; that is a quality question for the owner
+#      (T10's waiver covers the Windows cell only: it quotes that cell's verdict and run).
+#
 # PREDICTION (not a rule): Linux CUDA plans like Windows CUDA on all but a handful of requests
 #   (same GPU, same llama.cpp and model; only the OS, the driver path and the compiler differ).
 #   4B ACCEPTED on both skills. The 1.7B holds its thinnest ffmpeg slices (batch 26/29) by one
 #   request on Windows CUDA, so a single flip could miss one: ~30% risk.
+#   T15: 0 decision flips for both models (the Windows T9a sample had none in 130); the 4B Linux
+#   CPU cell ACCEPTED; the 1.7B Linux CPU cell NOT ACCEPTED on T10's three slices.
 set -uo pipefail
 cd "$(dirname "$0")/../../.."
 # Never from the Windows checkout through /mnt: it would unpack over that checkout's artifact and
 # let uv rebuild its .venv for Linux (a mis-quoted launch did exactly that for ~40 s, 2026-09-29).
 case "$PWD" in /mnt/*) echo "refusing to run from $PWD: use the WSL checkout" >&2; exit 2 ;; esac
-STAGE="${1:?usage: run_all.sh t14}"
+STAGE="${1:?usage: run_all.sh t14|t15}"
 R=evals/runs/2026-09-29_r5c-linux_success
 TARBALL="$HOME/r5c/dist/knaif-1.2.0-linux-x64.tar.gz"
 TAR_SHA=4fbba4a97f5d4a2377887d11df428be2db3c8c67e2d0f393e19bdd175f4bb801
@@ -154,7 +171,65 @@ os_flips() {  # $1 model label, $2 linux lane, $3 windows lane: Windows CUDA vs 
   done
 }
 
+only_run() {  # $1 dir, $2 lane, $3 skill, $4 only file: the pre-drawn rows, on the Linux CPU
+  local d="$1" lane="$2" skill="$3" only="$4"
+  mkdir -p "$d"
+  rm -f "$d/${skill}_${lane}_success.json"
+  backend_env cpu
+  uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$d/fixtures.log" 2>&1 \
+    || { failed "fixtures $skill"; return 1; }
+  if ! env "${ENVS[@]}" uv run python -m knaif.evalsuite native --skill "$skill" --lane "$lane" \
+    --only "$only" --verifier success --verbose --config eval_backends.yaml --save "$d" \
+    > "$d/$skill.log" 2>&1 || [ ! -s "$d/${skill}_${lane}_success.json" ]; then
+    failed "$lane $skill sample run failed (see $d/$skill.log)"; return 1
+  fi
+  [ "$(placement "$d/${skill}_${lane}_success.json")" = CPU ] \
+    || { failed "$lane $skill sample did not run on the CPU"; return 1; }
+}
+
+# $1 model label, $2 linux lane, $3 windows lane, $4 reference for ffmpeg, $5 for documents.
+cpu_by_reuse() {
+  local model="$1" lane="$2" wlane="$3" skill ref base ok=1 d="$R/$1/cpu"
+  mkdir -p "$d/sample" "$R/base/$model"
+  for skill in ffmpeg documents; do
+    if [ "$skill" = ffmpeg ]; then ref="$4"; else ref="$5"; fi
+    only_run "$d/sample" "$lane" "$skill" "$R/t15_sample_${model}_$skill.json" || { ok=0; continue; }
+    uv run python "$R/t15_confirm.py" confirm "$d/sample/${skill}_${lane}_success.json" "$ref" \
+      "$R/t15_sample_${model}_$skill.json" > "$d/${skill}_verdict.txt" 2>&1
+    echo "T15 $model $skill confirm exit $?" >> "$R/verdicts.txt"
+    cat "$d/${skill}_verdict.txt" >> "$R/verdicts.txt"
+    [ "$(tail -1 "$d/${skill}_verdict.txt")" = "VERDICT: the Windows CPU cell stands for Linux" ] || ok=0
+  done
+  if [ "$ok" -ne 1 ]; then
+    echo "T15 $model: NOT confirmed -> the full Linux CPU L4 for $model (separate approved run) $(date)" >> "$R/COMPLETE"
+    return 0
+  fi
+  backend_env cpu
+  for skill in ffmpeg documents; do
+    # The Windows board is copied in first: the composed record names its source path, and a
+    # path through /mnt would name the Windows checkout (public-output hygiene).
+    base="$R/base/$model/${skill}_${wlane}_success.json"
+    cp "$WIN_R/$model/cpu/${skill}_${wlane}_success.json" "$base" || { failed "copy base $model $skill"; continue; }
+    sha256sum "$base" >> "$R/base/SHA256SUMS"
+    rm -f "$d/${skill}_${lane}_success.json"
+    uv run python -m knaif.evalsuite compose --base "$base" \
+      --replace "$d/sample/${skill}_${lane}_success.json" --out "$d/${skill}_${lane}_success.json" \
+      --note "R5c T15: $model Linux CPU cell = the $model Windows CPU cell with the 150-request Linux CPU sample swapped in (0 decision flips against the Windows CPU plans)" \
+      > "$d/${skill}_compose.log" 2>&1 || { failed "compose $model $skill"; continue; }
+    accept "$model" "$lane" cpu "$d/${skill}_${lane}_success.json" "$skill" "$d" \
+      && echo "DONE L4 $model cpu $skill (composed) $(date)" >> "$R/COMPLETE"
+  done
+}
+
 case "$STAGE" in
+  t15)
+    cpu_by_reuse 4b r5c-linux-4b r5c-win-4b \
+      "$(git remote get-url origin)/evals/runs/2026-09-25_backend-parity-v2_plans/ffmpeg_cpu.jsonl" \
+      "$(git remote get-url origin)/evals/runs/2026-09-25_backend-parity-v2_plans/documents_cpu.jsonl"
+    cpu_by_reuse 1.7b r5c-linux-1.7b r5c-win-1.7b \
+      "$WIN_R/1.7b/cpu/ffmpeg_r5c-win-1.7b_success.json" \
+      "$WIN_R/1.7b/cpu/documents_r5c-win-1.7b_success.json"
+    ;;
   t14)
     cell 4b r5c-linux-4b cuda
     cell 1.7b r5c-linux-1.7b cuda
