@@ -216,3 +216,10 @@ def test_the_lexer_finds_strings_and_comments() -> None:
     assert '"s\\"q"' in kinds
     assert "/* b /* n */ c */" in kinds
     assert 'r#"raw "x" "#' in kinds
+
+
+def test_some_occurrences_may_stay_as_they_were() -> None:
+    """The real fix changed the help text and left the unit tests' v1 test data alone."""
+    old = f'/// e.g. `{V1}`\nfn t() {{ assert!(m("{V1}")); }}\n'
+    new = f'/// e.g. `{V2}`\nfn t() {{ assert!(m("{V1}")); }}\n'
+    assert text_only_change(old, new, [(V1, V2)])

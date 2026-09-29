@@ -385,22 +385,26 @@ def rust_text_spans(source: str) -> list[tuple[int, int]]:
 
 
 def text_only_change(old: str, new: str, replacements: list[tuple[str, str]]) -> bool:
-    """True when *new* is *old* with the replacements applied, something did change, and every
-    replaced occurrence lies inside a string literal or comment of *old* (so a comparison or an
-    identifier in code can never pass as a text fix)."""
-    fixed = old
-    for a, b in replacements:
-        fixed = fixed.replace(a, b)
-    if fixed != new or old == new:
-        return False
+    """True when *new* differs from *old* only by the declared replacements, applied to some of
+    their occurrences (others may stay, e.g. as test data), at least one was applied, and every
+    applied one lies inside a string literal or comment of *old*: a comparison or an identifier in
+    code can never pass as a text fix. Walks both texts side by side, so any other difference,
+    however small, fails."""
     spans = rust_text_spans(old)
-    for a, _ in replacements:
-        start = 0
-        while (k := old.find(a, start)) != -1:
-            if not any(s <= k and k + len(a) <= e for s, e in spans):
+    i = j = applied = 0
+    while i < len(old) or j < len(new):
+        for a, b in replacements:
+            if old.startswith(a, i) and new.startswith(b, j) and a != b:
+                if not any(s <= i and i + len(a) <= e for s, e in spans):
+                    return False
+                i, j, applied = i + len(a), j + len(b), applied + 1
+                break
+        else:
+            if i < len(old) and j < len(new) and old[i] == new[j]:
+                i, j = i + 1, j + 1
+            else:
                 return False
-            start = k + 1
-    return True
+    return applied > 0
 
 
 def _glob_regex(pattern: str) -> re.Pattern[str]:
