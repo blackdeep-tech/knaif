@@ -79,6 +79,53 @@
           "to": "454e03488dde282814708d5c1f281a1a4d447d3a288aa3949cecd9b731f61e65"
         }
       }
+    },
+    {
+      "id": "1.2.0-rc3-tools-tests",
+      "date": "2026-09-29",
+      "reason": "as 1.2.0-rc3-tools, re-recorded for ea8bf66: Linux CI found the folder-lookup unit tests unrunnable off Windows; fixed in the test module only",
+      "verified": "as 1.2.0-rc3-tools (sample run evals/runs/2026-09-29_r5c-rc3-tools); since the RC3 build commit 7c534e6 the only native or bundle source change is five hunks in native/crates/knaif-core/src/deps.rs, all inside #[cfg(test)] mod tests (lines 726+, module starts at 482), not compiled into the release binary; the RC3 artifacts are unchanged; cargo test --workspace passes on Windows and in the Linux build container",
+      "from_commit": "71884fd",
+      "to_commit": "ea8bf6650e89ef9652dd6dc9de8434f2c1e22c1c",
+      "kind": "sampled",
+      "sample_run": "evals/runs/2026-09-29_r5c-rc3-tools",
+      "changed_files": [
+        "apps/cli/src/main.rs",
+        "native/crates/knaif-core/src/deps.rs",
+        "native/crates/knaif-core/src/lib.rs",
+        "native/crates/knaif-skill-api/src/lib.rs",
+        "native/crates/knaif-skill-api/src/tools.rs",
+        "skills/documents/native/src/detect.rs",
+        "skills/ffmpeg/native/src/exec.rs",
+        "skills/documents/skill.yaml",
+        "skills/ffmpeg/skill.yaml"
+      ],
+      "fingerprints": {
+        "native": {
+          "from": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+          "to": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26"
+        },
+        "bundle": {
+          "documents": {
+            "from": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "to": "364d182eda5823019762ea81257044d17b648174c4a0769b6ad1752370b5eb2f"
+          },
+          "ffmpeg": {
+            "from": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "to": "bbeacec1f8cd7b646d29d009d6e2373cfde575bb86cfeef05c09a136c71217ca"
+          }
+        }
+      },
+      "binaries": {
+        "linux-x64": {
+          "from": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+          "to": "4100e720a07d5204465bcb488b3733466c327d50d48538f7fb929141684e6259"
+        },
+        "windows-x64": {
+          "from": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+          "to": "454e03488dde282814708d5c1f281a1a4d447d3a288aa3949cecd9b731f61e65"
+        }
+      }
     }
   ]
 }

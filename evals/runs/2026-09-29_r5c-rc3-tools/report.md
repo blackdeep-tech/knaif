@@ -52,6 +52,13 @@ HEAD). **The gate is green against the RC3 binaries** (both skills `supported`; 
 marked `[equivalent: 1.2.0-rc3-tools (sampled)]`; the three owner-waived 1.7B cells EXCEPTED as
 before), and `just check` passes.
 
+**Re-recorded as `1.2.0-rc3-tools-tests`** after PR #61's Linux CI: the new folder-lookup unit
+tests could not pass off Windows (fake executables without the execute bit; backslash patterns).
+Fixed in the test module only (`ea8bf66`): since the RC3 build commit `7c534e6` the only native or
+bundle change is inside `#[cfg(test)] mod tests` of `deps.rs`, so the RC3 artifacts are what this
+source builds. `cargo test --workspace` passes on Windows and in the Linux build container; the
+gate is green against the RC3 binaries through the new entry.
+
 ## Incidents (instrument, not artifact)
 
 - **An orphaned first attempt.** The rules were first committed into an ignored path (`evals/**`),
