@@ -203,3 +203,35 @@ before the next pass, rules unchanged):
 
 Not covered, by design: the CUDA component on an NVIDIA machine (T8 installed the payload with
 `backend install`), and the wizard's task tree (a GUI check).
+
+## T10 — 1.7B Windows CPU cell in full: documents ACCEPTED, ffmpeg NOT ACCEPTED (3 slices)
+
+Run 2026-09-29 09:25–12:30 on RC `71884fd`'s packaged artifact, GPU hidden (placement CPU, all 29
+layers), one fresh process per request, `success` verifier, 8 threads.
+
+| Skill | Outcome (floor / Python) | Avg score (floor / Python) | Safety | Verdict |
+|---|---|---|---|---|
+| ffmpeg | 0.9175 (0.8999 / 0.9199) | 0.9816 (0.9585 / 0.9785) | 11/11 | **NOT ACCEPTED** |
+| documents | 0.9634 (0.9500 / 0.9634) | 0.9961 (0.9745 / 0.9945) | 9/9 | ACCEPTED |
+
+ffmpeg clears both aggregates and 42 of 45 thresholds; three required slices miss:
+
+| Slice | CPU | CUDA (T8) | Floor |
+|---|---|---|---|
+| codec | 19/22 (0.864) | 21/22 | 0.900 |
+| adjust_speed | 40/45 (0.889) | 41/45 | 0.900 |
+| batch | 24/29 (0.828) | 26/29 | 0.896 |
+
+The whole difference from the accepted CUDA cell is three requests, where the CPU asks a
+clarifying question and CUDA plans correctly: `ffmpeg_229[1]` "re-encode all videos with h265"
+and `ffmpeg_229[4]` "批量将所有视频转换为HEVC" (each counts in codec and batch; `229[4]` is also
+the request behind the 1.7B Vulkan miss) and `ffmpeg_129[1]` (German, half speed plus CRF 25).
+The 1.7B CUDA cell holds these slices by the narrowest margins (batch 26/29 where 26 are needed),
+so a backend that flips one or two near-ties falls below. Across the corpus the CPU is not worse:
+of 42 requests the two backends plan differently, CUDA alone is right on 9 and the CPU alone on 11
+(T11 below). **Owner decision pending** (1.7B quality miss, not safety: the rules route it to the
+owner).
+
+T11, completed: 1.7B CUDA / CPU — ffmpeg 42 decision flips (both correct 14, only CUDA 9, only
+CPU 11, both wrong 8), documents 3 (both correct 2, both wrong 1). Reports:
+`1.7b/flips_<skill>_cuda_vs_cpu.txt`.
