@@ -124,3 +124,23 @@ def test_the_source_check_accepts_only_the_declared_replacements() -> None:
     added_line = ok + "+    unsafe_call();\n"
     assert not replacement_only(added_line, pairs)
     assert not replacement_only("", pairs), "an empty diff is not a text fix"
+
+
+def test_the_measured_binary_does_not_pass_with_the_rebuilt_source(tree, tmp_path) -> None:
+    """With the source carried over, only the equivalent rebuild may ship: the measured binary
+    was built from the old source (a loophole found while recording the 1.2.0 equivalence)."""
+    tree, old_native, old_sha, _, new_sha = tree
+    new_native = evidence_tuple("demo", tree)["native"]
+    _write(
+        tree,
+        [
+            {
+                "id": "textfix",
+                "fingerprints": {"native": {"from": old_native, "to": new_native}},
+                "binaries": {"windows-x64": {"from": old_sha, "to": new_sha}},
+            }
+        ],
+    )
+    old = tmp_path / "old.exe"
+    l4, _ = _l4(tree, old)
+    assert l4.state == "stale" and "equivalent rebuild" in l4.detail

@@ -45,7 +45,7 @@ case "$STAGE" in
   linux)
     case "$PWD" in /mnt/*) echo "run the linux stage from the WSL checkout" >&2; exit 2 ;; esac
     PKG="$HOME/r5c/dist-rc2/knaif-1.2.0-linux-x64.tar.gz"
-    sha256sum "$PKG" | tee "$R/linux_artifact.sha256"
+    (cd "$(dirname "$PKG")" && sha256sum "$(basename "$PKG")") | tee "$R/linux_artifact.sha256"
     rm -rf "$ART" && mkdir -p "$ART" && tar -xzf "$PKG" -C "$ART" || failed "untar"
     EXE="$PWD/$ART/knaif-1.2.0-linux-x64/bin/knaif"
     CUDA="$HOME/r5c/backends-cuda"

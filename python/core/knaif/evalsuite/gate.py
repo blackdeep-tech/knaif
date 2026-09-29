@@ -403,6 +403,18 @@ def _layer_state(
                 carried.append(via)
             else:
                 drifted.append(key)
+    # Source carried over by an equivalence, binary still the measured one: that binary was not
+    # built from this source. The rebuild the equivalence names is what ships with it.
+    if (
+        "native_binary" in current
+        and recorded.get("native_binary") == current.get("native_binary")
+        and any(
+            _equivalent(k, recorded.get(k), current.get(k), equivalences or [])
+            for k in depends
+            if k != "native_binary" and recorded.get(k) != current.get(k)
+        )
+    ):
+        drifted.append("native_binary (the measured build, not the equivalent rebuild)")
     missing = [key for key in depends if key in current and recorded.get(key) is None]
     if drifted:
         return LayerState(layer, "stale", f"changed since the run: {', '.join(sorted(drifted))}")
