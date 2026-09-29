@@ -90,13 +90,15 @@ capability slice.
 | `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 | `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
-<!-- R5c pending: Linux CUDA and CPU for both models (T14, T15). Fill
+| `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+<!-- R5c pending: Linux CPU for both models (T15). Fill
      before publishing; remove this comment. -->
 
-Measured 2026-09-28 on an RTX 5080 (Windows 11) with the release binary.
+Measured 2026-09-28/29 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) with the release binary.
 ¹ The 4B CPU cell is composed: the CUDA cell's results for every request whose CPU plan was shown
 to match, and a real CPU run for every request where it did not (60 ffmpeg, 4 documents).
 ² The 1.7B clears these capability slices by a single request on CUDA, so a backend that breaks a

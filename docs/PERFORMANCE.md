@@ -293,7 +293,15 @@ Source: `evals/runs/2026-09-28_r5c-windows_success` (T8, T9, T10).
 | `knaif-qwen3-1.7b-v2` | CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 2.1 s / 4.2 s | 1.4 s / 1.7 s |
 | `knaif-qwen3-1.7b-v2` | Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 2.6 s / 5.0 s | 1.9 s / 2.2 s |
 | `knaif-qwen3-1.7b-v2` | CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11.1 s / 15.4 s | 4.9 s / 6.1 s |
-<!-- R5c pending: the Linux cells (T14/T15, `5080-WSL`). -->
+
+Linux, the same RTX 5080 under WSL2 (`5080-WSL`, Ubuntu 24.04), the packaged tarball with the
+installed CUDA payload, 2026-09-29 (source: `evals/runs/2026-09-29_r5c-linux_success`, T14):
+
+| Model | Backend | ffmpeg outcome / knaif | documents outcome / knaif | ffmpeg p50 / p95 | documents p50 / p95 |
+|---|---|---:|---:|---:|---:|
+| `knaif-qwen3-4b-v2` | CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 2.4 s / 6.3 s | 1.2 s / 1.5 s |
+| `knaif-qwen3-1.7b-v2` | CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 2.1 s / 5.4 s | 1.0 s / 1.2 s |
+<!-- R5c pending: the Linux CPU cells (T15, `5080-WSL`). -->
 
 ¹ Composed from the CUDA cell and a CPU re-run of the 64 requests whose CPU plan differs, so it has
 no whole-corpus wall time; the per-phase CPU figure above (§2, ~8.8 s inference) is the one to quote.
@@ -303,6 +311,10 @@ no whole-corpus wall time; the per-phase CPU figure above (§2, ~8.8 s inference
   and the tool's own work. documents, where the tool work is light, sits in a narrow band
   (p50 to p95 within ~0.4 s); ffmpeg's wider spread follows the encodes.
 - **The 1.7B is ~0.5–0.7 s faster per request on the same GPU**, at 2 points of ffmpeg outcome.
+- **Linux runs a documents request ~0.7 s faster than Windows** on the same card (1.2 s vs 1.9 s
+  p50, 4B). The plans are identical (0 decision flips between the two OSes on CUDA), so the gap
+  lies outside the model's choices: process start, loading and the tool's own work, which these
+  runs do not time separately.
 
 ---
 

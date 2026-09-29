@@ -220,6 +220,52 @@
           "avg_knaif_score": 0.9961368653421633,
           "lane": "r5c-win-1.7b",
           "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/4b/cuda/documents_r5c-linux-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9817073170731707,
+          "avg_knaif_score": 0.9803030303030303,
+          "lane": "r5c-linux-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cuda/documents_r5c-linux-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9944812362030905,
+          "lane": "r5c-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
         }
       }
     },

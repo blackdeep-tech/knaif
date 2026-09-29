@@ -24,13 +24,15 @@ minus 0.02, on outcome and knaif score, plus every required capability slice).
 | `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 | `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
-<!-- R5c pending: Linux CUDA and CPU for both models (T14, T15); the
+| `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+<!-- R5c pending: Linux CPU for both models (T15); the
      release date in the heading. Fill before the release; remove this comment. -->
 
-Measured 2026-09-28 on an RTX 5080. The native and Python runtimes agree on every corpus request
+Measured 2026-09-28/29 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2). The native and Python runtimes agree on every corpus request
 where both planned the same thing (0 port bugs; 0.00% ffmpeg and 0.70% documents plan disagreement,
 both models). The Windows installer was checked in a clean VM: an upgrade from 1.1.0 is refused
 while the CLI runs, then happens in place, and OCR works with the bundled PDFium.
