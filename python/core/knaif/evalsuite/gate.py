@@ -215,15 +215,59 @@ def _manifest_model_sha(name: Any, root: Path) -> str | None:
     return sha if len(sha) == 64 and all(c in "0123456789abcdef" for c in sha.lower()) else None
 
 
-def _current_for_cell(cell: str, current: dict[str, str | None], root: Path) -> dict[str, Any]:
+#: Executable headers -> the OS id a matrix cell names. A binary handed to the gate is matched to
+#: the cells of its own OS by what it IS, not by what its file is called.
+_BINARY_FORMATS = (
+    (b"MZ", "windows-x64"),
+    (b"\x7fELF", "linux-x64"),
+    (b"\xcf\xfa\xed\xfe", "macos-arm64"),
+)
+
+
+def binaries_by_os(paths: list[Path]) -> dict[str, str]:
+    """{os id: sha256} for the packaged binaries under test, one per OS, recognised by header."""
+    out: dict[str, str] = {}
+    for path in paths:
+        head = Path(path).read_bytes()[:4]
+        os_id = next((os_ for magic, os_ in _BINARY_FORMATS if head.startswith(magic)), None)
+        if os_id is None:
+            raise ValueError(f"{path}: not a Windows, Linux or macOS executable")
+        if os_id in out:
+            raise ValueError(f"two binaries for {os_id}: the gate checks one artifact per OS")
+        out[os_id] = _sha256_file(Path(path))
+    return out
+
+
+def _current_for_cell(
+    cell: str,
+    current: dict[str, str | None],
+    root: Path,
+    binaries: dict[str, str] | None = None,
+    recorded_binary: Any = None,
+) -> dict[str, Any]:
     """The fingerprint a cell is judged against: the tree's, with `model` being the GGUF the
     cell NAMES (a cell key starts with the model's manifest name), not the skill's recommended
     one. Judged against the recommended model, every other model's cells read "stale: model"
-    once recorded, and a cell measured on the wrong GGUF read valid (R5c T7, 2026-09-28)."""
+    once recorded, and a cell measured on the wrong GGUF read valid (R5c T7, 2026-09-28).
+
+    With *binaries* ({os: sha256}, several packaged artifacts), `native_binary` is the binary of
+    the OS the cell names (absent if none was given: "not checked here"). A cell keyed by model
+    alone (L3) is judged against whichever given binary it recorded, else it has drifted."""
     cell_current = {k: v for k, v in current.items() if k != "model"}
     sha = _manifest_model_sha(cell.split("|", 1)[0], root)
     if sha:
         cell_current["model"] = sha
+    if binaries is not None:
+        cell_current.pop("native_binary", None)
+        parts = cell.split("|")
+        if len(parts) == 3:
+            if parts[1] in binaries:
+                cell_current["native_binary"] = binaries[parts[1]]
+        elif binaries:
+            given = list(binaries.values())
+            cell_current["native_binary"] = (
+                recorded_binary if recorded_binary in given else given[0]
+            )
     return cell_current
 
 
@@ -400,6 +444,7 @@ def _cells_state(
     contract: dict[str, Any],
     cells: list[str],
     root: Path,
+    binaries: dict[str, str] | None = None,
 ) -> LayerState:
     """A cell-keyed layer (the acceptance matrix): valid only when EVERY required cell is.
 
@@ -414,7 +459,13 @@ def _cells_state(
         cell: _layer_state(
             layer,
             {"layers": {layer: (stored or {}).get(cell)}},
-            _current_for_cell(cell, current, root),
+            _current_for_cell(
+                cell,
+                current,
+                root,
+                binaries,
+                (((stored or {}).get(cell) or {}).get("evidence") or {}).get("native_binary"),
+            ),
             contract,
             cell,
         )
@@ -425,6 +476,11 @@ def _cells_state(
     composed = [c for c in cells if ((stored or {}).get(c) or {}).get("composed")]
     note = f" [composed, not a full run: {', '.join(composed)}]" if composed else ""
     if worst == "valid":
+        # A cell that is valid only because nothing was there to compare must still say so.
+        for c, st in per_cell.items():
+            what = re.search(r"\[not checked here: ([^\]]+)\]", st.detail)
+            if what:
+                note += f" [not checked here: {what.group(1)} for {c}]"
         return LayerState(layer, "valid", f"{len(cells)} cell(s) valid{note}")
     groups = []
     for state in _SEVERITY[:-1]:
@@ -442,7 +498,10 @@ def _cells_state(
 
 
 def evaluate_skill(
-    skill: str, root: Path, declared: str, native_binary: Path | None = None
+    skill: str,
+    root: Path,
+    declared: str,
+    native_binary: Path | list[Path] | None = None,
 ) -> SkillGate:
     """Derive the status this skill's evidence actually supports, and compare with its claim.
 
@@ -451,13 +510,18 @@ def evaluate_skill(
     """
     contract = load_status_contract(root)
     record = load_acceptance_record(skill, root)
-    current = evidence_tuple(skill, root, native_binary)
+    # Several packaged artifacts (one per OS) are matched to the cells of their own OS; a single
+    # path keeps the original meaning: that binary, for every record.
+    binaries = binaries_by_os(native_binary) if isinstance(native_binary, list) else None
+    current = evidence_tuple(skill, root, None if binaries is not None else native_binary)
 
     all_layers = list(contract["layers"])
     matrix = load_matrix(root)
     states = [
         (
-            _cells_state(name, record, current, contract, required_cells(matrix, name), root)
+            _cells_state(
+                name, record, current, contract, required_cells(matrix, name), root, binaries
+            )
             if matrix is not None and name in CELL_LAYERS
             else _layer_state(name, record, current, contract)
         )

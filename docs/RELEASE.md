@@ -427,11 +427,14 @@ a valid verdict, so run L4 and safety once per model per full entry. For the rel
 pass the packaged binary, so the gate checks that the records measured *it*:
 
 ```bash
-uv run python -m knaif.evalsuite gate --native-bin <unpacked artifact>/knaif[.exe]
+uv run python -m knaif.evalsuite gate \
+  --native-bin <unpacked windows zip>/bin/knaif.exe --native-bin <unpacked linux tarball>/bin/knaif
 ```
 
-Without `--native-bin` the gate prints "not checked here: native_binary" for every record
-instead of comparing.
+Pass one binary per OS the release ships: the gate recognises each as Windows or Linux from its
+header and checks every `model|os|backend` cell against its own OS's binary (an L3 cell, keyed by
+model only, against whichever given binary it recorded). A cell whose OS has no binary given, or a
+gate run without `--native-bin`, prints "not checked here: native_binary" instead of comparing.
 
 **L4 runs the packaged layout.** The lane's `binary:` must be the executable inside the unpacked
 artifact, with PDFium beside it. `eval-native` and `eval-safety-native` refuse a binary without

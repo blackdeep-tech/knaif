@@ -1159,8 +1159,13 @@ def cmd_gate(args: argparse.Namespace) -> None:
         declared = _declared_native_status(skill, root)
         if declared is None:
             continue
-        native_bin = Path(args.native_bin) if getattr(args, "native_bin", None) else None
-        gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
+        given = getattr(args, "native_bin", None) or []
+        native_bin = [Path(p) for p in given] if given else None
+        try:
+            gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            sys.exit(2)
         marks = "  ".join(f"{s.layer}:{GATE_MARKS[s.state]}" for s in gate.layers)
         print(f"  {skill:<12} declared={declared:<12} evidence={gate.derived:<12} {marks}")
         for state in gate.layers:
@@ -2474,11 +2479,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_gate.add_argument(
         "--native-bin",
+        action="append",
         default=None,
         dest="native_bin",
         metavar="PATH",
-        help="The binary under acceptance (the packaged artifact). Checks that L3/L4 records "
-        "measured THIS binary; without it the gate reports the binary as not checked.",
+        help="The binary under acceptance (the packaged artifact), once per OS the release "
+        "ships (e.g. the Windows knaif.exe and the Linux knaif). Each cell is checked against "
+        "its own OS's binary; without any, the gate reports the binary as not checked.",
     )
 
     # waive — the owner's exception to one failing cell
