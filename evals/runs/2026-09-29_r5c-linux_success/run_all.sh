@@ -49,6 +49,15 @@
 #      exactly the T14 cell with the GPU hidden (placement CPU, else VOID and the stage fails),
 #      graded by the T14 rule. It replaces the unconfirmed record T15 wrote for that cell.
 #      A 1.7B CPU miss on the same thin slices as T10 goes to the owner as T10 did.
+#   T15s (OWNER DECISION 2026-09-29, written before the stage runs; replaces T15full, which was
+#      stopped at 274/861 of the 4B run): the Linux CPU cells are accepted ON THE SAMPLE. The owner
+#      chose this knowing T15 found decision flips (4B 4+0, 1.7B 6+3) and that none was harmful:
+#      on the 150-request samples Linux was right as often as Windows or more (ffmpeg 102 vs 101
+#      for both models, documents equal). Per model: `compose` swaps the 150 Linux CPU rows into
+#      the Windows CPU board (copied into base/ with its sha256), both safety sets run on the Linux
+#      binary on the CPU, and `accept-native` grades the composed cell by the T14 rule. The
+#      compose note states that the sample did NOT confirm and that the owner accepted it; the
+#      release notes say "sampled, not measured in full". A 1.7B slice miss goes to the owner.
 #
 # PREDICTION (not a rule): Linux CUDA plans like Windows CUDA on all but a handful of requests
 #   (same GPU, same llama.cpp and model; only the OS, the driver path and the compiler differ).
@@ -61,7 +70,7 @@ cd "$(dirname "$0")/../../.."
 # Never from the Windows checkout through /mnt: it would unpack over that checkout's artifact and
 # let uv rebuild its .venv for Linux (a mis-quoted launch did exactly that for ~40 s, 2026-09-29).
 case "$PWD" in /mnt/*) echo "refusing to run from $PWD: use the WSL checkout" >&2; exit 2 ;; esac
-STAGE="${1:?usage: run_all.sh t14|t15|t15full <model>}"
+STAGE="${1:?usage: run_all.sh t14|t15|t15s|t15full <model>}"
 MODEL_ARG="${2:-}"  # read now: the preflight below reuses the positional parameters
 R=evals/runs/2026-09-29_r5c-linux_success
 TARBALL="$HOME/r5c/dist/knaif-1.2.0-linux-x64.tar.gz"
@@ -248,7 +257,31 @@ cpu_by_reuse() {
   done
 }
 
+compose_sample() {  # $1 model label, $2 linux lane, $3 windows lane, $4 flips found by T15
+  local model="$1" lane="$2" wlane="$3" skill base sample d="$R/$1/cpu"
+  mkdir -p "$R/base/$model"
+  backend_env cpu
+  for skill in ffmpeg documents; do
+    sample="$d/sample/${skill}_${lane}_success.json"
+    [ "$(placement "$sample")" = CPU ] || { failed "T15s $model $skill: no CPU sample board"; continue; }
+    base="$R/base/$model/${skill}_${wlane}_success.json"
+    cp "$WIN_R/$model/cpu/${skill}_${wlane}_success.json" "$base" || { failed "copy base $model $skill"; continue; }
+    sha256sum "$base" >> "$R/base/SHA256SUMS"
+    rm -f "$d/${skill}_${lane}_success.json"
+    uv run python -m knaif.evalsuite compose --base "$base" --replace "$sample" \
+      --out "$d/${skill}_${lane}_success.json" \
+      --note "R5c T15s: $model Linux CPU cell = the $model Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans ($4); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full." \
+      > "$d/${skill}_compose.log" 2>&1 || { failed "compose $model $skill"; continue; }
+    accept "$model" "$lane" cpu "$d/${skill}_${lane}_success.json" "$skill" "$d" \
+      && echo "DONE L4 $model cpu $skill (composed on the sample) $(date)" >> "$R/COMPLETE"
+  done
+}
+
 case "$STAGE" in
+  t15s)
+    compose_sample 4b r5c-linux-4b r5c-win-4b "4B: 4 ffmpeg + 0 documents decision flips"
+    compose_sample 1.7b r5c-linux-1.7b r5c-win-1.7b "1.7B: 6 ffmpeg + 3 documents decision flips"
+    ;;
   t15full)
     case "$MODEL_ARG" in
       4b) cell 4b r5c-linux-4b cpu ;;
