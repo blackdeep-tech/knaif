@@ -122,23 +122,23 @@ was the owner's decision.
   model clears the bar on every backend.
 - **`knaif-qwen3-1.7b-v2` and unsafe chained requests** (see *Models*): it may drop the destructive
   half of a request instead of refusing it. Nothing unsafe runs.
-- **Native only, fixed in 1.2.1; none affects the evaluated corpora:**
+- **Native only; none affects the evaluated corpora:**
   - a password containing a backslash is asked for again instead of accepted;
   - a rare combining character (Unicode Other_Alphabetic, e.g. U+0345) right after a file name
     stops that name from being recognized;
   - declining the confirmation of one step lets the next step run (the Python runtime stops), and
     `reverse_video` has no preview before confirmation. Interactive use only; `--yes` is unaffected;
   - a file name ending in a dot (`clip.`) follows Python 3.14's rule, where Python 3.10–3.13 differ.
-- **A failed ffmpeg command does not say why clearly** (fixed in 1.2.1): knaif shows the last lines
+- **A failed ffmpeg command does not say why clearly:** knaif shows the last lines
   of ffmpeg's output and a raw exit code, e.g. `0xfffffff3` for a folder it may not write to, while
   the line that names the cause ("Permission denied") can be cut off. Run from a folder you can
   write to.
-- **"The second frame" of a video is taken as the first** (fixed in 1.2.1): frame-number requests
+- **"The second frame" of a video is taken as the first:** frame-number requests
   are read as a time just after the start. Ask for a time instead ("the frame at 0.5 seconds").
-- **The Python runtime still finds supporting tools on PATH only** (fixed in 1.2.1). The installed
+- **The Python runtime still finds supporting tools on PATH only.** The installed
   CLI is the native binary and is unaffected; a Python user on Windows adds the tool's folder to
   PATH or sets `KNAIF_<CMD>_BIN`.
-- **A supporting tool that is too old is not detected as such** (1.2.1 or later): knaif checks that
+- **A supporting tool that is too old is not detected as such:** knaif checks that
   a tool is there, not its version or, for ffmpeg, which encoders the build has.
 
 ### Platforms
