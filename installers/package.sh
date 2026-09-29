@@ -828,6 +828,12 @@ case "$KIND" in
   cuda)   INFER="Inference: NVIDIA CUDA GPU with CPU fallback. CUDA runtime DLLs are bundled; needs an NVIDIA driver." ;;
 esac
 
+# The recommended model, read from the manifest this artifact ships, never typed here: a hand-copied
+# name went stale at the v1 -> v2 promotion (1.2.0 release candidate).
+MODEL="$(awk '/^recommendations:/{r=1; next} r && /^[^ #]/{r=0} r && $1=="desktop:"{print $2; exit}' \
+  contracts/models/model-manifest.yaml)"
+[ -n "$MODEL" ] || { echo "ERROR: no recommendations.desktop in the model manifest" >&2; exit 1; }
+
 cat > "$STAGE/README.txt" <<EOF
 knaif $VER — native CLI ($OS-$ARCH${SUFFIX})
 
@@ -842,8 +848,8 @@ Issues:   https://github.com/blackdeep-tech/knaif/issues
 Quick start:
   bin/$EXE skills list                        list available skills
   bin/$EXE skills deps                         check required external tools (ffmpeg, ...)
-  bin/$EXE models pull knaif-qwen3-4b-v1       download the recommended model (~2.5 GB)
-  bin/$EXE run ffmpeg "compress clip.mp4 for email" --model knaif-qwen3-4b-v2
+  bin/$EXE models pull $MODEL       download the recommended model (~2.5 GB)
+  bin/$EXE run ffmpeg "compress clip.mp4 for email"
 
 Models live in ~/.knaif/models. External tools (ffmpeg, LibreOffice, Ghostscript,
 Tesseract) install separately — run 'skills deps' to see what each skill needs.

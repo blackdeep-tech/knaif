@@ -37,12 +37,13 @@
   #define Stage "..\..\dist\staging\knaif-" + AppVersion + "-windows-" + Arch + "-" + Kind
 #endif
 ; Default model offered at install (name = manifest recommendation; File = its store filename, used
-; to skip the download when already present). Keep in sync with contracts/models/model-manifest.yaml.
+; to skip the download when already present). Keep in sync with contracts/models/model-manifest.yaml:
+; python/core/tests/test_shipped_model_names.py fails when they disagree (the 1.2.0 release candidate carried v1 here).
 #ifndef DefaultModel
-  #define DefaultModel "knaif-qwen3-4b-v1"
+  #define DefaultModel "knaif-qwen3-4b-v2"
 #endif
 #ifndef DefaultModelFile
-  #define DefaultModelFile "knaif-qwen3-4b-v1-q4_k_m.gguf"
+  #define DefaultModelFile "knaif-qwen3-4b-v2-q4_k_m.gguf"
 #endif
 ; Minimum NVIDIA driver major version for the opt-in CUDA backend (the CUDA 13 floor). The
 ; authoritative declaration is `requires.min_driver` in contracts/backends/backend-manifest.yaml;

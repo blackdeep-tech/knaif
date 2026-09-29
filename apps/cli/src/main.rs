@@ -161,7 +161,7 @@ struct RunArgs {
     /// recommended model without prompting when none is given or installed.
     #[arg(long)]
     yes: bool,
-    /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v1`) or a GGUF file
+    /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
     /// back to the mock (drive it offline with `KNAIF_LLM_MOCK_RESPONSE`). Last one wins.
@@ -731,7 +731,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if request.trim().is_empty() {
         anyhow::bail!(
             "no request given. Usage: just native {0} \"<what to do>\" [--model <name|path>]\n  \
-             e.g. just native {0} \"compress clip.mp4 for email\" --model knaif-qwen3-4b-v1",
+             e.g. just native {0} \"compress clip.mp4 for email\" --model knaif-qwen3-4b-v2",
             args.skill
         );
     }

@@ -16,6 +16,8 @@ MODELS
 The fine-tuned models distributed alongside knaif are derivative works of the
 Qwen3 model family by Alibaba Cloud, used under the Apache License 2.0:
 
+    knaif-qwen3-4b-v2     derived from  Qwen/Qwen3-4B
+    knaif-qwen3-1.7b-v2   derived from  Qwen/Qwen3-1.7B
     knaif-qwen3-4b-v1     derived from  Qwen/Qwen3-4B
     knaif-qwen3-1.7b-v1   derived from  Qwen/Qwen3-1.7B
 
