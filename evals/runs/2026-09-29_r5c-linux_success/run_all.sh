@@ -9,6 +9,8 @@
 #
 #   bash run_all.sh t14   L4 CUDA cells in full: 4B, then 1.7B, both skills          ~1.5-2 h
 #   bash run_all.sh t15   CPU cells by reuse: 150-request sample per model, compose   ~1.25 h
+#   bash run_all.sh t15full <model>   the full Linux CPU cell, for a model T15 did not confirm
+#                                       (4B ~3.5-4.5 h, 1.7B ~2.5-3 h)
 #   t16 (floor + clean room) runs from Windows with Docker: t16_floor_cleanroom.sh, ~20-30 min
 #
 # Artifact: knaif-1.2.0-linux-x64.tar.gz (sha256 4fbba4a9...), built from 71884fd in the container,
@@ -42,6 +44,11 @@
 #      approved run; nothing is composed for it. The composed 1.7B cell carries T10's three
 #      slice misses unless the Linux rows change them; that is a quality question for the owner
 #      (T10's waiver covers the Windows cell only: it quotes that cell's verdict and run).
+#   T15full (written 2026-09-29 after T15 found 4 decision flips in the 4B ffmpeg sample, before
+#      any full run; the stage the T15 rule already names): the model's Linux CPU cell in full,
+#      exactly the T14 cell with the GPU hidden (placement CPU, else VOID and the stage fails),
+#      graded by the T14 rule. It replaces the unconfirmed record T15 wrote for that cell.
+#      A 1.7B CPU miss on the same thin slices as T10 goes to the owner as T10 did.
 #
 # PREDICTION (not a rule): Linux CUDA plans like Windows CUDA on all but a handful of requests
 #   (same GPU, same llama.cpp and model; only the OS, the driver path and the compiler differ).
@@ -54,7 +61,7 @@ cd "$(dirname "$0")/../../.."
 # Never from the Windows checkout through /mnt: it would unpack over that checkout's artifact and
 # let uv rebuild its .venv for Linux (a mis-quoted launch did exactly that for ~40 s, 2026-09-29).
 case "$PWD" in /mnt/*) echo "refusing to run from $PWD: use the WSL checkout" >&2; exit 2 ;; esac
-STAGE="${1:?usage: run_all.sh t14|t15}"
+STAGE="${1:?usage: run_all.sh t14|t15|t15full <model>}"
 R=evals/runs/2026-09-29_r5c-linux_success
 TARBALL="$HOME/r5c/dist/knaif-1.2.0-linux-x64.tar.gz"
 TAR_SHA=4fbba4a97f5d4a2377887d11df428be2db3c8c67e2d0f393e19bdd175f4bb801
@@ -241,6 +248,13 @@ cpu_by_reuse() {
 }
 
 case "$STAGE" in
+  t15full)
+    case "${2:-}" in
+      4b) cell 4b r5c-linux-4b cpu ;;
+      1.7b) cell 1.7b r5c-linux-1.7b cpu ;;
+      *) abort "usage: run_all.sh t15full 4b|1.7b" ;;
+    esac
+    ;;
   t15)
     cpu_by_reuse 4b r5c-linux-4b r5c-win-4b \
       "$(git remote get-url origin)/evals/runs/2026-09-25_backend-parity-v2_plans/ffmpeg_cpu.jsonl" \
