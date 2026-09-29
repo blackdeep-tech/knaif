@@ -67,8 +67,8 @@ result = nk.App([now]).invoke("what time is it in Tokyo", dry_run=True)
 Start with a 4B. Below that, accuracy on argument extraction drops off sharply, and
 knaif's own evaluation says so rather than hiding it.
 
-knaif publishes two fine-tunes of Qwen3 on HuggingFace — `knaif-qwen3-4b-v1` (2.5 GB, the
-default) and `knaif-qwen3-1.7b-v1` (1.32 GB). Both are trained on its bundled skills, so
+knaif publishes fine-tunes of Qwen3 on HuggingFace — since knaif 1.2.0, `knaif-qwen3-4b-v2`
+(2.5 GB, the default) and `knaif-qwen3-1.7b-v2` (1.32 GB). Both are trained on its bundled skills, so
 they are a reasonable starting point for an SDK app too, though they are tuned for *those*
 skills' vocabulary — if your commands are far from media and document work, a stock
 instruct model may route just as well. Measuring beats guessing; see

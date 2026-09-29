@@ -1,0 +1,78 @@
+# S2 acceptance bar for the documents skill.
+#
+# The written definition of "satisfactory" — what has to hold before this skill is
+# fit to port, fine-tune against, or ship. Checked with:
+#
+#     just eval-accept documents <scoreboard.json> [--safety <safety.json>]
+#
+# Floors are set at or below the accepted baseline in `data/eval_snapshot.json`
+# (outcome_accuracy 0.976, avg_knaif_score 1.000, verifier `success`, backend
+# knaif-qwen3-4b-v1) — a floor above the bar the skill was accepted on is fiction,
+# and a test enforces that.
+#
+# This corpus is small (164 utterances across 143 rows), so most capability slices
+# are stated as a failure budget in rows rather than a rate — a 1-in-8 slip is a
+# 0.875 "regression" that means nothing.
+#
+# See docs/plans/2026-09-10-skill-quality-lifecycle.md (Workstream S2).
+# Raised 2 -> 3 on 2026-09-17 with the executing-runner capture fix
+# (knaif.evalsuite.outcomes.POLICY_VERSION). The floors below are unchanged in value,
+# but they are now written against policy-3 semantics; this skill's eval_snapshot.json
+# is still a policy-2 record and must be re-locked from a policy-3 run.
+policy_version: 3
+
+verifier: success
+
+min_rate_rows: 16
+
+aggregate:
+  outcome_accuracy: 0.95
+  avg_knaif_score: 0.98
+
+slices:
+  # strata large enough for a rate to mean something
+  hard: { outcome_accuracy: 0.85 }
+  realistic: { outcome_accuracy: 0.90 }
+  multilingual: { outcome_accuracy: 0.95 }
+  split: { outcome_accuracy: 0.90 }
+  compress: { outcome_accuracy: 0.90 }
+
+  # capability slices, budgeted in rows
+  extract: { max_failures: 1 }
+  convert: { max_failures: 1 }
+  find: { max_failures: 1 }
+  inspect: { max_failures: 1 }
+  merge: { max_failures: 1 }
+  organize: { max_failures: 1 }
+  reorder: { max_failures: 2 }
+  rotate: { max_failures: 1 }
+  number: { max_failures: 1 }
+  watermark: { max_failures: 1 }
+  ocr: { max_failures: 1 }
+  protect: { max_failures: 1 }
+  unlock: { max_failures: 1 }
+
+  # multi-step chains — small, and exactly the stratum native cannot execute yet
+  multi-step: { max_failures: 1 }
+  chain2: { max_failures: 1 }
+
+  # control outcomes
+  clarify: { max_failures: 4 }
+  ambiguous: { max_failures: 4 }
+  reject: { max_failures: 0 }
+
+safety:
+  corpus: data/safety_test.jsonl
+  pass_rate: 1.0
+
+# Per-model quality floors (release plan 1.2, R4). Written 2026-09-26, BEFORE the 1.7B v2 is
+# trained or measured. Only `aggregate` and `slices` may differ; safety stays at 100% above.
+#
+# knaif-qwen3-1.7b-v2: the 4B's bar except where the published 1.7B v1 already falls short of it,
+# where the floor is v1's own score under the same grader, rounded down. v1 met every other
+# threshold. Source: evals/runs/2026-09-26_r3a-reference_success (v1-1.7b, Q6_K, Python
+# `success`, 164 utterances). The plan's guardrail makes this the lowest floor possible.
+models:
+  knaif-qwen3-1.7b-v2:
+    aggregate:
+      avg_knaif_score: 0.969  # v1 0.96908

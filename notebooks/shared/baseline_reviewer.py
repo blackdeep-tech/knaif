@@ -427,17 +427,22 @@ def make_reviewer(
                 shutil.rmtree(out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
 
-            toks = command.split()
-            for _i, _tok in enumerate(toks):
-                if _tok == "-i" and _i + 1 < len(toks):
-                    _p = fixture_dir / Path(toks[_i + 1]).name
-                    if _p.exists():
-                        toks[_i + 1] = str(_p)
-                    elif fixture_file is not None:
-                        toks[_i + 1] = str(fixture_file)
+            # One path rule, the same one the eval runner uses: provision the fixtures into
+            # this row's directory and re-root every path token there. The branch used to
+            # resolve `-i` out of the shared fixture directory by basename and redirect the
+            # output elsewhere — which cannot reproduce an `output == input` collision, and
+            # with `-y` on every command let a baseline overwrite a shared fixture.
+            from knaif.evalsuite.chain import resolve_command
+            from knaif.evalsuite.provisioning import provision_row_dir
 
-            out_path = out_dir / Path(toks[-1]).name
-            toks[-1] = str(out_path)
+            provision_row_dir(fixture_dir, out_dir)
+            anchors = [out_dir, fixture_dir]
+            if fixture_file is not None:
+                anchors.append(Path(fixture_file).parent)
+            resolved, _collapsed = resolve_command(command, out_dir, anchors)
+            toks = resolved.split()
+            out_path = Path(toks[-1])
+            out_path.parent.mkdir(parents=True, exist_ok=True)
 
             try:
                 proc = subprocess.run(toks, capture_output=True, text=True, timeout=120)

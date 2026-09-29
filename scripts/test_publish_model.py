@@ -154,3 +154,187 @@ def test_model_specs_reads_source_and_training_run_absence():
     assert spec["file"] == "knaif-qwen3-4b-v1-q4_k_m.gguf"
     assert spec["source"] == "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf"
     assert local_name(spec) == "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf"
+
+
+# ── staging uploads (release 1.2 R5b: pinned URLs exist before the release is public) ──────
+
+
+class _FakeApi:
+    calls: dict = {}
+
+    def __init__(self, token=None):
+        _FakeApi.calls = {}
+
+    def create_branch(self, repo_id, *, branch, repo_type, exist_ok):
+        _FakeApi.calls["branch"] = (repo_id, branch, repo_type, exist_ok)
+
+    def upload_file(self, **kw):
+        _FakeApi.calls["upload"] = kw
+        import types
+
+        return types.SimpleNamespace(oid="abc123")
+
+
+def _fake_hub(monkeypatch):
+    import types
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(HfApi=_FakeApi))
+
+
+def test_an_upload_to_a_revision_creates_that_branch_and_commits_there(monkeypatch, tmp_path):
+    """The frozen manifest needs a commit-pinned URL before 1.2.0 is public: the file goes to a
+    staging branch, whose commit the URL pins, while `main` and the card stay untouched."""
+    from publish_model import _upload
+
+    _fake_hub(monkeypatch)
+    f = tmp_path / "m.gguf"
+    f.write_bytes(b"x")
+
+    assert _upload(f, "o/r", "m.gguf", revision="staging-1.2.0") == "abc123"
+    assert _FakeApi.calls["branch"] == ("o/r", "staging-1.2.0", "model", True)
+    assert _FakeApi.calls["upload"]["revision"] == "staging-1.2.0"
+
+
+def test_an_upload_without_a_revision_goes_to_main_and_creates_no_branch(monkeypatch, tmp_path):
+    from publish_model import _upload
+
+    _fake_hub(monkeypatch)
+    f = tmp_path / "m.gguf"
+    f.write_bytes(b"x")
+
+    _upload(f, "o/r", "m.gguf")
+    assert "branch" not in _FakeApi.calls
+    assert _FakeApi.calls["upload"].get("revision") is None
+
+
+def test_main_passes_the_revision_through(monkeypatch, tmp_path):
+    import publish_model
+
+    seen = {}
+
+    def fake_upload(path, repo, path_in_repo, revision=None):
+        seen["revision"] = revision
+        return "abc123"
+
+    monkeypatch.setattr(publish_model, "_upload", fake_upload)
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(MANIFEST, encoding="utf-8")
+    (tmp_path / "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf").write_bytes(b"x")
+
+    rc = publish_model.main(
+        [
+            "--name",
+            "qwen3-4b-v3",
+            "--models-dir",
+            str(tmp_path),
+            "--manifest",
+            str(manifest),
+            "--revision",
+            "staging-1.2.0",
+        ]
+    )
+
+    assert rc == 0
+    assert seen["revision"] == "staging-1.2.0"
+    assert "/resolve/abc123/" in manifest.read_text(encoding="utf-8")
+
+
+# ── promotion: staging -> main at the release, manifest untouched ──────────────────────────
+
+
+class _Op:
+    def __init__(self, kind, **kw):
+        self.kind, self.kw = kind, kw
+
+
+def _fake_hub_with_commits(monkeypatch):
+    import types
+
+    class Api:
+        commits: list = []
+
+        def __init__(self, token=None):
+            pass
+
+        def create_commit(self, **kw):
+            Api.commits.append(kw)
+            return types.SimpleNamespace(oid="def456")
+
+    hub = types.SimpleNamespace(
+        HfApi=Api,
+        CommitOperationCopy=lambda **kw: _Op("copy", **kw),
+        CommitOperationAdd=lambda **kw: _Op("add", **kw),
+    )
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
+    return Api
+
+
+def test_promote_copies_the_staged_files_and_the_card_to_main_in_one_commit(monkeypatch, tmp_path):
+    """At the release, `main` gets the staged bytes and the card in one commit. The manifest keeps
+    its URLs pinned to the staging commits, so the frozen evidence stays valid."""
+    import publish_model
+
+    api = _fake_hub_with_commits(monkeypatch)
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(MANIFEST, encoding="utf-8")
+    card = tmp_path / "CARD.md"
+    card.write_text("# card\n", encoding="utf-8")
+
+    rc = publish_model.main(
+        [
+            "--promote",
+            "qwen3-4b-v3",
+            "qwen3-1.7b-sft-v3-flat-q6",
+            "--from-revision",
+            "staging-1.2.0",
+            "--manifest",
+            str(manifest),
+            "--card",
+            str(card),
+        ]
+    )
+
+    assert rc == 0
+    assert manifest.read_text(encoding="utf-8") == MANIFEST
+    (commit,) = api.commits
+    assert commit["revision"] == "main"
+    ops = [(op.kind, op.kw) for op in commit["operations"]]
+    assert (
+        "copy",
+        {
+            "src_path_in_repo": "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf",
+            "path_in_repo": "knaif-qwen3-4b-sft-v3-flat-q4_k_m.gguf",
+            "src_revision": "staging-1.2.0",
+        },
+    ) in ops
+    assert (
+        "copy",
+        {
+            "src_path_in_repo": "knaif-qwen3-1.7b-sft-v3-flat-q6_k.gguf",
+            "path_in_repo": "knaif-qwen3-1.7b-sft-v3-flat-q6_k.gguf",
+            "src_revision": "staging-1.2.0",
+        },
+    ) in ops
+    assert ("add", {"path_in_repo": "README.md", "path_or_fileobj": str(card)}) in ops
+
+
+def test_promote_refuses_an_unknown_model(monkeypatch, tmp_path):
+    import publish_model
+
+    api = _fake_hub_with_commits(monkeypatch)
+    manifest = tmp_path / "m.yaml"
+    manifest.write_text(MANIFEST, encoding="utf-8")
+
+    rc = publish_model.main(
+        ["--promote", "nope", "--from-revision", "staging-1.2.0", "--manifest", str(manifest)]
+    )
+
+    assert rc == 2
+    assert api.commits == []
+
+
+def test_the_card_in_the_repo_is_the_one_promote_uploads_by_default():
+    import publish_model
+
+    assert publish_model.DEFAULT_CARD == "contracts/models/HF_MODEL_CARD.md"
+    assert (Path(__file__).resolve().parent.parent / publish_model.DEFAULT_CARD).is_file()

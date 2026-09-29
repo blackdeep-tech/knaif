@@ -42,7 +42,7 @@ def _write(path: Path, snap: dict) -> None:
 def _patch_snapshot(monkeypatch, tmp_path: Path, snap: dict) -> Path:
     snap_path = tmp_path / "snapshot.json"
     _write(snap_path, snap)
-    monkeypatch.setattr(cli, "_snapshot_path", lambda skill: snap_path)
+    monkeypatch.setattr(cli, "_snapshot_path", lambda skill, model=None: snap_path)
     return snap_path
 
 

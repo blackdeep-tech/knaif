@@ -1,0 +1,88 @@
+{
+  "_comment": "L2 arg-shape-gate contract. Two deterministic gates turn a would-be validation error into a clarify: `required_args_clarify` (the model omitted something only the user can supply) and `unsupported_args_clarify` (an arg no known tool can express — the inventory-gap case of the reject/clarify taxonomy). Both were Python-only until 2026-09-15, and the L4 lane measured the cost: ffmpeg's `extract_audio` slice sat at 0.872 natively against 0.949 in Python, one row of which was exactly `Tool 'adjust_volume' has unsupported args: [target_sample_rate]` erroring where Python clarified. Consumed by python/core/tests/test_arg_gate_parity.py and `arg_gate_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
+  "_stage": "Each gate is tested on its own, because they are not composed: `required_args_clarify` runs BEFORE validation and short-circuits (a corrective re-prompt would invite the model to invent the value the user never gave), while `unsupported_args_clarify` runs only AFTER a repair retry has been spent (an undeclared arg is worth one re-prompt; only once that fails is it an inventory gap). Given (plan, registry) each must return the same clarify payload, or None, on both runtimes. Inputs are already normalized: the caller runs normalize_plan + apply_defaults first, so arg aliases are resolved and a merely-misnamed key never reaches here.",
+  "_expected_values": "`expected` is the clarify payload both runtimes must produce, or null for 'pass through, let validation decide'. Question text is compared exactly: it is the only thing the user sees, and two runtimes phrasing the same refusal differently is a fork.",
+  "registries": {
+    "volume": "adjust_volume:\n  description: Adjust volume.\n  required_args: [inputs]\n  optional_args: [normalize, level]\nclarify:\n  description: Ask for clarification.\n  required_args: [question]\n",
+    "rotate": "rotate_video:\n  description: Rotate a video.\n  required_args: [input]\n  optional_args: [angle, flip]\n  any_of_args: [angle, flip]\n"
+  },
+  "cases": [
+    {
+      "name": "unsupported_arg_clarifies",
+      "gate": "unsupported",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"], "target_sample_rate": 22050}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't adjust volume with target_sample_rate — that isn't supported. Could you rephrase?"}}]}
+    },
+    {
+      "name": "unsupported_args_are_all_named",
+      "gate": "unsupported",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"], "bitrate": "128k", "target_sr": 1}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't adjust volume with bitrate and target_sr — that isn't supported. Could you rephrase?"}}]}
+    },
+    {
+      "name": "supported_args_pass_through",
+      "gate": "unsupported",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"], "normalize": true}}]},
+      "expected": null
+    },
+    {
+      "name": "unknown_tool_stays_a_validation_error",
+      "gate": "unsupported",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "teleport_video", "args": {"whatever": 1}}]},
+      "expected": null
+    },
+    {
+      "name": "terminal_tools_are_skipped",
+      "gate": "unsupported",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "clarify", "args": {"question": "q", "extra": 1}}]},
+      "expected": null
+    },
+    {
+      "name": "missing_required_arg_clarifies",
+      "gate": "required",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"normalize": true}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "What inputs should I use?"}}]}
+    },
+    {
+      "name": "blank_required_arg_counts_as_missing",
+      "gate": "required",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": "   "}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "What inputs should I use?"}}]}
+    },
+    {
+      "name": "null_required_arg_counts_as_missing",
+      "gate": "required",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": null}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "What inputs should I use?"}}]}
+    },
+    {
+      "name": "any_of_args_none_present_clarifies",
+      "gate": "required",
+      "registry": "rotate",
+      "plan": {"plan": [{"tool": "rotate_video", "args": {"input": "a.mp4"}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "What angle or flip should I use?"}}]}
+    },
+    {
+      "name": "any_of_args_one_present_passes",
+      "gate": "required",
+      "registry": "rotate",
+      "plan": {"plan": [{"tool": "rotate_video", "args": {"input": "a.mp4", "angle": 90}}]},
+      "expected": null
+    },
+    {
+      "name": "required_args_all_present_passes",
+      "gate": "required",
+      "registry": "volume",
+      "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"]}}]},
+      "expected": null
+    }
+  ]
+}

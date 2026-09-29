@@ -89,8 +89,13 @@ pub fn geometry_vf(
             let (aw, ah) = parse_ratio(aspect).ok_or_else(|| {
                 anyhow::anyhow!("Invalid aspect value {aspect:?}. Expected 'aw:ah'.")
             })?;
+            // Rounded DOWN to even, because libx264 with `-pix_fmt yuv420p` refuses odd
+            // dimensions: a 9:16 crop of a 1280x720 source computes min(1280, 720*9/16) = 405,
+            // and ffmpeg answers "width not divisible by 2 (405x720)", writes a 0-byte file and
+            // exits non-zero. Broken on BOTH runtimes until 2026-09-11 and invisible because the
+            // `success` verifier grades these rows on command *text* (N4).
             return Ok(Some(format!(
-                "crop=min(iw\\,ih*{aw}/{ah}):min(ih\\,iw*{ah}/{aw})"
+                "crop=trunc(min(iw\\,ih*{aw}/{ah})/2)*2:trunc(min(ih\\,iw*{ah}/{aw})/2)*2"
             )));
         }
     }
@@ -117,11 +122,236 @@ pub fn geometry_vf(
 }
 
 /// Trim window (values are already stringified, e.g. `"5"` or `"00:00:05"`).
+///
+/// `frames` is a frame COUNT and is exclusive with `duration`/`end` — `normalize_trim`
+/// guarantees only one of the three is ever set, so `build_flags` need not arbitrate.
 #[derive(Debug, Clone, Default)]
 pub struct Trim {
     pub start: Option<String>,
+    /// Negative offset from the end of the input, rendered as `-sseof`.
+    pub start_from_end: Option<f64>,
     pub duration: Option<String>,
     pub end: Option<String>,
+    pub frames: Option<i64>,
+}
+
+/// Seconds for `HH:MM:SS[.ms]`, `MM:SS`, or a bare number. Port of `_timestamp_seconds`.
+///
+/// Comparing the strings would not do: `"0"` and `"00:00:00"` are the same instant and the
+/// model writes both.
+pub(crate) fn timestamp_seconds(value: Option<&String>) -> Option<f64> {
+    let mut text = value?.trim();
+    if text.is_empty() {
+        return None;
+    }
+    // A leading sign cannot survive componentwise parsing: `-00` is `-0.0` and `-0.0 * 60`
+    // is still `-0.0`, so `-00:00:02` read as +2.0 rather than -2.0.
+    let negative = text.starts_with('-');
+    if negative || text.starts_with('+') {
+        text = text[1..].trim();
+        if text.is_empty() {
+            return None;
+        }
+    }
+    // Unit suffixes ffmpeg itself accepts: `5s`, `-2s`, `500ms`.
+    for (unit, scale) in [("ms", 0.001f64), ("s", 1.0f64)] {
+        if text.ends_with(unit) && !text.contains(':') {
+            let body = text[..text.len() - unit.len()].trim();
+            let n: f64 = body.parse().ok()?;
+            let seconds = n * scale;
+            return Some(if negative { -seconds } else { seconds });
+        }
+    }
+    let mut total = 0.0f64;
+    for part in text.split(':') {
+        // Trim each component: Python's float() ignores surrounding whitespace and Rust's
+        // parse does not, so " 1 : 30 " parsed on one runtime and not the other.
+        let n: f64 = part.trim().parse().ok()?;
+        if n < 0.0 {
+            return None;
+        }
+        total = total * 60.0 + n;
+    }
+    Some(if negative { -total } else { total })
+}
+
+/// Render seconds for an ffmpeg flag, identically to Python's `_format_seconds`.
+///
+/// Fixed decimal with trailing zeros trimmed. Plain `{}` display diverged from Python's `:g`
+/// in both directions - `:g` rounded to six significant digits where this did not, and it
+/// emitted scientific notation (`-1e-06`) that ffmpeg cannot parse as a time.
+pub fn format_seconds(seconds: f64) -> String {
+    if seconds.fract() == 0.0 {
+        return format!("{}", seconds as i64);
+    }
+    let mut t = format!("{seconds:.9}");
+    if t.contains('.') {
+        t = t.trim_end_matches('0').trim_end_matches('.').to_string();
+    }
+    if t.is_empty() {
+        "0".to_string()
+    } else {
+        t
+    }
+}
+
+/// Resolve `.` and `..` without touching the filesystem, for a path that may not exist yet.
+/// `create_dir_all` on an unnormalised parent builds each component in turn on POSIX, so
+/// `../escaped/../sb` creates `escaped` even though the full path resolves inside the sandbox.
+pub fn lexically_normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Symbolic instants a user can name but a model cannot compute: the duration is only known
+/// after probing. Port of `_resolve_at_time`. Returns `None` for a token this skill does not
+/// know - callers refuse it rather than invent an instant.
+fn resolve_at_time(value: Option<&String>, duration: Option<f64>) -> Option<String> {
+    let raw = value?;
+    if timestamp_seconds(Some(raw)).is_some() {
+        return Some(raw.clone());
+    }
+    let text = raw.trim().to_ascii_lowercase();
+    if matches!(
+        text.as_str(),
+        "first" | "first_frame" | "start" | "beginning"
+    ) {
+        return Some("0".to_string());
+    }
+    if matches!(
+        text.as_str(),
+        "middle" | "midpoint" | "halfway" | "mid" | "centre" | "center"
+    ) {
+        let d = duration?;
+        if d <= 0.0 {
+            return None;
+        }
+        return Some(format_seconds(d / 2.0));
+    }
+    if matches!(
+        text.as_str(),
+        "last_frame" | "last" | "end" | "final_frame" | "final"
+    ) {
+        let d = duration?;
+        if d <= 0.0 {
+            return None;
+        }
+        // Step back from the very end: seeking exactly to the duration lands past the last
+        // frame and writes nothing.
+        return Some(format_seconds((d - 0.1).max(0.0)));
+    }
+    None
+}
+
+/// Resolve a trim request into exactly one of: a frame count, a duration, or an end.
+/// Port of `_normalize_trim`.
+///
+/// **An empty range becomes one frame.** `ffmpeg_161` asks for a one-frame video and the
+/// model emits `-ss 00:00:00 -to 00:00:00`; ffmpeg then exits 0 having written a file with
+/// nothing in it. A user who names a single instant wants the frame at that instant.
+fn normalize_trim(
+    start: Option<String>,
+    duration: Option<String>,
+    end: Option<String>,
+    frames: Option<i64>,
+) -> anyhow::Result<Trim> {
+    if frames.is_some() {
+        return Ok(Trim {
+            start,
+            start_from_end: None,
+            duration: None,
+            end: None,
+            frames,
+        });
+    }
+
+    let start_s = timestamp_seconds(start.as_ref());
+    let end_s = timestamp_seconds(end.as_ref());
+    let duration_s = timestamp_seconds(duration.as_ref());
+
+    // A NEGATIVE start is ffmpeg's from-end offset, not a reversed range: "the last 2
+    // seconds" arrives as start=-2s (end=0s or absent) and renders as `-sseof -2` with no
+    // `-to`. Reading it as reversed would collapse a 2-second request to a single frame.
+    if matches!(start_s, Some(a) if a < 0.0) {
+        // A supplied bound that could not be read is NOT the same as an absent one: reading
+        // `end="banana"` as "to the end of the clip" silently answers a different request.
+        for (label, raw, seconds) in [
+            ("end", end.as_ref(), end_s),
+            ("duration", duration.as_ref(), duration_s),
+        ] {
+            if raw.is_some() && seconds.is_none() {
+                anyhow::bail!(
+                    "Unrecognised {label} '{}'. Use a timestamp (00:00:05), a number of \
+                     seconds, or a value with a unit (5s, 500ms).",
+                    raw.map(String::as_str).unwrap_or("")
+                );
+            }
+        }
+        if matches!(duration_s, Some(d) if d <= 0.0) {
+            return Ok(Trim {
+                start,
+                start_from_end: None,
+                duration: None,
+                end: None,
+                frames: Some(1),
+            });
+        }
+        if !matches!(end_s, Some(b) if b > 0.0) {
+            // A span only when `end` is itself an offset from the end (-10 -> -5 is a 5s window).
+            // `end` 0 means "to the end": no `-t`, as Python renders it. Computing 0 - (-2) = 2
+            // here added a `-t 2` Python never emits (L3 2026-09-27, ffmpeg_209).
+            let length = if matches!(duration_s, Some(d) if d > 0.0) {
+                duration
+            } else if let (Some(a), Some(b)) = (start_s, end_s.filter(|b| *b < 0.0)) {
+                let span = b - a;
+                if span > 0.0 {
+                    Some(format_seconds(span))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            return Ok(Trim {
+                start: None,
+                start_from_end: start_s,
+                duration: length,
+                end: None,
+                frames: None,
+            });
+        }
+    }
+
+    // An absent `start` means zero, so `-to 00:00:00` with no start is the same empty range.
+    let effective_start = start_s.unwrap_or(0.0);
+    let empty_range = matches!(end_s, Some(b) if b <= effective_start)
+        || matches!(duration_s, Some(d) if d <= 0.0);
+    if empty_range {
+        return Ok(Trim {
+            start,
+            start_from_end: None,
+            duration: None,
+            end: None,
+            frames: Some(1),
+        });
+    }
+
+    Ok(Trim {
+        start,
+        start_from_end: None,
+        duration,
+        end,
+        frames: None,
+    })
 }
 
 /// Resolved video settings for a recipe.
@@ -170,6 +400,10 @@ pub struct Recipe {
     pub aspect: Option<String>,
     pub image_format: Option<String>,
     pub target_size_mb: Option<f64>,
+    /// Source length in seconds — what turns `target_size_mb` into a bitrate. Carried on the
+    /// recipe rather than re-probed in `build_flags`, so the cap is computed from the same
+    /// probe every other decision in the recipe was made from. Port of `source_duration`.
+    pub source_duration: Option<f64>,
     /// Human-readable operation summary (drives the plan preview); not used by `build_flags`.
     pub operations: Vec<String>,
 }
@@ -192,6 +426,66 @@ fn py_float_str(f: f64) -> String {
     } else {
         format!("{s}.0")
     }
+}
+
+/// Headroom left for container overhead — muxing, the moov atom, per-packet headers — and for
+/// x264's rate-control window. Port of `_SIZE_CAP_HEADROOM`.
+///
+/// **Both constants are measured, not guessed.** Swept over three fixtures x four targets on
+/// 2026-09-16: at `bufsize = 2 x maxrate` a 1 MiB cap produced 1027 KB — over, by 3 KB — because
+/// a two-second rate-control window lets the encoder overshoot the average. At
+/// `bufsize = maxrate` all twelve combinations landed under, worst case 93.5% of the cap.
+const SIZE_CAP_HEADROOM: f64 = 0.95;
+
+/// `bufsize` as a multiple of `maxrate`. 1x is a one-second window; see above for why the
+/// conventional 2x is not safe for a hard ceiling.
+const SIZE_CAP_BUFSIZE_MULTIPLE: i64 = 1;
+
+/// `"96k"` -> 96000. Anything unreadable is 0, i.e. budget nothing for it.
+/// Port of `_parse_bitrate_bps`.
+fn parse_bitrate_bps(value: Option<&String>) -> f64 {
+    let Some(text) = value.map(|v| v.trim().to_ascii_lowercase()) else {
+        return 0.0;
+    };
+    let (body, multiplier) = match text.strip_suffix('k') {
+        Some(b) => (b, 1000.0),
+        None => match text.strip_suffix('m') {
+            Some(b) => (b, 1_000_000.0),
+            None => (text.as_str(), 1.0),
+        },
+    };
+    body.parse::<f64>().map(|n| n * multiplier).unwrap_or(0.0)
+}
+
+/// Video bitrate ceiling in whole kbit/s that keeps the output under `target_size_mb`.
+/// Port of `_size_cap_kbit`.
+///
+/// `None` when the duration is unknown: a size only becomes a bitrate once there is a length to
+/// divide by. Inventing one would produce a cap that means nothing, and refusing would fail a
+/// request that is otherwise valid — so the caller falls back to plain CRF.
+///
+/// Floors to whole kbit rather than rounding: this is a ceiling, so every approximation in it
+/// has to point the same way.
+fn size_cap_kbit(
+    target_size_mb: f64,
+    duration_s: Option<f64>,
+    audio_bitrate: Option<&String>,
+) -> anyhow::Result<Option<i64>> {
+    let Some(duration) = duration_s.filter(|d| *d > 0.0 && d.is_finite()) else {
+        return Ok(None);
+    };
+    let total_bps = (target_size_mb * 1024.0 * 1024.0 * 8.0) / duration;
+    let video_bps = total_bps * SIZE_CAP_HEADROOM - parse_bitrate_bps(audio_bitrate);
+    let kbit = (video_bps / 1000.0).floor() as i64;
+    if kbit <= 0 {
+        anyhow::bail!(
+            "target_size_mb={} is too small for this file: {}s of audio at {} already exceeds              it. Ask for a larger size, or strip the audio.",
+            py_float_str(target_size_mb),
+            py_float_str(duration),
+            audio_bitrate.map(String::as_str).unwrap_or("none")
+        );
+    }
+    Ok(Some(kbit))
 }
 
 /// Emit `-c:v/-crf/-preset[/-pix_fmt]` for a video block (pixel format only when `pixfmt`).
@@ -232,15 +526,27 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
     let mut pre: Vec<String> = Vec::new();
     let mut post: Vec<String> = Vec::new();
 
-    // Trim: fast-seek before -i; duration/end after -i (then falls through to the encode arm).
+    // Trim: `-ss`/`-to` are INPUT options; only `-t`/`-vframes` go after `-i`.
+    //
+    // `-to` after `-i` is relative to the seek point, so `-ss 2 -i in.mp4 -to 5` is five
+    // seconds starting at two, not the range 2->5. Measured on a real 10s file: 5.000s that
+    // way, 3.000s this way. Every range trim was wrong until `duration_s` exposed it.
     if mode == "trim" {
-        if let Some(start) = &recipe.trim.start {
+        if let Some(from_end) = recipe.trim.start_from_end {
+            // -sseof takes a negative offset from the end of the input.
+            pre.extend(["-sseof".to_string(), format_seconds(from_end)]);
+        } else if let Some(start) = &recipe.trim.start {
             pre.extend(["-ss".to_string(), start.clone()]);
         }
-        if let Some(dur) = &recipe.trim.duration {
+        if let Some(frames) = recipe.trim.frames {
+            // A frame count replaces the range rather than joining it: with both, ffmpeg
+            // stops at whichever arrives first, so the command would mean neither request.
+            post.extend(["-vframes".to_string(), frames.to_string()]);
+        } else if let Some(dur) = &recipe.trim.duration {
+            // `-t` is a LENGTH, already relative to the seek point. Correct after `-i`.
             post.extend(["-t".to_string(), dur.clone()]);
         } else if let Some(end) = &recipe.trim.end {
-            post.extend(["-to".to_string(), end.clone()]);
+            pre.extend(["-to".to_string(), end.clone()]);
         }
     }
 
@@ -254,11 +560,13 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             post.push("-an".to_string());
         }
     } else if mode == "extract_audio" {
+        // Both bounds are INPUT options: see the `trim` arm. A `-to` after `-i` made
+        // `ffmpeg_119` ("just the audio from 3 to 5 seconds") render five seconds of audio.
         if let Some(start) = &recipe.trim.start {
             pre.extend(["-ss".to_string(), start.clone()]);
         }
         if let Some(end) = &recipe.trim.end {
-            post.extend(["-to".to_string(), end.clone()]);
+            pre.extend(["-to".to_string(), end.clone()]);
         }
         let fmt = recipe.audio_format.as_deref().unwrap_or("mp3");
         post.extend([
@@ -285,14 +593,38 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
         post.extend(["-an".to_string(), "-c:v".to_string(), "copy".to_string()]);
     } else if mode == "adjust_speed" {
         let speed = recipe.speed.unwrap_or(1.0);
+        anyhow::ensure!(
+            speed.is_finite() && speed > 0.0,
+            "Playback speed must be a finite positive number."
+        );
         let pts = ((1.0 / speed) * 1e6).round() / 1e6;
-        post.extend([
-            "-vf".to_string(),
-            format!("setpts={}*PTS", py_float_str(pts)),
-            "-af".to_string(),
-            format!("atempo={}", py_float_str(speed)),
-        ]);
-        push_video(&mut post, &recipe.video, false);
+        // Each atempo factor must lie in [0.5, 100]; their product is the speed.
+        // Keep the same spelling and factor order as the Python renderer.
+        let mut remaining = speed;
+        let mut tempo_filters = Vec::new();
+        while remaining < 0.5 {
+            tempo_filters.push("atempo=0.5".to_string());
+            remaining *= 2.0;
+        }
+        while remaining > 100.0 {
+            tempo_filters.push("atempo=100.0".to_string());
+            remaining /= 100.0;
+        }
+        tempo_filters.push(format!("atempo={}", py_float_str(remaining)));
+        let tempo = tempo_filters.join(",");
+        // The tempo filter is the request and always applies; `setpts` retimes a video stream
+        // an audio-only input does not have, and neither does the video encoder.
+        if recipe.audio_only {
+            post.extend(["-af".to_string(), tempo]);
+        } else {
+            post.extend([
+                "-vf".to_string(),
+                format!("setpts={}*PTS", py_float_str(pts)),
+                "-af".to_string(),
+                tempo,
+            ]);
+            push_video(&mut post, &recipe.video, false);
+        }
         push_audio(&mut post, &recipe.audio, true);
     } else if mode == "rotate" {
         let mut filters: Vec<&str> = Vec::new();
@@ -361,7 +693,30 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             (None, Some(h)) => post.extend(["-vf".to_string(), format!("scale=-2:{h}")]),
             (None, None) => {}
         }
-        push_video(&mut post, &recipe.video, true);
+        // Split rather than `push_video(.., true)`: Python emits the cap AFTER `-preset` and
+        // BEFORE `-pix_fmt`, and a byte comparison is the parity contract.
+        push_video(&mut post, &recipe.video, false);
+        // Capped CRF: quality still drives the encode, the cap only stops it exceeding the size
+        // that was asked for. A fixed `-b:v` derived from the target would INFLATE an already-
+        // small clip — `email.yaml` declares `default_target_size_mb: 20`, and a clip that
+        // compresses to 200 KB must not become a 20 MB file because a ceiling was named.
+        if let Some(target) = recipe.target_size_mb {
+            if let Some(kbit) = size_cap_kbit(
+                target,
+                recipe.source_duration,
+                recipe.audio.bitrate.as_ref(),
+            )? {
+                post.extend([
+                    "-maxrate".to_string(),
+                    format!("{kbit}k"),
+                    "-bufsize".to_string(),
+                    format!("{}k", kbit * SIZE_CAP_BUFSIZE_MULTIPLE),
+                ]);
+            }
+        }
+        if let Some(pf) = &recipe.video.pixel_format {
+            post.extend(["-pix_fmt".to_string(), pf.clone()]);
+        }
         push_audio(&mut post, &recipe.audio, true);
         if recipe.faststart {
             post.extend(["-movflags".to_string(), "+faststart".to_string()]);
@@ -455,6 +810,55 @@ pub struct Probe {
     pub duration: Option<f64>,
     /// Frames per second (used by concat normalization; not by `build_one_recipe`).
     pub fps: Option<f64>,
+}
+
+/// Why a picture operation (resize, rotate) cannot run on this input, or `None` when it can. Port of
+/// `_engine._needs_video`; the message is byte-identical. On an audio-only file ffmpeg ignores the
+/// video filter, re-muxes the audio and exits 0, so the step reports a success that did nothing.
+pub fn needs_video(options: &Options, probe: &Probe) -> Option<String> {
+    let verb = match options.mode.as_deref() {
+        Some("resize") => "resize",
+        Some("rotate") => "rotate",
+        _ => return None,
+    };
+    if probe.video_codec.as_deref().is_some_and(|c| !c.is_empty()) || probe.width.is_some() {
+        return None;
+    }
+    let name = Path::new(&probe.file)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "the input".to_string());
+    Some(format!(
+        "Can't {verb} {name}: it has no video stream, only audio. \
+         Check which file this step should start from."
+    ))
+}
+
+/// Why a trim cannot be answered on this input, or `None` when it can. Port of
+/// `_engine._trim_past_end`; the message is byte-identical because both runtimes show it.
+///
+/// A start at or beyond the measured duration leaves ffmpeg no frame to write, and it exits 0
+/// anyway with an empty container. Only a REAL probe may be read here — callers skip this in
+/// dry-run, where a missing file carries [`dummy_probe`]'s placeholder 60 s. A negative start is a
+/// from-end offset, never a late start.
+pub fn trim_past_end(options: &Options, probe: &Probe) -> Option<String> {
+    if options.mode.as_deref() != Some("trim") {
+        return None;
+    }
+    let duration = probe.duration?;
+    let start = options.start.as_ref()?;
+    let start_s = timestamp_seconds(Some(start))?;
+    if start_s < 0.0 || start_s < duration {
+        return None;
+    }
+    let name = Path::new(&probe.file)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| probe.file.clone());
+    Some(format!(
+        "Can't cut from {start}: {name} is only {duration:.1}s long, so the cut would be empty. \
+         Check which file this step should start from."
+    ))
 }
 
 /// Deterministic placeholder probe for dry-run (no ffprobe / file needed). An audio extension
@@ -584,6 +988,7 @@ pub struct Options {
     pub start: Option<String>,
     pub duration: Option<String>,
     pub end: Option<String>,
+    pub frames: Option<i64>,
     pub audio_format: Option<String>,
     pub at_time: Option<String>,
     pub image_format: Option<String>,
@@ -605,6 +1010,243 @@ fn dim_str(d: Option<u32>) -> String {
 }
 
 /// Derive the output path from the input stem + a per-mode suffix + the right extension. Port of
+/// Read an `output` that names a DESTINATION rather than one file. Port of
+/// `_resolve_output_target`.
+///
+/// A batch writes one file per input, so these two spellings are per-file requests and were
+/// being passed to ffmpeg verbatim:
+///
+/// * `videos/*.mp4` - "same name, over there". The `*` reached ffmpeg as a literal character.
+/// * `videos_hevc` - a destination directory. ffmpeg cannot choose a muxer for an
+///   extensionless path without `-f` and failed with "Invalid argument".
+///
+/// A genuine filename (`renamed.mp4`) is returned untouched.
+/// The file name an input takes inside a destination directory. Port of `_destination_name`.
+fn destination_name(input: &Path, ext: &str) -> String {
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    format!("{stem}.{ext}")
+}
+
+/// The parts of an input's name that can tell two colliding outputs apart, best first.
+/// Port of `_batch_suffixes`.
+///
+/// Two batch shapes collide, and they are distinguished by different things: one literal
+/// filename for many inputs (six videos into `audio.mp3` - the source STEMS differ) versus a
+/// destination directory (`clip.mp4` and `clip.mov` into `converted/` both take the output
+/// stem, so only the EXTENSION is left). Using the extension for both is what produced
+/// `audio_mp4_5.mp3`: five of six inputs were `.mp4`, so the suffix distinguished nothing and
+/// a counter did all the work.
+fn batch_suffixes(input: &Path, out_stem: &str) -> Vec<String> {
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let ext = input
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mut suffixes = Vec::new();
+    if !stem.is_empty() && stem != out_stem {
+        suffixes.push(stem.to_string());
+    }
+    if !ext.is_empty() {
+        suffixes.push(ext.clone());
+    }
+    // Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
+    // `audio.mp3` share a stem AND an extension with each other but not with the output.
+    if !stem.is_empty() && !ext.is_empty() && stem != out_stem {
+        suffixes.push(format!("{stem}_{ext}"));
+    }
+    suffixes
+}
+
+/// Give every command in a batch its own output path. Port of `disambiguate_outputs`.
+///
+/// A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
+/// render `converted/clip.mp4` - and every command carries `-y`, so the second conversion
+/// silently destroyed the first. Whatever part of the source name actually differs is what gets
+/// restored (see [`batch_suffixes`]); a counter is the fallback for a genuine repeat, and only a
+/// genuine repeat, because a counter tells the user nothing.
+///
+/// Only the batch can see the clash: a lone `clip.mp4` must stay `clip.mp4` rather than gain a
+/// suffix because some other input might have existed.
+///
+/// **Every input of the batch is taken too, before any output is placed.** A same-folder pattern
+/// sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the `-y`
+/// conversion replaced it (ffmpeg_229#4, run for real). Reserving inputs up front is what makes
+/// the order of the batch irrelevant.
+pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
+    let mut seen: std::collections::HashSet<String> =
+        outputs.iter().map(|(input, _)| path_key(input)).collect();
+    for (input, out) in outputs.iter_mut() {
+        if seen.insert(path_key(out)) {
+            continue;
+        }
+        let stem = out
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let ext = out
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string();
+        let build = |name: String| -> PathBuf {
+            let file = if ext.is_empty() {
+                name
+            } else {
+                format!("{name}.{ext}")
+            };
+            out.with_file_name(file)
+        };
+        let tried: Vec<PathBuf> = batch_suffixes(input, &stem)
+            .into_iter()
+            .map(|s| build(format!("{stem}_{s}")))
+            .collect();
+        let candidate = match tried.iter().find(|c| !seen.contains(&path_key(c))) {
+            Some(c) => c.clone(),
+            None => {
+                // Nothing in the source name is left to say. Count off the most specific
+                // candidate so the walk still terminates.
+                let base = tried.last().cloned().unwrap_or_else(|| out.clone());
+                let base_stem = base
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                let mut n = 1;
+                let mut candidate = base;
+                while seen.contains(&path_key(&candidate)) {
+                    n += 1;
+                    candidate = build(format!("{base_stem}_{n}"));
+                }
+                candidate
+            }
+        };
+        seen.insert(path_key(&candidate));
+        *out = candidate;
+    }
+}
+
+/// Characters a filename may not contain on Windows. `*` and `?` are deliberately absent: they
+/// are this skill's own output grammar (`videos/*.mp4`), expanded in [`resolve_output_target`],
+/// and stripping them would break a documented feature to fix an unrelated bug. `/` and `\` are
+/// absent because they are structure, not characters.
+const ILLEGAL_IN_FILENAME: &[char] = &['<', '>', ':', '"', '|'];
+const ILLEGAL_REPLACEMENT: char = '-';
+
+/// A path as a comparison key: absolute, and case-folded on Windows, whose paths ignore case.
+/// Port of Python's `os.path.normcase(os.path.abspath(..))`.
+fn path_key(p: &Path) -> String {
+    let abs = std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    let s = abs.to_string_lossy().into_owned();
+    if cfg!(windows) {
+        s.replace('/', "\\").to_lowercase()
+    } else {
+        s
+    }
+}
+
+/// Do two paths name one file? Port of Python `_same_file`.
+fn same_file(a: &Path, b: &Path) -> bool {
+    path_key(a) == path_key(b)
+}
+
+/// Make a model-supplied `output` a string the filesystem will actually accept.
+/// Port of `_legal_output_path`.
+///
+/// The model writes filenames out of the utterance, and `ffmpeg_268` named one after the time
+/// range it was given: `clip_trimmed_00:00:00.mp4`. Colons are legal on Linux and illegal on
+/// Windows, so ffmpeg refused to open it - *Error opening output files: Invalid argument* - and
+/// the chain died at step 1 with nothing written.
+///
+/// **Unconditional, not per-platform.** Sanitising only on Windows would make the same plan
+/// render different names on different machines, which breaks L3 parity across runners and makes
+/// an eval result depend on where it ran. A colon in a filename is a bad idea everywhere.
+///
+/// A leading drive letter is the one legitimate colon in a path (`C:/out/clip.mp4`), and CLI mode
+/// has no sandbox to confine writes to, so absolute outputs are real there.
+pub fn legal_output_path(raw: &str) -> String {
+    let mut chars = raw.chars();
+    let drive = matches!((chars.next(), chars.next(), chars.next()),
+        (Some(a), Some(':'), Some(sep)) if a.is_ascii_alphabetic() && (sep == '/' || sep == '\\'));
+    let (head, tail) = if drive { raw.split_at(2) } else { ("", raw) };
+    let mut out = String::with_capacity(raw.len());
+    out.push_str(head);
+    out.extend(tail.chars().map(|c| {
+        if ILLEGAL_IN_FILENAME.contains(&c) {
+            ILLEGAL_REPLACEMENT
+        } else {
+            c
+        }
+    }));
+    out
+}
+
+pub fn resolve_output_target(
+    raw: &str,
+    input: &Path,
+    mode: &str,
+    opts: &Options,
+    container: &str,
+) -> anyhow::Result<PathBuf> {
+    // Before anything reads it as a path: the model supplied this string, and it is not
+    // guaranteed to be a legal filename. See [`legal_output_path`].
+    let cleaned = legal_output_path(raw);
+    let out = PathBuf::from(&cleaned);
+    let ext = match mode {
+        "extract_audio" => opts.audio_format.as_deref().unwrap_or("mp3"),
+        "thumbnail" => opts.image_format.as_deref().unwrap_or("jpg"),
+        _ => container,
+    };
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let name = out.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
+    // A wildcard anywhere but the final component cannot be expanded.
+    let parts: Vec<_> = out.components().collect();
+    if parts.len() > 1 {
+        for part in &parts[..parts.len() - 1] {
+            if part.as_os_str().to_string_lossy().contains('*') {
+                anyhow::bail!(
+                    "Unrecognised output '{raw}'. A '*' may only stand for the file name,                      as in 'videos/*.mp4'."
+                );
+            }
+        }
+    }
+
+    if name.contains('*') {
+        let pat_ext = out
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_string();
+        if pat_ext.contains('*') {
+            anyhow::bail!("Unrecognised output '{raw}'. A '*' may only stand for the file name.");
+        }
+        // The `*` stands for the input's stem; text around it is kept.
+        let pattern = if pat_ext.is_empty() {
+            name.to_string()
+        } else {
+            name[..name.len() - (pat_ext.len() + 1)].to_string()
+        };
+        let file = format!(
+            "{}.{}",
+            pattern.replace('*', stem),
+            if pat_ext.is_empty() { ext } else { &pat_ext }
+        );
+        return Ok(match out.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent.join(file),
+            _ => PathBuf::from(file),
+        });
+    }
+
+    // `.mp4` is a dotfile - a concrete file name with no extension by the parser's reading.
+    if out.extension().is_none() && !name.starts_with('.') {
+        return Ok(out.join(destination_name(input, ext)));
+    }
+
+    Ok(out)
+}
+
 /// `_derive_output_path` (suffix template from `output_suffix_by_mode`, `{platform}` substituted).
 pub fn derive_output_path(
     input: &Path,
@@ -647,6 +1289,24 @@ pub fn assert_in_sandbox(p: &Path, sandbox: Option<&Path>) -> anyhow::Result<()>
     knaif_skill_api::sandbox::assert_in_sandbox(p, sandbox)
 }
 
+/// The container for an output that keeps its input's kind: the input's own extension, lowercased.
+/// Port of `_engine._same_container_as`. ffprobe names demuxers, not extensions — `.mkv` and
+/// `.webm` both probe as `matroska,webm` — so taking the probe name wrote
+/// `clip_reversed.matroska` (ffmpeg: "Unable to choose an output format") and turned
+/// `.mp4`/`.m4a` into `.mov`. The probe name is only a fallback for an extensionless input.
+fn same_container_as(input_path: &Path, probe: &Probe) -> Option<String> {
+    if let Some(ext) = input_path.extension().and_then(|e| e.to_str()) {
+        if !ext.is_empty() {
+            return Some(ext.to_lowercase());
+        }
+    }
+    let probed = probe.container.as_deref().filter(|s| !s.is_empty())?;
+    Some(match probed {
+        "matroska" => "mkv".to_string(),
+        other => other.to_string(),
+    })
+}
+
 /// Build a fully-resolved [`Recipe`] from a probe + optional platform/quality profiles + options.
 /// Faithful port of `_build_one_recipe`: fallback chains for container/codecs/dims/bitrate, the
 /// audio-only + gif + single-codec-container edge cases, the operations summary, output-path
@@ -670,18 +1330,34 @@ pub fn build_one_recipe(
         .clone()
         .or_else(|| platform.map(|p| p.container.clone()))
         .unwrap_or_else(|| "mp4".to_string());
-    if mode == "reverse" && options.container.is_none() {
-        container = probe
-            .container
-            .clone()
-            .filter(|s| !s.is_empty())
-            .or_else(|| {
-                input_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(String::from)
-            })
-            .unwrap_or(container);
+    // Operations that EDIT a file keep the container they were given (owner decision 2026-09-23 —
+    // "convert to mkv, then crop" came back as an mp4); compress/platform deliver, and stay mp4.
+    // An explicit output name wins, since `clip_trimmed.mkv` was being rendered with the mp4-only
+    // faststart flag. ogg is theora-only with no theora encoder in vocab, so it cannot be kept.
+    // Port of the `_EDIT_MODES` block in `_build_one_recipe`.
+    const EDIT_MODES: [&str; 7] = [
+        "trim",
+        "resize",
+        "rotate",
+        "strip_audio",
+        "adjust_speed",
+        "adjust_volume",
+        "reverse",
+    ];
+    if EDIT_MODES.contains(&mode.as_str()) && options.container.is_none() {
+        let from_output = options
+            .output_path
+            .as_deref()
+            .and_then(|o| Path::new(o).extension())
+            .and_then(|e| e.to_str())
+            .map(str::to_lowercase)
+            .filter(|e| vocab.video_containers.contains(e));
+        let kept = from_output.or_else(|| same_container_as(&input_path, probe));
+        if let Some(kept) = kept {
+            if vocab.video_containers.contains(&kept) && kept != "ogg" {
+                container = kept;
+            }
+        }
     }
 
     let mut video_encoder = options
@@ -716,23 +1392,25 @@ pub fn build_one_recipe(
         .or_else(|| platform.and_then(|p| p.max_audio_bitrate.clone()))
         .or_else(|| Some("128k".to_string()));
 
-    // Audio-only inputs routed through adjust_volume produce an audio file, not a video container.
-    let audio_only = mode == "adjust_volume"
+    // An audio operation on an audio-only input produces an audio file in that file's own
+    // format, not a video container with a re-encoded aac track. `adjust_speed` joined
+    // `adjust_volume` here after ffmpeg_226 rendered `-vf setpts ... -c:v libx264 ... -c:a aac
+    // clip_speed.mp4` from an mp3 — a filter and an encoder for a stream that is not there,
+    // and ffmpeg exiting 0 while handing back the wrong file.
+    let audio_only = matches!(mode.as_str(), "adjust_volume" | "adjust_speed")
         && probe.video_codec.as_deref().is_none_or(str::is_empty)
         && probe.width.is_none_or(|w| w == 0);
     if audio_only {
         container = options
             .container
             .clone()
-            .or_else(|| probe.container.clone().filter(|s| !s.is_empty()))
-            .or_else(|| {
-                input_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(String::from)
-            })
+            .or_else(|| same_container_as(&input_path, probe))
             .unwrap_or(container);
         audio_codec = audio_encoder_for(vocab, &container);
+        // A lossless codec ignores a bitrate target and should not carry one.
+        if matches!(audio_codec.as_str(), "flac" | "pcm_s16le" | "alac") {
+            audio_bitrate = None;
+        }
     }
 
     if container == "gif" {
@@ -743,11 +1421,19 @@ pub fn build_one_recipe(
     }
 
     let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
-        let out = PathBuf::from(raw);
-        if out.is_absolute() {
+        let out = resolve_output_target(raw, &input_path, &mode, options, &container)?;
+        let out = if out.is_absolute() {
             out
         } else {
             input_path.parent().map(|p| p.join(&out)).unwrap_or(out)
+        };
+        // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
+        // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the derived
+        // name, as the plan-level collision handling does for a literal self-overwrite.
+        if same_file(&out, &input_path) {
+            derive_output_path(&input_path, &mode, vocab, options, &container)
+        } else {
+            out
         }
     } else {
         derive_output_path(&input_path, &mode, vocab, options, &container)
@@ -823,6 +1509,16 @@ pub fn build_one_recipe(
                 }
             }
         }
+    } else if container == "webm"
+        && options.video_encoder.is_none()
+        && !video_encoder.is_empty()
+        && !["vp8", "vp9", "av1"].contains(&codec_from_encoder(vocab, &video_encoder))
+    {
+        // The same restriction holds when ENCODING: `-c:v libx264` into webm is refused outright.
+        // Reached once operations that keep their input's container (a reverse of `clip.webm`)
+        // started writing `.webm` instead of `.matroska`. Port of the `elif` in
+        // `_build_one_recipe`; an encoder the caller named is theirs to get wrong.
+        video_encoder = "libvpx-vp9".to_string();
     }
 
     // Stream-copy into a container that can't hold the source audio codec → re-encode instead.
@@ -918,11 +1614,12 @@ pub fn build_one_recipe(
             recipe.audio_only = audio_only;
         }
         "trim" => {
-            recipe.trim = Trim {
-                start: options.start.clone(),
-                duration: options.duration.clone(),
-                end: options.end.clone(),
-            };
+            recipe.trim = normalize_trim(
+                options.start.clone(),
+                options.duration.clone(),
+                options.end.clone(),
+                options.frames,
+            )?;
         }
         "extract_audio" => {
             recipe.audio_format = Some(
@@ -934,19 +1631,28 @@ pub fn build_one_recipe(
             if options.start.is_some() || options.end.is_some() {
                 recipe.trim = Trim {
                     start: options.start.clone(),
+                    start_from_end: None,
                     duration: None,
                     end: options.end.clone(),
+                    frames: None,
                 };
             }
             recipe.video = Video::default(); // no video stream in an audio extract
         }
         "thumbnail" => {
-            recipe.at_time = Some(
-                options
-                    .at_time
-                    .clone()
-                    .unwrap_or_else(|| "00:00:01".to_string()),
-            );
+            // `probe` carries the duration, which is what makes "the last frame" answerable
+            // here and nowhere upstream. An unknown token must not fall back to the default
+            // instant - that answers a different question than the one asked.
+            let requested = options
+                .at_time
+                .clone()
+                .unwrap_or_else(|| "00:00:01".to_string());
+            let resolved = resolve_at_time(Some(&requested), probe.duration).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unrecognised time '{requested}'. Use a timestamp (00:00:05),                      a number of seconds, or 'first' / 'last'."
+                )
+            })?;
+            recipe.at_time = Some(resolved);
             recipe.image_format = Some(
                 options
                     .image_format
@@ -958,6 +1664,9 @@ pub fn build_one_recipe(
         }
         "compress" => {
             recipe.target_size_mb = options.target_size_mb;
+            if recipe.target_size_mb.is_some() {
+                recipe.source_duration = probe.duration;
+            }
         }
         "reverse" => {
             recipe.include_audio = options.include_audio.unwrap_or(true);
@@ -968,6 +1677,7 @@ pub fn build_one_recipe(
         }
         "adjust_speed" => {
             recipe.speed = Some(options.speed.unwrap_or(1.0));
+            recipe.audio_only = audio_only;
         }
         _ => {}
     }
@@ -981,6 +1691,40 @@ pub fn build_one_recipe(
 
 #[cfg(test)]
 mod tests {
+
+    /// `clip.mov -> *.mp4` must not land on the batch's other input `clip.mp4` (ffmpeg_229#4,
+    /// run for real: the `-y` conversion replaced it). Both orders.
+    #[test]
+    fn a_batch_output_never_lands_on_another_input() {
+        for order in [["clip.mp4", "clip.mov"], ["clip.mov", "clip.mp4"]] {
+            let mut outs: Vec<(PathBuf, PathBuf)> = order
+                .iter()
+                .map(|n| {
+                    let input = PathBuf::from("/sb").join(n);
+                    // What the pattern gives each: the self-case already took the derived name.
+                    let out = if *n == "clip.mp4" {
+                        PathBuf::from("/sb/clip_converted.mp4")
+                    } else {
+                        PathBuf::from("/sb/clip.mp4")
+                    };
+                    (input, out)
+                })
+                .collect();
+            disambiguate_outputs(&mut outs);
+            let names: Vec<String> = outs
+                .iter()
+                .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+                .collect();
+            assert!(
+                !names.iter().any(|n| order.contains(&n.as_str())),
+                "{order:?}: {names:?}"
+            );
+            assert_eq!(
+                names.len(),
+                names.iter().collect::<std::collections::HashSet<_>>().len()
+            );
+        }
+    }
     use super::*;
 
     fn vf(
@@ -1032,12 +1776,13 @@ mod tests {
     fn aspect_only_center_crops() {
         assert_eq!(
             vf(None, None, None, Some("16:9")).as_deref(),
-            Some("crop=min(iw\\,ih*16/9):min(ih\\,iw*9/16)")
+            // Even-rounded: libx264 + yuv420p refuse odd dimensions (N4).
+            Some("crop=trunc(min(iw\\,ih*16/9)/2)*2:trunc(min(ih\\,iw*9/16)/2)*2")
         );
         // `/` separator also accepted
         assert_eq!(
             vf(None, None, None, Some("4/3")).as_deref(),
-            Some("crop=min(iw\\,ih*4/3):min(ih\\,iw*3/4)")
+            Some("crop=trunc(min(iw\\,ih*4/3)/2)*2:trunc(min(ih\\,iw*3/4)/2)*2")
         );
     }
 
@@ -1133,6 +1878,35 @@ mod tests {
     }
 
     #[test]
+    fn adjust_speed_on_audio_only_drops_the_video_half() {
+        // ffmpeg_226: an mp3 in, and `-vf setpts` + `-c:v libx264` address a stream that is
+        // not there. The tempo filter is the request and must survive. Mirrors Python's
+        // skills/ffmpeg/python/tests/test_audio_only_speed.py.
+        let mut r = recipe("adjust_speed");
+        r.speed = Some(0.8);
+        r.audio_only = true;
+        r.audio.codec = Some("libmp3lame".to_string());
+        r.audio.bitrate = Some("128k".to_string());
+        let (_, post) = flags(&r);
+        assert_eq!(
+            post,
+            s(&["-af", "atempo=0.8", "-c:a", "libmp3lame", "-b:a", "128k"])
+        );
+        assert!(!post.iter().any(|f| f == "-vf" || f == "-c:v"));
+    }
+
+    #[test]
+    fn adjust_speed_on_video_is_unchanged_by_the_audio_rule() {
+        let mut r = recipe("adjust_speed");
+        r.speed = Some(0.8);
+        r.video.encoder = Some("libx264".to_string());
+        let (_, post) = flags(&r);
+        assert!(post.contains(&"-vf".to_string()));
+        assert!(post.contains(&"setpts=1.25*PTS".to_string()));
+        assert!(post.contains(&"libx264".to_string()));
+    }
+
+    #[test]
     fn adjust_speed_formats_floats_like_python() {
         let mut r = recipe("adjust_speed");
         r.speed = Some(2.0);
@@ -1143,6 +1917,34 @@ mod tests {
         r.speed = Some(0.5);
         let (_, post) = flags(&r);
         assert_eq!(post, s(&["-vf", "setpts=2.0*PTS", "-af", "atempo=0.5"]));
+    }
+
+    #[test]
+    fn adjust_speed_composes_factors_outside_atempo_range() {
+        for (speed, filter) in [
+            (0.25, "atempo=0.5,atempo=0.5"),
+            (0.125, "atempo=0.5,atempo=0.5,atempo=0.5"),
+            (0.4, "atempo=0.5,atempo=0.8"),
+            (200.0, "atempo=100.0,atempo=2.0"),
+        ] {
+            for audio_only in [false, true] {
+                let mut r = recipe("adjust_speed");
+                r.speed = Some(speed);
+                r.audio_only = audio_only;
+                let (_, post) = flags(&r);
+                let index = post.iter().position(|arg| arg == "-af").unwrap();
+                assert_eq!(post[index + 1], filter);
+            }
+        }
+    }
+
+    #[test]
+    fn adjust_speed_rejects_nonpositive_or_nonfinite_factors() {
+        for speed in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            let mut r = recipe("adjust_speed");
+            r.speed = Some(speed);
+            assert!(build_flags(&r, &bundle_vocab()).is_err());
+        }
     }
 
     #[test]
@@ -1228,6 +2030,101 @@ mod tests {
     }
 
     #[test]
+    fn a_size_target_caps_the_bitrate_between_preset_and_pixfmt() {
+        // Byte-identical with Python's `_build_flags`, which emits the cap after `-preset` and
+        // before `-pix_fmt`. Order is the parity contract, not a preference.
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.video.crf = Some(28);
+        r.video.preset = Some("medium".into());
+        r.video.pixel_format = Some("yuv420p".into());
+        r.audio.codec = Some("aac".into());
+        r.audio.bitrate = Some("96k".into());
+        r.target_size_mb = Some(0.5);
+        r.source_duration = Some(10.0);
+        let (_, post) = flags(&r);
+        assert_eq!(
+            post,
+            s(&[
+                "-c:v", "libx264", "-crf", "28", "-preset", "medium", "-maxrate", "302k",
+                "-bufsize", "302k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k"
+            ])
+        );
+    }
+
+    #[test]
+    fn no_size_target_renders_what_it_rendered_before() {
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.video.crf = Some(28);
+        r.video.pixel_format = Some("yuv420p".into());
+        let (_, post) = flags(&r);
+        assert!(!post.iter().any(|f| f == "-maxrate"), "{post:?}");
+    }
+
+    #[test]
+    fn an_unknown_duration_falls_back_rather_than_guessing() {
+        // A size only becomes a bitrate once there is a length to divide by.
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.video.crf = Some(28);
+        r.target_size_mb = Some(0.5);
+        r.source_duration = None;
+        let (_, post) = flags(&r);
+        assert!(!post.iter().any(|f| f == "-maxrate"), "{post:?}");
+    }
+
+    #[test]
+    fn a_target_too_small_for_its_own_audio_is_refused() {
+        // 10s of 96k audio is ~117 KB; a 0.05 MiB ceiling cannot hold it. Emitting a floored
+        // zero would produce a file several times the requested size and report success.
+        let mut r = recipe("compress");
+        r.video.encoder = Some("libx264".into());
+        r.audio.bitrate = Some("96k".into());
+        r.target_size_mb = Some(0.05);
+        r.source_duration = Some(10.0);
+        let err = build_flags(&r, &bundle_vocab()).unwrap_err().to_string();
+        assert!(err.contains("target_size_mb"), "{err}");
+    }
+
+    #[test]
+    fn size_cap_table_matches_python() {
+        // Mirrored verbatim from `_CAP_TABLE` in
+        // `skills/ffmpeg/python/tests/test_target_size.py`. Float division and a floor are
+        // exactly where two runtimes drift without either being obviously wrong, and the flags
+        // they produce are compared byte-for-byte at L3.
+        let cases: &[(f64, f64, Option<&str>, i64)] = &[
+            (0.5, 10.0, Some("96k"), 302),
+            (20.0, 8.0, Some("128k"), 19794),
+            (1.0, 30.0, Some("96k"), 169),
+            (0.25, 5.0, Some("64k"), 334),
+            (2.0, 120.0, None, 132),
+            (1.0, 7.3, Some("192k"), 899),
+            (100.0, 3600.0, Some("128k"), 93),
+        ];
+        for (target, duration, audio, expected) in cases {
+            let a = audio.map(|s| s.to_string());
+            let got = size_cap_kbit(*target, Some(*duration), a.as_ref()).unwrap();
+            assert_eq!(got, Some(*expected), "target={target} duration={duration}");
+        }
+    }
+
+    #[test]
+    fn bitrate_parsing_matches_python() {
+        // An unreadable bitrate budgets nothing for audio, making the cap tighter, not looser.
+        for (value, bps) in [
+            (Some("96k"), 96000.0),
+            (Some("1.5M"), 1_500_000.0),
+            (Some("128000"), 128_000.0),
+            (None, 0.0),
+            (Some("garbage"), 0.0),
+        ] {
+            let v = value.map(|s| s.to_string());
+            assert_eq!(parse_bitrate_bps(v.as_ref()), bps, "{value:?}");
+        }
+    }
+
+    #[test]
     fn adjust_volume_normalize_keeps_video() {
         let mut r = recipe("adjust_volume");
         r.normalize = true;
@@ -1287,6 +2184,167 @@ mod tests {
         assert!(r.output.ends_with("video_compressed.mp4"));
         assert!(r.operations.iter().any(|o| o == "ensure_yuv420p"));
         assert!(r.operations.iter().any(|o| o == "enable_faststart"));
+    }
+
+    /// A probe as `summarise_probe` stores it: the first entry of ffprobe's `format_name`.
+    fn probe_of(file: &str, format_name: &str, video: bool) -> Probe {
+        Probe {
+            file: file.into(),
+            container: format_name.split(',').next().map(String::from),
+            video_codec: video.then(|| "h264".into()),
+            audio_codec: Some("aac".into()),
+            has_audio: true,
+            width: video.then_some(1280),
+            height: video.then_some(720),
+            duration: Some(2.0),
+            fps: None,
+        }
+    }
+
+    fn reversed_name(probe: &Probe, container: Option<&str>) -> String {
+        let opts = Options {
+            mode: Some("reverse".into()),
+            container: container.map(String::from),
+            ..Default::default()
+        };
+        let r = build_one_recipe(probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        Path::new(&r.output)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn reverse_keeps_the_input_extension_not_the_demuxer_name() {
+        // Workbench 2026-09-23: `clip_trimmed.mkv` reversed to `clip_trimmed_reversed.matroska`
+        // and ffmpeg could not choose an output format. Mirrors Python's
+        // skills/ffmpeg/python/tests/test_output_container_from_input.py.
+        let mov = "mov,mp4,m4a,3gp,3g2,mj2";
+        let cases = [
+            ("clip.mkv", "matroska,webm", "clip_reversed.mkv"),
+            ("clip.webm", "matroska,webm", "clip_reversed.webm"),
+            ("clip.mp4", mov, "clip_reversed.mp4"),
+            ("clip.mov", mov, "clip_reversed.mov"),
+            ("clip.MKV", "matroska,webm", "clip_reversed.mkv"),
+            ("clip", "matroska,webm", "clip_reversed.mkv"),
+        ];
+        for (file, format_name, expected) in cases {
+            assert_eq!(
+                reversed_name(&probe_of(file, format_name, true), None),
+                expected
+            );
+        }
+        let mkv = probe_of("clip.mkv", "matroska,webm", true);
+        assert_eq!(reversed_name(&mkv, Some("mp4")), "clip_reversed.mp4");
+    }
+
+    #[test]
+    fn reversing_a_webm_encodes_vp9_not_h264() {
+        // Mirrors Python's test_reversing_a_webm_encodes_vp9_not_h264: `-c:v libx264` into
+        // webm is refused by ffmpeg ("Conversion failed!", verified on a real VP9 clip).
+        let mut probe = probe_of("clip.webm", "matroska,webm", true);
+        probe.video_codec = Some("vp9".into());
+        probe.audio_codec = Some("opus".into());
+        let opts = Options {
+            mode: Some("reverse".into()),
+            ..Default::default()
+        };
+        let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        assert_eq!(r.video.encoder.as_deref(), Some("libvpx-vp9"));
+        assert_eq!(r.audio.codec.as_deref(), Some("libopus"));
+
+        let explicit = Options {
+            mode: Some("reverse".into()),
+            video_encoder: Some("libaom-av1".into()),
+            ..Default::default()
+        };
+        let r = build_one_recipe(&probe, None, None, &explicit, &bundle_vocab(), None).unwrap();
+        assert_eq!(r.video.encoder.as_deref(), Some("libaom-av1"));
+    }
+
+    /// Build a recipe for `mode` on `file` and return (container, output file name, faststart).
+    fn edit_of(file: &str, format_name: &str, opts: Options) -> (String, String, bool) {
+        let r = build_one_recipe(
+            &probe_of(file, format_name, true),
+            None,
+            None,
+            &opts,
+            &bundle_vocab(),
+            None,
+        )
+        .unwrap();
+        let name = Path::new(&r.output)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        (r.container.unwrap_or_default(), name, r.faststart)
+    }
+
+    fn mode(m: &str) -> Options {
+        Options {
+            mode: Some(m.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn an_edit_keeps_the_input_container() {
+        // Owner decision 2026-09-23; mirrors Python's test_an_edit_keeps_the_input_container.
+        // "convert clip.mp4 to mkv then … crop it" came back as an mp4.
+        for m in [
+            "trim",
+            "resize",
+            "rotate",
+            "strip_audio",
+            "adjust_speed",
+            "adjust_volume",
+        ] {
+            for ext in ["mkv", "mov", "avi", "webm"] {
+                let file = format!("clip.{ext}");
+                let (container, name, faststart) = edit_of(&file, "matroska,webm", mode(m));
+                assert_eq!(container, ext, "{m} on {file}");
+                assert!(name.ends_with(&format!(".{ext}")), "{m} on {file}: {name}");
+                assert!(!faststart, "{m} on {file}: mp4-only faststart");
+            }
+        }
+    }
+
+    #[test]
+    fn an_edit_of_an_ogg_falls_back_to_mp4() {
+        let (container, _, _) = edit_of("clip.ogg", "ogg", mode("resize"));
+        assert_eq!(container, "mp4");
+    }
+
+    #[test]
+    fn an_explicit_output_extension_decides_an_edits_container() {
+        let opts = Options {
+            output_path: Some("clip_trimmed.mkv".into()),
+            ..mode("trim")
+        };
+        let (container, _, faststart) = edit_of("clip.mp4", "mov,mp4,m4a", opts);
+        assert_eq!(container, "mkv");
+        assert!(!faststart);
+    }
+
+    #[test]
+    fn a_delivery_operation_still_defaults_to_mp4() {
+        let (container, _, _) = edit_of("clip.mkv", "matroska,webm", mode("compress"));
+        assert_eq!(container, "mp4");
+    }
+
+    #[test]
+    fn audio_only_volume_keeps_m4a() {
+        let opts = Options {
+            mode: Some("adjust_volume".into()),
+            level: Some("2.0".into()),
+            ..Default::default()
+        };
+        let probe = probe_of("song.m4a", "mov,mp4,m4a,3gp,3g2,mj2", false);
+        let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        assert_eq!(r.container.as_deref(), Some("m4a"));
+        assert!(r.output.ends_with(".m4a"), "{}", r.output);
     }
 
     #[test]
@@ -1558,5 +2616,576 @@ mod tests {
                 "thumb.jpg"
             ])
         );
+    }
+}
+
+#[cfg(test)]
+mod trim_frames_tests {
+    use super::*;
+
+    // Port of skills/ffmpeg/python/tests/test_trim_frames.py. L2 parity is a byte comparison
+    // of the rendered command, so the flag SPELLING matters as much as the behaviour:
+    // `-vframes`, matching the thumbnail arm and the Python renderer.
+
+    fn trim_flags(t: Trim) -> (Vec<String>, Vec<String>) {
+        let mut recipe = Recipe {
+            mode: "trim".to_string(),
+            ..Default::default()
+        };
+        recipe.trim = t;
+        build_flags(&recipe, &Vocab::default()).unwrap()
+    }
+
+    fn s(v: Option<&str>) -> Option<String> {
+        v.map(str::to_string)
+    }
+
+    #[test]
+    fn a_frame_count_renders_vframes() {
+        let t = normalize_trim(s(Some("00:00:02")), None, None, Some(3)).unwrap();
+        let (pre, post) = trim_flags(t);
+        assert_eq!(pre, vec!["-ss".to_string(), "00:00:02".to_string()]);
+        assert_eq!(post, vec!["-vframes".to_string(), "3".to_string()]);
+    }
+
+    #[test]
+    fn a_frame_count_never_renders_a_duration() {
+        // With both, ffmpeg stops at whichever arrives first and the command means neither.
+        let t = normalize_trim(
+            s(Some("00:00:02")),
+            s(Some("5")),
+            s(Some("00:00:07")),
+            Some(5),
+        )
+        .unwrap();
+        assert!(t.duration.is_none() && t.end.is_none());
+        let (_, post) = trim_flags(t);
+        assert!(!post.contains(&"-t".to_string()));
+        assert!(!post.contains(&"-to".to_string()));
+    }
+
+    #[test]
+    fn equal_bounds_render_exactly_one_frame() {
+        // ffmpeg_161: `-ss 00:00:00 -to 00:00:00` wrote an empty file and exited 0.
+        let t = normalize_trim(s(Some("00:00:00")), None, s(Some("00:00:00")), None).unwrap();
+        let (_, post) = trim_flags(t);
+        assert_eq!(post, vec!["-vframes".to_string(), "1".to_string()]);
+    }
+
+    #[test]
+    fn equal_bounds_away_from_zero_render_one_frame_there() {
+        let t = normalize_trim(s(Some("00:00:04")), None, s(Some("00:00:04")), None).unwrap();
+        let (pre, post) = trim_flags(t);
+        assert_eq!(pre, vec!["-ss".to_string(), "00:00:04".to_string()]);
+        assert_eq!(post, vec!["-vframes".to_string(), "1".to_string()]);
+    }
+
+    #[test]
+    fn mixed_timestamp_spellings_are_still_the_same_instant() {
+        // Comparing the strings would miss this; the model writes both spellings.
+        let t = normalize_trim(s(Some("0")), None, s(Some("00:00:00")), None).unwrap();
+        assert_eq!(t.frames, Some(1));
+    }
+
+    #[test]
+    fn a_zero_duration_is_also_one_frame() {
+        let t = normalize_trim(s(Some("00:00:03")), s(Some("0")), None, None).unwrap();
+        assert_eq!(t.frames, Some(1));
+    }
+
+    #[test]
+    fn a_real_range_is_untouched() {
+        // `-to` moved to `pre` when the range-trim bug was fixed: after `-i` it is relative to
+        // the seek point, so `-ss 2 -i in.mp4 -to 5` rendered five seconds instead of three.
+        // This test asserted only that `-to` existed, so it was green throughout the defect.
+        let t = normalize_trim(s(Some("00:00:02")), None, s(Some("00:00:07")), None).unwrap();
+        assert_eq!(t.frames, None);
+        let (pre, post) = trim_flags(t);
+        assert_eq!(
+            pre,
+            vec![
+                "-ss".to_string(),
+                "00:00:02".to_string(),
+                "-to".to_string(),
+                "00:00:07".to_string()
+            ]
+        );
+        assert!(post.is_empty(), "{post:?}");
+    }
+
+    // ── argument vocabulary: mirrors skills/ffmpeg/python/tests/test_arg_vocabulary.py ──
+
+    #[test]
+    fn timestamp_reads_unit_suffixes() {
+        for (text, want) in [
+            ("5s", 5.0),
+            ("-2s", -2.0),
+            ("0s", 0.0),
+            ("500ms", 0.5),
+            ("2.5s", 2.5),
+        ] {
+            let got = timestamp_seconds(Some(&text.to_string()));
+            assert_eq!(got, Some(want), "{text}");
+        }
+    }
+
+    #[test]
+    fn timestamp_keeps_a_leading_sign() {
+        // `-00` is `-0.0` and `-0.0 * 60` is still `-0.0`, so this read as +2.0 before.
+        assert_eq!(
+            timestamp_seconds(Some(&"-00:00:02".to_string())),
+            Some(-2.0)
+        );
+        assert_eq!(timestamp_seconds(Some(&"-00:00:00".to_string())), Some(0.0));
+    }
+
+    #[test]
+    fn timestamp_still_reads_plain_clocks_and_numbers() {
+        assert_eq!(timestamp_seconds(Some(&"00:00:05".to_string())), Some(5.0));
+        assert_eq!(timestamp_seconds(Some(&"01:30".to_string())), Some(90.0));
+        assert_eq!(timestamp_seconds(Some(&"2.5".to_string())), Some(2.5));
+    }
+
+    #[test]
+    fn timestamp_rejects_non_times() {
+        for text in ["last_frame", "", "abc", "::"] {
+            assert_eq!(timestamp_seconds(Some(&text.to_string())), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn negative_start_is_a_from_end_offset() {
+        for (start, end) in [
+            ("-2s", Some("0s")),
+            ("-00:00:02", Some("-00:00:00")),
+            ("-2s", None),
+        ] {
+            let got = normalize_trim(Some(start.to_string()), None, end.map(str::to_string), None)
+                .unwrap();
+            assert_eq!(got.start_from_end, Some(-2.0), "{start}");
+            assert_eq!(
+                got.frames, None,
+                "a 2-second request must not become one frame"
+            );
+            assert_eq!(got.end, None);
+        }
+    }
+
+    #[test]
+    fn genuinely_reversed_range_still_becomes_one_frame() {
+        let got = normalize_trim(Some("5".into()), None, Some("2".into()), None).unwrap();
+        assert_eq!(got.frames, Some(1));
+        assert_eq!(got.start_from_end, None);
+    }
+
+    #[test]
+    fn ordinary_range_is_untouched() {
+        let got =
+            normalize_trim(Some("00:00:01".into()), None, Some("00:00:05".into()), None).unwrap();
+        assert_eq!(got.start.as_deref(), Some("00:00:01"));
+        assert_eq!(got.end.as_deref(), Some("00:00:05"));
+        assert_eq!(got.frames, None);
+        assert_eq!(got.start_from_end, None);
+    }
+
+    #[test]
+    fn symbolic_at_time_resolves_against_duration() {
+        for token in ["last_frame", "last", "end"] {
+            let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
+            let secs: f64 = got.parse().unwrap();
+            assert!((11.0..12.0).contains(&secs), "{token} -> {got}");
+        }
+        for token in ["middle", "midpoint", "halfway"] {
+            let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
+            let secs: f64 = got.parse().unwrap();
+            assert!((secs - 6.0).abs() < 1e-9, "{token} -> {got}");
+        }
+        for token in ["first", "start", "beginning"] {
+            assert_eq!(
+                resolve_at_time(Some(&token.to_string()), Some(12.0)).as_deref(),
+                Some("0"),
+                "{token}"
+            );
+        }
+    }
+
+    #[test]
+    fn at_time_passes_real_times_through_and_refuses_junk() {
+        assert_eq!(
+            resolve_at_time(Some(&"00:00:03".to_string()), Some(12.0)).as_deref(),
+            Some("00:00:03")
+        );
+        assert_eq!(
+            resolve_at_time(Some(&"banana".to_string()), Some(12.0)),
+            None
+        );
+    }
+
+    // ── batch output that names a destination, not a file ──
+    // Mirrors the `output` cases in python/tests/test_arg_vocabulary.py.
+
+    #[test]
+    fn glob_output_binds_the_input_stem() {
+        let opts = Options::default();
+        for stem in ["clip", "holiday"] {
+            let input = PathBuf::from(format!("/sb/{stem}.mp4"));
+            let got =
+                resolve_output_target("videos/*.mp4", &input, "convert", &opts, "mp4").unwrap();
+            assert_eq!(
+                got.file_name().and_then(|s| s.to_str()),
+                Some(format!("{stem}.mp4").as_str()),
+                "{stem}"
+            );
+            assert_eq!(
+                got.parent()
+                    .and_then(|p| p.file_name())
+                    .and_then(|s| s.to_str()),
+                Some("videos")
+            );
+        }
+    }
+
+    #[test]
+    fn extensionless_output_is_a_directory() {
+        let opts = Options::default();
+        let input = PathBuf::from("/sb/clip.mp4");
+        let got = resolve_output_target("videos_hevc", &input, "convert", &opts, "mkv").unwrap();
+        assert_eq!(got.file_name().and_then(|s| s.to_str()), Some("clip.mkv"));
+        assert_eq!(
+            got.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|s| s.to_str()),
+            Some("videos_hevc")
+        );
+    }
+
+    #[test]
+    fn a_real_output_filename_is_still_honoured() {
+        let opts = Options::default();
+        let input = PathBuf::from("/sb/clip.mp4");
+        let got = resolve_output_target("renamed.mp4", &input, "convert", &opts, "mp4").unwrap();
+        assert_eq!(got, PathBuf::from("renamed.mp4"));
+    }
+
+    // ── review findings: exact-string parity with Python ──
+    // The earlier mirrored tests compared numbers, which is exactly how the `:g` divergence
+    // survived. These assert the rendered STRING, against the same table as
+    // python/tests/test_arg_vocabulary_review.py.
+
+    #[test]
+    fn seconds_render_identically_to_python() {
+        for (value, want) in [
+            (5.0f64, "5"),
+            (-2.0, "-2"),
+            (11.9, "11.9"),
+            (6.172839, "6.172839"),
+            (-1.23456789, "-1.23456789"),
+            (-0.000001, "-0.000001"), // never "-1e-06"; ffmpeg cannot parse an exponent
+            (0.5, "0.5"),
+        ] {
+            assert_eq!(format_seconds(value), want, "{value}");
+        }
+    }
+
+    #[test]
+    fn destination_keeps_inputs_apart_when_stems_collide() {
+        let mut outs = vec![
+            (
+                PathBuf::from("/sb/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+            (
+                PathBuf::from("/sb/clip.mov"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+        ];
+        disambiguate_outputs(&mut outs);
+        assert_ne!(outs[0].1, outs[1].1, "both inputs render {:?}", outs[0].1);
+        assert!(
+            outs[1].1.to_string_lossy().contains("mov"),
+            "{:?}",
+            outs[1].1
+        );
+    }
+
+    #[test]
+    fn a_lone_input_keeps_its_plain_name() {
+        let mut outs = vec![(
+            PathBuf::from("/sb/clip.mp4"),
+            PathBuf::from("/sb/out/clip.mkv"),
+        )];
+        disambiguate_outputs(&mut outs);
+        assert_eq!(
+            outs[0].1.file_name().and_then(|s| s.to_str()),
+            Some("clip.mkv")
+        );
+    }
+
+    #[test]
+    fn a_timestamp_derived_output_name_is_a_legal_filename() {
+        // `ffmpeg_268#4` - the row that costs ffmpeg its L4 `extract_audio` floor. The model
+        // named the output after the time range: `clip_trimmed_00:00:00.mp4`. Colons are legal
+        // on Linux and illegal on Windows, so ffmpeg refused to open it and the chain died at
+        // step 1 having written nothing. Python produces it too - this is the skill trusting a
+        // model string as a filename, not a port defect.
+        let opts = Options::default();
+        let got = resolve_output_target(
+            "clip_trimmed_00:00:00.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4",
+        )
+        .unwrap();
+        assert_eq!(
+            got.file_name().and_then(|s| s.to_str()),
+            Some("clip_trimmed_00-00-00.mp4")
+        );
+    }
+
+    #[test]
+    fn the_wildcard_output_vocabulary_survives_sanitising() {
+        // `*` is illegal on Windows but it is this skill's own output grammar.
+        let opts = Options::default();
+        let got =
+            resolve_output_target("*.mp4", Path::new("/sb/clip.mp4"), "convert", &opts, "mp4")
+                .unwrap();
+        assert_eq!(got.file_name().and_then(|s| s.to_str()), Some("clip.mp4"));
+    }
+
+    #[test]
+    fn a_drive_letter_is_the_one_legitimate_colon() {
+        // CLI mode has no sandbox, so an absolute output is real there.
+        let opts = Options::default();
+        let got = resolve_output_target(
+            "C:/out/clip_00:00:05.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4",
+        )
+        .unwrap();
+        let s = got.to_string_lossy().replace('\\', "/");
+        assert!(s.starts_with("C:/out/"), "{s}");
+        assert!(s.ends_with("clip_00-00-05.mp4"), "{s}");
+    }
+
+    #[test]
+    fn a_batch_name_says_which_input_produced_it() {
+        // `audio_mp4_5.mp3` - observed in `2026-09-15_l4-ffmpeg-t8`. Six fixture videos into
+        // one literal `audio.mp3` suffixed with the SOURCE EXTENSION, which five of the six
+        // share, so it distinguished nothing and the counter did all the work.
+        let mut outs: Vec<(PathBuf, PathBuf)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
+            .iter()
+            .map(|n| (PathBuf::from("/sb").join(n), PathBuf::from("/sb/audio.mp3")))
+            .collect();
+        disambiguate_outputs(&mut outs);
+        let names: Vec<String> = outs
+            .iter()
+            .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["audio.mp3", "audio_clip2.mp3", "audio_clip_4k.mp3"]);
+    }
+
+    #[test]
+    fn a_three_way_collision_terminates() {
+        let mut outs = vec![
+            (
+                PathBuf::from("/sb/a/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+            (
+                PathBuf::from("/sb/b/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+            (
+                PathBuf::from("/sb/c/clip.mp4"),
+                PathBuf::from("/sb/out/clip.mp4"),
+            ),
+        ];
+        disambiguate_outputs(&mut outs);
+        let set: std::collections::HashSet<_> = outs.iter().map(|(_, o)| o.clone()).collect();
+        assert_eq!(set.len(), 3, "{outs:?}");
+    }
+
+    #[test]
+    fn a_dotfile_output_is_a_file_not_a_directory() {
+        let opts = Options::default();
+        let got = resolve_output_target(".mp4", Path::new("/sb/clip.mp4"), "convert", &opts, "mp4")
+            .unwrap();
+        assert_eq!(got, PathBuf::from(".mp4"));
+    }
+
+    #[test]
+    fn a_wildcard_in_a_parent_segment_is_refused() {
+        let opts = Options::default();
+        assert!(resolve_output_target(
+            "out*/clip.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn a_wildcard_pattern_keeps_the_text_around_it() {
+        let opts = Options::default();
+        let got = resolve_output_target(
+            "prefix_*.mp4",
+            Path::new("/sb/clip.mp4"),
+            "convert",
+            &opts,
+            "mp4",
+        )
+        .unwrap();
+        assert_eq!(
+            got.file_name().and_then(|s| s.to_str()),
+            Some("prefix_clip.mp4")
+        );
+    }
+
+    #[test]
+    fn lexical_normalize_drops_traversal_without_touching_disk() {
+        // create_dir_all on an unnormalised parent builds each component in turn on POSIX,
+        // so `../escaped/../sb` creates `escaped` even though the whole path resolves inside.
+        let got = lexically_normalize(Path::new("/tmp/sb/../escaped/../sb"));
+        assert_eq!(got, PathBuf::from("/tmp/sb"));
+    }
+
+    #[test]
+    fn from_end_refuses_an_unreadable_end() {
+        let got = normalize_trim(Some("-2s".into()), None, Some("banana".into()), None);
+        assert!(
+            got.is_err(),
+            "an unreadable end must not be read as 'to the end'"
+        );
+    }
+
+    #[test]
+    fn zero_duration_still_wins_over_from_end() {
+        let got = normalize_trim(Some("-2".into()), Some("0".into()), None, None).unwrap();
+        assert_eq!(got.frames, Some(1));
+    }
+}
+
+#[cfg(test)]
+mod needs_video_tests {
+    use super::*;
+
+    // Port of skills/ffmpeg/python/tests/test_video_only_operations.py.
+
+    fn audio_only() -> Probe {
+        Probe {
+            file: "/sb/clip_rev.mkv".into(),
+            audio_codec: Some("aac".into()),
+            has_audio: true,
+            duration: Some(2.0),
+            ..Default::default()
+        }
+    }
+
+    fn with_mode(m: &str) -> Options {
+        Options {
+            mode: Some(m.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_picture_operation_on_audio_only_says_why() {
+        for verb in ["resize", "rotate"] {
+            assert_eq!(
+                needs_video(&with_mode(verb), &audio_only()).as_deref(),
+                Some(
+                    format!(
+                        "Can't {verb} clip_rev.mkv: it has no video stream, only audio. \
+         Check which file this step should start from."
+                    )
+                    .as_str()
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn a_picture_operation_on_video_is_allowed() {
+        let video = Probe {
+            video_codec: Some("h264".into()),
+            width: Some(1920),
+            ..audio_only()
+        };
+        assert!(needs_video(&with_mode("resize"), &video).is_none());
+    }
+
+    #[test]
+    fn operations_that_mean_something_for_audio_are_left_alone() {
+        for m in ["reverse", "adjust_speed", "adjust_volume", "trim"] {
+            assert!(needs_video(&with_mode(m), &audio_only()).is_none(), "{m}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod trim_past_end_tests {
+    use super::*;
+
+    // Port of skills/ffmpeg/python/tests/test_empty_output_guards.py (the "before running" half).
+
+    fn trim(start: &str) -> Options {
+        Options {
+            mode: Some("trim".to_string()),
+            start: Some(start.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn probe(name: &str, duration: Option<f64>) -> Probe {
+        Probe {
+            file: format!("/sb/{name}"),
+            duration,
+            video_codec: Some("h264".to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_start_past_the_end_is_refused_by_name_with_pythons_words() {
+        let got = trim_past_end(&trim("00:00:03"), &probe("Test1.mov", Some(2.0)));
+        assert_eq!(
+            got.as_deref(),
+            Some(
+                "Can't cut from 00:00:03: Test1.mov is only 2.0s long, so the cut would be \
+                 empty. Check which file this step should start from."
+            )
+        );
+    }
+
+    #[test]
+    fn a_start_exactly_at_the_end_is_refused() {
+        assert!(trim_past_end(&trim("2"), &probe("Test1.mov", Some(2.0))).is_some());
+    }
+
+    #[test]
+    fn a_start_inside_the_file_is_fine() {
+        assert!(trim_past_end(&trim("00:00:03"), &probe("clip_silent.mp4", Some(10.0))).is_none());
+    }
+
+    #[test]
+    fn a_from_end_start_is_not_a_late_start() {
+        assert!(trim_past_end(&trim("-2s"), &probe("clip.mp4", Some(10.0))).is_none());
+    }
+
+    #[test]
+    fn an_unknown_duration_is_not_a_reason_to_refuse() {
+        assert!(trim_past_end(&trim("00:00:03"), &probe("stream.ts", None)).is_none());
+    }
+
+    #[test]
+    fn other_modes_are_untouched() {
+        let mut options = trim("00:00:30");
+        options.mode = Some("extract_audio".to_string());
+        assert!(trim_past_end(&options, &probe("clip.mp4", Some(10.0))).is_none());
     }
 }

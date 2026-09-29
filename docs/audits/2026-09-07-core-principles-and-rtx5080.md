@@ -145,7 +145,9 @@ scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)
 
 **Live Python measurement plus native source review; previously documented, not fixed.**
 
-Sources: [main.rs](../../apps/cli/src/main.rs), line 1051; [native prompt.rs](../../native/crates/knaif-core/src/prompt.rs); [agent.py](../../python/core/knaif/agent.py), `build_prompt`; [build_dataset.py](../../python/training/build_dataset.py). Prior analysis: [native/Python planning parity plan](../plans/2026-08-08-native-python-planning-parity.md).
+Sources: [main.rs](../../apps/cli/src/main.rs), line 1051; [native prompt.rs](../../native/crates/knaif-core/src/prompt.rs); [agent.py](../../python/core/knaif/agent.py), `build_prompt`; [build_dataset.py](../../python/training/build_dataset.py). Prior analysis: the native/Python planning-parity plan, retired 2026-09-10 after its premise was
+measured false — superseded by [skill-quality-lifecycle](../plans/2026-09-10-skill-quality-lifecycle.md),
+which carries the measurements (native and Python do not differ significantly, p = 0.21).
 
 For `trim clip.mp4 to 5 seconds then resize to 720p`, Python retrieval selected these five public tools in order: `resize_video, trim_video, convert_video, compress_video, strip_audio`. The live registry has 13 public FFmpeg tools. Native passes the full registry into `build_prompt`, filters internal tools, and orders public tools by YAML order. Python's retrieved path also selects examples, whereas native uses the static examples block. The dataset-builder code uses Python retrieval, consistent with the documented training pipeline; its current entry point is broken, as recorded in F12.
 
@@ -221,7 +223,7 @@ Additional data-hygiene observation: the current training files contain 404 FFmp
 - Windows, PowerShell; NVIDIA GeForce RTX 5080, 16,303 MiB reported by `nvidia-smi`, driver 616.64.
 - CPU: AMD Ryzen 9 9950X3D, 16 physical cores / 32 logical processors. FFmpeg: `N-124716-g054dffd133-20260531`, installed on PATH.
 - Python 3.13.12, uv 0.11.2, Rust 1.96.0, `llama-cpp-python` 0.3.23.
-- Initial repo `models/` directory was absent. Both public fine-tunes existed in `C:/Users/statu/.knaif/models`. During the audit the user copied the model directory into the repo; final evaluation uses the repo copy.
+- Initial repo `models/` directory was absent. Both public fine-tunes existed in `~/.knaif/models`. During the audit the user copied the model directory into the repo; final evaluation uses the repo copy.
 - `knaif-qwen3-4b-v1-q4_k_m.gguf`, 2,497,280,960 bytes, SHA-256 `6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014`. The native-cache and copied repo model match the committed manifest.
 - The project entry point `uv run --frozen -m knaif._gpu_check` succeeded and identified CUDA device 0 as the RTX 5080. A bare `import llama_cpp` initially failed DLL loading; the project's DLL preparation resolves it. This is **not** a broken-backend finding.
 - Actual model-load trace selected `CUDA0` and reported `offloaded 37/37 layers to GPU`. The evaluation config requests `n_gpu_layers=99`, `n_ctx=8192`, `n_threads=8`, `max_tokens=512`, JSON grammar off, thinking off; llama.cpp generation uses temperature 0.

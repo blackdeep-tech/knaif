@@ -29,6 +29,37 @@ in the console before "test it on the branch" means anything in a browser.
 `amplify.yml` is the authority: a repo build spec overrides build settings saved in the
 console, which is what makes the file reviewable in a PR rather than advisory.
 
+## Installing and updating site dependencies
+
+Run these recipes from the repository root:
+
+```bash
+just site-install             # install the committed lockfile
+just site-update              # update dependencies within declared ranges, all site packages
+just site-update --latest     # include major dependency upgrades
+just site-pnpm-update         # update the site's pnpm pin to latest, then install dependencies
+just site-pnpm-update 12.4.1   # select a specific pnpm version
+just site-check               # install and check both sites
+```
+
+`site-install`, `site-check`, and `site-build` use `--frozen-lockfile`, so routine
+installs and builds do not upgrade dependencies. Updates are explicit: review and
+commit the changed package manifests and `site/pnpm-lock.yaml`, then run the deploy
+gates below. When updating pnpm itself, also align the pnpm version in `mise.toml`
+and the installer configuration in `amplify.yml`.
+
+Keep the sites' TypeScript dependency on 6.x while the installed `astro check`
+requires its programmatic API; TypeScript 7 does not provide that API yet.
+Review this constraint when using `site-update --latest`.
+
+`site-pnpm-update` runs inside `site/`, so the updater reads the site's version pin.
+For standalone pnpm it uses `self-update`. If pnpm is managed by Corepack, it disables
+the pnpm Corepack shims and installs standalone pnpm globally through npm first;
+this avoids both Corepack's refusal to self-update and older Corepack versions'
+incompatible pnpm 12 entry point. If pnpm is missing, it installs it through npm too.
+The bootstrap requires Node.js and npm on PATH (Node 22.13+ for pnpm 12), and permission
+to write to npm's global prefix. A failed npm install restores the Corepack shims.
+
 ## 2. Before you merge to `main`
 
 The site gates are deliberately outside `just check` — they need a full production build of

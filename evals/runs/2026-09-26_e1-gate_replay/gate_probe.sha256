@@ -1,0 +1,3 @@
+37f4c84802baeb5e7a77eb4aaa38fdb135a3dd1a37fe8171680c0c878142c20f  gate_probe.jsonl
+# Re-frozen once before any gate rule existed: gate_06's UNC path had been written with a
+# literal form feed () instead of a backslash + 'f'. No other row changed.

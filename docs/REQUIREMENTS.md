@@ -40,8 +40,12 @@ the same YAML contracts and skill bundles; see [NATIVE.md](NATIVE.md).
 2. Produce a structured JSON action plan referencing only tools in the active skill registry.
 3. Support multi-step plans and variable binding between steps.
 4. Expand high-level skill tools into deterministic internal workflows when `Intent` tools are defined.
-5. Detect ambiguity and ask clarifying questions instead of guessing.
-6. Reject unsafe or out-of-scope requests.
+5. Detect ambiguity and ask clarifying questions instead of guessing — and answer the same
+   way when a request is clear but the active skill has no tool for it, saying plainly that it
+   is unsupported rather than asking an open-ended question.
+6. Reject requests that violate the active skill's safety policy. Which categories those are
+   is per-skill and is declared in `skills/<name>/prompt.yaml` and `SPEC.md`; a request that is
+   merely outside a skill's tool inventory is a clarification (5), not a refusal.
 7. Enforce safety categories before execution.
 8. Require explicit confirmation or dry-run mode for destructive tools.
 9. Support dry-run previews for handlers that perform side effects.

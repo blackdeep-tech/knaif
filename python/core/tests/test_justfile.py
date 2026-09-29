@@ -72,3 +72,46 @@ def test_gpu_check_uses_module_not_inline_script() -> None:
 
     assert "uv run -m knaif._gpu_check" in text
     assert "python -c" not in text
+
+
+def _check_contracts_recipe() -> str:
+    """The body of the `check-contracts:` recipe, up to the next top-level item."""
+    text = JUSTFILE.read_text(encoding="utf-8")
+    start = text.index("\ncheck-contracts:\n")
+    rest = text[start + 1 :]
+    end = re.search(r"\n(?=[^\s#])", rest)
+    return rest[: end.start()] if end else rest
+
+
+def _parity_test_files() -> set[str]:
+    return {p.name for p in (ROOT / "python" / "core" / "tests").glob("test_*_parity.py")}
+
+
+def test_check_contracts_runs_every_parity_test() -> None:
+    """`check-contracts` enumerates its Python test files by hand, so a new contract test
+    is silently not run until someone remembers to edit this recipe.
+
+    The Rust half has no such hazard — `cargo test -p knaif-core --test parity` runs the
+    whole binary, so a new `#[test]` there is picked up for free. That asymmetry bit during
+    the 2026-09-15 arg-gate port: the Rust case ran on its own, the Python one did not.
+
+    Scoped to the `*_parity.py` naming family, which is exactly the L1/L2 contract
+    consumers. The recipe legitimately lists other checks too (generation settings, the
+    scoring contract, outcomes); those are not constrained here.
+    """
+    recipe = _check_contracts_recipe()
+    missing = sorted(name for name in _parity_test_files() if name not in recipe)
+    assert not missing, (
+        f"check-contracts does not run {missing} — a contract test nobody runs is a "
+        f"contract nobody checks. Add it to the recipe in justfile."
+    )
+
+
+def test_the_parity_guard_would_notice_an_omission() -> None:
+    """The guard above is only worth having if it can fail; prove it on a doctored recipe."""
+    recipe = _check_contracts_recipe()
+    files = _parity_test_files()
+    assert files, "no *_parity.py tests found — the guard would vacuously pass"
+    victim = sorted(files)[0]
+    doctored = recipe.replace(f"python/core/tests/{victim}", "")
+    assert victim not in doctored, f"{victim} was not actually removed from the copy"

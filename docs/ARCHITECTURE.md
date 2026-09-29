@@ -229,12 +229,42 @@ two places:
 
 - **At infer time** (`CommandAgent.infer`, post-parse) — `_link_chain_intermediates()`
   first fills in an omitted step-1 `output` and points the consuming step at it, then
-  `_hallucinated_filename()` downgrades the plan to `clarify` if any filename-like
-  arg is absent from the utterance.
+  forward-threads a later reference to a producer's *source* onto that producer's output
+  (`unlock_pdf s.pdf` then "check if *it* contains beta" must search the unlocked copy).
+  Threading has two limits. It applies only when the user named that source **at most once**:
+  a name written again is the user's choice, and a fan-out (several steps reading one file)
+  runs as written. It never rewrites onto a file of a **different kind** (a thumbnail of a
+  video), per the skill's `file_kinds:`. Then `_hallucinated_filename()` downgrades the plan
+  to `clarify` if any filename-like arg is absent from the utterance. Native ports the whole
+  stage (`knaif_core::apply_clarify_gate`), held to Python by the L2 contract
+  `contracts/parity/clarify_gate_cases.json`.
 - **Before expansion** (`execute_plan`, after stem resolution) — `nl_clarify_gate()`
   clarifies when a required file input is under-specified and injection cannot resolve
   it, or when a tool's declared `grounded_args` (e.g. a password) hold a value the
   model invented.
+
+#### The arg-shape gates
+
+Two smaller gates run earlier in `execute_plan`, *before* structural validation, and
+both convert a would-be `ValueError` into a `clarify`:
+
+- `required_args_clarify()` — a step omits a required arg (or a tool declares
+  `any_of_args` and none is present). The user never supplied the value, so asking beats
+  erroring.
+- `unsupported_args_clarify()` — a step puts an arg on a **known** tool that the tool
+  does not declare, e.g. `adjust_volume` given `target_sample_rate`. The user asked for
+  something real that no tool can express, and the model wrote it down as the closest
+  thing it had; per the [reject/clarify taxonomy](plans/2026-09-11-reject-clarify-taxonomy.md)
+  an inventory gap is `clarify`, not a validator string.
+
+Both are deliberately narrow, so neither becomes a place for bugs to hide behind a
+polite question. They fire only on the NL path (`utterance is not None`) — a direct
+`execute_plan()` call keeps strict validation; only on tools already in the registry —
+an unknown tool is still a hard error; and only before expansion — an *expanded* plan
+carrying an undeclared arg is a skill bug and must keep failing loudly. Because a plan
+they touch could never have validated, they cannot turn a passing plan into a clarify.
+
+Neither has a native counterpart yet; `runtimes.native.status` reflects that.
 
 `_hallucinated_filename` flags invented **inputs** only. It deliberately skips two
 things, and both exclusions are load-bearing:

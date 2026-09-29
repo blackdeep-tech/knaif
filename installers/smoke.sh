@@ -128,6 +128,21 @@ for f in LICENSE NOTICE; do
 done
 echo "  ok  LICENSE + NOTICE present"
 
+# 6a. PDFium ships beside the exe in every functional artifact (release plan R0). OCR and PDF
+# rendering fail without it, and until 1.2.0 the evals only passed because KNAIF_PDFIUM_PATH
+# pointed at a copy no user has. A functional artifact is one that carries llama.cpp; `base` has
+# no PDF feature and ships neither. Present, not loaded: loading is the OCR row in RELEASE.md §4.
+BINDIR="$(dirname "$BIN")"
+if ls "$BINDIR"/llama.dll "$BINDIR"/libllama.so* "$BINDIR"/libllama.dylib >/dev/null 2>&1; then
+  pdfium_found=""
+  for lib in pdfium.dll libpdfium.so libpdfium.dylib; do
+    [ -f "$BINDIR/$lib" ] && pdfium_found="$lib"
+  done
+  [ -n "$pdfium_found" ] || fail "no PDFium library beside $(basename "$BIN") (OCR would fail)"
+  [ -f "$ART/licenses/PDFium/LICENSE" ] || fail "PDFium ships without licenses/PDFium/LICENSE"
+  echo "  ok  PDFium ($pdfium_found) + its notices present"
+fi
+
 # 6b. the language-neutral contracts ship. package.sh names each file individually rather than
 # copying contracts/ wholesale, so a NEW contract reaches the installed tree only when someone
 # remembers to add it — and forgetting fails at the user, not at the build. That already applied to

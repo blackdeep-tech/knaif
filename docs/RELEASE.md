@@ -173,7 +173,7 @@ bundled redist). AppImage needs `libfuse2`/`libfuse2t64` + `appimagetool`.
   run once and are then cached, so a box that built successfully can later lose `libclang-dev` or the
   Vulkan `-dev` packages and still **`--no-build` package fine** — the failure only appears when
   something invalidates the crate's fingerprint (a changed env var, a `cargo build` that errored, a
-  wiped `target/release/build/llama-cpp-sys-2-*`) and forces a fresh compile. Two ways this bites:
+  wiped `target/<profile>/build/llama-cpp-sys-2-*`) and forces a fresh compile. Two ways this bites:
   - **`libclang-dev`** — bindgen `dlopen`s `libclang.so`; absent → *"Unable to find libclang"*.
   - **Vulkan `-dev`** (`libvulkan-dev glslc glslang-tools spirv-headers`) — cmake's `find_package`
     → *"Could NOT find Vulkan (missing: Vulkan_LIBRARY Vulkan_INCLUDE_DIR glslc)"*. The runtime
@@ -192,24 +192,34 @@ installers/linux/build-appimage.sh dist/staging/knaif-<ver>-linux-x64
 `package.sh` picks the features, stages the core libs + loadable backends beside the exe, and sets an
 **`$ORIGIN` RPATH** (patchelf) so the unpacked folder relocates.
 
-### Windows (compile first in a "Developer PowerShell for VS")
+### Windows
 
 ```bash
-CMAKE_GENERATOR=Ninja cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan
-installers/package.sh --no-build --kind=vulkan                        # -> dist/knaif-<ver>-windows-x64.zip
+just build-native-kind vulkan                                         # -> target/release-vulkan/
+installers/package.sh --no-build --kind=vulkan --profile=release-vulkan   # -> dist/knaif-<ver>-windows-x64.zip
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installers\windows\knaif.iss
 ```
 
 `just package-native vulkan` + `just installer` wrap the same steps.
 
+The build no longer needs a "Developer PowerShell for VS": `build-native-kind` locates Visual
+Studio and enters `VsDevCmd.bat` itself, and sets `CMAKE_GENERATOR` and `CUDAARCHS`. **Packaging
+still wants that shell** — see the `$VCToolsRedistDir` note below. Driving cargo by hand still
+needs it too.
+
 **Vulkan requires `CMAKE_GENERATOR=Ninja`** — the default MSBuild generator dies in
 `vulkan-shaders-gen` with `cannot find the batch label specified - VCEnd`.
 
-**Package each kind immediately after its own build.** Several feature sets coexist under
-`target/release/build/llama-cpp-sys-2-*/`, and cargo does not re-run a cached build script, so mtime
-does not identify which build is current. `out_dir()` resolves the right one by the backends it
-emitted — but only ever package the kind you just built, and never assume a rebuilt-but-cached kind
-refreshed anything.
+**Each kind now has its own directory**, so kinds no longer overwrite one another's binary or
+staged libs: `just build-native-kind <kind>` builds into `target/release-<kind>/`, and packaging
+points at it with `--profile=release-<kind>`. Several feature sets still coexist under
+`target/release-<kind>/build/llama-cpp-sys-2-*/`, and cargo does not re-run a cached build script,
+so mtime still does not identify which build is current — `out_dir()` continues to resolve the
+right one by the backends it emitted, and `just verify-build-kind <kind>` asserts it independently.
+
+Passing the matching `--profile` is what makes this hold. Package a kind out of plain
+`target/release/` and you are back to "whatever was linked last", which is what the guards below
+exist to catch.
 
 **Package from that same Developer shell, not just build from it.** `package.sh` stages the four
 VC++ runtime DLLs from `$VCToolsRedistDir`, which a Developer shell exports pointing at the redist
@@ -247,14 +257,38 @@ tree comes from the MSVC v14x **build tools** component in the VS Installer, not
 - **Changing `CUDAARCHS` or the generator needs a clean.** `always_configure(false)` means cmake will
   not reconfigure and an incremental build silently keeps the old settings. `cargo clean -p
   llama-cpp-sys-2` is the documented step, but it does **not** reliably remove the directory — wipe
-  `target/release/build/llama-cpp-sys-2-*` directly to be sure.
-- **Stale lib copies break `build.rs`.** If `target/release/lib{ggml,llama}*.so*` survive from a
-  previous feature set (possibly as dangling symlinks), build.rs's hard-link step panics with
-  `AlreadyExists`. Delete them before switching kinds.
+  `target/<profile>/build/llama-cpp-sys-2-*` directly to be sure — or, with the per-kind
+  profiles, `rm -rf target/release-<kind>` to start that kind from scratch.
+- **Stale lib copies break `build.rs`** — *fixed by the per-kind profiles, for builds that use
+  them.* If `target/<profile>/lib{ggml,llama}*.so*` survive from a **different feature set**
+  (possibly as dangling symlinks), build.rs's hard-link step panics with `AlreadyExists`. Building
+  each kind into its own `release-<kind>` directory means two kinds never share a destination, so
+  there is nothing to delete. The hazard returns the moment two feature sets are pointed at one
+  profile — a hand-run `cargo build --release` with differing `--features`, for instance.
 - **Memory.** llama.cpp's Vulkan `mul_mm` shader and nvcc are memory-hungry; on a ~7 GB box, 16
   parallel jobs OOM-kill `cc1plus`. Cap with `CARGO_BUILD_JOBS=<n>` — cmake-rs reads cargo's
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
   not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
+
+### Windows binaries must not carry the builder's home directory
+
+Rust embeds source paths as panic locations and C/C++/CUDA embed them through `__FILE__`, so every
+crate built out of the cargo registry carries `C:\Users\<name>\.cargo\registry\...` into the binary.
+The 1.1.0 Windows artifacts shipped about 1,200 of these strings, which name whoever built the
+release. The Linux artifacts, built in a container, carry none.
+
+`scripts/build_native_kind.sh` remaps the cargo home and the checkout on Windows
+(`scripts/path_hygiene.sh`: `--remap-path-prefix` for Rust, `/d1trimfile:` for cl and, through
+`-Xcompiler`, for nvcc), and `package.sh` refuses to package a tree that still contains the home
+directory (`scripts/check_no_local_paths.py`). Two consequences:
+
+- **Build with the script, not a bare `cargo build`**, or the guard fails the packaging step.
+- **The C flags reach CMake only on a fresh configure.** After first adopting them (or changing
+  them), clean the llama.cpp build once: `cargo clean -p llama-cpp-sys-2 --profile release-<kind>`.
+
+One build-directory path remains: llama.cpp compiles in its backend search folder
+(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`). It names the checkout's location,
+not a person.
 
 ### A Windows CUDA build takes about an hour, and shows nothing while it does
 
@@ -270,7 +304,7 @@ six times the nvcc work of a single-arch build.
 To tell a slow build from a stuck one, watch objects rather than stdout:
 
 ```bash
-find target/release/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
+find target/release-cuda/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
 ```
 
 Two things worth knowing:
@@ -353,6 +387,107 @@ version `Cargo.toml` claims; `skills list` finds ffmpeg + documents via exe-rela
 §4(d) respectively, and `NOTICE` carries the Qwen3 derivation attribution for the models knaif
 downloads. `NOTICE` was absent from every artifact on every OS through 1.0.1 precisely because no
 check read it.
+
+### Runtime parity and shipped-path acceptance — REQUIRED before publishing
+
+`smoke.sh` proves the artifact *runs*. It does not prove the native runtime still agrees with the
+reference, or that a skill still does the job. Those are L3 and L4 of
+[the skill-quality plan](plans/2026-09-10-skill-quality-lifecycle.md), and they need a GGUF, so
+they cannot live in CI — which is exactly why they have to be a named release step rather than
+something someone remembers.
+
+```bash
+# L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
+KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v2-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
+
+# L4 — the shipped path: the binary executing for real, graded on the files it produces.
+just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
+just eval-native ffmpeg --save evals/runs/<date>_<ver>-l4-ffmpeg_success
+just eval-safety-native ffmpeg evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
+
+# L4 acceptance — the verdict. The only check that can buy `supported`.
+just eval-accept-native ffmpeg \
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/ffmpeg_native-cli_success.json \
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
+```
+
+`accept-native` is what turns the run into a verdict: it grades the lane's scoreboard against
+**both** the skill's written S2 bar and the frozen Python baseline — `native ≥ max(S2 floor,
+accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete coverage,
+with every required capability slice holding and safety at 100%. It writes its verdict into
+`evals/acceptance/<skill>.json` either way, so a failing run is recorded as **failing** rather
+than left looking unmeasured, and `just check-gate` then derives the status that evidence
+supports.
+
+**Every cell of the acceptance matrix.** `contracts/release/acceptance_matrix.yaml` lists the
+release's models and its OS × backend entries. Each `accept-native` verdict is filed under
+`model|os|backend`: the run's public model, the OS it ran on, and the backend its layers
+actually landed on. `check-gate` reports `supported` only when **every** full-coverage cell holds
+a valid verdict, so run L4 and safety once per model per full entry. For the release candidate,
+pass the packaged binary, so the gate checks that the records measured *it*:
+
+```bash
+uv run python -m knaif.evalsuite gate \
+  --native-bin <unpacked windows zip>/bin/knaif.exe --native-bin <unpacked linux tarball>/bin/knaif
+```
+
+Pass one binary per OS the release ships: the gate recognises each as Windows or Linux from its
+header and checks every `model|os|backend` cell against its own OS's binary (an L3 cell, keyed by
+model only, against whichever given binary it recorded). A cell whose OS has no binary given, or a
+gate run without `--native-bin`, prints "not checked here: native_binary" instead of comparing.
+
+**L4 runs the packaged layout.** The lane's `binary:` must be the executable inside the unpacked
+artifact, with PDFium beside it. `eval-native` and `eval-safety-native` refuse a binary without
+it, and the lane never passes `$KNAIF_PDFIUM_PATH` to the binary, so OCR is measured with the
+library users actually get. `--allow-unpackaged` runs a developer build for diagnosis only. The
+result is marked `packaged_layout: false`, and `accept-native` refuses it.
+
+Two things it refuses, both deliberately: a scoreboard that did not come from the native lane
+(Python execution locates a failure, it never certifies one — L4b), and a safety result that did
+not come from the binary (the two runtimes reach a refusal by different code, so one's answers
+are not evidence for the other).
+
+Rules, each of which exists because ignoring it produces a number that reads better than the
+product:
+
+- **Run it from a clean tree.** Both runs record the git SHA and warn when the tree is dirty; a
+  dirty run does not describe a releasable commit.
+- **Record the backend.** `$KNAIF_PARITY_BACKEND` is stamped into `meta.json` and left `null`
+  when unset. Greedy argmax over different FP accumulation can flip a near-tie, so two runs on
+  different backends are not comparable — this is measured, not theoretical (see
+  `evals/parity/2026-09-10_l3-ffmpeg-command/backend_attribution.json`).
+- **Add a row to `evals/INDEX.md`** for each saved run. A run nobody indexed is a run nobody can
+  find when the next release asks "was this better or worse?".
+- **Quote the right number.** L4 — the binary executing for real, reported *with its coverage* —
+  is the only number that may back a claim that the product works. L1's 100% proves the prompts
+  match; L3's rate proves the runtimes agree on what to do. Neither says a user's file came out
+  right.
+- **Read L3's rate as symmetric disagreement, not a native score.** It says nothing about which
+  side is correct; native has been the better answer on real rows.
+
+**A rebuild after acceptance.** Every L3/L4 cell pins the native source, the skill bundle and the
+measured binary, so any fix after acceptance stales them. Re-measure, or — owner's decision —
+carry the results over with `evalsuite equivalence`, which maps the measured values to the new
+ones in `evals/acceptance/equivalences.json` and makes the gate print `[equivalent: <id>]`:
+
+```bash
+# a text fix: the native source differs only by the declared replacements, inside strings/comments
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --replace OLD=NEW \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
+# a code change: vouched for by a committed, pre-registered sample run (gate says "(sampled)")
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sample-run evals/runs/<dir> \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --new-artifact <the zip/tarball the run tested> \
+  --reason "..." --verified "..."
+```
+
+`--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
+entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
+and otherwise only the skill's native sources did. Its run must be committed, its `run.sh` in an
+earlier commit than its `verdicts.txt` (pre-registered), every OS and skill `VERDICT: equivalent on
+the sample` exactly once, each stage one START then DONE; binaries must cover every OS a cell was
+measured on, and each `--new-bin` must be the executable inside an artifact whose sha256 the run
+recorded. The gate re-checks the run on every read. 1.2.0: RC2 (text) and RC3 (sampled,
+supporting-tool lookup).
 
 ### Testing the Windows installer without damaging a real install
 
@@ -486,6 +621,16 @@ cd dist && sha256sum knaif-<ver>-* > SHA256SUMS      # Linux
 
 ## 5. Publish (strict order)
 
+**At the tag, record what was true for the release** (before the tree moves on):
+
+```bash
+just release-record <ver>     # -> evals/acceptance/releases/<ver>/, written once
+```
+
+It copies each skill's acceptance record and the gate's verdict at that commit. The live records
+go stale on `main` as soon as anything changes, as they should. The copy is what answers "what
+was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release.
+
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
 URL has ever depended on an org redirect.
@@ -597,6 +742,25 @@ time, so no re-upload is needed. Skill bundles are deliberately excluded from th
 
 ## 6. Notes for users (put these in the release body)
 
+### Stating the quality claim honestly
+
+Every layer measures something different, and only one of them is about the product working. Quote
+accordingly (plan G5):
+
+| Layer | What it proves | What it does NOT prove |
+|---|---|---|
+| L1 contract | The two runtimes build the same prompt, retrieve the same tools, share the same settings | Nothing about behavior — a matching prompt can still produce a wrong plan |
+| L2 deterministic | Parse/validate/expand/gate agree, and native executes chains in order | Nothing about what the model chooses |
+| L3 behavioral | The runtimes **agree on what to do** for real utterances | Which side is *right*. It is symmetric disagreement; native has been the better answer on real rows |
+| L4 shipped path | **The installed binary produced the right files** | Only for the skills, corpus and coverage the run actually covered |
+
+So: **an L4 number, reported with its coverage, is the only one that may back "it works".** A
+release that quotes L1's 100% as a quality figure is claiming the prompts match and hoping the
+reader mistakes it for something else.
+
+State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
+locally, macOS unexercised** — say that rather than implying three platforms.
+
 **Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
 Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence
 of a warning, is what proves the download is intact.
@@ -638,11 +802,12 @@ explicitly, e.g.
 (add `/TASKS=""` to skip PATH, winget deps, and the model download).
 
 **GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU. That
-covers every vendor, and it is enough for most users — **but not for NVIDIA users on the newest
-cards.** On Blackwell (RTX 50xx, sm_120) the Vulkan path generates at roughly CPU speed: ~5.7 tok/s
-against the CPU's ~5.9, measured on knaif's real workload ([PERFORMANCE.md](PERFORMANCE.md) §2).
-That is not a slower option, it is a product that reads as broken, so say so plainly in the release
-body rather than letting "Vulkan works everywhere" stand.
+covers every vendor and is usable on every NVIDIA card measured. Through 1.1.0 this section warned
+that Blackwell (RTX 50xx, sm_120) Vulkan ran at roughly CPU speed (~5.7 tok/s, 2026-07-07); the
+2026-09-25 re-measurement on the same RTX 5080 found Vulkan at ~72% of CUDA (146.8 vs 203.8 tok/s
+generation, [PERFORMANCE.md](PERFORMANCE.md) §2), so the release body no longer needs that warning.
+If a future measurement lists an architecture in `nudge.vulkan_inadequate_compute_caps`, say so
+plainly in the release body again.
 
 NVIDIA users install the CUDA backend with one command:
 
@@ -651,8 +816,9 @@ knaif backend install cuda
 ```
 
 ~668 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
-undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
-faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
+undoes it. It is faster on every NVIDIA card measured and genuinely optional (on an architecture
+listed in `nudge.vulkan_inadequate_compute_caps` it would be what makes the product usable; none is
+listed today). knaif offers it on first run when it detects an eligible GPU, and the
 Windows installer offers it as a task that is checked by default — the task renders only on a machine
 whose GPU and driver already qualify and that has no payload yet, so it is never shown to a user it
 cannot help. Setup blocks on the download, which the task description states.

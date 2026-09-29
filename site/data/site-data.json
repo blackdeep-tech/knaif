@@ -14,10 +14,34 @@
       ]
     },
     {
+      "base_model": "Qwen/Qwen3-1.7B",
+      "default": false,
+      "file": "knaif-qwen3-1.7b-v2-q6_k.gguf",
+      "id": "knaif-qwen3-1.7b-v2",
+      "license": "Apache-2.0",
+      "size_bytes": 1417754976,
+      "skills": [
+        "ffmpeg",
+        "documents"
+      ]
+    },
+    {
       "base_model": "Qwen/Qwen3-4B",
-      "default": true,
+      "default": false,
       "file": "knaif-qwen3-4b-v1-q4_k_m.gguf",
       "id": "knaif-qwen3-4b-v1",
+      "license": "Apache-2.0",
+      "size_bytes": 2497280960,
+      "skills": [
+        "ffmpeg",
+        "documents"
+      ]
+    },
+    {
+      "base_model": "Qwen/Qwen3-4B",
+      "default": true,
+      "file": "knaif-qwen3-4b-v2-q4_k_m.gguf",
+      "id": "knaif-qwen3-4b-v2",
       "license": "Apache-2.0",
       "size_bytes": 2497280960,
       "skills": [
@@ -121,10 +145,10 @@
     "schema_version": 1
   },
   "recommendations": {
-    "cli": "knaif-qwen3-4b-v1",
-    "default": "knaif-qwen3-4b-v1",
-    "desktop": "knaif-qwen3-4b-v1",
-    "mobile": "knaif-qwen3-1.7b-v1"
+    "cli": "knaif-qwen3-4b-v2",
+    "default": "knaif-qwen3-4b-v2",
+    "desktop": "knaif-qwen3-4b-v2",
+    "mobile": "knaif-qwen3-1.7b-v2"
   },
   "schema_version": 1,
   "skills": [
@@ -180,7 +204,7 @@
         }
       ],
       "name": "documents",
-      "recommended_model": "knaif-qwen3-4b-v1",
+      "recommended_model": "knaif-qwen3-4b-v2",
       "runtimes": {
         "native": "supported",
         "python": true
@@ -745,7 +769,7 @@
         }
       ],
       "name": "ffmpeg",
-      "recommended_model": "knaif-qwen3-4b-v1",
+      "recommended_model": "knaif-qwen3-4b-v2",
       "runtimes": {
         "native": "supported",
         "python": true
@@ -755,6 +779,19 @@
       "title": "FFmpeg",
       "tools": [
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Change the playback speed of one or more videos by a given multiplier (e.g. 2.0 for double speed, 0.5 for half speed).",
           "name": "adjust_speed",
           "optional_args": [
@@ -769,6 +806,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Increase or decrease the audio volume of one or more videos or audio files.",
           "name": "adjust_volume",
           "optional_args": [
@@ -784,6 +834,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Compress one or more videos to a smaller file size, optionally targeting a delivery channel (email).",
           "name": "compress_video",
           "optional_args": [
@@ -805,7 +868,7 @@
             "base",
             "append"
           ],
-          "description": "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided.",
+          "description": "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input.",
           "name": "concat_video",
           "optional_args": [
             "inputs",
@@ -819,6 +882,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Convert one or more videos to a different container and/or codec.",
           "name": "convert_video",
           "optional_args": [
@@ -855,6 +931,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Extract the audio track from one or more videos into a chosen audio format.",
           "name": "extract_audio",
           "optional_args": [
@@ -873,6 +962,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Convert one or more videos so they are suitable for a target platform (WhatsApp, YouTube, etc.).",
           "name": "prepare_for_platform",
           "optional_args": [
@@ -886,6 +988,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Resize or crop one or more videos to a target width/height or aspect ratio.",
           "name": "resize_video",
           "optional_args": [
@@ -904,6 +1019,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Reverse a video (and optionally its audio) so it plays backwards. Re-encodes the full file and buffers it in RAM — keep clips short.",
           "name": "reverse_video",
           "optional_args": [
@@ -917,6 +1045,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Rotate or flip one or more videos by a fixed angle or axis.",
           "name": "rotate_video",
           "optional_args": [
@@ -932,6 +1073,19 @@
           "safety_category": "destructive"
         },
         {
+          "arg_schemas": {
+            "quality": {
+              "enum": [
+                "small_file",
+                "balanced",
+                "visually_good",
+                "high_quality",
+                "best_possible",
+                "lossless"
+              ],
+              "type": "enum"
+            }
+          },
           "description": "Remove the audio track from one or more videos, producing a silent video file.",
           "name": "strip_audio",
           "optional_args": [
@@ -945,12 +1099,27 @@
           "safety_category": "destructive"
         },
         {
-          "description": "Trim a single video to a time range.",
+          "arg_schemas": {
+            "duration": {
+              "type": "string"
+            },
+            "end": {
+              "type": "string"
+            },
+            "frames": {
+              "type": "integer"
+            },
+            "start": {
+              "type": "string"
+            }
+          },
+          "description": "Trim a single video to a time range, or grab a fixed number of frames.",
           "name": "trim_video",
           "optional_args": [
             "start",
             "end",
             "duration",
+            "frames",
             "output",
             "preview"
           ],

@@ -15,6 +15,7 @@ path = "src/main.rs"
 knaif-core = { workspace = true }
 knaif-models = { workspace = true }
 knaif-llm = { workspace = true }
+knaif-skill-api = { workspace = true }
 knaif-skill-ffmpeg = { workspace = true }
 knaif-skill-documents = { workspace = true }
 clap = { workspace = true }

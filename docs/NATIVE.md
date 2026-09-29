@@ -69,13 +69,23 @@ request
   -> extract_json -> parse_plan -> normalize_plan -> apply_defaults -> validate_plan
   -> [repair] on parse/validate failure, retry once with validator feedback (real model only)
   -> apply_clarify_gate (chain-intermediate linking + hallucinated-filename downgrade)
-  -> core control tools short-circuit (clarify / reject)
-  -> skill dispatch: dry-run preview OR confirmed execution
+  -> execute_plan: for each step, in plan order
+       -> core control tools short-circuit (clarify / reject / done)  ends the WHOLE plan
+       -> skill dispatch: dry-run preview OR confirmed execution
+       -> stop at the first failure, naming the step and what did/didn't run
 ```
 
 - `--dry-run` previews commands/output paths with no side effects (stubs missing
-  inputs). Execution requires explicit consent (`--yes`, or an interactive `y`);
-  non-interactive execution without `--yes` errors with the preview.
+  inputs) — **every step of a chain, not just the first**. Execution requires explicit consent
+  (`--yes`, or an interactive `y`); non-interactive execution without `--yes` errors with the
+  preview. Consent is **per step**: a destructive step in the middle of a chain is confirmed as
+  one, so an N-step chain asks N times without `--yes`.
+- **Chains are mediated by files, not variables.** `skills/<name>/prompt.yaml` instructs the model
+  to give an earlier step an explicit `output` filename and reuse that same name as the later
+  step's input, and never to chain with `$variable` references; `apply_clarify_gate` binds
+  intermediates the model left undeclared. Plan order is therefore the dependency mechanism, which
+  is why the executor runs steps strictly in order and the L2 contract pins the order rather than
+  just the count.
 - `plan --skill <name> [--json] [--batch FILE]` emits the validated plan envelope only.
   `--batch` loads the model once and streams one plan per input line (avoids per-line
   model reload).
@@ -201,7 +211,14 @@ and it is how `backend install` gets debugged. Two caveats that matter only on t
 - **Vulkan needs `CMAKE_GENERATOR=Ninja`** — on Windows from a VS Developer shell; on Linux
   `package.sh` sets it. See §10.
 
-### 5.4 Performance findings (RTX 5080, knaif-qwen3-4b-v1) — **the decisive result**
+### 5.4 Performance findings (RTX 5080, knaif-qwen3-4b-v1) — **2026-07-07, superseded for Vulkan**
+
+> **2026-09-25 re-measurement, same RTX 5080, same `llama-cpp-2` 0.1.150, driver 616.92:** CUDA
+> 10 129 / 203.8 tok/s (prompt / generation), **Vulkan 8 812 / 146.8 tok/s**, CPU 373 / 14.4 tok/s.
+> Vulkan is ~72% of CUDA on generation, no longer at CPU speed — conclusions 2, 3 and 5 below and the
+> "CUDA is required" recommendation in §5.5 no longer hold. Numbers and method:
+> [PERFORMANCE.md §2](PERFORMANCE.md#2-backend-cuda-vs-vulkan-vs-cpu). The table below is kept as the
+> record behind the original decision.
 
 Measured 2026-07-07. Full investigation and methodology:
 [docs/plans/2026-07-07-inference-backend-performance.md](plans/2026-07-07-inference-backend-performance.md).
@@ -231,24 +248,27 @@ Conclusions (all evidence-backed):
 
 ### 5.5 Backend recommendation (product)
 
-- **CUDA is required on NVIDIA hardware** — the only backend that makes `run`
-  responsive. Ship a CUDA artifact and select it when an NVIDIA GPU is present.
-- **Vulkan is the cross-vendor fallback** (AMD / Intel / no-CUDA), accepting it is slow
-  for LLM decode.
+- **CUDA is the fastest backend on NVIDIA hardware** and is selected whenever its payload is
+  installed. *(Until 2026-09-25 this read "CUDA is required on NVIDIA hardware"; that came from the
+  July Blackwell measurement, which no longer reproduces — §5.4.)*
+- **Vulkan is the default GPU backend** — the release artifact ships it, and it drives AMD, Intel and
+  NVIDIA cards. Measured usable on both NVIDIA architectures tried: ~as fast as CUDA on Ampere, ~72%
+  of CUDA on Blackwell.
 - **CPU** is the no-GPU last resort.
-- Consider `knaif-qwen3-1.7b-v1` for the Vulkan/CPU fallback paths to offset slower compute.
+- Consider `knaif-qwen3-1.7b-v2` for the Vulkan/CPU fallback paths to offset slower compute (its
+  per-backend numbers, including the slices it misses there, are on the model card).
 - Do **not** invest in a Vulkan pipeline-cache patch for speed.
 
 **The first-run CUDA offer.** The default artifact ships CPU+Vulkan; CUDA is an opt-in payload, so
-something has to tell an NVIDIA user it exists — *before* their first slow run, not after. A Blackwell
-user who runs first and reads later gets one CPU-speed request and may reasonably conclude the
-product is broken.
+something has to tell an NVIDIA user it exists — *before* their first slow run, not after. Where
+Vulkan runs at CPU speed (Blackwell did, 2026-07-07 → re-measured fine 2026-09-25), a user who runs
+first and reads later gets one CPU-speed request and may reasonably conclude the product is broken.
 
 The offer has **two strengths**, because the two populations are genuinely different:
 
 | Population | Message | Why |
 |---|---|---|
-| Compute cap in `nudge.vulkan_inadequate_compute_caps` (today: `12.0`, Blackwell) | prominent, stated as *correctness* | Vulkan generates at ~CPU speed there (§5.4 / PERFORMANCE.md §2) — the payload is what makes the product work |
+| Compute cap in `nudge.vulkan_inadequate_compute_caps` (today: **empty**; `12.0` Blackwell was listed 2026-07-07 → 2026-09-25) | prominent, stated as *correctness* | for an architecture where Vulkan is *measured* to run at ~CPU speed — the payload is what makes the product work. None measures that way today (PERFORMANCE.md §2) |
 | Any other NVIDIA GPU | quiet, stated as *optional* | CUDA is faster, Vulkan is perfectly usable |
 | Driver below `requires.min_driver` | update hint, **no offer** | the payload would download and then fail to load, which reaches the user as "CUDA didn't work" |
 | No NVIDIA GPU, or already installed | nothing at all | an unsolicited GPU message on an AMD laptop is noise |
@@ -416,10 +436,36 @@ Component-model rationale: see the installer-component-model decision record.
 
 ## 10. Building from source
 
+**Each kind builds into its own directory.** `just build-native-kind <kind>` uses the matching
+`release-<kind>` cargo profile, so `target/release-cuda/` and `target/release-vulkan/` hold their
+own binary *and* their own staged `llama`/`ggml` libs. This is not tidiness: cargo's artifact path
+is `target/<profile>/<bin>` and features are not part of it, and `llama-cpp-sys-2` hard-links its
+shared libs into that same directory — so before the profiles, every feature set overwrote the
+last one. Switching kinds could panic with `hard_link … AlreadyExists`, and a `cpu` package was
+once built from a leftover `vulkan` tree. See
+[docs/plans/2026-09-21-per-backend-build-profiles.md](plans/2026-09-21-per-backend-build-profiles.md).
+
+```bash
+just build-native-kind cpu      # -> target/release-cpu/
+just build-native-kind vulkan   # -> target/release-vulkan/    (both coexist)
+just verify-build-kind vulkan   # assert the layout, and read the kind from what it emitted
+```
+
+On Windows this needs **no Developer PowerShell**: the script locates Visual Studio with `vswhere`
+and enters `VsDevCmd.bat` itself when `cl.exe` is absent, setting `LIBCLANG_PATH`,
+`CMAKE_GENERATOR` and `CUDAARCHS` for you.
+
+The first build of a kind compiles everything from scratch — about a minute for `base`/`cpu`,
+15-30 minutes for `cuda` (183 CUDA translation units). After that, switching between kinds costs
+nothing. To reclaim the space, delete the directory: `rm -rf target/release-<kind>` (`cargo clean`
+does not reliably remove it).
+
+The raw commands, if you would rather drive cargo yourself:
+
 ```bash
 # base (no inference) — no MSVC/C++ toolchain needed
-cargo build --release -p knaif-cli
-installers/package.sh --kind=base
+cargo build --profile release-base -p knaif-cli
+installers/package.sh --kind=base --profile=release-base
 ```
 
 **Linux — `package.sh` builds and packages in one step** (gcc + cmake + ninja + patchelf; Vulkan also
@@ -434,15 +480,24 @@ CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
 installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 ```
 
-**Windows — compile first in a "Developer PowerShell for VS"**, then package `--no-build`:
+**Windows — compile first, then package `--no-build`.** `just package-native <kind>` does both;
+these are the same steps by hand. No Developer PowerShell is needed for the `just` form.
 
 ```bash
-cargo build --release -p knaif-cli --features llama,dynamic-backends            # cpu
+just build-native-kind cpu      # or: vulkan, cuda
+installers/package.sh --no-build --kind=cpu --profile=release-cpu
+```
+
+Driving cargo directly instead — **from a "Developer PowerShell for VS"**, since nothing then sets
+up MSVC for you:
+
+```bash
+cargo build --profile release-cpu -p knaif-cli --features llama,dynamic-backends
 CMAKE_GENERATOR=Ninja \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan   # vulkan
+  cargo build --profile release-vulkan -p knaif-cli --features llama,dynamic-backends,vulkan
 CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
-  cargo build --release -p knaif-cli --features llama,dynamic-backends,cuda     # cuda payload
-installers/package.sh --no-build --kind=<cpu|vulkan|cuda>
+  cargo build --profile release-cuda -p knaif-cli --features llama,dynamic-backends,cuda
+installers/package.sh --no-build --kind=<cpu|vulkan|cuda> --profile=release-<kind>
 ```
 
 Release artifacts use **`dynamic-backends`** (§5.3). Drop it for a static single-exe dev build
@@ -513,12 +568,25 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 - **macOS** — no installers/notarization; explicitly out for v1.
 - **Linux CPU floor** — the CPU artifact is glibc-linked; a static-musl floor build is a possible
   fast-follow (CUDA/Vulkan need glibc + the vendor driver regardless).
-- **Persistent daemon** — keep the model resident to make repeat CUDA calls near-instant
-  (low value for Vulkan; see §5.4/5.5).
-- **Vulkan decode speed** — investigate whether it is Blackwell/sm_120/coopmat2-specific;
-  revisit after llama.cpp updates.
+- **Persistent daemon** — keep the model resident to make repeat GPU calls near-instant
+  (the July "low value for Vulkan" reasoning assumed Vulkan's slow compute, which no longer holds).
+- **Vulkan decode speed** — *answered 2026-09-25*: Blackwell Vulkan is ~72% of CUDA on the same
+  crate as July, most likely a driver fix. Re-measure when the llama.cpp pin or the driver moves.
 - **Execution breadth** — native `run` supports ffmpeg + documents, including image watermark
   (documents; image-XObject with soft-mask alpha, covered by `overlay.rs` tests).
+- **Chain failure handling is stop-and-report, nothing more** — deliberately, and worth stating
+  plainly because the boundary is easy to mistake for a bug. When a step of a chain fails, the
+  runtime stops, exits non-zero, and names which step failed, which had already completed, and
+  which were not run. It does **not**:
+  - **recover** — there is no attempt to continue past a failed step or substitute an alternative;
+  - **roll back** — files written by earlier steps stay written. A three-step chain that fails at
+    step 2 leaves step 1's output on disk, which is why the report says so explicitly;
+  - **resume** — there is no way to restart a half-run chain from where it stopped. Re-running the
+    request re-runs it from step 1.
+
+  These are deferred rather than missing (2026-09-10 plan, E4). Rollback in particular is not a
+  small addition: ffmpeg steps write through subprocesses to paths the user chose, so "undo" means
+  deciding what may be deleted, which is a safety question, not a plumbing one.
 - **Logging facility** — diagnostics are currently ad-hoc `eprintln!` gated by env vars
   (`KNAIF_TIMING`, `KNAIF_DEBUG`). Establishing a first-class logging system (and routing
   timing through it) is deferred to its own plan.

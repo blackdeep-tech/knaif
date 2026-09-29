@@ -75,11 +75,18 @@ def _is_batch_utterance(utterance: str) -> bool:
 
 _OUTPUT_ARG_KEYS = frozenset({"output", "outputs"})
 
+#: `_PATH_ARG_KEYS` in a fixed order. The planner's set is a frozenset, whose iteration order
+#: changes from one process to the next, so with two unnamed inputs under different keys the
+#: question named either one at random. The native port walks this same order
+#: (contracts/parity/nl_clarify_gate_cases.json).
+_INPUT_ARG_ORDER = ("inputs", "input", "files", "src", "dst", "path", "base", "append")
+assert set(_INPUT_ARG_ORDER) == _PATH_ARG_KEYS
+
 
 def _input_tokens(step: dict[str, Any]) -> list[str]:
     args = step.get("args") or {}
     tokens: list[str] = []
-    for key in _PATH_ARG_KEYS:
+    for key in _INPUT_ARG_ORDER:
         if key not in args:
             continue
         val = args[key]
@@ -205,6 +212,67 @@ def required_args_clarify(
         if tool_def.any_of_args and not any(a in args for a in tool_def.any_of_args):
             opts = " or ".join(tool_def.any_of_args)
             return [{"tool": "clarify", "args": {"question": f"What {opts} should I use?"}}]
+    return None
+
+
+def _join_args(args: list[str]) -> str:
+    if len(args) == 1:
+        return args[0]
+    return f"{', '.join(args[:-1])} and {args[-1]}"
+
+
+def unsupported_args_clarify(
+    intent_plan: list[dict[str, Any]],
+    registry: dict[str, ToolDef] | None,
+) -> list[dict[str, Any]] | None:
+    """Clarify (instead of hard-erroring) when a step puts an arg on a *known*
+    tool that the tool does not declare. Runs before structural validation.
+    Returns a clarify step list, or None to proceed.
+
+    This is the inventory-gap case of the reject/clarify taxonomy
+    (docs/plans/2026-09-11-reject-clarify-taxonomy.md): the user asked for
+    something real that no tool can express ("...and lower the sample rate to
+    22050 Hz"), and the model wrote it down as an arg because that was the
+    closest it could get. Refusing with a validator string tells the user
+    nothing; saying it is not supported does.
+
+    Deliberately narrow, so it stays a taxonomy fix and not a way for bugs to
+    hide behind a polite question:
+
+    * **Known tools only.** An unknown tool is still a hard validation error.
+    * **After normalization.** ``normalize_plan``'s alias and input/inputs passes
+      run first, so a merely-misnamed key is renamed rather than clarified.
+    * **NL path only** (the caller gates on having an utterance), and before
+      expansion — an *expanded* plan carrying an undeclared arg is a skill bug
+      and must keep failing loudly.
+    """
+    if registry is None:
+        return None
+    for step in intent_plan:
+        tool = step.get("tool", "")
+        if tool in _TERMINAL_TOOLS:
+            continue
+        tool_def = registry.get(tool)
+        if tool_def is None:  # unknown tool → leave for validation to reject
+            continue
+        args = step.get("args")
+        if not isinstance(args, dict):
+            continue
+        allowed = set(tool_def.required_args) | set(tool_def.optional_args)
+        extra = [k for k in args if k not in allowed]
+        if extra:
+            verb = tool.replace("_", " ")
+            return [
+                {
+                    "tool": "clarify",
+                    "args": {
+                        "question": (
+                            f"I can't {verb} with {_join_args(extra)} — that isn't "
+                            "supported. Could you rephrase?"
+                        )
+                    },
+                }
+            ]
     return None
 
 

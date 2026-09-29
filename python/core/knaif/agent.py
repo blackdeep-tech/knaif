@@ -6,19 +6,24 @@ import copy
 import json
 import re
 import time
-from collections.abc import Iterator
-from pathlib import Path
+from collections.abc import Collection, Iterator, Mapping
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from .core_tools import CORE_TOOL_DEFS
 from .evaluator import compute_metrics, run_eval
 from .executor import HANDLERS as _EXECUTOR_HANDLERS
 from .handler_api import HandlerContext
-from .nl_clarify_gate import nl_clarify_gate, required_args_clarify
+from .nl_clarify_gate import (
+    nl_clarify_gate,
+    required_args_clarify,
+    unsupported_args_clarify,
+)
 from .planner import (
     _VALID_FILE_TYPES,
     StemAmbiguousError,
     StemNotFoundError,
+    _is_stem_candidate,
     _resolve_path,
     apply_defaults,
     classify_preflight_errors,
@@ -37,6 +42,22 @@ from .skill import Skill
 
 _TERMINAL_TOOLS = frozenset({"done", "clarify", "reject"})
 _FILENAME_RE = re.compile(r"\.[a-z][a-z0-9]{1,4}$", re.IGNORECASE)
+
+
+def _named_by_stem(value: str, u_lower: str, known: set[str]) -> bool:
+    """Did the user name this file by its stem, and is the stem's file really there?
+
+    Both halves are required — see :meth:`CommandAgent._hallucinated_filename` for why
+    either alone admits a hallucination. ``_is_stem_candidate`` is reused rather than
+    re-derived so "what counts as a stem" has one definition in the codebase: the
+    resolver and the guard must agree, or the guard passes a name the resolver then
+    refuses.
+    """
+    name = PurePosixPath(value.replace("\\", "/")).name
+    stem = name.rsplit(".", 1)[0]
+    if not stem or not _is_stem_candidate(stem):
+        return False
+    return stem.lower() in u_lower and name.lower() in known
 
 
 def _step_failed(result: Any) -> bool:
@@ -71,6 +92,27 @@ def _iter_string_values(args: dict[str, Any]) -> Iterator[str]:
 def _basename(value: str) -> str:
     """Last path component of *value*, splitting on either separator."""
     return re.split(r"[\\/]", value)[-1]
+
+
+def _extension(value: str) -> str:
+    """Lower-cased extension of *value*'s basename, without the dot ('' when none)."""
+    name = _basename(value)
+    dot = name.rfind(".")
+    return name[dot + 1 :].lower() if dot > 0 else ""
+
+
+def _mention_count(utterance: str, name: str) -> int:
+    """How many times the filename *name* appears in *utterance*, case-insensitively.
+
+    A match must stand alone as a filename: ``clip.mp4`` inside ``myclip.mp4`` or
+    ``clip.mp4.bak`` is not a mention, while a ``./`` prefix or trailing punctuation
+    (``clip.mp4,``) is. Only ASCII letters, digits, ``_``, ``.`` and ``-`` extend a name:
+    Chinese and Japanese are written without spaces ("为clip.mp4生成"), so a Unicode
+    word-character boundary would hide every mention there. Pass a basename; the
+    utterance is expected already normalized.
+    """
+    pattern = r"(?<![A-Za-z0-9_.-])" + re.escape(name.lower()) + r"(?![A-Za-z0-9_-]|\.[A-Za-z0-9_])"
+    return len(re.findall(pattern, utterance.lower()))
 
 
 def _intermediate_name(src: str, taken: set[str]) -> str:
@@ -130,6 +172,7 @@ class CommandAgent:
         expanders: dict[str, Any] | None = None,
         confirmer: Any | None = None,
         unsafe_phrases: tuple[str, ...] = (),
+        file_kinds: dict[str, str] | None = None,
         summarizers: dict[str, Any] | None = None,
         preflights: dict[str, Any] | None = None,
         result_formatter: Any | None = None,
@@ -156,6 +199,8 @@ class CommandAgent:
             if "output" in set(td.required_args) | set(td.optional_args)
         }
         self.unsafe_phrases: tuple[str, ...] = unsafe_phrases
+        # Extension -> kind, from the skill's `file_kinds:`; chain threading never crosses kinds.
+        self.file_kinds: dict[str, str] = file_kinds or {}
         self.sandbox: Path | None = Path(sandbox).resolve() if sandbox else None
         self.root: Path = Path(root).resolve() if root else Path.cwd()
         self.orchestrator = orchestrator
@@ -181,6 +226,9 @@ class CommandAgent:
         self.last_parse_error: str | None = None
         self.last_validation_error: str | None = None
         self.last_retried: bool = False
+        # The plan as the model emitted it (parsed), before `infer` links chain intermediates
+        # and threads reused sources in place. None when no model plan exists for the last call.
+        self.last_model_plan: dict[str, Any] | None = None
         # One corrective re-prompt on a parse/validation failure (validator-
         # feedback retry). Toggle off to measure the without-retry baseline.
         self.repair_invalid_plans: bool = True
@@ -220,6 +268,7 @@ class CommandAgent:
             expanders=skill.expanders,
             confirmer=confirmer,
             unsafe_phrases=skill.unsafe_phrases,
+            file_kinds=skill.file_kinds,
             summarizers=skill.summarizers,
             preflights=skill.preflights,
             result_formatter=skill.result_formatter,
@@ -353,15 +402,19 @@ class CommandAgent:
         normalize_plan(payload, self.registry)
         apply_defaults(payload, self.registry)
 
-        # Missing-required-arg clarify gate (before structural validation): when
-        # the model omits a required arg the user must supply, ask rather than
-        # hard-error. Only fires on absent args, so well-formed plans are
+        # Arg-shape clarify gates (before structural validation): when the model
+        # omits a required arg the user must supply, or puts an arg on a known
+        # tool that the tool cannot express, ask rather than hard-error. Both
+        # fire only on plans that could never validate, so well-formed plans are
         # untouched. Needs an utterance (NL path); direct execute_plan calls in
         # tests with deliberately-partial args still hit normal validation.
         if utterance is not None:
-            missing = required_args_clarify(payload.get("plan", []), self.registry)
-            if missing is not None:
-                q = missing[0]["args"]["question"]
+            plan_steps = payload.get("plan", [])
+            gated = required_args_clarify(plan_steps, self.registry) or unsupported_args_clarify(
+                plan_steps, self.registry
+            )
+            if gated is not None:
+                q = gated[0]["args"]["question"]
                 return [
                     {
                         "tool": "clarify",
@@ -380,27 +433,30 @@ class CommandAgent:
         # Expanders receive the intent args and forward them to internal steps,
         # so resolving here means every expanded step sees the full filename.
         # Terminal tools (clarify/reject/done) carry no file paths — skipped.
-        if self.sandbox is not None:
-            clean_intents: list[dict[str, Any]] = []
-            for intent_step in intent_plan:
-                if intent_step.get("tool") in _TERMINAL_TOOLS:
-                    clean_intents.append(intent_step)
-                else:
-                    try:
-                        resolved_args = resolve_stems(intent_step.get("args", {}), self.sandbox)
-                        clean_intents.append({**intent_step, "args": resolved_args})
-                    except (StemNotFoundError, StemAmbiguousError) as exc:
-                        q = str(exc)
-                        return [
-                            {
-                                "tool": "clarify",
-                                "args": {"question": q},
-                                "result": {"status": "clarification_needed", "question": q},
-                                "output": None,
-                                "duration_ms": 0.0,
-                            }
-                        ]
-            intent_plan = clean_intents
+        # Open/CLI mode resolves too, against root (= cwd). Gating this on a sandbox left
+        # `knaif run ffmpeg "compress clip_4k"` rendering `-i clip_4k` verbatim, and paired
+        # with an empty guard listing it refused the file instead. Native never had the gap.
+        resolution_dir = self._resolution_dir()
+        clean_intents: list[dict[str, Any]] = []
+        for intent_step in intent_plan:
+            if intent_step.get("tool") in _TERMINAL_TOOLS:
+                clean_intents.append(intent_step)
+            else:
+                try:
+                    resolved_args = resolve_stems(intent_step.get("args", {}), resolution_dir)
+                    clean_intents.append({**intent_step, "args": resolved_args})
+                except (StemNotFoundError, StemAmbiguousError) as exc:
+                    q = str(exc)
+                    return [
+                        {
+                            "tool": "clarify",
+                            "args": {"question": q},
+                            "result": {"status": "clarification_needed", "question": q},
+                            "output": None,
+                            "duration_ms": 0.0,
+                        }
+                    ]
+        intent_plan = clean_intents
 
         # NL clarify gate: check that every file-bearing input was concretely
         # named (or stem-referenced) in the utterance.  Runs after stem
@@ -423,6 +479,18 @@ class CommandAgent:
                         "duration_ms": 0.0,
                     }
                 ]
+
+        # Give the skill a chance to rewrite outputs that would destroy a file, and to
+        # rebind the steps that referred to them. Here rather than deeper because a
+        # collision is a property of the whole plan plus what is on disk, and neither is
+        # visible from inside a single step's handler. Default is a no-op
+        # (`Skill.resolve_output_collisions`); the naming policy stays in the skill.
+        if self.skill_instance is not None:
+            rebound = self.skill_instance.resolve_output_collisions(
+                intent_plan, sandbox=self.sandbox
+            )
+            if isinstance(rebound, list):
+                intent_plan = rebound
 
         # Expand each intent independently, preserving intent boundaries.
         intent_blocks: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
@@ -941,6 +1009,7 @@ class CommandAgent:
         self.last_parse_error = None
         self.last_validation_error = None
         self.last_retried = False
+        self.last_model_plan = None
         # Normalize here, not just in build_prompt: the same text grounds the
         # hallucinated-filename guard and chain-intermediate linking below, and
         # those must compare against the paths the model was actually shown.
@@ -1008,10 +1077,15 @@ class CommandAgent:
 
         # Only the "parse" kind yields a None payload, and it returned above.
         assert payload is not None
+        # Kept before the rewrites below, which mutate `payload` in place: without it nothing
+        # downstream can tell a model error from a correct plan that core changed.
+        self.last_model_plan = copy.deepcopy(payload)
         self._link_chain_intermediates(
-            payload.get("plan") or [], user_utterance, self._output_capable
+            payload.get("plan") or [], user_utterance, self._output_capable, self.file_kinds
         )
-        hallucinated = self._hallucinated_filename(payload.get("plan") or [], user_utterance)
+        hallucinated = self._hallucinated_filename(
+            payload.get("plan") or [], user_utterance, self._listed_filenames()
+        )
         if hallucinated:
             return {
                 "plan": [
@@ -1079,6 +1153,7 @@ class CommandAgent:
         plan: list[dict[str, Any]],
         utterance: str,
         output_capable: set[str] | None = None,
+        file_kinds: Mapping[str, str] | None = None,
     ) -> None:
         """Bind undeclared chain intermediates to the producing step's ``output``.
 
@@ -1143,12 +1218,14 @@ class CommandAgent:
             if isinstance(out, str):
                 produced.add(out.lower())
 
-        CommandAgent._forward_thread_reused_sources(plan, output_capable)
+        CommandAgent._forward_thread_reused_sources(plan, utterance, output_capable, file_kinds)
 
     @staticmethod
     def _forward_thread_reused_sources(
         plan: list[dict[str, Any]],
+        utterance: str,
         output_capable: set[str] | None = None,
+        file_kinds: Mapping[str, str] | None = None,
     ) -> None:
         """Thread a reused source filename onto the transforming step's output.
 
@@ -1169,7 +1246,20 @@ class CommandAgent:
         *output_capable* is None (unit tests) any non-terminal step is eligible.
         A producer that fans out to many files (multiple inputs or a glob) is not
         a safe single-``output`` target and is skipped. Mutates *plan* in place.
+
+        **Named-once rule.** A source the user wrote more than once in *utterance* is
+        left alone: repeating the name makes each later step's input the user's choice,
+        and a fan-out (several steps reading one file) must reach execution as written.
+        A name said once ("…and check if *it* contains beta") or never (the model invented
+        the intermediate) is still threaded.
+
+        **Kind rule.** A producer whose declared ``output`` is a different kind of file from
+        its source (a thumbnail of a video) is not threaded onto: the later step keeps the
+        source. Kinds come from the skill's ``file_kinds:`` (*file_kinds*, extension ->
+        kind); an extension it does not list is unrestricted, and a minted intermediate
+        keeps the source's extension. See docs/plans/2026-09-23-chain-source-threading.md.
         """
+        kinds = file_kinds or {}
         produced: set[str] = set()
         for step in plan:
             out = (step.get("args") or {}).get("output")
@@ -1190,6 +1280,8 @@ class CommandAgent:
             if len(sources) != 1:
                 continue  # batch / glob producer — one output can't name many files
             src_base = _basename(sources[0]).lower()
+            if _mention_count(utterance, src_base) > 1:
+                continue  # the user named it again: later references are theirs
 
             # Collect later references to the same source file.
             targets: list[tuple[Any, Any]] = []
@@ -1215,24 +1307,84 @@ class CommandAgent:
                 continue
 
             out = args.get("output")
-            if not isinstance(out, str) or not out:
+            if isinstance(out, str) and out:
+                src_kind = kinds.get(_extension(sources[0]))
+                out_kind = kinds.get(_extension(out))
+                if src_kind and out_kind and src_kind != out_kind:
+                    continue  # a different kind of file: the later step meant the source
+            else:
                 out = _intermediate_name(sources[0], produced)
                 args["output"] = out
                 produced.add(_basename(out).lower())
             for container, key in targets:
                 container[key] = out
 
+    def _resolution_dir(self) -> Path:
+        """The directory paths resolve against: the sandbox when configured, else root.
+
+        `root` defaults to `Path.cwd()`, so this is open/CLI mode's working directory —
+        the same rule native has always applied (`sandbox.unwrap_or(current_dir())`,
+        apps/cli/src/main.rs). Both callers below MUST use it: the guard's stem exemption
+        and stem resolution have to look at one directory, or the guard admits a name the
+        resolver then refuses, or refuses one it would have resolved.
+        """
+        return self.sandbox if self.sandbox is not None else self.root
+
+    def _listed_filenames(self) -> frozenset[str]:
+        """Lowercased names of the files in `_resolution_dir()`, for the guard.
+
+        Read at gate time rather than cached: the directory changes under a running agent
+        (a chain writes into it), and a stale listing would reject a file that is there.
+        Non-recursive and files-only, matching what stem resolution globs. Any OS error
+        yields an empty set, which restores the strict rule rather than failing the plan.
+        """
+        try:
+            return frozenset(
+                p.name.lower() for p in self._resolution_dir().iterdir() if p.is_file()
+            )
+        except OSError:
+            return frozenset()
+
     @staticmethod
-    def _hallucinated_filename(plan: list[dict[str, Any]], utterance: str) -> str | None:
+    def _hallucinated_filename(
+        plan: list[dict[str, Any]],
+        utterance: str,
+        known_files: Collection[str] = (),
+    ) -> str | None:
         """Return any INPUT filename-like arg value missing from *utterance*, else None.
 
         The guard catches the model inventing *input* filenames the user never
         named. It deliberately ignores:
         - ``output`` arg values — output filenames are the model's to invent;
         - chained intermediates — a filename an earlier step declares it will
-          produce (its ``output``) and a later step consumes is legitimate.
+          produce (its ``output``) and a later step consumes is legitimate;
+        - a **stem the user did name**, when the value resolves to a file that is
+          actually there (*known_files*, the sandbox listing).
+
+        The last case is the one the substring test got wrong. People name files the
+        way they say them — "downscale clip_4k to 1920x1080" — and the model supplies
+        `clip_4k.mp4`, the real file. Testing the *full* filename against the utterance
+        then overrides a correct plan with a clarify. The T6a control arm lost eight
+        utterances to exactly that.
+
+        Two conditions keep the relaxation honest, and both are load-bearing:
+
+        * **the value must name a file that exists.** "join clip.mov and clip_4k
+          together" → `clip_4k.mov` keeps its clarify, because `clip_4k.mp4` is the
+          file; naming a stem does not license guessing which file it is.
+        * **the stem must look like a stem** — carrying ``_``, ``-`` or a digit, the
+          same test :func:`planner._is_stem_candidate` uses to decide what is
+          resolvable. Without it "make the video smaller" would pass `video.mp4` and
+          the German "drei Clips" ("three clips") would pass `drei.mp4`, turning two
+          genuine hallucinations into silent plans against the wrong file.
+
+        *known_files* is passed in rather than read here so the guard stays pure and
+        the L2 parity contract can state it (`sandbox_files` in
+        `contracts/parity/clarify_gate_cases.json`). Empty means nothing can be
+        confirmed, and the strict rule applies unchanged.
         """
         u_lower = utterance.lower()
+        known = {name.lower() for name in known_files}
         # Filenames the plan itself produces; consuming one downstream is not a
         # hallucination.
         produced: set[str] = set()
@@ -1254,8 +1406,11 @@ class CommandAgent:
                     continue
                 if value.lower() in produced:
                     continue
-                if value.lower() not in u_lower:
-                    return value
+                if value.lower() in u_lower:
+                    continue
+                if _named_by_stem(value, u_lower, known):
+                    continue
+                return value
         return None
 
     # ── re-planning loop ──────────────────────────────────────────────────────
@@ -1355,6 +1510,7 @@ class CommandAgent:
         use_mock: bool = True,
         ollama_model: str = "mistral",
         max_tokens: int = 1024,
+        registry_override: dict[str, ToolDef] | None = None,
     ) -> Iterator[tuple[str, str]]:
         """
         Stream inference, yielding ("thinking", chunk) or ("plan", chunk) tuples.
@@ -1362,8 +1518,15 @@ class CommandAgent:
         Populates ``self.last_thinking`` as the thinking block streams in.
         After the iterator is exhausted, call
         ``agent.parse_plan(agent._clean_json(plan_acc))`` to get the plan dict.
+
+        ``registry_override`` mirrors :meth:`infer`: pass the *retrieved* subset so the model
+        sees the prompt it ships with. Production and the eval lane both retrieve before
+        prompting, so a caller that streams without it shows the model every tool — a
+        different prompt, and one the model reliably answers worse.
         """
-        system_msg, user_msg = self.build_prompt(user_utterance)
+        system_msg, user_msg = self.build_prompt(
+            user_utterance, registry_override=registry_override
+        )
 
         if use_mock:
             self.last_thinking = ""

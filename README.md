@@ -67,7 +67,8 @@ as its skills. That's the trade.
 
 ## Measured against three premium agents
 
-Eleven real-world ffmpeg requests, run through knaif and three premium coding agents —
+Eleven real-world ffmpeg requests (measured 2026-07-02 with `knaif-qwen3-4b-v1`, the model then
+shipping), run through knaif and three premium coding agents —
 **Claude Code** (`opus-4-8`), **GitHub Copilot CLI** (`sonnet-5`), and **OpenAI Codex CLI**
 (`gpt-5.5`). Each agent got an isolated directory, no project memory, and full tool
 permissions. Every output was verified with `ffprobe` — container, codec, resolution,
@@ -105,7 +106,10 @@ calibration, caveats, and a one-command harness to reproduce all of it:
 
 ## Status
 
-**v1.1.0** — first release with downloadable binaries.
+**v1.2.0** — new models (`knaif-qwen3-4b-v2`, the default, and `knaif-qwen3-1.7b-v2`), and the
+native binary now runs every step of a multi-step plan. Measured on the shipped binary per OS and
+backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on the
+[model card](https://huggingface.co/blackdeep/knaif).
 
 | | |
 |---|---|
@@ -113,9 +117,9 @@ calibration, caveats, and a one-command harness to reproduce all of it:
 | **Linux** | x64, **glibc 2.34+ and libstdc++ with `GLIBCXX_3.4.30`** — Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+ |
 | **Not supported** | RHEL / Rocky / Alma 9 — glibc is new enough, but its `libstdc++` is one version short |
 | **macOS** | not yet — core is cross-platform, packaging is a fast-follow |
-| **GPU** | CPU and Vulkan in every artifact; CUDA is a manual opt-in build |
+| **GPU** | CPU and Vulkan in every artifact; NVIDIA cards add CUDA with `knaif backend install cuda` |
 | **Skills** | `ffmpeg` and `documents` are production; `io` is stale and under rebuild |
-| **Windows binaries** | unsigned at v1 — SmartScreen will warn |
+| **Windows binaries** | unsigned — SmartScreen will warn (More info → Run anyway; verify the checksum first) |
 | **Python package** | on PyPI as [`knaif`](https://pypi.org/project/knaif/) — `pip install knaif` |
 
 External tools are **not bundled**. Skills that shell out to FFmpeg need FFmpeg installed.
@@ -130,7 +134,7 @@ value.
 [Releases](https://github.com/blackdeep-tech/knaif/releases), then:
 
 ```console
-$ knaif models pull knaif-qwen3-4b-v1        # ~2.5 GB, verified against a pinned SHA-256
+$ knaif models pull knaif-qwen3-4b-v2        # ~2.5 GB, verified against a pinned SHA-256
 $ knaif run ffmpeg "make a thumbnail from the first frame of clip.mp4"
 $ knaif run ffmpeg --dry-run "..."           # print the command, don't execute
 $ knaif plan --skill ffmpeg "..."            # the validated plan envelope, as JSON

@@ -10,6 +10,7 @@ from knaif.tool import Intent, Step
 
 from . import _deps
 from ._engine import (
+    _MEDIA_EXTENSIONS,
     _VIDEO_CODEC_ALIASES,
     _VIDEO_ENCODER_MAP,
     _assert_in_sandbox,
@@ -26,7 +27,14 @@ from ._engine import (
     _quality_from_crf,
     _summarise_probe,
 )
-from ._reporting import _fmt_files, _load_platform_summary, _load_quality_hint
+from ._reporting import (
+    _fmt_files,
+    _load_platform_summary,
+    _load_quality_hint,
+    _preflight_trim_frames,
+    _zero_length_end,
+)
+from .steps import require_streams
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent expanders.
@@ -69,6 +77,14 @@ def _build_batch_block() -> list[dict[str, Any]]:
     ]
 
 
+def _codec_from_output(output: Any) -> str | None:
+    """The video codec an output name spells as its extension (`clip.hevc`), else None."""
+    if not isinstance(output, str) or not output:
+        return None
+    ext = Path(output).suffix.lstrip(".").lower()
+    return ext if ext in _VIDEO_CODEC_ALIASES else None
+
+
 class PrepareForPlatformIntent(Intent):
     name = "prepare_for_platform"
 
@@ -82,7 +98,11 @@ class PrepareForPlatformIntent(Intent):
         preview = bool(args.get("preview", True))
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_platform_profile",
@@ -144,7 +164,11 @@ class CompressVideoIntent(Intent):
             options["output_path"] = args["output"]
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
         ]
         if target:
@@ -228,8 +252,18 @@ class ConvertVideoIntent(Intent):
         ):
             video_codec = container.lower()
             container = None
+        # The same mistake in the output NAME: `*.hevc` / `clip.h265`. ffmpeg picks its muxer
+        # from the extension, chooses a raw elementary stream, and fails (ffmpeg_229#4). The
+        # extension supplies the codec only when the plan names none, and is replaced by the
+        # container's below.
+        output_codec = _codec_from_output(output)
+        if output_codec is not None and video_codec is None:
+            video_codec = output_codec
         if container is None:
             container = _container_from_output(output) or "mp4"
+        if output_codec is not None:
+            # By string, not Path: keep the caller's separators (`out/clip.hevc`).
+            output = f"{output[: -len(output_codec) - 1]}.{container}"
         audio_codec = args.get("audio_codec")
         crf = args.get("crf")
         quality = _quality_from_crf(crf, args.get("quality"))
@@ -254,7 +288,11 @@ class ConvertVideoIntent(Intent):
         load_quality = quality is not None and not remux
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
         ]
         if load_quality:
@@ -318,7 +356,11 @@ class ResizeVideoIntent(Intent):
             options["output_path"] = args["output"]
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -364,6 +406,15 @@ class TrimVideoIntent(Intent):
     name = "trim_video"
 
     def expand(self, args: dict[str, Any]) -> list[dict[str, Any]]:
+        # `frames` is checked HERE, not only in `Skill.preflight`. Preflight runs on the
+        # *expanded* plan, whose steps are `resolve_inputs` / `build_recipes` / ... — none of
+        # which carries a `frames` arg — so the conflict rule never fired for a plan that came
+        # through the agent, and "3 frames of the first 5 seconds" quietly honoured the range.
+        # `expand` is the one place that sees trim_video's own arguments.
+        errors = _preflight_trim_frames(args)
+        if errors:
+            raise ValueError(" ".join(errors))
+
         input_path = args["input"]
         inputs = _coerce_inputs(input_path)
         options: dict[str, Any] = {"mode": "trim"}
@@ -371,15 +422,28 @@ class TrimVideoIntent(Intent):
             options["start"] = args["start"]
         if args.get("duration") is not None:
             options["duration"] = args["duration"]
-        if args.get("end") is not None:
+        # With a frame count, a zero-length `end` is the model filling both fields: the
+        # preflight above accepted it on that reading, so it is not rendered.
+        if args.get("end") is not None and not (
+            args.get("frames") is not None and _zero_length_end(args)
+        ):
             options["end"] = args["end"]
+        # Forwarding this is what makes the frame count exist at all. Without it the arg was
+        # declared in tools.yaml, rendered by the engine and validated by the preflight, and
+        # still did nothing: a three-frame request produced every frame of the clip.
+        if args.get("frames") is not None:
+            options["frames"] = args["frames"]
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         quality = args.get("quality", "visually_good")
         preview = bool(args.get("preview", False))
 
         plan: list[dict[str, Any]] = [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -451,7 +515,11 @@ class ExtractAudioIntent(Intent):
             options["output_path"] = output
 
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "build_recipes",
@@ -482,7 +550,11 @@ class CreateThumbnailIntent(Intent):
         if output is not None:
             options["output_path"] = output
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "build_recipes",
@@ -509,7 +581,11 @@ class StripAudioIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "build_recipes",
@@ -534,7 +610,11 @@ class AdjustSpeedIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -572,7 +652,11 @@ class AdjustVolumeIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -614,7 +698,11 @@ class RotateVideoIntent(Intent):
         if args.get("output") is not None:
             options["output_path"] = args["output"]
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",
@@ -702,7 +790,14 @@ def _concat_filter_args(
     else:
         infos = []
         for inp in inputs:
-            if dry_run:
+            # Probe whenever the file is really there, dry-run included: ffprobe reads, it
+            # does not write, and `ctx.dry_run` is about side effects. The `inputs` path
+            # already has real dimensions in a dry run (inspect_media supplies them), so
+            # skipping the probe here made the *preview* of a base/append concat show a
+            # different filter graph from the one execution would build — the plan a user
+            # approves has to be the plan that runs. Absent files still fall back to the
+            # dummy info below, which is what the dry-run guard was protecting.
+            if dry_run and not Path(inp).exists():
                 infos.append(
                     {
                         "has_audio": True,
@@ -859,6 +954,27 @@ class RunConcatStep(Step):
         """Concatenate multiple video files into one using ffmpeg filter_complex concat."""
         inputs = _assemble_concat_inputs(args)
 
+        # Resolve the inputs against the sandbox, exactly as `output` is resolved below.
+        # The `inputs` form arrives here already absolute — `resolve_inputs` ran during
+        # expansion — but `base`/`append` cannot be expanded that way, because they may be
+        # `$var` references that only exist at runtime, so they arrive as bare filenames.
+        # Leaving them bare made the self-probe in `_concat_filter_args` look for `clip.mp4`
+        # relative to the process cwd, find nothing, and emit **no normalization**: `concat`
+        # requires identical width, height and sample rate across its inputs, so any two
+        # clips that differ produced "Nothing was written into output file" and exit -22.
+        # Three of ffmpeg_244's four utterances died here, and every one used base/append.
+        # Already-absolute paths are unchanged, so this is a no-op for the `inputs` form.
+        base_dir = ctx.sandbox if ctx.sandbox is not None else ctx.root
+        if base_dir is not None:
+            resolved_inputs: list[str] = []
+            for inp in inputs:
+                path = Path(str(inp))
+                if not path.is_absolute():
+                    path = (base_dir / path).resolve()
+                    _assert_in_sandbox(path, ctx.sandbox)
+                resolved_inputs.append(str(path))
+            inputs = resolved_inputs
+
         output = str(args["output"])
         if not Path(output).is_absolute():
             base = ctx.sandbox if ctx.sandbox is not None else ctx.root
@@ -894,6 +1010,8 @@ class RunConcatStep(Step):
             }
 
         result = _deps.run_ffmpeg(cmd)
+        if result["returncode"] == 0:
+            require_streams(output)
         return {
             "mode": "execute",
             "count": 1,
@@ -962,7 +1080,11 @@ class ConcatVideoIntent(Intent):
         if target_fps:
             run_concat_args["target_fps"] = target_fps
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {"tool": "run_concat", "args": run_concat_args, "output": "$concat_result"},
             {
@@ -998,7 +1120,11 @@ class ReverseVideoIntent(Intent):
             options["output_path"] = args["output"]
 
         return [
-            {"tool": "resolve_inputs", "args": {"paths": inputs}, "output": "$files"},
+            {
+                "tool": "resolve_inputs",
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                "output": "$files",
+            },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
             {
                 "tool": "load_quality_profile",

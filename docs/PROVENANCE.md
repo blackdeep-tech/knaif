@@ -18,10 +18,12 @@ each pinned to a commit SHA and verified against a recorded SHA-256.
 
 | Released model | Base model | Base license | Fine-tune license |
 |---|---|---|---|
+| `knaif-qwen3-4b-v2` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Apache-2.0 | Apache-2.0 |
+| `knaif-qwen3-1.7b-v2` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Apache-2.0 | Apache-2.0 |
 | `knaif-qwen3-4b-v1` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Apache-2.0 | Apache-2.0 |
 | `knaif-qwen3-1.7b-v1` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Apache-2.0 | Apache-2.0 |
 
-Both are **derivative works** of the Qwen3 family by Alibaba Cloud, used under
+All are **derivative works** of the Qwen3 family by Alibaba Cloud, used under
 Apache-2.0. Apache-2.0 permits redistribution of derivatives under the same
 license, which is what knaif does. The manifest records this machine-readably via
 each entry's `base_model` and `base_model_license` fields, so the provenance
@@ -219,6 +221,30 @@ compatibility axis, but `libggml-vulkan.so` **dlopens the host GPU driver**, whi
 commonly built against a newer `libstdc++` than ours — forcing our copy ahead via
 `$ORIGIN` risks breaking GPU support on current desktops. That choice is what sets the
 `GLIBCXX_3.4.30` floor and excludes RHEL/Rocky/Alma 9.
+
+### PDFium — every inference-capable artifact (from 1.2.0)
+
+| File | Source |
+|---|---|
+| `pdfium.dll` / `libpdfium.so` | `bblanchon/pdfium-binaries` release `chromium/7999`, pinned by archive sha256 in `contracts/release/pdfium.yaml` |
+
+The documents skill renders and OCRs PDFs through `pdfium-render`, which loads this library
+at run time: from `$KNAIF_PDFIUM_PATH`, then beside the exe. `installers/fetch_pdfium.sh`
+downloads the pinned archive, **refuses it unless the sha256 matches**, and stages the
+library in `bin/`. `package.sh` does this for every functional kind, and
+`scripts/build_native_kind.sh` for dev builds; `installers/smoke.sh` asserts it is present.
+Chosen by the owner on 2026-09-26: the build is byte-identical to the pypdfium2 copy every
+accepted L4 run had used, so bundling it changed nothing that was measured.
+
+Licensing, checked against every notice in the archive: PDFium is **BSD 3-Clause**, the
+prebuilt packaging is **MIT**, and the components compiled into it are all permissive
+(Abseil and LLVM libc Apache-2.0; Anti-Grain Geometry, fast_float, Little CMS, simdutf,
+LibTIFF, OpenJPEG, libpng and zlib under their own permissive terms; libjpeg-turbo IJG/BSD;
+FreeType under the FreeType Project License, whose credit line NOTICE carries; ICU under the
+Unicode licence). ICU's notice file also quotes GPL text, but for Autoconf build macros
+(`pkg.m4`, under the Autoconf exception), which are not compiled into the library.
+Chromium ships the same notice. Nothing copyleft is bundled. All 15 notices, plus the
+packaging licence, ship in `licenses/PDFium/`.
 
 ### CUDA opt-in payload (not part of any default artifact)
 

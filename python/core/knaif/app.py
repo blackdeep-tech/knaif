@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -19,6 +20,49 @@ import yaml
 from . import create_agent, list_skills
 from ._console import enable_utf8_console
 from .models import build_orchestrator, load_models_registry
+
+# The model is shown the tools retrieval surfaces for the request, never the whole registry: the
+# eval lane and the native binary both prompt this way, and a CLI that skipped it planned with a
+# prompt nobody measured (L3 2026-09-27: 11.9% disagreement with native, where the lanes differ
+# by 1.97%).
+from .registry import retrieve_tools
+
+#: Prefixes the plan dump under $KNAIF_DUMP_PLAN. The same string as native `run`
+#: (apps/cli/src/main.rs) and scripts/parity_check.py; a test holds them together.
+PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
+#: One line per rendered ffmpeg command under $KNAIF_DUMP_PLAN: the exact argv as JSON. The
+#: display line joins with spaces and quotes nothing, so it cannot carry `silent clip.mp4` or a
+#: filter's escapes; L3 compares this instead. Same string as native `run` (a test holds it).
+ARGV_DUMP_MARKER = "===KNAIF-ARGV==="
+
+
+def rendered_argvs(results: list[dict[str, Any]]) -> list[list[str]]:
+    """The ffmpeg argv each intent rendered, in plan order: what the user is shown as `$ …`.
+
+    Taken from the batch steps (`run_batch`/`run_concat`), the same place the dry-run display
+    reads (`skills/ffmpeg/python/_reporting.py`); a preview render is not one of them.
+    """
+    argvs: list[list[str]] = []
+    for result in results:
+        if result.get("tool") not in ("run_batch", "run_concat"):
+            continue
+        r = result.get("result")
+        if not isinstance(r, dict):
+            continue
+        # One argv per command that runs. `run_concat` stores its single command both at the top
+        # level and in `outputs`, so the top level counts only when `outputs` carries none;
+        # reading both dumped every concat twice, and L3 read each as a port bug (R5c,
+        # 2026-09-28). Not de-duplicated by value: a batch may really run a command twice.
+        found = [
+            out["command"]
+            for out in r.get("outputs") or []
+            if isinstance(out, dict) and isinstance(out.get("command"), list) and out["command"]
+        ]
+        if not found and isinstance(r.get("command"), list) and r["command"]:
+            found = [r["command"]]
+        argvs.extend([str(a) for a in cmd] for cmd in found)
+    return argvs
+
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -359,11 +403,17 @@ def run_cmd(
             use_mock=use_mock,
             ollama_model=model or "mistral",
             max_tokens=max_tokens,
+            registry_override=retrieve_tools(prompt_str, agent.registry),
         )
     except Exception as exc:  # noqa: BLE001
         click.echo(click.style(f"\nInference error: {exc}", fg="red"), err=True)
         sys.exit(1)
     _infer_ms = (time.perf_counter() - _t_infer) * 1000
+    # The same contract as native `run` under $KNAIF_DUMP_PLAN: the post-gate plan, one marker
+    # line on stderr. L3 reads both sides' plans from it to tell a port bug (same plan,
+    # different commands) from plan disagreement (release plan R0).
+    if os.environ.get("KNAIF_DUMP_PLAN"):
+        click.echo(PLAN_DUMP_MARKER + json.dumps(payload, ensure_ascii=False), err=True)
 
     # ── header ────────────────────────────────────────────────────────────────
     if not silent:
@@ -408,6 +458,9 @@ def run_cmd(
     except ValueError as exc:
         click.echo(click.style(f"\n{exc}", fg="red"), err=True)
         sys.exit(1)
+    if os.environ.get("KNAIF_DUMP_PLAN"):
+        for argv in rendered_argvs(results):
+            click.echo(ARGV_DUMP_MARKER + json.dumps(argv, ensure_ascii=False), err=True)
 
     # The NL clarify gate (run inside execute_plan) can downgrade the plan to a
     # clarify/reject — e.g. an under-specified file or an ungrounded password
@@ -516,7 +569,11 @@ def plan_cmd(
     def _plan_one(agent: Any, utterance: str) -> dict[str, Any]:
         try:
             result: dict[str, Any] = agent.infer(
-                utterance, use_mock=use_mock, ollama_model=model or "mistral", max_tokens=max_tokens
+                utterance,
+                use_mock=use_mock,
+                ollama_model=model or "mistral",
+                max_tokens=max_tokens,
+                registry_override=retrieve_tools(utterance, agent.registry),
             )
             return result
         except Exception as exc:  # noqa: BLE001

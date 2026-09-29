@@ -14,6 +14,11 @@ from typing import Any
 from knaif.evalsuite.protocols import VerifyResult
 
 # Default per-field tolerances. Per-row tolerances in the corpus override these.
+#: Tolerance for the `duration_s` success criterion, deliberately the same number as
+#: `_DEFAULTS["duration_s"]` below: both answer "is this the length that was asked for", and two
+#: tolerances for one question is how the two verifiers start disagreeing about the same file.
+_DURATION_TOLERANCE_S = 0.5
+
 _DEFAULTS: dict[str, Any] = {
     "duration_s": 0.5,
     "size_pct": 20,
@@ -327,6 +332,26 @@ def honest(
     return VerifyResult(score=0.0, failed=["output_file_not_produced"], verifier_kind="output")
 
 
+def _frame_count(video: dict | None) -> int | None:
+    """Frames in the video stream, from whichever field this build of ffprobe filled in.
+
+    ``nb_frames`` is absent or "N/A" for a stream ffprobe did not count, which is common for
+    a freshly muxed file; ``nb_read_frames`` appears when frames were actually decoded. Try
+    both rather than reporting "unreadable" for a file that is perfectly fine.
+    """
+    if not video:
+        return None
+    for key in ("nb_frames", "nb_read_frames"):
+        raw = video.get(key)
+        if raw in (None, "", "N/A"):
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 SUCCESS_CRITERIA_FIELDS: dict[str, str] = {
     "container": "Expected output container format (mp4, mkv, webm, …)",
     "video_codec": "Expected video codec, aliases resolved (h264, hevc, vp9, av1)",
@@ -337,6 +362,7 @@ SUCCESS_CRITERIA_FIELDS: dict[str, str] = {
     "max_height": "Maximum output height in pixels (inclusive)",
     "filters": "List of substrings that must appear in filter arguments",
     "flags": "List of substrings that must appear as ffmpeg CLI flags",
+    "frames": "Exact number of video frames the output must contain",
 }
 
 
@@ -393,6 +419,9 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
         "no_audio",
         "max_width",
         "max_height",
+        "max_size_kb",
+        "duration_s",
+        "frames",
     }
     has_file_criteria = any(k in criteria for k in _FILE_FIELDS)
 
@@ -427,6 +456,62 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
     fmt = probe.get("format") or {}
     video = next((s for s in streams if s.get("codec_type") == "video"), None)
     audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+
+    if "frames" in criteria:
+        # `ffmpeg_161` asks for a one-frame video. Its criterion used to be
+        # {"container": "mp4"} — which a full-length MP4 satisfies, so the row scored a pass
+        # while the plan produced a file with nothing in it. A frame count is the only
+        # criterion that can tell "one frame" from "no frames" and from "the whole clip".
+        want = int(criteria["frames"])
+        got = _frame_count(video)
+        if got is None:
+            failed.append("frames: could not read a frame count from the output")
+        elif got == want:
+            matched.append(f"frames={want}")
+        else:
+            failed.append(f"frames: expected {want}, got {got}")
+
+    if "duration_s" in criteria:
+        # 20 plan rows state a length in the utterance and none asserted it: "cut clip.mp4 from
+        # 2 seconds to 5 seconds" was graded on container and flags, both of which the untouched
+        # 10-second source satisfies. A regression that stopped trimming would have passed them.
+        #
+        # Tolerance matches `output_diff`'s existing `duration_s` default, and for the same
+        # reason: a stream copy cuts at the nearest keyframe, so an honest 3-second trim can land
+        # at 2.6s. A tighter bound fails correct plans for something the user never asked about.
+        want = float(criteria["duration_s"])
+        raw = fmt.get("duration")
+        try:
+            got = float(raw)
+        except (TypeError, ValueError):
+            # Fails closed, like every other file criterion here.
+            failed.append("duration_s: could not read a duration from the output")
+        else:
+            if abs(got - want) <= _DURATION_TOLERANCE_S:
+                matched.append(f"duration_s≈{want:g} (got {got:.2f}s)")
+            else:
+                failed.append(
+                    f"duration_s: expected {want:g}s ±{_DURATION_TOLERANCE_S:g}, got {got:.2f}s"
+                )
+
+    if "max_size_kb" in criteria:
+        # `ffmpeg_020` / `ffmpeg_093` ask for a size and could only assert a container, which
+        # the untouched 1.6 MB source satisfies — so the row could not fail on the one thing
+        # it asks for. Read from `format.size` rather than the encoder settings: "under 500 KB"
+        # is a claim about the file, and a CRF that usually lands there is not the same claim.
+        want_kb = float(criteria["max_size_kb"])
+        raw = fmt.get("size")
+        try:
+            got_kb = int(raw) / 1024
+        except (TypeError, ValueError):
+            # Fails closed, like every other file criterion here. A size check that passed on
+            # an unreadable probe would reintroduce the cannot-fail row it exists to remove.
+            failed.append("max_size_kb: could not read a size from the output")
+        else:
+            if got_kb <= want_kb:
+                matched.append(f"max_size_kb<={want_kb:g} (got {got_kb:.0f} KB)")
+            else:
+                failed.append(f"max_size_kb: expected <={want_kb:g} KB, got {got_kb:.0f} KB")
 
     if "container" in criteria:
         containers = [n.strip() for n in fmt.get("format_name", "").lower().split(",")]

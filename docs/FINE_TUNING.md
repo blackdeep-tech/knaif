@@ -24,29 +24,73 @@ Two files per skill, never confused: `data/train.jsonl` (learned from) vs `data/
 (measured against, never trained on). The `hard` / `chain3` tagged eval rows are **held out**
 of training — gains there measure generalization, not memorization.
 
-## 1. Current production state (as of 2026-07-02)
+## 1. Current production state (as of knaif 1.2.0, 2026-09-29)
 
 | lane | model | serves | notes |
 |---|---|---|---|
-| **shared default** | `knaif-qwen3-4b-v1` = `models/knaif-qwen3-4b-v1-q4_k_m.gguf` | ffmpeg + documents | promoted; sft-v3 union LoRA, Q4, 2.5 GB (key renamed from `qwen3-4b-v3` 2026-07-20) |
+| **shared default** | `knaif-qwen3-4b-v2` = `models/knaif-qwen3-4b-v2-q4_k_m.gguf` | ffmpeg + documents | promoted for 1.2.0; FT cycle `sft-v4-flat` (reject/clarify taxonomy + terse-phrasing rows), Q4, 2.5 GB |
 | untuned fallback | `qwen3-4b` = `Qwen3-4B-Q4_K_M.gguf` | io + project default | skills not in training stay here |
-| quality-per-byte | `models/knaif-qwen3-1.7b-v1-q6_k.gguf` (1.32 GB) | mobile / footprint | not deployed; ready if size matters |
+| quality-per-byte | `models/knaif-qwen3-1.7b-v2-q6_k.gguf` (1.32 GB) | mobile / footprint | 1.2.0's footprint model; FT cycle `sft-v9-flat`; own acceptance bar; released by owner exception |
+| previous | `knaif-qwen3-4b-v1`, `knaif-qwen3-1.7b-v1` (FT cycle `sft-v3-flat`) | knaif 1.0.1 / 1.1.0 | kept on HF for pinned installs |
 
 Wiring: `models.yaml` (`default:` + named entries) and each skill's
 `recommended_model:` in `skills/<skill>/skill.yaml`.
 
 ## 2. Hardware & environment
 
-- **GPU:** RTX 5080, 16 GB, **Blackwell (sm_120)** on **WSL2**. ⚠️ Fragile: on any
-  `CUDA: illegal memory access`, **STOP — do not auto-retry** (it can crash the Windows
-  display driver / TDR). A reboot clears it. A 1.7B LoRA (3 epochs, ~730 rows) ≈ 9 min; a 4B
-  ≈ 19 min.
-- **Train venv:** `python/training/.venv/bin/python` (Unsloth, bf16 LoRA, `load_in_4bit=False`).
-  After (re)building this venv, copy the Unsloth-cache guard into it so ad-hoc /
-  REPL / notebook imports don't recreate `./unsloth_compiled_cache` in the repo root:
-  `cp python/training/sitecustomize.py python/training/.venv/lib/python*/site-packages/`
+- **GPU:** RTX 5080, 16 GB, **Blackwell (sm_120)**, trained **natively on Windows** since
+  2026-09 (sft-v4 onwards; WSL2 goes through the same WDDM driver, so everything below applies
+  to both). ⚠️ Fragile: on any `CUDA: illegal memory access`, **STOP — do not auto-retry** (it
+  can crash the Windows display driver / TDR). A reboot clears it.
+  Measured 2026-09-26 (sft-v6-flat, 828 rows, 3 epochs, 312 steps, cap 0.88): **4B 64 min**
+  (~12.4 s/step), **1.7B 27 min** (~5 s/step); merge + f16 convert + quantize under a minute
+  each. The older "1.7B ≈ 9 min, 4B ≈ 19 min" figures came from a different stack and ~730 rows.
+- **VRAM: the allocator is capped to 80% of the card, by default.** `train_lora.py` and
+  `train_dpo.py` call `cap_allocator_to_device_memory()` (`python/training/_gpu.py`) before
+  loading anything. Override with `KNAIF_TRAIN_MEM_FRACTION`; `0` or `1` disables it.
+
+  **What it does not do:** it does not offload weights, quantize, or let a model fit that
+  otherwise would not. The whole base model is resident either way — a LoRA trains ~0.8% of
+  the parameters but reads all of them. What it bounds is how far the *caching allocator*
+  may grow before it has to reuse what it already holds.
+
+  **Why it is needed:** on WDDM — Windows, and WSL2 through the same driver — an allocation
+  the card cannot satisfy does not fail. The driver silently backs it with system RAM over
+  PCIe, so the run continues at a fraction of the speed with nothing in the log to notice.
+  Measured on the 16 GB RTX 5080, 2026-09-17, 4B bf16 LoRA, 762 rows, 288 steps:
+
+  | | dedicated | shared | step time | outcome |
+  |---|---|---|---|---|
+  | uncapped (v1) | 15.99 GB | **6.69 GB** | 15.3s → 17.5s, climbing | abandoned at step 2, no CUDA error |
+  | capped 0.8 (v2) | ≤12.8 GB | 0 | ~12.7s | all 288 steps, ~61 min |
+  | capped 0.88 (sft-v6, 2026-09-26) | ≤15.4 GB incl. ~1.1 GB desktop | ~1.25 GB, **flat** | ~12.4s | all 312 steps, 64 min |
+
+  The 0.88 row sized the cap from what was actually free (`torch.cuda.mem_get_info()`: 14.99 of
+  16.28 GiB, minus ~0.5 GB for the CUDA context outside the allocator). Its shared usage is not a
+  spill: it appeared within the first steps and never grew (the 1.7B held ~0.96 GB the same way).
+  It is most likely Unsloth's `use_gradient_checkpointing="unsloth"`, which parks activations in
+  pinned host memory on purpose (not confirmed). A spill looks like the uncapped row:
+  shared climbing and step time climbing with it. Sample `\GPU Adapter Memory(*)\Shared Usage`
+  (Windows performance counters) during a run to tell the two apart; nvidia-smi does not show it.
+  Raising the cap bought no speed (batch 1 is compute-bound), only headroom.
+
+  So the cap turns a silent crawl into an honest `CUDA out of memory`. **If you hit that
+  OOM, lower batch/sequence/rank — do not raise the fraction**, which only buys back the
+  crawl. 0.8 clears the spill on a 16 GB card; it is not a tuned optimum, and no
+  cap-vs-throughput sweep has been run. Distinct from the `illegal memory access` above:
+  that one is a driver fault needing a reboot, this one has no error at all.
+- **Train venv:** `python/training/.venv` (Unsloth, bf16 LoRA, `load_in_4bit=False`; on Windows
+  with `triton-windows`). Its interpreter is `.venv/Scripts/python.exe` on Windows and
+  `.venv/bin/python` on Linux/WSL; the commands below use the Linux spelling.
+  After (re)building this venv, copy the Unsloth-cache guard into its `site-packages`
+  (`Lib/site-packages` on Windows, `lib/python*/site-packages` on Linux) so ad-hoc / REPL /
+  notebook imports don't recreate `./unsloth_compiled_cache` in the repo root.
 - **Core venv:** `uv run ...` (knaif + skills; for data build + eval).
-- **llama.cpp:** `~/tools/llama.cpp` (`convert_hf_to_gguf.py`, `build/bin/llama-quantize`).
+- **llama.cpp:** `~/tools/llama.cpp` (`convert_hf_to_gguf.py`, `build/bin/llama-quantize`, `.exe`
+  on Windows). Run `convert_hf_to_gguf.py` with `PYTHONPATH=~/tools/llama.cpp/gguf-py`.
+- **Merge needs the Hub reachable.** `merge_to_hf.py` (Unsloth) re-resolves the base model; with
+  `HF_HUB_OFFLINE=1` it logs "merged" but writes no checkpoint (seen 2026-09-17). Check that
+  `merged/<name>/` holds `*.safetensors` before converting.
 
 **Training is strictly optional and physically isolated — keep it that way.** Someone who
 runs `pip install knaif` must never acquire torch, Unsloth, or CUDA wheels; the library's
@@ -138,9 +182,10 @@ uv run python -m knaif.evalsuite run --skill ffmpeg --verifier success \
    and reading that FAIL as catastrophic forgetting is a mistake already made once here. For
    the forgetting question, baseline **your own pre-run** (same family, same pipeline);
    reserve the snapshot gate for the promotion decision in §6. Two setup traps come with it:
-   the run folder must contain a scoreboard at **each** skill's snapshot verifier (ffmpeg's
-   is `cheap`, documents' is `success`, so sweep at *both* into one folder — otherwise the
-   unmeasured skill is silently skipped, not failed), and a gate that cannot fail is worse
+   the run folder must contain a scoreboard at **each** skill's snapshot verifier (both are
+   `success` today — a snapshot can no longer be locked from a non-executing run — so sweep
+   at every verifier the skills in the run actually declare, otherwise an unmeasured skill is
+   silently skipped, not failed), and a gate that cannot fail is worse
    than none. See *The two ways an aggregate gate lies to you* in
    [EVAL_VERIFICATION_SOP.md](EVAL_VERIFICATION_SOP.md).
 10. **Fix retrieval before blaming the model.** Run `uv run -m knaif.evalsuite retrieval`
@@ -148,6 +193,35 @@ uv run python -m knaif.evalsuite run --skill ffmpeg --verifier success \
    *retrieval* failures, not model failures — no fine-tune can recover them. Keywords may be
    shared across tools (retrieval down-weights by document frequency). See the retrieval-miss
    audit and `docs/plans/2026-07-02-retrieval-overhaul.md`.
+
+11. **A prompt edit silently invalidates the dataset, and nothing fails when it does.**
+   `build_dataset.py` calls `agent.build_prompt()` once per row (§3b), so every training row
+   carries a **frozen copy** of `skills/<skill>/prompt.yaml` as it stood at build time. Nothing
+   re-checks it afterwards: edit the prompt and the weights were tuned against text the model is
+   no longer served, with no test, gate, or snapshot registering the change.
+   This is the current state, not a hypothetical — ffmpeg's prompt has been rewritten three times
+   (`c16c404`, `0b2bf3f`, `5e3b089`) since the shipped `sft-v3` model was trained, so **the
+   deployed model has never seen the prompt it is served.** The rebuilt v4 dataset does match
+   today's prompt; the next prompt edit will break that just as quietly.
+   Note the direction carefully before concluding skew is damage: T7 moved ffmpeg from four unmet
+   thresholds to ACCEPTED 31/31 **with no retrain**, purely by prompt edits. The hazard is not
+   that skew is bad, it is that a training experiment which also edits the prompt has changed two
+   variables and can attribute the result to neither. Rebuild the dataset first, or say plainly
+   that the comparison measures prompt + weights together.
+   To check before trusting a run, diff the static header (everything before the
+   retrieval-varying `Available tools:` list) of a built row against a fresh `build_prompt`:
+
+   ```bash
+   uv run python -c "
+   import json
+   from knaif.agent import CommandAgent
+   cut = lambda s: s[: s.index('Available tools:')]
+   today = cut(CommandAgent.from_skill('skills/ffmpeg', sandbox='sandbox').build_prompt('x')[0])
+   rows = (json.loads(l)['messages'][0]['content'] for l in open('python/training/union_chat.jsonl', encoding='utf-8'))
+   built = {cut(s) for s in rows if 'media workflow intent parser' in s}
+   print('in sync' if built == {today} else 'SKEWED — rebuild the dataset')"
+   ```
+
 
 ## 5. What we already know — outcomes (don't re-litigate these)
 

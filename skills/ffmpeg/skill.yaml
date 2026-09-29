@@ -15,13 +15,21 @@ tools: tools.yaml
 skill_class: handlers.FFmpegSkill
 prompt: prompt.yaml
 
-recommended_model: knaif-qwen3-4b-v1  # promoted 2026-07-02 (sft-v3 union LoRA; see models.yaml)
+recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 
 # Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
 runtimes:
   python:
     handlers: handlers.FFmpegSkill   # resolved inside skills/ffmpeg/python/ (loaded by path)
   native:
+    # STATUS IS EVIDENCE-BACKED, not an intention: `just check-gate` fails when this claims more
+    # than evals/acceptance/<skill>.json supports (contracts/release/native_status.yaml defines
+    # the three statuses). Lowered from `supported` to `in-progress` on 2026-09-11, when the
+    # gate first ran and there was nothing behind the old word: L1/L2 are green, but there is no
+    # L4 acceptance record for either skill, and ffmpeg's first L3 run scored 0.819 against a
+    # 1.0 bar. Raise it again by producing the evidence — `just parity`, then `just eval-native`.
+    # Claimed `supported` in the 1.2.0 freeze (release plan R5c, D2): the claim is left out of
+    # the evidence fingerprint, and `check-gate` holds it to the L3/L4 records R5c produces.
     status: supported
     crate: knaif-skill-ffmpeg
 
@@ -34,6 +42,13 @@ dependencies:
       all_required: true          # ffmpeg AND ffprobe are both needed (distinct binaries)
       commands: [ffmpeg, ffprobe]
       install: { windows: winget, macos: brew, linux: package_manager }
+      windows:                    # how setup installs it, and where to look beyond PATH
+        winget: Gyan.FFmpeg
+        download: https://ffmpeg.org/download.html#build-windows
+        dirs:                     # winget's portable-app links, else the unpacked package
+          - '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+          - '%ProgramFiles%\WinGet\Links'
+          - '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin'
 
 safety:
   unsafe_phrases:
@@ -49,6 +64,17 @@ safety:
 data:
   train: data/train.jsonl
   safety_test: data/safety_test.jsonl
+
+# What kind of thing each file is, for chain threading only (read by both runtimes). A later
+# step that names a step's source is rewritten onto that step's output only when the two are
+# the same kind: "convert clip.mp4 to mkv then strip its audio" threads, "make a thumbnail of
+# clip.mp4 and compress it" does not. Animated gif is video (convert_video makes it). An
+# extension listed here nowhere is unrestricted. See docs/plans/2026-09-23-chain-source-threading.md.
+file_kinds:
+  video: [mp4, mov, mkv, webm, avi, m4v, flv, wmv, ts, mpg, mpeg, gif]
+  audio: [mp3, aac, wav, flac, ogg, opus, m4a, wma]
+  image: [jpg, jpeg, png, bmp, webp, tif, tiff]
+  subtitle: [srt, vtt, ass]
 
 arg_value_sets:
   platform:

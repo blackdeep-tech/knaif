@@ -1,0 +1,10 @@
+sample 115: compared 115, decision flips 6
+  missing (board or reference): []
+  rejected before inference (set aside): []
+  FLIP ffmpeg_094#1
+  FLIP ffmpeg_099#1
+  FLIP ffmpeg_115#0
+  FLIP ffmpeg_121#2
+  FLIP ffmpeg_138#0
+  FLIP ffmpeg_229#1
+VERDICT: full Linux CPU L4

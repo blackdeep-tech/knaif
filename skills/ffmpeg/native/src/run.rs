@@ -44,6 +44,31 @@ pub enum ProbeMode {
     Execute,
 }
 
+/// Is this input one `extract_audio` must skip? Port of `BuildRecipesStep`'s skip.
+///
+/// ffmpeg cannot extract audio from a file that has none: it exits with "Output file does not
+/// contain any stream", and one silent video in a folder of ten takes the whole batch down. The
+/// probe already answered this, so building the command anyway discards a fact we hold.
+///
+/// Scoped to `extract_audio` on measurement, not on principle: `adjust_volume` and `strip_audio`
+/// both succeed on a real silent file, so skipping there would drop work that completes today.
+pub fn skips_silent_input(mode: Option<&str>, has_audio: bool) -> bool {
+    mode == Some("extract_audio") && !has_audio
+}
+
+/// The message when every input was skipped. Byte-identical to Python's, because it reaches the
+/// user on both runtimes and two spellings of one refusal is how the two drift apart.
+pub fn no_audio_error(skipped: &[String]) -> String {
+    if skipped.len() == 1 {
+        format!("No audio to extract: {} has no audio track.", skipped[0])
+    } else {
+        format!(
+            "No audio to extract — none of these files has an audio track: {}.",
+            skipped.join(", ")
+        )
+    }
+}
+
 /// Probe one input per [`ProbeMode`]: real `ffprobe` for an existing file; a [`dummy_probe`]
 /// fallback in dry-run; a hard error in execute mode. Port of the `inspect_media` probe policy.
 fn probe_input(path: &Path, data: &FfmpegData, mode: ProbeMode) -> anyhow::Result<Probe> {
@@ -114,12 +139,51 @@ pub fn expand(
         Ok(r) => r,
         Err(clarify) => return Ok(Expansion::Clarify(clarify)),
     };
-    let mut commands = Vec::with_capacity(resolved.inputs.len());
-    for input in &resolved.inputs {
+    // Globs become one input per matching file BEFORE the render loop, so each match gets its own
+    // command and its own derived output name (N1).
+    let inputs = expand_input_globs(&resolved.inputs, sandbox, &data.vocab.media_extensions)?;
+    // Build every recipe first: only the batch can see two inputs landing on one output
+    // path, and every rendered command carries -y, so an unresolved clash is a silent
+    // overwrite rather than an error.
+    let mut recipes = Vec::with_capacity(inputs.len());
+    let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::with_capacity(inputs.len());
+    let mut skipped: Vec<String> = Vec::new();
+    for input in &inputs {
         // Probe and render the RESOLVED path — checking one representation and reading another
         // is not a boundary (see resolve_input_in_sandbox; fix review R1).
         let input_path = resolve_input_in_sandbox(input, sandbox)?;
         let probe = probe_input(&input_path, data, mode)?;
+        // ffmpeg cannot extract audio from a file that has none: it exits with "Output file does
+        // not contain any stream", and one silent video in a folder of ten takes the whole batch
+        // down. The probe already answered this, so building the command anyway discards a fact
+        // we hold. Port of `BuildRecipesStep`'s skip.
+        //
+        // Scoped to `extract_audio` on measurement, not on principle: `adjust_volume` and
+        // `strip_audio` both succeed on a real silent file, so skipping there would drop work
+        // that currently completes.
+        if skips_silent_input(resolved.options.mode.as_deref(), probe.has_audio) {
+            skipped.push(
+                input_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| input_path.to_string_lossy().into_owned()),
+            );
+            continue;
+        }
+        // A trim that starts at or past the end has no answer: ffmpeg would exit 0 with an empty
+        // file and the NEXT step would fail under another file's name. Real probes only — a
+        // dry-run's missing file carries a placeholder duration. Port of `BuildRecipesStep`.
+        if mode == ProbeMode::Execute {
+            if let Some(reason) = crate::engine::trim_past_end(&resolved.options, &probe) {
+                anyhow::bail!("{reason}");
+            }
+        }
+        // A picture operation on a sound exits 0 having done nothing. Unlike the trim check this
+        // holds in a dry run too: the placeholder probe decides audio vs video from the extension,
+        // which is all this reads. Port of `BuildRecipesStep`.
+        if let Some(reason) = crate::engine::needs_video(&resolved.options, &probe) {
+            anyhow::bail!("{reason}");
+        }
         let recipe = build_one_recipe(
             &probe,
             resolved.platform.as_ref(),
@@ -128,6 +192,22 @@ pub fn expand(
             &data.vocab,
             sandbox,
         )?;
+        outs.push((input_path.clone(), std::path::PathBuf::from(&recipe.output)));
+        recipes.push(recipe);
+    }
+    // Skipping every input is not success with zero results: an empty command list executes
+    // cleanly and reports done, telling the user the work happened.
+    if recipes.is_empty() && !skipped.is_empty() {
+        anyhow::bail!("{}", no_audio_error(&skipped));
+    }
+    // Returning fewer files than asked for without saying why reads as a tool that lost a file.
+    if !skipped.is_empty() {
+        eprintln!("note: skipped {} (no audio track)", skipped.join(", "));
+    }
+    crate::engine::disambiguate_outputs(&mut outs);
+    let mut commands = Vec::with_capacity(recipes.len());
+    for (mut recipe, (_, out)) in recipes.into_iter().zip(outs) {
+        recipe.output = out.to_string_lossy().into_owned();
         let (pre, post) = build_flags(&recipe, &data.vocab)?;
         commands.push(render_command(&recipe, &pre, &post, None));
     }
@@ -204,6 +284,155 @@ fn assemble_concat_inputs(args: &serde_json::Map<String, Value>) -> anyhow::Resu
 /// `<sandbox>/clip.mp4` while ffprobe/ffmpeg open `<cwd>/clip.mp4` — a different file (2026-09-07
 /// fix review, R1). In open/CLI mode (`sandbox` is `None`) there is no boundary to enforce and
 /// nothing to re-base, so the raw string is returned unchanged.
+/// True when *s* carries fnmatch magic — the same three characters Python's `ResolveInputs`
+/// treats as "this is a pattern, not a path".
+fn has_glob_magic(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[')
+}
+
+/// fnmatch one path component, via the `glob` crate.
+///
+/// The requirement is **"match Python's `fnmatch`"**, not "glob correctly", so the crate is
+/// adopted behind this function with one correction. `glob` treats `**` as a *recursive wildcard*
+/// — a directory-descent extension fnmatch does not have — and **rejects the pattern outright**
+/// when `**` is not a whole path component: `**.mp4` and `a**b` are syntax errors to it and
+/// ordinary patterns to Python. Under fnmatch a run of `*` is just `*`, so collapsing the run
+/// before handing the pattern over restores Python's reading exactly.
+///
+/// Found by diffing the crate against `fnmatch.fnmatchcase` rather than by trusting it; the
+/// disagreement is pinned in `the_glob_crate_still_differs_on_recursive_wildcards`.
+///
+/// Matches a NAME, never a path, so separator handling never comes into it.
+fn name_matches(pattern: &str, name: &str) -> bool {
+    let collapsed = collapse_star_runs(pattern);
+    match glob::Pattern::new(&collapsed) {
+        Ok(p) => p.matches_with(name, GLOB_OPTS),
+        // An unparseable pattern matches nothing rather than aborting the whole expansion — the
+        // same shape as a pattern that simply found no files.
+        Err(_) => false,
+    }
+}
+
+/// `glob`'s matching options, pinned to fnmatch's: case-sensitive, and no special treatment of a
+/// leading dot (Python's `fnmatch` happily matches `.mp4` against `*.mp4`).
+const GLOB_OPTS: glob::MatchOptions = glob::MatchOptions {
+    case_sensitive: true,
+    require_literal_separator: true,
+    require_literal_leading_dot: false,
+};
+
+/// Collapse runs of `*` to a single `*` — fnmatch's reading, and what keeps `**` from being a
+/// syntax error to the `glob` crate.
+fn collapse_star_runs(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let mut prev_star = false;
+    for c in pattern.chars() {
+        if c == '*' {
+            if !prev_star {
+                out.push(c);
+            }
+            prev_star = true;
+        } else {
+            out.push(c);
+            prev_star = false;
+        }
+    }
+    out
+}
+
+/// Expand any glob patterns in *inputs* against the sandbox, mirroring Python's `ResolveInputs`.
+///
+/// Native passed `*.mp4` straight to ffmpeg, which does not glob — so "convert all mp4 files in
+/// this folder" rendered one command against a literal `*.mp4` and did nothing useful. Measured on
+/// the 2026-09-11 L4 re-run it was 29 of 52 native-only failures, and the whole of the `batch`
+/// slice (0.034 against Python's 1.000).
+///
+/// The semantics are Python's, and each one is load-bearing:
+/// * the pattern applies to the **name component only** — `videos/*.mp4` globs inside `videos/`,
+///   never recursively, so a glob cannot quietly pull in a whole tree;
+/// * results are **sorted**, so the rendered command order is reproducible;
+/// * **files only** — a matching directory is not an input;
+/// * a path with no magic is passed through **untouched even when missing**, leaving "not found"
+///   to the probe rather than silently expanding to nothing.
+///
+/// Not applied to `concat_video`: Python's `ConcatVideoIntent` does not route its inputs through
+/// `ResolveInputs`, so globbing there would be a divergence, not a fix.
+/// Expand globs to one input per matching file, keeping only media.
+///
+/// `media_extensions` mirrors Python, which passes the same list to `resolve_inputs` at all 13
+/// of its call sites: a bare `*` is a legitimate way to say "all my media", and unfiltered it
+/// handed ffmpeg the .txt and .json sitting beside the clips. An EMPTY list disables the
+/// filter, so a vocab without the key behaves as before rather than matching nothing.
+fn expand_input_globs(
+    inputs: &[String],
+    sandbox: Option<&Path>,
+    media_extensions: &[String],
+) -> anyhow::Result<Vec<String>> {
+    let mut out = Vec::with_capacity(inputs.len());
+    for raw in inputs {
+        if !has_glob_magic(raw) {
+            out.push(raw.clone());
+            continue;
+        }
+        let as_path = Path::new(raw);
+        let Some(file_name) = as_path.file_name().and_then(|n| n.to_str()) else {
+            out.push(raw.clone());
+            continue;
+        };
+        let parent = as_path.parent().unwrap_or(Path::new(""));
+        // A bare `*.mp4` has an EMPTY parent, and `read_dir("")` fails — so in open/CLI mode the
+        // glob would match nothing at all. Python never sees this because it re-bases every
+        // relative path onto the sandbox (or root) first, making the parent concrete. `.` is the
+        // same base the rest of CLI mode already resolves against.
+        let parent = if parent.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            parent
+        };
+        // The directory is resolved and boundary-checked like any other input, so a pattern
+        // cannot read outside the sandbox.
+        let dir = resolve_input_in_sandbox(&parent.to_string_lossy(), sandbox)?;
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue; // No such directory: the pattern matches nothing, exactly as Python's does.
+        };
+        // Emit each match in the shape the pattern was written in — `a.mp4` for `*.mp4`,
+        // `videos/a.mp4` for `videos/*.mp4` — rather than the resolved directory joined to the
+        // name. The render loop resolves every input against the sandbox anyway, so re-basing
+        // here would resolve twice and leave a synthesized `.\` in the rendered command.
+        let as_written = as_path.parent().unwrap_or(Path::new(""));
+        let mut matched: Vec<String> = entries
+            .flatten()
+            .filter(|e| e.path().is_file())
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|n| name_matches(file_name, n))
+            })
+            .filter(|e| {
+                if media_extensions.is_empty() {
+                    return true;
+                }
+                e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .is_some_and(|x| {
+                        let x = x.to_ascii_lowercase();
+                        media_extensions.iter().any(|m| m.to_ascii_lowercase() == x)
+                    })
+            })
+            .map(|e| {
+                as_written
+                    .join(e.file_name())
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        matched.sort();
+        out.extend(matched);
+    }
+    Ok(out)
+}
+
 fn resolve_input_in_sandbox(
     raw: &str,
     sandbox: Option<&Path>,
@@ -233,6 +462,32 @@ fn resolve_output(output: &str, sandbox: Option<&Path>) -> anyhow::Result<std::p
 
 /// Map one intent's args to its [`Resolved`] plan. `Ok(Ok(..))` = ready to render; `Ok(Err(msg))` =
 /// a clarify is needed (e.g. an unknown platform); `Err` = a hard/unknown-tool error.
+/// Public tools this runtime dispatches, declared rather than inferred from the match below.
+///
+/// `documents` has had an `is_supported` list since its port; ffmpeg had only the match arms, so
+/// the one tool with no arm (`reverse_video`) was invisible — nothing could enumerate what was
+/// missing, and the first L4 run recorded it as 25 execution errors rather than as an
+/// unimplemented capability. A contract test asserts this list equals the bundle's public tools,
+/// so a tool added to `tools.yaml` without a native implementation fails the build, not the user.
+pub fn is_supported(tool: &str) -> bool {
+    matches!(
+        tool,
+        "adjust_speed"
+            | "adjust_volume"
+            | "compress_video"
+            | "concat_video"
+            | "convert_video"
+            | "create_thumbnail"
+            | "extract_audio"
+            | "prepare_for_platform"
+            | "resize_video"
+            | "reverse_video"
+            | "rotate_video"
+            | "strip_audio"
+            | "trim_video"
+    )
+}
+
 fn resolve_intent(
     tool: &str,
     args: &serde_json::Map<String, Value>,
@@ -289,11 +544,20 @@ fn resolve_intent(
             let mut video_codec = str_arg(args, "video_codec");
             // A model sometimes slots a video codec token ("av1", "hevc") into the container arg.
             if let Some(c) = &container {
-                if video_codec.is_none() && data.vocab.video_encoder_map.contains_key(&c.to_lowercase())
+                if video_codec.is_none()
+                    && data.vocab.video_encoder_map.contains_key(&c.to_lowercase())
                 {
                     video_codec = Some(c.to_lowercase());
                     container = None;
                 }
+            }
+            // The same mistake in the output NAME: `*.hevc` / `clip.h265`. ffmpeg picks its muxer
+            // from the extension, chooses a raw elementary stream, and fails (ffmpeg_229#4). The
+            // extension supplies the codec only when the plan names none, and is replaced by the
+            // container's below. Port of Python `_codec_from_output`.
+            let output_codec = codec_from_output(output.as_deref(), data);
+            if let (Some(oc), None) = (&output_codec, &video_codec) {
+                video_codec = Some(oc.clone());
             }
             let container = container
                 .or_else(|| container_from_output(output.as_deref(), data))
@@ -303,8 +567,13 @@ fn resolve_intent(
             let remux = video_codec.is_none() && audio_codec.is_none() && q.is_none();
 
             options.mode = Some("convert".into());
-            options.container = Some(container);
             set_output(&mut options, args);
+            if let (Some(oc), Some(out)) = (&output_codec, &output) {
+                // By string, not Path: keep the caller's separators (`out/clip.hevc`).
+                options.output_path =
+                    Some(format!("{}.{container}", &out[..out.len() - oc.len() - 1]));
+            }
+            options.container = Some(container);
             if remux {
                 options.remux = true;
             }
@@ -345,6 +614,45 @@ fn resolve_intent(
             options.start = str_arg(args, "start");
             options.duration = str_arg(args, "duration");
             options.end = str_arg(args, "end");
+            options.frames = i64_arg(args, "frames");
+            // `start == end` names an instant, not a length, so it does not compete with a frame
+            // count (ffmpeg_161#0 sent `start: 00:00:00, end: 00:00:00, frames: 1`). Port of
+            // Python `_zero_length_end`: the `end` is dropped and `frames` decides how much.
+            let zero_length_end = {
+                let zero = "0".to_string();
+                let end = crate::engine::timestamp_seconds(options.end.as_ref());
+                let start =
+                    crate::engine::timestamp_seconds(Some(options.start.as_ref().unwrap_or(&zero)));
+                matches!((end, start), (Some(e), Some(s)) if e == s)
+            };
+            if options.frames.is_some() && zero_length_end {
+                options.end = None;
+            }
+            // Port of `_preflight_trim_frames`. Without it the two runtimes hold opposite
+            // answers to a decision the plan took explicitly: Python refuses `frames`
+            // alongside a range, native silently dropped the range and rendered the count.
+            if let Some(n) = options.frames {
+                if n < 1 {
+                    anyhow::bail!("'frames' must be at least 1, got {n}.");
+                }
+                let conflicting: Vec<&str> = ["end", "duration"]
+                    .into_iter()
+                    .filter(|k| args.get(*k).is_some_and(|v| !v.is_null()))
+                    .filter(|k| !(*k == "end" && zero_length_end))
+                    .collect();
+                if !conflicting.is_empty() {
+                    anyhow::bail!(
+                        "'frames' cannot be combined with {} - a frame count and a time                          range are two different requests. Give one or the other.",
+                        conflicting
+                            .iter()
+                            .map(|k| format!("'{k}'"))
+                            .collect::<Vec<_>>()
+                            .join(" and ")
+                    );
+                }
+            } else if args.get("frames").is_some_and(|v| !v.is_null()) {
+                anyhow::bail!("'frames' must be a whole number of frames.");
+            }
             set_output(&mut options, args);
             quality = Some(resolve_quality_profile(
                 &str_arg(args, "quality").unwrap_or_else(|| "visually_good".into()),
@@ -406,6 +714,18 @@ fn resolve_intent(
                 data,
             )?);
         }
+        // The engine has implemented `mode = "reverse"` (filters, audio handling, container
+        // default) and tested it all along; only this dispatch arm was missing, so the tool was
+        // unreachable. Python defaults quality to `visually_good` here, not `balanced`.
+        "reverse_video" => {
+            options.mode = Some("reverse".into());
+            options.include_audio = args.get("include_audio").and_then(Value::as_bool);
+            set_output(&mut options, args);
+            quality = Some(resolve_quality_profile(
+                &str_arg(args, "quality").unwrap_or_else(|| "visually_good".into()),
+                data,
+            )?);
+        }
         "rotate_video" => {
             options.mode = Some("rotate".into());
             options.angle = args.get("angle").and_then(Value::as_u64).map(|a| a as u32);
@@ -416,9 +736,14 @@ fn resolve_intent(
                 data,
             )?);
         }
-        other => anyhow::bail!(
-            "ffmpeg intent {other:?} has no native dry-run expansion yet (join_videos + execution land next)"
-        ),
+        // The `not_implemented:` marker, not a bare error: this is a capability the native
+        // runtime does not have, which is a different fact from a failure and has to stay
+        // countable in the machine-readable output. Without it the L4 lane records the row as
+        // `error`, coverage cannot see the gap, and the quality average is computed over a
+        // population that silently excludes what the port cannot do (L4d, N6).
+        other => anyhow::bail!(knaif_skill_api::capability::not_implemented_message(
+            &format!("the ffmpeg intent {other:?} is not built into the native runtime yet")
+        )),
     }
 
     Ok(Ok(Resolved {
@@ -456,6 +781,17 @@ fn str_arg(args: &serde_json::Map<String, Value>, key: &str) -> Option<String> {
 
 fn bool_arg(args: &serde_json::Map<String, Value>, key: &str) -> Option<bool> {
     args.get(key).and_then(Value::as_bool)
+}
+
+/// A whole-number arg, tolerating a numeric string (`"3"`) the way Python's `int(...)` would.
+/// Used for `frames`, which is a COUNT: a fractional value is not a smaller request, it is a
+/// different kind of thing, so it is rejected here rather than truncated.
+fn i64_arg(args: &serde_json::Map<String, Value>, key: &str) -> Option<i64> {
+    match args.get(key) {
+        Some(Value::Number(n)) => n.as_i64(),
+        Some(Value::String(s)) => s.trim().parse().ok(),
+        _ => None,
+    }
 }
 
 /// A number arg, tolerating a numeric string (`"2.0"`) the way Python's `float(...)` would.
@@ -509,6 +845,15 @@ fn ext_of(output: &str) -> Option<String> {
 fn container_from_output(output: Option<&str>, data: &FfmpegData) -> Option<String> {
     let ext = output.and_then(ext_of)?;
     data.vocab.video_containers.contains(&ext).then_some(ext)
+}
+
+/// `_codec_from_output`: the output extension iff it names a video codec (`clip.hevc`).
+fn codec_from_output(output: Option<&str>, data: &FfmpegData) -> Option<String> {
+    let ext = output.and_then(ext_of)?;
+    data.vocab
+        .video_encoder_map
+        .contains_key(&ext)
+        .then_some(ext)
 }
 
 /// `_audio_format_from_output`: the output extension iff it is a known audio extension.
@@ -598,6 +943,40 @@ fn resolve_quality_profile(quality: &str, data: &FfmpegData) -> anyhow::Result<Q
             .ok_or_else(|| anyhow::anyhow!("Unknown quality profile: {quality:?}"))
     }
 }
+
+/// The contract the port owes Python, as data: every expectation generated from
+/// `fnmatch.fnmatchcase`, the function behind `Path.glob`. Shared by the two matcher tests so
+/// the hand-rolled matcher and the `glob` crate are judged against the SAME cases.
+#[cfg(test)]
+const PYTHON_FNMATCH_CASES: &[(&str, &str, bool)] = &[
+    ("*.mp4", "a.mp4", true),
+    ("*.mp4", "a.mkv", false),
+    ("*.mp4", ".mp4", true),
+    ("*", "x", true),
+    ("*", "", true),
+    ("a*b", "ab", true),
+    ("a*b", "axxb", true),
+    ("a*b", "axxc", false),
+    ("a*b*c", "axbyc", true),
+    ("a*b*c", "abc", true),
+    ("?.mp4", "a.mp4", true),
+    ("?.mp4", "ab.mp4", false),
+    ("clip?.mp4", "clip1.mp4", true),
+    ("[ab].mp4", "a.mp4", true),
+    ("[ab].mp4", "c.mp4", false),
+    ("[a-c].mp4", "b.mp4", true),
+    ("[a-c].mp4", "d.mp4", false),
+    ("[!a].mp4", "b.mp4", true),
+    ("[!a].mp4", "a.mp4", false),
+    ("[^a].mp4", "b.mp4", false),
+    ("[^a].mp4", "^.mp4", true),
+    ("*.MP4", "a.mp4", false),
+    ("clip*.mp4", "clip_4k.mp4", true),
+    ("*.*", "a.b", true),
+    ("*.*", "ab", false),
+    ("**.mp4", "a.mp4", true),
+    ("a**b", "aXb", true),
+];
 
 #[cfg(test)]
 mod tests {
@@ -905,6 +1284,55 @@ mod tests {
         );
     }
 
+    // `reverse_video` was the one public ffmpeg tool with no native dispatch arm, even though
+    // the engine has implemented and tested `mode = "reverse"` all along (engine.rs). Ground
+    // truth from Python for the same intent args.
+    #[test]
+    fn reverse_keeps_audio_by_default() {
+        assert_eq!(
+            cmd("reverse_video", serde_json::json!({"inputs": "clip.mp4"})),
+            vec![
+                "ffmpeg",
+                "-y",
+                "-i",
+                "clip.mp4",
+                "-vf",
+                "reverse",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "23",
+                "-preset",
+                "medium",
+                "-pix_fmt",
+                "yuv420p",
+                "-af",
+                "areverse",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                // `.mp4`, not `.mov`, and the difference is the STUB PROBE - not a divergence.
+                // Reverse preserves the source container (engine.rs, `mode == "reverse"`), taking
+                // `probe.container` first and falling back to the input's extension. These tests
+                // expand without a real file, so the stub reports no container and the extension
+                // wins. Against the real `clip.mp4`, ffprobe reports the container as `mov` and
+                // BOTH runtimes render `clip_reversed.mov` - verified end to end.
+                "clip_reversed.mp4"
+            ]
+        );
+    }
+
+    #[test]
+    fn reverse_without_audio_drops_the_track() {
+        let got = cmd(
+            "reverse_video",
+            serde_json::json!({"inputs": "clip.mp4", "include_audio": false}),
+        );
+        assert!(got.contains(&"-an".to_string()), "got {got:?}");
+        assert!(!got.contains(&"areverse".to_string()), "got {got:?}");
+    }
+
     #[test]
     fn rotate_90() {
         assert_eq!(
@@ -983,6 +1411,136 @@ mod tests {
             Some(sandbox),
         );
         assert!(err.is_err(), "output outside the sandbox must be rejected");
+    }
+
+    #[test]
+    fn the_glob_crate_still_differs_on_recursive_wildcards() {
+        // WHY `collapse_star_runs` EXISTS, pinned as a fact about the crate rather than left as
+        // a comment. `glob` reads `**` as a recursive wildcard and REJECTS it outside a whole
+        // path component; Python's fnmatch reads it as an ordinary run of stars. Found by
+        // diffing, not by reading docs.
+        //
+        // If a future `glob` release starts accepting these, this test fails and the
+        // normalization can be reconsidered — which is the point of pinning it.
+        for pattern in ["**.mp4", "a**b"] {
+            assert!(
+                glob::Pattern::new(pattern).is_err(),
+                "{pattern:?} now parses; re-evaluate collapse_star_runs"
+            );
+            assert!(
+                glob::Pattern::new(&collapse_star_runs(pattern)).is_ok(),
+                "collapsing must make {pattern:?} parseable"
+            );
+        }
+    }
+
+    #[test]
+    fn the_matcher_agrees_with_pythons_fnmatch() {
+        for (pattern, name, expected) in PYTHON_FNMATCH_CASES {
+            assert_eq!(
+                name_matches(pattern, name),
+                *expected,
+                "{pattern} vs {name}"
+            );
+        }
+    }
+
+    // ---- N1: glob expansion (the largest single cause of the L4 outcome gap) ----
+    //
+    // Python's `ResolveInputs` expands a pattern against the sandbox and yields ONE command per
+    // matching file; native passed the literal `*.mp4` to ffmpeg, which does not glob. Measured
+    // on the 2026-09-11 L4 re-run: 29 of the 52 native-only failures, and the `batch` slice at
+    // 0.034 against Python's 1.000.
+    //
+    // Semantics ported deliberately (python/core/knaif/steps/_resolve_inputs.py):
+    //   * the pattern applies to the NAME component only - `videos/*.mp4` globs inside
+    //     `videos/`, never recursively;
+    //   * results are SORTED, so the command order is deterministic;
+    //   * directories match nothing (files only);
+    //   * a path with no magic characters is passed through untouched, even if missing, so
+    //     "file not found" stays the probe's error to report.
+
+    fn glob_sandbox(tag: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("knaif-ffmpeg-glob-{}-{}", std::process::id(), tag));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_glob_expands_to_one_command_per_matching_file() {
+        let sandbox = glob_sandbox("basic");
+        for name in ["b.mp4", "a.mp4", "notes.txt"] {
+            std::fs::write(sandbox.join(name), b"x").unwrap();
+        }
+        let exp = expand_dry_run(
+            "convert_video",
+            &args(serde_json::json!({"inputs": ["*.mp4"], "container": "mkv"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        let cmds = match exp {
+            Expansion::Commands(c) => c,
+            Expansion::Clarify(q) => panic!("expected commands, got clarify: {q}"),
+        };
+        assert_eq!(cmds.len(), 2, "one command per matching file: {cmds:?}");
+        // Sorted, so the order is reproducible across runs and platforms.
+        assert!(cmds[0].iter().any(|a| a.ends_with("a.mp4")), "{cmds:?}");
+        assert!(cmds[1].iter().any(|a| a.ends_with("b.mp4")), "{cmds:?}");
+        // The non-matching file is not swept in.
+        assert!(
+            !cmds.iter().flatten().any(|a| a.ends_with("notes.txt")),
+            "{cmds:?}"
+        );
+        std::fs::remove_dir_all(&sandbox).ok();
+    }
+
+    #[test]
+    fn a_glob_never_leaves_its_own_directory() {
+        // `videos/*.mp4` must not reach a sibling directory, and must not recurse.
+        let sandbox = glob_sandbox("scoped");
+        std::fs::create_dir_all(sandbox.join("videos/nested")).unwrap();
+        std::fs::create_dir_all(sandbox.join("other")).unwrap();
+        std::fs::write(sandbox.join("videos/in.mp4"), b"x").unwrap();
+        std::fs::write(sandbox.join("videos/nested/deep.mp4"), b"x").unwrap();
+        std::fs::write(sandbox.join("other/sibling.mp4"), b"x").unwrap();
+
+        let exp = expand_dry_run(
+            "convert_video",
+            &args(serde_json::json!({"inputs": ["videos/*.mp4"], "container": "mkv"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        let cmds = match exp {
+            Expansion::Commands(c) => c,
+            Expansion::Clarify(q) => panic!("clarify: {q}"),
+        };
+        assert_eq!(cmds.len(), 1, "only videos/in.mp4 matches: {cmds:?}");
+        assert!(cmds[0].iter().any(|a| a.ends_with("in.mp4")), "{cmds:?}");
+        std::fs::remove_dir_all(&sandbox).ok();
+    }
+
+    #[test]
+    fn a_plain_path_is_passed_through_even_when_missing() {
+        // No magic characters: not a glob, so a missing file stays the probe's error to report
+        // rather than silently expanding to nothing.
+        let sandbox = glob_sandbox("plain");
+        let exp = expand_dry_run(
+            "convert_video",
+            &args(serde_json::json!({"inputs": ["ghost.mp4"], "container": "mkv"})),
+            &data(),
+            Some(&sandbox),
+        )
+        .unwrap();
+        match exp {
+            Expansion::Commands(c) => {
+                assert_eq!(c.len(), 1, "the missing path still renders one command")
+            }
+            Expansion::Clarify(q) => panic!("clarify: {q}"),
+        }
+        std::fs::remove_dir_all(&sandbox).ok();
     }
 
     #[test]
@@ -1065,5 +1623,43 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    // ── a silent input must not fail the batch it is in ──────────────────────
+    //
+    // Mirrors `skills/ffmpeg/python/tests/test_silent_input_batch.py`. Tested at this level
+    // rather than through `expand_dry_run` deliberately: dry-run stubs a missing file with
+    // `dummy_probe`, which reports `has_audio: true`, so a test written that way would pass
+    // without ever exercising the skip — and on a machine without ffprobe it would silently
+    // stop testing anything at all.
+
+    #[test]
+    fn extract_audio_skips_a_silent_input() {
+        assert!(skips_silent_input(Some("extract_audio"), false));
+        assert!(!skips_silent_input(Some("extract_audio"), true));
+    }
+
+    #[test]
+    fn other_modes_keep_silent_inputs() {
+        // Measured on a real silent file: both succeed, so skipping would drop real work.
+        for mode in ["adjust_volume", "strip_audio", "convert", "compress"] {
+            assert!(
+                !skips_silent_input(Some(mode), false),
+                "{mode} dropped a silent input"
+            );
+        }
+        assert!(!skips_silent_input(None, false));
+    }
+
+    #[test]
+    fn the_no_audio_message_matches_python_byte_for_byte() {
+        assert_eq!(
+            no_audio_error(&["clip_no_audio.mp4".to_string()]),
+            "No audio to extract: clip_no_audio.mp4 has no audio track."
+        );
+        assert_eq!(
+            no_audio_error(&["a.mp4".to_string(), "b.mp4".to_string()]),
+            "No audio to extract — none of these files has an audio track: a.mp4, b.mp4."
+        );
     }
 }

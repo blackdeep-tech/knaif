@@ -7,7 +7,7 @@ Development and test tooling (pytest, black, ruff, mypy) is excluded --
 it is never distributed. The optional `llama` extra is excluded for the
 same reason; llama.cpp's own license ships as llama.cpp-LICENSE.txt.
 
-8 packages in the runtime closure.
+7 packages in the runtime closure.
 
 ------------------------------------------------------------------------------
 SUMMARY
@@ -15,13 +15,12 @@ SUMMARY
 
 PACKAGE                 VERSION       LICENSE
 certifi                 2026.7.22     Mozilla Public License 2.0 (MPL 2.0)
-charset-normalizer      3.4.9         MIT
-click                   8.4.2         BSD-3-Clause
-colorama                0.4.6         BSD License
-idna                    3.18          BSD-3-Clause
+charset-normalizer      3.5.1         MIT
+click                   8.5.0         BSD-3-Clause
+idna                    3.20          BSD-3-Clause
 pyyaml                  6.0.3         MIT License
 requests                2.34.2        Apache Software License
-urllib3                 2.7.0         MIT
+urllib3                 2.8.0         MIT
 
 ------------------------------------------------------------------------------
 FULL LICENSE TEXTS
@@ -53,7 +52,7 @@ one at http://mozilla.org/MPL/2.0/.
 @(#) $RCSfile: certdata.txt,v $ $Revision: 1.80 $ $Date: 2011/11/03 15:11:58 $
 
 ==============================================================================
-charset-normalizer 3.4.9 -- MIT
+charset-normalizer 3.5.1 -- MIT
 ==============================================================================
 
 MIT License
@@ -79,7 +78,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-click 8.4.2 -- BSD-3-Clause
+click 8.5.0 -- BSD-3-Clause
 ==============================================================================
 
 Copyright 2014 Pallets
@@ -112,39 +111,7 @@ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-colorama 0.4.6 -- BSD License
-==============================================================================
-
-Copyright (c) 2010 Jonathan Hartley
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-* Redistributions of source code must retain the above copyright notice, this
-  list of conditions and the following disclaimer.
-
-* Redistributions in binary form must reproduce the above copyright notice,
-  this list of conditions and the following disclaimer in the documentation
-  and/or other materials provided with the distribution.
-
-* Neither the name of the copyright holders, nor those of its contributors
-  may be used to endorse or promote products derived from this software without
-  specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-==============================================================================
-idna 3.18 -- BSD-3-Clause
+idna 3.20 -- BSD-3-Clause
 ==============================================================================
 
 BSD 3-Clause License
@@ -212,7 +179,7 @@ Requests
 Copyright 2019 Kenneth Reitz
 
 ==============================================================================
-urllib3 2.7.0 -- MIT
+urllib3 2.8.0 -- MIT
 ==============================================================================
 
 MIT License

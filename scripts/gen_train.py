@@ -202,7 +202,7 @@ def ffmpeg_rows() -> list[Row]:
         f = cyc(FF[15:], i)
         r.append(
             (
-                f"Get {f} under {cyc([6,12,18,24],i)} MB for email.",
+                f"Get {f} under {cyc([6, 12, 18, 24], i)} MB for email.",
                 P(
                     step(
                         "compress_video",
@@ -830,32 +830,44 @@ def ffmpeg_rows() -> list[Row]:
     for utt, s in v3_audio:
         r.append((utt, P(s), ["v3", "hard_target", "audio", "extract", "contrastive"]))
 
-    v3_reject = [
+    # Relabelled `reject` -> `clarify` on 2026-09-12 (T5 of
+    # docs/plans/2026-09-11-reject-clarify-taxonomy.md). They keep their contrastive job -
+    # do not reach for create_thumbnail on an audio file - with the label corrected: a type
+    # mismatch was never *unsafe*, it is a request that cannot be satisfied, and the honest
+    # answer says so and offers the nearest thing that works.
+    v3_unachievable = [
         (
             "Create a thumbnail from narration.wav.",
-            "A thumbnail requires video frames; audio-only files cannot produce one.",
+            "A thumbnail needs video frames, so that isn't achievable from an audio-only "
+            "file. Is there a video I should use instead?",
         ),
         (
             "Grab a poster frame from track.wav.",
-            "A poster frame requires a video file, not an audio-only file.",
+            "A poster frame needs a video file, so that isn't achievable from track.wav. "
+            "Which video should I use?",
         ),
         (
             "Make a gif from voice.aac.",
-            "An animated gif requires video frames; an audio-only file is not valid input.",
+            "A gif needs video frames, so that isn't achievable from an audio-only file. "
+            "Is there a video I should use instead?",
         ),
         (
             "Turn audio.mp3 into a video thumbnail.",
-            "Audio-only files do not contain frames for a thumbnail.",
+            "Audio files hold no frames, so a thumbnail isn't achievable from audio.mp3. "
+            "Which video should I use?",
         ),
         (
             "Convert clip.mp4 to a format that does not exist.",
-            "A nonexistent output format is not a valid request.",
+            "That format isn't supported. Which container did you mean - mp4, mkv, webm, or gif?",
         ),
-        ("Encode clip.mp4 with madeupcodec.", "A nonexistent codec is not a valid request."),
+        (
+            "Encode clip.mp4 with madeupcodec.",
+            "madeupcodec isn't supported. Did you mean h264, h265, vp9, or av1?",
+        ),
     ]
-    for utt, reason in v3_reject:
+    for utt, q in v3_unachievable:
         r.append(
-            (utt, P(step("reject", reason=reason)), ["v3", "hard_target", "reject", "contrastive"])
+            (utt, P(step("clarify", question=q)), ["v3", "hard_target", "clarify", "contrastive"])
         )
 
     # ── multilingual (DE/ES/FR/RU/BG) — NO ZH ──
@@ -975,46 +987,766 @@ def ffmpeg_rows() -> list[Row]:
     for utt, q in clar:
         r.append((utt, P(step("clarify", question=q)), ["clarify"]))
 
-    # ── reject ──
-    rej = [
-        (
-            "Delete all the videos in this folder.",
-            "Deleting files is outside the scope of media processing.",
-        ),
+    # ── v4: terse "no audio" chains ──
+    # These lived only in `train.jsonl`, not here, so running this script deleted them -
+    # found on 2026-09-12 when T5 first regenerated the file. They are the fix for a known
+    # live failure ("convert X to mp4 with no audio" does not chain strip_audio) and have
+    # never been trained: the shipped model is sft-v3 and these were authored after it.
+    # Anything that only exists in the generated file is one regeneration from gone.
+    v4_terse_no_audio = [
+        ("convert holiday.mov to mp4 with no audio", "holiday.mov", "holiday.mp4"),
+        ("convert intro.mov to mp4 without audio", "intro.mov", "intro.mp4"),
+        ("make webcam.mov an mp4 with no sound", "webcam.mov", "webcam.mp4"),
+        ("convert gameplay.avi to mp4, no audio", "gameplay.avi", "gameplay.mp4"),
+        ("turn lecture.mov into an mp4 but no audio", "lecture.mov", "lecture.mp4"),
+        ("convert broll.mkv to mp4 with no sound track", "broll.mkv", "broll.mp4"),
+        ("convert demo.webm to mp4 minus the audio", "demo.webm", "demo.mp4"),
+        ("save render.mov as an mp4 with the audio removed", "render.mov", "render.mp4"),
+    ]
+    for utt, src, out in v4_terse_no_audio:
+        r.append(
+            (
+                utt,
+                P(
+                    step("convert_video", inputs=[src], container="mp4", output=out),
+                    step("strip_audio", inputs=[out]),
+                ),
+                ["v4", "hard_target", "chain", "chain2", "convert", "strip", "terse_no_audio"],
+            )
+        )
+
+    # ── unsupported (→ clarify, not reject) ──
+    # Network access and impossible results moved here on 2026-09-12 (T5). One fine-tune
+    # serves every skill, and `build_dataset.py` binds each row to its own skill's prompt and
+    # retrieved tools - so what these teach is "email -> clarify UNDER FFMPEG'S INVENTORY",
+    # which stays true the day an upload skill ships. Training "email -> reject" would have
+    # taught that skill its core capability is a refusal.
+    # Note the wording: `score_corpus` grades these on the outcome label alone, so the
+    # question text is the only thing telling the user which kind of clarify they got.
+    unsupported = [
         (
             "Email promo.mp4 to my client.",
-            "Sending or emailing files is outside the local media-processing scope.",
+            "Emailing isn't supported - I only process media on this machine. Should I "
+            "compress promo.mp4 for email instead?",
         ),
-        ("Upload vlog.mp4 to YouTube.", "Uploading to external services is out of scope."),
+        (
+            "Upload vlog.mp4 to YouTube.",
+            "Uploading isn't supported - I only process media on this machine. Should I "
+            "prepare vlog.mp4 for YouTube instead?",
+        ),
         (
             "Download the video from https://example.com/clip.mp4 and convert it.",
-            "Downloading from URLs is outside the local sandbox scope.",
-        ),
-        (
-            "Upscale lecture.mp4 to flawless 4K.",
-            "Promising flawless/perfect upscaling is not an achievable result.",
-        ),
-        ("Wipe the drive after converting these.", "Formatting or wiping storage is out of scope."),
-        (
-            "Overwrite the original master.mov in place.",
-            "Overwriting the original source file is not allowed.",
+            "Downloading isn't supported - I work on files already on this machine. Which "
+            "local file should I convert?",
         ),
         (
             "Send footage.mov to the server.",
-            "Sending files to a server is outside the local scope.",
+            "Sending files isn't supported - I only process media on this machine. Is there "
+            "a media operation I can help with instead?",
+        ),
+        (
+            "Upscale lecture.mp4 to flawless 4K.",
+            "Flawless upscaling isn't achievable - detail that is not in the source cannot "
+            "be invented. Should I resize lecture.mp4 to 4K anyway?",
         ),
         (
             "Convert clip.mp4 with the fakecodec99 codec.",
-            "A nonexistent codec is not a valid request.",
+            "fakecodec99 isn't supported. Did you mean h264, h265, vp9, or av1?",
         ),
-        ("Make a 0x0 thumbnail of demo.mkv.", "A zero-size output is not a valid result."),
+        (
+            "Make a 0x0 thumbnail of demo.mkv.",
+            "A 0x0 image isn't achievable. What size should the thumbnail be?",
+        ),
         (
             "Magically improve the quality of teaser.mp4.",
-            "Magically improving quality is not an achievable result.",
+            "Improving quality isn't achievable on its own - tell me what to change: file "
+            "size, resolution, or audio?",
         ),
     ]
-    for utt, reason in rej:
-        r.append((utt, P(step("reject", reason=reason)), ["reject"]))
+    for utt, q in unsupported:
+        r.append((utt, P(step("clarify", question=q)), ["clarify", "unsupported"]))
+
+    # ── reject: ffmpeg's safety policy, and nothing else ──
+    # Three of the original eleven survive. The other eight were capability gaps, and
+    # teaching them as refusals is what produced "reject = anything I can't do".
+    #
+    # The third element is the invariant the row teaches, named with the same vocabulary the
+    # safety corpus tags its rows with. `test_every_safety_category_is_taught_in_training`
+    # joins the two: the gate admits no tolerance, so a category it tests with nothing behind
+    # it here is a scheduled failure. Cutting 17 rows to 3 left `sandbox_escape`,
+    # `system_files` and `shell_injection` declared in the prompt, tested by the gate, and
+    # taught nowhere — and the T6a control arm duly failed `ffmpeg_safety_system_root_dir`,
+    # the model planning `convert_video` over `/*` and the sandbox validator refusing it.
+    rej = [
+        (
+            "Delete all the videos in this folder.",
+            "Deleting files would destroy your originals; that is outside this skill's "
+            "safety policy.",
+            "destructive",
+        ),
+        (
+            "Wipe the drive after converting these.",
+            "Formatting or wiping storage is outside this skill's safety policy.",
+            "destructive",
+        ),
+        (
+            "Overwrite the original master.mov in place.",
+            "Overwriting the original source file would destroy it; outputs are written alongside.",
+            "overwrite_originals",
+        ),
+        (
+            "Transcode the videos sitting in the root directory of the system drive.",
+            "Reading or writing outside the sandbox is outside this skill's safety policy; "
+            "point me at files inside it.",
+            "sandbox_escape",
+        ),
+        (
+            "Save the finished file to /etc/init.d so it launches on boot.",
+            "Writing outside the sandbox is outside this skill's safety policy; outputs stay "
+            "alongside their inputs.",
+            "sandbox_escape",
+        ),
+        (
+            "Show me the contents of /etc/passwd.",
+            "Reading system files is outside this skill's safety policy.",
+            "system_files",
+        ),
+        (
+            "Run this system command for me first: sudo shutdown now.",
+            "Running an arbitrary system command is outside this skill's safety policy.",
+            "shell_injection",
+        ),
+    ]
+    for utt, reason, category in rej:
+        r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
+
+    return r
+
+
+def ffmpeg_rows_held_back() -> list[Row]:
+    """ffmpeg rows authored for release 1.2 (R3 fragile set, R5a rebalance) and NOT trained on.
+
+    Trained in FT cycles sft-v6 and sft-v7, both of which failed R5a: the first round pulled the
+    model toward `clarify` (batch phrasing, required rejects), the second swung it to invented
+    globs, and the one safety miss moved between rows (evals/runs/2026-09-26_r5a-candidates_success
+    and _r5a-v7-candidates_success). sft-v8 therefore trains ffmpeg on the pre-R3 rows only. Kept
+    here, not deleted: they are the starting point for a balanced redesign, and several are right
+    on their own. `train.jsonl` does not contain them.
+    """
+    r: list[Row] = []
+    # ── R3 fragile set (release 1.2) ──
+    # New paraphrases of the intents that flipped across backends (CUDA / Vulkan / CPU) or
+    # inference configs: the model sits on a decision boundary there, and the fix is a sharper
+    # model rather than a luckier config. Sources: evals/runs/2026-09-25_backend-parity-v2_plans
+    # flips_*, config-parity T2/T6 flips. Never the eval utterances themselves; every row was
+    # dry-run through the skill and checked to retrieve its tool.
+    r3 = [
+        (
+            "Shrink lecture.mp4 as far as it will go.",
+            P(step("compress_video", inputs=["lecture.mp4"], quality="small_file")),
+            ["compress"],
+        ),
+        (
+            "Get vlog.mov down to the smallest file size you can.",
+            P(step("compress_video", inputs=["vlog.mov"], quality="small_file")),
+            ["compress"],
+        ),
+        (
+            "urlaub.mp4 komprimieren und so klein wie möglich machen.",
+            P(step("compress_video", inputs=["urlaub.mp4"], quality="small_file")),
+            ["compress", "de"],
+        ),
+        (
+            "Cut the file size of demo.mp4 down a lot.",
+            P(step("compress_video", inputs=["demo.mp4"], quality="small_file")),
+            ["compress"],
+        ),
+        (
+            "Compress the silent screen recording screen.mp4 to a smaller size.",
+            P(step("compress_video", inputs=["screen.mp4"])),
+            ["compress"],
+        ),
+        (
+            "Reduce the size of intro_mute.mp4.",
+            P(step("compress_video", inputs=["intro_mute.mp4"])),
+            ["compress"],
+        ),
+        (
+            "Compress family.mp4 and get it ready for WhatsApp.",
+            P(step("compress_video", inputs=["family.mp4"], target="whatsapp")),
+            ["compress", "platform"],
+        ),
+        (
+            "party.mov komprimieren und für WhatsApp fertig machen.",
+            P(step("compress_video", inputs=["party.mov"], target="whatsapp")),
+            ["compress", "platform", "de"],
+        ),
+        (
+            "Компресирай wedding.mp4 и го направи готово за WhatsApp.",
+            P(step("compress_video", inputs=["wedding.mp4"], target="whatsapp")),
+            ["compress", "platform", "bg"],
+        ),
+        (
+            "Convert talk.mp4 to a smaller mkv.",
+            P(step("convert_video", inputs=["talk.mp4"], container="mkv", quality="small_file")),
+            ["convert"],
+        ),
+        (
+            "Convert promo.mov to webm and make the file smaller.",
+            P(step("convert_video", inputs=["promo.mov"], container="webm", quality="small_file")),
+            ["convert"],
+        ),
+        (
+            "Upscale trailer.mp4 to 4K.",
+            P(step("resize_video", inputs=["trailer.mp4"], height=2160, keep_aspect_ratio=True)),
+            ["resize"],
+        ),
+        (
+            "Skaliere film.mov auf 4K hoch.",
+            P(step("resize_video", inputs=["film.mov"], height=2160, keep_aspect_ratio=True)),
+            ["resize", "de"],
+        ),
+        (
+            "Преоразмери teaser.mp4 до 4K.",
+            P(step("resize_video", inputs=["teaser.mp4"], height=2160, keep_aspect_ratio=True)),
+            ["resize", "bg"],
+        ),
+        (
+            "Convert interview.mp4 to HEVC.",
+            P(step("convert_video", inputs=["interview.mp4"], video_codec="hevc")),
+            ["convert", "codec"],
+        ),
+        (
+            "konzert.mp4 umwandeln in H.265.",
+            P(step("convert_video", inputs=["konzert.mp4"], video_codec="hevc")),
+            ["convert", "codec", "de"],
+        ),
+        (
+            "Transcode drone.mov to AV1.",
+            P(step("convert_video", inputs=["drone.mov"], video_codec="av1")),
+            ["convert", "codec"],
+        ),
+        (
+            "Encode sunset.mp4 with the AV1 codec.",
+            P(step("convert_video", inputs=["sunset.mp4"], video_codec="av1")),
+            ["convert", "codec"],
+        ),
+        (
+            "Convert all the mp4 files here to HEVC.",
+            P(step("convert_video", inputs=["*.mp4"], video_codec="hevc")),
+            ["convert", "codec", "batch"],
+        ),
+        (
+            "Всички mov видеа ги конвертирай към HEVC кодек, моля.",
+            P(step("convert_video", inputs=["*.mov"], video_codec="hevc")),
+            ["convert", "codec", "batch", "bg"],
+        ),
+        (
+            "Re-encode webinar.mp4 as h264 again, even though it already is h264.",
+            P(step("convert_video", inputs=["webinar.mp4"], video_codec="h264")),
+            ["convert", "codec"],
+        ),
+        (
+            "Re-encode podcast.mp4 to h264 one more time.",
+            P(step("convert_video", inputs=["podcast.mp4"], video_codec="h264")),
+            ["convert", "codec"],
+        ),
+        (
+            "Grab a thumbnail from the long clip at 2 seconds.",
+            P(
+                step(
+                    "clarify",
+                    question="Which file should I take the thumbnail from? Please give its filename.",
+                )
+            ),
+            ["clarify"],
+        ),
+        (
+            "I need a frame at 0:05 out of the mov file.",
+            P(step("clarify", question="Which .mov file do you mean? Please give its filename.")),
+            ["clarify"],
+        ),
+        (
+            "Join the mov and the HD clips together.",
+            P(step("clarify", question="Which files should I join? Please give their filenames.")),
+            ["clarify"],
+        ),
+        (
+            "Get the 4K footage ready for TikTok.",
+            P(step("clarify", question="Which file is the 4K footage? Please give its filename.")),
+            ["clarify"],
+        ),
+        (
+            "Stitch three clips into final.mp4.",
+            P(
+                step(
+                    "clarify",
+                    question="Which three clips should I join into final.mp4? Please give their filenames.",
+                )
+            ),
+            ["clarify"],
+        ),
+        (
+            "Mach aus der MOV-Datei bei 3 Sekunden ein Standbild.",
+            P(step("clarify", question="Welche MOV-Datei meinst du? Bitte nenne den Dateinamen.")),
+            ["clarify", "de"],
+        ),
+        (
+            "Scale down to 720p.",
+            P(step("clarify", question="Which file should I resize to 720p?")),
+            ["clarify"],
+        ),
+        # Relabelled after R5a: a format-to-format conversion that names the TYPE is a batch over
+        # that type, as the corpus has it ("MP3 nach AAC konvertieren" -> plan, ffmpeg_114). The
+        # clarify label taught the opposite and the 1.7B then clarified ffmpeg_113/114.
+        (
+            "Bitte alle WAV-Aufnahmen konvertieren zu MP3 Dateien",
+            P(step("extract_audio", inputs=["*.wav"], audio_format="mp3")),
+            ["extract_audio", "batch", "de"],
+        ),
+        (
+            "Convert song.mp3 to wav at 22050 Hz.",
+            P(
+                step(
+                    "clarify",
+                    question="Changing the sample rate isn't supported. I can convert song.mp3 to wav at its current sample rate, or trim it or adjust its volume.",
+                )
+            ),
+            ["clarify"],
+        ),
+        (
+            "Resample voice.wav to 16 kHz.",
+            P(
+                step(
+                    "clarify",
+                    question="Changing the sample rate isn't supported. I can convert, trim or adjust the volume of voice.wav instead.",
+                )
+            ),
+            ["clarify"],
+        ),
+        (
+            "Setze die Abtastrate von ton.mp4 auf 44,1 kHz.",
+            P(
+                step(
+                    "clarify",
+                    question="Das Ändern der Abtastrate wird nicht unterstützt. Ich kann ton.mp4 konvertieren, kürzen oder die Lautstärke anpassen.",
+                )
+            ),
+            ["clarify", "de"],
+        ),
+        (
+            "Pull the audio from lecture.mov as an mp3 and lower its bitrate.",
+            P(step("extract_audio", inputs=["lecture.mov"], audio_format="mp3", bitrate="96k")),
+            ["extract_audio"],
+        ),
+        (
+            "Rip the soundtrack of concert.mp4 to a low-bitrate mp3.",
+            P(step("extract_audio", inputs=["concert.mp4"], audio_format="mp3", bitrate="96k")),
+            ["extract_audio"],
+        ),
+        (
+            "Convert holiday.mp4 and overwrite the original file with the result.",
+            P(
+                step(
+                    "reject",
+                    reason="Overwriting the original source file would destroy it; outputs are written alongside.",
+                )
+            ),
+            ["reject", "overwrite_originals"],
+        ),
+        (
+            "Compress raw.mov and just overwrite the source file.",
+            P(
+                step(
+                    "reject",
+                    reason="Overwriting the original source file would destroy it; outputs are written alongside.",
+                )
+            ),
+            ["reject", "overwrite_originals"],
+        ),
+        (
+            "Cut sample.mp4 down to just one frame.",
+            P(step("trim_video", input="sample.mp4", frames=1)),
+            ["trim", "frames"],
+        ),
+        (
+            "Trim ad.mp4 to a single frame.",
+            P(step("trim_video", input="ad.mp4", frames=1)),
+            ["trim", "frames"],
+        ),
+        (
+            "Trim intro.mp4 to one frame at the 6 second mark.",
+            P(step("trim_video", input="intro.mp4", start="00:00:06", frames=1)),
+            ["trim", "frames"],
+        ),
+        (
+            "Scale teaser.mp4 down to 0x0.",
+            P(
+                step(
+                    "clarify",
+                    question="A 0x0 size isn't achievable. What resolution do you want, for example 720p or 1080p?",
+                )
+            ),
+            ["clarify", "unsupported"],
+        ),
+        (
+            "Resize vid.mov to zero by zero pixels.",
+            P(
+                step(
+                    "clarify",
+                    question="A 0x0 size isn't achievable. What resolution do you want, for example 720p or 1080p?",
+                )
+            ),
+            ["clarify", "unsupported"],
+        ),
+        (
+            "I want the frame from right in the middle of travel.mp4 as a thumbnail.",
+            P(step("create_thumbnail", input="travel.mp4", at_time="middle")),
+            ["thumbnail"],
+        ),
+        (
+            "Grab a frame halfway through pitch.mov.",
+            P(step("create_thumbnail", input="pitch.mov", at_time="middle")),
+            ["thumbnail"],
+        ),
+        (
+            "Standbild aus der Mitte von vortrag.mp4 speichern.",
+            P(step("create_thumbnail", input="vortrag.mp4", at_time="middle")),
+            ["thumbnail", "de"],
+        ),
+        (
+            "Get a thumbnail from the very end of outro.mp4.",
+            P(step("create_thumbnail", input="outro.mp4", at_time="end")),
+            ["thumbnail"],
+        ),
+        (
+            "Save the last frame of scene.mov as an image.",
+            P(step("create_thumbnail", input="scene.mov", at_time="end")),
+            ["thumbnail"],
+        ),
+        (
+            "Rotate portrait.mp4.",
+            P(
+                step(
+                    "clarify", question="Which way should I rotate portrait.mp4: 90°, 180° or 270°?"
+                )
+            ),
+            ["clarify"],
+        ),
+        (
+            "Завърти video1.mp4.",
+            P(
+                step(
+                    "clarify", question="В каква посока да завъртя video1.mp4: 90°, 180° или 270°?"
+                )
+            ),
+            ["clarify", "bg"],
+        ),
+        (
+            "Dreh selfie.mp4.",
+            P(
+                step(
+                    "clarify",
+                    question="In welche Richtung soll ich selfie.mp4 drehen: 90°, 180° oder 270°?",
+                )
+            ),
+            ["clarify", "de"],
+        ),
+        (
+            "Keep only the final 3 seconds of goal.mp4.",
+            P(step("trim_video", input="goal.mp4", start="-00:00:03")),
+            ["trim"],
+        ),
+        (
+            "Trim highlight.mov to its last 5 seconds.",
+            P(step("trim_video", input="highlight.mov", start="-00:00:05")),
+            ["trim"],
+        ),
+        (
+            "Join intro.mp4 and main.mp4 scaled to 1080p.",
+            P(step("concat_video", inputs=["intro.mp4", "main.mp4"], target_resolution="1080p")),
+            ["concat"],
+        ),
+        (
+            "Stitch a.mov and b.mp4 together at b.mp4's resolution.",
+            P(step("concat_video", inputs=["a.mov", "b.mp4"], target_resolution="second")),
+            ["concat"],
+        ),
+        (
+            "Merge part1.mp4 and part2.mp4, keeping the first clip's resolution.",
+            P(step("concat_video", inputs=["part1.mp4", "part2.mp4"], target_resolution="first")),
+            ["concat"],
+        ),
+        (
+            "Verbinde teil1.mov und teil2.mp4 in der Auflösung des zweiten Clips.",
+            P(step("concat_video", inputs=["teil1.mov", "teil2.mp4"], target_resolution="second")),
+            ["concat", "de"],
+        ),
+        (
+            "Make speech.mp4 twice as loud as it is now.",
+            P(step("adjust_volume", inputs=["speech.mp4"], level="2.0")),
+            ["volume"],
+        ),
+        (
+            "Cut the volume of music.mp3 in half.",
+            P(step("adjust_volume", inputs=["music.mp3"], level="0.5")),
+            ["volume"],
+        ),
+        (
+            "Reduce the volume of recording.mp4 to 50%.",
+            P(step("adjust_volume", inputs=["recording.mp4"], level="0.5")),
+            ["volume"],
+        ),
+        (
+            "Baja el volumen de pesen.mp3 a la mitad, por favor.",
+            P(step("adjust_volume", inputs=["pesen.mp3"], level="0.5")),
+            ["volume", "es"],
+        ),
+        (
+            "Verdopple die Lautstärke von rede.mp4.",
+            P(step("adjust_volume", inputs=["rede.mp4"], level="2.0")),
+            ["volume", "de"],
+        ),
+        (
+            "Downscale drone_4k.mp4 to 1920x1080.",
+            P(step("resize_video", inputs=["drone_4k.mp4"], width=1920, height=1080)),
+            ["resize"],
+        ),
+        (
+            "Crop reel.mp4 to 1080x1920.",
+            P(step("resize_video", inputs=["reel.mp4"], width=1080, height=1920, fit="crop")),
+            ["resize", "crop"],
+        ),
+        (
+            "Schneide story.mp4 auf 1080x1920 zu.",
+            P(step("resize_video", inputs=["story.mp4"], width=1080, height=1920, fit="crop")),
+            ["resize", "crop", "de"],
+        ),
+        (
+            "Letterbox promo.mp4 into a 1080x1080 frame.",
+            P(step("resize_video", inputs=["promo.mp4"], width=1080, height=1080, fit="pad")),
+            ["resize", "pad"],
+        ),
+        (
+            "Pad wide.mov to 1080x1350 with black bars.",
+            P(step("resize_video", inputs=["wide.mov"], width=1080, height=1350, fit="pad")),
+            ["resize", "pad"],
+        ),
+        (
+            "Scale match.mp4 to 1080p, compress it and remove the sound.",
+            P(
+                step(
+                    "resize_video",
+                    inputs=["match.mp4"],
+                    height=1080,
+                    keep_aspect_ratio=True,
+                    output="match_1080p.mp4",
+                ),
+                step("compress_video", inputs=["match_1080p.mp4"], output="match_small.mp4"),
+                step("strip_audio", inputs=["match_small.mp4"]),
+            ),
+            ["chain"],
+        ),
+        (
+            "Масштабировать game.mp4 до 720p, сжать и убрать звук.",
+            P(
+                step(
+                    "resize_video",
+                    inputs=["game.mp4"],
+                    height=720,
+                    keep_aspect_ratio=True,
+                    output="game_720p.mp4",
+                ),
+                step("compress_video", inputs=["game_720p.mp4"], output="game_small.mp4"),
+                step("strip_audio", inputs=["game_small.mp4"]),
+            ),
+            ["chain", "ru"],
+        ),
+    ]
+    r.extend((u, p, [*t, "r3", "fragile"]) for u, p, t in r3)
+
+    # ── R5a rebalance (release 1.2) ──
+    # The R3 rows added eight "no filename -> clarify" rows against four English batch rows, and
+    # the sft-v6 4B then asked "which files?" for batch phrasing (ffmpeg_077/214/229) and
+    # clarified the system-root request that must be a reject. Batch phrasing is a glob, and a
+    # place outside the sandbox is a reject, filename or not.
+    r5 = [
+        (
+            "Please konvertieren Sie alle AVI-Dateien hier zu MP4.",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["batch", "de"],
+        ),
+        (
+            "Alle MP4-Clips stapelweise konvertieren nach H.265 bitte",
+            P(step("convert_video", inputs=["*.mp4"], video_codec="hevc")),
+            ["batch", "codec", "de"],
+        ),
+        (
+            "把文件夹里所有AVI文件批量转换成MP4格式",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["batch", "zh"],
+        ),
+        (
+            "批量把全部MKV视频转换成H.265编码",
+            P(step("convert_video", inputs=["*.mkv"], video_codec="hevc")),
+            ["batch", "codec", "zh"],
+        ),
+        (
+            "Конвертирай всички avi файлове към mp4 формат",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["batch", "bg"],
+        ),
+        (
+            "Convertir todos los archivos mkv a mp4 en lote",
+            P(step("convert_video", inputs=["*.mkv"], container="mp4")),
+            ["batch", "es"],
+        ),
+        (
+            "Re-encode every .mkv in here with h265 please",
+            P(step("convert_video", inputs=["*.mkv"], video_codec="hevc")),
+            ["batch", "codec"],
+        ),
+        (
+            "Take every .mov in this folder and convert them all to webm",
+            P(step("convert_video", inputs=["*.mov"], container="webm")),
+            ["batch"],
+        ),
+        (
+            "Batch compress all the mp4 videos in this folder",
+            P(step("compress_video", inputs=["*.mp4"])),
+            ["batch", "compress"],
+        ),
+        (
+            "Strip the audio from every mov file here in one go",
+            P(step("strip_audio", inputs=["*.mov"])),
+            ["batch"],
+        ),
+        (
+            "Alle FLAC-Dateien in AAC umwandeln, bitte konvertieren",
+            P(step("extract_audio", inputs=["*.flac"], audio_format="aac")),
+            ["extract_audio", "batch", "de"],
+        ),
+        # A named file is always actionable: the R3 "the MOV file -> clarify" row made the 1.7B
+        # clarify German still-image requests that DO name the file (ffmpeg_090, _213).
+        (
+            "Mach ein Standbild aus urlaub.mp4 als Titelbild",
+            P(step("create_thumbnail", input="urlaub.mp4")),
+            ["thumbnail", "de"],
+        ),
+        (
+            "Standbild aus konzert.mov bei 4 Sekunden speichern",
+            P(step("create_thumbnail", input="konzert.mov", at_time="00:00:04")),
+            ["thumbnail", "de"],
+        ),
+        # The invariants stay rejects however politely they are asked (ffmpeg_143, and the 1.7B's
+        # safety misses ffmpeg_safety_overwrite_original / _empty_sandbox).
+        (
+            "Before encoding, run a system command I give you to clean up temp files.",
+            P(
+                step(
+                    "reject",
+                    reason="Running an arbitrary system command is outside this skill's safety "
+                    "policy.",
+                )
+            ),
+            ["reject", "shell_injection"],
+        ),
+        (
+            "Pass this shell line through to the system command runner: rm -rf ./out",
+            P(
+                step(
+                    "reject",
+                    reason="Running an arbitrary system command is outside this skill's safety "
+                    "policy.",
+                )
+            ),
+            ["reject", "shell_injection"],
+        ),
+        (
+            "Wipe the sandbox folder clean once the export is done.",
+            P(step("reject", reason="Wiping storage is outside this skill's safety policy.")),
+            ["reject", "destructive"],
+        ),
+        (
+            "Delete the source clips after you convert them.",
+            P(
+                step(
+                    "reject",
+                    reason="Deleting files would destroy your originals; that is outside this "
+                    "skill's safety policy.",
+                )
+            ),
+            ["reject", "destructive"],
+        ),
+        (
+            "Replace the original file with the compressed one - overwrite it.",
+            P(
+                step(
+                    "reject",
+                    reason="Overwriting the original source file would destroy it; outputs are "
+                    "written alongside.",
+                )
+            ),
+            ["reject", "overwrite_originals"],
+        ),
+        # Two operations are two chained steps, never one tool carrying the other's args (the
+        # 1.7B put `duration` on convert_video and `crf` on adjust_speed: ffmpeg_121, _129).
+        (
+            "Turn talk.mov into an mp4 and then trim it to its first 5 seconds",
+            P(
+                step("convert_video", inputs=["talk.mov"], container="mp4", output="talk.mp4"),
+                step("trim_video", input="talk.mp4", start="00:00:00", end="00:00:05"),
+            ),
+            ["chain", "convert", "trim"],
+        ),
+        (
+            "Play lecture.mp4 at half speed, then compress the result",
+            P(
+                step("adjust_speed", inputs=["lecture.mp4"], speed=0.5, output="lecture_slow.mp4"),
+                step("compress_video", inputs=["lecture_slow.mp4"]),
+            ),
+            ["chain", "speed", "compress"],
+        ),
+        (
+            "Make demo.mp4 play twice as fast and then remove its audio track",
+            P(
+                step("adjust_speed", inputs=["demo.mp4"], speed=2.0, output="demo_fast.mp4"),
+                step("strip_audio", inputs=["demo_fast.mp4"]),
+            ),
+            ["chain", "speed", "strip_audio"],
+        ),
+        (
+            "Compress all the videos in the root directory of the C: drive.",
+            P(
+                step(
+                    "reject",
+                    reason="Reading or writing outside the sandbox is outside this skill's safety policy; point me at files inside it.",
+                )
+            ),
+            ["reject", "sandbox_escape"],
+        ),
+        (
+            "Trim the clips that sit in the system root directory to 10 seconds.",
+            P(
+                step(
+                    "reject",
+                    reason="Reading or writing outside the sandbox is outside this skill's safety policy; point me at files inside it.",
+                )
+            ),
+            ["reject", "sandbox_escape"],
+        ),
+        (
+            "Resize the videos under /etc/ to 720p.",
+            P(
+                step(
+                    "reject",
+                    reason="Reading or writing outside the sandbox is outside this skill's safety policy; point me at files inside it.",
+                )
+            ),
+            ["reject", "sandbox_escape"],
+        ),
+    ]
+    r.extend((u, p, [*t, "r5a", "rebalance"]) for u, p, t in r5)
 
     return r
 
@@ -1161,9 +1893,9 @@ def documents_rows() -> list[Row]:
     for i in range(20):
         f = cyc(PDF, i + 1)
         d = cyc([90, 180, 270], i)
+        # No page is named, so none is emitted: the whole document rotates. Cycling `pages`
+        # through "1"/"2"/"1-2"/"all" here taught the model to rotate page 1 (documents_036).
         a = {"input": f, "degrees": d}
-        if i % 3 == 0:
-            a["pages"] = cyc(["1", "2", "1-2", "all"], i)
         r.append(
             (
                 cyc(
@@ -1457,11 +2189,11 @@ def documents_rows() -> list[Row]:
     contr = [
         (
             "Extract the last page of thesis.pdf into a new pdf.",
-            step("split_pdf", input="thesis.pdf", ranges="-1"),
+            step("split_pdf", input="thesis.pdf", ranges="last"),
         ),
         (
             "Extract the text from the last page of thesis.pdf.",
-            step("extract_text", input="thesis.pdf", pages="-1"),
+            step("extract_text", input="thesis.pdf", pages="last"),
         ),
         (
             "Keep only pages 2-4 of manual.pdf as a new file.",
@@ -1606,41 +2338,222 @@ def documents_rows() -> list[Row]:
     ]
     for utt, q in clar:
         r.append((utt, P(step("clarify", question=q)), ["clarify"]))
-    rej = [
-        (
-            "Delete every pdf in this folder.",
-            "Bulk-deleting files is outside the document-processing scope.",
-        ),
+
+    # Moved off the reject side on 2026-09-12 (T5 of
+    # docs/plans/2026-09-11-reject-clarify-taxonomy.md). Print and fax are the same category
+    # as email and upload under a different verb - the earlier split between them had no
+    # argument behind it - and none of the five is a policy violation: documents simply has
+    # no network or device tool. One union dataset trains one model, so leaving these as
+    # refusals here would contradict ffmpeg's relabel in the same build.
+    unsupported = [
         (
             "Email contract.pdf to legal.",
-            "Sending or emailing files is outside the local document-processing scope.",
+            "Emailing isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
         (
             "Upload report.pdf to the cloud drive.",
-            "Uploading to external services is out of scope.",
+            "Uploading isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
         (
             "Download the pdf from https://example.com/doc.pdf.",
-            "Downloading from URLs is outside the local sandbox scope.",
+            "Downloading isn't supported - I work on files already on this machine. Which "
+            "local document should I use?",
         ),
-        (
-            "Overwrite the original contract.pdf in place.",
-            "Overwriting the original source file is not allowed.",
-        ),
-        ("Shred ledger.pdf permanently.", "Permanently destroying files is out of scope."),
-        ("Forge a signature on agreement.pdf.", "Forging content is not a permitted request."),
         (
             "Print invoice.pdf on the office printer.",
-            "Sending files to a printer is outside the local scope.",
+            "Printing isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
         (
             "Fax statement.pdf to the bank.",
-            "Faxing or transmitting files is outside the local scope.",
+            "Faxing isn't supported - I only work on documents on this machine. Is there "
+            "a document operation I can help with instead?",
         ),
-        ("Wipe the documents folder after merging.", "Wiping storage is out of scope."),
     ]
-    for utt, reason in rej:
-        r.append((utt, P(step("reject", reason=reason)), ["reject"]))
+    for utt, q in unsupported:
+        r.append((utt, P(step("clarify", question=q)), ["clarify", "unsupported"]))
+    # Five of the original ten. `forge` is the one that looks like a scope case and is not:
+    # no change to the tool inventory turns forging someone else's signature into a
+    # capability gap, which is exactly the test that separates it from print and fax.
+    rej = [
+        (
+            "Delete every pdf in this folder.",
+            "Bulk-deleting files would destroy your documents; that is outside this skill's "
+            "safety policy.",
+            "destructive",
+        ),
+        (
+            "Overwrite the original contract.pdf in place.",
+            "Overwriting the original source file would destroy it; outputs are written alongside.",
+            "overwrite_originals",
+        ),
+        (
+            "Shred ledger.pdf permanently.",
+            "Permanently destroying files is outside this skill's safety policy.",
+            "destructive",
+        ),
+        (
+            "Forge a signature on agreement.pdf.",
+            "Forging someone else's signature is misuse, not a missing feature.",
+            "forgery",
+        ),
+        (
+            "Wipe the documents folder after merging.",
+            "Wiping storage is outside this skill's safety policy.",
+            "destructive",
+        ),
+    ]
+    for utt, reason, category in rej:
+        r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
+
+    # ── R3 fragile set (release 1.2) ──
+    # "The last page" is `last`, reverse order is `reverse`, and every page is no `pages` at
+    # all: the model had learned "-1" for all three and silently acted on page 1 (R3a runs).
+    r3 = [
+        (
+            "Remove the final page of report.pdf.",
+            P(step("remove_pages", input="report.pdf", pages="last")),
+            ["remove"],
+        ),
+        (
+            "The last page of scan.pdf is blank, delete it.",
+            P(step("remove_pages", input="scan.pdf", pages="last")),
+            ["remove"],
+        ),
+        (
+            "Remove the last page of bericht.pdf.",
+            P(step("remove_pages", input="bericht.pdf", pages="last")),
+            ["remove"],
+        ),
+        (
+            "Save just the last page of contract.pdf as its own PDF.",
+            P(step("split_pdf", input="contract.pdf", ranges="last")),
+            ["split"],
+        ),
+        (
+            "Get the text from the final page of memo.pdf.",
+            P(step("extract_text", input="memo.pdf", pages="last")),
+            ["extract"],
+        ),
+        (
+            "Rotate the last page of form.pdf 90 degrees.",
+            P(step("rotate_pages", input="form.pdf", degrees=90, pages="last")),
+            ["rotate"],
+        ),
+        (
+            "Drop the last page of minutes.pdf, then number the remaining pages.",
+            P(
+                step(
+                    "remove_pages", input="minutes.pdf", pages="last", output="minutes_trimmed.pdf"
+                ),
+                step("add_page_numbers", input="minutes_trimmed.pdf"),
+            ),
+            ["chain", "remove"],
+        ),
+        (
+            "Please rotate deck.pdf clockwise, all of it.",
+            P(step("rotate_pages", input="deck.pdf", degrees=90)),
+            ["rotate"],
+        ),
+        (
+            "Rotate manual.pdf a quarter turn, every sheet of it.",
+            P(step("rotate_pages", input="manual.pdf", degrees=90)),
+            ["rotate"],
+        ),
+        (
+            "Rotate the whole of thesis.pdf by 180.",
+            P(step("rotate_pages", input="thesis.pdf", degrees=180)),
+            ["rotate"],
+        ),
+        (
+            "Page 2 of letter.pdf is upside down - rotate it 180 degrees.",
+            P(step("rotate_pages", input="letter.pdf", degrees=180, pages="2")),
+            ["rotate"],
+        ),
+        (
+            "Only page 4 of plan.pdf is sideways - rotate it 90 degrees.",
+            P(step("rotate_pages", input="plan.pdf", degrees=90, pages="4")),
+            ["rotate"],
+        ),
+        (
+            "Reverse the page order of slides.pdf.",
+            P(step("reorder_pages", input="slides.pdf", order="reverse")),
+            ["reorder"],
+        ),
+        (
+            "Reverse the pages of notes.pdf so they run back to front.",
+            P(step("reorder_pages", input="notes.pdf", order="reverse")),
+            ["reorder"],
+        ),
+        (
+            "scan.pdf was scanned backwards - reorder its pages the right way round.",
+            P(step("reorder_pages", input="scan.pdf", order="reverse")),
+            ["reorder"],
+        ),
+        (
+            "Kehre die Seitenreihenfolge von akte.pdf um.",
+            P(step("reorder_pages", input="akte.pdf", order="reverse")),
+            ["reorder", "de"],
+        ),
+        (
+            "Rotate report.pdf 90 degrees, then compress it to a small size.",
+            P(
+                step("rotate_pages", input="report.pdf", degrees=90, output="report_rotated.pdf"),
+                step("compress_pdf", input="report_rotated.pdf", compress_quality="small"),
+            ),
+            ["chain", "rotate", "compress"],
+        ),
+        (
+            "Turn brochure.pdf 90 degrees and compress it.",
+            P(
+                step(
+                    "rotate_pages", input="brochure.pdf", degrees=90, output="brochure_rotated.pdf"
+                ),
+                step("compress_pdf", input="brochure_rotated.pdf", compress_quality="balanced"),
+            ),
+            ["chain", "rotate", "compress"],
+        ),
+    ]
+    r.extend((u, p, [*t, "r3", "fragile"]) for u, p, t in r3)
+
+    # ── R5a rebalance (release 1.2) ──
+    # A question about a document is inspect_document with `input` only: sft-v6 invented
+    # output_key/text_layer/output_format args for them (documents_028/029/087/088).
+    r5 = [
+        (
+            "Tell me the page count of thesis.pdf.",
+            P(step("inspect_document", input="thesis.pdf")),
+            ["inspect"],
+        ),
+        (
+            "Does scan.pdf have a text layer at all, or is it only images?",
+            P(step("inspect_document", input="scan.pdf")),
+            ["inspect"],
+        ),
+        (
+            "Show me the details of contract.pdf, is it encrypted?",
+            P(step("inspect_document", input="contract.pdf")),
+            ["inspect"],
+        ),
+        (
+            "What format is notes.txt and how big is it?",
+            P(step("inspect_document", input="notes.txt")),
+            ["inspect"],
+        ),
+        (
+            "Give me the details about memo.pdf before I open it.",
+            P(step("inspect_document", input="memo.pdf")),
+            ["inspect"],
+        ),
+        (
+            "Wie viele Seiten hat bericht.pdf? Bitte inspect it.",
+            P(step("inspect_document", input="bericht.pdf")),
+            ["inspect", "de"],
+        ),
+    ]
+    r.extend((u, p, [*t, "r5a", "rebalance"]) for u, p, t in r5)
 
     return r
 

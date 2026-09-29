@@ -127,36 +127,69 @@ fn office_to_pdf(input: &Path, output: &Path) -> anyhow::Result<()> {
     let soffice = ExternalTools::detect().libreoffice.ok_or_else(|| {
         anyhow::anyhow!("LibreOffice (soffice) not found. Install it for Office→PDF conversion.")
     })?;
-    let outdir = output.parent().unwrap_or_else(|| Path::new("."));
-    std::fs::create_dir_all(outdir).ok();
-    let result = std::process::Command::new(&soffice)
+    office_to_pdf_with(&soffice, input, output)
+}
+
+/// The conversion itself, with the `soffice` to run passed in (so a test can stand one in).
+///
+/// soffice names its result `<stem>.pdf` and writes it over any file of that name in `--outdir`.
+/// Pointing `--outdir` at the output's folder therefore destroyed the user's own `sample.pdf` on
+/// `sample.docx -> conv.pdf` (found 2026-09-26, both runtimes). It converts into a private
+/// directory instead, and only the requested output is written where the user's files are.
+fn office_to_pdf_with(soffice: &Path, input: &Path, output: &Path) -> anyhow::Result<()> {
+    if let Some(parent) = output.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let private = private_dir()?;
+    let result = std::process::Command::new(soffice)
         .args(["--headless", "--convert-to", "pdf", "--outdir"])
-        .arg(outdir)
+        .arg(&private)
         .arg(input)
         .output()
-        .map_err(|e| anyhow::anyhow!("could not launch soffice ({}): {e}", soffice.display()))?;
-    if !result.status.success() {
-        anyhow::bail!(
-            "soffice conversion failed: {}",
-            String::from_utf8_lossy(&result.stderr).trim()
-        );
-    }
-    // soffice writes `<stem>.pdf` into outdir; move it to the requested output if different.
-    let stem = input
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("output");
-    let produced = outdir.join(format!("{stem}.pdf"));
-    if produced != output {
-        std::fs::rename(&produced, output).map_err(|e| {
-            anyhow::anyhow!(
-                "soffice produced {} but could not move it to {}: {e}",
-                produced.display(),
-                output.display()
-            )
-        })?;
-    }
-    Ok(())
+        .map_err(|e| anyhow::anyhow!("could not launch soffice ({}): {e}", soffice.display()));
+    let moved = result.and_then(|result| {
+        if !result.status.success() {
+            anyhow::bail!(
+                "soffice conversion failed: {}",
+                String::from_utf8_lossy(&result.stderr).trim()
+            );
+        }
+        let stem = input
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("output");
+        let produced = private.join(format!("{stem}.pdf"));
+        // `rename` fails across filesystems (a temp dir on another volume); copy then.
+        std::fs::rename(&produced, output)
+            .or_else(|_| std::fs::copy(&produced, output).map(|_| ()))
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "soffice produced {} but it could not be moved to {}: {e}",
+                    produced.display(),
+                    output.display()
+                )
+            })
+    });
+    let _ = std::fs::remove_dir_all(&private);
+    moved
+}
+
+/// A fresh directory under the system temp dir, unique to this process and call.
+fn private_dir() -> anyhow::Result<std::path::PathBuf> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!(
+        "knaif-soffice-{}-{nanos}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| anyhow::anyhow!("could not create {}: {e}", dir.display()))?;
+    Ok(dir)
 }
 
 /// The extension suffix a converted output gets when no explicit output is given
@@ -180,6 +213,54 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// A stand-in for `soffice --headless --convert-to pdf --outdir DIR INPUT` that behaves as the
+    /// real one does where it matters: it writes `DIR/<stem>.pdf`, over any file of that name.
+    fn fake_soffice(dir: &Path) -> std::path::PathBuf {
+        if cfg!(windows) {
+            let path = dir.join("fake_soffice.cmd");
+            std::fs::write(
+                &path,
+                "@echo off\r\nfor %%F in (%6) do echo converted> \"%~5\\%%~nF.pdf\"\r\n",
+            )
+            .unwrap();
+            path
+        } else {
+            let path = dir.join("fake_soffice.sh");
+            std::fs::write(
+                &path,
+                "#!/bin/sh\nstem=$(basename \"$6\"); stem=${stem%.*}\necho converted > \"$5/$stem.pdf\"\n",
+            )
+            .unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            }
+            path
+        }
+    }
+
+    /// `sample.docx -> conv.pdf` destroyed the user's own `sample.pdf` (found 2026-09-26): soffice
+    /// writes `<stem>.pdf` into `--outdir`, which was the output's folder. Now a private one.
+    #[test]
+    fn office_conversion_never_replaces_a_same_stem_pdf() {
+        let dir = tmpdir();
+        let soffice = fake_soffice(&dir);
+        std::fs::write(dir.join("sample.docx"), "docx").unwrap();
+        let users_pdf = dir.join("sample.pdf");
+        std::fs::write(&users_pdf, "the user's own file").unwrap();
+
+        let out = dir.join("conv.pdf");
+        office_to_pdf_with(&soffice, &dir.join("sample.docx"), &out).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&users_pdf).unwrap(),
+            "the user's own file"
+        );
+        assert!(std::fs::read_to_string(&out).unwrap().contains("converted"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

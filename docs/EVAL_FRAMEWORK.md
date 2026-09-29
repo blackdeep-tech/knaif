@@ -209,6 +209,8 @@ The `success` verifier grades the produced output file against these fields (all
 | `encoder` | `str` | Exact encoder library name (`"libx264"`, `"libvpx-vp9"`) |
 | `max_width` | `int` | Maximum output width in pixels |
 | `max_height` | `int` | Maximum output height in pixels |
+| `duration_s` | `float` | Expected output length in seconds, ±0.5. The criterion for every row whose utterance states a length — *"cut clip.mp4 from 2 seconds to 5 seconds"* was graded on container and flags, both of which the untouched 10-second source satisfies. The tolerance is deliberately the same number `output_diff` uses: a stream copy cuts at the nearest keyframe, so an honest 3-second trim can land at 2.6s, and a tighter bound would fail correct plans for something the user never asked about. Fails closed when the probe reports no duration. |
+| `max_size_kb` | `int` | Maximum output size in KiB, read from ffprobe's `format.size`. The criterion for *"compress to under N"* rows, which could otherwise only assert a container — and an untouched source satisfies its own container, so the row could not fail on the one thing it asks for. Fails closed when the probe reports no size. |
 | `filters` | `list[str]` | Substrings expected in filter arguments (e.g. `["scale", "vf"]`) |
 | `flags` | `list[str]` | Substrings expected as ffmpeg CLI flags (e.g. `["-movflags", "-ss"]`) |
 
@@ -323,6 +325,27 @@ building a skill, cross 3–5 once to finish it, then re-run 3–5 on meaningful
 | **3. Honest** | `just eval-fixtures <skill>` **first**, then `just eval-success <skill>` | model + external binaries | slow | Is the produced artifact actually right? |
 | **4. Lock** | `just eval-snapshot <skill>` | model + binaries | slow, rare | Commit the acceptance bar (own commit) |
 | **5. Parity** | `just parity <skill>` | model + native build | slow | Does the native runtime render what Python renders? |
+| **6. Shipped path** | `uv run -m knaif.evalsuite native --skill <name> --lane native-cli --verifier success` | model + native build + external binaries | slowest | Does the **binary a user installs** produce the right files? |
+
+**Phase 6 exists because every phase above it stops short of the product.** Phases 1–4 grade
+the Python runtime. Phase 5 compares *renderings* from `--dry-run`. Phase 6 runs `knaif run`
+for real — dependency preflight, sandbox enforcement, the confirmation gate, the subprocess —
+and grades the files that land on disk. Each of those stages is a place a correct plan still
+fails a user, and none of them is visible to a planner-only lane.
+
+Three rules it carries:
+
+- **A lane is not a backend.** It is configured under `lanes:` in `eval_backends.yaml`, never
+  `backends:` — anything under `backends:` is passed to `InferenceOrchestrator(backend=…)` and
+  would be constructed as a token-generation backend.
+- **Coverage and score are reported together, or neither is.** A shipped-path score computed
+  over "the rows that ran" silently excludes whatever the runtime could not attempt — the
+  hardest stratum — and reads healthier than the product is. Below `--min-coverage` the run
+  prints coverage and **withholds** the score.
+- **Executing native plans through *Python* is a diagnostic, never the gate.** It is useful for
+  locating a failure (planner vs executor) and nothing else; any output from it must be labelled
+  *"native planner, Python execution — not the shipped path"*, because it grades a pipeline no
+  user runs.
 
 > **Phase 3 prerequisite — generate fixtures first, always.** An executing verifier with
 > missing fixtures does not error; it *silently scores near-zero on correct plans*. A
@@ -361,6 +384,13 @@ skill's SPEC if you do it.
 The table above describes ffmpeg, which renders **one shell command string** per intent —
 so the runner can capture that string as the artifact, execute it, and probe the result.
 
+Executing Python evaluations grant confirmation during dry-run command capture, then
+execute the complete batch chain against copied fixtures. This measures the approved
+workflow, including intents after a preview gate; it does not test interactive consent.
+Declining that gate would grade a preview or an earlier intermediate output instead.
+Non-executing evaluations retain unconfirmed previews. Compare models using the same
+runner version; historical preview-truncated results are not matched controls.
+
 Not every skill works that way. A **plan-shaped** skill (documents is the reference case)
 executes through library calls, so there is no command to capture: `_extract_artifact`
 returns `None`, and any check that needs a produced file — `output_exists` above all —
@@ -379,6 +409,22 @@ Two rules follow for a plan-shaped skill:
 
 If a new skill's destructive rows all score suspiciously low on `output_exists`, this is
 the first thing to check.
+
+## The noise floor — how big a difference has to be to mean anything
+
+Measured 2026-09-24 (`evals/runs/2026-09-23_config-parity-flip_cheap/report.md`), same model,
+greedy decoding, first phrasings of both corpora (469 utterances):
+
+- **The same config twice changes nothing** — 0 flips. An eval run is deterministic; a row that
+  moves between two runs of one config moved because something else did.
+- **The llama.cpp compute config alone** (flash attention, batch layout, KV-prefix reuse) flipped
+  **1.2%** of ffmpeg outcomes, net 0.00 pp — rows move both ways.
+
+So an aggregate change smaller than about 1.2 pp, or a single-utterance move in a small slice,
+is not evidence on its own that a model, prompt or code change did anything. Both lanes have
+run one pinned compute config since then (`docs/INFERENCE.md`, *Compute config*), which removes
+that source between Python and native; it does not make a borderline decision less borderline.
+The rows that flipped are listed in the report as candidate training rows.
 
 ## Scoring model
 
@@ -406,8 +452,92 @@ For each corpus row the engine produces:
   so the model-load + cold-KV-cache cost does not skew the mean. Plan rows
   only — clarify/reject/error rows have different cost profiles.
 
+- **Coverage** — the fraction of rows the runtime actually *attempted*, reported both
+  aggregate and per tag, alongside `unattempted` and a `by_outcome` census.
+
 Aggregated scoreboard answers: "knaif scored X, freeform baseline scored Y."
 Per-tag breakdowns surface which feature classes drag the average.
+
+### The shared scoring contract
+
+Both runtimes' records are graded by one definition, and every scoreboard is stamped with
+`scoring_policy` (`knaif.evalsuite.outcomes.POLICY_VERSION`) so a later change to the rules
+cannot leave old records looking compliant with semantics they were never measured under.
+
+| the runtime…                             | `outcome_accuracy`  | `avg_knaif_score` |
+|------------------------------------------|---------------------|-------------------|
+| produced a plan, artifact graded          | correct iff `plan`  | the graded score  |
+| produced a plan, grading raised           | correct iff `plan`  | 0.0               |
+| correctly refused (`clarify` / `reject`)  | **correct**         | **excluded**      |
+| wrongly refused, or capability unbuilt    | **failure**         | **excluded**      |
+
+The two metrics have **different denominators**, deliberately: outcome accuracy is over
+every row, the quality average only over rows that produced something to grade. Scoring a
+correct refusal as a zero would punish a runtime for refusing correctly; folding an
+unattempted row in would mean a drop could no longer be read as a *quality* regression
+rather than a *coverage* one.
+
+Excluding unattempted rows is honest only because **coverage is reported beside the
+average**. That is why `not_implemented` exists as an outcome of its own: while a
+capability gap and a deliberate refusal both read as `reject`, coverage is not computable
+at all. The native runtime marks one with a `not_implemented:` prefix; a test pins that
+marker identical across `apps/cli/src/main.rs`, `scripts/parity_check.py`, and
+`knaif.evalsuite.outcomes`.
+
+Two consequences worth knowing before you hit them:
+
+- `diff_snapshots` refuses to compare runs graded under different policies, exactly as it
+  refuses two different verifiers. Baselines locked before the policy existed still diff.
+- `just eval-accept` refuses a run that declares no policy. Re-lock the baseline in the
+  same commit that changes the semantics — a number graded under new rules is not
+  comparable to one graded under old ones.
+
+### The acceptance bar — `acceptance.yaml` (S2)
+
+A snapshot answers *"did it drop since last time?"*. It cannot answer *"is it good
+enough?"* — a skill that was locked in bad stays bad and never regresses. So each skill
+also carries a **written acceptance bar** at the bundle top,
+`skills/<name>/acceptance.yaml`, stating what has to hold before the skill is fit to
+port, fine-tune against, or ship:
+
+```yaml
+policy_version: 1
+verifier: success          # an executing verifier; `cheap` is never an acceptance bar
+min_rate_rows: 16          # below this many utterances, use a max_failures budget
+aggregate:
+  outcome_accuracy: 0.88
+  avg_knaif_score: 0.95
+slices:                    # required capabilities, each gated on its own
+  convert: { outcome_accuracy: 0.92 }
+  chain2:  { max_failures: 2 }
+safety:
+  corpus: data/safety_test.jsonl
+  pass_rate: 1.0           # never a tolerance
+```
+
+Three things it adds that a scoreboard cannot:
+
+- **Aggregate floors**, so "good enough" is written down before the number is seen.
+- **Required capability slices**, so a healthy average cannot absorb a whole broken
+  capability — ffmpeg's chain strata are 41 of 847 utterances and invisible in any mean.
+  On small slices a pass *rate* is noise, so those state a failure budget in rows.
+- **Safety at 100%.** A destructive request that plans instead of rejecting is not a
+  score regression.
+
+```bash
+just eval-safety ffmpeg evals/runs/<run>/safety.json     # every row must reject
+just eval-accept ffmpeg evals/runs/<run>/ffmpeg_<backend>_success.json \
+                        evals/runs/<run>/safety.json
+```
+
+Everything fails closed: a slice the run did not report, a run that does not declare its
+verifier, a run graded with a *different* verifier, and a safety corpus that was never
+executed are all rejections rather than silent passes. A test also asserts that each
+skill's floors are cleared by its own committed snapshot — a floor above the bar the
+skill was accepted on is fiction.
+
+Full rationale and where this sits in the six-stage lifecycle:
+[`docs/plans/2026-09-10-skill-quality-lifecycle.md`](plans/2026-09-10-skill-quality-lifecycle.md).
 
 ### When two runs are comparable
 
@@ -436,6 +566,38 @@ intent tool.
 Pass `--no-retrieval` to disable both per-utterance retrieval and example
 filtering. This measures the full unfiltered prompt and is intended for
 diagnostic A/B comparison only.
+
+### Varying the prompt deliberately
+
+Two settings change what the model is shown, and both are exposed on `run` (and on
+`safety`, since what a model is shown changes what it refuses):
+
+| flag | levels | what it varies |
+|---|---|---|
+| `--top-k N` | default `5` (`registry.DEFAULT_TOP_K`) | how many tools retrieval surfaces |
+| `--examples` | `selected` (default) \| `static` | whether `select_examples` filters the block per utterance, or the fixed `prompt.yaml` block is used as-is — the latter is the native runtime's behavior |
+
+Every scoreboard records what it resolved, as `prompt_config`. This is not decoration:
+two runs that resolved these differently measure **different systems**, so `diff_snapshots`
+refuses to compare them, exactly as it refuses two verifiers or two scoring policies. An
+experimental cell is not a regression against the baseline it was varied from.
+
+### The prompt factorial (S3g)
+
+`scripts/s3g_factorial.py` runs `examples × top_k` across both skills, grading every cell
+with an executing verifier on real artifacts, reporting per required slice from each
+skill's `acceptance.yaml`, and pairing each cell against the shipped configuration row by
+row (McNemar's exact test — two independent percentages throw away the pairing that makes
+a small real difference detectable at this corpus size).
+
+```bash
+uv run python scripts/s3g_factorial.py --out evals/runs/<date>_s3g-factorial_success
+uv run python scripts/s3g_factorial.py --out <dir> --analyze-only    # re-report, no GPU
+```
+
+It writes `summary.json` and `summary.md` (both committed; the per-cell scoreboards behind
+them are not). Adopting a winner is a separate, deliberate act: re-lock the snapshot in its
+own commit with the new `prompt_config` recorded in it.
 
 ## CLI usage
 
@@ -583,7 +745,8 @@ Use `--backends <name1>,<name2>` to select a subset. Omit to run all backends.
 ```
 python/core/knaif/evalsuite/      Framework modules (corpus, runner, scoring, report, snapshot, cli)
 skills/<name>/eval/   Per-skill verifiers, fixtures, and playbooks
-skills/<name>/data/   eval.jsonl corpus + eval_snapshot.json (acceptance bar)
+skills/<name>/data/   eval.jsonl corpus + eval_snapshot.json (locked baseline)
+skills/<name>/acceptance.yaml   the S2 acceptance bar (floors, slices, safety)
 ```
 
 Fixtures are generated into `sandbox/fixtures/<skill>/` (gitignored) on the first

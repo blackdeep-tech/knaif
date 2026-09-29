@@ -57,8 +57,14 @@ def test_chain_outputs_land_in_out_dir(tmp_path: Path):
     assert results[1]["output"] == out_dir / "clip_trimmed.mp3"
 
 
-def test_chain_first_input_resolves_to_fixture(tmp_path: Path):
-    """The first command's -i must be rewritten to the fixture file path."""
+def test_chain_first_input_resolves_to_the_provisioned_copy(tmp_path: Path):
+    """The first command's -i resolves into the work dir, against a COPY of the fixture.
+
+    It used to point straight at the shared fixture directory. With `-y` on every rendered
+    command, a plan whose output lands on a fixture's name then overwrote the source for
+    every later row — and `.cache.json` hashes the generation command, not the bytes, so
+    nothing would have noticed. The bytes are still the fixture's; only the path moved.
+    """
     fixture_dir = tmp_path / "fixtures"
     fixture_dir.mkdir()
     (fixture_dir / "clip.mp4").write_bytes(b"src")
@@ -79,7 +85,9 @@ def test_chain_first_input_resolves_to_fixture(tmp_path: Path):
 
     with patch.object(subprocess, "run", side_effect=_fake):
         run_command_chain(["ffmpeg -y -i clip.mp4 clip_trimmed.mp4"], fixture_dir, out_dir)
-    assert seen_inputs[0] == str(fixture_dir / "clip.mp4")
+    assert seen_inputs[0] == str(out_dir / "clip.mp4")
+    assert Path(seen_inputs[0]).read_bytes() == b"src", "the copy must hold the fixture's bytes"
+    assert (fixture_dir / "clip.mp4").read_bytes() == b"src", "the source must be untouched"
 
 
 def test_chain_second_input_resolves_to_prior_output(tmp_path: Path):

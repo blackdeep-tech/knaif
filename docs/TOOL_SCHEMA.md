@@ -187,6 +187,25 @@ validated — see [TRAINING_DATA_GENERATION.md](TRAINING_DATA_GENERATION.md).
 
 `safety.unsafe_phrases` is a list of strings used by mock inference to force a `reject` response when any phrase appears in the user's utterance. It is currently used for known argument names such as `file_type` and can be extended as validator support grows.
 
+`file_kinds` (optional) says which of the skill's files are the same kind of thing, as
+`kind: [extensions]`:
+
+```yaml
+file_kinds:
+  video: [mp4, mov, mkv, webm, gif]
+  image: [jpg, jpeg, png]
+```
+
+Both runtimes read it for chain threading only. When a later step names an earlier step's
+source file, core rewrites it onto that step's output ("convert clip.mp4 to mkv then strip
+*its* audio"), but never onto a file of a different kind: "make a thumbnail of clip.mp4 and
+compress *it*" compresses the video. An extension no kind lists is unrestricted, and one
+listed under two kinds fails the skill load.
+
+Threading also stops when the **user repeats the filename**: "thumbnail of clip.mp4 and
+compress clip.mp4" is two steps over one file, and the plan runs as written. When you write
+corpus rows or examples, a name written twice pins that step to the original file.
+
 ### Display metadata
 
 `display:` is **end-user catalog copy**, read only by the website generator
@@ -330,6 +349,36 @@ runtimes:
   emit. Keep the model-visible surface identical and let `status` express the gap.
 
 See [NATIVE.md](NATIVE.md) §7 for how the native runtime consumes this, and §3 for the crate layout.
+
+### External tools (`dependencies.external_tools`)
+
+Third-party programs a skill runs as subprocesses. knaif detects them and never bundles them or
+changes `PATH`; `knaif skills deps` reports them, a run refuses early when a `required` one is
+missing, and the Windows installer offers each through winget.
+
+```yaml
+dependencies:
+  external_tools:
+    - name: ghostscript            # one vendor package = one installer task
+      required: false              # true → blocks execution and defaults the task on
+      all_required: false          # true → every command is needed (ffmpeg + ffprobe);
+                                   # false → the commands are aliases, any one satisfies
+      commands: [gs, gswin64c, gswin32c]
+      install: { windows: winget, macos: brew, linux: package_manager }
+      windows:
+        winget: ArtifexSoftware.GhostScript          # `winget install -e --id …`
+        download: https://ghostscript.com/releases/gsdnld.html   # hint when winget is absent
+        dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
+```
+
+A command resolves to `$KNAIF_<CMD>_BIN` when set, else the first hit on `PATH`, else — on Windows
+— the first `windows.dirs` folder holding it. List the folders the vendor's own installer uses:
+most Windows installers never add themselves to `PATH`. `%VAR%` is expanded from the environment
+(a folder naming an unset variable is skipped), and `*` matches within one path component, newest
+version first. The skill must **launch the binary this lookup returns** (native:
+`knaif_skill_api::tools`), not a bare name, or `skills deps` reports a tool the run cannot start.
+The installer's winget ids, commands and folders mirror this block, and
+`python/core/tests/test_installer_iss.py` fails when they drift.
 
 ### Runtime models
 
@@ -650,6 +699,32 @@ class MySkill(Skill):
 A skill that does not override `run_artifact` leaves it returning `None`, and eval
 execution against fixtures is skipped (the `artifact_path` on each `AgentOutput` stays
 `None`).
+
+## Output Collisions (Optional)
+
+Override `Skill.resolve_output_collisions` to rewrite plan outputs that would destroy a file,
+and rebind the steps that referred to them. Core calls it once per plan, **after stem
+resolution and before expansion** — the first point where both the whole plan and real disk
+state are visible — and the default is a no-op.
+
+```python
+class MySkill(Skill):
+    def resolve_output_collisions(self, plan, *, sandbox=None):
+        """Return the plan, with colliding outputs renamed and consumers rebound."""
+        ...
+```
+
+The rule a skill implements here, if it implements one:
+
+> A name an earlier step declares it will write binds, for every later step, to what that
+> step actually wrote. Substitute the old name with the resolved one across steps **strictly
+> after** the producer; never re-infer which file was meant.
+
+Whether an output collides at all, and what a free replacement is called, are **skill
+policy** and stay in the skill. ffmpeg renders every command with `-y`, so an output equal to
+its own input truncates the source before ffmpeg reads it (`skills/ffmpeg/python/_collisions.py`);
+a skill whose handlers write to a temporary file and move it has no such problem. Core supplies
+the extension point and keeps no naming logic of its own.
 
 ## Shared Steps (`knaif.steps`)
 

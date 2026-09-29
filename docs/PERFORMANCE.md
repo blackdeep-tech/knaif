@@ -15,11 +15,14 @@ the inference figure quoted there.
 > **⚠️ Never quote a latency number from this repo without naming the machine.** Most pre-2026-07-14
 > numbers were measured on an **RTX 5080** and don't say so. The project now runs on an **RTX 3070
 > Laptop**, 2.5–4× slower. Worse, one *conclusion* in those docs — ["CUDA is required on
-> NVIDIA"](#2-backend-cuda-vs-vulkan-vs-cpu) — turns out to be **true only on Blackwell**.
+> NVIDIA"](#2-backend-cuda-vs-vulkan-vs-cpu) — turned out to be **true only on Blackwell**, and since
+> the **2026-09-25** re-measurement not even there: Vulkan on the `5080` is now ~72% of CUDA (§2).
 
 Last measured 2026-07-14 (Qwen3-4B q4_k_m, ffmpeg skill prompt of **3938 tokens**, 32-token
 generation, `n_ctx = 8192`, fresh process, median of warm reps). **Linux CUDA payload added
-2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`.
+2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`. **`5080` backends
+re-measured 2026-09-25** (§2) — `knaif-qwen3-4b-v2`, the ffmpeg prompt at its current 2441 tokens,
+driver 616.92. **v2 end-to-end on the shipped binary added 2026-09-28** (§5).
 
 ---
 
@@ -73,8 +76,11 @@ the committed record for this and most other runs. Link to the row, never to a r
 
 ## 2. Backend: CUDA vs Vulkan vs CPU
 
-**Headline: on Ampere, Vulkan is as fast as CUDA. On Blackwell, it collapses.** This reverses a
-shipped decision, so it is the most load-bearing fact here.
+**Headline: Vulkan is a usable GPU backend on both measured NVIDIA architectures.** On Ampere it is
+as fast as CUDA; on Blackwell it is ~72% of CUDA (2026-09-25). The July Blackwell "collapse" (Vulkan at
+CPU speed) no longer reproduces on the same card and the same llama.cpp crate — most likely a driver
+fix. This reversed a shipped decision twice, so it is the most load-bearing fact here: **always record
+the driver version with a Vulkan number.**
 
 ### `3070L` (Ampere) — all six runtime × backend cells
 
@@ -87,7 +93,28 @@ shipped decision, so it is the most load-bearing fact here.
 | **python** | **Vulkan** | 1879 tok/s | 72.9 tok/s | ~2520 ms |
 | python | CPU (honest, §4) | 38 tok/s | 6.7 tok/s | ~110 000 ms |
 
-### `5080` (Blackwell) — from [the 2026-07-07 investigation](plans/2026-07-07-inference-backend-performance.md), native only
+### `5080` (Blackwell) — **2026-09-25**, native, the current numbers
+
+RTX 5080, compute 12.0, **driver 616.92**, `llama-cpp-2` 0.1.150, `knaif-qwen3-4b-v2` q4_k_m, the
+ffmpeg prompt (now **2441 tokens**, down from 3938), 32-token generation, `run --dry-run`,
+`KNAIF_TIMING=1`, per-kind builds from `scripts/build_native_kind.sh` (`dynamic-backends`). Median of
+5 warm runs (CPU: 3) after one warm-up; placement checked (CUDA0 37 / Vulkan0 37 / CPU 37 layers). CPU
+at default threads (16 generation / 32 prompt).
+
+| Backend | prompt decode | generation | inference total | model load |
+|---|---:|---:|---:|---:|
+| CUDA | **10 129 tok/s** (241 ms) | **203.8 tok/s** (157 ms) | **419 ms** | 1006 ms |
+| Vulkan | 8 812 tok/s (277 ms) | 146.8 tok/s (218 ms) | 814 ms | 1278 ms |
+| CPU | 373 tok/s (6540 ms) | 14.4 tok/s (2217 ms) | 8845 ms | 1734 ms |
+
+- **Vulkan is ~87% of CUDA on prompt decode and ~72% on generation** — 26× July's 5.7 tok/s on the
+  same card. Blackwell was removed from `nudge.vulkan_inadequate_compute_caps` on this evidence.
+- Same `llama-cpp-2` 0.1.150 as July, so the llama.cpp version is not what changed. The driver is the
+  likely cause; July's driver version was not recorded, so that is an inference, not a proof.
+- Corpus-scale confirmation (2026-09-25, `evals/runs/2026-09-25_backend-parity-v2_plans`, 1015
+  utterances, plan-only): CUDA 0.46 s, Vulkan 0.78 s, CPU at 8 threads ~12 s per utterance.
+
+### `5080` (Blackwell) — **2026-07-07, SUPERSEDED** by the table above ([investigation](plans/2026-07-07-inference-backend-performance.md)), native only
 
 | Backend | prompt decode | generation | inference total |
 |---|---:|---:|---:|
@@ -130,6 +157,8 @@ that silently isn't the one you think you are benchmarking.
 
 ### What this means
 
+- *(2026-09-25: the Blackwell half of this no longer holds — see the current `5080` table. Kept
+  for the history of the decision.)*
 - **Vulkan's catastrophic generation speed was Blackwell-specific.** On the `5080` Vulkan
   generated at 5.7 tok/s — *tied with pure CPU*, absurd for a discrete GPU. On Ampere it runs at
   **88.6 tok/s: ~15× faster than CPU and within 3% of CUDA.** This **closes the open question**
@@ -149,7 +178,10 @@ The first launch after install will look hung. This does **not** contradict the 
 compute is fine and one-time *compilation* is the only cost. **Warm the cache at install time**, or
 the user's first request eats it.
 
-### ⚠️ The `5080` native CUDA numbers are suspect — do not derive a hardware ratio from them
+### ⚠️ The **2026-07-07** `5080` native CUDA numbers are suspect — do not derive a hardware ratio from them
+
+*(2026-09-25: resolved for current numbers — the `5080` now measures 203.8 tok/s CUDA generation,
+above the `3070L`'s 90.9, as expected of the faster card. The note below is about the July table.)*
 
 The `5080` table reports **80 tok/s** generation. The `3070L` measures **91 tok/s** — a laptop
 Ampere part beating a desktop Blackwell on memory-bound decode, which is not physically credible.
@@ -244,6 +276,47 @@ Quality is machine-independent; speed is not. Distilled from
 - **1.7B-Q6 = the speed pick.** ~2.5 pt behind on full ffmpeg, 1 GB smaller, **~2× faster on both
   machines** (the ratio is hardware-invariant) — the better interactive default on the `3070L`.
 - **Gemma3-4B is not competitive** — worse quality *and* ~4× slower. Qwen3 is the base; settled.
+
+### v2 on the shipped path — `5080`, **2026-09-28** (knaif 1.2.0 release candidate)
+
+The packaged Windows binary, one **fresh process per request** executing for real (process start,
+model load, planning and the tool's own work all inside the wall time), RTX 5080,
+driver 616.92, 8 CPU threads. Quality is `success`-graded at complete coverage (ffmpeg 861,
+documents 164). Wall time is per request with a produced file (`time_to_artifact_ms`), p50 / p95.
+Source: `evals/runs/2026-09-28_r5c-windows_success` (T8, T9, T10).
+
+| Model | Backend | ffmpeg outcome / knaif | documents outcome / knaif | ffmpeg p50 / p95 | documents p50 / p95 |
+|---|---|---:|---:|---:|---:|
+| `knaif-qwen3-4b-v2` | CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 2.8 s / 5.2 s | 1.9 s / 2.2 s |
+| `knaif-qwen3-4b-v2` | Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 3.3 s / 5.9 s | 2.4 s / 2.8 s |
+| `knaif-qwen3-4b-v2` | CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | — | — |
+| `knaif-qwen3-1.7b-v2` | CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 2.1 s / 4.2 s | 1.4 s / 1.7 s |
+| `knaif-qwen3-1.7b-v2` | Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 2.6 s / 5.0 s | 1.9 s / 2.2 s |
+| `knaif-qwen3-1.7b-v2` | CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11.1 s / 15.4 s | 4.9 s / 6.1 s |
+
+Linux, the same RTX 5080 under WSL2 (`5080-WSL`, Ubuntu 24.04), the packaged tarball with the
+installed CUDA payload, 2026-09-29 (source: `evals/runs/2026-09-29_r5c-linux_success`, T14):
+
+| Model | Backend | ffmpeg outcome / knaif | documents outcome / knaif | ffmpeg p50 / p95 | documents p50 / p95 |
+|---|---|---:|---:|---:|---:|
+| `knaif-qwen3-4b-v2` | CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 2.4 s / 6.3 s | 1.2 s / 1.5 s |
+| `knaif-qwen3-1.7b-v2` | CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 2.1 s / 5.4 s | 1.0 s / 1.2 s |
+The Linux CPU cells are composed (the Windows CPU cell with a 150-request Linux CPU sample swapped
+in, by owner decision), so they have no whole-corpus wall time: 4B 0.943 / 0.985 and 0.976 / 0.982,
+1.7B 0.920 / 0.981 and 0.963 / 0.996.
+
+¹ Composed from the CUDA cell and a CPU re-run of the 64 requests whose CPU plan differs, so it has
+no whole-corpus wall time; the per-phase CPU figure above (§2, ~8.8 s inference) is the one to quote.
+
+- **These are end-to-end numbers, not inference numbers.** §2's 0.42 s (4B, CUDA) is inference
+  alone; a cold CLI request adds process start, backend and model load (~1 s on the `5080`, §2)
+  and the tool's own work. documents, where the tool work is light, sits in a narrow band
+  (p50 to p95 within ~0.4 s); ffmpeg's wider spread follows the encodes.
+- **The 1.7B is ~0.5–0.7 s faster per request on the same GPU**, at 2 points of ffmpeg outcome.
+- **Linux runs a documents request ~0.7 s faster than Windows** on the same card (1.2 s vs 1.9 s
+  p50, 4B). The plans are identical (0 decision flips between the two OSes on CUDA), so the gap
+  lies outside the model's choices: process start, loading and the tool's own work, which these
+  runs do not time separately.
 
 ---
 

@@ -5,3 +5,5 @@ packages:
   - shared
   - org
   - dev
+allowBuilds:
+  esbuild: true

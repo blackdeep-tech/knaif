@@ -891,6 +891,49 @@ def test_normalize_plan_enum_separator_insensitive():
     assert _run("nowhere") == "nowhere"  # unknown left for validation
 
 
+def test_normalize_plan_alias_keys_are_separator_insensitive_too():
+    """An alias is matched on the same normalized form as an enum value.
+
+    These two halves of Pass 5 used to disagree: enum values tolerated spacing and case,
+    while alias keys were matched exactly after lowercasing. Nothing justified the
+    asymmetry — a model writing "visually lossless" is doing exactly what it does when it
+    writes "bottom center", and only one of the two survived.
+
+    The asymmetry is invisible until a *multi-word* alias exists: every alias in the tree
+    when Pass 5 was written was a single word ("markdown", "jpeg"), which has no separator
+    to get wrong.
+    """
+    from knaif.registry import ToolDef
+
+    reg = {
+        "encode": ToolDef(
+            name="encode",
+            description="encode",
+            required_args=("input",),
+            optional_args=("quality",),
+            arg_schemas={
+                "quality": ArgSchema(
+                    type="enum",
+                    enum=("best_possible", "balanced"),
+                    aliases={"visually_lossless": "best_possible"},
+                )
+            },
+        ),
+    }
+
+    def _run(value):
+        p = {"plan": [{"tool": "encode", "args": {"input": "a.mp4", "quality": value}}]}
+        normalize_plan(p, reg)
+        return p["plan"][0]["args"]["quality"]
+
+    assert _run("visually_lossless") == "best_possible"  # exact, as before
+    assert _run("visually lossless") == "best_possible"  # space → underscore
+    assert _run("visually-lossless") == "best_possible"  # hyphen → underscore
+    assert _run("Visually Lossless") == "best_possible"  # case + separator
+    assert _run("balanced") == "balanced"  # already valid, untouched
+    assert _run("nonsense") == "nonsense"  # unknown left for validation
+
+
 def test_normalize_plan_numeric_string_to_number():
     """A numeric string for an integer/number-typed arg is coerced to the numeric
     type before validation (qwen sometimes quotes degrees: '180'). Non-numeric

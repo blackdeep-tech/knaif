@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,49 @@ def _coerce_inputs(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(v) for v in value]
     raise ValueError("'inputs' must be a string or list of strings.")
+
+
+#: Suffix walked when an explicit output would overwrite its own input. The user asked for
+#: a *copy*, so "_converted" says what happened; the numbered variants exist because the
+#: first candidate can itself be taken.
+_COLLISION_SUFFIX = "_converted"
+
+#: Suffix for the OTHER kind of collision repair: renaming a chained intermediate so the name
+#: the user asked for can stay on the step that actually produces what they described. Calling
+#: that file `_converted` would be a lie — it is the input to the conversion, not its result.
+_INTERMEDIATE_SUFFIX = "_intermediate"
+
+
+def next_free_output(requested: Path, taken: set[Path], suffix: str = _COLLISION_SUFFIX) -> Path:
+    """First free ``<stem><suffix>[_N]<.ext>``. **Never returns *requested* itself.**
+
+    *taken* holds every path the caller has committed to — each input of the plan and each
+    output the plan declares — and the filesystem is consulted on top of it.
+
+    Always advancing is the contract, not an implementation detail. The caller only reaches
+    here once a self-overwrite is established, and a chained intermediate that does not exist
+    on disk yet collides exactly as hard as one that does: an earlier draft checked only
+    ``exists()`` and so handed the colliding path straight back for
+    ``trim -> clip_trimmed.mp4`` feeding ``convert -> clip_trimmed.mp4``, leaving the ``-y``
+    truncation in place while telling the user it had been renamed. It also made the result
+    depend on whether the plan had been run before.
+
+    **Every rendered ffmpeg command carries ``-y``**, so the replacement must be free too:
+    otherwise the fix destroys a file that is already there, another input of the same plan,
+    or a later step's output. The walk is deterministic, so two runs of the same plan on the
+    same tree land on the same name.
+    """
+
+    def is_free(candidate: Path) -> bool:
+        return candidate not in taken and not candidate.exists()
+
+    stem, ext = requested.stem, requested.suffix
+    candidate = requested.with_name(f"{stem}{suffix}{ext}")
+    n = 2
+    while not is_free(candidate):
+        candidate = requested.with_name(f"{stem}{suffix}_{n}{ext}")
+        n += 1
+    return candidate
 
 
 def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
@@ -271,7 +316,13 @@ def _geometry_vf(
         if not m:
             raise ValueError(f"Invalid aspect value {aspect!r}. Expected 'aw:ah'.")
         aw, ah = m.group(1), m.group(2)
-        return f"crop=min(iw\\,ih*{aw}/{ah}):min(ih\\,iw*{ah}/{aw})"
+        # Rounded DOWN to even, because libx264 with `-pix_fmt yuv420p` refuses odd
+        # dimensions outright: a 9:16 crop of a 1280x720 source computes
+        # min(1280, 720*9/16) = 405, and ffmpeg answers "width not divisible by 2
+        # (405x720)", writes a 0-byte file and exits non-zero. This was invisible for
+        # months because the `success` verifier grades these rows on command *text*
+        # (`filter:crop` present), so the broken artifact scored 1.0 on both runtimes (N4).
+        return f"crop=trunc(min(iw\\,ih*{aw}/{ah})/2)*2:trunc(min(ih\\,iw*{ah}/{aw})/2)*2"
 
     if width and height:
         effective_fit = fit or "crop"
@@ -282,9 +333,7 @@ def _geometry_vf(
                 f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
             )
-        return (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase," f"crop={width}:{height}"
-        )
+        return f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
 
     if width:
         return f"scale=min({width}\\,iw):-2"
@@ -300,6 +349,11 @@ def _geometry_vf(
 
 _OUTPUT_SUFFIX_BY_MODE: dict[str, str] = dict(_VOCAB["output_suffix_by_mode"])
 
+
+# Every extension the skill can read. Passed to `resolve_inputs` so a bare `*` glob means
+# "all my media" rather than "every file in the sandbox" - unfiltered, it handed ffmpeg the
+# .txt and .json sitting beside the clips and ffmpeg died on the first one.
+_MEDIA_EXTENSIONS: list[str] = list(_VOCAB["media_extensions"])
 
 _IMAGE_EXTENSIONS = set(_VOCAB["image_extensions"])
 
@@ -442,6 +496,395 @@ def _container_from_output(output: str | None) -> str | None:
     return ext if ext in _VIDEO_CONTAINERS else None
 
 
+# Symbolic instants a user can name but a model cannot compute: the duration is only known
+# after probing, so this layer is the only one that can resolve them. Left unresolved they
+# reached ffmpeg as `-ss last_frame` ("Invalid duration"); the alternative the model has is
+# to guess a number, and on the control arm it guessed 00:00:00 and returned the FIRST frame
+# for a request that said the last.
+_AT_TIME_END_TOKENS = frozenset({"last_frame", "last", "end", "final_frame", "final"})
+_AT_TIME_START_TOKENS = frozenset({"first", "first_frame", "start", "beginning"})
+_AT_TIME_MIDDLE_TOKENS = frozenset({"middle", "midpoint", "halfway", "mid", "centre", "center"})
+
+# Step back from the very end: seeking exactly to the duration lands past the last frame and
+# writes nothing.
+_LAST_FRAME_EPSILON = 0.1
+
+
+def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
+    """Resolve a symbolic instant against the clip duration.
+
+    Returns the value unchanged when it is already a time, and ``None`` when the token is not
+    one this skill knows - callers must refuse it rather than invent an instant for it.
+    """
+    if value is None or isinstance(value, (int, float)):
+        return value
+    text = str(value).strip().lower()
+    if _timestamp_seconds(value) is not None:
+        return value
+    if text in _AT_TIME_START_TOKENS:
+        return "0"
+    if text in _AT_TIME_MIDDLE_TOKENS:
+        if duration is None or duration <= 0:
+            return None
+        return _format_seconds(duration / 2.0)
+    if text in _AT_TIME_END_TOKENS:
+        if duration is None or duration <= 0:
+            return None
+        return _format_seconds(max(0.0, duration - _LAST_FRAME_EPSILON))
+    return None
+
+
+def _format_seconds(seconds: float) -> str:
+    """Render seconds for an ffmpeg flag, identically on both runtimes.
+
+    `:g` was wrong twice over: it rounds to six significant digits where the Rust port does
+    not (`6.172839` became `6.17284`), and it switches to scientific notation for small
+    values (`-1e-06`), which ffmpeg cannot parse as a time at all. Fixed decimal, trailing
+    zeros trimmed, matches `format_seconds` in `engine.rs` character for character.
+    """
+    value = float(seconds)
+    if value.is_integer():
+        return str(int(value))
+    text = f"{value:.9f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _timestamp_seconds(value: Any) -> float | None:
+    """Seconds for a timestamp written as ``HH:MM:SS[.ms]``, ``MM:SS``, or a bare number.
+
+    Comparing the strings would not do: ``"0"`` and ``"00:00:00"`` are the same instant and
+    the model writes both.
+
+    Two spellings ffmpeg itself accepts have to be read here too, because the callers that
+    compare instants (``_normalize_trim``'s reversed-range guard) are blind to anything this
+    returns ``None`` for:
+
+    * a **unit suffix** — ``5s``, ``-2s``, ``500ms``. ``-2s`` is how "the last 2 seconds"
+      arrives, and it used to fall through to ffmpeg as ``-ss -2s``.
+    * a **leading sign on a clock string**. Parsing componentwise loses it, because
+      ``float("-00") * 60`` is ``-0.0``: ``-00:00:02`` read as **+2.0**, so the guard fired
+      on a number of the wrong sign rather than not at all.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    negative = text.startswith("-")
+    if negative or text.startswith("+"):
+        text = text[1:].strip()
+    if not text:
+        return None
+    for unit, scale in (("ms", 0.001), ("s", 1.0)):
+        if text.endswith(unit) and ":" not in text:
+            body = text[: -len(unit)].strip()
+            try:
+                seconds = float(body) * scale
+            except ValueError:
+                return None
+            return -seconds if negative else seconds
+    try:
+        parts = [float(p) for p in text.split(":")]
+    except ValueError:
+        return None
+    if any(p < 0 for p in parts):
+        return None
+    total = 0.0
+    for part in parts:
+        total = total * 60 + part
+    return -total if negative else total
+
+
+def _normalize_trim(*, start: Any, duration: Any, end: Any, frames: Any) -> dict[str, Any]:
+    """Resolve a trim request into exactly one of: a frame count, a duration, or an end.
+
+    **An empty range becomes one frame.** ``ffmpeg_161`` asks for a one-frame video and the
+    model emits ``-ss 00:00:00 -to 00:00:00``; ffmpeg then exits 0 having written a file with
+    nothing in it, which the corpus scored as a pass because the container was right. A user
+    who names a single instant wants the frame at that instant - there is no other reading of
+    it, and no reading at all under which producing an empty file is the answer.
+
+    Resolving it here rather than teaching the model the new `frames` argument is deliberate:
+    a product fix that only works after a fine-tune is not a product fix.
+    """
+    if frames is not None:
+        # An explicit count wins outright; preflight has already refused it alongside a range.
+        return {"start": start, "duration": None, "end": None, "frames": frames}
+
+    start_s = _timestamp_seconds(start)
+    end_s = _timestamp_seconds(end)
+    duration_s = _timestamp_seconds(duration)
+
+    # An absent `start` means zero, so "-to 00:00:00" with no start is the same empty range
+    # and produced the same empty file. A *reversed* range (end < start) lands here too: the
+    # engine cannot clarify, so its only choices are one frame or a file with nothing in it.
+    # A NEGATIVE start is ffmpeg's from-end offset, not a reversed range: "trim to the last
+    # 2 seconds" arrives as start=-2s (end=0s or absent) and means "start two seconds before
+    # the end, run to the end". It renders as `-sseof -2` with no `-to`. Reading it as a
+    # reversed range would collapse a 2-second request to a single frame - which is exactly
+    # what happened while the sign was being lost in parsing.
+    if start_s is not None and start_s < 0:
+        # A supplied bound that could not be read is NOT the same as an absent one. Treating
+        # `end="banana"` as "to the end of the clip" silently answers a different request,
+        # and `duration="0"` is an empty range the guard below still owns.
+        for label, raw, seconds in (("end", end, end_s), ("duration", duration, duration_s)):
+            if raw is not None and seconds is None:
+                raise ValueError(
+                    f"Unrecognised {label} {raw!r}. Use a timestamp (00:00:05), a number of "
+                    "seconds, or a value with a unit (5s, 500ms)."
+                )
+        if duration_s is not None and duration_s <= 0:
+            return {
+                "start": start,
+                "start_from_end": None,
+                "duration": None,
+                "end": None,
+                "frames": 1,
+            }
+        # `end` is a second offset from the end when negative (-10 -> -5 is a 5s window);
+        # a positive `end` alongside a from-end start is contradictory, so leave both alone
+        # and let the ordinary path render what was asked.
+        if end_s is None or end_s <= 0:
+            length = None
+            if duration_s is not None and duration_s > 0:
+                length = duration
+            elif end_s is not None and end_s < 0:
+                span = end_s - start_s
+                length = _format_seconds(span) if span > 0 else None
+            return {
+                "start": None,
+                "start_from_end": start_s,
+                "duration": length,
+                "end": None,
+                "frames": None,
+            }
+
+    effective_start = 0.0 if start_s is None else start_s
+    empty_range = (end is not None and end_s is not None and end_s <= effective_start) or (
+        duration is not None and duration_s is not None and duration_s <= 0
+    )
+    if empty_range:
+        return {"start": start, "duration": None, "end": None, "frames": 1}
+
+    return {"start": start, "duration": duration, "end": end, "frames": None}
+
+
+def _trim_past_end(options: dict[str, Any], probe: dict[str, Any]) -> str | None:
+    """Why a trim cannot be answered on this input, or None when it can.
+
+    A start at or beyond the measured duration leaves ffmpeg no frame to write, and it exits 0
+    anyway with an empty container. Only a real probe may be read here — callers skip this in
+    dry-run, where a missing file carries `_dummy_probe`'s placeholder 60 s. A negative start is
+    a from-end offset, never a late start.
+    """
+    duration = probe.get("duration")
+    start = options.get("start")
+    start_s = _timestamp_seconds(start)
+    if not isinstance(duration, (int, float)) or start_s is None or start_s < 0:
+        return None
+    if start_s < duration:
+        return None
+    name = Path(str(probe.get("file", "the input"))).name
+    return (
+        f"Can't cut from {start}: {name} is only {duration:.1f}s long, so the cut would be "
+        "empty. Check which file this step should start from."
+    )
+
+
+#: Operations that act on the picture and mean nothing for a sound.
+_PICTURE_MODES = {"resize": "resize", "rotate": "rotate"}
+
+
+def _needs_video(options: dict[str, Any], probe: dict[str, Any]) -> str | None:
+    """Why a picture operation cannot run on this input, or None when it can.
+
+    On an audio-only file ffmpeg ignores `-vf scale`/`transpose`, re-muxes the audio and exits 0,
+    so the step reports success having done nothing (workbench, 2026-09-23). Reverse, speed,
+    volume and trim all mean something for a sound and are not listed.
+    """
+    verb = _PICTURE_MODES.get(str(options.get("mode")))
+    if verb is None or probe.get("video_codec") or probe.get("width"):
+        return None
+    name = Path(str(probe.get("file", "the input"))).name
+    return (
+        f"Can't {verb} {name}: it has no video stream, only audio. "
+        "Check which file this step should start from."
+    )
+
+
+def _output_extension(mode: str, options: dict[str, Any]) -> str:
+    if mode == "extract_audio":
+        return options.get("audio_format", "mp3")
+    if mode == "thumbnail":
+        return options.get("image_format", "jpg")
+    return options.get("container", "mp4")
+
+
+def _destination_name(input_path: Path, ext: str) -> str:
+    """The file name an input takes inside a destination directory."""
+    return f"{input_path.stem}.{ext}"
+
+
+def _batch_suffixes(input_path: Path, out_stem: str) -> list[str]:
+    """The parts of an input's name that can tell two colliding outputs apart, best first.
+
+    Two batch shapes collide, and they are distinguished by different things:
+
+    * **One literal filename for many inputs** — six fixture videos extracted to ``audio.mp3``.
+      The source *stems* differ and the extensions mostly do not, so the stem is the answer.
+    * **A destination directory** — ``clip.mp4`` and ``clip.mov`` into ``converted/`` both take
+      the output stem ``clip``, and only the extension is left.
+
+    Using the extension for both is what produced ``audio_mp4_5.mp3``: five of six inputs were
+    `.mp4`, so the suffix distinguished nothing and a counter did all the work.
+    """
+    stem, ext = input_path.stem, input_path.suffix.lstrip(".").lower()
+    suffixes: list[str] = []
+    if stem and stem != out_stem:
+        suffixes.append(stem)
+    if ext:
+        suffixes.append(ext)
+    # Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
+    # `audio.mp3` share a stem AND an extension with each other but not with the output.
+    if stem and ext and stem != out_stem:
+        suffixes.append(f"{stem}_{ext}")
+    return suffixes
+
+
+def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Give every recipe in a batch its own output path.
+
+    A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
+    render `converted/clip.mp4` — and every command carries `-y`, so the second conversion
+    silently destroyed the first. Whatever part of the source name actually differs is what
+    gets restored (see `_batch_suffixes`); a counter is the fallback for a genuine repeat, and
+    only a genuine repeat, because a counter tells the user nothing.
+
+    Doing it here rather than per file is deliberate: only the batch knows whether there is a
+    clash at all, and a lone `clip.mp4 -> converted/` should stay `clip.mp4`, not become
+    `clip_mp4.mkv` because some other input might have existed.
+
+    **Every input of the batch is taken too, before any output is placed.** A same-folder
+    pattern sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the
+    `-y` conversion replaced it (ffmpeg_229#4, run for real). Reserving inputs up front is what
+    makes the order of the batch irrelevant.
+    """
+
+    def key(p: str | Path) -> str:
+        return os.path.normcase(os.path.abspath(p))
+
+    seen: set[str] = {key(r["input"]) for r in recipes if r.get("input")}
+    for recipe in recipes:
+        out = recipe.get("output")
+        if not out:
+            continue
+        if key(out) not in seen:
+            seen.add(key(out))
+            continue
+        path = Path(out)
+        suffixes = _batch_suffixes(Path(recipe.get("input", "")), path.stem)
+        tried = [path.with_name(f"{path.stem}_{s}{path.suffix}") for s in suffixes]
+        candidate = next((c for c in tried if key(c) not in seen), None)
+        if candidate is None:
+            # Nothing in the source name is left to say. Count off the most specific candidate
+            # so the walk still terminates.
+            base = tried[-1] if tried else path
+            candidate, n = base, 1
+            while key(candidate) in seen:
+                n += 1
+                candidate = base.with_name(f"{base.stem}_{n}{base.suffix}")
+        recipe["output"] = str(candidate)
+        seen.add(key(candidate))
+    return recipes
+
+
+#: Characters a filename may not contain on Windows. ``*`` and ``?`` are deliberately absent:
+#: they are this skill's own output grammar (``videos/*.mp4``), expanded in
+#: :func:`_resolve_output_target`, and stripping them would break a documented feature to fix
+#: an unrelated bug. ``/`` and ``\`` are absent because they are structure, not characters.
+_ILLEGAL_IN_FILENAME = '<>:"|'
+_ILLEGAL_REPLACEMENT = "-"
+
+#: A leading drive letter is the one legitimate colon in a path (``C:/out/clip.mp4``), and CLI
+#: mode has no sandbox to confine writes to, so absolute outputs are real there.
+_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:(?=[\\/])")
+
+
+def _legal_output_path(raw: str) -> str:
+    """Make a model-supplied ``output`` a string the filesystem will actually accept.
+
+    The model writes filenames out of the utterance, and `ffmpeg_268` named one after the time
+    range it was given: ``clip_trimmed_00:00:00.mp4``. Colons are legal on Linux and illegal on
+    Windows, so ffmpeg refused to open it — *Error opening output files: Invalid argument* — and
+    the chain died at step 1 with nothing written. Both runtimes produce it, so this is the skill
+    trusting model output as a filename rather than a native port defect.
+
+    **Unconditional, not per-platform.** Sanitising only on Windows would make the same plan
+    render different names on different machines, which breaks L3 parity across runners and makes
+    an eval result depend on where it ran. A colon in a filename is a bad idea everywhere.
+    """
+    drive = _DRIVE_PREFIX.match(raw)
+    head, tail = (raw[: drive.end()], raw[drive.end() :]) if drive else ("", raw)
+    return head + "".join(_ILLEGAL_REPLACEMENT if c in _ILLEGAL_IN_FILENAME else c for c in tail)
+
+
+def _resolve_output_target(
+    raw_output: str, *, input_path: Path, mode: str, options: dict[str, Any]
+) -> Path:
+    """Read an `output` that names a DESTINATION rather than one file.
+
+    A batch writes one file per input, so these two spellings are per-file requests and were
+    being passed to ffmpeg verbatim:
+
+    * ``videos/*.mp4`` - "same name, over there". The ``*`` reached ffmpeg as a literal
+      character in the filename.
+    * ``videos_hevc`` - a destination directory. ffmpeg cannot choose a muxer for an
+      extensionless path without ``-f`` and failed with "Invalid argument".
+
+    A genuine filename (``renamed.mp4``) is returned untouched, so the single-file case is
+    unchanged.
+    """
+    # Before anything reads it as a path: the model supplied this string, and it is not
+    # guaranteed to be a legal filename. See `_legal_output_path`.
+    requested, raw_output = raw_output, _legal_output_path(raw_output)
+    out = Path(raw_output)
+    ext = _output_extension(mode, options)
+
+    # A wildcard anywhere but the final component cannot be expanded - `out*/clip.mp4` names
+    # no directory this skill can pick, and creating a literal `out*` is not the answer.
+    if any("*" in part for part in out.parts[:-1]):
+        raise ValueError(
+            f"Unrecognised output {requested!r}. A '*' may only stand for the file name, "
+            "as in 'videos/*.mp4'."
+        )
+
+    if "*" in out.name:
+        # The `*` stands for the input's stem, and the text around it is kept:
+        # `prefix_*.mp4` -> `prefix_clip.mp4`. Replacing the whole name dropped the prefix.
+        stem_ext = out.suffix.lstrip(".")
+        if "*" in stem_ext:  # `*.*` - the extension is not a pattern this skill can read
+            raise ValueError(
+                f"Unrecognised output {requested!r}. A '*' may only stand for the file name."
+            )
+        pattern = out.name[: -(len(stem_ext) + 1)] if stem_ext else out.name
+        name = pattern.replace("*", input_path.stem)
+        return out.with_name(f"{name}.{stem_ext or ext}")
+
+    # `.mp4` is a dotfile, i.e. a concrete file name that pathlib reports as suffix-less.
+    # Only a name with no dot at all is a destination directory.
+    if not out.suffix and not out.name.startswith("."):
+        return out / _destination_name(input_path, ext)
+
+    return out
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """Do two paths name one file? Resolved and case-folded, since Windows paths ignore case."""
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
 def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) -> Path:
     suffix_template = _OUTPUT_SUFFIX_BY_MODE.get(mode, "_out")
     platform = options.get("platform") or ""
@@ -456,6 +899,33 @@ def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) ->
     return input_path.with_name(f"{input_path.stem}{suffix}.{container}")
 
 
+# ffprobe names demuxers, not extensions: `.mkv` and `.webm` both probe as `matroska,webm`,
+# and `_summarise_probe` keeps the first entry. Only consulted for an extensionless input.
+_DEMUXER_EXTENSION = {"matroska": "mkv"}
+
+# Operations that EDIT a file rather than deliver it: with no container asked for, they write
+# the container they were given (owner decision 2026-09-23 — "convert to mkv, then crop"
+# came back as an mp4). compress and prepare_for_platform are about delivery and keep mp4.
+_EDIT_MODES = frozenset(
+    {"trim", "resize", "rotate", "strip_audio", "adjust_speed", "adjust_volume", "reverse"}
+)
+# ogg video is theora-only and vocab.yaml has no theora encoder, so an edit cannot keep it.
+_UNKEEPABLE_CONTAINERS = frozenset({"ogg"})
+
+
+def _same_container_as(input_path: Path, probe: dict[str, Any]) -> str:
+    """The container for an output that keeps its input's kind: the input's own extension.
+
+    Taking ffprobe's name instead wrote `clip_reversed.matroska` for a `.mkv` (ffmpeg: "Unable
+    to choose an output format") and turned `.mp4`/`.m4a` into `.mov`.
+    """
+    suffix = input_path.suffix.lstrip(".").lower()
+    if suffix:
+        return suffix
+    probed = probe.get("container") or ""
+    return _DEMUXER_EXTENSION.get(probed, probed)
+
+
 def _build_one_recipe(
     probe: dict[str, Any],
     platform_profile: dict[str, Any] | None,
@@ -467,8 +937,14 @@ def _build_one_recipe(
     input_path = Path(probe["file"])
 
     container = options.get("container") or (platform_profile or {}).get("container", "mp4")
-    if mode == "reverse" and not options.get("container"):
-        container = probe.get("container") or input_path.suffix.lstrip(".") or container
+    if mode in _EDIT_MODES and not options.get("container"):
+        # An explicit output name says what it is (`clip_trimmed.mkv` was rendered with the
+        # mp4-only `-movflags +faststart`); otherwise the input's own container.
+        kept = _container_from_output(options.get("output_path")) or _same_container_as(
+            input_path, probe
+        )
+        if kept in _VIDEO_CONTAINERS and kept not in _UNKEEPABLE_CONTAINERS:
+            container = kept
     video_encoder = options.get("video_encoder") or (platform_profile or {}).get(
         "video_encoder", "libx264"
     )
@@ -488,16 +964,25 @@ def _build_one_recipe(
 
     # Audio-only inputs (no video stream): an audio operation must produce an
     # audio file in the input's format, not a video container with a re-encoded
-    # aac track. Only adjust_volume currently routes audio-only inputs here.
-    audio_only = mode == "adjust_volume" and not probe.get("video_codec") and not probe.get("width")
+    # aac track.
+    #
+    # `adjust_speed` joined `adjust_volume` here after `ffmpeg_226` ("pull mp3 from clip.mp4
+    # and apply 0.8x tempo") rendered `-vf setpts ... -c:v libx264 ... -c:a aac clip_speed.mp4`
+    # against a file with no video stream: a filter and an encoder for a stream that is not
+    # there, and the user's mp3 handed back as an mp4. **ffmpeg exited 0**, so only the
+    # artifact-level `audio_codec` criterion caught it — the failure mode this whole class of
+    # bug has, and the reason the rule belongs to the operation rather than to one tool.
+    _AUDIO_APPLICABLE_MODES = ("adjust_volume", "adjust_speed")
+    audio_only = (
+        mode in _AUDIO_APPLICABLE_MODES and not probe.get("video_codec") and not probe.get("width")
+    )
     if audio_only:
-        container = (
-            options.get("container")
-            or probe.get("container")
-            or input_path.suffix.lstrip(".")
-            or container
-        )
+        container = options.get("container") or _same_container_as(input_path, probe) or container
         audio_codec = _audio_encoder_for(container)
+        # A lossless codec ignores a bitrate target and should not carry one (same rule as
+        # the container-mandated path below).
+        if audio_codec in ("flac", "pcm_s16le", "alac"):
+            audio_bitrate = None
 
     if container == "gif":
         video_encoder = ""
@@ -509,10 +994,17 @@ def _build_one_recipe(
     output_options["container"] = container
     raw_output = options.get("output_path")
     if raw_output:
-        out = Path(raw_output)
+        out = _resolve_output_target(
+            raw_output, input_path=input_path, mode=mode, options=output_options
+        )
         if not out.is_absolute():
             out = input_path.parent / out
         output_path = out
+        # A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
+        # refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the
+        # derived name, as the plan-level collision handling does for a literal self-overwrite.
+        if _same_file(output_path, input_path):
+            output_path = _derive_output_path(input_path, mode, output_options)
     else:
         output_path = _derive_output_path(input_path, mode, output_options)
 
@@ -564,6 +1056,17 @@ def _build_one_recipe(
             remux = False
             copy_audio = False
             video_encoder = options.get("video_encoder") or _CONTAINER_VIDEO_ENCODER[container]
+    # The same restriction holds when ENCODING: `-c:v libx264` into webm is refused outright
+    # ("Conversion failed!"). Reached once operations that keep their input's container (a
+    # reverse of `clip.webm`) started writing `.webm` instead of `.matroska`. An encoder the
+    # caller named is theirs to get wrong.
+    elif (
+        video_encoder
+        and not options.get("video_encoder")
+        and container in _COMPATIBLE_VIDEO
+        and _codec_from_encoder(video_encoder) not in _COMPATIBLE_VIDEO[container]
+    ):
+        video_encoder = _CONTAINER_VIDEO_ENCODER[container]
 
     # When stream-copy was requested but the source audio codec is incompatible
     # with the target container, fall back to the container's default encoder.
@@ -642,12 +1145,15 @@ def _build_one_recipe(
         recipe["level"] = options.get("level")
         recipe["normalize"] = bool(options.get("normalize", False))
         recipe["audio_only"] = audio_only
+    if mode == "adjust_speed":
+        recipe["audio_only"] = audio_only
     if mode == "trim":
-        recipe["trim"] = {
-            "start": options.get("start"),
-            "duration": options.get("duration"),
-            "end": options.get("end"),
-        }
+        recipe["trim"] = _normalize_trim(
+            start=options.get("start"),
+            duration=options.get("duration"),
+            end=options.get("end"),
+            frames=options.get("frames"),
+        )
     if mode == "extract_audio":
         recipe["audio_format"] = options.get("audio_format", "mp3")
         if options.get("start") is not None or options.get("end") is not None:
@@ -658,12 +1164,26 @@ def _build_one_recipe(
             }
         recipe.pop("video", None)
     if mode == "thumbnail":
-        recipe["at_time"] = options.get("at_time", "00:00:01")
+        # `probe` carries the duration, which is what makes "the last frame" answerable here
+        # and nowhere upstream. An unknown token resolves to None; falling back to the default
+        # instant would answer a different question than the one asked, so it raises instead.
+        requested_at = options.get("at_time", "00:00:01")
+        resolved_at = _resolve_at_time(requested_at, duration=probe.get("duration"))
+        if resolved_at is None:
+            raise ValueError(
+                f"Unrecognised time {requested_at!r}. Use a timestamp (00:00:05), "
+                "a number of seconds, or 'first' / 'last'."
+            )
+        recipe["at_time"] = resolved_at
         recipe["image_format"] = options.get("image_format", "jpg")
         recipe["scale"] = _parse_scale(options.get("scale"))
         recipe.pop("audio", None)
     if mode == "compress" and options.get("target_size_mb") is not None:
         recipe["target_size_mb"] = options["target_size_mb"]
+        # The duration is what turns a size into a bitrate, and `_build_flags` sees only the
+        # recipe. Carried here rather than re-probed there, so the cap is computed from the
+        # same probe every other decision in this recipe was made from.
+        recipe["source_duration"] = probe.get("duration")
     if mode == "reverse":
         recipe["include_audio"] = options.get("include_audio", True)
         recipe["has_audio"] = probe.get("has_audio", False)
@@ -693,6 +1213,68 @@ def _codec_from_encoder(encoder: str) -> str:
     return _ENCODER_CODEC_MAP.get(encoder, encoder)
 
 
+#: Headroom left for container overhead — muxing, the moov atom, per-packet headers — and for
+#: x264's rate-control window. A cap that budgeted 100% of the target for the streams would be
+#: exceeded by exactly that overhead, which is the one outcome a ceiling may not have.
+#:
+#: **Both constants are measured, not guessed.** Swept over three fixtures x four targets on
+#: 2026-09-16: at `bufsize = 2 x maxrate` a 1 MiB cap produced 1027 KB — over, by 3 KB — because
+#: a two-second rate-control window lets the encoder overshoot the average. At `bufsize = maxrate`
+#: all twelve combinations landed under, worst case 93.5% of the cap. 0.95 rather than 0.97 keeps
+#: margin for sources not in that sweep: undershooting costs some quality, overshooting makes the
+#: ceiling a lie.
+_SIZE_CAP_HEADROOM = 0.95
+
+#: `bufsize` as a multiple of `maxrate`. 1x is a one-second rate-control window; see above for
+#: why the conventional 2x is not safe for a hard ceiling.
+_SIZE_CAP_BUFSIZE_MULTIPLE = 1
+
+
+def _parse_bitrate_bps(value: Any) -> int:
+    """``"96k"`` -> 96000. Anything unreadable is 0, i.e. budget nothing for it."""
+    if value is None:
+        return 0
+    text = str(value).strip().lower()
+    multiplier = 1
+    if text.endswith("k"):
+        multiplier, text = 1000, text[:-1]
+    elif text.endswith("m"):
+        multiplier, text = 1_000_000, text[:-1]
+    try:
+        return int(float(text) * multiplier)
+    except ValueError:
+        return 0
+
+
+def _size_cap_kbit(target_size_mb: float, duration_s: Any, audio_bitrate: Any) -> int | None:
+    """Video bitrate ceiling, in whole kbit/s, that keeps the output under *target_size_mb*.
+
+    Returns ``None`` when the duration is unknown, because a size only becomes a bitrate once
+    there is a length to divide by. Inventing one would produce a cap that means nothing, and
+    refusing would fail a request that is otherwise valid — so the caller falls back to plain
+    CRF, exactly what it rendered before.
+
+    Floors to whole kbit rather than rounding: this is a ceiling, so every approximation in it
+    has to point the same way.
+    """
+    try:
+        duration = float(duration_s)
+    except (TypeError, ValueError):
+        return None
+    if duration <= 0:
+        return None
+    total_bps = (float(target_size_mb) * 1024 * 1024 * 8) / duration
+    video_bps = total_bps * _SIZE_CAP_HEADROOM - _parse_bitrate_bps(audio_bitrate)
+    kbit = int(video_bps // 1000)
+    if kbit <= 0:
+        raise ValueError(
+            f"target_size_mb={target_size_mb:g} is too small for this file: "
+            f"{duration:g}s of audio at {audio_bitrate} already exceeds it. "
+            "Ask for a larger size, or strip the audio."
+        )
+    return kbit
+
+
 def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Return (pre_input_flags, post_input_flags) for the given recipe.
 
@@ -706,12 +1288,28 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
     # Trim: fast-seek before -i; duration/end after -i (falls through to encode below).
     if mode == "trim":
         trim = recipe.get("trim", {})
-        if trim.get("start") is not None:
+        if trim.get("start_from_end") is not None:
+            # -sseof takes a negative offset from the end of the input.
+            pre += ["-sseof", _format_seconds(trim["start_from_end"])]
+        elif trim.get("start") is not None:
             pre += ["-ss", str(trim["start"])]
-        if trim.get("duration") is not None:
+        if trim.get("frames") is not None:
+            # A frame count replaces the range rather than joining it: with both, ffmpeg
+            # stops at whichever arrives first, so the command would mean neither request.
+            # `-vframes`, not `-frames:v`: the thumbnail arm below already uses that
+            # spelling and so does the native port. Two spellings of one flag in one
+            # renderer is how the two runtimes drift apart on a byte comparison.
+            post += ["-vframes", str(trim["frames"])]
+        elif trim.get("duration") is not None:
+            # `-t` is a LENGTH, already relative to the seek point. Correct after `-i`.
             post += ["-t", str(trim["duration"])]
         elif trim.get("end") is not None:
-            post += ["-to", str(trim["end"])]
+            # `-to` goes BEFORE `-i`, with `-ss`. As an OUTPUT option it is relative to the
+            # seek point, so `-ss 2 -i in.mp4 -to 5` is five seconds starting at two — not the
+            # range 2->5. Measured on a real 10s file: 5.000s the old way, 3.000s this way.
+            # Every range trim this engine rendered was wrong, and nothing saw it until
+            # `duration_s` was added to the corpus.
+            pre += ["-to", str(trim["end"])]
 
     if mode == "reverse":
         post += ["-vf", "reverse"]
@@ -734,12 +1332,14 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         else:
             post += ["-an"]
     elif mode == "extract_audio":
-        # Optional trim-while-extract: -ss before -i (fast seek), -to after.
+        # Optional trim-while-extract. Both bounds are INPUT options: see the `trim` arm —
+        # a `-to` after `-i` is relative to the seek point, which made `ffmpeg_119`
+        # ("just the audio from 3 to 5 seconds") render five seconds of audio.
         trim = recipe.get("trim", {})
         if trim.get("start") is not None:
             pre += ["-ss", str(trim["start"])]
         if trim.get("end") is not None:
-            post += ["-to", str(trim["end"])]
+            pre += ["-to", str(trim["end"])]
         post += ["-vn", "-c:a", _audio_encoder_for(recipe.get("audio_format", "mp3"))]
         bitrate = (recipe.get("audio") or {}).get("bitrate")
         if bitrate:
@@ -754,15 +1354,34 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         post += ["-an", "-c:v", "copy"]
     elif mode == "adjust_speed":
         speed = float(recipe.get("speed", 1.0))
+        if not math.isfinite(speed) or speed <= 0:
+            raise ValueError("Playback speed must be a finite positive number.")
         pts_factor = round(1.0 / speed, 6)
-        post += ["-vf", f"setpts={pts_factor}*PTS", "-af", f"atempo={speed}"]
-        video = recipe.get("video", {})
-        if video.get("encoder"):
-            post += ["-c:v", video["encoder"]]
-        if video.get("crf") is not None:
-            post += ["-crf", str(video["crf"])]
-        if video.get("preset"):
-            post += ["-preset", video["preset"]]
+        # FFmpeg accepts each atempo factor only in [0.5, 100]. Compose factors
+        # multiplicatively so e.g. quarter speed slows the audio as well as video.
+        remaining = speed
+        tempo_filters: list[str] = []
+        while remaining < 0.5:
+            tempo_filters.append("atempo=0.5")
+            remaining *= 2.0
+        while remaining > 100.0:
+            tempo_filters.append("atempo=100.0")
+            remaining /= 100.0
+        tempo_filters.append(f"atempo={remaining}")
+        tempo = ",".join(tempo_filters)
+        # The tempo filter is the request and always applies; `setpts` retimes a video stream
+        # an audio-only input does not have, and neither does the video encoder.
+        if recipe.get("audio_only"):
+            post += ["-af", tempo]
+        else:
+            post += ["-vf", f"setpts={pts_factor}*PTS", "-af", tempo]
+            video = recipe.get("video", {})
+            if video.get("encoder"):
+                post += ["-c:v", video["encoder"]]
+            if video.get("crf") is not None:
+                post += ["-crf", str(video["crf"])]
+            if video.get("preset"):
+                post += ["-preset", video["preset"]]
         audio = recipe.get("audio", {})
         if audio.get("codec"):
             post += ["-c:a", audio["codec"]]
@@ -856,6 +1475,23 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             post += ["-crf", str(video["crf"])]
         if video.get("preset"):
             post += ["-preset", video["preset"]]
+        # Capped CRF: quality still drives the encode, the cap only stops it exceeding the
+        # size that was asked for. A fixed `-b:v` derived from the target would INFLATE an
+        # already-small clip — `email.yaml` declares `default_target_size_mb: 20`, and a clip
+        # that compresses to 200 KB must not become a 20 MB file because a ceiling was named.
+        if recipe.get("target_size_mb") is not None:
+            kbit = _size_cap_kbit(
+                recipe["target_size_mb"],
+                recipe.get("source_duration"),
+                (recipe.get("audio") or {}).get("bitrate"),
+            )
+            if kbit is not None:
+                post += [
+                    "-maxrate",
+                    f"{kbit}k",
+                    "-bufsize",
+                    f"{kbit * _SIZE_CAP_BUFSIZE_MULTIPLE}k",
+                ]
         if video.get("pixel_format"):
             post += ["-pix_fmt", video["pixel_format"]]
         audio = recipe.get("audio", {})

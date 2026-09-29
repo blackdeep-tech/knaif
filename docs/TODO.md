@@ -321,6 +321,41 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 
 # Open / Next (no dedicated plan yet)
 
+- [x] **4B audit and measured improvement — experiment pass** — closed 2026-09-17; [results and follow-ups](plans/2026-09-17-4b-audit-and-improvement.md). Deterministic speed fix measured with no observed control regressions; model candidate rejected, prompt diagnostic not adopted. Broader model improvement remains open. Nothing committed or promoted.
+- [x] **Re-lock both snapshots — done 2026-09-17.** `POLICY_VERSION` 3 required it and the evidence is in [`2026-09-17_t7-relock-policy-v3_success`](../evals/runs/2026-09-17_t7-relock-policy-v3_success/report.md). ffmpeg **0.9388954172 / 0.9801227169** (third independent reproduction of the corrected instrument, to ten decimals), documents **0.9817073171 / 1.0** (unchanged in value). Both **S2 ACCEPTED** (39 / 36 thresholds), safety 11/11 and 9/9, suite green. The promotion verdict was recorded first, per T7's ordering rule.
+- [ ] **Skill and prompt workbench** — one notebook, both runtimes, any model, chosen backend, dry-run or real, with measured timing. Plan: [skill-prompt-workbench](plans/2026-09-21-skill-prompt-workbench.md). Wanted before the v2 publish decision, because the current testers cannot make it: they use a pre-restructure `src/skills/` path, list no knaif fine-tune at all, and show the model all 30 tools where production sends ~8 — which changed **4 of 14** plans and made the model look *worse* than it is. Carries two core fixes: `infer_stream` needs `registry_override` (T1), and `detect_backend()` reports `CUDA0` even when every layer is on CPU (T2), which is what the L4 lane records.
+- [x] **documents silently overwrites an existing file with its default output name** — FIXED 2026-09-24, both runtimes: a taken derived name moves to `<name>-1<ext>`; explicit outputs honoured (skills/documents/SPEC.md). Was: both runtimes. `convert sample.txt to markdown` replaces an existing `sample.md`; `protect_pdf` replaces `sample-protected.pdf`. Found by the 2026-09-24 native L4 (16 rows). Blocks the v2 publish by owner decision.
+- [x] **The native L4 lane cannot grade read-only documents tools** — FIXED 2026-09-24: native dumps each read result as a `===KNAIF-RESULT===` line in Python's shape and the lane grades it; the lane also counts rewritten files, not only new ones. Was: — `inspect_document`/`extract_text`/`find_in_document` print their answer; the lane grades files only, so every criterion reads `None` (~25 rows of the 2026-09-24 L4). Blocks the v2 publish by owner decision.
+- [ ] **Native builds do not ship PDFium, so native OCR fails everywhere** — `build_native_kind.sh` stages no PDFium library beside the binary, and the documents OCR tools refuse with "could not load the PDFium library" (all 7 OCR rows of the 2026-09-24 L4 run). The installer decision already says bundle PDFium (BSD); until the build stages it, dev L4 runs set `KNAIF_PDFIUM_PATH` to pypdfium2's copy. Blocks documents native `supported`.
+- [x] **Inference config parity** — **done 2026-09-26** (T8 closed by release-1.2 R3) — the two lanes feed identical tokens but configure llama.cpp differently (flash attention, batch size, cross-call cache reuse), and on a borderline token that alone flipped `extract_audio`/`strip_audio` (68% → 20%). Measure the eval noise floor first, then pin the config in `generation.yaml` for both runtimes. Plan: [inference-config-parity](plans/2026-09-23-inference-config-parity.md). Before the v2 L3/L4 runs.
+- [ ] **Chain source threading** — core rewrites a later step's input onto an earlier step's output whenever both read the same file, so every fan-out plan (thumbnail + compress of one video; three trims of one clip) is silently turned into a straight chain before it runs. Found in the workbench 2026-09-23. Plan: [chain-source-threading](plans/2026-09-23-chain-source-threading.md). No retrain; independent of the v2 publish. Native does not port the threader, so the runtimes already disagree.
+- [ ] **Promote the model pointer to `knaif-qwen3-4b-v2`** — **REPLACED 2026-09-25 by [release-1.2](plans/2026-09-25-release-1.2.md):** `sft-v4` is not published; the next training cycle's 4B and 1.7B ship as the public `v2`s with knaif 1.2.0. Original note: the verdict authorises it ([`PROMOTION_VERDICT.md`](../evals/runs/2026-09-15_t6g-sizing-vs-sending_success/PROMOTION_VERDICT.md): ffmpeg outcome +2.00 pp, documents +1.83 pp, 26/26 required slices vs v3's 25/26). Three steps, in order: publish the GGUF (`scripts/publish_model.py` fills `url`/`sha256`, currently `TODO` in `contracts/models/model-manifest.yaml`), then move `recommendations:`, then both skills' `recommended_model:`. Moving the pointers first would break `knaif models pull`. The 1.7B tier is a **separate open decision** — its candidate clears documents 28/28 but misses ffmpeg by 2, while the published v1 misses by 9/10 and fails `ffmpeg_safety_system_root_dir`.
+- [x] **The eval lane is not bitwise reproducible, and nothing says so** — **resolved 2026-09-24** by [inference-config parity](plans/2026-09-23-inference-config-parity.md): the lane IS deterministic (same config twice: 0 flips over 469 utterances); what moved rows was KV-prefix reuse from the previous row and the llama.cpp compute config — `documents_042#0` flips between configs, not between runs. Both are now pinned in `generation.yaml`; the measured noise floor is in `docs/EVAL_FRAMEWORK.md`. Original note: — inference runs at `temperature=0.0`, yet `documents_042#0` emitted `order: "-1"` on one run and `order: "reverse"` on two others from identical model bytes and prompt (llama.cpp GPU reduction order, not sampling). One row in 1,015, but a single documents row is **0.22 pp of `avg_knaif_score`** on a 154-row denominator. Consequence: artifact-average deltas below roughly half a point are not decision-grade on documents. The 2026-09-17 candidate rejection is unaffected — it rests on three *outcome* regressions, and outcome accuracy reproduced exactly on both skills — but its artifact component (1.0 → 0.99669) is within this noise and should not be quoted alone. Measure the actual run-to-run spread before any future decision leans on a small artifact delta.
+- [x] **Evaluation trust follow-up — gate hardening done, both gates.** [Audit findings](../evals/runs/2026-09-17_audit-control-v1_success/report.md). `check_acceptance` and `check_native_acceptance` now fail closed on:
+  - absent or incomplete **coverage**, and recorded **fixture-integrity** drift;
+  - **non-finite numbers anywhere a threshold is compared** — aggregates, slice rates, `max_failures` row counts, safety pass rates, coverage, and the native raised floor (a NaN *baseline* made `accepted - tolerance` NaN, which nothing could fail). One `_finite()` helper feeds every comparison rather than four separately-patched sites; a NaN in a `max_failures` slice used to raise `ValueError` out of the gate instead of rejecting the run;
+  - an **empty safety population**, a safety result **for a different skill** (documents' 9 rows could certify ffmpeg's 11 — same backend, same rate, minutes apart), and safety **from a different model**.
+
+  Model identity is compared as identifier *sets*, not `backend == backend`: a native scoreboard records the lane in `backend` and the model in `backend_public_name`, while its paired safety record puts the model in `backend`. A direct string compare rejects **4 of the 26 real scoreboard/safety pairs** under `evals/runs/`; the set rule rejects 0 and still catches a genuine swap. `load_acceptance` now stamps `skill` so a bar can be bound to its evidence at all.
+
+  Also: `schema_validity` no longer counts `parse_error` as valid; the train/eval verbatim-copy test covers **both** skills (it was ffmpeg-only, which is why `documents_079` was never caught). The native lane keeps its own lowerable coverage floor — `check_acceptance` takes `coverage_floor`, so there is one rule, not two that can disagree.
+- [ ] **Safety population count is still unbound** — the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
+- [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
+- [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
+- [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
+  tests; next version. Native asks `[y/N]` through `ask_yes_no` (`apps/cli/src/main.rs`: "Proceed?"
+  before running, and the model-download question), so Enter declines; the Python SDK app already
+  asks `Proceed? [Y/n]` (`python/core/knaif/app.py`) — the two runtimes disagree today.
+  Low risk (owner, 2026-09-29): `safety_category: destructive` means "writes a file" — every
+  transformation tool carries it — while nothing can delete, overwrite an existing file (a taken
+  name gets `-1`) or run a shell, and truly destructive requests are rejected. So "Proceed?"
+  approves writing new files only. Before switching: `flush_terminal_input` is a no-op off Unix,
+  so on Windows an Enter typed during a long CPU inference would answer the prompt, and with a Yes
+  default silently approve — flush the console input buffer there first (`FlushConsoleInputBuffer`).
+  A non-tty stdin keeps meaning "no answer". Consider renaming the category (`writes` vs
+  `read_only`) so "destructive" stops suggesting deletion; REQUIREMENTS.md §safety uses the term.
+- [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
+
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
@@ -477,10 +512,25 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `reject`, so it correctly falls through to `mismatch` against python's multi-command
     outcome rather than the old lenient `chain-native-single-step` bucket, which is kept for
     its narrower original trigger — both sides still rendering `commands` — not deleted).
+    **Superseded 2026-09-10 (a):** the refusal stopped saying `reject:` and started printing
+    `not_implemented: this request needs N steps, ...`, because a capability the port has not
+    built and a request the runtime declined are opposite facts about the product and coverage
+    cannot be computed while they share a label.
+    **CLOSED 2026-09-10 (b) — the refusal is gone, replaced by the executor** (Workstream E of
+    `docs/plans/2026-09-10-skill-quality-lifecycle.md`). Native runs a plan's steps in order:
+    control tools end the whole plan, execution stops at the first failure and names which
+    steps ran, and `--dry-run` previews every step. `StepDecision` keeps only `Empty` and
+    `Run { total }`; `Unsupported` is deleted. This is what the audit actually recommended —
+    the refusal was the interim it explicitly OK'd.
+    Two consequences worth recording: `parity_check.py`'s lenient `chain-native-single-step`
+    bucket is **deleted**, because a branch that prefix-matched the first command would now
+    pass every chain row on step 1 alone and hide exactly the step-2..n divergence the executor
+    makes possible; and `not_implemented:` still exists, now produced by an unimplemented skill
+    tool rather than by chains.
     Tests: `decide_steps_empty_plan_is_empty` / `_single_step_is_ok` /
-    `_multi_step_is_unsupported` in `apps/cli/src/main.rs` — deterministic, no model/GPU
-    needed, per the audit's own ask. `cargo test --workspace`: 263 passed, 0 failed (was
-    260); fmt + clippy clean.
+    `_multi_step_runs_every_step` / `chain_failure_context_accounts_for_every_step` in
+    `apps/cli/src/main.rs`, plus six end-to-end cases in `apps/cli/tests/executor_semantics.rs`
+    — all deterministic, no model/GPU needed, per the audit's own ask.
   - [~] **F9 — acceptance snapshots RE-LOCKED (2026-09-08). HALF DONE — the identity half is
     outstanding.** The audit asked for two things: adopt compatible full-corpus executing
     snapshots, *and* "store corpus hash/row IDs, model checksum/config, and code identity" in
@@ -527,15 +577,23 @@ This **Open / Next** section is the live backlog (originally distilled from the
     and `docs/EVAL_VERIFICATION_SOP.md`'s documented join snippet — which keyed on `id` alone
     and so carried the same defect — now keys on `(id, utterance)` text, with a note on why
     `utterance_idx` is unsafe across pre-2026-09-08 runs.
-  - [ ] **F8 — Python and native feed the model different planning prompts.** Python retrieves
-    (5 of 13 public ffmpeg tools for the audit's probe, retrieval-ordered, retrieved examples);
-    native passes the full registry, filters internal tools, orders by YAML, and uses the static
-    examples block. Generation budget is **512 on both** — do not revive the corrected "2048 in
-    Python" claim. **Impact: Python eval scores do not establish shipped native planning
-    quality.** Known since 2026-08-08, not worsened by this branch. Do the controlled prompt
-    comparison in `docs/plans/2026-08-08-native-python-planning-parity.md` *before* attributing
-    any remaining model failure to the model, then measure the shipped native runtime with
-    executing criteria. Tracked follow-up; not blocking.
+  - [x] **F8 — Python and native feed the model different planning prompts. MEASURED 2026-09-09;
+    the divergence is confirmed, its predicted impact is not.** The description was accurate —
+    Python retrieves 5 of 13, retrieval-ordered, with retrieved examples; native passes the full
+    registry in YAML order with the static examples block; generation budget 512 on both.
+    **What the controlled comparison found is that this does not cost planning quality:** native
+    vs Python is **11/5 wins on 847 paired utterances, p = 0.21**, and with the prompt held
+    identical the two planners agree on **99.6%** (3/847). Per axis the two halves cancel —
+    retrieval helps (8/1, p = 0.039), example selection hurts (16/1, p ≤ 0.001), and native lacks
+    the first while having the better second.
+    **So F8's stated impact — "Python eval scores do not establish shipped native planning
+    quality" — is now answered rather than open: for ffmpeg on `knaif-qwen3-4b-v1` they do,
+    within noise.** That is a measurement on one skill and one model, not a general licence; the
+    durable fix is the four-layer process in
+    [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md),
+    which makes the number a gate instead of a one-off. Evidence:
+    `evals/parity/2026-09-09_p2b-prefix-baseline/` and `.../2026-09-09_p3-prompt-factorial/`;
+    method and caveats in the superseded plan's *P3 full corpus* section.
   - [ ] **F10 — runtime output verification doesn't check requested properties.**
     `VerifyOutputsStep` records a probe summary and marks a successfully-probed file verified
     without asserting the requested duration/dimensions/codec; batch expansion supplies no
@@ -710,7 +768,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
     the `main-guardrails` ruleset went on: **`ci` required and nothing else** (every other job
     is path-gated, and a *skipped* required check blocks a PR forever), strict up-to-date
     branches, squash/rebase only, linear history, no direct pushes, **no bypass actors at all**.
-    Settings recorded in full at C5 in the plan.
+    Settings recorded in full at C5 in the plan. **Changed 2026-09-25:** linear history removed
+    and merge commits allowed, for integration branches
+    ([release-1.2](plans/2026-09-25-release-1.2.md) R1); everything else unchanged.
   - **`release.json` refresh — decided and built** (2026-08-08):
     `.github/workflows/release-data.yml`. Neither of the two options on the table: **no bypass
     actor** (adding the Actions app would give every workflow in the repo unreviewed write
@@ -719,11 +779,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
     required and strict, could never be merged. The workflow pushes a branch and links the
     compare page; a human opens the PR and CI runs normally. Upgrade path if it ever needs to
     be hands-off is a GitHub App token, **not** a ruleset bypass.
-  - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane is now Workstream S of
-    [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md),
-    where its prerequisite lives. Relocated rather than deferred: the native-planning finding
-    turned it from a benchmark into an acceptance gate, and it cannot be built until the prompt is
-    pinned by a contract. The design finding travels with it.
+  - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane went to the
+    prompt-parity plan as its Workstream S; when that plan was superseded on 2026-09-10 it moved
+    again, and now lives as **Workstream L4** of
+    [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+    Relocated rather than deferred, twice for the same reason: it cannot be built until the prompt
+    is pinned by a contract (now L1), and its design finding — a whole-pipeline binary must not be
+    registered under `backends:` — travels with it.
   - **Workstream U is closed — U1 verified against the live assets 2026-08-08.** The uploads had
     in fact happened for both platforms; the box had simply never been ticked, and the plan still
     described `url: TODO` placeholders the manifest no longer had. Checked rather than assumed:
@@ -757,41 +819,108 @@ This **Open / Next** section is the live backlog (originally distilled from the
       `just bootstrap` (the documented path, and mise-based) now adds them explicitly, and
       `rust-toolchain.toml` says why its own `components` list cannot be relied on.
 
-- [ ] **Native plans worse than Python on the same model** — plan:
-  [plans/2026-08-08-native-python-planning-parity.md](plans/2026-08-08-native-python-planning-parity.md).
-  Owner observation (2026-08-07), driving the CLI by hand: native produced lower-quality plans
-  than the Python runtime and **would not produce a multi-step plan at all**. **Not
-  platform-specific** — every divergence found is in prompt-building code that is identical on
-  every target. Diagnosis and the fix are exercised **on Windows**; the plan's commands are
-  PowerShell. Not yet reproduced from a checkout; everything below is a code read.
-  - **The cause is probably already found, and it is not the model.** `retrieve_tools` is ported
-    into `knaif-core` and **never called** — `registry.rs` says "ported in a later slice" — so the
-    native prompt carries the *entire* registry: **13 model-visible ffmpeg tools against Python's
-    5** (`top_k=5`). `select_examples` is not ported either, so the few-shot block is static
-    instead of chosen per utterance. And **wiring retrieval up is not enough**: Rust's
-    `retrieve_tools` returns a `BTreeMap`, discarding rank, and `prompt.rs` re-sorts by
-    `tools.yaml` order, while Python emits in relevance order. Both runtimes decode greedily on
-    the same GGUF, so a systematic gap has to be deterministic — and the shipped model is
-    **fine-tuned on Python-shaped prompts**, now confirmed at `build_dataset.py:132`: every
-    training row is built through `retrieve_tools` → `build_prompt`, so the training distribution
-    is five tools, ranked, with filtered examples. Native serves thirteen, in YAML order, with a
-    static block — three divergences at once. Multi-step is the first thing to degrade.
-  - **Audited 2026-08-08 before any implementation; two findings were wrong and are corrected in
-    the plan rather than quietly replaced.** The 26-of-26 count compared registry entries against
-    prompt lines — 13 of the 26 are `internal: true` and both prompt builders skip them. And the
-    `max_tokens` 512-vs-2048 gap does not exist: the promoted `knaif-qwen3-4b-v1` is **512 on both
-    sides** (`models.yaml:56`, `eval_backends.yaml:196`); the 2048 belongs to a superseded stanza
-    for a different GGUF. Both errors are what "established by reading" looks like unexecuted.
-  - **P cannot start as originally written:** `$KNAIF_DEBUG` dumps raw model output on a
-    parse/validation *failure*, never the prompt — so a prompt dump is now P0.
-  - Ruled out: `n_ctx` 8192 both, `/no_think` both, greedy both. **Path normalization is not**
-    ruled out — native rewrites every backslash, Python only path-shaped tokens.
-  - **The structural lesson.** `prompt.rs` recorded its divergences as safe because "Phase 10
-    eval-parity measures end quality" — that check is **C4, and it was never built**. A divergence
-    accepted on the strength of a check that does not exist is an unmeasured divergence.
-  - **C4 lives here now** as Workstream S, after the contracts that let its number mean anything —
-    and it needs an adapter: `plan --batch` emits validated plans, while the executing verifiers
-    grade rendered commands and produced files.
+- [ ] **Runtime parity process — Python/Rust must agree, measurably** — plan:
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+  **Replaces** the 2026-08-08 prompt-parity plan, retired 2026-09-10 once its measurements were
+  carried into the successor (they are reproduced there in full; the file is in git history).
+  - **The old premise was measured false (2026-09-09).** "Native plans worse than Python" is not
+    supported: 847 paired utterances, native vs Python **11/5 wins, p = 0.21**. Holding the prompt
+    identical the two planners agree on **99.6%** (3/847). What the owner saw on 2026-08-07 was
+    almost certainly the **executor** — native `run` refuses every multi-step plan — not the
+    planner, which emits correct chains on 39/41 chain utterances.
+  - **The prompt divergence is real but not costly, and its two halves cancel.** Retrieval helps
+    (8/1, p = 0.039); example selection *hurts* (16/1 and 14/1, p ≤ 0.001). Native lacks the first
+    and has the better second, which is why the totals wash out.
+  - **So the work is a process, not a fix.** Four layers with per-layer thresholds: **L1 contract**
+    and **L2 deterministic** (no GGUF, every PR, **100%** — a mismatch there is a bug, never
+    noise), **L3 behavioral** (≥99% per row, and `scripts/parity_check.py` already does most of
+    it — it needs a threshold, a saved record and a trigger), **L4 shipped path** (the native
+    binary executing for real, graded on the artifacts it produces, within 2 pts of the
+    Python-locked bar — the only layer that measures what a user actually gets). A single blended "99%" is rejected: it would let a deterministic port bug hide
+    inside model noise, which is how the prompt divergence survived a year.
+  - **Two rules.** *Python is the reference; Rust moves* — with a written, measured exception, and
+    V2 is that exception (the evidence says **delete `select_examples` from Python** rather than
+    port it to Rust). And *compare the same stage on both sides*: an ad-hoc comparison that broke
+    this rule reported 18.2% disagreement, of which 150/154 were Rust's clarify gate running
+    against a Python path that had none. The true figure was 3/847.
+  - **`not_implemented` marker landed 2026-09-10.** Native marks a capability it has not
+    built with a `not_implemented:` prefix instead of `reject:`; `knaif.evalsuite.outcomes`
+    carries the shared vocabulary and a `coverage()` that counts a deliberate refusal as
+    attempted; `parity_check.py` reports `native-not-implemented` as its own gating bucket.
+    A test pins the marker identical across Rust, the parity script and the Python module.
+  - **Started 2026-09-10 — S2 acceptance bars are written and enforceable.** Each active skill
+    now carries `skills/<name>/acceptance.yaml`: aggregate floors on an executing verifier,
+    required capability slices (chains included, budgeted in rows where the slice is too small
+    for a rate to mean anything), and safety at **100%**. `just eval-accept` grades a run against
+    it and `just eval-safety` runs the safety corpus; both fail closed on an unreported slice, an
+    unidentified run, a `cheap` run, or a safety corpus that was never executed. A test asserts
+    each skill's committed snapshot clears its own floors — a floor above the bar the skill was
+    accepted on is fiction.
+  - **S3g factorial ran 2026-09-10 — and V2 reversed.** 12 cells (example selection x `top_k`,
+    both skills, executing verifier on real artifacts, paired McNemar):
+    `evals/runs/2026-09-10_s3g-factorial_success/summary.md`.
+    - **`select_examples` stays; Rust gains it** rather than Python dropping it. Static wins the
+      ffmpeg aggregate at `top_k=8` (0.916 vs 0.902, 30/14, p = 0.0226) and in the same cell
+      pushes `concat_video` under its floor (0.800 → 0.733) and busts `chain2`'s budget. On
+      documents it does nothing at all. The 2026-09-09 finding does not survive per-slice
+      artifact grading — which is exactly why the plan required re-running it.
+    - **`top_k` stays at 5.** 8 edges 5 on ffmpeg but never significantly (p = 0.19); 99 is worse
+      than both; on documents there is no effect and 99 lowers artifact quality.
+  - ⚠️ **ffmpeg fails its own S2 safety bar: 6/9, with 0 breaches.** All five dangerous requests
+    are refused; the three misses are *over*-refusals — `reject` where the corpus asks for
+    `clarify` (overwrite-originals, and both raw-command rows). Every aggregate floor and every
+    required slice passes in the shipped configuration, so safety is the only thing standing
+    between ffmpeg and acceptance. **Needs an owner decision:** either the model learns to
+    clarify those three (training data), or the corpus rows are wrong and should expect
+    `reject`. Do not silently relax `safety.pass_rate`.
+  - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
+    L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
+    gate the layers are a checklist nobody must run, which is the failure mode being fixed.
+  - **Blocked on chains** by the native multi-step executor gap (next item). L3 either waits for it
+    or launches with chains explicitly excluded and the hole recorded — not silently skipped.
+  - **Evidence is committed**, not just described: `evals/parity/2026-09-09_p2b-prefix-baseline/`
+    (847 pre-fix envelopes, with git/corpus/model/binary sha256 and the inference backend pinned)
+    and `evals/parity/2026-09-09_p3-prompt-factorial/` (3 388 inferences, four prompt shapes).
+
+- [ ] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
+  2026-09-09 while diagnosing the parity plan's P1/P3). `decide_steps` returns
+  `StepDecision::Unsupported` for any plan with more than one step, and `cmd_run` turns that into
+  *"this request needs 3 steps, but the native runtime executes one step at a time (multi-step
+  chains aren't supported yet)"*. That is **by design** (audit F5 made the truncation explicit
+  rather than silent, which was the right call), but it is now the binding limit on native: the
+  planner is not the problem. Measured the same day, `plan --batch` over the full 847-utterance
+  ffmpeg corpus emits multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step,
+  first tool correct on 39/41 — so every one of those correct chains is refused at execution.
+  **This is very likely what the 2026-08-07 "native won't produce a multi-step plan" observation
+  actually was** — which is why the plan built on that observation was retired (2026-09-10) and
+  replaced by [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+  Needs an ordered multi-step executor: chain-intermediate binding already exists in
+  `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
+  and partial-failure semantics do not. **Now Workstream E of
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md)**
+  (added 2026-09-10) rather than its own plan: both active skills have chain rows, so the
+  lifecycle's `supported` status is unreachable for *every* skill until it lands. It is also
+  smaller than this entry assumed — chains are mediated by explicit output filenames, never
+  `$variable` references (`skills/ffmpeg/prompt.yaml:27-30`), so no variable-binding layer is
+  needed; recovery, rollback and resumption stay deferred.
+
+- [ ] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). Running a
+  `--features llama,cuda,pdfium` binary on the RTX 5080 still prints *"the bundled Vulkan backend
+  runs at roughly CPU speed on this GPU generation. Install the CUDA backend for usable
+  performance: knaif backend install cuda"*. The nudge (U3, keyed on compute capability — correct
+  for the payload case) does not check **which backend the running binary actually has**, so a
+  correctly-configured CUDA user is told to go fix something that is not broken, and the advice it
+  gives is already true. Small, self-contained: gate the warning on the active backend as well as
+  the compute capability.
+
+- [ ] **Building for a corpus run: pick the CUDA feature set on Blackwell** (measured 2026-09-09).
+  `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only and plans **~1
+  utterance / 30 s** on this box — a 847-utterance corpus run is ~7 hours. With
+  `CMAKE_CUDA_ARCHITECTURES=120 --features "llama,cuda,pdfium"` the same corpus takes **~8 min**
+  (111 utt/min, measured). Vulkan is *not* the fallback on this generation:
+  [PERFORMANCE.md](PERFORMANCE.md) §2 records it collapsing to roughly CPU speed on Blackwell.
+  Worth a line wherever corpus/parity runs are documented, because the default feature set is the
+  slow one and the failure mode is silent — it just looks like the run is taking a long time.
 
 - [ ] **Website split — knaif.org + knaif.dev** — plan:
   [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
@@ -825,7 +954,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `release.yml`: that job builds a draft, and the extractor rejects drafts by design, so the
   refresh needs its own `on: release: published` trigger.
 
-- [ ] **Inference latency: daemon + prompt-prefix KV reuse (1.2.0, NOT 1.1.0).** Measured
+- [ ] **Inference latency: daemon + prompt-prefix KV reuse (moved to 1.3.0 on 2026-09-25, [release-1.2](plans/2026-09-25-release-1.2.md) R0: cache reuse between requests is what config parity switched off).** Measured
   2026-08-01 on the shipped Linux CUDA payload; full budget in
   [PERFORMANCE.md §6](PERFORMANCE.md). A CUDA `run` is ~5.2 s wall of which only ~1.6 s is compute:
   ~1.9 s CUDA context init + ~1.3 s model load + ~1.2 s prompt decode + ~0.4 s generation + ~0.24 s

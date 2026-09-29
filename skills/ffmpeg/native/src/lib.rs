@@ -7,6 +7,7 @@
 //! Tier 1 (shared data) is in place: [`Vocab`] loads `vocab.yaml`. The imperative engine
 //! (Tier 2/3) follows.
 
+pub mod binding;
 pub mod concat;
 pub mod engine;
 pub mod exec;

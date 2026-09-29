@@ -29,6 +29,7 @@
 # artifact identity; the `path:` is what maps one to the other.
 #
 # The two promoted (shipped) models, whatever else is present:
+#   models/knaif-qwen3-4b-v2-q4_k_m.gguf   (public knaif-qwen3-4b-v2  — FT cycle sft-v4-flat, Q4_K_M)
 #   models/knaif-qwen3-4b-v1-q4_k_m.gguf   (public knaif-qwen3-4b-v1  — FT cycle sft-v3-flat, Q4_K_M)
 #   models/knaif-qwen3-1.7b-v1-q6_k.gguf   (public knaif-qwen3-1.7b-v1 — FT cycle sft-v3-flat, Q6_K)
 #
@@ -57,6 +58,88 @@
 #                     (e.g. "using device CUDA0"). Default false. Set true
 #                     once when diagnosing why CUDA isn't being used.
 
+# ── lanes ─────────────────────────────────────────────────────────────────────
+#
+# A LANE IS NOT A BACKEND, and this is a separate top-level section for that reason
+# (docs/plans/2026-09-10-skill-quality-lifecycle.md, L4c). Everything under `backends:` is
+# handed to `InferenceOrchestrator(backend=...)` by `_make_agent`, so a lane key placed there
+# would not be inert — it would be constructed as a token-generation backend and fail, or
+# half-work, which is a confusing way to learn about a config mistake.
+#
+# A backend answers "which model generates the tokens". A lane answers "which runtime is under
+# test, end to end". The native lane runs the shipped binary for real — `knaif run`, no
+# --dry-run — and is graded on the files it writes to disk (L4a):
+#
+#   uv run -m knaif.evalsuite native --skill ffmpeg --lane native-cli \
+#       --verifier success --save evals/runs/<date>_<label>_success
+#
+# `binary` must be a build with the llama feature (`cargo build --release -p knaif-cli
+# --features llama,cuda,pdfium`); a mock-only build plans nothing and every row scores 0.
+lanes:
+  native-cli:
+    kind: native_cli
+    # The per-kind CUDA build (scripts/build_native_kind.sh cuda), repointed 2026-09-24. The old
+    # `target/release/` was last built 2026-09-16 and predates the pinned compute config and the
+    # 2026-09-23 engine fixes; the workbench's stale-build flag is what showed it. Grading that
+    # binary would have graded a build nobody ships.
+    binary: target/release-cuda/knaif.exe
+    # Repointed to sft-v4 on 2026-09-15 with T7's re-lock. `eval-accept-native` grades this
+    # lane against `max(S2 floor, accepted python score - 0.02)`, and the accepted Python
+    # score is now sft-v4's — so measuring v1 here would compare two different models and the
+    # verdict would mean nothing. sft-v4 is being promoted as `knaif-qwen3-4b-v2`, so the file
+    # now carries its public name; the lane reads the path, not the manifest.
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    # The model's shipped name, which the L4 identity gate compares against the baseline's.
+    # Lost in the 2026-09-15 repoint, so the 2026-09-24 L4 run reported `None` and was refused.
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 180
+  # The other two per-kind builds a release ships, for the 2026-09-25 cross-backend check: a backend
+  # changes FP accumulation, which flips greedy near-ties, so each shipped kind is measured rather
+  # than assumed to plan like CUDA. Same model, same identity; only the binary differs.
+  native-cli-cpu:
+    kind: native_cli
+    binary: target/release-cpu/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    # CPU decodes a 4B model several times slower than a GPU.
+    timeout_s: 600
+  native-cli-vulkan:
+    kind: native_cli
+    binary: target/release-vulkan/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 180
+  # Release 1.2.0 R5c: the UNPACKED release artifact (dist/knaif-1.2.0-windows-x64.zip, built from
+  # the freeze commit), one lane per model. The backend is chosen by the environment each run sets,
+  # not by the lane: the CUDA payload installed into $KNAIF_BACKENDS_DIR, Vulkan with it empty, CPU
+  # with the GPU hidden. The lane records where the layers actually landed.
+  r5c-win-4b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r5c-win-1.7b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
+  # The Linux half (WSL Ubuntu 24.04, same RTX 5080): the unpacked linux-x64 tarball, models copied
+  # onto the Linux filesystem (not loaded over /mnt/c once per request).
+  r5c-linux-4b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r5c-linux-1.7b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
+
 backends:
   # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".
   # Substitutes ONLY token generation: the mock planner picks the top retrieval hit
@@ -81,6 +164,34 @@ backends:
                                  # object. json_mode:true only works when thinking is on
                                  # (verified 2026-06-08). Keep false; thinking is off.
       thinking_enabled: false    # /no_think suppresses the <think> block
+
+  # ⚠️ OLLAMA IS NOT A SUPPORTED knaif RUNTIME, and this stanza does not make it one. The policy
+  # is recorded in native/crates/knaif-llm/src/lib.rs: "No Ollama backend — Ollama is confined to
+  # the Python dev/eval path." The native runtime has none, this file does not ship in the
+  # artifact, and nothing here is a product surface. It exists so the workbench and the eval
+  # suite can ASK A QUESTION, not so anyone can run knaif on Ollama.
+  #
+  # The SAME model through a different serving stack, so "does this prompt behave the same
+  # somewhere other than our llama.cpp build?" is a question that can be asked at all. Pairs with
+  # `qwen3-4b` above: same weights, same settings, different host.
+  #
+  # NOT a quality arm and not comparable on latency — Ollama keeps its own model resident, applies
+  # its own template, and its stanza cannot pin a quantisation the way a `path:` can. Use it to
+  # separate "the model does this" from "our inference setup does this".
+  #
+  # Needs a local Ollama: `ollama serve`, then `ollama pull qwen3:4b`. Unreachable or un-pulled,
+  # the arm fails loudly rather than mocking — the workbench greys it and says which.
+  ollama-qwen3-4b:
+    backend: ollama
+    model: qwen3:4b
+    ollama_url: http://localhost:11434
+    options:
+      description: Qwen3 4B via Ollama
+      max_tokens: 2048
+      json_mode: false           # Same reasoning as qwen3-4b: a JSON constraint from the first
+                                 # token cannot coexist with a thinking preamble.
+      thinking_enabled: false    # /no_think, matching the llama.cpp arm
+      request_timeout: 120       # Covers a cold model load plus a full tool-registry prompt
 
   # phi4-mini removed 2026-06-08: weakest of the three (66.8% outcome, 87.6%
   # knaif) and an over-refusal artifact — it rejected 47 legitimate plan rows
@@ -212,7 +323,38 @@ backends:
   qwen3-4b-sft-v3-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
     public_name: knaif-qwen3-4b-v1   # shipped name — reports label the arm with this, not the eval key
-    options: {path: models/knaif-qwen3-4b-v1-q4_k_m.gguf, description: "Qwen3 4B SFT v3 flat union, Q4_K_M (public: knaif-qwen3-4b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+    options: {path: models/knaif-qwen3-4b-v1-q4_k_m.gguf, description: "Qwen3 4B SFT v3 flat union, Q4_K_M (public: knaif-qwen3-4b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # --- 4B-v4 retrain (T6b): same flat recipe and same config as sft-v3-flat-q4 above,
+  # only the union corpus moved (reject/clarify taxonomy + the 10 new clarify rows).
+  # Compared against the frozen control evals/runs/2026-09-13_t6a-control-v4_success.
+  qwen3-4b-sft-v4-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v4-flat-f16.gguf, description: "Qwen3 4B SFT v4 flat union, f16", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-4b-sft-v4-flat-q4:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
+    backend: llama_cpp
+    public_name: knaif-qwen3-4b-v2   # shipped name — reports label the arm with this, not the eval key
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "Qwen3 4B SFT v4 flat union, Q4_K_M (public: knaif-qwen3-4b-v2)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # Inference-config parity T2 (docs/plans/2026-09-23-inference-config-parity.md): the SAME
+  # weights and options as the arm above, varying only how llama.cpp is configured, to measure
+  # how many answers change when nothing but the config does. Not promotion arms.
+  #   -cold:      no KV prefix reuse across rows — isolates corpus-order dependence
+  #   -nativecfg: native's config — flash attention on, prompt batch = n_ctx, fresh per call.
+  #               Since T4 the arm above carries this same config; kept as the T2 record.
+  #   -legacycfg: the config every snapshot up to 2026-09-23 was measured on (llama-cpp-python
+  #               defaults, KV prefix reused row to row) — the arm that reproduces them.
+  qwen3-4b-sft-v4-flat-q4-legacycfg:
+    backend: llama_cpp
+    public_name: knaif-qwen3-4b-v2
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "knaif-qwen3-4b-v2, pre-parity llama.cpp config", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: false, n_batch: 512, n_ubatch: 512, reset_cache_per_call: false}
+  qwen3-4b-sft-v4-flat-q4-cold:
+    backend: llama_cpp
+    public_name: knaif-qwen3-4b-v2
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "knaif-qwen3-4b-v2, cold cache per call", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, reset_cache_per_call: true}
+  qwen3-4b-sft-v4-flat-q4-nativecfg:
+    backend: llama_cpp
+    public_name: knaif-qwen3-4b-v2
+    options: {path: models/knaif-qwen3-4b-v2-q4_k_m.gguf, description: "knaif-qwen3-4b-v2, native's llama.cpp config", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, reset_cache_per_call: true, flash_attn: true, n_batch: 8192}
+
   # matched-config re-eval of the untuned 4B default + old v1 4B-ft, for a clean 4B-v3 comparison on the 845 corpus
   qwen3-4b-base-q4-mt512:
     backend: llama_cpp
@@ -300,7 +442,7 @@ backends:
   qwen3-1.7b-sft-v3-flat-q6:  # eval key kept stable (baked into saved run filenames); file renamed to knaif convention
     backend: llama_cpp
     public_name: knaif-qwen3-1.7b-v1   # shipped name — reports label the arm with this, not the eval key
-    options: {path: models/knaif-qwen3-1.7b-v1-q6_k.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q6_K (public: knaif-qwen3-1.7b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+    options: {path: models/knaif-qwen3-1.7b-v1-q6_k.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q6_K (public: knaif-qwen3-1.7b-v1)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
   # pass-3 Task 5 planner-diversity: control (ffmpeg+documents) vs +io, new keywords, same recipe
   qwen3-1.7b-v3b-control-q6:
     backend: llama_cpp
@@ -317,6 +459,51 @@ backends:
   qwen3-1.7b-sft-v3-flat-q8:
     backend: llama_cpp
     options: {path: models/qwen3-1.7b-sft-v3-flat-q8.gguf, description: "Qwen3 1.7B SFT v3 flat union, Q8_0 (diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # --- 1.7B-v4 retrain (the v2 release pair): same union_chat.jsonl, same flat recipe and
+  # the same config as sft-v3-flat above — only the BASE size differs from qwen3-4b-sft-v4-flat.
+  # Its control is qwen3-1.7b-sft-v3-flat-q6 (published as knaif-qwen3-1.7b-v1), which carries
+  # the OLD taxonomy: both v1 models came from training_run sft-v3-flat.
+  qwen3-1.7b-sft-v4-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v4-flat-f16.gguf, description: "Qwen3 1.7B SFT v4 flat union, f16", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  qwen3-1.7b-sft-v4-flat-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v4-flat-q6.gguf, description: "Qwen3 1.7B SFT v4 flat union, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # --- release 1.2 R4: the v2 candidates (FT cycle sft-v6-flat, both sizes from one union
+  # dataset: R3 fragile set + v4 rows). Same flat recipe as sft-v4; the shipping-quant arms use
+  # the aligned (shipped) llama.cpp config the R3a reference runs were measured on, so R5a
+  # compares like with like. `public_name` selects each size's bar in acceptance.yaml.
+  qwen3-4b-sft-v6-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v6-flat-f16.gguf, description: "Qwen3 4B SFT v6 flat union, f16 (diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-4b-sft-v6-flat-q4:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v6-flat-q4_k_m.gguf, description: "Qwen3 4B SFT v6 flat union, Q4_K_M (v2 candidate)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-1.7b-sft-v6-flat-f16:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v6-flat-f16.gguf, description: "Qwen3 1.7B SFT v6 flat union, f16 (diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # sft-v7-flat: sft-v6's data + the R5a rebalance (batch globs, system-root / shell / wipe
+  # rejects, named-file stills, inspect questions, chains) and the relabelled "WAV nach MP3" row.
+  # None of sft-v6/v7/v8 passed R5a, so none carries a public name: sft-v4 stays knaif-qwen3-4b-v2.
+  # Their saved scoreboards already record the name they were graded under.
+  qwen3-4b-sft-v7-flat-q4:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v7-flat-q4_k_m.gguf, description: "Qwen3 4B SFT v7 flat union, Q4_K_M (v2 candidate)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-1.7b-sft-v7-flat-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v7-flat-q6.gguf, description: "Qwen3 1.7B SFT v7 flat union, Q6_K (v2 candidate)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # sft-v8-flat: ffmpeg rows exactly as before R3 (the R3 and R5a ffmpeg blocks are held back in
+  # gen_train.py), documents with R3's page fixes + the inspect rows. The 1.7B additionally trains
+  # on extra_1.7b_*.jsonl (named-file stills, "extract X"), per the plan's 1.7B retrain loop.
+  qwen3-4b-sft-v8-flat-q4:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v8-flat-q4_k_m.gguf, description: "Qwen3 4B SFT v8 flat union, Q4_K_M (v2 candidate)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-1.7b-sft-v8-flat-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v8-flat-q6.gguf, description: "Qwen3 1.7B SFT v8 flat union + 1.7B extras, Q6_K (v2 candidate)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-1.7b-sft-v6-flat-q6:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v6-flat-q6.gguf, description: "Qwen3 1.7B SFT v6 flat union, Q6_K (v2 candidate)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
   # v1-union baseline at matched max_tokens=512 for a clean v3-flat vs v1 data-effect read (pass-3 Task 1/2)
   qwen3-1.7b-ft-f16-mt512:
     backend: llama_cpp
@@ -342,3 +529,30 @@ backends:
   qwen3-1.7b-sft-v3-distill-v1-q6:
     backend: llama_cpp
     options: {path: models/qwen3-1.7b-sft-v3-distill-v1-q6.gguf, description: "Qwen3 1.7B SFT v3 verifier-filtered distill v1, Q6_K", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false}
+  # --- policy-gate-and-skill-adapters E2a: the sft-v4 4B adapter applied at load to the base,
+  # vs the merged sft-v4 on the same code. Experiment arms only: no public_name.
+  qwen3-4b-base-plus-sft-v4-lora:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-base-unsloth-q4_k_m.gguf, lora_path: models/adapters/qwen3-4b-sft-v4-flat-lora-f16.gguf, description: "Qwen3 4B base Q4_K_M + sft-v4 LoRA (f16) at load", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-4b-base-unsloth-q4:  # E2a control: the same base, no adapter
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-base-unsloth-q4_k_m.gguf, description: "Qwen3 4B base Q4_K_M, no adapter (E2a control)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # E2a diagnostic (not a verdict): the same comparison with no quantization on either side.
+  qwen3-4b-sft-v4-flat-f16-aligned:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-sft-v4-flat-f16.gguf, description: "merged sft-v4 f16, aligned config (E2a diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  qwen3-4b-base-f16-plus-sft-v4-lora:
+    backend: llama_cpp
+    options: {path: models/qwen3-4b-base-unsloth-f16.gguf, lora_path: models/adapters/qwen3-4b-sft-v4-flat-lora-f16.gguf, description: "base f16 + sft-v4 LoRA f16 at load (E2a diagnostic)", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # Release 1.2, 1.7B candidate after R5a: the sft-v4 cycle's 1.7B (trained 2026-09-16) under the
+  # aligned (shipped) config and the v2 name, so the 1.7B bar in acceptance.yaml applies.
+  # NOT promoted (2026-09-27): safety 10/11, probe rejects 3/7; its v2 name moved to sft-v9.
+  qwen3-1.7b-sft-v4-flat-q6-aligned:
+    backend: llama_cpp
+    options: {path: models/qwen3-1.7b-sft-v4-flat-q6.gguf, description: "Qwen3 1.7B SFT v4 flat union, Q6_K (v2 candidate), aligned config", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}
+  # Release 1.2, 1.7B candidate sft-v9 (R0 loop step 2): sft-v7's exact dataset (the only 1.7B at
+  # safety 11/11 + 9/9) plus sft-v8's 14 rows targeting its two misses (create_thumbnail, extract).
+  qwen3-1.7b-sft-v9-flat-q6:
+    backend: llama_cpp
+    public_name: knaif-qwen3-1.7b-v2
+    options: {path: models/qwen3-1.7b-sft-v9-flat-q6.gguf, description: "Qwen3 1.7B SFT v9 flat (sft-v7 data + 14 targeted rows), Q6_K (v2 candidate), aligned config", n_ctx: 8192, n_gpu_layers: 99, n_threads: 8, max_tokens: 512, json_mode: false, thinking_enabled: false, flash_attn: true, n_batch: 8192, n_ubatch: 512, reset_cache_per_call: true}

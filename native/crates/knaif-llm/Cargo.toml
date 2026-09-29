@@ -37,3 +37,8 @@ vulkan = ["llama", "llama-cpp-sys-2/vulkan"]
 # the exe is no longer self-contained and needs its core libs staged beside it (a packaging
 # consequence for D0/D2, and an input to the C5b go/no-go).
 dynamic-backends = ["llama", "llama-cpp-2/dynamic-backends"]
+
+[dev-dependencies]
+# Only for the generation-settings drift guard (tests/generation.rs), which reads
+# contracts/runtime/generation.yaml. Not a runtime dependency of this crate.
+serde_yaml = { workspace = true }

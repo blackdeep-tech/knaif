@@ -81,6 +81,11 @@ ignore = [
     "C901",   # complexity
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# The workbench notebook must put notebooks/shared on sys.path before it can import the
+# workbench package — the path insert IS part of the import, not a style slip.
+"notebooks/skill_workbench.ipynb" = ["E402"]
+
 [tool.ruff.lint.isort]
 # The package moved out of a src/ layout into python/core/, so ruff can no longer
 # auto-detect knaif as first-party. Declare it so `from knaif ...` keeps its own import

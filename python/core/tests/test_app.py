@@ -99,3 +99,89 @@ def test_backend_mismatch_is_rejected():
 def test_backend_ollama_with_model_path_is_rejected():
     with pytest.raises(RuntimeError, match="model-path"):
         build_orchestrator(model_path="model.gguf", backend="ollama")
+
+
+# ── the CLI plans with the retrieved registry, like the eval lane and native ──────────────
+
+
+def _capture_infer(monkeypatch):
+    from knaif.agent import CommandAgent
+
+    seen: list = []
+    original = CommandAgent.infer
+
+    def spy(self, utterance, **kwargs):
+        seen.append((self, utterance, kwargs.get("registry_override")))
+        return original(self, utterance, **kwargs)
+
+    monkeypatch.setattr(CommandAgent, "infer", spy)
+    return seen
+
+
+def _expected_tools(agent, utterance: str) -> set[str]:
+    from knaif.registry import retrieve_tools
+
+    return set(retrieve_tools(utterance, agent.registry))
+
+
+@pytest.mark.parametrize("command", ["run", "plan"])
+def test_the_cli_shows_the_model_the_retrieved_tools(runner, monkeypatch, command):
+    """`knaif-cli run`/`plan` called `agent.infer` with no `registry_override`, so the model saw
+    every tool and unfiltered examples, while the eval lane and the native binary both retrieve
+    first. The shipped Python CLI planned with a prompt nobody evaluated, and L3 (which drives
+    this CLI) measured 11.9% plan disagreement against native where the eval lanes differ by
+    1.97% (2026-09-27, evals/parity/2026-09-27_r5c-l3-4b-ffmpeg)."""
+    seen = _capture_infer(monkeypatch)
+    utterance = "encode clip.mp4 at crf 22"
+    args = [command, "ffmpeg", *utterance.split(), "--backend", "mock"]
+    if command == "run":
+        args += ["--dry-run", "--auto-approve"]
+
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code == 0, result.output
+    agent, said, override = seen[0]
+    assert said == utterance
+    assert override is not None, "the CLI must pass the retrieved registry"
+    assert set(override) == _expected_tools(agent, utterance)
+
+
+# ── the argv dump (L3 compares it) ────────────────────────────────────────────────────────
+
+
+def test_a_concat_command_is_dumped_once() -> None:
+    """`run_concat` stores its one command twice (top level and in `outputs`); ffmpeg runs once,
+    and the dump must say so. Dumped twice, every concat row read as a port bug in R5c L3
+    (2026-09-28: 9 of 9 ffmpeg port bugs)."""
+    from knaif.app import rendered_argvs
+
+    cmd = ["ffmpeg", "-y", "-i", "a.mp4", "-i", "b.mp4", "combined.mp4"]
+    results = [
+        {
+            "tool": "run_concat",
+            "result": {
+                "mode": "dry_run",
+                "outputs": [
+                    {"input": ["a.mp4", "b.mp4"], "output": "combined.mp4", "command": cmd}
+                ],
+                "command": cmd,
+            },
+        }
+    ]
+    assert rendered_argvs(results) == [cmd]
+
+
+def test_a_batch_that_really_runs_a_command_twice_is_dumped_twice() -> None:
+    """Commands are counted where they run, not de-duplicated by value."""
+    from knaif.app import rendered_argvs
+
+    cmd = ["ffmpeg", "-y", "-i", "a.mp4", "a_out.mp4"]
+    results = [{"tool": "run_batch", "result": {"outputs": [{"command": cmd}, {"command": cmd}]}}]
+    assert rendered_argvs(results) == [cmd, cmd]
+
+
+def test_a_result_with_only_a_top_level_command_is_dumped() -> None:
+    from knaif.app import rendered_argvs
+
+    cmd = ["ffmpeg", "-y", "-i", "a.mp4", "b.mp4"]
+    assert rendered_argvs([{"tool": "run_concat", "result": {"command": cmd}}]) == [cmd]

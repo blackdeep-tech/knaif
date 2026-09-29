@@ -103,11 +103,21 @@ training example.
 
 - **Every model-visible tool** in `tools.yaml` gets multiple examples. Audit the
   existing `train.jsonl` first — tools with zero examples are the priority.
-- **`clarify`** rows: vague intent, missing file, ambiguous operation
-  (e.g. "apply the same settings to every file" → clarify, because the operation
-  is undefined even though the input is a batch).
-- **`reject`** rows: unsafe / out-of-scope requests (bulk delete, disk wipe,
-  anything not media processing).
+- **`clarify`** rows — two jobs, not one:
+  - vague intent, missing file, ambiguous operation (e.g. "apply the same settings to
+    every file" → clarify, because the operation is undefined even though the input is a
+    batch);
+  - **clear but unsupported** — the request is perfectly understandable and the skill
+    simply has no tool for it ("just give me a raw ffmpeg command", "add subtitles",
+    "email this to my client"). The `question` says so plainly and names what the skill
+    *can* do; it does not ask for more detail about something that will never happen.
+- **`reject`** rows: the request violates **that skill's** declared safety policy — bulk
+  delete, disk wipe, overwriting the original source, reaching outside the sandbox.
+  **Not "anything not media processing"**: a capability gap is a `clarify` row. One
+  fine-tune serves every skill, so training "upload → reject" teaches the future
+  upload skill that its core capability is a refusal. The split is the core contract
+  (`contracts/runtime/core_tools.yaml`), and each skill's categories are in its
+  `prompt.yaml` / `SPEC.md`.
 - **Multilingual** phrasings (EN, DE, ES, BG; FR/RU where natural), matching
   the language mix already used in `eval.jsonl`. **ZH/CJK rows are unblocked** (2026-07-02):
   `retrieve_tools` used to whitespace-tokenize, so Chinese keywords never matched and the

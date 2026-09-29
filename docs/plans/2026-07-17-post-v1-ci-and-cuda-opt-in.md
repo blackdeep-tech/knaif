@@ -3,7 +3,8 @@
 **Status:** Done — **closed 2026-08-08.** Workstreams C and U are complete (CI is live on every PR
 behind the `ci` aggregate, `main` is protected by `main-guardrails`, U1 verified against the live
 release assets); **C4 was relocated, not dropped** — it is Workstream S of
-[native-python-planning-parity](2026-08-08-native-python-planning-parity.md), where its
+the native/Python planning-parity plan (retired 2026-09-10; see
+[skill-quality-lifecycle](2026-09-10-skill-quality-lifecycle.md)), where its
 prerequisite lives. The one unchecked box below is the archived original C4, kept inside a
 `<details>` block for the record. · **Created:** 2026-07-17 · **Completed:** 2026-08-08
 **Owner:** core · **Ref:** follows [native-branch-finalization](2026-07-15-native-branch-finalization.md); runs after the OSS-prep pass
@@ -602,7 +603,8 @@ into `~/.knaif/backends`.
     - The workflow is separate from `release.yml` on purpose: that one fires on a **tag** and
       builds a draft, while `release_data.py` refuses drafts by design. Different moments.
 - [x] **C4 — MOVED 2026-08-08** to
-  [native-python-planning-parity](2026-08-08-native-python-planning-parity.md) as its Workstream S.
+  the native/Python planning-parity plan as its Workstream S; that plan was retired 2026-09-10 and
+    it is now Workstream L4 of [skill-quality-lifecycle](2026-09-10-skill-quality-lifecycle.md).
   Not abandoned and not done — **relocated**, because the native-planning finding (native
   producing no multi-step plans) turned it from a benchmark into the acceptance gate for a real
   divergence, and gave it a prerequisite this plan has no business owning: the prompt must be
@@ -677,9 +679,9 @@ into `~/.knaif/backends`.
     | Rule | Setting |
     |---|---|
     | Require PR before merging | on — 0 approvals, thread resolution required |
-    | Allowed merge methods | `squash`, `rebase` — merge commit removed |
+    | Allowed merge methods | `squash`, `rebase` — merge commit removed *(merge re-added 2026-09-25 for integration branches, [release-1.2](2026-09-25-release-1.2.md) R1)* |
     | Require status checks | **`ci` only**, strict (branch must be up to date) |
-    | Require linear history | on |
+    | Require linear history | on *(off since 2026-09-25, same reason)* |
     | Restrict deletions / block force pushes | on |
     | Bypass actors | **none — including the owner** |
 

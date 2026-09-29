@@ -10,6 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use clap::{Args, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 use knaif_models::{BackendState, BackendStore, CudaOffer, HttpFetcher, ModelStore, VerifyOutcome};
@@ -101,7 +102,12 @@ enum ModelsAction {
 #[derive(Subcommand)]
 enum BackendAction {
     /// List the optional GPU backend payloads and whether they're installed here.
-    List,
+    List {
+        /// Emit JSON: the compiled feature set, the backends directory and the payload states.
+        /// Always answers, even on a build with no backend manifest.
+        #[arg(long)]
+        json: bool,
+    },
     /// Download a backend payload and install it where the runtime scans for it.
     Install { name: String },
     /// Verify an installed payload's files against the manifest checksums.
@@ -155,7 +161,7 @@ struct RunArgs {
     /// recommended model without prompting when none is given or installed.
     #[arg(long)]
     yes: bool,
-    /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v1`) or a GGUF file
+    /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
     /// back to the mock (drive it offline with `KNAIF_LLM_MOCK_RESPONSE`). Last one wins.
@@ -456,11 +462,86 @@ fn backend_bar() -> ProgressBar {
     bar
 }
 
+/// The cargo features this binary was compiled with.
+///
+/// The exe knows; until now it never said. `--version` is bare `CARGO_PKG_VERSION`, so nothing
+/// outside the build could tell a CUDA build from a Vulkan one — and a build DIRECTORY name is
+/// not evidence, since anyone can put a binary in one.
+fn built_with() -> Vec<&'static str> {
+    let mut features = Vec::new();
+    if cfg!(feature = "llama") {
+        features.push("llama");
+    }
+    if cfg!(feature = "dynamic-backends") {
+        features.push("dynamic-backends");
+    }
+    if cfg!(feature = "cuda") {
+        features.push("cuda");
+    }
+    if cfg!(feature = "vulkan") {
+        features.push("vulkan");
+    }
+    if cfg!(feature = "pdfium") {
+        features.push("pdfium");
+    }
+    features
+}
+
+/// Machine-readable `backend list`. **Always answers**, store or not: a static build has no
+/// backend manifest, and a consumer that has to special-case "this binary could not tell me"
+/// ends up guessing from the path instead. `store: None` reports an empty payload list and a
+/// null directory, which is the truth about such a build.
+///
+/// The key names are a parsed interface — see the tests that pin them.
+fn backend_list_json(store: Option<&BackendStore>) -> serde_json::Value {
+    let entries: Vec<serde_json::Value> = store
+        .map(|s| {
+            s.list()
+                .into_iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "name": e.name,
+                        "state": format!("{:?}", e.state),
+                        "platform_supported": e.platform_supported,
+                        "total_bytes": e.total_bytes,
+                        "description": e.description,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "built_with": built_with(),
+        // A compile-time fact, deliberately not read from the store: a static build has no store
+        // to read it from, and `false` is the answer that matters to a caller.
+        "dynamic_backends": cfg!(feature = "dynamic-backends"),
+        "backends_dir": store.map(|s| s.dir().display().to_string()),
+        "platform": store.map(|s| s.platform().to_string()),
+        "entries": entries,
+    })
+}
+
 fn cmd_backend(action: BackendAction) -> anyhow::Result<()> {
+    // `list --json` must answer even when the manifest cannot be resolved, so the store is
+    // optional for that one path and required for the rest.
+    if let BackendAction::List { json: true } = action {
+        let store = resolve_backend_manifest_path()
+            .and_then(|p| BackendStore::open(&p))
+            .ok();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&backend_list_json(store.as_ref()))?
+        );
+        return Ok(());
+    }
+
     let store = BackendStore::open(&resolve_backend_manifest_path()?)?;
     match action {
-        BackendAction::List => {
+        BackendAction::List { .. } => {
             let entries = store.list();
+            println!("Built with: {}", built_with().join(", "));
             if entries.is_empty() {
                 println!("No backend payloads in the manifest.");
                 return Ok(());
@@ -600,29 +681,39 @@ fn cmd_plan(args: PlanArgs) -> anyhow::Result<()> {
 
 /// What `cmd_run` should do with a parsed plan's step list, before dispatching to a skill.
 ///
-/// Native `run` executes exactly one intent per invocation — there is no ordered multi-step
-/// executor yet (variable binding between steps, per-intent confirmation, chain execution).
-/// [`decide_steps`] makes that limit an explicit, deterministic decision instead of a silent
-/// truncation: previously `cmd_run` took `steps.first()` and discarded every later step without
-/// a word, so a valid multi-step plan (e.g. strip_audio -> resize_video) rendered/executed only
-/// the first command and still exited 0 — reporting full success for partial completion, and
-/// for a destructive plan, silently skipping a real side effect the request asked for. See
-/// docs/audits/2026-09-07-core-principles-and-rtx5080.md, F5.
+/// **History, because the variant that is gone matters.** `cmd_run` originally took
+/// `steps.first()` and discarded every later step in silence: a valid two-step plan executed one
+/// command and still exited 0, reporting full success for partial completion — and for a
+/// destructive plan, silently skipping a side effect the request asked for
+/// (docs/audits/2026-09-07-core-principles-and-rtx5080.md, F5). `Unsupported` replaced that with
+/// an honest refusal, which was right while there was no executor.
+///
+/// E2 removed it: native now runs the steps in order, so a chain is executed rather than
+/// declined. What remains is the one case that still needs a decision — a plan with no steps.
 #[derive(Debug, PartialEq, Eq)]
 enum StepDecision {
     /// No steps at all.
     Empty,
-    /// Exactly one step, at this index (always 0) — the shape the rest of `cmd_run` handles.
-    Single(usize),
-    /// More than one step: unsupported. Reject the whole plan rather than run only the first.
-    Unsupported { total: usize },
+    /// `total` steps to run, in plan order.
+    Run { total: usize },
 }
+
+/// Marks output the runtime produced because a capability is **not built**, as opposed to a
+/// `reject:` — a request the runtime understood and declined. The two look alike to a user but
+/// are opposite facts about the product: a coverage gap versus the safety model working. Kept
+/// distinct in the machine-readable output so acceptance records can count coverage at all
+/// (docs/plans/2026-09-10-skill-quality-lifecycle.md, L4d).
+///
+/// Defined in `knaif-skill-api` rather than here, because the skills are where the gaps are:
+/// while this was the host's private constant, `ffmpeg` could not reach it and bailed with a
+/// bare error instead, which is how the first L4 run reported full coverage over a corpus it
+/// could not fully attempt (N6).
+use knaif_skill_api::capability::not_implemented_message;
 
 fn decide_steps(steps: &[serde_json::Value]) -> StepDecision {
     match steps.len() {
         0 => StepDecision::Empty,
-        1 => StepDecision::Single(0),
-        total => StepDecision::Unsupported { total },
+        total => StepDecision::Run { total },
     }
 }
 
@@ -640,7 +731,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if request.trim().is_empty() {
         anyhow::bail!(
             "no request given. Usage: just native {0} \"<what to do>\" [--model <name|path>]\n  \
-             e.g. just native {0} \"compress clip.mp4 for email\" --model knaif-qwen3-4b-v1",
+             e.g. just native {0} \"compress clip.mp4 for email\" --model knaif-qwen3-4b-v2",
             args.skill
         );
     }
@@ -695,8 +786,9 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         );
     }
     // Tell an NVIDIA user about the opt-in CUDA payload, once, before the slow run rather than
-    // after it. A Blackwell user who runs first and reads later gets one CPU-speed request and may
-    // reasonably conclude the product is broken.
+    // after it. Where Vulkan measures at CPU speed (Blackwell did until a 2026-09 re-measurement), a
+    // user who runs first and reads later gets one CPU-speed request and may reasonably conclude the
+    // product is broken.
     //
     // `gpu.is_some()` is the "this build can actually infer" test. Offering a GPU backend to a
     // mock-only binary is noise — there is nothing for it to accelerate — and the CPU warning above
@@ -730,12 +822,34 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     }
     let payload = built?;
 
-    let steps = payload
+    let mut steps = payload
         .get("plan")
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let step = match decide_steps(&steps) {
+    // Two plan-level naming repairs, in one pass and in this order: a name the filesystem would
+    // reject is not a path at all, so it is rewritten before anything resolves one, and only then
+    // is an output that would truncate its own input moved aside. Every later step referencing a
+    // rewritten name is rebound, or the chain quietly unlinks.
+    //
+    // Scoped to ffmpeg because that is exactly where Python applies it (only ffmpeg overrides
+    // `Skill.resolve_output_collisions`); extending it to documents here would create the runtime
+    // divergence this pass exists to avoid. This is the native half of that hook — the Python
+    // side reports the renames through `format_results`, so they are reported here too: a rename
+    // the user is not told about leaves them looking for a file that was never written.
+    if args.skill == "ffmpeg" {
+        let renames = knaif_skill_ffmpeg::binding::rebind_colliding_outputs(&mut steps, sandbox);
+        for (requested, used) in renames.illegal {
+            eprintln!("note: {requested:?} is not a valid file name here — writing {used:?}");
+        }
+        for (requested, used) in renames.collisions {
+            eprintln!(
+                "note: {requested:?} would have been overwritten by the step that reads it, so \
+                 the result goes to {used:?}"
+            );
+        }
+    }
+    let total = match decide_steps(&steps) {
         StepDecision::Empty => {
             if model.is_none() {
                 let (recommended, installed) = recommended_model_status();
@@ -751,17 +865,112 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        StepDecision::Unsupported { total } => {
-            println!(
-                "reject: this request needs {total} steps, but the native runtime executes \
-                 one step at a time (multi-step chains aren't supported yet). Try rephrasing \
-                 it as separate requests, one at a time."
-            );
-            return Ok(());
-        }
-        StepDecision::Single(idx) => &steps[idx],
+        StepDecision::Run { total } => total,
     };
 
+    let ctx = StepContext {
+        skill: &args.skill,
+        bundle: &bundle,
+        base: &base,
+        sandbox,
+        dry_run: args.dry_run,
+        yes: args.yes,
+    };
+    execute_plan(&steps, total, &ctx)
+}
+
+/// Run a plan's steps in order (E2/E3).
+///
+/// The semantics are deliberately narrow:
+///
+/// - **A control tool ends the whole plan**, wherever it sits. `clarify`/`reject`/`done` are
+///   statements about the *request*, not work to run past.
+/// - **Stop at the first failure**, and say which steps ran. A chain that fails at step 2 of 3 is
+///   neither a success nor a clean failure: step 1 already wrote a file to the user's disk, and a
+///   bare error would leave the user guessing what is on it.
+/// - **Confirmation stays per step** — each dispatch runs its own gate, so a destructive step in
+///   the middle of a chain is still confirmed as one.
+///
+/// Chains are file-mediated, not variable-bound: `skills/ffmpeg/prompt.yaml` instructs the model
+/// to give an earlier step an explicit `output` filename and reuse it as the later step's input
+/// ("Never chain steps with `$variable` references"), and `apply_clarify_gate` binds intermediates
+/// the model left undeclared. So ordering *is* the dependency mechanism — which is why the L2
+/// cases pin the order and not just the count.
+///
+/// Recovery, rollback and resumption of a half-run chain are deliberately **not** here; see E4 and
+/// the limitations section of `docs/NATIVE.md`.
+/// The context line attached to a failing step: which step failed, what had already run, and what
+/// did not.
+///
+/// A bare "ffmpeg exited 1" after a chain leaves the user guessing whether anything reached their
+/// disk. Kept pure so the wording is unit-testable without executing anything.
+fn chain_failure_context(idx: usize, total: usize) -> String {
+    let ordinal = idx + 1;
+    if total == 1 {
+        return String::from("the step failed");
+    }
+    let completed = match idx {
+        0 => "nothing had run yet".to_string(),
+        1 => "step 1 had already completed".to_string(),
+        _ => format!("steps 1-{idx} had already completed"),
+    };
+    let skipped = match total - ordinal {
+        0 => "it was the last step".to_string(),
+        1 => format!("step {total} was not run"),
+        _ => format!("steps {}-{total} were not run", ordinal + 1),
+    };
+    format!("step {ordinal} of {total} failed; {completed}, and {skipped}")
+}
+
+fn execute_plan(
+    steps: &[serde_json::Value],
+    total: usize,
+    ctx: &StepContext,
+) -> anyhow::Result<()> {
+    for (idx, step) in steps.iter().enumerate() {
+        let ordinal = idx + 1;
+        // Announce the position only for a real chain: a one-step plan reads better without a
+        // "step 1 of 1" preamble, and every existing single-step test asserts that output.
+        if total > 1 {
+            println!("step {ordinal} of {total}:");
+        }
+        match run_step(step, ctx).with_context(|| chain_failure_context(idx, total))? {
+            StepOutcome::Continue => {}
+            StepOutcome::ShortCircuit => return Ok(()),
+        }
+    }
+    Ok(())
+}
+
+/// Everything one step needs that does not vary between the steps of a plan.
+///
+/// Extracted in E1 so the ordered executor (E2) is a loop over [`run_step`] rather than a second
+/// copy of the dispatch. Dependency preflight and model resolution are deliberately *not* here:
+/// they run once per invocation, before any step, and nothing about chaining changes them.
+struct StepContext<'a> {
+    skill: &'a str,
+    bundle: &'a Path,
+    base: &'a Path,
+    sandbox: Option<&'a Path>,
+    dry_run: bool,
+    yes: bool,
+}
+
+/// What one step means for the steps after it.
+#[derive(Debug, PartialEq, Eq)]
+enum StepOutcome {
+    /// The step ran (or previewed). Carry on with the next one.
+    Continue,
+    /// A core control tool answered the *request*, not this position in it — so nothing after it
+    /// is meaningful. See E3: `clarify` / `reject` / `done` end the plan wherever they appear.
+    ShortCircuit,
+}
+
+/// Run (or preview) exactly one step: control-tool short-circuit, then skill dispatch.
+///
+/// A pure lift of what `cmd_run` did inline for its single step (E1) — no behavior change beyond
+/// reporting *why* it stopped, which E2 needs and a single-step caller can ignore.
+fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepOutcome> {
     let tool = step
         .get("tool")
         .and_then(serde_json::Value::as_str)
@@ -780,7 +989,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("(no question)");
             println!("clarify: {q}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
         }
         "reject" => {
             let r = step_args
@@ -788,27 +997,46 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("(no reason)");
             println!("reject: {r}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
+        }
+        // `done` says the request is already satisfied. It reached a skill dispatch before E3,
+        // where it could only ever produce "unknown tool" — a control tool leaking out as an
+        // error. It is now what it always meant: nothing to do, and nothing after it to do.
+        "done" => {
+            println!("Nothing to do.");
+            return Ok(StepOutcome::ShortCircuit);
         }
         _ => {}
     }
 
-    match args.skill.as_str() {
-        "ffmpeg" => run_ffmpeg_step(&bundle, tool, step_args, sandbox, args.dry_run, args.yes),
-        "documents" => run_documents_step(
-            &bundle,
+    match ctx.skill {
+        "ffmpeg" => run_ffmpeg_step(
+            ctx.bundle,
             tool,
             step_args,
-            &base,
-            sandbox,
-            args.dry_run,
-            args.yes,
+            ctx.sandbox,
+            ctx.dry_run,
+            ctx.yes,
         ),
+        "documents" => run_documents_step(
+            ctx.bundle,
+            tool,
+            step_args,
+            ctx.base,
+            ctx.sandbox,
+            ctx.dry_run,
+            ctx.yes,
+        )
+        .map(|()| StepOutcome::Continue),
         _ => unreachable!("skill guarded above"),
     }
 }
 
 /// ffmpeg dispatch: expand the intent → dry-run preview or confirmed subprocess execution.
+///
+/// An expansion that needs a clarify (an unknown platform) ends the plan, as a `clarify` step
+/// does: Python's executor stops at the first clarify leaf. Native used to print the question
+/// and run on, so a later step acted on a file this one never produced (R5c L3, `ffmpeg_136`).
 fn run_ffmpeg_step(
     bundle: &Path,
     tool: &str,
@@ -816,7 +1044,7 @@ fn run_ffmpeg_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<StepOutcome> {
     let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
     let expansion = if dry_run {
@@ -828,12 +1056,18 @@ fn run_ffmpeg_step(
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
             println!("clarify: {q}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
         }
     };
     if commands.is_empty() {
         println!("Nothing to do.");
-        return Ok(());
+        return Ok(StepOutcome::Continue);
+    }
+    let dump = plan_dump_enabled();
+    for cmd in &commands {
+        if let Some(msg) = argv_dump(dump, cmd) {
+            eprintln!("{msg}");
+        }
     }
 
     // Dry-run: print the copy-pasteable command line(s) and stop — no side effects.
@@ -841,7 +1075,7 @@ fn run_ffmpeg_step(
         for cmd in &commands {
             println!("{}", shell_join(cmd));
         }
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
 
     // Execution: every ffmpeg intent is `safety_category: destructive`, so it needs explicit
@@ -849,15 +1083,30 @@ fn run_ffmpeg_step(
     let previews: Vec<String> = commands.iter().map(|c| shell_join(c)).collect();
     if !confirm_action(yes, &previews, "ffmpeg command")? {
         println!("Aborted (no changes made).");
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
 
     let mut failures = 0;
     for cmd in &commands {
         let output = cmd.last().cloned().unwrap_or_default();
+        // An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a parent
+        // that need not exist yet; ffmpeg does not create one and fails on open. The path is
+        // already sandbox-checked by the engine.
+        // Create the RESOLVED parent: the stored path keeps the spelling the plan supplied,
+        // so `../escaped/../sb/out.mp4` passes containment while creating its unnormalised
+        // parent walks through `../escaped` and creates it on POSIX.
+        if let Some(parent) = std::path::Path::new(&output).parent() {
+            if !parent.as_os_str().is_empty() {
+                let target = std::fs::canonicalize(parent)
+                    .unwrap_or_else(|_| knaif_skill_ffmpeg::engine::lexically_normalize(parent));
+                std::fs::create_dir_all(target).ok();
+            }
+        }
         eprintln!("running: {}", shell_join(cmd));
         let result = knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?;
         if result.status.success() {
+            // Exit 0 is not evidence of output: a trim past the end writes an empty container.
+            knaif_skill_ffmpeg::exec::require_streams(std::path::Path::new(&output))?;
             println!("✓ {output}");
         } else {
             failures += 1;
@@ -877,7 +1126,7 @@ fn run_ffmpeg_step(
     if failures > 0 {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
-    Ok(())
+    Ok(StepOutcome::Continue)
 }
 
 /// documents dispatch: safe read tools print their result; destructive write tools preview the
@@ -895,13 +1144,23 @@ fn run_documents_step(
     use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
 
     if !is_supported(tool) {
-        anyhow::bail!(
-            "documents tool {tool:?} is not implemented natively yet (image watermark is deferred)"
-        );
+        // The `not_implemented:` prefix, not a bare error: this is a capability the native
+        // runtime does not have, which is a different fact from a `reject:` and has to stay
+        // countable in the machine-readable output (see [`NOT_IMPLEMENTED_PREFIX`]).
+        // The "(image watermark is deferred)" this message used to carry was stale — `watermark`
+        // has been in `is_supported` for a while. Naming no example is better than naming a
+        // wrong one; `is_supported` is the list.
+        anyhow::bail!(not_implemented_message(&format!(
+            "the documents tool {tool:?} is not built into the native runtime yet"
+        )));
     }
 
     match preview(tool, step_args, base, sandbox, bundle)? {
         Preview::Read(result) => {
+            // Stderr, beside the plan dump, so stdout stays the human answer.
+            if let Some(line) = result_dump(plan_dump_enabled(), tool, &read_result_json(&result)) {
+                eprintln!("{line}");
+            }
             match result {
                 ReadResult::Inspection(i) => println!(
                     "{}: {} page(s), {} bytes, encrypted={}, text_layer={}",
@@ -1041,7 +1300,7 @@ fn build_plan(
     model: Option<&Path>,
     verbose: bool,
 ) -> anyhow::Result<serde_json::Value> {
-    PlanSession::new(root, skill, model, verbose)?.plan(utterance, base, sandbox)
+    PlanSession::new(root, skill, model, verbose)?.plan_for_run(utterance, base, sandbox)
 }
 
 /// A loaded planning session: the expensive per-run setup (skill registry, prompt overrides, and
@@ -1052,6 +1311,8 @@ struct PlanSession {
     registry: knaif_core::Registry,
     overrides: knaif_core::PromptOverrides,
     output_capable: std::collections::HashSet<String>,
+    /// The skill's `file_kinds:` — chain threading never crosses kinds.
+    file_kinds: knaif_core::FileKinds,
     backend: Box<dyn knaif_llm::LlmBackend>,
     /// Repair only for a real model — the mock repeats its canned response, so a retry is pointless.
     repair: bool,
@@ -1066,14 +1327,49 @@ impl PlanSession {
         }
         let overrides = knaif_core::load_prompt_yaml(&bundle.join("prompt.yaml"));
         let output_capable = knaif_core::output_capable_tools(&registry);
+        let file_kinds =
+            knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
         let backend = knaif_llm::backend_for(model, verbose)?;
         Ok(Self {
             registry,
             overrides,
             output_capable,
+            file_kinds,
             backend,
             repair: model.is_some(),
         })
+    }
+
+    /// The skill's prompt overrides with the examples block filtered for *this* utterance.
+    ///
+    /// Mirrors `CommandAgent.build_prompt`, including its fallback: when the corpus has no
+    /// examples, or selection returns nothing, the unfiltered block stands. Cloning the header per
+    /// utterance is deliberate — it keeps the loaded overrides immutable, and it is a rounding
+    /// error next to the inference it precedes.
+    fn examples_for(
+        &self,
+        utterance: &str,
+        retrieved: &knaif_core::RetrievedTools<'_>,
+    ) -> knaif_core::PromptOverrides {
+        let names: std::collections::HashSet<String> = retrieved
+            .iter()
+            .filter(|(_, d)| !d.internal)
+            .map(|(n, _)| n.clone())
+            .collect();
+        let selected = knaif_core::select_examples(
+            &self.overrides.examples,
+            &names,
+            utterance,
+            knaif_core::MAX_TOOL_EXAMPLES,
+        );
+        let block = (!selected.is_empty())
+            .then(|| knaif_core::render_examples_block(&selected))
+            .or_else(|| self.overrides.examples_block.clone());
+        knaif_core::PromptOverrides {
+            system_header: self.overrides.system_header.clone(),
+            examples_block: block,
+            examples: Vec::new(),
+        }
     }
 
     /// Plan a single utterance: prompt → infer (+repair) → chain-link + hallucinated-filename gate.
@@ -1087,7 +1383,22 @@ impl PlanSession {
         // JSON escape; normalize separators to forward slashes (accepted by ffmpeg + `std::path` on
         // Windows) before the utterance reaches the prompt so the emitted plan parses.
         let utterance = normalize_path_separators(utterance);
-        let (system, user) = knaif_core::build_prompt(&utterance, &self.registry, &self.overrides);
+        // Retrieval (V1): show the model the tools relevant to *this* utterance, in relevance
+        // order, rather than the whole registry. The port existed in knaif-core but nothing
+        // called it, so native's prompt listed all 13 ffmpeg tools where the reference lists 5 —
+        // the single largest prompt divergence between the runtimes. `retrieve_tools` returns a
+        // ranked Vec, and `build_prompt_ordered` renders it as given.
+        let retrieved =
+            knaif_core::retrieve_tools(&utterance, &self.registry, knaif_core::DEFAULT_TOP_K, 0.0);
+        let tools: Vec<&knaif_core::ToolDef> = retrieved.iter().map(|(_, d)| *d).collect();
+        // Example selection (V2): the other half of the same divergence. `prompt.yaml`'s whole
+        // block went to the model on every utterance — 28 examples for ffmpeg where the reference
+        // sends 5, chosen against the tools retrieval just picked. The S3g factorial settled the
+        // direction: static examples win the ffmpeg *aggregate* but push `concat_video` below its
+        // acceptance floor, so Python keeps `select_examples` and native gains it.
+        let overrides = self.examples_for(&utterance, &retrieved);
+        let (system, user) = knaif_core::build_prompt_ordered(&utterance, &tools, &overrides);
+        emit_prompt_dump(prompt_dump_enabled(), &system, &user);
         let payload = infer_with_repair(
             self.backend.as_ref(),
             &system,
@@ -1101,12 +1412,73 @@ impl PlanSession {
         // `_link_chain_intermediates` + `_hallucinated_filename`): bind undeclared chain outputs,
         // then downgrade to a clarify when the model invented an input file the utterance never
         // named. Applied here so both `run` and `plan` inherit it, matching Python's `infer`.
-        Ok(knaif_core::apply_clarify_gate(
+        // The guard's stem exemption needs to know which files are really there. Read from the
+        // same directory stem resolution uses two lines down — `sandbox` when configured, else
+        // the cwd — so the guard cannot admit a name the resolver would then refuse.
+        let known_files = listed_filenames(sandbox.unwrap_or(base));
+        let gated = knaif_core::apply_clarify_gate(
             payload,
             &utterance,
             &self.output_capable,
+            &known_files,
+            &self.file_kinds,
+        );
+        // Extension-less stems (`clip_4k`, `silent_clip`) resolve against the working directory,
+        // or become a clarify when it cannot decide — port of Python's `resolve_stems` call in
+        // `CommandAgent._execute_steps`, applied at the same stage (N2). Without it native
+        // rendered `-i clip_4k` verbatim and acted on an ambiguous reference where Python asked.
+        //
+        // **Resolved against `sandbox` when set, otherwise `base` (the cwd) — and the second half
+        // is a deliberate widening of Python's rule**, which skips stem resolution entirely when
+        // no sandbox is configured. Two reasons: open/CLI mode is exactly how the shipped binary
+        // is used and how the L4 lane drives it, so gating on a sandbox would leave the defect in
+        // place everywhere it actually bites; and native already resolves *relative inputs*
+        // against the cwd in this mode, so resolving stems there too is consistent with how the
+        // same path is already read rather than a new notion of where files live.
+        let gated = resolve_plan_stems(gated, sandbox.unwrap_or(base));
+        emit_plan_dump(plan_dump_enabled(), &gated);
+        Ok(gated)
+    }
+
+    /// [`Self::plan`], then the NL clarify gate: the plan `run` executes. Python runs that gate
+    /// in `execute_plan` right after `resolve_stems`, so it asks when the user never named an
+    /// input the plan uses ("reverse the mov file" -> inputs ["mov"]) or when a grounded arg such
+    /// as a password was invented. Without it native ran such plans and failed with "input not
+    /// found" where Python asked (R5c L3, 2026-09-28).
+    ///
+    /// Execution only, as in Python, whose `plan` command stops at `infer` and never applies it
+    /// (Codex audit, 2026-09-28): `plan` / `plan --batch` keep returning the ungated plan. And
+    /// after the plan dump, since Python dumps before `execute_plan`: the dumped plans stay
+    /// comparable across runtimes (L3's "same plan") and across builds (R5c T9a), and a gate
+    /// that fires shows as the run's clarify outcome.
+    fn plan_for_run(
+        &self,
+        utterance: &str,
+        base: &Path,
+        sandbox: Option<&Path>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let planned = self.plan(utterance, base, sandbox)?;
+        Ok(knaif_core::nl_clarify_gate(
+            planned,
+            utterance,
+            &self.registry,
         ))
     }
+}
+
+/// Lowercased names of the files directly inside `dir`, for the clarify gate's stem exemption.
+///
+/// Non-recursive and files-only, matching what stem resolution globs. An unreadable directory
+/// yields an empty set, which restores the strict substring rule rather than failing the plan.
+fn listed_filenames(dir: &Path) -> std::collections::HashSet<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return std::collections::HashSet::new();
+    };
+    entries
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().to_lowercase())
+        .collect()
 }
 
 /// Infer a plan and, on parse/validation failure, retry once with the error fed back (port of the
@@ -1139,15 +1511,35 @@ fn infer_with_repair(
                         &retry_raw,
                         &knaif_core::extract_json(&retry_raw).json,
                     );
-                    Err(first_err)
+                    // The re-prompt had its chance. An arg no known tool can express is an
+                    // inventory gap, not a malformed plan, so say so instead of surfacing
+                    // "Tool 'adjust_volume' has unsupported args: [...]" to the user.
+                    unsupported_gap(&retry_raw, &raw, registry).ok_or(first_err)
                 }
             }
         }
         Err(e) => {
             emit_debug(debug, &raw, &knaif_core::extract_json(&raw).json);
-            Err(e)
+            // No repair configured, so this is already the last word.
+            unsupported_gap(&raw, &raw, registry).ok_or(e)
         }
     }
+}
+
+/// The unsupported-arg clarify, from whichever attempt still shows one.
+///
+/// Checks the retry first and falls back to the original: the retry is the more recent answer,
+/// but a retry that failed some *other* way should not mask an inventory gap the first attempt
+/// showed plainly.
+fn unsupported_gap(
+    latest: &str,
+    original: &str,
+    registry: &knaif_core::Registry,
+) -> Option<serde_json::Value> {
+    [latest, original]
+        .iter()
+        .filter_map(|raw| prepared_payload(raw, registry))
+        .find_map(|p| knaif_core::unsupported_args_clarify(&p, registry))
 }
 
 /// Whether to dump raw model output on a parse/validation failure (`$KNAIF_DEBUG` non-empty).
@@ -1178,15 +1570,197 @@ fn debug_dump(enabled: bool, raw: &str, extracted: &str) -> Option<String> {
     ))
 }
 
+/// Frame marker for [`plan_dump`]: the validated, post-gate plan `run` is about to execute.
+///
+/// L4 grades the **shipped** path — `run`, with real execution — but a scoreboard also carries
+/// tool/argument metrics, which need the plan. Without this the L4 lane would have to either run
+/// inference twice (once for `plan --json`, once for `run`, with no guarantee the two agree) or
+/// report `predicted_tool = None` for every row, which scores as 0% tool accuracy and invents a
+/// catastrophe. An env gate on the shared `PlanSession::plan` costs nothing when unset and covers
+/// `run`, `plan` and `plan --batch` alike — same reasoning as [`PROMPT_DUMP_MARKER`].
+const PLAN_DUMP_MARKER: &str = "===KNAIF-PLAN===";
+
+fn plan_dump_enabled() -> bool {
+    std::env::var("KNAIF_DUMP_PLAN")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
+/// Print the plan dump to stderr when enabled. stderr, not stdout: `run`'s stdout is the user-
+/// facing preview/result, and a capture has to be able to keep the two apart.
+fn emit_plan_dump(enabled: bool, payload: &serde_json::Value) {
+    if let Some(msg) = plan_dump(enabled, payload) {
+        eprintln!("{msg}");
+    }
+}
+
+/// One line: the marker, then the plan envelope as compact JSON. Single-line by design — a
+/// consumer scans stderr for the marker and parses the remainder, with no multi-line framing to
+/// get wrong. Kept pure (the gate is a parameter) so it is testable without mutating process env.
+fn plan_dump(enabled: bool, payload: &serde_json::Value) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{PLAN_DUMP_MARKER}{}",
+        serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string())
+    ))
+}
+
+/// Marker for [`argv_dump`]: one line per rendered ffmpeg command, the exact argv as JSON.
+const ARGV_DUMP_MARKER: &str = "===KNAIF-ARGV===";
+
+/// One line: the marker, then the argv as a JSON array. Gated with the plan dump. L3 compares it
+/// instead of the display line, which cannot carry every argv once re-split (a space in a
+/// filename, a filter's `\,`). Pure, so testable without process env.
+fn argv_dump(enabled: bool, argv: &[String]) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{ARGV_DUMP_MARKER}{}",
+        serde_json::to_string(argv).unwrap_or_else(|_| "[]".to_string())
+    ))
+}
+
+/// Marker for [`result_dump`]: one line per read-tool result, as data.
+const RESULT_DUMP_MARKER: &str = "===KNAIF-RESULT===";
+
+/// A documents read result in Python's shape (`skills/documents/python/steps.py`), which the
+/// documents verifier grades: `inspect_document` → format/size_bytes/encrypted/has_text_layer/pages;
+/// `extract_text` → pages + joined text; `find_in_document` → matches + count.
+fn read_result_json(result: &knaif_skill_documents::run::ReadResult) -> serde_json::Value {
+    use knaif_skill_documents::run::ReadResult;
+    match result {
+        ReadResult::Inspection(i) => serde_json::json!({
+            "format": i.format, "size_bytes": i.size_bytes, "encrypted": i.encrypted,
+            "has_text_layer": i.has_text_layer, "pages": i.pages,
+        }),
+        ReadResult::Text(records) => serde_json::json!({
+            "pages": records.iter().map(|r| serde_json::json!({"page": r.page, "text": r.text}))
+                .collect::<Vec<_>>(),
+            "text": records.iter().map(|r| r.text.as_str()).collect::<Vec<_>>().join("\n"),
+        }),
+        ReadResult::Matches(matches) => serde_json::json!({
+            "matches": matches.iter().map(|m| serde_json::json!({
+                "page": m.page, "snippet": m.snippet, "span": [m.span.0, m.span.1],
+            })).collect::<Vec<_>>(),
+            "count": matches.len(),
+        }),
+    }
+}
+
+/// One line: the marker, then `{"tool", "result"}` as compact JSON. Gated with the plan dump
+/// (`$KNAIF_DUMP_PLAN`) because the consumer is the same: the L4 lane, which grades data and could
+/// not read the prose answer a read tool prints (the 2026-09-24 documents run scored every
+/// inspect/extract/find row as `None`). Pure, so testable without process env.
+fn result_dump(enabled: bool, tool: &str, result: &serde_json::Value) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    let body = serde_json::json!({"tool": tool, "result": result});
+    Some(format!(
+        "{RESULT_DUMP_MARKER}{}",
+        serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string())
+    ))
+}
+
+/// Frame marker for [`prompt_dump`]. Both halves of the prompt are wrapped in `BEGIN`/`END` lines
+/// carrying this prefix so a capture can cut them back out exactly; the marker is deliberately
+/// unlikely to occur inside a prompt.
+const PROMPT_DUMP_MARKER: &str = "===KNAIF-PROMPT-";
+
+/// Whether to dump the built prompt before inference (`$KNAIF_DUMP_PROMPT` non-empty).
+///
+/// An env gate rather than a `--dump-prompt` flag on `plan`: the prompt is built inside
+/// [`PlanSession::plan`], which `plan`, `plan --batch` and `run` all share, so a gate here covers
+/// every path — including the batch path a corpus-wide capture needs — without threading a flag
+/// through three commands. Mirrors [`debug_enabled`].
+fn prompt_dump_enabled() -> bool {
+    std::env::var("KNAIF_DUMP_PROMPT")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+}
+
+/// Print the prompt dump to stderr when enabled (thin wrapper over [`prompt_dump`]).
+///
+/// stderr, not stdout: `plan --json` and `plan --batch` put their envelopes on stdout, so a
+/// capture can redirect the two streams to separate files and keep both machine-readable.
+fn emit_prompt_dump(enabled: bool, system: &str, user: &str) {
+    if let Some(msg) = prompt_dump(enabled, system, user) {
+        eprintln!("{msg}");
+    }
+}
+
+/// Frame the `(system, user)` messages for capture, or `None` when disabled. Kept pure (the enable
+/// gate is a parameter) so it is testable without mutating process env, as [`debug_dump`] is.
+///
+/// **This is a dump, not a formatter.** Each message is written between its markers byte for byte
+/// — no trimming, wrapping, escaping or re-encoding. Workstream P1 diffs this output against
+/// Python's prompt for the same utterance, and R1 uses it to produce the native side of a golden;
+/// any reshaping here would make that diff a diff of this function instead of of the prompts.
+fn prompt_dump(enabled: bool, system: &str, user: &str) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{PROMPT_DUMP_MARKER}BEGIN system\n{system}\n{PROMPT_DUMP_MARKER}END system\n\
+         {PROMPT_DUMP_MARKER}BEGIN user\n{user}\n{PROMPT_DUMP_MARKER}END user"
+    ))
+}
+
 /// Normalize Windows-style backslash path separators in an utterance to forward slashes. A model
 /// that echoes a path verbatim (`.\clip.mov`) would otherwise emit an illegal `\c` JSON escape;
 /// forward slashes are accepted by ffmpeg and `std::path` on Windows, so this is lossless for the
 /// file-path domain these skills operate in.
+/// **Only path-shaped tokens are rewritten** (V3). This used to replace *every* backslash in
+/// the utterance, which differs from Python on two shapes the prompt contract pins: a quoted
+/// path (the quotes make it not a path token, and it is not a single token anyway) and a lone
+/// backslash, which has no alphanumeric and stays literal. Splitting on `' '` rather than any
+/// whitespace also mirrors the reference, so a tab is not silently normalized away.
 fn normalize_path_separators(utterance: &str) -> String {
-    utterance.replace('\\', "/")
+    if !utterance.contains('\\') {
+        return utterance.to_string();
+    }
+    utterance
+        .split(' ')
+        .map(|token| {
+            if token.contains('\\') && is_path_token(token) {
+                token.replace('\\', "/")
+            } else {
+                token.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Is this space-delimited token shaped like a path?
+///
+/// Port of Python's `_PATH_TOKEN_RE` (`prompt.py`): made only of path characters (ASCII word
+/// chars, `-`, `.`, `:`, backslash, `/`) with **at least one alphanumeric**, so a bare
+/// backslash stays literal. Spelled out rather than pulling in a regex dependency — it is one
+/// character-class test and the CLI has no other use for `regex`.
+fn is_path_token(token: &str) -> bool {
+    !token.is_empty()
+        && token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ':' | '\\' | '/'))
+        && token.chars().any(|c| c.is_ascii_alphanumeric())
 }
 
 /// Extract JSON → parse → normalize → apply defaults → validate. Errors describe the first failure.
+///
+/// The two arg-shape clarify gates sit either side of validation, and Python gives them
+/// *different* retry semantics, which this mirrors rather than simplifying:
+///
+/// * `required_args_clarify` runs here, before validation, and short-circuits. The model
+///   omitted something only the user can supply, so a corrective re-prompt would invite it to
+///   invent the value and turn a correct clarify into a wrong plan. Python defers to this gate
+///   by reporting the probe "clean" so no retry fires (`agent.py::_parse_and_check`).
+/// * `unsupported_args_clarify` does NOT run here — see `build_payload_with_repair`. An
+///   undeclared arg is worth one corrective re-prompt, because the model may well pick a
+///   different tool or drop the arg; only once that has failed is it an inventory gap.
 fn try_build_payload(
     raw: &str,
     registry: &knaif_core::Registry,
@@ -1197,8 +1771,23 @@ fn try_build_payload(
     let mut payload = knaif_core::parse_plan(&extracted.json)?;
     knaif_core::normalize_plan(&mut payload, Some(registry));
     knaif_core::apply_defaults(&mut payload, registry);
+    if let Some(clarify) = knaif_core::required_args_clarify(&payload, registry) {
+        return Ok(clarify);
+    }
     knaif_core::validate_plan(&payload, registry, base, sandbox)?;
     Ok(payload)
+}
+
+/// Re-derive a plan as far as `validate_plan` would see it, for the post-retry arg-shape gate.
+///
+/// Stops one step short of validation deliberately: this exists to inspect a plan that validation
+/// has already refused, so running it again would only re-raise the error being handled.
+fn prepared_payload(raw: &str, registry: &knaif_core::Registry) -> Option<serde_json::Value> {
+    let extracted = knaif_core::extract_json(raw);
+    let mut payload = knaif_core::parse_plan(&extracted.json).ok()?;
+    knaif_core::normalize_plan(&mut payload, Some(registry));
+    knaif_core::apply_defaults(&mut payload, registry);
+    Some(payload)
 }
 
 /// Resolve a `--model` argument (a raw path, or a manifest/installed name via the shared store) to a
@@ -1407,7 +1996,37 @@ fn resolve_manifest_path() -> anyhow::Result<PathBuf> {
 /// `$KNAIF_NO_CUDA_NUDGE` suppresses the *offer* for anyone who has decided not to install the
 /// payload and does not want to be told again. It does not suppress the stale/interrupted report:
 /// that one is about a payload they already have.
+/// Can this *build* actually use a downloaded CUDA payload?
+///
+/// Two independent facts decide it, and [`knaif_models::cuda_offer`] can see neither — it reads
+/// the install receipt in `~/.knaif/backends`, which is empty in both failing cases below:
+///
+/// * **`cuda_compiled_in`** — `just eval-native` builds `llama,cuda,pdfium` and the release `cuda`
+///   kind builds `llama,dynamic-backends,cuda`. The backend is already there (static in the first,
+///   staged beside the exe in the second), so the offer told a CUDA-capable binary to install CUDA.
+/// * **`can_load_payloads`** — without `dynamic-backends`, `load_dynamic_backends` is a no-op and
+///   `~/.knaif/backends` is never scanned. Following the advice downloads ~668 MB that is never
+///   `dlopen`ed.
+///
+/// Both mistakes reach the user as "CUDA didn't work", which the `DriverTooOld` branch already
+/// calls the least debuggable outcome available; that branch exists precisely to avoid handing
+/// someone a payload that cannot load, and these two cases are the same error from the other side.
+///
+/// Taken as parameters rather than read from `cfg!` inside, so every combination is testable in
+/// the default (feature-free) test build — the configurations that are wrong are exactly the ones
+/// CI never compiles.
+fn cuda_payload_is_worth_offering(cuda_compiled_in: bool, can_load_payloads: bool) -> bool {
+    can_load_payloads && !cuda_compiled_in
+}
+
 fn print_cuda_offer() {
+    // Nothing below is worth saying if this build could not use the payload anyway. This also
+    // silences `NeedsReinstall`, deliberately: in a build that cannot load payloads the receipt is
+    // irrelevant, and in a CUDA build a skipped payload changes nothing — CUDA still works, and
+    // `knaif backend install cuda` would not be the fix in either case.
+    if !cuda_payload_is_worth_offering(cfg!(feature = "cuda"), cfg!(feature = "dynamic-backends")) {
+        return;
+    }
     let Ok(store) = resolve_backend_manifest_path().and_then(|p| BackendStore::open(&p)) else {
         return;
     };
@@ -1510,6 +2129,46 @@ fn first_run_model_message(skill: &str, recommended: Option<&str>, installed: bo
              (See `knaif models list` for available models.)"
         ),
     }
+}
+
+/// Resolve extension-less stems in every non-terminal step, or downgrade the whole plan to a
+/// clarify when the sandbox cannot pin one down.
+///
+/// Mirrors Python's loop in `CommandAgent._execute_steps`: terminal tools carry no file paths and
+/// are skipped, and the FIRST unresolvable stem replaces the entire plan with a single clarify —
+/// asking once beats half-running a plan whose inputs are in doubt.
+fn resolve_plan_stems(payload: serde_json::Value, sandbox: &Path) -> serde_json::Value {
+    const TERMINAL: [&str; 4] = ["clarify", "reject", "done", "wait_for_confirmation"];
+    let Some(steps) = payload.get("plan").and_then(|p| p.as_array()) else {
+        return payload;
+    };
+    let mut out = Vec::with_capacity(steps.len());
+    for step in steps {
+        let tool = step.get("tool").and_then(|t| t.as_str()).unwrap_or("");
+        if TERMINAL.contains(&tool) {
+            out.push(step.clone());
+            continue;
+        }
+        let Some(args) = step.get("args") else {
+            out.push(step.clone());
+            continue;
+        };
+        match knaif_core::resolve_stems(args, sandbox) {
+            knaif_core::StemOutcome::Resolved(resolved) => {
+                let mut s = step.clone();
+                if let Some(obj) = s.as_object_mut() {
+                    obj.insert("args".into(), resolved);
+                }
+                out.push(s);
+            }
+            knaif_core::StemOutcome::Clarify(question) => {
+                return serde_json::json!({
+                    "plan": [{"tool": "clarify", "args": {"question": question}}]
+                });
+            }
+        }
+    }
+    serde_json::json!({ "plan": out })
 }
 
 #[cfg(test)]
@@ -1860,6 +2519,22 @@ mod tests {
     }
 
     #[test]
+    fn normalize_leaves_non_path_backslashes_alone() {
+        // V3: converged on Python's `_PATH_TOKEN_RE`. Both shapes are cases in
+        // contracts/parity/prompt_cases.json; the blanket replace got both wrong.
+        assert_eq!(
+            normalize_path_separators(r#"convert "C:\Users\me\my clip.mp4" to webm"#),
+            r#"convert "C:\Users\me\my clip.mp4" to webm"#,
+            "a quoted path is not a path *token* — quotes are not path characters"
+        );
+        assert_eq!(
+            normalize_path_separators(r"what does \ mean here"),
+            r"what does \ mean here",
+            "a lone backslash has no alphanumeric and stays literal"
+        );
+    }
+
+    #[test]
     fn normalize_leaves_forward_slash_and_bare_paths_untouched() {
         assert_eq!(
             normalize_path_separators("convert ./clip.mov to mp4"),
@@ -1883,14 +2558,185 @@ mod tests {
         assert!(debug_dump(false, "RAW_OUTPUT", "EXTRACTED_JSON").is_none());
     }
 
-    // ── F5: a multi-step plan must be recognized as unsupported, not silently truncated ──────
+    // ── P0: the prompt dump (native/Python planning parity, Workstream P) ───────────────────
     //
-    // `cmd_run` dispatches exactly one step per invocation (no ordered multi-intent executor,
-    // variable binding, or per-intent confirmation yet). It previously took `steps.first()` and
-    // discarded the rest without a word, so a valid 2-step plan (e.g. strip_audio -> resize)
-    // rendered/executed only the first command and still exited 0 — reporting full success for
-    // partial completion. `decide_steps` is deterministic (no model/GPU/subprocess needed) so
-    // this guarantee is tested directly, per the audit's own recommendation.
+    // `$KNAIF_DEBUG` only fires on a parse/validation *failure* and prints model output, never
+    // the prompt — so on a successful plan (most of the corpus, and the interesting case) there
+    // was no way to see what the model was asked. P1 diffs this dump against Python's, and R1
+    // later uses it to produce the native side of a golden, so the one property that matters is
+    // that it reproduces `(system, user)` **verbatim**: a dump that reshapes the string turns the
+    // P1 diff into a diff of the dumper.
+
+    #[test]
+    fn prompt_dump_is_none_when_disabled() {
+        assert!(prompt_dump(false, "SYSTEM", "USER").is_none());
+    }
+
+    // ── read results as data, for the L4 lane ──────────────────────────────────────────────
+    // The 2026-09-24 documents L4 graded every inspect/extract/find row as `None`: native printed
+    // its answer as prose and the lane grades data. These pin the dump to Python's result shapes
+    // (skills/documents/python/steps.py), which the documents verifier reads.
+
+    #[test]
+    fn an_inspection_dumps_python_field_names() {
+        use knaif_skill_documents::run::ReadResult;
+        use knaif_skill_documents::text::Inspection;
+        let v = read_result_json(&ReadResult::Inspection(Inspection {
+            format: "png".into(),
+            size_bytes: 1396,
+            encrypted: false,
+            has_text_layer: false,
+            pages: 1,
+        }));
+        assert_eq!(
+            v,
+            serde_json::json!({"format": "png", "size_bytes": 1396, "encrypted": false,
+                               "has_text_layer": false, "pages": 1})
+        );
+    }
+
+    #[test]
+    fn extracted_text_dumps_pages_and_joined_text() {
+        use knaif_skill_documents::run::ReadResult;
+        use knaif_skill_documents::text::PageText;
+        let v = read_result_json(&ReadResult::Text(vec![
+            PageText {
+                page: 1,
+                text: "Alpha".into(),
+            },
+            PageText {
+                page: 3,
+                text: "Gamma".into(),
+            },
+        ]));
+        assert_eq!(v["text"], "Alpha\nGamma");
+        assert_eq!(
+            v["pages"],
+            serde_json::json!([{"page": 1, "text": "Alpha"}, {"page": 3, "text": "Gamma"}])
+        );
+    }
+
+    #[test]
+    fn matches_dump_their_count() {
+        use knaif_skill_documents::run::ReadResult;
+        use knaif_skill_documents::text::Match;
+        let v = read_result_json(&ReadResult::Matches(vec![Match {
+            page: 3,
+            snippet: "Gamma page three".into(),
+            span: (1, 6),
+        }]));
+        assert_eq!(v["count"], 1);
+        assert_eq!(
+            v["matches"],
+            serde_json::json!([{"page": 3, "snippet": "Gamma page three", "span": [1, 6]}])
+        );
+    }
+
+    #[test]
+    fn a_result_dump_is_one_marked_line_or_nothing() {
+        assert!(result_dump(false, "find_in_document", &serde_json::json!({"count": 0})).is_none());
+        let line = result_dump(true, "find_in_document", &serde_json::json!({"count": 0})).unwrap();
+        assert!(!line.contains('\n'));
+        let body: serde_json::Value =
+            serde_json::from_str(line.strip_prefix(RESULT_DUMP_MARKER).unwrap()).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({"tool": "find_in_document", "result": {"count": 0}})
+        );
+    }
+
+    #[test]
+    fn plan_dump_is_none_when_disabled() {
+        assert!(plan_dump(false, &serde_json::json!({"plan": []})).is_none());
+    }
+
+    #[test]
+    fn plan_dump_is_one_parseable_line() {
+        // The consumer (the L4 lane) scans stderr for the marker and parses the rest of that
+        // line, so the envelope must survive round-tripping and must not wrap.
+        let payload = serde_json::json!({
+            "plan": [{"tool": "strip_audio", "args": {"inputs": ["a b.mp4"], "output": "o.mp4"}}]
+        });
+        let msg = plan_dump(true, &payload).expect("enabled → Some");
+        assert!(!msg.contains('\n'), "the dump must be a single line: {msg}");
+        let rest = msg.strip_prefix(PLAN_DUMP_MARKER).expect("marker prefix");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(rest).expect("parses"),
+            payload
+        );
+    }
+
+    #[test]
+    fn argv_dump_carries_the_exact_argv_on_one_line() {
+        // L3 compares this, not the display line: `shell_join` quotes for a shell, Python quotes
+        // nothing, and neither round-trips a space or a filter escape once re-split.
+        let argv: Vec<String> = [
+            "ffmpeg",
+            "-i",
+            "silent clip.mp4",
+            "-vf",
+            r"crop=trunc(min(iw\,ih*1/1)/2)*2",
+            "out.mp4",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert!(argv_dump(false, &argv).is_none(), "disabled → nothing");
+        let msg = argv_dump(true, &argv).expect("enabled → Some");
+        assert!(!msg.contains('\n'), "one line: {msg}");
+        let rest = msg.strip_prefix(ARGV_DUMP_MARKER).expect("marker prefix");
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(rest).expect("parses"),
+            argv
+        );
+    }
+
+    #[test]
+    fn prompt_dump_carries_system_and_user_when_enabled() {
+        let msg = prompt_dump(true, "SYSTEM_TEXT", "USER_TEXT").expect("enabled → Some");
+        assert!(msg.contains("SYSTEM_TEXT"));
+        assert!(msg.contains("USER_TEXT"));
+    }
+
+    #[test]
+    fn prompt_dump_reproduces_both_messages_byte_for_byte() {
+        // Deliberately nasty: trailing spaces, a blank line, a lone CR, tabs and a non-ASCII
+        // char — all things a "helpful" formatter would trim, join or re-encode.
+        let system = "line one  \n\n\tindented\r\nsuffix — ünicode ";
+        let user = "  leading and trailing  ";
+        let msg = prompt_dump(true, system, user).expect("enabled → Some");
+
+        assert_eq!(
+            extract_dump_section(&msg, "system"),
+            system,
+            "system message must survive the dump unaltered"
+        );
+        assert_eq!(
+            extract_dump_section(&msg, "user"),
+            user,
+            "user message must survive the dump unaltered"
+        );
+    }
+
+    /// Pull one framed section back out of a dump, so the tests assert on the payload rather
+    /// than on the framing. Mirrors what the P1 capture script does.
+    fn extract_dump_section(dump: &str, name: &str) -> String {
+        let begin = format!("{PROMPT_DUMP_MARKER}BEGIN {name}\n");
+        let end = format!("\n{PROMPT_DUMP_MARKER}END {name}");
+        let start = dump.find(&begin).expect("begin marker present") + begin.len();
+        let stop = dump[start..].find(&end).expect("end marker present") + start;
+        dump[start..stop].to_string()
+    }
+
+    // ── F5: a multi-step plan must never be silently truncated ───────────────────────────────
+    //
+    // `cmd_run` originally took `steps.first()` and discarded the rest without a word, so a valid
+    // 2-step plan (e.g. strip_audio -> resize) executed only the first command and still exited 0
+    // — reporting full success for partial completion. The first fix made that an explicit
+    // refusal; E2 replaced the refusal with an ordered executor, which is what the audit actually
+    // recommended. `decide_steps` stays deterministic (no model/GPU/subprocess), so the shape of
+    // the decision is tested here and the execution semantics in
+    // `apps/cli/tests/executor_semantics.rs`.
 
     #[test]
     fn decide_steps_empty_plan_is_empty() {
@@ -1900,11 +2746,95 @@ mod tests {
     #[test]
     fn decide_steps_single_step_is_ok() {
         let steps = vec![serde_json::json!({"tool": "strip_audio", "args": {}})];
-        assert!(matches!(decide_steps(&steps), StepDecision::Single(0)));
+        assert!(matches!(
+            decide_steps(&steps),
+            StepDecision::Run { total: 1 }
+        ));
+    }
+
+    /// L1a: the prompt-parity contract. Fixed utterance x fixed registry x fixed prompt
+    /// overrides -> the exact `(system, user)` pair the reference runtime produces, compared
+    /// byte for byte with no allow-list.
+    ///
+    /// It lives here rather than in `knaif-core` because the stage under test is
+    /// *normalize -> build*, and `normalize_path_separators` is a binary-crate function: a
+    /// core test could only compare half the pipeline, which is the mistake Rule 2 exists to
+    /// prevent (an earlier ad-hoc comparison broke that rule and reported 18.2% disagreement,
+    /// of which 150/154 were an artifact of comparing different stages).
+    ///
+    /// **Green since V3 (2026-09-10).** It was authored red and verified red first: native
+    /// rewrote every backslash in the utterance where Python rewrites only path-shaped tokens,
+    /// so a quoted Windows path and a lone backslash diverged. That failure, then this pass, is
+    /// the evidence the contract detects what it was written for — a contract that was never
+    /// observed failing proves nothing.
+    ///
+    /// See docs/plans/2026-09-10-skill-quality-lifecycle.md (L1a, V3).
+    #[test]
+    fn prompt_parity_cases() {
+        let fixtures =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../contracts/parity/prompt_cases.json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&fixtures).expect("read fixtures"))
+                .unwrap();
+        let registries = doc["registries"].as_object().unwrap();
+        let overrides_by_name = doc["prompt_overrides"].as_object().unwrap();
+
+        for case in doc["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let reg_yaml = registries[case["registry"].as_str().unwrap()]
+                .as_str()
+                .unwrap();
+            let registry = knaif_core::registry::load_registry_str(reg_yaml)
+                .unwrap_or_else(|e| panic!("{name}: registry {e}"));
+
+            let ov = &overrides_by_name[case["prompt_overrides"].as_str().unwrap()];
+            let overrides = knaif_core::PromptOverrides {
+                system_header: Some(ov["system_header"].as_str().unwrap().to_string()),
+                examples_block: Some(ov["examples_block"].as_str().unwrap().to_string()),
+                // L1a pins the *rendering* of a given block; the per-utterance selection that
+                // chooses which examples go into it is L1e's contract.
+                examples: Vec::new(),
+            };
+
+            let utterance = normalize_path_separators(case["utterance"].as_str().unwrap());
+            let (system, user) = knaif_core::build_prompt(&utterance, &registry, &overrides);
+
+            assert_eq!(
+                system,
+                case["expected_system"].as_str().unwrap(),
+                "case {name}: system message differs"
+            );
+            assert_eq!(
+                user,
+                case["expected_user"].as_str().unwrap(),
+                "case {name}: user message differs"
+            );
+        }
     }
 
     #[test]
-    fn decide_steps_multi_step_is_unsupported() {
+    fn capability_refusal_is_marked_not_implemented_not_reject() {
+        // A capability the runtime has not built and a request it deliberately refuses are
+        // both a refusal to the user, but they are opposite facts about the product: one is
+        // a coverage gap, the other is the safety model working. Recorded under the same
+        // `reject:` prefix they are indistinguishable, and coverage becomes uncomputable.
+        //
+        // The example moved with E2: multi-step chains used to be the marker's main producer,
+        // and are now executed. What still produces it is a skill tool the native runtime has
+        // not built (`is_supported` in the documents crate).
+        let msg = not_implemented_message("the documents tool \"redact\" is not built");
+        assert!(msg.starts_with(knaif_skill_api::capability::NOT_IMPLEMENTED_PREFIX));
+        assert!(!msg.starts_with("reject:"));
+        assert!(msg.contains("is not built"));
+    }
+
+    /// E2: a chain is work to do, not a plan to decline. This asserted `Unsupported { total: 2 }`
+    /// until the executor existed; the behavior it used to pin — running one step of two and
+    /// exiting 0 — is what `Unsupported` was introduced to stop, and what the executor now
+    /// actually handles. The end-to-end proof that both steps run is
+    /// `apps/cli/tests/executor_semantics.rs`.
+    #[test]
+    fn decide_steps_multi_step_runs_every_step() {
         let steps = vec![
             serde_json::json!({
                 "tool": "strip_audio",
@@ -1916,8 +2846,120 @@ mod tests {
             }),
         ];
         match decide_steps(&steps) {
-            StepDecision::Unsupported { total } => assert_eq!(total, 2),
-            other => panic!("expected Unsupported, got {other:?}"),
+            StepDecision::Run { total } => assert_eq!(total, 2),
+            other => panic!("expected Run, got {other:?}"),
         }
+    }
+
+    /// E3: the failure report has to name the step and account for the ones around it — a bare
+    /// "ffmpeg exited 1" after a chain leaves the user guessing what reached their disk.
+    #[test]
+    fn chain_failure_context_accounts_for_every_step() {
+        assert_eq!(chain_failure_context(0, 1), "the step failed");
+
+        let first_of_three = chain_failure_context(0, 3);
+        assert!(first_of_three.contains("step 1 of 3"), "{first_of_three}");
+        assert!(
+            first_of_three.contains("nothing had run yet"),
+            "{first_of_three}"
+        );
+        assert!(
+            first_of_three.contains("steps 2-3 were not run"),
+            "{first_of_three}"
+        );
+
+        let middle = chain_failure_context(1, 3);
+        assert!(middle.contains("step 2 of 3"), "{middle}");
+        assert!(middle.contains("step 1 had already completed"), "{middle}");
+        assert!(middle.contains("step 3 was not run"), "{middle}");
+
+        // The last step of a chain has nothing after it — "steps 4-3 were not run" would be
+        // worse than saying nothing.
+        let last = chain_failure_context(2, 3);
+        assert!(last.contains("steps 1-2 had already completed"), "{last}");
+        assert!(last.contains("it was the last step"), "{last}");
+        assert!(!last.contains("4-3"), "{last}");
+    }
+
+    // ── the CUDA offer is about THIS build, not just the payload receipt ─────────
+
+    #[test]
+    fn a_build_with_cuda_compiled_in_is_never_offered_the_payload() {
+        // `just eval-native` and the release `cuda` kind both compile the CUDA backend in
+        // (`llama,cuda,pdfium` and `llama,dynamic-backends,cuda`). The receipt in
+        // `~/.knaif/backends` is empty in both cases, so `cuda_offer` says NotInstalled and the
+        // CLI told a CUDA-capable binary to go install CUDA.
+        assert!(!cuda_payload_is_worth_offering(true, true));
+        assert!(!cuda_payload_is_worth_offering(true, false));
+    }
+
+    #[test]
+    fn a_build_that_cannot_dlopen_a_payload_is_never_offered_one() {
+        // `load_dynamic_backends` is a no-op without `dynamic-backends`, so `~/.knaif/backends`
+        // is never scanned. Following the advice downloads ~668 MB that is never loaded — the
+        // same "CUDA didn't work" outcome `DriverTooOld` exists to avoid.
+        assert!(!cuda_payload_is_worth_offering(false, false));
+    }
+
+    #[test]
+    fn the_shipped_cpu_and_vulkan_artifacts_are_still_offered_the_payload() {
+        // The whole point of the opt-in payload: `llama,dynamic-backends[,vulkan]` can load it
+        // and does not already have it. Suppressing this case would make the feature unreachable.
+        assert!(cuda_payload_is_worth_offering(false, true));
+    }
+
+    // ── `backend list --json` (workbench T2a) ──────────────────────────────────────────────
+    //
+    // The workbench parses this to label a build, so the KEY NAMES ARE AN INTERFACE. A build
+    // directory named `release-vulkan` holding a CUDA build must not be able to mislead an
+    // operator — the binary has the last word, and this is how it speaks.
+
+    #[test]
+    fn backend_list_json_always_carries_the_same_keys() {
+        // No store: a build with no backend manifest still answers, rather than failing. That is
+        // what lets the workbench parse ONE shape from every binary it finds.
+        let doc = backend_list_json(None);
+        for key in [
+            "built_with",
+            "dynamic_backends",
+            "backends_dir",
+            "platform",
+            "entries",
+        ] {
+            assert!(doc.get(key).is_some(), "missing key: {key}");
+        }
+        assert!(doc["entries"].as_array().is_some_and(|e| e.is_empty()));
+        assert!(doc["backends_dir"].is_null());
+    }
+
+    #[test]
+    fn backend_list_json_reports_the_compiled_feature_set() {
+        let doc = backend_list_json(None);
+        // `dynamic_backends` is a compile-time fact, never read from the store — a static build
+        // has no backend store at all, and would otherwise report nothing.
+        assert_eq!(doc["dynamic_backends"], cfg!(feature = "dynamic-backends"));
+
+        let features: Vec<String> = doc["built_with"]
+            .as_array()
+            .expect("built_with is an array")
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            features.contains(&"llama".to_string()),
+            cfg!(feature = "llama")
+        );
+        assert_eq!(
+            features.contains(&"cuda".to_string()),
+            cfg!(feature = "cuda")
+        );
+        assert_eq!(
+            features.contains(&"vulkan".to_string()),
+            cfg!(feature = "vulkan")
+        );
+        assert_eq!(
+            features.contains(&"pdfium".to_string()),
+            cfg!(feature = "pdfium")
+        );
     }
 }

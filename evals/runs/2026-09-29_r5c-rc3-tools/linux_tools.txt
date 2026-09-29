@@ -1,0 +1,12 @@
+documents:
+  [OK  ] ghostscript    (optional) /usr/bin/gs
+  [OK  ] libreoffice    (optional) /usr/bin/soffice, /usr/bin/libreoffice
+  [OK  ] tesseract      (optional) /usr/bin/tesseract
+ffmpeg:
+  [OK  ] ffmpeg         (required) /usr/bin/ffmpeg, /usr/bin/ffprobe
+ok  ghostscript: gs -> the first PATH hit
+ok  libreoffice: soffice -> the first PATH hit
+ok  libreoffice: libreoffice -> the first PATH hit
+ok  tesseract: tesseract -> the first PATH hit
+ok  ffmpeg: ffmpeg -> the first PATH hit
+ok  ffmpeg: ffprobe -> the first PATH hit
