@@ -46,7 +46,7 @@ WIN_R="$(git remote get-url origin)/evals/runs/2026-09-28_r5c-windows_success"
 THREADS="${THREADS:-8}"
 export KNAIF_N_THREADS="$THREADS" KNAIF_N_THREADS_BATCH="$THREADS"
 export PATH="$HOME/.local/bin:$PATH"
-unset KNAIF_PDFIUM_PATH
+unset KNAIF_PDFIUM_PATH KNAIF_BACKEND_MANIFEST  # verify against the artifact's own manifest
 
 mkdir -p "$R"
 git rev-parse HEAD > "$R/GIT_SHA.$STAGE"
@@ -59,8 +59,10 @@ failed() { echo "FAILED $STAGE: $* $(date)" | tee -a "$R/verdicts.txt" >> "$R/CO
 # The artifact is the tarball's bytes: check it, unpack it fresh, check the payload and the models.
 echo "$TAR_SHA  $TARBALL" | sha256sum -c - > "$R/artifact.$STAGE.log" 2>&1 || abort "tarball sha256 mismatch"
 rm -rf "$ART" && mkdir -p "$ART" && tar -xzf "$TARBALL" -C "$ART" || abort "untar failed"
-KNAIF_BACKENDS_DIR="$CUDA_DIR" "$EXE" backend verify cuda >> "$R/artifact.$STAGE.log" 2>&1 \
-  || abort "installed CUDA payload does not verify"
+# `backend verify` exits 0 for "not installed" and "no checksum" too: require the positive answer.
+KNAIF_BACKENDS_DIR="$CUDA_DIR" "$EXE" backend verify cuda > "$R/verify.$STAGE.log" 2>&1
+cat "$R/verify.$STAGE.log" >> "$R/artifact.$STAGE.log"
+grep -q "^cuda: ok" "$R/verify.$STAGE.log" || abort "installed CUDA payload does not verify as ok"
 "$EXE" --version >> "$R/artifact.$STAGE.log" 2>&1
 for pair in "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7 knaif-qwen3-4b-v2-q4_k_m.gguf" \
             "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5 knaif-qwen3-1.7b-v2-q6_k.gguf"; do
@@ -91,12 +93,20 @@ accept() {
   if [ $rc -ne 0 ] && [ ! -s "$d/${skill}_safety.json" ]; then
     failed "safety $model $backend $skill: exit $rc, no result"; return 1
   fi
+  # accept-native exits 1 on NOT ACCEPTED (a recorded verdict) and also on errors that record
+  # nothing: only output naming a verdict AND a written record counts as a result.
+  uv run python -m knaif.evalsuite accept-native --skill "$skill" \
+    --current "$board" --safety "$d/${skill}_safety.json" > "$d/${skill}_accept.log" 2>&1
+  rc=$?
   {
     echo "=== $model $backend $skill (placement $(placement "$board"))"
-    uv run python -m knaif.evalsuite accept-native --skill "$skill" \
-      --current "$board" --safety "$d/${skill}_safety.json"
-    echo "exit $?"
-  } >> "$R/verdicts.txt" 2>&1
+    cat "$d/${skill}_accept.log"
+    echo "exit $rc"
+  } >> "$R/verdicts.txt"
+  if ! grep -qE "^(NOT )?ACCEPTED" "$d/${skill}_accept.log" \
+    || ! grep -q "recorded L4 evidence" "$d/${skill}_accept.log"; then
+    failed "accept-native $model $backend $skill: no verdict recorded (exit $rc)"; return 1
+  fi
 }
 
 cell() {  # $1 model label, $2 lane, $3 backend: the full cell
@@ -107,7 +117,9 @@ cell() {  # $1 model label, $2 lane, $3 backend: the full cell
   for skill in ffmpeg documents; do
     board="$d/${skill}_${lane}_success.json"
     rm -f "$board"
-    uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$d/fixtures.log" 2>&1
+    if ! uv run python -m knaif.evalsuite fixtures regen --skill "$skill" >> "$d/fixtures.log" 2>&1; then
+      failed "L4 $model $backend $skill: fixture regeneration failed"; continue
+    fi
     if ! env "${ENVS[@]}" uv run python -m knaif.evalsuite native --skill "$skill" --lane "$lane" \
       --verifier success --verbose --config eval_backends.yaml --save "$d" > "$d/$skill.log" 2>&1 \
       || [ ! -s "$board" ]; then
@@ -116,7 +128,7 @@ cell() {  # $1 model label, $2 lane, $3 backend: the full cell
     got="$(placement "$board")"
     if [ "$got" != "$WANT" ]; then
       echo "VOID $model $backend $skill: ran on '$got', expected $WANT" >> "$R/verdicts.txt"
-      echo "VOID $model $backend $skill $(date)" >> "$R/COMPLETE"
+      failed "VOID $model $backend $skill: ran on '$got', expected $WANT"
       continue
     fi
     accept "$model" "$lane" "$backend" "$board" "$skill" "$d" \
@@ -125,10 +137,15 @@ cell() {  # $1 model label, $2 lane, $3 backend: the full cell
 }
 
 os_flips() {  # $1 model label, $2 linux lane, $3 windows lane: Windows CUDA vs Linux CUDA, reported
-  local skill
+  local skill win lin
   for skill in ffmpeg documents; do
-    uv run python evals/runs/2026-09-28_r5c-windows_success/t11_flips.py \
-      "$WIN_R/$1/cuda/${skill}_$3_success.json" "$R/$1/cuda/${skill}_$2_success.json" \
+    win="$WIN_R/$1/cuda/${skill}_$3_success.json"
+    lin="$R/$1/cuda/${skill}_$2_success.json"
+    # Only two measured CUDA0 boards make a Windows-vs-Linux CUDA comparison.
+    if [ "$(placement "$win")" != CUDA0 ] || [ "$(placement "$lin")" != CUDA0 ]; then
+      failed "flips $1 $skill: a board is missing or not CUDA0"; continue
+    fi
+    uv run python evals/runs/2026-09-28_r5c-windows_success/t11_flips.py "$win" "$lin" \
       --label "windows-cuda/linux-cuda" > "$R/$1/flips_${skill}_windows_vs_linux_cuda.txt" 2>&1 \
       || failed "flips $1 $skill windows/linux"
   done
