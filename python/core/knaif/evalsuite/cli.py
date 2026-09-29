@@ -1120,12 +1120,16 @@ def cmd_gate(args: argparse.Namespace) -> None:
     )
 
     root = Path.cwd()
+    given = getattr(args, "native_bin", None) or []
+    native_bin = [Path(p) for p in given] if given else None
 
     if getattr(args, "release_record", None):
         # At the tag (release plan R7): keep what was true for this release, beside the live
         # records that will go stale on main as the tree moves.
         try:
-            out = write_release_record(root, args.release_record, skills=sorted(list_skills()))
+            out = write_release_record(
+                root, args.release_record, skills=sorted(list_skills()), native_binary=native_bin
+            )
         except (FileExistsError, ValueError) as exc:
             sys.exit(f"ERROR: {exc}")
         print(f"  release record written: {out}")
@@ -1159,8 +1163,6 @@ def cmd_gate(args: argparse.Namespace) -> None:
         declared = _declared_native_status(skill, root)
         if declared is None:
             continue
-        given = getattr(args, "native_bin", None) or []
-        native_bin = [Path(p) for p in given] if given else None
         try:
             gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
         except ValueError as exc:
@@ -1169,7 +1171,8 @@ def cmd_gate(args: argparse.Namespace) -> None:
         marks = "  ".join(f"{s.layer}:{GATE_MARKS[s.state]}" for s in gate.layers)
         print(f"  {skill:<12} declared={declared:<12} evidence={gate.derived:<12} {marks}")
         for state in gate.layers:
-            if state.detail and state.state != "valid":
+            # A green layer still prints what it could not check (Codex, 2026-09-29).
+            if state.detail and (state.state != "valid" or "not checked here" in state.detail):
                 print(f"       {state.layer}: {state.detail}")
         problems += gate.problems
 

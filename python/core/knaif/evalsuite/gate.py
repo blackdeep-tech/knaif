@@ -215,23 +215,32 @@ def _manifest_model_sha(name: Any, root: Path) -> str | None:
     return sha if len(sha) == 64 and all(c in "0123456789abcdef" for c in sha.lower()) else None
 
 
-#: Executable headers -> the OS id a matrix cell names. A binary handed to the gate is matched to
-#: the cells of its own OS by what it IS, not by what its file is called.
-_BINARY_FORMATS = (
-    (b"MZ", "windows-x64"),
-    (b"\x7fELF", "linux-x64"),
-    (b"\xcf\xfa\xed\xfe", "macos-arm64"),
-)
+def _binary_os(head: bytes) -> str | None:
+    """The `platforms.yaml` id an executable belongs to, from its header: the format AND the
+    architecture, so an arm64 build is never taken for x64 (Codex, 2026-09-29). None if unknown."""
+    if head[:2] == b"MZ" and len(head) >= 0x40:
+        pe = int.from_bytes(head[0x3C:0x40], "little")
+        if head[pe : pe + 4] == b"PE\x00\x00":
+            machine = int.from_bytes(head[pe + 4 : pe + 6], "little")
+            return "windows-x64" if machine == 0x8664 else None
+        return None
+    if head[:4] == b"\x7fELF" and len(head) >= 20:
+        # 64-bit, little-endian, e_machine x86-64
+        if head[4] == 2 and head[5] == 1 and int.from_bytes(head[18:20], "little") == 0x3E:
+            return "linux-x64"
+        return None
+    if head[:4] in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):  # Mach-O 64 / universal
+        return "macos"
+    return None
 
 
 def binaries_by_os(paths: list[Path]) -> dict[str, str]:
     """{os id: sha256} for the packaged binaries under test, one per OS, recognised by header."""
     out: dict[str, str] = {}
     for path in paths:
-        head = Path(path).read_bytes()[:4]
-        os_id = next((os_ for magic, os_ in _BINARY_FORMATS if head.startswith(magic)), None)
+        os_id = _binary_os(Path(path).read_bytes()[:4096])
         if os_id is None:
-            raise ValueError(f"{path}: not a Windows, Linux or macOS executable")
+            raise ValueError(f"{path}: not a Windows x64, Linux x64 or macOS executable")
         if os_id in out:
             raise ValueError(f"two binaries for {os_id}: the gate checks one artifact per OS")
         out[os_id] = _sha256_file(Path(path))
@@ -264,11 +273,30 @@ def _current_for_cell(
             if parts[1] in binaries:
                 cell_current["native_binary"] = binaries[parts[1]]
         elif binaries:
-            given = list(binaries.values())
-            cell_current["native_binary"] = (
-                recorded_binary if recorded_binary in given else given[0]
-            )
+            cell_current["native_binary"] = _pick_binary(binaries, recorded_binary)
     return cell_current
+
+
+def _pick_binary(binaries: dict[str, str], recorded: Any) -> str:
+    """For a record that names no OS: the given binary it recorded, else one it did not (drift)."""
+    given = list(binaries.values())
+    return str(recorded) if recorded in given else given[0]
+
+
+def _current_for_flat(
+    layer: str,
+    record: dict[str, Any] | None,
+    current: dict[str, str | None],
+    binaries: dict[str, str] | None,
+) -> dict[str, str | None]:
+    """A flat (pre-matrix) layer, given several binaries: judged against the one it recorded,
+    exactly as a model-keyed cell is. Without this, a list of binaries dropped the check for
+    flat records altogether (Codex, 2026-09-29)."""
+    if not binaries:
+        return current
+    entry = ((record or {}).get("layers") or {}).get(layer) or {}
+    recorded = (entry.get("evidence") or {}).get("native_binary")
+    return {**current, "native_binary": _pick_binary(binaries, recorded)}
 
 
 def load_status_contract(root: Path) -> dict[str, Any]:
@@ -513,7 +541,8 @@ def evaluate_skill(
     # Several packaged artifacts (one per OS) are matched to the cells of their own OS; a single
     # path keeps the original meaning: that binary, for every record.
     binaries = binaries_by_os(native_binary) if isinstance(native_binary, list) else None
-    current = evidence_tuple(skill, root, None if binaries is not None else native_binary)
+    single = native_binary if not isinstance(native_binary, list) else None
+    current = evidence_tuple(skill, root, single)
 
     all_layers = list(contract["layers"])
     matrix = load_matrix(root)
@@ -523,7 +552,9 @@ def evaluate_skill(
                 name, record, current, contract, required_cells(matrix, name), root, binaries
             )
             if matrix is not None and name in CELL_LAYERS
-            else _layer_state(name, record, current, contract)
+            else _layer_state(
+                name, record, _current_for_flat(name, record, current, binaries), contract
+            )
         )
         for name in all_layers
     ]
@@ -705,7 +736,12 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
 RELEASES_DIR = ACCEPTANCE_DIR / "releases"
 
 
-def write_release_record(root: Path, version: str, skills: list[str] | None = None) -> Path:
+def write_release_record(
+    root: Path,
+    version: str,
+    skills: list[str] | None = None,
+    native_binary: Path | list[Path] | None = None,
+) -> Path:
     """Keep what was true for *version*: the acceptance records and the gate's verdict at the tag.
 
     The live records under `evals/acceptance/` go stale on `main` as soon as the tree moves, as
@@ -735,7 +771,9 @@ def write_release_record(root: Path, version: str, skills: list[str] | None = No
         if record.is_file():
             (out / record.name).write_bytes(record.read_bytes())
         declared = _declared_status(skill, root)
-        gate = evaluate_skill(skill, root, declared or "in-progress")
+        # The verdict frozen at the tag is judged against the packaged binaries, like `gate`
+        # itself; without them a different build could be frozen as valid (Codex, 2026-09-29).
+        gate = evaluate_skill(skill, root, declared or "in-progress", native_binary=native_binary)
         verdicts[skill] = {
             "declared": declared,
             "derived": gate.derived,
