@@ -39,7 +39,7 @@ tool rather than for chains.
 Usage (normally via `just parity ffmpeg`, which builds native first):
     uv run python scripts/parity_check.py --skill ffmpeg \
         --native-bin target/debug/knaif.exe \
-        --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf \
+        --model-path models/knaif-qwen3-4b-v2-q4_k_m.gguf \
         --cwd sandbox/fixtures/ffmpeg [--limit N] [--tags audio,convert] [--skip-chains]
 
 Self-test the pure parsing/normalization (no models, no subprocesses):
@@ -61,6 +61,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: How much of each side's raw output a report keeps.
+RAW_EXCERPT_CHARS = 800
+
+
+def utterance_argv(utt: str) -> list[str]:
+    """The utterance as trailing CLI words, after `--` so none is read as an option: `rm -rf /`
+    passed bare made both CLIs fail on `-rf` before either saw the request (ffmpeg_053)."""
+    return ["--", *utt.split()]
+
+
+def raw_excerpt(text: str) -> str:
+    """The first `RAW_EXCERPT_CHARS` of *text*, redacted BEFORE the cut: cut first, a local path
+    straddling the cut survived as a prefix the redactor (it matches whole paths) could not see,
+    and both 2026-09-28 ffmpeg reports carried the start of the checkout path (AGENTS.md, Public
+    Output Hygiene)."""
+    from knaif.evalsuite.redact import redact_local_paths
+
+    return redact_local_paths(text, root=REPO_ROOT)[:RAW_EXCERPT_CHARS]
+
+
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 # The marker native prints for a capability it has not built, as distinct from a `reject:`
@@ -89,6 +110,43 @@ def _dumped_plan(stderr: str) -> list[dict]:
     return []
 
 
+#: One line per rendered ffmpeg command under `$KNAIF_DUMP_PLAN`: the exact argv as JSON. The
+#: display line cannot carry it (Python joins with spaces and quotes nothing, so `silent clip.mp4`
+#: splits in two), so the comparator prefers this. The same string in both CLIs; a test holds it.
+ARGV_DUMP_MARKER = "===KNAIF-ARGV==="
+
+
+def _canon_dumped_token(token: str) -> str:
+    """Forward-slash a path's separators; leave anything with `=` (a filter, an option value)
+    verbatim, since its backslashes are ffmpeg escapes (`iw\\,ih`, `\\!`), not separators."""
+    return token if "=" in token else token.replace("\\", "/")
+
+
+def _dumped_argvs(stderr: str) -> list[list[str]]:
+    """Every argv a CLI dumped under `$KNAIF_DUMP_PLAN`, in order; [] when it dumped none."""
+    argvs: list[list[str]] = []
+    for line in strip_ansi(stderr).splitlines():
+        s = line.strip()
+        if s.startswith(ARGV_DUMP_MARKER):
+            try:
+                argv = json.loads(s[len(ARGV_DUMP_MARKER) :])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(argv, list) and all(isinstance(a, str) for a in argv):
+                argvs.append([_canon_dumped_token(a) for a in argv])
+    return argvs
+
+
+def _with_dumped_argvs(out: Outcome, stderr: str) -> Outcome:
+    """Replace the commands parsed from display lines with the dumped argv, when there is one."""
+    argvs = _dumped_argvs(stderr)
+    if argvs:
+        out.commands = argvs
+        if out.kind in ("none", "commands"):
+            out.kind = "commands"
+    return out
+
+
 # ── output parsing (pure) ─────────────────────────────────────────────────────
 
 
@@ -99,18 +157,32 @@ def strip_ansi(text: str) -> str:
 _PATH_EXT = re.compile(r"\.[A-Za-z0-9]{1,4}$")
 
 
-def to_argv(line: str) -> list[str]:
-    """Tokenize one rendered command line into an argv.
+def _forward_path_separators(token: str) -> str:
+    """Display-line tokens get the same rule as dumped ones (`_canon_dumped_token`)."""
+    return _canon_dumped_token(token)
 
-    Backslashes are forward-slashed FIRST: on Windows Python emits `C:\\…` paths, and
-    shlex(posix=True) would otherwise consume the backslash as an escape. Forward slashes
-    are valid path separators for ffmpeg + std::path, so this is lossless for the file-path
-    domain (mirrors native's own normalize_path_separators).
+
+def to_argv(line: str, quoted: bool = False) -> list[str]:
+    """Tokenize one rendered command line into an argv, the way that side wrote it.
+
+    *quoted*: native's `shell_join` POSIX-quotes any token with a backslash or space and doubles
+    the backslash inside the quotes, so shlex(posix=True) recovers the exact argv. Python joins
+    the argv with spaces and escapes nothing, so its line is split with quotes honoured but
+    backslashes kept literal. Either way path separators are then forward-slashed (lossless for
+    ffmpeg + std::path), but ffmpeg's own escapes are not: the old blanket
+    `replace("\\\\", "/")` turned a filter's `iw\\,ih` into `/,` on one side and `//,` on the
+    other, and reported identical commands as port bugs (L3 2026-09-27, ffmpeg_293/294).
     """
     try:
-        return shlex.split(line.replace("\\", "/"), posix=True)
+        lexer = shlex.shlex(line, posix=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""  # shlex.split's default; shlex.shlex would cut `clip#1.mp4`
+        if not quoted:
+            lexer.escape = ""
+        tokens = list(lexer)
     except ValueError:
         return []
+    return [_forward_path_separators(t) for t in tokens]
 
 
 def _is_ffmpeg_line(tokens: list[str]) -> bool:
@@ -272,6 +344,10 @@ class Outcome:
     dumped_plan: list[dict] = field(default_factory=list)  # command mode: the plan that ran
     text: str = ""  # clarify/reject message or error detail
     raw: str = ""  # raw stdout+stderr, for the report on mismatch
+    # Some step of the plan rendered no command ("(nothing to execute)"), so `commands` covers
+    # only part of it: Python's dry-run stops at a preview/confirmation (reverse_video) that
+    # native does not have. Its commands cannot be compared with a full render.
+    partial: bool = False
 
     def key(self, cwd: str | None = None) -> tuple:
         """Comparison key: commands/plan canonicalized; else just kind.
@@ -315,7 +391,7 @@ def _parse_native_body(stdout: str, stderr: str) -> Outcome:
         if low.startswith("reject:"):
             kind, text = "reject", s.split(":", 1)[1].strip()
             continue
-        tokens = to_argv(s)
+        tokens = to_argv(s, quoted=True)
         if _is_ffmpeg_line(tokens):
             cmds.append(tokens)
     if cmds:
@@ -348,7 +424,9 @@ def _parse_python_body(stdout: str, stderr: str) -> Outcome:
         elif "REJECT:" in s:
             kind, detail = "reject", s.split("REJECT:", 1)[1].strip()
     if cmds:
-        return Outcome("commands", cmds, raw=stdout + stderr)
+        return Outcome(
+            "commands", cmds, raw=stdout + stderr, partial="(nothing to execute)" in text
+        )
     if kind in ("clarify", "reject"):
         return Outcome(kind, text=detail, raw=stdout + stderr)
     # Python planned but its dry-run renders no ffmpeg line for compress/platform/thumbnail/
@@ -363,18 +441,27 @@ def _parse_python_body(stdout: str, stderr: str) -> Outcome:
     return Outcome("none", text=detail, raw=stdout + stderr)
 
 
-def parse_native(stdout: str, stderr: str) -> Outcome:
+def _failed(out: Outcome, stderr: str, returncode: int) -> Outcome:
+    """A run that exited non-zero with no other outcome failed; say so. Read as `none` it
+    matched a side that succeeded with the same plan (Codex follow-up review, 2026-09-28)."""
+    if returncode == 0 or out.kind != "none":
+        return out
+    last = next((line for line in reversed(stderr.splitlines()) if line.strip()), "")
+    return Outcome("error", text=f"exit {returncode}: {last.strip()}", raw=out.raw)
+
+
+def parse_native(stdout: str, stderr: str, returncode: int = 0) -> Outcome:
     """Parse `knaif run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
-    out = _parse_native_body(stdout, stderr)
+    out = _failed(_parse_native_body(stdout, stderr), stderr, returncode)
     out.dumped_plan = _dumped_plan(stderr)
-    return out
+    return _with_dumped_argvs(out, stderr)
 
 
-def parse_python(stdout: str, stderr: str) -> Outcome:
+def parse_python(stdout: str, stderr: str, returncode: int = 0) -> Outcome:
     """Parse `knaif-cli run <skill> --dry-run`, plus the plan it dumped under `$KNAIF_DUMP_PLAN`."""
-    out = _parse_python_body(stdout, stderr)
+    out = _failed(_parse_python_body(stdout, stderr), stderr, returncode)
     out.dumped_plan = _dumped_plan(stderr)
-    return out
+    return _with_dumped_argvs(out, stderr)
 
 
 # ── row loading ───────────────────────────────────────────────────────────────
@@ -466,7 +553,7 @@ def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Pa
         "--dry-run",
         "--model",
         str(model_path),
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv,
@@ -477,7 +564,7 @@ def run_native(native_bin: Path, skill: str, model_path: Path, utt: str, cwd: Pa
         errors="replace",
         env=_native_env(),
     )
-    return parse_native(proc.stdout, proc.stderr)
+    return parse_native(proc.stdout, proc.stderr, proc.returncode)
 
 
 def parse_plan_json(stdout: str, stderr: str) -> Outcome:
@@ -632,7 +719,7 @@ def run_native_plan(native_bin: Path, skill: str, model_path: Path, utt: str, cw
         "--json",
         "--model",
         str(model_path),
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
@@ -651,7 +738,7 @@ def run_python_plan(skill: str, python_model: str, utt: str, cwd: Path) -> Outco
         "llama-cpp",
         "--model",
         python_model,
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace"
@@ -675,7 +762,7 @@ def run_python(skill: str, python_model: str, utt: str, cwd: Path) -> Outcome:
         "llama-cpp",
         "--model",
         python_model,
-        *utt.split(),
+        *utterance_argv(utt),
     ]
     proc = subprocess.run(
         argv,
@@ -686,7 +773,7 @@ def run_python(skill: str, python_model: str, utt: str, cwd: Path) -> Outcome:
         errors="replace",
         env={**os.environ, "KNAIF_DUMP_PLAN": "1"},  # the plan it ran; see `_native_env`
     )
-    return parse_python(proc.stdout, proc.stderr)
+    return parse_python(proc.stdout, proc.stderr, proc.returncode)
 
 
 def _resolve_python_model_path(python_model: str) -> Path | None:
@@ -968,6 +1055,34 @@ def compare(
     # limitation it was written for: every chain row would pass on its first command alone, and a
     # divergence in steps 2..n — precisely what the executor newly makes possible — would be
     # invisible. Chains now fall through to the same comparison as everything else.
+    # One side rendered only part of the plan (Python's dry-run stops at reverse_video's preview
+    # confirmation, native has none). With the same plan, the commands cannot be compared: not
+    # a port bug. With different plans it is still ordinary disagreement.
+    if native.partial or py.partial:
+        if (
+            native.dumped_plan
+            and py.dumped_plan
+            and _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
+        ):
+            # Only the steps BOTH rendered are compared; the rest cannot be. A step both
+            # rendered differently is still a port bug (Codex audit, 2026-09-28).
+            n = min(len(native.commands), len(py.commands))
+            both = tuple(_canon_argv(c, cwd) for c in native.commands[:n])
+            if both != tuple(_canon_argv(c, cwd) for c in py.commands[:n]):
+                return "port-bug", "same plan, different commands on the steps both rendered"
+            return "not-comparable", "same plan; one side's dry-run renders only part of it"
+        return "mismatch", f"native={native.kind} python={py.kind} (one side partial)"
+    # Neither side rendered a command (documents runs in-process), so the outcome says nothing
+    # about what was done: compare the plans both dumped. Counted as a match on the outcome alone,
+    # 133 of 143 4B documents rows never compared the plans (Codex audit, 2026-09-28).
+    if (
+        native.kind == "none"
+        and py.kind == "none"
+        and native.dumped_plan
+        and py.dumped_plan
+        and not _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
+    ):
+        return "mismatch", "no command on either side, different plans"
     if native.key(cwd) == py.key(cwd):
         # Equal actions, but flag when they only match after path normalization (native
         # emits relative paths, python absolute) so the representation gap stays visible.
@@ -979,13 +1094,16 @@ def compare(
     # Only decidable when both sides dumped the plan they ran; without it the row stays an
     # ordinary mismatch rather than being called a port bug on a guess.
     if (
-        native.kind == "commands"
-        and py.kind == "commands"
-        and native.dumped_plan
+        native.dumped_plan
         and py.dumped_plan
         and _plans_equivalent(native.dumped_plan, py.dumped_plan, cwd, tool_defaults)
     ):
-        return "port-bug", "same plan, different commands"
+        if native.kind == "commands" and py.kind == "commands":
+            return "port-bug", "same plan, different commands"
+        # Same plan, and one side asked, refused or failed where the other ran: a deterministic
+        # stage after the plan differs (R5c L3: Python's NL clarify gate had no native port, and
+        # four such rows were counted as model disagreement; Codex audit, 2026-09-28).
+        return "port-bug", f"same plan, different outcome (native={native.kind} python={py.kind})"
     # Both declined execution but chose different control tools (reject vs clarify): a softer
     # class than real command drift — usually a prompt/core-tool sync gap, not a wrong action.
     if native.kind in ("clarify", "reject") and py.kind in ("clarify", "reject"):
@@ -1015,7 +1133,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--python-model",
-        default="knaif-qwen3-4b-v1",
+        default="knaif-qwen3-4b-v2",
         help="models.yaml NAME python loads (carries json_mode/thinking options); "
         "must map to the same GGUF as --model-path.",
     )
@@ -1237,14 +1355,14 @@ def main() -> int:
                     "commands": native.commands,
                     "plan": native.plan,
                     "text": native.text,
-                    "raw": native.raw[:800],
+                    "raw": raw_excerpt(native.raw),
                 },
                 "python": {
                     "kind": py.kind,
                     "commands": py.commands,
                     "plan": py.plan,
                     "text": py.text,
-                    "raw": py.raw[:800],
+                    "raw": raw_excerpt(py.raw),
                 },
             }
         )
@@ -1329,25 +1447,28 @@ def main() -> int:
             / f"parity_{args.skill}_{args.mode}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json"
         )
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Committed evidence in a public repo: rendered commands carry absolute fixture paths, so the
+    # checkout and home directory become <repo> and ~ (AGENTS.md, Public Output Hygiene).
+    from knaif.evalsuite.redact import redact_local_paths
+
+    report = {
+        "skill": args.skill,
+        "mode": args.mode,
+        "model": str(args.model_path),
+        "counts": counts,
+        "total": total,
+        "elapsed_s": round(elapsed, 1),
+        "rows": results,
+    }
     out.write_text(
-        json.dumps(
-            {
-                "skill": args.skill,
-                "mode": args.mode,
-                "model": str(args.model_path),
-                "counts": counts,
-                "total": total,
-                "elapsed_s": round(elapsed, 1),
-                "rows": results,
-            },
-            indent=2,
-            ensure_ascii=False,
-        ),
+        json.dumps(redact_local_paths(report, root=REPO_ROOT), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
     print(f"  report                  : {out}")
     if run_dir is not None:
-        meta = build_meta(args, rows, entry_points, counts, rate, verdict)
+        meta = redact_local_paths(
+            build_meta(args, rows, entry_points, counts, rate, verdict), root=REPO_ROOT
+        )
         (run_dir / "meta.json").write_text(
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )

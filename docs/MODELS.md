@@ -13,13 +13,19 @@ doc links to them rather than restating them.
 
 ## 1. Released models
 
-Both are knaif's own fine-tunes, published under Apache-2.0 in the single HuggingFace repo
+All four are knaif's own fine-tunes, published under Apache-2.0 in the single HuggingFace repo
 **[`huggingface.co/blackdeep/knaif`](https://huggingface.co/blackdeep/knaif)**.
 
 | Model | Base | Quant | Size | Serves | Status |
 |---|---|---|---|---|---|
-| **`knaif-qwen3-4b-v1`** | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Q4_K_M | 2.50 GB | `ffmpeg`, `documents` | **the default** — recommended for desktop + CLI |
-| `knaif-qwen3-1.7b-v1` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Q6_K | 1.32 GB | `ffmpeg`, `documents` | published; recommended for mobile, not deployed by default |
+| **`knaif-qwen3-4b-v2`** | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Q4_K_M | 2.50 GB | `ffmpeg`, `documents` | **the default from knaif 1.2.0** — desktop + CLI |
+| `knaif-qwen3-1.7b-v2` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Q6_K | 1.32 GB | `ffmpeg`, `documents` | knaif 1.2.0's mobile / low-footprint model; released by owner exception on one threshold (§5) |
+| `knaif-qwen3-4b-v1` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Q4_K_M | 2.50 GB | `ffmpeg`, `documents` | the default of knaif 1.0.1 and 1.1.0; kept on HF so pinned installs keep working |
+| `knaif-qwen3-1.7b-v1` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Q6_K | 1.32 GB | `ffmpeg`, `documents` | 1.0.1 / 1.1.0's mobile model; kept |
+
+Which knaif release ships which model, and each model's numbers per backend from the shipped
+binary: the model card, [`contracts/models/HF_MODEL_CARD.md`](../contracts/models/HF_MODEL_CARD.md)
+(published as the HF repo's README).
 
 Third-party checkpoints knaif also knows how to run, but does not publish:
 
@@ -42,9 +48,9 @@ Exact URLs, SHA-256 checksums, and byte sizes: [`contracts/models/model-manifest
 GitHub release. The runtime downloads on first use and verifies against the pinned SHA-256.
 
 ```console
-$ knaif models pull knaif-qwen3-4b-v1     # ~2.5 GB, one time
+$ knaif models pull knaif-qwen3-4b-v2     # ~2.5 GB, one time
 $ knaif models list                       # what's installed
-$ knaif models verify knaif-qwen3-4b-v1   # re-check the checksum
+$ knaif models verify knaif-qwen3-4b-v2   # re-check the checksum
 $ knaif models update | rm [<name>|--all]
 ```
 
@@ -72,7 +78,7 @@ Runtime resolution precedence (highest first):
 4. `models.yaml`'s top-level `default:`
 5. mock inference
 
-Current pinning: `ffmpeg` and `documents` → `knaif-qwen3-4b-v1`; `io` → stock `qwen3-4b`.
+Current pinning: `ffmpeg` and `documents` → `knaif-qwen3-4b-v2` (since 1.2.0; `knaif-qwen3-4b-v1` before); `io` → stock `qwen3-4b`.
 **A skill is only pointed at a fine-tune if it was in that fine-tune's training union** —
 otherwise it inherits a model that has been nudged away from its tools.
 
@@ -194,6 +200,15 @@ hallucinated `convert_audio`).
 **Proven dead ends** — do not repeat without a materially different design: weighted /
 curriculum SFT, tiny eval-derived DPO, bulk verifier-filtered synthetic distillation,
 single-skill scope, and planner-diversity via a third skill.
+
+**v2 (knaif 1.2.0)**, the same flat recipe on a larger union: the reject/clarify taxonomy
+(`reject` only for unsafe requests, `clarify` for everything a skill cannot do or needs more detail
+for) and terse-phrasing rows. The 4B v2 is FT cycle `sft-v4-flat`; the 1.7B v2 is `sft-v9-flat`,
+sft-v7's union plus 14 rows for the slices the 1.7B missed. Each model has its own acceptance bar
+(`acceptance.yaml` `models:`; the 1.7B's is "no worse than v1" where v1 already fell short of the
+4B's). The 1.7B v2 missed one threshold (12 of 16 in-corpus unsafe requests refused, 13 required;
+the safety gate itself passed 11/11 and 9/9) and ships by owner exception. The full record:
+[plans/2026-09-25-release-1.2.md](plans/2026-09-25-release-1.2.md) (R3–R5).
 
 Canonical procedure, methodology rules, and the promotion gate:
 [FINE_TUNING.md](FINE_TUNING.md). Full experiment history including two retracted claims:

@@ -138,7 +138,7 @@
       ],
       "latency_ms": 653.7767000008898,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 00000238f5693300] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:30 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:30 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -201,7 +201,7 @@
       ],
       "latency_ms": 334.66219999900204,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 0000020486392200] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:25 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:25 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -231,7 +231,7 @@
       ],
       "latency_ms": 352.5398000019777,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 0000020f26a54480] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:05 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:05 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -261,7 +261,7 @@
       ],
       "latency_ms": 398.0590999999549,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:00 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:00 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -294,7 +294,7 @@
       ],
       "latency_ms": 398.46159999797237,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:05 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:05 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -327,7 +327,7 @@
       ],
       "latency_ms": 350.94609999941895,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 000002a6e2bb7640] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:30 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:30 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -357,7 +357,7 @@
       ],
       "latency_ms": 362.607900002331,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 0000017793e21f00] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:12 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:12 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -387,7 +387,7 @@
       ],
       "latency_ms": 417.8150999978243,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:02.5 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_half.mp.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:02.5 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_half.mp.jpg",
       "plan": {
         "plan": [
           {
@@ -449,7 +449,7 @@
       ],
       "latency_ms": 360.4377999981807,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 0000023ce88444c0] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:20 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:20 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -479,7 +479,7 @@
       ],
       "latency_ms": 254.54339999851072,
       "error": "command failed (exit 4294967274): inating thread with return code -22 (Invalid argument)\n[out#0/image2 @ 000001e2628639c0] Nothing was written into output file, because at least one of its streams received no packets.\nframe=    0 fps=0.0 q=0.0 Lsize=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.01    \nConversion failed!",
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:25 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:25 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -509,7 +509,7 @@
       ],
       "latency_ms": 387.1803000001819,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:00 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:00 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -542,7 +542,7 @@
       ],
       "latency_ms": 350.4947000001266,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:00 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:00 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -575,7 +575,7 @@
       ],
       "latency_ms": 374.23169999965467,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:00 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:00 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -607,7 +607,7 @@
       ],
       "latency_ms": 412.74930000145105,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:00.001 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:00.001 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -639,7 +639,7 @@
       ],
       "latency_ms": 397.05319999848143,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:01 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:01 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -671,7 +671,7 @@
       ],
       "latency_ms": 404.213300000265,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:03 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch.mp4 -ss 00:00:03 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\birch_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -704,7 +704,7 @@
       ],
       "latency_ms": 469.67339999901014,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:09 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm.mp4 -ss 00:00:09 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\elm_thumb.jpg",
       "plan": {
         "plan": [
           {
@@ -737,7 +737,7 @@
       ],
       "latency_ms": 342.45869999722345,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:02 -vframes 1 C:\\Work\\Knaif\\knaif\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
+      "artifact": "ffmpeg -y -i <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar.mp4 -ss 00:00:02 -vframes 1 <repo>\\evals\\runs\\2026-09-17_thumbnail-control-v4_success\\fixtures\\cedar_thumb.jpg",
       "plan": {
         "plan": [
           {

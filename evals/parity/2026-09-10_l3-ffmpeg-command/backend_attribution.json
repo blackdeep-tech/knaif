@@ -56,7 +56,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -69,7 +69,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -129,7 +129,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -146,7 +146,7 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_compressed.mp4"
         ]
       ]
     },
@@ -186,12 +186,12 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-ss",
           "00:00:01",
           "-vframes",
           "1",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/poster.jpg"
+          "<repo>/sandbox/fixtures/ffmpeg/poster.jpg"
         ]
       ]
     },
@@ -231,56 +231,56 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip2_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_converted.mp4"
         ]
       ]
     },
@@ -336,7 +336,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -349,7 +349,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -405,7 +405,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -418,7 +418,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -482,7 +482,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "scale=1280:720",
           "-c:v",
@@ -499,7 +499,7 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
         ]
       ]
     },
@@ -555,7 +555,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -568,7 +568,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -584,7 +584,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -601,16 +601,16 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_small.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_small.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_small.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_small.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_small_converted.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_small_converted.mkv"
         ]
       ]
     },
@@ -734,7 +734,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -751,7 +751,7 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_compressed.mp4"
         ]
       ]
     },
@@ -787,46 +787,46 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mkv"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2_converted.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip2_converted.mkv"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_converted.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_converted.mkv"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_converted.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_converted.mkv"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_converted.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_converted.mkv"
         ]
       ]
     },
@@ -842,7 +842,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "scale=-2:2160",
           "-c:v",
@@ -857,7 +857,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_resized.mp4"
         ]
       ]
     },
@@ -923,7 +923,7 @@
           "-ss",
           "00:00:03",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-to",
           "00:00:06",
           "-c:v",
@@ -940,7 +940,7 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
         ]
       ]
     },
@@ -982,13 +982,13 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio.mp3",
+          "<repo>/sandbox/fixtures/ffmpeg/audio.mp3",
           "-vn",
           "-c:a",
           "libmp3lame",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio_audio.mp3"
+          "<repo>/sandbox/fixtures/ffmpeg/audio_audio.mp3"
         ]
       ]
     },
@@ -1094,7 +1094,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -1109,7 +1109,7 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_small.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_small.mp4"
         ]
       ]
     },
@@ -1211,16 +1211,16 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-c",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mkv"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mkv"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mkv",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mkv",
           "-vf",
           "scale=-2:1080",
           "-c:v",
@@ -1235,7 +1235,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_resized.mp4"
         ]
       ]
     },
@@ -1351,7 +1351,7 @@
           "-ss",
           "00:00:00",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-to",
           "00:00:02",
           "-c:v",
@@ -1368,7 +1368,7 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
         ]
       ]
     },
@@ -1489,7 +1489,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -1504,7 +1504,7 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_1080p.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_1080p.mp4"
         ]
       ]
     },
@@ -1568,24 +1568,24 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mov",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
           "-vn",
           "-c:a",
           "libmp3lame",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp3"
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp3"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp3",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp3",
           "-af",
           "volume=1.0",
           "-c:a",
           "libmp3lame",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_vol.mp3"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_vol.mp3"
         ]
       ]
     },
@@ -1667,62 +1667,62 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/output.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/output.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/output.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/output.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/output.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/output.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -1737,7 +1737,7 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/output_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/output_compressed.mp4"
         ]
       ]
     },
@@ -1777,7 +1777,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -1790,7 +1790,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -1806,13 +1806,13 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-vn",
           "-c:a",
           "aac",
           "-b:a",
           "500k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2_audio.aac"
+          "<repo>/sandbox/fixtures/ffmpeg/clip2_audio.aac"
         ]
       ]
     },
@@ -1848,7 +1848,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx265",
           "-crf",
@@ -1861,7 +1861,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -1919,12 +1919,12 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-ss",
           "00:00:15",
           "-vframes",
           "1",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_thumb.jpg"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_thumb.jpg"
         ]
       ]
     },
@@ -1968,14 +1968,14 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-af",
           "loudnorm",
           "-c:v",
           "copy",
           "-c:a",
           "aac",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_vol.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_vol.mp4"
         ]
       ]
     },
@@ -2053,7 +2053,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
@@ -2062,13 +2062,13 @@
           "libopus",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.webm"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
@@ -2077,13 +2077,13 @@
           "libopus",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip2_converted.webm"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
@@ -2092,13 +2092,13 @@
           "libopus",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_converted.webm"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
@@ -2107,26 +2107,26 @@
           "libopus",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_converted.webm"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
           "yuv420p",
           "-c:a",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_converted.webm"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mov",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
@@ -2135,7 +2135,7 @@
           "libopus",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.webm"
         ]
       ]
     },
@@ -2210,7 +2210,7 @@
           "-ss",
           "00:00:02",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-to",
           "00:00:04",
           "-c:v",
@@ -2227,7 +2227,7 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_trimmed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_trimmed.mp4"
         ]
       ]
     },
@@ -2267,12 +2267,12 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mov",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
           "-c",
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ]
       ]
     },
@@ -2356,19 +2356,19 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vn",
           "-c:a",
           "libmp3lame",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio.mp3"
+          "<repo>/sandbox/fixtures/ffmpeg/audio.mp3"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio.mp3",
+          "<repo>/sandbox/fixtures/ffmpeg/audio.mp3",
           "-vf",
           "setpts=1.25*PTS",
           "-af",
@@ -2383,7 +2383,7 @@
           "aac",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio_speed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/audio_speed.mp4"
         ]
       ]
     },
@@ -2461,7 +2461,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-c:v",
           "libx265",
           "-pix_fmt",
@@ -2470,13 +2470,13 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-c:v",
           "libx265",
           "-pix_fmt",
@@ -2485,13 +2485,13 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip2_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-c:v",
           "libx265",
           "-pix_fmt",
@@ -2500,13 +2500,13 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-c:v",
           "libx265",
           "-pix_fmt",
@@ -2515,13 +2515,13 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_converted.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-c:v",
           "libx265",
           "-pix_fmt",
@@ -2530,7 +2530,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_converted.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_converted.mp4"
         ]
       ]
     },
@@ -2553,7 +2553,7 @@
           "[outv]",
           "-map",
           "[outa]",
-          "C://Work//Knaif//knaif//sandbox//fixtures//ffmpeg//combined.mp4"
+          "<repo>//sandbox//fixtures//ffmpeg//combined.mp4"
         ]
       ],
       "native_cpu": [
@@ -2570,7 +2570,7 @@
           "[outv]",
           "-map",
           "[outa]",
-          "C://Work//Knaif//knaif//sandbox//fixtures//ffmpeg//combined.mp4"
+          "<repo>//sandbox//fixtures//ffmpeg//combined.mp4"
         ]
       ],
       "python": [
@@ -2587,7 +2587,7 @@
           "[outv]",
           "-map",
           "[outa]",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/combined.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/combined.mp4"
         ]
       ]
     },
@@ -2603,7 +2603,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/.cache.json",
+          "<repo>/sandbox/fixtures/ffmpeg/.cache.json",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2620,13 +2620,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/.cache_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/.cache_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio.mp3",
+          "<repo>/sandbox/fixtures/ffmpeg/audio.mp3",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2643,13 +2643,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/audio_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/audio_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mov",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2666,13 +2666,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2689,13 +2689,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2712,13 +2712,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip2_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip2_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2735,13 +2735,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2758,13 +2758,13 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_ctr_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_ctr_compressed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-vf",
           "scale=854:480",
           "-c:v",
@@ -2781,7 +2781,7 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_compressed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_compressed.mp4"
         ]
       ]
     },
@@ -2875,7 +2875,7 @@
           "-ss",
           "00:00:03",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-to",
           "00:00:05",
           "-c:v",
@@ -2892,19 +2892,19 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
           "-vn",
           "-c:a",
           "libmp3lame",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed_audio.mp3"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed_audio.mp3"
         ]
       ]
     },
@@ -3004,7 +3004,7 @@
           "-ss",
           "00:00:00",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k",
           "-to",
           "00:00:02",
           "-c:v",
@@ -3021,13 +3021,13 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_2s.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_2s.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_2s.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_2s.mp4",
           "-c:v",
           "libvpx-vp9",
           "-pix_fmt",
@@ -3036,7 +3036,7 @@
           "libopus",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_4k_2s_converted.webm"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_4k_2s_converted.webm"
         ]
       ]
     },
@@ -3085,17 +3085,17 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-an",
           "-c:v",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
           "-vf",
           "setpts=0.5*PTS",
           "-af",
@@ -3110,7 +3110,7 @@
           "aac",
           "-b:a",
           "128k",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_no_audio_speed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_speed.mp4"
         ]
       ]
     },
@@ -3264,7 +3264,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "crop=min(iw/,ih*1/1):min(ih/,iw*1/1)",
           "-c:v",
@@ -3279,7 +3279,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_resized.mp4"
         ]
       ]
     },
@@ -3339,7 +3339,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "crop=min(iw/,ih*9/16):min(ih/,iw*16/9)",
           "-c:v",
@@ -3354,7 +3354,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_resized.mp4"
         ]
       ]
     },
@@ -3414,7 +3414,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "scale=1080:1920",
           "-c:v",
@@ -3429,7 +3429,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_resized.mp4"
         ]
       ]
     },
@@ -3489,7 +3489,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "scale=1080:1080",
           "-c:v",
@@ -3504,7 +3504,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_resized.mp4"
         ]
       ]
     },
@@ -3568,7 +3568,7 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-vf",
           "crop=min(iw/,ih*4/5):min(ih/,iw*5/4)",
           "-c:v",
@@ -3583,7 +3583,7 @@
           "copy",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_resized.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_resized.mp4"
         ]
       ]
     },
@@ -3715,7 +3715,7 @@
           "-ss",
           "00:00:00",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-to",
           "00:00:04",
           "-c:v",
@@ -3732,13 +3732,13 @@
           "128k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
           "-c:v",
           "libx264",
           "-crf",
@@ -3753,17 +3753,17 @@
           "96k",
           "-movflags",
           "+faststart",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed-chained.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed-chained.mp4"
         ],
         [
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed-chained.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed-chained.mp4",
           "-an",
           "-c:v",
           "copy",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_trimmed-chained_silent.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed-chained_silent.mp4"
         ]
       ]
     },
@@ -3846,14 +3846,14 @@
           "ffmpeg",
           "-y",
           "-i",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip.mp4",
+          "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
           "-af",
           "loudnorm",
           "-c:v",
           "copy",
           "-c:a",
           "aac",
-          "C:/Work/Knaif/knaif/sandbox/fixtures/ffmpeg/clip_vol.mp4"
+          "<repo>/sandbox/fixtures/ffmpeg/clip_vol.mp4"
         ]
       ]
     }

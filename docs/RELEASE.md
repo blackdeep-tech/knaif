@@ -270,6 +270,26 @@ tree comes from the MSVC v14x **build tools** component in the VS Installer, not
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
   not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
 
+### Windows binaries must not carry the builder's home directory
+
+Rust embeds source paths as panic locations and C/C++/CUDA embed them through `__FILE__`, so every
+crate built out of the cargo registry carries `C:\Users\<name>\.cargo\registry\...` into the binary.
+The 1.1.0 Windows artifacts shipped about 1,200 of these strings, which name whoever built the
+release. The Linux artifacts, built in a container, carry none.
+
+`scripts/build_native_kind.sh` remaps the cargo home and the checkout on Windows
+(`scripts/path_hygiene.sh`: `--remap-path-prefix` for Rust, `/d1trimfile:` for cl and, through
+`-Xcompiler`, for nvcc), and `package.sh` refuses to package a tree that still contains the home
+directory (`scripts/check_no_local_paths.py`). Two consequences:
+
+- **Build with the script, not a bare `cargo build`**, or the guard fails the packaging step.
+- **The C flags reach CMake only on a fresh configure.** After first adopting them (or changing
+  them), clean the llama.cpp build once: `cargo clean -p llama-cpp-sys-2 --profile release-<kind>`.
+
+One build-directory path remains: llama.cpp compiles in its backend search folder
+(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`). It names the checkout's location,
+not a person.
+
 ### A Windows CUDA build takes about an hour, and shows nothing while it does
 
 Measured 2026-07-30: **54 minutes**, on 16 CPUs / 15.4 GB with `CARGO_BUILD_JOBS=4` and the default
@@ -378,7 +398,7 @@ something someone remembers.
 
 ```bash
 # L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
-KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v1-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
+KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v2-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
 
 # L4 — the shipped path: the binary executing for real, graded on the files it produces.
 just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
@@ -407,11 +427,14 @@ a valid verdict, so run L4 and safety once per model per full entry. For the rel
 pass the packaged binary, so the gate checks that the records measured *it*:
 
 ```bash
-uv run python -m knaif.evalsuite gate --native-bin <unpacked artifact>/knaif[.exe]
+uv run python -m knaif.evalsuite gate \
+  --native-bin <unpacked windows zip>/bin/knaif.exe --native-bin <unpacked linux tarball>/bin/knaif
 ```
 
-Without `--native-bin` the gate prints "not checked here: native_binary" for every record
-instead of comparing.
+Pass one binary per OS the release ships: the gate recognises each as Windows or Linux from its
+header and checks every `model|os|backend` cell against its own OS's binary (an L3 cell, keyed by
+model only, against whichever given binary it recorded). A cell whose OS has no binary given, or a
+gate run without `--native-bin`, prints "not checked here: native_binary" instead of comparing.
 
 **L4 runs the packaged layout.** The lane's `binary:` must be the executable inside the unpacked
 artifact, with PDFium beside it. `eval-native` and `eval-safety-native` refuse a binary without
@@ -441,6 +464,30 @@ product:
   right.
 - **Read L3's rate as symmetric disagreement, not a native score.** It says nothing about which
   side is correct; native has been the better answer on real rows.
+
+**A rebuild after acceptance.** Every L3/L4 cell pins the native source, the skill bundle and the
+measured binary, so any fix after acceptance stales them. Re-measure, or — owner's decision —
+carry the results over with `evalsuite equivalence`, which maps the measured values to the new
+ones in `evals/acceptance/equivalences.json` and makes the gate print `[equivalent: <id>]`:
+
+```bash
+# a text fix: the native source differs only by the declared replacements, inside strings/comments
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --replace OLD=NEW \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
+# a code change: vouched for by a committed, pre-registered sample run (gate says "(sampled)")
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sample-run evals/runs/<dir> \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --new-artifact <the zip/tarball the run tested> \
+  --reason "..." --verified "..."
+```
+
+`--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
+entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
+and otherwise only the skill's native sources did. Its run must be committed, its `run.sh` in an
+earlier commit than its `verdicts.txt` (pre-registered), every OS and skill `VERDICT: equivalent on
+the sample` exactly once, each stage one START then DONE; binaries must cover every OS a cell was
+measured on, and each `--new-bin` must be the executable inside an artifact whose sha256 the run
+recorded. The gate re-checks the run on every read. 1.2.0: RC2 (text) and RC3 (sampled,
+supporting-tool lookup).
 
 ### Testing the Windows installer without damaging a real install
 

@@ -229,7 +229,19 @@ def score_corpus(
         )
 
     _mark_warmup(scored_rows)
+    return aggregate_scored_rows(scored_rows, intent_rows, verifier_name)
 
+
+def aggregate_scored_rows(
+    scored_rows: list[dict[str, Any]],
+    intent_rows: list[dict[str, Any]],
+    verifier_name: str,
+) -> dict[str, Any]:
+    """The scoreboard for already-scored rows: aggregates, per-tag slices, coverage.
+
+    Split out of `score_corpus` so a composed L4 cell (`evalsuite.compose`) is aggregated by the
+    very code that aggregates a measured run, rather than by a second copy that could drift.
+    """
     n = len(scored_rows)
     outcome_acc = sum(1 for r in scored_rows if r["outcome_correct"]) / n if n else 0.0
 

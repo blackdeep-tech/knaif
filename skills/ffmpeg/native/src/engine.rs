@@ -306,9 +306,12 @@ fn normalize_trim(
             });
         }
         if !matches!(end_s, Some(b) if b > 0.0) {
+            // A span only when `end` is itself an offset from the end (-10 -> -5 is a 5s window).
+            // `end` 0 means "to the end": no `-t`, as Python renders it. Computing 0 - (-2) = 2
+            // here added a `-t 2` Python never emits (L3 2026-09-27, ffmpeg_209).
             let length = if matches!(duration_s, Some(d) if d > 0.0) {
                 duration
-            } else if let (Some(a), Some(b)) = (start_s, end_s) {
+            } else if let (Some(a), Some(b)) = (start_s, end_s.filter(|b| *b < 0.0)) {
                 let span = b - a;
                 if span > 0.0 {
                     Some(format_seconds(span))

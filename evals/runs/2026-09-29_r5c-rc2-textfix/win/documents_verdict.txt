@@ -1,0 +1,2 @@
+sample 10: 10 identical, 0 different
+VERDICT: equivalent on the sample

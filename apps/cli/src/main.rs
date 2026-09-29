@@ -161,7 +161,7 @@ struct RunArgs {
     /// recommended model without prompting when none is given or installed.
     #[arg(long)]
     yes: bool,
-    /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v1`) or a GGUF file
+    /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
     /// back to the mock (drive it offline with `KNAIF_LLM_MOCK_RESPONSE`). Last one wins.
@@ -731,7 +731,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if request.trim().is_empty() {
         anyhow::bail!(
             "no request given. Usage: just native {0} \"<what to do>\" [--model <name|path>]\n  \
-             e.g. just native {0} \"compress clip.mp4 for email\" --model knaif-qwen3-4b-v1",
+             e.g. just native {0} \"compress clip.mp4 for email\" --model knaif-qwen3-4b-v2",
             args.skill
         );
     }
@@ -1026,13 +1026,17 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
-        ),
+        )
+        .map(|()| StepOutcome::Continue),
         _ => unreachable!("skill guarded above"),
-    }?;
-    Ok(StepOutcome::Continue)
+    }
 }
 
 /// ffmpeg dispatch: expand the intent → dry-run preview or confirmed subprocess execution.
+///
+/// An expansion that needs a clarify (an unknown platform) ends the plan, as a `clarify` step
+/// does: Python's executor stops at the first clarify leaf. Native used to print the question
+/// and run on, so a later step acted on a file this one never produced (R5c L3, `ffmpeg_136`).
 fn run_ffmpeg_step(
     bundle: &Path,
     tool: &str,
@@ -1040,7 +1044,7 @@ fn run_ffmpeg_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<StepOutcome> {
     let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
     let expansion = if dry_run {
@@ -1052,12 +1056,18 @@ fn run_ffmpeg_step(
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
             println!("clarify: {q}");
-            return Ok(());
+            return Ok(StepOutcome::ShortCircuit);
         }
     };
     if commands.is_empty() {
         println!("Nothing to do.");
-        return Ok(());
+        return Ok(StepOutcome::Continue);
+    }
+    let dump = plan_dump_enabled();
+    for cmd in &commands {
+        if let Some(msg) = argv_dump(dump, cmd) {
+            eprintln!("{msg}");
+        }
     }
 
     // Dry-run: print the copy-pasteable command line(s) and stop — no side effects.
@@ -1065,7 +1075,7 @@ fn run_ffmpeg_step(
         for cmd in &commands {
             println!("{}", shell_join(cmd));
         }
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
 
     // Execution: every ffmpeg intent is `safety_category: destructive`, so it needs explicit
@@ -1073,7 +1083,7 @@ fn run_ffmpeg_step(
     let previews: Vec<String> = commands.iter().map(|c| shell_join(c)).collect();
     if !confirm_action(yes, &previews, "ffmpeg command")? {
         println!("Aborted (no changes made).");
-        return Ok(());
+        return Ok(StepOutcome::Continue);
     }
 
     let mut failures = 0;
@@ -1116,7 +1126,7 @@ fn run_ffmpeg_step(
     if failures > 0 {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
-    Ok(())
+    Ok(StepOutcome::Continue)
 }
 
 /// documents dispatch: safe read tools print their result; destructive write tools preview the
@@ -1290,7 +1300,7 @@ fn build_plan(
     model: Option<&Path>,
     verbose: bool,
 ) -> anyhow::Result<serde_json::Value> {
-    PlanSession::new(root, skill, model, verbose)?.plan(utterance, base, sandbox)
+    PlanSession::new(root, skill, model, verbose)?.plan_for_run(utterance, base, sandbox)
 }
 
 /// A loaded planning session: the expensive per-run setup (skill registry, prompt overrides, and
@@ -1428,6 +1438,31 @@ impl PlanSession {
         let gated = resolve_plan_stems(gated, sandbox.unwrap_or(base));
         emit_plan_dump(plan_dump_enabled(), &gated);
         Ok(gated)
+    }
+
+    /// [`Self::plan`], then the NL clarify gate: the plan `run` executes. Python runs that gate
+    /// in `execute_plan` right after `resolve_stems`, so it asks when the user never named an
+    /// input the plan uses ("reverse the mov file" -> inputs ["mov"]) or when a grounded arg such
+    /// as a password was invented. Without it native ran such plans and failed with "input not
+    /// found" where Python asked (R5c L3, 2026-09-28).
+    ///
+    /// Execution only, as in Python, whose `plan` command stops at `infer` and never applies it
+    /// (Codex audit, 2026-09-28): `plan` / `plan --batch` keep returning the ungated plan. And
+    /// after the plan dump, since Python dumps before `execute_plan`: the dumped plans stay
+    /// comparable across runtimes (L3's "same plan") and across builds (R5c T9a), and a gate
+    /// that fires shows as the run's clarify outcome.
+    fn plan_for_run(
+        &self,
+        utterance: &str,
+        base: &Path,
+        sandbox: Option<&Path>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let planned = self.plan(utterance, base, sandbox)?;
+        Ok(knaif_core::nl_clarify_gate(
+            planned,
+            utterance,
+            &self.registry,
+        ))
     }
 }
 
@@ -1569,6 +1604,22 @@ fn plan_dump(enabled: bool, payload: &serde_json::Value) -> Option<String> {
     Some(format!(
         "{PLAN_DUMP_MARKER}{}",
         serde_json::to_string(payload).unwrap_or_else(|_| "{}".to_string())
+    ))
+}
+
+/// Marker for [`argv_dump`]: one line per rendered ffmpeg command, the exact argv as JSON.
+const ARGV_DUMP_MARKER: &str = "===KNAIF-ARGV===";
+
+/// One line: the marker, then the argv as a JSON array. Gated with the plan dump. L3 compares it
+/// instead of the display line, which cannot carry every argv once re-split (a space in a
+/// filename, a filter's `\,`). Pure, so testable without process env.
+fn argv_dump(enabled: bool, argv: &[String]) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    Some(format!(
+        "{ARGV_DUMP_MARKER}{}",
+        serde_json::to_string(argv).unwrap_or_else(|_| "[]".to_string())
     ))
 }
 
@@ -2612,6 +2663,31 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(rest).expect("parses"),
             payload
+        );
+    }
+
+    #[test]
+    fn argv_dump_carries_the_exact_argv_on_one_line() {
+        // L3 compares this, not the display line: `shell_join` quotes for a shell, Python quotes
+        // nothing, and neither round-trips a space or a filter escape once re-split.
+        let argv: Vec<String> = [
+            "ffmpeg",
+            "-i",
+            "silent clip.mp4",
+            "-vf",
+            r"crop=trunc(min(iw\,ih*1/1)/2)*2",
+            "out.mp4",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert!(argv_dump(false, &argv).is_none(), "disabled → nothing");
+        let msg = argv_dump(true, &argv).expect("enabled → Some");
+        assert!(!msg.contains('\n'), "one line: {msg}");
+        let rest = msg.strip_prefix(ARGV_DUMP_MARKER).expect("marker prefix");
+        assert_eq!(
+            serde_json::from_str::<Vec<String>>(rest).expect("parses"),
+            argv
         );
     }
 

@@ -1,0 +1,12 @@
+== win ffmpeg
+sample 20: 20 identical, 0 different
+VERDICT: equivalent on the sample
+== win documents
+sample 40: 40 identical, 0 different
+VERDICT: equivalent on the sample
+== linux ffmpeg
+sample 20: 20 identical, 0 different
+VERDICT: equivalent on the sample
+== linux documents
+sample 40: 40 identical, 0 different
+VERDICT: equivalent on the sample

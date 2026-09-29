@@ -661,6 +661,47 @@
           "clip_trimmed.mp4"
         ]
       ]
+    },
+    {
+      "name": "trim_the_last_two_seconds_with_end_zero",
+      "_comment": "'cut just the end 2 seconds' plans start=-00:00:02, end=00:00:00. A from-end start with end 0 runs to the end of the input: `-sseof -2` and no `-t`. Native added `-t 2` here (L3 2026-09-27, ffmpeg_209); same output, different argv.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "start": "-00:00:02",
+              "end": "00:00:00"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-sseof",
+          "-2",
+          "-i",
+          "clip.mp4",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_trimmed.mp4"
+        ]
+      ]
     }
   ]
 }

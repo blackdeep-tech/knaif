@@ -58,9 +58,9 @@ A keyword fix is an afternoon. A training cycle is days, and it cannot fix this.
 
 | Lane | Model | Serves |
 |---|---|---|
-| Shared default | `knaif-qwen3-4b-v1` (Q4_K_M, 2.5 GB) | ffmpeg + documents |
+| Shared default | `knaif-qwen3-4b-v2` (Q4_K_M, 2.5 GB) | ffmpeg + documents |
 | Untuned fallback | `qwen3-4b` | Skills not in training |
-| Quality-per-byte | `knaif-qwen3-1.7b-v1` (Q6_K, 1.32 GB) | Not deployed; ready if size matters |
+| Quality-per-byte | `knaif-qwen3-1.7b-v2` (Q6_K, 1.32 GB) | The footprint model since knaif 1.2.0; not the desktop default |
 
 Skills that were not part of a training run stay on the untuned model. That is deliberate —
 a tune is only ever pointed at the skills it was trained on.

@@ -11,12 +11,12 @@
     "sha256": "df4295c631a358849b6949594da3b2abf52bb303895b8b4c3e979820b77d0469"
   },
   "model": {
-    "path": "C:\\Users\\statu\\.knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
+    "path": "~\\.knaif\\models\\knaif-qwen3-4b-v1-q4_k_m.gguf",
     "sha256": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014",
     "bytes": 2497280960
   },
   "binary": {
-    "path": "C:\\Work\\Knaif\\knaif\\target\\release\\knaif.exe",
+    "path": "<repo>\\target\\release\\knaif.exe",
     "sha256": "43ebaae1cd1c1ba818d72bd72b2c2d4f7263ad6c1449adfa2edb335a40c7cc33",
     "features": "llama,cuda,pdfium",
     "profile": "release",

@@ -75,18 +75,78 @@ def _scalar(value: Any) -> str:
     return json.dumps(value, sort_keys=True)
 
 
-def _step_key(step: dict[str, Any], *, with_files: bool) -> tuple:
+def _step_key(step: dict[str, Any], *, with_files: bool, fold: bool = False) -> tuple:
     tool = step.get("tool")
     if tool in PROSE_TOOLS:
         return (tool,)
     args = step.get("args") or {}
-    kept = sorted((k, _scalar(v)) for k, v in args.items() if with_files or k not in FILE_ARGS)
+    kept = sorted(
+        (k, _folded(k, v) if fold else _scalar(v))
+        for k, v in args.items()
+        if with_files or k not in FILE_ARGS
+    )
     return (tool, tuple(kept))
+
+
+# ── canonical level: spellings the engine renders identically ────────────────────────────
+
+#: Arguments holding an instant or a length of time.
+TIME_ARGS = frozenset({"start", "end", "at_time", "duration"})
+_ENCODERS: dict[str, str] | None = None
+
+
+def _encoders() -> dict[str, str]:
+    """ffmpeg's codec token -> encoder map, read from the engine's own vocabulary so the
+    measurement can never fold two spellings the engine would render differently."""
+    global _ENCODERS
+    if _ENCODERS is None:
+        import yaml
+
+        vocab = yaml.safe_load((REPO_ROOT / "skills/ffmpeg/vocab.yaml").read_text(encoding="utf-8"))
+        _ENCODERS = {
+            str(k).lower(): str(v) for k, v in (vocab.get("video_encoder_map") or {}).items()
+        }
+    return _ENCODERS
+
+
+def _seconds(value: Any) -> str | None:
+    """`0:00:03`, `00:00:03`, `3s`, `3000ms`, `3` -> "3"; anything else -> None."""
+    import re
+
+    s = str(value).strip().lower()
+    m = re.fullmatch(r"(-?)(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)", s)
+    if m:
+        total = int(m.group(2) or 0) * 3600 + int(m.group(3)) * 60 + float(m.group(4))
+        return _scalar(-total if m.group(1) else total)
+    m = re.fullmatch(r"(-?\d+(?:\.\d+)?)\s*(ms|s|sec|secs|seconds)?", s)
+    if m:
+        number = float(m.group(1)) / (1000 if m.group(2) == "ms" else 1)
+        return _scalar(number)
+    return None
+
+
+def _folded(key: str, value: Any) -> str:
+    if key == "video_codec" and isinstance(value, str):
+        encoder = _encoders().get(value.strip().lower())
+        if encoder:
+            return f"encoder:{encoder}"
+    if key in TIME_ARGS:
+        seconds = _seconds(value)
+        if seconds is not None:
+            return f"t:{seconds}"
+    return _scalar(value)
 
 
 def decision(plan: list[dict[str, Any]]) -> tuple:
     """What the model chose: tools and non-file arguments, order of steps kept."""
     return tuple(_step_key(s, with_files=False) for s in plan)
+
+
+def canonical(plan: list[dict[str, Any]]) -> tuple:
+    """A decision with the spellings the engine renders identically folded together: codec
+    tokens through `vocab.yaml`'s encoder map, times to seconds. A flip here is one a user could
+    see; a decision flip that is not one is a spelling."""
+    return tuple(_step_key(s, with_files=False, fold=True) for s in plan)
 
 
 def full(plan: list[dict[str, Any]]) -> tuple:
@@ -135,6 +195,7 @@ class Report:
     shared: int
     missing: int
     decision_flips: list[Key] = field(default_factory=list)
+    canonical_flips: list[Key] = field(default_factory=list)
     full_flips: list[Key] = field(default_factory=list)
     outcome_flips: list[Key] = field(default_factory=list)
     graded: int = 0
@@ -159,6 +220,8 @@ def compare(a: dict[Key, Result], b: dict[Key, Result]) -> Report:
         x, y = a[key], b[key]
         if decision(x.plan) != decision(y.plan):
             report.decision_flips.append(key)
+        if canonical(x.plan) != canonical(y.plan):
+            report.canonical_flips.append(key)
         if full(x.plan) != full(y.plan):
             report.full_flips.append(key)
         if x.correct is not None and y.correct is not None:
@@ -176,6 +239,11 @@ def _print_report(label: str, r: Report, a: dict[Key, Result], b: dict[Key, Resu
     print(f"{label}")
     print(f"  shared utterances  {r.shared}   (in only one run: {r.missing})")
     print(f"  decision flips     {len(r.decision_flips):>4}   {_pct(r.decision_rate)}")
+    print(
+        f"  canonical flips    {len(r.canonical_flips):>4}   "
+        f"{_pct(len(r.canonical_flips) / r.shared if r.shared else None)}"
+        "   (decision minus spellings the engine renders identically)"
+    )
     print(f"  full-plan flips    {len(r.full_flips):>4}   {_pct(r.full_rate)}")
     print(
         f"  outcome flips      {len(r.outcome_flips):>4}   {_pct(r.outcome_rate)}  of {r.graded} graded"
@@ -294,6 +362,7 @@ def _compare(args: argparse.Namespace) -> int:
                     "shared": report.shared,
                     "missing": report.missing,
                     "decision_flips": [f"{k[0]}#{k[1]}" for k in report.decision_flips],
+                    "canonical_flips": [f"{k[0]}#{k[1]}" for k in report.canonical_flips],
                     "full_flips": [f"{k[0]}#{k[1]}" for k in report.full_flips],
                     "outcome_flips": [f"{k[0]}#{k[1]}" for k in report.outcome_flips],
                     "graded": report.graded,

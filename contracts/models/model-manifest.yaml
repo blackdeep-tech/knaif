@@ -25,7 +25,9 @@
 #   url: https://huggingface.co/blackdeep/knaif/resolve/<commit-sha>/<file>
 # and fill `sha256` + `size_bytes` from the uploaded file (the publish script does both).
 # Both v1 models are PUBLISHED and live (verified 2026-07-16: anonymous 200, Content-Length ==
-# size_bytes). `url`/`sha256` read "TODO" only for a model that has not been uploaded yet; `pull`
+# size_bytes). Both v2 models are uploaded to the `staging-1.2.0` branch and pinned to its commits
+# (verified 2026-09-27: anonymous 200, size and sha256 match); `main` gets them at the 1.2.0
+# release. `url`/`sha256` read "TODO" only for a model that has not been uploaded yet; `pull`
 # refuses such a model and `verify` reports NoChecksum.
 #
 # NAMING & VERSIONS: the manifest key + `file` carry the PUBLIC RELEASE version (v1, v2, … — +1
@@ -60,8 +62,8 @@ models:
   knaif-qwen3-4b-v2:                                   # public release v2 (from FT cycle sft-v4)
     file: knaif-qwen3-4b-v2-q4_k_m.gguf
     training_run: sft-v4-flat                           # reject/clarify taxonomy + the v4 rows
-    url: TODO                                           # filled by scripts/publish_model.py
-    sha256: TODO                                        # filled by scripts/publish_model.py
+    url: "https://huggingface.co/blackdeep/knaif/resolve/107611504850e6d334034ab0898de23527c6ec32/knaif-qwen3-4b-v2-q4_k_m.gguf"
+    sha256: "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
     size_bytes: 2497280960
     license: Apache-2.0
     base_model: Qwen/Qwen3-4B
@@ -79,9 +81,20 @@ models:
     base_model_license: Apache-2.0
     skills: [ffmpeg, documents]
 
+  knaif-qwen3-1.7b-v2:                                 # public release v2 (from FT cycle sft-v9)
+    file: knaif-qwen3-1.7b-v2-q6_k.gguf
+    training_run: sft-v9-flat                           # sft-v7 union + 14 1.7B rows; owner exception at R5a
+    url: "https://huggingface.co/blackdeep/knaif/resolve/1936be4ca47d32f79d18eae7c49a3cd135ce337f/knaif-qwen3-1.7b-v2-q6_k.gguf"
+    sha256: "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5"
+    size_bytes: 1417754976
+    license: Apache-2.0
+    base_model: Qwen/Qwen3-1.7B
+    base_model_license: Apache-2.0
+    skills: [ffmpeg, documents]
+
 # Recommended defaults, not hard requirements (users may override by name or path).
 recommendations:
-  desktop: knaif-qwen3-4b-v1
-  cli: knaif-qwen3-4b-v1
-  mobile: knaif-qwen3-1.7b-v1
-  default: knaif-qwen3-4b-v1
+  desktop: knaif-qwen3-4b-v2
+  cli: knaif-qwen3-4b-v2
+  mobile: knaif-qwen3-1.7b-v2
+  default: knaif-qwen3-4b-v2

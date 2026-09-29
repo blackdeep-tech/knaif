@@ -1,11 +1,11 @@
 ---
 title: Released models
-description: The two Qwen3 fine-tunes knaif publishes on HuggingFace — what they are, how to get one, and which to point your app at.
+description: The Qwen3 fine-tunes knaif publishes on HuggingFace — what they are, how to get one, and which to point your app at.
 sidebar:
   order: 1
 ---
 
-knaif publishes **two fine-tunes of its own**, both Apache-2.0, both in a single
+knaif publishes **fine-tunes of its own**, all Apache-2.0, all in a single
 HuggingFace repo: **[huggingface.co/blackdeep/knaif](https://huggingface.co/blackdeep/knaif)**.
 
 They are trained to do one job — turn an utterance into
@@ -14,8 +14,13 @@ extraction**, not knowledge or style.
 
 | Model | Base | Quant | Size | Status |
 |---|---|---|---|---|
-| **`knaif-qwen3-4b-v1`** | [Qwen3-4B](https://huggingface.co/Qwen/Qwen3-4B) | Q4_K_M | 2.50 GB | **The default.** Recommended for desktop and CLI |
-| `knaif-qwen3-1.7b-v1` | [Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) | Q6_K | 1.32 GB | Published for footprint-constrained surfaces; not deployed by default |
+| **`knaif-qwen3-4b-v2`** | [Qwen3-4B](https://huggingface.co/Qwen/Qwen3-4B) | Q4_K_M | 2.50 GB | **The default from knaif 1.2.0.** Recommended for desktop and CLI |
+| `knaif-qwen3-1.7b-v2` | [Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) | Q6_K | 1.32 GB | knaif 1.2.0's model for footprint-constrained surfaces; not deployed by default |
+| `knaif-qwen3-4b-v1` | [Qwen3-4B](https://huggingface.co/Qwen/Qwen3-4B) | Q4_K_M | 2.50 GB | The default of knaif 1.0.1 and 1.1.0; kept so pinned installs keep working |
+| `knaif-qwen3-1.7b-v1` | [Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) | Q6_K | 1.32 GB | knaif 1.0.1 and 1.1.0's footprint model; kept |
+
+Which knaif release uses which model, and each model's numbers per backend from the shipped
+binary, are on the [model card](https://huggingface.co/blackdeep/knaif).
 
 Exact URLs, SHA-256 checksums and byte sizes live in
 [`contracts/models/model-manifest.yaml`](https://github.com/blackdeep-tech/knaif/blob/main/contracts/models/model-manifest.yaml).
@@ -29,9 +34,9 @@ third-party checkpoint that knaif knows how to run but does not publish.
 release. The runtime downloads on first use and verifies against the pinned checksum.
 
 ```console
-$ knaif models pull knaif-qwen3-4b-v1     # ~2.5 GB, one time
+$ knaif models pull knaif-qwen3-4b-v2     # ~2.5 GB, one time
 $ knaif models list                       # what's installed
-$ knaif models verify knaif-qwen3-4b-v1   # re-check the checksum
+$ knaif models verify knaif-qwen3-4b-v2   # re-check the checksum
 ```
 
 The native runtime keeps models in `~/.knaif/models`; the Python runtime reads GGUFs from
@@ -46,7 +51,7 @@ from knaif.orchestrator import InferenceOrchestrator
 
 orch = InferenceOrchestrator(
     backend="llama_cpp",
-    model_path="models/knaif-qwen3-4b-v1.gguf",
+    model_path="models/knaif-qwen3-4b-v2-q4_k_m.gguf",
 )
 ```
 
@@ -124,6 +129,15 @@ uses is separate and slightly lower on the hard slice (0.929 at the shipped Q4) 
 [snapshots](/evaluate/snapshots/). Rows tagged `hard` and `chain3`
 are held out of training entirely, so those numbers measure generalisation.
 
+**v2 (knaif 1.2.0)** keeps the flat recipe on a larger union: `reject` now means only "unsafe",
+`clarify` covers everything a skill cannot do or needs more detail for, and terse phrasings got
+their own rows. The 4B v2 (FT cycle `sft-v4-flat`) lifts ffmpeg from 0.921 to **0.943** and
+documents from 0.970 to **0.976** under the same grader; the 1.7B v2 (`sft-v9-flat`) lifts ffmpeg
+from 0.878 to **0.920** and passes the safety set it missed by one request as v1. Both are
+measured on the shipped binary per backend before release; the 1.7B has its own acceptance bar and
+misses a few thin ffmpeg slices on Vulkan and CPU, which ships by owner decision and is listed on
+the model card.
+
 Fine-tuning also **shrinks the quantization tax** rather than merely raising the score: the
 1.7B's ffmpeg outcome tax fell from −.064 untuned to −.009 tuned. Do not read an untuned
 model's quant tax as a property of the size — re-measure after tuning, or you will
@@ -131,7 +145,7 @@ over-provision the quant level.
 
 ## Is a local 4B actually good enough
 
-On eleven real-world ffmpeg requests, `knaif-qwen3-4b-v1` produced a correct,
+Measured with v1 (2026-07-02): on eleven real-world ffmpeg requests, `knaif-qwen3-4b-v1` produced a correct,
 `ffprobe`-verified artifact for all nine artifact requests — matching Claude Code
 (`opus-4-8`), GitHub Copilot CLI (`sonnet-5`) and OpenAI Codex CLI (`gpt-5.5`) at 9/9 each,
 at zero marginal cost and roughly a tenth of the latency. The full table is on

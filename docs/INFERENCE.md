@@ -33,7 +33,7 @@ overrides it for a single run. Edit `models.yaml` to add, remove, or retune entr
 ### Is a local 4B actually good enough?
 
 For the everyday cases, yes — and it is worth knowing that before you spend an afternoon on
-backend setup. On eleven real-world ffmpeg requests, the promoted `knaif-qwen3-4b-v1`
+backend setup. On eleven real-world ffmpeg requests (2026-07-02), the then-promoted `knaif-qwen3-4b-v1`
 produced a correct, `ffprobe`-verified artifact for all nine artifact requests, matching
 Claude Code (`opus-4-8`), GitHub Copilot CLI (`sonnet-5`), and OpenAI Codex CLI (`gpt-5.5`)
 at 9/9 each — at ~1.2 s per request instead of 11–16 s, and at zero marginal cost. The gap
@@ -127,7 +127,7 @@ defaults do not apply:
 > **Quality note.** Stock `qwen3:4b` routes correctly with these settings but spends
 > 15–30 s per request reasoning its way there. knaif's fine-tuned models are trained to
 > emit the plan directly. To get one into Ollama, import the GGUF:
-> `ollama create knaif-qwen3-4b -f Modelfile` with `FROM ./knaif-qwen3-4b-v1-q4_k_m.gguf`.
+> `ollama create knaif-qwen3-4b -f Modelfile` with `FROM ./knaif-qwen3-4b-v2-q4_k_m.gguf`.
 
 ## llama.cpp
 

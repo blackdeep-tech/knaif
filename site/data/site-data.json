@@ -14,8 +14,20 @@
       ]
     },
     {
+      "base_model": "Qwen/Qwen3-1.7B",
+      "default": false,
+      "file": "knaif-qwen3-1.7b-v2-q6_k.gguf",
+      "id": "knaif-qwen3-1.7b-v2",
+      "license": "Apache-2.0",
+      "size_bytes": 1417754976,
+      "skills": [
+        "ffmpeg",
+        "documents"
+      ]
+    },
+    {
       "base_model": "Qwen/Qwen3-4B",
-      "default": true,
+      "default": false,
       "file": "knaif-qwen3-4b-v1-q4_k_m.gguf",
       "id": "knaif-qwen3-4b-v1",
       "license": "Apache-2.0",
@@ -27,7 +39,7 @@
     },
     {
       "base_model": "Qwen/Qwen3-4B",
-      "default": false,
+      "default": true,
       "file": "knaif-qwen3-4b-v2-q4_k_m.gguf",
       "id": "knaif-qwen3-4b-v2",
       "license": "Apache-2.0",
@@ -133,10 +145,10 @@
     "schema_version": 1
   },
   "recommendations": {
-    "cli": "knaif-qwen3-4b-v1",
-    "default": "knaif-qwen3-4b-v1",
-    "desktop": "knaif-qwen3-4b-v1",
-    "mobile": "knaif-qwen3-1.7b-v1"
+    "cli": "knaif-qwen3-4b-v2",
+    "default": "knaif-qwen3-4b-v2",
+    "desktop": "knaif-qwen3-4b-v2",
+    "mobile": "knaif-qwen3-1.7b-v2"
   },
   "schema_version": 1,
   "skills": [
@@ -192,9 +204,9 @@
         }
       ],
       "name": "documents",
-      "recommended_model": "knaif-qwen3-4b-v1",
+      "recommended_model": "knaif-qwen3-4b-v2",
       "runtimes": {
-        "native": "in-progress",
+        "native": "supported",
         "python": true
       },
       "stage": "stable",
@@ -757,9 +769,9 @@
         }
       ],
       "name": "ffmpeg",
-      "recommended_model": "knaif-qwen3-4b-v1",
+      "recommended_model": "knaif-qwen3-4b-v2",
       "runtimes": {
-        "native": "in-progress",
+        "native": "supported",
         "python": true
       },
       "stage": "stable",

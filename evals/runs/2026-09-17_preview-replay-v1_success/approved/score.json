@@ -126,7 +126,7 @@
       ],
       "latency_ms": 28.243699998711236,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small.mp4 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small_whatsapp.mp4",
+      "artifact": "ffmpeg -y -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small.mp4 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small_whatsapp.mp4",
       "plan": {
         "plan": [
           {
@@ -176,7 +176,7 @@
       ],
       "latency_ms": 28.758700000253157,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_compressed.mp4",
+      "artifact": "ffmpeg -y -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_compressed.mp4",
       "plan": {
         "plan": [
           {
@@ -217,7 +217,7 @@
       ],
       "latency_ms": 27.890800000022864,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -vf scale=1280:720 -c:v libx264 -crf 28 -preset slow -maxrate 15842k -bufsize 15842k -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_compressed.mp4",
+      "artifact": "ffmpeg -y -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -vf scale=1280:720 -c:v libx264 -crf 28 -preset slow -maxrate 15842k -bufsize 15842k -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_compressed.mp4",
       "plan": {
         "plan": [
           {
@@ -258,7 +258,7 @@
       ],
       "latency_ms": 26.9120999982988,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_compressed.mp4",
+      "artifact": "ffmpeg -y -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_compressed.mp4",
       "plan": {
         "plan": [
           {
@@ -300,7 +300,7 @@
       ],
       "latency_ms": 35.616199998912634,
       "error": null,
-      "artifact": "ffmpeg -y -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb.mp4 -vf scale=3840:2160 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb_youtube.mp4",
+      "artifact": "ffmpeg -y -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb.mp4 -vf scale=3840:2160 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb_youtube.mp4",
       "plan": {
         "plan": [
           {

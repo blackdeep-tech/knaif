@@ -350,6 +350,36 @@ runtimes:
 
 See [NATIVE.md](NATIVE.md) §7 for how the native runtime consumes this, and §3 for the crate layout.
 
+### External tools (`dependencies.external_tools`)
+
+Third-party programs a skill runs as subprocesses. knaif detects them and never bundles them or
+changes `PATH`; `knaif skills deps` reports them, a run refuses early when a `required` one is
+missing, and the Windows installer offers each through winget.
+
+```yaml
+dependencies:
+  external_tools:
+    - name: ghostscript            # one vendor package = one installer task
+      required: false              # true → blocks execution and defaults the task on
+      all_required: false          # true → every command is needed (ffmpeg + ffprobe);
+                                   # false → the commands are aliases, any one satisfies
+      commands: [gs, gswin64c, gswin32c]
+      install: { windows: winget, macos: brew, linux: package_manager }
+      windows:
+        winget: ArtifexSoftware.GhostScript          # `winget install -e --id …`
+        download: https://ghostscript.com/releases/gsdnld.html   # hint when winget is absent
+        dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
+```
+
+A command resolves to `$KNAIF_<CMD>_BIN` when set, else the first hit on `PATH`, else — on Windows
+— the first `windows.dirs` folder holding it. List the folders the vendor's own installer uses:
+most Windows installers never add themselves to `PATH`. `%VAR%` is expanded from the environment
+(a folder naming an unset variable is skipped), and `*` matches within one path component, newest
+version first. The skill must **launch the binary this lookup returns** (native:
+`knaif_skill_api::tools`), not a bare name, or `skills deps` reports a tool the run cannot start.
+The installer's winget ids, commands and folders mirror this block, and
+`python/core/tests/test_installer_iss.py` fails when they drift.
+
 ### Runtime models
 
 *(model selection, unrelated to the `runtimes:` block above)*

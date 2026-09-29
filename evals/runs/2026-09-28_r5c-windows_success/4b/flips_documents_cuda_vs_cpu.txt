@@ -1,0 +1,4 @@
+cuda/cpu: 164 shared rows (in one board only: 0)
+  decision  flips   1: both-correct 0, only cuda correct 0, only cpu correct 0, both-wrong 1
+  canonical flips   1: both-correct 0, only cuda correct 0, only cpu correct 0, both-wrong 1
+{"label": "cuda/cpu", "shared": 164, "decision": {"flips": 1, "both_correct": [], "only_a": [], "only_b": [], "both_wrong": ["documents_105#0"]}, "canonical": {"flips": 1, "both_correct": [], "only_a": [], "only_b": [], "both_wrong": ["documents_105#0"]}}

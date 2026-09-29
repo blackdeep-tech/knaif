@@ -3,27 +3,30 @@
 //! Port of the Python `_deps.run_ffmpeg`: run an already-rendered `ffmpeg` argv (never
 //! model-emitted shell) and return its status. Keeping the subprocess call in one function is
 //! where the future desktop/mobile UIs reuse execution (they embed the crate, they don't shell
-//! to the CLI). The binary name is overridable via `$KNAIF_FFMPEG_BIN` (custom install / tests).
+//! to the CLI). The binary is the one `knaif skills deps` reports: `$KNAIF_FFMPEG_BIN`, else
+//! `PATH`, else (Windows) the install folders `skill.yaml` declares.
 
 use std::path::Path;
 use std::process::Output;
 
 use crate::engine::{summarise_probe, Probe};
 
-/// The ffmpeg binary to launch: `$KNAIF_FFMPEG_BIN` when set, else `ffmpeg` (found on `PATH`).
+/// This bundle's `skill.yaml`, whose `external_tools` entry says where ffmpeg may live.
+const SKILL_YAML: &str = include_str!("../../skill.yaml");
+
+/// The ffmpeg binary to launch: `$KNAIF_FFMPEG_BIN` when set, else the `PATH` hit, else the
+/// declared install folders; the bare `ffmpeg` when none resolves.
 pub fn ffmpeg_bin() -> String {
-    std::env::var("KNAIF_FFMPEG_BIN")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "ffmpeg".to_string())
+    knaif_skill_api::tools::command_bin(SKILL_YAML, "ffmpeg")
+        .to_string_lossy()
+        .into_owned()
 }
 
-/// The ffprobe binary to launch: `$KNAIF_FFPROBE_BIN` when set, else `ffprobe`.
+/// The ffprobe binary to launch, resolved as [`ffmpeg_bin`] (`$KNAIF_FFPROBE_BIN` first).
 pub fn ffprobe_bin() -> String {
-    std::env::var("KNAIF_FFPROBE_BIN")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "ffprobe".to_string())
+    knaif_skill_api::tools::command_bin(SKILL_YAML, "ffprobe")
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Probe a real media file, returning the normalized [`Probe`] the engine consumes. Port of
@@ -139,11 +142,25 @@ mod tests {
     }
 
     #[test]
-    fn ffmpeg_bin_defaults_without_env() {
-        // Exercises the default branch without mutating process env (parallel-test safe).
+    fn ffmpeg_bin_names_ffmpeg_without_env() {
+        // The bare name, or wherever the lookup found it; never another program. Reads the env
+        // without mutating it (parallel-test safe).
         if std::env::var_os("KNAIF_FFMPEG_BIN").is_none() {
-            assert_eq!(ffmpeg_bin(), "ffmpeg");
+            let bin = ffmpeg_bin();
+            assert_eq!(
+                Path::new(&bin).file_stem().and_then(|s| s.to_str()),
+                Some("ffmpeg"),
+                "{bin}"
+            );
         }
+    }
+
+    #[test]
+    fn ffprobe_bin_honours_its_override() {
+        // No other test reads KNAIF_FFPROBE_BIN, so setting it here cannot race.
+        std::env::set_var("KNAIF_FFPROBE_BIN", "/opt/custom/ffprobe");
+        assert_eq!(ffprobe_bin(), "/opt/custom/ffprobe");
+        std::env::remove_var("KNAIF_FFPROBE_BIN");
     }
 
     #[test]

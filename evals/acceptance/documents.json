@@ -4,51 +4,719 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "6c72fd387620ea4a787b9a8675ee277b16b6c8051522dbf06051ce97c78ece00",
-        "contracts": "32f301ef7165aef62feaaaa19556aea6c7fcb566bee4d8351e64137ca4cae9b0",
-        "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
-        "grading": "c46e7ca1f83c6b8d49c0a6005a786b5e52553a7769146b3788102c0e58b5410f",
-        "native": "ed1d74bd66e6cbb07ae5333bddc9045860b01082ba5bb72520bca71db0a6a559",
+        "bundle": "364d182eda5823019762ea81257044d17b648174c4a0769b6ad1752370b5eb2f",
+        "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+        "native": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26",
         "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
-        "verifier": "5755efa468eb5bb7ebd5710b6470395ed330d22dd2a25573cd374ec7075be69b",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28",
+        "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
         "policy": "3",
-        "model": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
+        "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
       }
     },
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "6c72fd387620ea4a787b9a8675ee277b16b6c8051522dbf06051ce97c78ece00",
-        "contracts": "32f301ef7165aef62feaaaa19556aea6c7fcb566bee4d8351e64137ca4cae9b0",
-        "python_core": "0641f113a3804a31ff17d570d01117af6c47224868f257cd9ccec154b1b430a6",
-        "grading": "c46e7ca1f83c6b8d49c0a6005a786b5e52553a7769146b3788102c0e58b5410f",
-        "native": "ed1d74bd66e6cbb07ae5333bddc9045860b01082ba5bb72520bca71db0a6a559",
+        "bundle": "364d182eda5823019762ea81257044d17b648174c4a0769b6ad1752370b5eb2f",
+        "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+        "native": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26",
         "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
-        "verifier": "5755efa468eb5bb7ebd5710b6470395ed330d22dd2a25573cd374ec7075be69b",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28",
+        "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
         "policy": "3",
-        "model": "6dd7779b2597b4c211c6f83afbc2423cdf2951e631a9d1a27e4f841119644014"
+        "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
       }
     },
     "L4": {
-      "run": "evals\\runs\\2026-09-24_l4-v2-final_success\\documents_native-cli_success.json",
-      "summary": "ACCEPTED - 42 thresholds met.",
-      "passed": true,
-      "coverage": 1.0,
-      "outcome_accuracy": 0.9817073170731707,
-      "avg_knaif_score": 0.9945887445887446,
-      "lane": "native-cli",
-      "model": "knaif-qwen3-4b-v2",
-      "evidence": {
-        "bundle": "75ff8740d55d6a3a9657c37dadbc42f484fe521fc89bd35fab92c084c4e528eb",
-        "contracts": "46946f6dd92093aa76ded4e3e747ccda56cb8b87a71e24c6c639a2d044abcfd6",
-        "python_core": "cb84461450916eb3d1bc9dbdeefb47d6793c951ccb892162879eb83afc034025",
-        "grading": "f332804bd5485398eba0267b4febdd214003bbc1a473121bd519c0d6c5b6c662",
-        "native": "6641acb54c311c25f1bbc1eef07c24ebeb27b59e425a9a9aea74fcb02d98312e",
-        "corpus": "828b85928b32e8a22343d9b61987e5add2d5aaf86a3c05db9173ddd5f1db4fb4",
-        "verifier": "79146c1e0fa8b860acd9572071a81084bb994e09db8b8e4f8feb64b0af4b0c2a",
-        "settings": "5ca7e40093e8693f2cac4c51ea30fae77a210b49f8b91e08602be162faf93d28"
+      "cells": {
+        "knaif-qwen3-4b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cuda\\documents_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9817073170731707,
+          "avg_knaif_score": 0.9803030303030303,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-4b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\vulkan\\documents_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.975609756097561,
+          "avg_knaif_score": 0.9872549019607844,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cuda\\documents_r5c-win-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9944812362030905,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\vulkan\\documents_r5c-win-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9944812362030905,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cpu\\documents_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.975609756097561,
+          "avg_knaif_score": 0.9818082788671024,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T9b: 4B Windows CPU cell = the 4B CUDA cell + every row whose 2026-09-25 CPU plan differs in full or is missing, re-run on the CPU (T9a confirmed those plans)",
+            "base": {
+              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cuda/documents_r5c-win-4b_success.json",
+              "file_sha256": "41e2caacfc0a313d4b7a25060eae065015fc8df7e56ce39ebd44590db9ed5882",
+              "git_sha": "4977b3b4330919c1c0b94f3215a5c8cb417f1ba6",
+              "git_dirty": true,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CUDA0",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cpu/rows/documents_r5c-win-4b_success.json",
+              "file_sha256": "5e4df3ab96e7b822a62a31925849c494a31d3a4d93d18ce7e45ec2ee4e734e45",
+              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
+              "git_dirty": true,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 4
+            },
+            "replaced_rows": [
+              [
+                "documents_020",
+                0
+              ],
+              [
+                "documents_083",
+                0
+              ],
+              [
+                "documents_084",
+                0
+              ],
+              [
+                "documents_105",
+                0
+              ]
+            ]
+          }
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cpu\\documents_r5c-win-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9961368653421633,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/4b/cuda/documents_r5c-linux-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9817073170731707,
+          "avg_knaif_score": 0.9803030303030303,
+          "lane": "r5c-linux-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cuda/documents_r5c-linux-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9944812362030905,
+          "lane": "r5c-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cpu": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/4b/cpu/documents_r5c-linux-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.975609756097561,
+          "avg_knaif_score": 0.9818082788671024,
+          "lane": "r5c-linux-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T15s: 4b Linux CPU cell = the 4b Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans (4B: 4 ffmpeg + 0 documents decision flips); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/base/4b/documents_r5c-win-4b_success.json",
+              "file_sha256": "adaf4aaf9c24fa136a7a334e32f36feeba8db263903ca33b4fb6f8d8ca484aed",
+              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
+              "git_dirty": true,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/4b/cpu/sample/documents_r5c-linux-4b_success.json",
+              "file_sha256": "583181db91bea05c53383ac3a3dd9a69e0e9e5d46d4ca742d87ba7201c7805e7",
+              "git_sha": "9b8fab5ee17e42c99a9dafd2f5de40d31cdb99c1",
+              "git_dirty": false,
+              "binary_sha256": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "linux-x64",
+              "lane": "r5c-linux-4b",
+              "total": 35
+            },
+            "replaced_rows": [
+              [
+                "documents_011",
+                0
+              ],
+              [
+                "documents_016",
+                0
+              ],
+              [
+                "documents_034",
+                0
+              ],
+              [
+                "documents_035",
+                0
+              ],
+              [
+                "documents_037",
+                0
+              ],
+              [
+                "documents_040",
+                0
+              ],
+              [
+                "documents_043",
+                0
+              ],
+              [
+                "documents_044",
+                0
+              ],
+              [
+                "documents_045",
+                0
+              ],
+              [
+                "documents_069",
+                0
+              ],
+              [
+                "documents_070",
+                0
+              ],
+              [
+                "documents_072",
+                0
+              ],
+              [
+                "documents_076",
+                0
+              ],
+              [
+                "documents_078",
+                0
+              ],
+              [
+                "documents_090",
+                0
+              ],
+              [
+                "documents_092",
+                0
+              ],
+              [
+                "documents_096",
+                0
+              ],
+              [
+                "documents_100",
+                0
+              ],
+              [
+                "documents_106",
+                0
+              ],
+              [
+                "documents_109",
+                0
+              ],
+              [
+                "documents_111",
+                0
+              ],
+              [
+                "documents_115",
+                0
+              ],
+              [
+                "documents_116",
+                0
+              ],
+              [
+                "documents_118",
+                0
+              ],
+              [
+                "documents_120",
+                0
+              ],
+              [
+                "documents_121",
+                0
+              ],
+              [
+                "documents_125",
+                0
+              ],
+              [
+                "documents_129",
+                0
+              ],
+              [
+                "documents_131",
+                0
+              ],
+              [
+                "documents_133",
+                1
+              ],
+              [
+                "documents_133",
+                2
+              ],
+              [
+                "documents_136",
+                0
+              ],
+              [
+                "documents_138",
+                1
+              ],
+              [
+                "documents_140",
+                1
+              ],
+              [
+                "documents_142",
+                0
+              ]
+            ]
+          }
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cpu": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/documents_r5c-linux-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9961368653421633,
+          "lane": "r5c-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T15s: 1.7b Linux CPU cell = the 1.7b Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans (1.7B: 6 ffmpeg + 3 documents decision flips); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/base/1.7b/documents_r5c-win-1.7b_success.json",
+              "file_sha256": "e3652659d49821177a9826e51e722bdb61a5157d5930e747a892ca34b560746b",
+              "git_sha": "fe3954bb25e451098b32ecd1b4338f9e32405d0d",
+              "git_dirty": true,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-1.7b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/sample/documents_r5c-linux-1.7b_success.json",
+              "file_sha256": "27cdacbc28d7c2cf6cf325296240c6bfe8e5c7f3dc2d2f8addd29ae1ae2be4ea",
+              "git_sha": "9b8fab5ee17e42c99a9dafd2f5de40d31cdb99c1",
+              "git_dirty": true,
+              "binary_sha256": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "linux-x64",
+              "lane": "r5c-linux-1.7b",
+              "total": 35
+            },
+            "replaced_rows": [
+              [
+                "documents_005",
+                0
+              ],
+              [
+                "documents_007",
+                0
+              ],
+              [
+                "documents_023",
+                0
+              ],
+              [
+                "documents_026",
+                0
+              ],
+              [
+                "documents_035",
+                0
+              ],
+              [
+                "documents_036",
+                0
+              ],
+              [
+                "documents_037",
+                0
+              ],
+              [
+                "documents_041",
+                0
+              ],
+              [
+                "documents_043",
+                0
+              ],
+              [
+                "documents_047",
+                0
+              ],
+              [
+                "documents_050",
+                0
+              ],
+              [
+                "documents_054",
+                0
+              ],
+              [
+                "documents_060",
+                0
+              ],
+              [
+                "documents_070",
+                0
+              ],
+              [
+                "documents_071",
+                0
+              ],
+              [
+                "documents_073",
+                0
+              ],
+              [
+                "documents_076",
+                0
+              ],
+              [
+                "documents_078",
+                0
+              ],
+              [
+                "documents_082",
+                0
+              ],
+              [
+                "documents_086",
+                0
+              ],
+              [
+                "documents_098",
+                0
+              ],
+              [
+                "documents_105",
+                0
+              ],
+              [
+                "documents_107",
+                0
+              ],
+              [
+                "documents_119",
+                0
+              ],
+              [
+                "documents_123",
+                0
+              ],
+              [
+                "documents_129",
+                0
+              ],
+              [
+                "documents_131",
+                0
+              ],
+              [
+                "documents_132",
+                1
+              ],
+              [
+                "documents_132",
+                2
+              ],
+              [
+                "documents_135",
+                1
+              ],
+              [
+                "documents_135",
+                2
+              ],
+              [
+                "documents_136",
+                1
+              ],
+              [
+                "documents_138",
+                0
+              ],
+              [
+                "documents_142",
+                1
+              ],
+              [
+                "documents_143",
+                1
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "L3": {
+      "cells": {
+        "knaif-qwen3-4b-v2": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\parity\\2026-09-28_r5c-l3-rc2-4b-documents",
+          "summary": "2026-09-28_r5c-l3-rc2-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
+          "equivalence_rate": 0.993007,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.006993,
+          "max_plan_disagreement": 0.0183,
+          "passed": true,
+          "backend": "cuda",
+          "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+          "git_dirty": true
+        },
+        "knaif-qwen3-1.7b-v2": {
+          "evidence": {
+            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\parity\\2026-09-28_r5c-l3-rc2-1.7b-documents",
+          "summary": "2026-09-28_r5c-l3-rc2-1.7b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
+          "equivalence_rate": 0.993007,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.006993,
+          "max_plan_disagreement": 0.0183,
+          "passed": true,
+          "backend": "cuda",
+          "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+          "git_dirty": true
+        }
       }
     }
   }

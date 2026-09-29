@@ -164,3 +164,88 @@ fn a_single_step_plan_reads_exactly_as_it_did_before_the_executor() {
         "expected exactly one command:\n{stdout}"
     );
 }
+
+/// A step whose expansion needs a clarify ends the plan, as Python's executor does (it stops at
+/// the first clarify leaf). Native printed the question and ran on: in the R5c L3 run (1.7B,
+/// `ffmpeg_136`) step 2 then rendered a command on a file step 1 never produced, and a real run
+/// failed with "input not found: clip_1080p.mp4" after asking.
+#[test]
+fn a_step_that_needs_a_clarify_ends_the_plan() {
+    let plan = r#"{"plan": [
+        {"tool": "compress_video", "args": {"inputs": ["clip_4k.mp4"], "target": "1080p", "output": "clip_1080p.mp4"}},
+        {"tool": "prepare_for_platform", "args": {"inputs": ["clip_1080p.mp4"], "platform": "youtube"}}
+    ]}"#;
+    let (stdout, stderr, ok) = run_with_plan(
+        plan,
+        "compress clip_4k.mp4 to 1080p and then prepare for YouTube",
+    );
+    assert!(ok, "a clarify is an answer, not a failure: {stderr}");
+    assert!(
+        stdout.contains("clarify: I don't have a platform profile for \"1080p\""),
+        "{stdout}"
+    );
+    assert!(
+        !stdout.contains("step 2 of 2"),
+        "the plan must end at the clarify: {stdout}"
+    );
+    assert!(
+        !stdout.contains("ffmpeg "),
+        "nothing may be rendered after it: {stdout}"
+    );
+}
+
+/// The NL clarify gate runs in `run`: an input the user never named is asked about, not run.
+/// Before its port native rendered `-i mov` here and failed with "input not found: mov" (R5c L3,
+/// 2026-09-28); the rule itself is pinned by contracts/parity/nl_clarify_gate_cases.json.
+#[test]
+fn an_input_the_user_never_named_is_asked_about() {
+    let plan = r#"{"plan": [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]}"#;
+    let out = Command::new(env!("CARGO_BIN_EXE_knaif"))
+        .args(["run", "ffmpeg", "--dry-run", "reverse the mov file"])
+        .env("KNAIF_LLM_BACKEND", "mock")
+        .env("KNAIF_LLM_MOCK_RESPONSE", plan)
+        .env("KNAIF_DUMP_PLAN", "1")
+        .output()
+        .expect("run the knaif binary");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{stderr}");
+    assert!(
+        stdout.contains("clarify: Which mov did you mean?"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("ffmpeg "), "{stdout}");
+    // The dumped plan is the model's, before the gate, as Python dumps it before `execute_plan`.
+    let dumped = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("===KNAIF-PLAN==="))
+        .expect("the plan is dumped");
+    assert!(dumped.contains("reverse_video"), "{dumped}");
+}
+
+/// The NL clarify gate belongs to execution: `plan` returns the model's plan, as Python's `plan`
+/// command (which stops at `infer`) does. Codex audit of the port, 2026-09-28.
+#[test]
+fn plan_mode_does_not_apply_the_execution_gate() {
+    let plan = r#"{"plan": [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]}"#;
+    let out = Command::new(env!("CARGO_BIN_EXE_knaif"))
+        .args([
+            "plan",
+            "--skill",
+            "ffmpeg",
+            "--json",
+            "reverse the mov file",
+        ])
+        .env("KNAIF_LLM_BACKEND", "mock")
+        .env("KNAIF_LLM_MOCK_RESPONSE", plan)
+        .output()
+        .expect("run the knaif binary");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(stdout.contains("reverse_video"), "{stdout}");
+    assert!(!stdout.contains("clarify"), "{stdout}");
+}

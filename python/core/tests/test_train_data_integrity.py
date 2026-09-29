@@ -94,6 +94,40 @@ def test_documents_enum_values_canonical() -> None:
     assert not bad, "documents enum drift:\n" + "\n".join(bad)
 
 
+def test_documents_page_args_never_use_a_leading_dash() -> None:
+    """A page value starting with "-" is the open-start range: "-1" means "pages 1 to 1".
+
+    Two rows taught `"-1"` for "the last page", so the model learned it, and then reused it for
+    "every page" and "reverse order" too (R3a reference runs, documents_024/038/042/044/103/128):
+    all of them silently acted on page 1. "The last page" is `last`; reverse order is `reverse`.
+    """
+    bad = [
+        f"{rec['utterance'][:50]!r}: {key}={s['args'][key]!r}"
+        for rec in _rows("documents")
+        for s in rec["plan"]["plan"]
+        for key in ("pages", "ranges", "order")
+        if str(s.get("args", {}).get(key, "")).lstrip().startswith("-")
+    ]
+    assert not bad, "leading-dash page values:\n" + "\n".join(bad)
+
+
+def test_documents_rotate_names_no_pages_the_user_did_not() -> None:
+    """ "Rotate x.pdf 90 degrees" rotates the whole document, so its plan omits `pages`.
+
+    The generator used to cycle `pages` through "1", "2", "1-2" and "all" on utterances that
+    named no page at all, and the v2 candidate duly rotated only page 1 (documents_036).
+    """
+    bad = [
+        f"{rec['utterance']!r}: pages={s['args']['pages']!r}"
+        for rec in _rows("documents")
+        for s in rec["plan"]["plan"]
+        if s["tool"] == "rotate_pages"
+        and "pages" in s["args"]
+        and not any(w in rec["utterance"].lower() for w in ("page", "seite", "página", "стр"))
+    ]
+    assert not bad, "rotate rows with pages the utterance never named:\n" + "\n".join(bad)
+
+
 #: Overlaps that exist today and are *not* a licence to add more. Each entry is a row id
 #: with the reason it is tolerated and what would retire it.
 #:

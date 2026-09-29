@@ -55,6 +55,21 @@ def print_scoreboard(
     lines.append(f"  {label}")
     lines.append(_hr("═"))
     lines.append("")
+    if scoreboard.get("composed"):
+        src = scoreboard.get("composed_from") or {}
+
+        def _name(side: Any) -> Any:
+            return side.get("path") if isinstance(side, dict) else side
+
+        lines.append("  COMPOSED cell, not a full run: rows re-run elsewhere swapped into a base")
+        lines.append(f"    base        : {_name(src.get('base'))}")
+        lines.append(
+            f"    replacements: {_name(src.get('replacements'))} "
+            f"({len(src.get('replaced_rows') or [])} rows)"
+        )
+        if src.get("note"):
+            lines.append(f"    rule        : {src['note']}")
+        lines.append("")
     lines.append(f"  Verifier          : {scoreboard.get('verifier', '?')}")
     lines.append(f"  Total rows        : {scoreboard.get('total', 0)}")
     lines.append(f"  Outcome accuracy  : {_fmt_score(scoreboard.get('outcome_accuracy'))}")

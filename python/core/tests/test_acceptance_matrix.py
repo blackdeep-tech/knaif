@@ -225,3 +225,69 @@ def test_the_live_gate_ignores_release_records(tree: Path) -> None:
     _write_py.write_text("x = 2\n", encoding="utf-8")  # the tree moves on after the tag
     assert _derived(tree) != "supported"  # live: stale
     assert (tree / "evals" / "acceptance" / "releases" / "9.9.0" / "demo.json").is_file()
+
+
+# ── each cell is judged against its own model (R5c T7, 2026-09-28) ─────────────────────────
+#
+# The gate compared every cell's `model` evidence with the skill's RECOMMENDED model, so the
+# smaller model's cells — measured on their own GGUF, as they must be — read "stale: model" the
+# moment they were recorded, and could never support a release that ships both.
+
+
+def _two_model_manifest(tree: Path, big: str, small: str) -> None:
+    (tree / "contracts" / "models").mkdir(parents=True, exist_ok=True)
+    (tree / "contracts" / "models" / "model-manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    MODEL: {"file": "big.gguf", "sha256": big},
+                    SMALL: {"file": "small.gguf", "sha256": small},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tree / "skills" / "demo" / "skill.yaml").write_text(
+        f"name: demo\nrecommended_model: {MODEL}\n", encoding="utf-8"
+    )
+
+
+def _cell_record(tree: Path, layer: str, cell: str, model_sha: str) -> None:
+    from knaif.evalsuite.gate import evidence_tuple
+
+    evidence = {**evidence_tuple("demo", tree), "model": model_sha}
+    record_layers(
+        "demo",
+        tree,
+        {layer: {"cell": cell, "summary": "run", "passed": True, "evidence": evidence}},
+    )
+
+
+def test_a_cell_is_valid_on_the_model_it_names(tree: Path) -> None:
+    big, small = "b" * 64, "5" * 64
+    _two_model_manifest(tree, big, small)
+    _matrix(tree, models=(MODEL, SMALL))
+    record_layers("demo", tree, {"L1": {"summary": "green"}, "L2": {"summary": "green"}})
+    _cell_record(tree, "L3", MODEL, big)
+    _cell_record(tree, "L3", SMALL, small)
+    for m, sha in ((MODEL, big), (SMALL, small)):
+        for os_, backend in (("windows-x64", "cuda"), ("windows-x64", "cpu")):
+            _cell_record(tree, "L4", cell_key(m, os_, backend), sha)
+
+    gate = evaluate_skill("demo", tree, "supported")
+    states = {s.layer: s for s in gate.layers}
+    assert states["L3"].state == "valid", states["L3"].detail
+    assert states["L4"].state == "valid", states["L4"].detail
+    assert gate.derived == "supported"
+
+
+def test_a_cell_measured_on_the_wrong_model_is_stale(tree: Path) -> None:
+    big, small = "b" * 64, "5" * 64
+    _two_model_manifest(tree, big, small)
+    _matrix(tree, models=(MODEL, SMALL))
+    record_layers("demo", tree, {"L1": {"summary": "green"}, "L2": {"summary": "green"}})
+    _cell_record(tree, "L3", MODEL, big)
+    _cell_record(tree, "L3", SMALL, big)  # the small model's cell, run on the big GGUF
+
+    l3 = next(s for s in evaluate_skill("demo", tree, "supported").layers if s.layer == "L3")
+    assert l3.state == "stale" and SMALL in l3.detail and "model" in l3.detail

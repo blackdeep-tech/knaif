@@ -126,7 +126,7 @@
       ],
       "latency_ms": 32.75179999945976,
       "error": null,
-      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small_preview.mp4",
+      "artifact": "ffmpeg -y -ss 0 -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_small_preview.mp4",
       "plan": {
         "plan": [
           {
@@ -177,7 +177,7 @@
       ],
       "latency_ms": 28.174199998829863,
       "error": null,
-      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
+      "artifact": "ffmpeg -y -ss 0 -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
       "plan": {
         "plan": [
           {
@@ -218,7 +218,7 @@
       ],
       "latency_ms": 37.15660000125354,
       "error": null,
-      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 28 -preset slow -maxrate 15842k -bufsize 15842k -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
+      "artifact": "ffmpeg -y -ss 0 -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 28 -preset slow -maxrate 15842k -bufsize 15842k -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
       "plan": {
         "plan": [
           {
@@ -259,7 +259,7 @@
       ],
       "latency_ms": 26.942200000121375,
       "error": null,
-      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
+      "artifact": "ffmpeg -y -ss 0 -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr.mp4 -t 10 -vf scale=1280:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_ctr_preview.mp4",
       "plan": {
         "plan": [
           {
@@ -301,7 +301,7 @@
       ],
       "latency_ms": 37.614299999404466,
       "error": null,
-      "artifact": "ffmpeg -y -ss 0 -i C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb.mp4 -t 10 -vf scale=3840:2160 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart C:\\Work\\Knaif\\knaif\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb_preview.mp4",
+      "artifact": "ffmpeg -y -ss 0 -i <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb.mp4 -t 10 -vf scale=3840:2160 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\2026-09-17_audit-control-v1_success\\fixtures\\ffmpeg\\clip_10mb_preview.mp4",
       "plan": {
         "plan": [
           {

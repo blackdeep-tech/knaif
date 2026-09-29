@@ -166,6 +166,94 @@ def test_the_verifier_implementation_is_hashed_not_its_name(tree: Path) -> None:
     assert "stale" in states
 
 
+SKILL_YAML = (
+    "name: demo\n"
+    "status: active\n"
+    "runtimes:\n"
+    "  python:\n"
+    "    handlers: h.Demo\n"
+    "  native:\n"
+    "    status: in-progress\n"
+    "    crate: knaif-skill-demo\n"
+    "recommended_model: m-v1\n"
+)
+
+
+def test_the_native_status_claim_is_not_evidence(tree: Path) -> None:
+    """`runtimes.native.status` is the claim the evidence justifies, and it sat inside the bundle
+    fingerprint: flipping it to `supported` after R5c staled every L3/L4 record that justified the
+    flip, so a skill could never reach the only release-eligible status. Nothing reads it at run
+    time, so it is left out of the hash; every other line still counts."""
+    skill = tree / "skills" / "demo" / "skill.yaml"
+    skill.write_text(SKILL_YAML, encoding="utf-8")
+    before = evidence_tuple("demo", tree)["bundle"]
+
+    skill.write_text(
+        SKILL_YAML.replace("    status: in-progress", "    status: supported"), "utf-8"
+    )
+    assert evidence_tuple("demo", tree)["bundle"] == before
+
+    for old, new in (
+        ("status: active", "status: stale"),  # top-level: hides the skill from discovery
+        ("crate: knaif-skill-demo", "crate: other"),
+        ("recommended_model: m-v1", "recommended_model: m-v2"),
+    ):
+        skill.write_text(SKILL_YAML.replace(old, new), encoding="utf-8")
+        assert evidence_tuple("demo", tree)["bundle"] != before, f"{old} -> {new} must count"
+
+
+def test_flow_style_and_anchors_cannot_hide_a_change(tree: Path) -> None:
+    """Codex audit 2026-09-28: a line-based mask blanked a whole flow mapping (`native: {status:
+    in-progress, crate: x}`), hiding the crate change. The claim is masked in the parsed document,
+    at exactly one path."""
+    skill = tree / "skills" / "demo" / "skill.yaml"
+    flow = "name: demo\nruntimes:\n  native: {status: in-progress, crate: a}\n"
+    skill.write_text(flow, encoding="utf-8")
+    before = evidence_tuple("demo", tree)["bundle"]
+    skill.write_text(flow.replace("in-progress", "supported"), encoding="utf-8")
+    assert evidence_tuple("demo", tree)["bundle"] == before
+    skill.write_text(flow.replace("crate: a", "crate: b"), encoding="utf-8")
+    assert evidence_tuple("demo", tree)["bundle"] != before
+
+    anchored = "name: demo\nlevel: &lvl in-progress\nruntimes:\n  native:\n    status: *lvl\n"
+    skill.write_text(anchored, encoding="utf-8")
+    before = evidence_tuple("demo", tree)["bundle"]
+    skill.write_text(anchored.replace("&lvl in-progress", "&lvl supported"), encoding="utf-8")
+    assert evidence_tuple("demo", tree)["bundle"] != before, "the anchor's other use still counts"
+
+
+def test_claiming_supported_after_the_evidence_keeps_it_valid(tree: Path) -> None:
+    skill = tree / "skills" / "demo" / "skill.yaml"
+    skill.write_text(SKILL_YAML, encoding="utf-8")
+    _record_all(tree)
+    skill.write_text(
+        SKILL_YAML.replace("    status: in-progress", "    status: supported"), "utf-8"
+    )
+    gate = evaluate_skill("demo", tree, "supported")
+    assert gate.derived == "supported", [(s.layer, s.state) for s in gate.layers]
+
+
+def test_line_endings_do_not_change_the_evidence(tree: Path) -> None:
+    """A Windows checkout (`core.autocrlf=true`) holds CRLF where git and Linux CI hold LF, and a
+    freshly written file is LF until git next touches it. Hashing raw bytes made the same commit
+    fingerprint differently on each, so evidence recorded on one machine read as stale on another.
+    Source is hashed as git stores it: CRLF folded to LF."""
+    sources = [*tree.rglob("*.yaml"), *tree.rglob("*.py"), *tree.rglob("*.json")]
+
+    def rewrite(eol: bytes) -> dict:
+        for path in sources:
+            path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", eol))
+        return evidence_tuple("demo", tree)
+
+    assert rewrite(b"\n") == rewrite(b"\r\n")
+
+
+def test_a_real_content_change_still_changes_the_evidence(tree: Path) -> None:
+    before = evidence_tuple("demo", tree)
+    (tree / "contracts" / "runtime" / "generation.yaml").write_text("max_tokens: 257\r\n", "utf-8")
+    assert evidence_tuple("demo", tree)["settings"] != before["settings"]
+
+
 def test_the_evidence_tuple_covers_the_shared_members(tree: Path) -> None:
     keys = set(evidence_tuple("demo", tree))
     assert {"bundle", "contracts", "python_core", "corpus", "verifier", "settings"} <= keys

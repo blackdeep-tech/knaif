@@ -381,18 +381,24 @@ def run_native_corpus(
     sandbox: Path,
     limit: int | None = None,
     verbose: bool = False,
+    only: set[tuple[str, int]] | None = None,
 ) -> list[AgentOutput]:
     """Execute every corpus utterance through the shipped binary and collect what it produced.
 
     Returns `AgentOutput`s in the shape `score_corpus` already grades, so the lane reuses the
     scoring contract rather than restating it — which is the point: L4's number has to be
     comparable to the Python snapshot it is measured against.
+
+    *only* runs just those `(id, utterance_idx)` pairs, keeping their corpus indices so a sample
+    or a set of re-graded rows lines up with the full runs it is compared with or composed into.
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
 
     for row in rows:
         for utt_idx, utterance in enumerate(row.utterances):
+            if only is not None and (row.id, utt_idx) not in only:
+                continue
             work_dir = sandbox / f"{row.id}__{utt_idx}"
             if work_dir.exists():
                 shutil.rmtree(work_dir)

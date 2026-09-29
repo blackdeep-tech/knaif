@@ -26,7 +26,9 @@ def _write(tmp_path: Path, data: dict) -> Path:
 
 def test_scalar_override_replaces(tmp_path):
     base = Skill.load(DOCUMENTS)
-    assert base.recommended_model == "knaif-qwen3-4b-v1"
+    # Read from the bundle, not a literal: promoting a model must not break an override test.
+    declared = yaml.safe_load((DOCUMENTS / "skill.yaml").read_text(encoding="utf-8"))
+    assert base.recommended_model == declared["recommended_model"] != "mobile-lane-q6"
     ov = _write(tmp_path, {"recommended_model": "mobile-lane-q6"})
     skill = Skill.load(DOCUMENTS, overrides=[ov])
     assert skill.recommended_model == "mobile-lane-q6"

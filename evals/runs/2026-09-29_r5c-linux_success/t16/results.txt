@@ -1,0 +1,10 @@
+PASS floor_tarball: see t16/floor_tarball.log
+PASS floor_appimage: see t16/floor_appimage.log
+PASS cleanroom_no_python
+PASS cleanroom_version: knaif 1.2.0 (inference: llama.cpp)
+PASS cleanroom_models_pull: see cleanroom/pull.log
+PASS cleanroom_models_verify
+PASS cleanroom_tarball_ffmpeg: clip_converted.mkv
+PASS cleanroom_tarball_documents: sample-rotated.pdf
+PASS cleanroom_appimage_ffmpeg: clip_converted.webm
+PASS cleanroom_appimage_documents: sample-rotated.pdf

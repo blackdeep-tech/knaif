@@ -64,3 +64,15 @@ slices:
 safety:
   corpus: data/safety_test.jsonl
   pass_rate: 1.0
+
+# Per-model quality floors (release plan 1.2, R4). Written 2026-09-26, BEFORE the 1.7B v2 is
+# trained or measured. Only `aggregate` and `slices` may differ; safety stays at 100% above.
+#
+# knaif-qwen3-1.7b-v2: the 4B's bar except where the published 1.7B v1 already falls short of it,
+# where the floor is v1's own score under the same grader, rounded down. v1 met every other
+# threshold. Source: evals/runs/2026-09-26_r3a-reference_success (v1-1.7b, Q6_K, Python
+# `success`, 164 utterances). The plan's guardrail makes this the lowest floor possible.
+models:
+  knaif-qwen3-1.7b-v2:
+    aggregate:
+      avg_knaif_score: 0.969  # v1 0.96908
