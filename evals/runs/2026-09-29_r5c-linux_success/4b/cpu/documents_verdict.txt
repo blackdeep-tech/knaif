@@ -1,0 +1,4 @@
+sample 35: compared 35, decision flips 0
+  missing (board or reference): []
+  rejected before inference (set aside): []
+VERDICT: the Windows CPU cell stands for Linux

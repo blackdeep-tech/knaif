@@ -32,3 +32,28 @@ every Windows stage) and let `uv` strip files from the Windows `.venv`. Killed a
 was reinstalled from the unchanged `uv.lock` (`uv sync --reinstall`; the core suite passes), the
 stray files deleted, and the script now refuses to run from `/mnt` (`1316637`). Relaunched with
 `wsl.exe --cd ~/knaif`.
+
+## T15 — Linux CPU cells by reuse: NOT confirmed for either model; full Linux CPU runs follow
+
+Run 2026-09-29 14:20–15:33, the Linux binary on the CPU (GPU hidden), one process per request,
+over the samples drawn and committed before the run (`t15_sample_*.json`: 115 ffmpeg + 35
+documents per model, seed 20260929). `t15_confirm.py` compared the plans with the Windows CPU plans
+at the decision level (4B: the 2026-09-25 CPU plans, which T9a confirmed for the release binary;
+1.7B: the T10 board).
+
+| Model | ffmpeg (115) | documents (35) | Verdict |
+|---|---|---|---|
+| 4B | 4 decision flips | 0 | NOT confirmed |
+| 1.7B | 6 decision flips | 3 | NOT confirmed |
+
+Flips: 4B `ffmpeg_246#2`, `271#3`, `284#0`, `hard_016#1`; 1.7B `ffmpeg_094#1`, `099#1`, `115#0`,
+`121#2`, `138#0`, `229#1`, `documents_073#0`, `119#0`, `129#0` (`<model>/cpu/<skill>_verdict.txt`).
+By the pre-registered rule neither Windows CPU cell stands for Linux: both Linux CPU cells were
+recorded as failing ("sample did not confirm", not waivable) and each model's full Linux CPU cell
+runs instead (`run_all.sh t15full <model>`, pre-registered in `a4d1a7a` before any full run).
+Prediction (written before the run): 0 flips for both models. Wrong.
+
+The contrast with T14 is the finding: on CUDA the two OSes plan identically (0 decision flips over
+1,025 requests per model), on the CPU they break ~3-5% of near-ties differently. The CPU backend is
+the one component each OS builds separately (a different compiler, and the ggml CPU variants each
+artifact carries), so its floating-point accumulation can differ where the GPU kernels do not.

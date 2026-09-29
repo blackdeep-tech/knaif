@@ -1,0 +1,7 @@
+sample 35: compared 35, decision flips 3
+  missing (board or reference): []
+  rejected before inference (set aside): []
+  FLIP documents_073#0
+  FLIP documents_119#0
+  FLIP documents_129#0
+VERDICT: full Linux CPU L4
