@@ -6,7 +6,7 @@
       "reason": "owner (2026-09-29): the RC 71884fd binaries named the v1 model in two help strings; fixed in the source (36f9651) and rebuilt with the release scripts; keep the acceptance results",
       "verified": "rebuilt binaries differ from the tested ones only in the two text bytes plus link metadata (Windows: PE/debug timestamps and PDB id; Linux: build-id note and symbol-name hashes; every loaded ELF section otherwise identical); pre-registered 30-request CUDA sample per OS (evals/runs/2026-09-29_r5c-rc2-textfix) gave identical plans and grades",
       "from_commit": "71884fd",
-      "to_commit": "35918304b5e9d6658d463d79eecaa7117f4d7701",
+      "to_commit": "6dddc40dd1d78e168d90cd4d05f45e86a3e734fd",
       "replacements": [
         [
           "knaif-qwen3-4b-v1",
