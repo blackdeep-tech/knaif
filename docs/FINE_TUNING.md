@@ -24,13 +24,14 @@ Two files per skill, never confused: `data/train.jsonl` (learned from) vs `data/
 (measured against, never trained on). The `hard` / `chain3` tagged eval rows are **held out**
 of training — gains there measure generalization, not memorization.
 
-## 1. Current production state (as of 2026-07-02)
+## 1. Current production state (as of knaif 1.2.0, 2026-09-29)
 
 | lane | model | serves | notes |
 |---|---|---|---|
-| **shared default** | `knaif-qwen3-4b-v1` = `models/knaif-qwen3-4b-v1-q4_k_m.gguf` | ffmpeg + documents | promoted; sft-v3 union LoRA, Q4, 2.5 GB (key renamed from `qwen3-4b-v3` 2026-07-20) |
+| **shared default** | `knaif-qwen3-4b-v2` = `models/knaif-qwen3-4b-v2-q4_k_m.gguf` | ffmpeg + documents | promoted for 1.2.0; FT cycle `sft-v4-flat` (reject/clarify taxonomy + terse-phrasing rows), Q4, 2.5 GB |
 | untuned fallback | `qwen3-4b` = `Qwen3-4B-Q4_K_M.gguf` | io + project default | skills not in training stay here |
-| quality-per-byte | `models/knaif-qwen3-1.7b-v1-q6_k.gguf` (1.32 GB) | mobile / footprint | not deployed; ready if size matters |
+| quality-per-byte | `models/knaif-qwen3-1.7b-v2-q6_k.gguf` (1.32 GB) | mobile / footprint | 1.2.0's footprint model; FT cycle `sft-v9-flat`; own acceptance bar; released by owner exception |
+| previous | `knaif-qwen3-4b-v1`, `knaif-qwen3-1.7b-v1` (FT cycle `sft-v3-flat`) | knaif 1.0.1 / 1.1.0 | kept on HF for pinned installs |
 
 Wiring: `models.yaml` (`default:` + named entries) and each skill's
 `recommended_model:` in `skills/<skill>/skill.yaml`.

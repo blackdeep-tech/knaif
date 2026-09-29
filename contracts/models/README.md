@@ -2,8 +2,8 @@
 
 Home of the **no-code, cross-language model manifest** (`model-manifest.yaml`): model
 names, download URLs, SHA-256 checksums, sizes, license/source notes, per-skill
-compatibility, and surface recommendations (desktop/native CLI `knaif-qwen3-4b-v1`; mobile
-`knaif-qwen3-1.7b-v1`). Read by the shared `knaif-models` `ModelStore` and by any UI's
+compatibility, and surface recommendations (desktop/native CLI `knaif-qwen3-4b-v2`; mobile
+`knaif-qwen3-1.7b-v2`, since knaif 1.2.0). Read by the shared `knaif-models` `ModelStore` and by any UI's
 model-management screen. Manifest keys are **public release** versions (v1, v2, …); the
 originating fine-tune cycle is recorded per entry in `training_run`/`source`.
 

@@ -255,7 +255,8 @@ Conclusions (all evidence-backed):
   NVIDIA cards. Measured usable on both NVIDIA architectures tried: ~as fast as CUDA on Ampere, ~72%
   of CUDA on Blackwell.
 - **CPU** is the no-GPU last resort.
-- Consider `knaif-qwen3-1.7b-v1` for the Vulkan/CPU fallback paths to offset slower compute.
+- Consider `knaif-qwen3-1.7b-v2` for the Vulkan/CPU fallback paths to offset slower compute (its
+  per-backend numbers, including the slices it misses there, are on the model card).
 - Do **not** invest in a Vulkan pipeline-cache patch for speed.
 
 **The first-run CUDA offer.** The default artifact ships CPU+Vulkan; CUDA is an opt-in payload, so

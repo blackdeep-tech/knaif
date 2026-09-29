@@ -18,10 +18,12 @@ each pinned to a commit SHA and verified against a recorded SHA-256.
 
 | Released model | Base model | Base license | Fine-tune license |
 |---|---|---|---|
+| `knaif-qwen3-4b-v2` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Apache-2.0 | Apache-2.0 |
+| `knaif-qwen3-1.7b-v2` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Apache-2.0 | Apache-2.0 |
 | `knaif-qwen3-4b-v1` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Apache-2.0 | Apache-2.0 |
 | `knaif-qwen3-1.7b-v1` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Apache-2.0 | Apache-2.0 |
 
-Both are **derivative works** of the Qwen3 family by Alibaba Cloud, used under
+All are **derivative works** of the Qwen3 family by Alibaba Cloud, used under
 Apache-2.0. Apache-2.0 permits redistribution of derivatives under the same
 license, which is what knaif does. The manifest records this machine-readably via
 each entry's `base_model` and `base_model_license` fields, so the provenance
