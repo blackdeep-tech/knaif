@@ -187,9 +187,27 @@ only_run() {  # $1 dir, $2 lane, $3 skill, $4 only file: the pre-drawn rows, on 
     || { failed "$lane $skill sample did not run on the CPU"; return 1; }
 }
 
-# $1 model label, $2 linux lane, $3 windows lane, $4 reference for ffmpeg, $5 for documents.
+record_unconfirmed() {  # $1 public model name: the Linux CPU cell fails, for both skills
+  # Without this a failed re-run would leave an earlier accepted composed cell standing on
+  # unchanged fingerprints (Codex, 2026-09-29). The summary names no threshold kind, so it can
+  # never be waived: the rule's answer is the full Linux CPU run.
+  uv run python -c "
+import sys
+from pathlib import Path
+from knaif.evalsuite.gate import record_layers
+from knaif.evalsuite.matrix import cell_key
+cell = cell_key(sys.argv[1], 'linux-x64', 'cpu')
+for skill in ('ffmpeg', 'documents'):
+    record_layers(skill, Path.cwd(), {'L4': {'cell': cell, 'passed': False, 'summary':
+        'T15: the Linux CPU sample did not confirm the Windows CPU plans; the full Linux CPU L4 is required'}})
+" "$1" || failed "recording $1 as unconfirmed"
+}
+
+# $1 model label, $2 linux lane, $3 windows lane, $4 reference for ffmpeg, $5 for documents,
+# $6 the model's public name.
 cpu_by_reuse() {
   local model="$1" lane="$2" wlane="$3" skill ref base ok=1 d="$R/$1/cpu"
+  rm -rf "$d" "$R/base/$model"  # never compose or judge from an earlier attempt's files
   mkdir -p "$d/sample" "$R/base/$model"
   for skill in ffmpeg documents; do
     if [ "$skill" = ffmpeg ]; then ref="$4"; else ref="$5"; fi
@@ -202,6 +220,7 @@ cpu_by_reuse() {
   done
   if [ "$ok" -ne 1 ]; then
     echo "T15 $model: NOT confirmed -> the full Linux CPU L4 for $model (separate approved run) $(date)" >> "$R/COMPLETE"
+    record_unconfirmed "$6"
     return 0
   fi
   backend_env cpu
@@ -225,10 +244,12 @@ case "$STAGE" in
   t15)
     cpu_by_reuse 4b r5c-linux-4b r5c-win-4b \
       "$(git remote get-url origin)/evals/runs/2026-09-25_backend-parity-v2_plans/ffmpeg_cpu.jsonl" \
-      "$(git remote get-url origin)/evals/runs/2026-09-25_backend-parity-v2_plans/documents_cpu.jsonl"
+      "$(git remote get-url origin)/evals/runs/2026-09-25_backend-parity-v2_plans/documents_cpu.jsonl" \
+      knaif-qwen3-4b-v2
     cpu_by_reuse 1.7b r5c-linux-1.7b r5c-win-1.7b \
       "$WIN_R/1.7b/cpu/ffmpeg_r5c-win-1.7b_success.json" \
-      "$WIN_R/1.7b/cpu/documents_r5c-win-1.7b_success.json"
+      "$WIN_R/1.7b/cpu/documents_r5c-win-1.7b_success.json" \
+      knaif-qwen3-1.7b-v2
     ;;
   t14)
     cell 4b r5c-linux-4b cuda

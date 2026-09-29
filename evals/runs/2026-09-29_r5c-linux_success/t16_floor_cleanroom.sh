@@ -44,7 +44,8 @@ bash installers/linux/check-floor.sh "$APPIMAGE" > "$R/floor_appimage.log" 2>&1
 check floor_appimage $? "see t16/floor_appimage.log"
 
 # 2. Clean room. The container gets the artifacts and two fixtures read-only, and writes results.
-mkdir -p "$R/cleanroom"
+# An earlier attempt's results never count: cleared first, and the container's exit is checked.
+rm -rf "$R/cleanroom" && mkdir -p "$R/cleanroom"
 MSYS_NO_PATHCONV=1 docker run --rm \
   -v "$(cygpath -aw dist):/in:ro" \
   -v "$(cygpath -aw sandbox/fixtures/ffmpeg/clip.mp4):/fixtures/clip.mp4:ro" \
@@ -68,8 +69,8 @@ MSYS_NO_PATHCONV=1 docker run --rm \
       local out; out=$(ls -t | grep -vxE "clip.mp4|sample.pdf" | head -1)
       if [ $rc -ne 0 ] || [ -z "$out" ]; then say "$1" 1 "exit $rc, output ${out:-none}"; return; fi
       case "$5" in
-        video) ffprobe -v error -show_entries format=duration -of csv=p=0 "$out" > /dev/null 2>&1 \
-                 && say "$1" 0 "$out" || say "$1" 1 "$out is not a valid video" ;;
+        video) [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_type -of csv=p=0 "$out" 2>/dev/null)" = video ] \
+                 && say "$1" 0 "$out" || say "$1" 1 "$out has no video stream" ;;
         pdf)   [ "$(head -c 4 "$out")" = "%PDF" ] && say "$1" 0 "$out" || say "$1" 1 "$out is not a PDF" ;;
       esac
       cp "$out" "/out/$1.${out##*.}" 2>/dev/null
@@ -81,7 +82,9 @@ MSYS_NO_PATHCONV=1 docker run --rm \
     run cleanroom_appimage_ffmpeg "$A" ffmpeg "convert clip.mp4 to webm" video
     run cleanroom_appimage_documents "$A" documents "turn all pages of sample.pdf 90 degrees" pdf
   ' > "$R/cleanroom.log" 2>&1
+rc=$?
 cat "$R/cleanroom/checks.txt" >> "$R/results.txt" 2>/dev/null
+[ $rc -eq 0 ] || echo "FAIL cleanroom_container: docker exit $rc (see t16/cleanroom.log)" | tee -a "$R/results.txt"
 cat "$R/results.txt"
 n=$(grep -c "^PASS" "$R/results.txt"); f=$(grep -c "^FAIL" "$R/results.txt")
 # 2 floor checks + 8 clean-room checks; fewer lines means a step never reported, which fails too.

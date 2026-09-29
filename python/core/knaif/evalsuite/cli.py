@@ -1585,7 +1585,9 @@ def _safety_through_the_lane(
     if getattr(args, "save", None):
         out = Path(args.save)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        # Like a scoreboard: the lane's entry point is an absolute path (AGENTS.md hygiene).
+        saved = redact_local_paths(result)
+        out.write_text(json.dumps(saved, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"  saved -> {out}")
 
     if result["pass_rate"] < 1.0:
