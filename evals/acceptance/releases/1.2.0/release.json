@@ -1,0 +1,87 @@
+{
+  "version": "1.2.0",
+  "skills": {
+    "documents": {
+      "declared": "supported",
+      "derived": "supported",
+      "layers": {
+        "L1": {
+          "state": "valid",
+          "detail": "contracts/parity/* green on both runtimes"
+        },
+        "L2": {
+          "state": "valid",
+          "detail": "deterministic pipeline + ordered execution green"
+        },
+        "L3": {
+          "state": "valid",
+          "detail": "2 cell(s) valid [equivalent: 1.2.0-rc3-tools-tests (sampled)]"
+        },
+        "L4": {
+          "state": "valid",
+          "detail": "10 cell(s) valid [composed, not a full run: knaif-qwen3-4b-v2|windows-x64|cpu, knaif-qwen3-4b-v2|linux-x64|cpu, knaif-qwen3-1.7b-v2|linux-x64|cpu] [equivalent: 1.2.0-rc3-tools-tests (sampled)]"
+        }
+      }
+    },
+    "ffmpeg": {
+      "declared": "supported",
+      "derived": "supported",
+      "layers": {
+        "L1": {
+          "state": "valid",
+          "detail": "contracts/parity/* green on both runtimes"
+        },
+        "L2": {
+          "state": "valid",
+          "detail": "deterministic pipeline + ordered execution green"
+        },
+        "L3": {
+          "state": "valid",
+          "detail": "2 cell(s) valid [equivalent: 1.2.0-rc3-tools-tests (sampled)]"
+        },
+        "L4": {
+          "state": "excepted",
+          "detail": "excepted: knaif-qwen3-1.7b-v2|windows-x64|vulkan (NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) — owner exception 2026-09-28: not a blocker (owner, R5c T8): one Chinese batch request, ffmpeg_229[4], flips on a CUDA/Vulkan near-tie; CUDA holds the slice; stated in the 1.2.0 release notes [equivalent: 1.2.0-rc3-tools-tests (sampled)]), knaif-qwen3-1.7b-v2|windows-x64|cpu (NOT ACCEPTED - 3 of 45 thresholds unmet: [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22) [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29) — owner exception 2026-09-29: not a blocker (owner, R5c T10): aggregates and safety clear; the gap to the accepted CUDA cell is three requests answered with a clarify (ffmpeg_229[1], ffmpeg_229[4], ffmpeg_129[1]); across the corpus CPU is not worse than CUDA (only-CPU 11, only-CUDA 9); stated in the 1.2.0 release notes [equivalent: 1.2.0-rc3-tools-tests (sampled)]), knaif-qwen3-1.7b-v2|linux-x64|cpu (NOT ACCEPTED - 2 of 45 thresholds unmet: [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) — owner exception 2026-09-29: not a blocker (owner, R5c T15s): composed on the Linux CPU sample; adjust_speed 40/45 and batch 25/29 each miss by one request, as the waived Windows CPU cell does; aggregates, safety and documents clear; stated in the 1.2.0 release notes [equivalent: 1.2.0-rc3-tools-tests (sampled)]) [composed, not a full run: knaif-qwen3-4b-v2|windows-x64|cpu, knaif-qwen3-4b-v2|linux-x64|cpu, knaif-qwen3-1.7b-v2|linux-x64|cpu] [equivalent: 1.2.0-rc3-tools-tests (sampled)]"
+        }
+      }
+    }
+  },
+  "matrix": {
+    "models": [
+      "knaif-qwen3-4b-v2",
+      "knaif-qwen3-1.7b-v2"
+    ],
+    "entries": [
+      {
+        "os": "windows-x64",
+        "backend": "cuda",
+        "coverage": "full"
+      },
+      {
+        "os": "windows-x64",
+        "backend": "vulkan",
+        "coverage": "full"
+      },
+      {
+        "os": "windows-x64",
+        "backend": "cpu",
+        "coverage": "full"
+      },
+      {
+        "os": "linux-x64",
+        "backend": "cuda",
+        "coverage": "full"
+      },
+      {
+        "os": "linux-x64",
+        "backend": "cpu",
+        "coverage": "full"
+      },
+      {
+        "os": "linux-x64",
+        "backend": "vulkan",
+        "coverage": "not-measured"
+      }
+    ]
+  }
+}
