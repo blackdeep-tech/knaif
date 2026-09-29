@@ -50,3 +50,13 @@ the native source differs from `71884fd` only by `knaif-qwen3-4b-v1` → `knaif-
 old → new binary per OS. **The gate is green against the RC2 binaries** (both skills
 `supported`, every carried result marked `[equivalent: 1.2.0-rc2-textfix]`) and **stale against
 the RC binaries**, which were not built from this source.
+
+## The installer check on RC2 (T12 re-run)
+
+The T12 checks, unchanged except the artifact hashes (pre-registered in `1c758bc`), on the RC2
+`-setup.exe` (`6df5f520…`) and zip (`b86cbfbf…`) in Windows Sandbox: **PASS, 14/14** — clean-room
+zip runs; 1.1.0 installs; the RC2 installer refuses while a 1.1.0 CLI runs, then upgrades in place
+(one row, same folder, no leftover libraries); the OCR row runs with no `--model` on CPU with the
+bundled PDFium and its output text checks out. Also on the RC2 artifacts: `smoke.sh` PASS (zip),
+the Linux floor in both directions for the tarball and the AppImage, and the local-path scan of
+all four artifacts clean.
