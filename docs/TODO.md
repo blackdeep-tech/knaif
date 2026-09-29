@@ -345,12 +345,15 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 - [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
   tests; next version. Native asks `[y/N]` through `ask_yes_no` (`apps/cli/src/main.rs`: "Proceed?"
   before running, and the model-download question), so Enter declines; the Python SDK app already
-  asks `Proceed? [Y/n]` (`python/core/knaif/app.py`) — the two runtimes disagree today. Decide with
-  it: (1) whether a *destructive* / overwrite step keeps `[y/N]` (the safety model requires an
-  explicit confirmation for `safety_category: destructive`); (2) Windows — `flush_terminal_input`
-  is a no-op off Unix, so an Enter typed during a long CPU inference would answer the prompt, which
-  with a Yes default silently approves. Flush the console input buffer on Windows first
-  (`FlushConsoleInputBuffer`). A non-tty stdin keeps meaning "no answer" either way.
+  asks `Proceed? [Y/n]` (`python/core/knaif/app.py`) — the two runtimes disagree today.
+  Low risk (owner, 2026-09-29): `safety_category: destructive` means "writes a file" — every
+  transformation tool carries it — while nothing can delete, overwrite an existing file (a taken
+  name gets `-1`) or run a shell, and truly destructive requests are rejected. So "Proceed?"
+  approves writing new files only. Before switching: `flush_terminal_input` is a no-op off Unix,
+  so on Windows an Enter typed during a long CPU inference would answer the prompt, and with a Yes
+  default silently approve — flush the console input buffer there first (`FlushConsoleInputBuffer`).
+  A non-tty stdin keeps meaning "no answer". Consider renaming the category (`writes` vs
+  `read_only`) so "destructive" stops suggesting deletion; REQUIREMENTS.md §safety uses the term.
 - [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
