@@ -286,22 +286,33 @@ NATIVE_PATTERNS = (
 )
 
 
+def _mapping(value: Any) -> bool:
+    return isinstance(value, dict) and bool(value.get("from")) and bool(value.get("to"))
+
+
 def _valid_equivalence(entry: Any) -> bool:
-    """Only the shape `evalsuite equivalence` writes may carry anything: an id, a `native` source
-    mapping and nothing else under `fingerprints`, and at least one binary mapping. A hand-added
-    `contracts`/`grading`/`model` mapping is ignored (Codex, 2026-09-29)."""
+    """Only the shapes `evalsuite equivalence` writes may carry anything: an id, a `native` source
+    mapping, and at least one binary mapping. A text fix maps `native` and nothing else under
+    `fingerprints`; a `sampled` entry (a code change, verified by a pre-registered sample run it
+    names) may also map `bundle`, per skill. A hand-added `contracts`/`grading`/`model` mapping is
+    ignored (Codex, 2026-09-29)."""
     if not isinstance(entry, dict) or not entry.get("id"):
         return False
     fps = entry.get("fingerprints")
     bins = entry.get("binaries")
-    if not isinstance(fps, dict) or set(fps) != {"native"}:
+    if not isinstance(fps, dict) or not _mapping(fps.get("native")):
         return False
-    native = fps["native"]
-    if not (isinstance(native, dict) and native.get("from") and native.get("to")):
+    if entry.get("kind") == "sampled":
+        if not entry.get("sample_run") or not set(fps) <= {"native", "bundle"}:
+            return False
+        bundle = fps.get("bundle", {})
+        if not isinstance(bundle, dict) or not all(_mapping(m) for m in bundle.values()):
+            return False
+    elif set(fps) != {"native"}:
         return False
     if not isinstance(bins, dict) or not bins:
         return False
-    return all(isinstance(p, dict) and p.get("from") and p.get("to") for p in bins.values())
+    return all(_mapping(p) for p in bins.values())
 
 
 def load_equivalences(root: Path) -> list[dict[str, Any]]:
@@ -313,16 +324,22 @@ def load_equivalences(root: Path) -> list[dict[str, Any]]:
 
 
 def _carrying_entry(
-    recorded: dict[str, Any], current: dict[str, Any], entries: list[dict[str, Any]]
-) -> str | None:
+    recorded: dict[str, Any],
+    current: dict[str, Any],
+    entries: list[dict[str, Any]],
+    skill: str | None = None,
+) -> dict[str, Any] | None:
     """The one equivalence that maps this record's measured build to the current one: its source
-    mapping takes the recorded `native` to the current, and (when a binary is checked) its binary
-    mapping takes the recorded binary to the given one. Both from the SAME entry, so two entries
-    cannot certify a source/binary pair neither vouches for (Codex, 2026-09-29)."""
+    mapping takes the recorded `native` to the current, (when a binary is checked) its binary
+    mapping takes the recorded binary to the given one, and — if this skill's `bundle` moved too —
+    its `bundle` mapping for this skill takes the recorded bundle to the current. All from the SAME
+    entry, so two entries cannot certify a combination neither vouches for (Codex, 2026-09-29)."""
     rec_native, cur_native = recorded.get("native"), current.get("native")
     if rec_native is None or rec_native == cur_native:
         return None
     check_binary = "native_binary" in current and recorded.get("native_binary") is not None
+    rec_bundle, cur_bundle = recorded.get("bundle"), current.get("bundle")
+    bundle_moved = rec_bundle is not None and rec_bundle != cur_bundle
     for entry in entries:
         native = entry["fingerprints"]["native"]
         if native["from"] != rec_native or native["to"] != cur_native:
@@ -332,8 +349,18 @@ def _carrying_entry(
             for p in entry["binaries"].values()
         ):
             continue
-        return str(entry["id"])
+        if bundle_moved:
+            mapped = (entry["fingerprints"].get("bundle") or {}).get(skill or "")
+            if not (mapped and mapped["from"] == rec_bundle and mapped["to"] == cur_bundle):
+                continue
+        return entry
     return None
+
+
+def _equivalence_label(entry: dict[str, Any]) -> str:
+    """How the gate names a carrying entry: its id, and "(sampled)" when a sample run, not a
+    text-only diff, is what vouches for it."""
+    return f"{entry['id']} (sampled)" if entry.get("kind") == "sampled" else str(entry["id"])
 
 
 def rust_text_spans(source: str) -> list[tuple[int, int]]:
@@ -414,9 +441,11 @@ def _glob_regex(pattern: str) -> re.Pattern[str]:
     return re.compile(out + r"\Z")
 
 
-def tree_at_commit(root: Path, commit: str, patterns: tuple[str, ...]) -> str:
-    """`_sha256_tree(root, patterns)` computed from *commit*'s tree instead of the checkout, so a
-    measured fingerprint can be tied to the commit it came from."""
+def tree_at_commit(root: Path, commit: str, patterns: tuple[str, ...], base: str = "") -> str:
+    """`_sha256_tree(root / base, patterns)` computed from *commit*'s tree instead of the
+    checkout, so a measured fingerprint can be tied to the commit it came from. Paths are taken
+    relative to *base* and each blob is hashed as `_sha256_source` hashes the file (CRLF folded,
+    `skill.yaml`'s native status claim masked), so the two agree byte for byte."""
     import subprocess
 
     names = subprocess.run(
@@ -426,15 +455,87 @@ def tree_at_commit(root: Path, commit: str, patterns: tuple[str, ...]) -> str:
         text=True,
         check=True,
     ).stdout.splitlines()
+    prefix = base.strip("/") + "/" if base else ""
     regexes = [_glob_regex(p) for p in patterns]
     h = hashlib.sha256()
-    for name in sorted(n for n in names if any(r.match(n) for r in regexes)):
+    rel_names = sorted(n[len(prefix) :] for n in names if n.startswith(prefix))
+    for rel in (n for n in rel_names if any(r.match(n) for r in regexes)):
         blob = subprocess.run(
-            ["git", "show", f"{commit}:{name}"], cwd=root, capture_output=True, check=True
+            ["git", "show", f"{commit}:{prefix}{rel}"], cwd=root, capture_output=True, check=True
         ).stdout.replace(b"\r\n", b"\n")
-        h.update(name.encode())
+        if rel.rsplit("/", 1)[-1] == "skill.yaml":
+            blob = _without_native_status_claim(blob.decode("utf-8")).encode("utf-8")
+        h.update(rel.encode())
         h.update(hashlib.sha256(blob).hexdigest().encode())
     return h.hexdigest()
+
+
+#: The files the `bundle` fingerprint covers, relative to `skills/<skill>` (see `evidence_tuple`).
+BUNDLE_PATTERNS = ("*.yaml", "python/**/*.py", "native/src/**/*.rs")
+
+
+def bundle_change_allowed(old: str, new: str) -> bool:
+    """True when two `skill.yaml` texts differ only under `dependencies` (the external tools the
+    skill runs and where to find them; nothing the prompt, planning or validation reads) or in the
+    masked native status claim. Anything else — a prompt, a tool, a model — is not a change a
+    sampled equivalence may carry."""
+    try:
+        before, after = yaml.safe_load(old), yaml.safe_load(new)
+    except yaml.YAMLError:
+        return False
+    if not (isinstance(before, dict) and isinstance(after, dict)):
+        return False
+
+    def rest(doc: dict[str, Any]) -> str:
+        doc = {k: v for k, v in doc.items() if k != "dependencies"}
+        return _without_native_status_claim(yaml.safe_dump(doc, sort_keys=True))
+
+    return rest(before) == rest(after)
+
+
+#: `run.sh` stage names in a sample run, and the `platforms.yaml` id each one ran on.
+SAMPLE_STAGES = {"win": "windows-x64", "linux": "linux-x64"}
+
+
+def sample_run_problems(run_dir: Path, os_ids: set[str], skills: set[str]) -> list[str]:
+    """Why a sample run cannot vouch for an equivalence, or [] when it can.
+
+    Every (OS, skill) pair must have a `VERDICT: equivalent on the sample` block in
+    `verdicts.txt`; no line may report a failure; and `COMPLETE` must show each OS's stage started
+    once and ended `DONE`, nothing else — two endings under one start is two runs overlapping in
+    one folder (RC3, 2026-09-29), not a clean run."""
+    problems: list[str] = []
+    verdicts = run_dir / "verdicts.txt"
+    complete = run_dir / "COMPLETE"
+    if not verdicts.is_file() or not complete.is_file():
+        return [f"{run_dir}: no verdicts.txt / COMPLETE"]
+    found: dict[tuple[str, str], str] = {}
+    current: tuple[str, str] | None = None
+    for line in verdicts.read_text(encoding="utf-8").splitlines():
+        if line.startswith("FAILED"):
+            problems.append(f"a failure is recorded: {line.strip()}")
+        head = re.match(r"^== (\S+) (\S+)$", line.strip())
+        if head:
+            current = (SAMPLE_STAGES.get(head.group(1), head.group(1)), head.group(2))
+        elif current and line.startswith("VERDICT:"):
+            found[current] = line.strip()
+            current = None
+    for os_id in sorted(os_ids):
+        for skill in sorted(skills):
+            verdict = found.get((os_id, skill))
+            if verdict != "VERDICT: equivalent on the sample":
+                problems.append(f"{os_id} {skill}: {verdict or 'no verdict'}")
+    events: dict[str, list[str]] = {}
+    for line in complete.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] in ("START", "DONE"):
+            events.setdefault(SAMPLE_STAGES.get(parts[1], parts[1]), []).append(parts[0])
+        elif line.startswith("FINISHED WITH FAILURES"):
+            problems.append(f"a stage finished with failures: {line.strip()}")
+    for os_id in sorted(os_ids):
+        if events.get(os_id) != ["START", "DONE"]:
+            problems.append(f"{os_id}: stage log is {events.get(os_id)}, not one START then DONE")
+    return problems
 
 
 def record_equivalence(root: Path, entry: dict[str, Any]) -> Path:
@@ -526,15 +627,16 @@ def _layer_state(
     depends = (contract["layers"].get(layer) or {}).get("invalidated_by") or []
     # Results measured on an earlier build carry over only through ONE equivalence that maps
     # both the measured source and the measured binary to what is here now.
-    via = _carrying_entry(recorded, current, equivalences or [])
-    carried: list[str] = [via] if via else []
+    via = _carrying_entry(recorded, current, equivalences or [], (record or {}).get("skill"))
+    carried: list[str] = [_equivalence_label(via)] if via else []
+    carried_keys = ("native", "native_binary", "bundle") if via else ()
     drifted = [
         key
         for key in depends
         if key in current
         and recorded.get(key) is not None
         and recorded.get(key) != current[key]
-        and not (via and key in ("native", "native_binary"))
+        and key not in carried_keys
     ]
     # Source carried over, binary still the measured one: that binary was not built from this
     # source. The rebuild the equivalence names is what ships with it.
@@ -698,7 +800,8 @@ def _cells_state(
     per_cell = {
         cell: _layer_state(
             layer,
-            {"layers": {layer: (stored or {}).get(cell)}},
+            # `skill` travels with the cell: a sampled equivalence maps `bundle` per skill.
+            {"skill": (record or {}).get("skill"), "layers": {layer: (stored or {}).get(cell)}},
             _current_for_cell(
                 cell,
                 current,

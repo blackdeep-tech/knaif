@@ -465,6 +465,26 @@ product:
 - **Read L3's rate as symmetric disagreement, not a native score.** It says nothing about which
   side is correct; native has been the better answer on real rows.
 
+**A rebuild after acceptance.** Every L3/L4 cell pins the native source, the skill bundle and the
+measured binary, so any fix after acceptance stales them. Re-measure, or — owner's decision —
+carry the results over with `evalsuite equivalence`, which maps the measured values to the new
+ones in `evals/acceptance/equivalences.json` and makes the gate print `[equivalent: <id>]`:
+
+```bash
+# a text fix: the native source differs only by the declared replacements, inside strings/comments
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --replace OLD=NEW \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
+# a code change: vouched for by a committed, pre-registered sample run (gate says "(sampled)")
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sample-run evals/runs/<dir> \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
+```
+
+`--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
+entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
+and otherwise only the skill's native sources did; its run must be committed, with every OS and
+skill `VERDICT: equivalent on the sample` and each stage one START then DONE. 1.2.0: RC2 (text) and
+RC3 (sampled, supporting-tool lookup).
+
 ### Testing the Windows installer without damaging a real install
 
 The wizard cannot be verified silently — `/VERYSILENT` never builds the task tree, which is how

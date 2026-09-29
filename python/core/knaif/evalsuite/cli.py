@@ -1092,18 +1092,24 @@ GATE_MARKS = {
 
 
 def cmd_equivalence(args: argparse.Namespace) -> None:
-    """Record a rebuild as equivalent to the measured build: text-only source change, verified."""
+    """Record a rebuild as equivalent to the measured build: a text-only source change
+    (`--replace`), or a code change vouched for by a committed, pre-registered sample run
+    (`--sample-run`, which may also carry each skill's `bundle` when only `skill.yaml`'s
+    `dependencies` and the skill's native sources changed)."""
     import subprocess
     from datetime import date as _date
 
     from .gate import (
+        BUNDLE_PATTERNS,
         CELL_LAYERS,
         NATIVE_PATTERNS,
         RUN_SCOPED,
         binaries_by_os,
+        bundle_change_allowed,
         evidence_tuple,
         load_acceptance_record,
         record_equivalence,
+        sample_run_problems,
         text_only_change,
         tree_at_commit,
     )
@@ -1114,8 +1120,11 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         print(f"refused: {msg}", file=sys.stderr)
         sys.exit(2)
 
+    sampled = bool(args.sample_run)
+    if sampled == bool(args.replace):
+        refuse("give exactly one of --replace (a text fix) or --sample-run (a sampled code change)")
     pairs = []
-    for spec in args.replace:
+    for spec in args.replace or []:
         old, sep, new = spec.partition("=")
         if not sep or not old or not new:
             refuse(f"--replace wants OLD=NEW, got {spec!r}")
@@ -1132,26 +1141,32 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
     # The mapping must describe committed trees: an uncommitted native change would enter the
     # new fingerprint without ever being diffed (Codex, 2026-09-29).
     if git("status", "--porcelain", "--", *specs).strip():
-        refuse("the native source tree has uncommitted changes; commit the text fix first")
-    # Modified files only: an added, deleted or renamed file is not a text fix, and --no-renames
-    # keeps a rename from hiding behind git's rename detection.
+        refuse("the native source tree has uncommitted changes; commit the change first")
+    # --no-renames keeps a rename from hiding behind git's rename detection.
     status = git("diff", "--name-status", "--no-renames", args.from_commit, "HEAD", "--", *specs)
     changed_files = []
     for line in status.splitlines():
         kind, _, name = line.partition("\t")
-        if kind != "M":
+        # A text fix modifies files only: an added, deleted or renamed file is not text. A sampled
+        # change may be any code change — the sample run is what vouches for its behaviour.
+        if kind != "M" and not sampled:
             refuse(f"{name}: {kind!r} is not a modification")
         changed_files.append(name)
     if not changed_files:
         refuse(f"no native source change since {args.from_commit}")
-    for name in changed_files:
-        before = git("show", f"{args.from_commit}:{name}")
-        after = git("show", f"HEAD:{name}")
-        if not text_only_change(before, after, pairs):
-            refuse(f"{name}: not only the declared replacements inside strings or comments")
+    if not sampled:
+        for name in changed_files:
+            before = git("show", f"{args.from_commit}:{name}")
+            after = git("show", f"HEAD:{name}")
+            if not text_only_change(before, after, pairs):
+                refuse(f"{name}: not only the declared replacements inside strings or comments")
 
-    # Every L3/L4 record must differ from the tree in `native` alone (run-scoped keys aside).
+    # Every L3/L4 record must differ from the tree in `native` alone — or, sampled, in `native`
+    # and the skill's `bundle` (run-scoped keys aside).
+    carryable = {"native", "bundle"} if sampled else {"native"}
     natives: set[str] = set()
+    bundles: dict[str, set[str]] = {}
+    measured_skills: set[str] = set()
     for skill in sorted(list_skills()):
         record = load_acceptance_record(skill, root) or {}
         now = evidence_tuple(skill, root)
@@ -1159,16 +1174,19 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
             for cell, entry in (
                 (record.get("layers") or {}).get(layer, {}).get("cells") or {}
             ).items():
+                measured_skills.add(skill)
                 ev = entry.get("evidence") or {}
                 moved = {
                     k
                     for k, v in now.items()
                     if k not in RUN_SCOPED and ev.get(k) is not None and ev.get(k) != v
                 }
-                if moved - {"native"}:
-                    refuse(f"{skill} {layer} {cell}: {sorted(moved - {'native'})} changed too")
+                if moved - carryable:
+                    refuse(f"{skill} {layer} {cell}: {sorted(moved - carryable)} changed too")
                 if "native" in moved:
                     natives.add(str(ev["native"]))
+                if "bundle" in moved:
+                    bundles.setdefault(skill, set()).add(str(ev["bundle"]))
     if len(natives) != 1:
         refuse(f"expected one measured native fingerprint, found {len(natives)}")
     measured = next(iter(natives))
@@ -1180,27 +1198,95 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
     if tree_at_commit(root, "HEAD", NATIVE_PATTERNS) != new_native:
         refuse("the native source in the tree is not HEAD's")
 
+    bundle_map: dict[str, dict[str, str]] = {}
+    for skill, found in sorted(bundles.items()):
+        if len(found) != 1:
+            refuse(f"{skill}: expected one measured bundle fingerprint, found {len(found)}")
+        base = f"skills/{skill}"
+        bspecs = [f":(glob){base}/{p}" for p in BUNDLE_PATTERNS]
+        if git("status", "--porcelain", "--", *bspecs).strip():
+            refuse(f"{base} has uncommitted changes; commit them first")
+        # What moved the bundle: `skill.yaml` under `dependencies` only, and the skill's native
+        # sources (behaviour the sample run exercised). A Python handler, prompt, tool or profile
+        # change is refused — the native sample says nothing about the Python lane.
+        diff = git("diff", "--name-status", "--no-renames", args.from_commit, "HEAD", "--", *bspecs)
+        for line in diff.splitlines():
+            kind, _, name = line.partition("\t")
+            rel = name[len(base) + 1 :]
+            if rel == "skill.yaml" and kind == "M":
+                if not bundle_change_allowed(
+                    git("show", f"{args.from_commit}:{name}"), git("show", f"HEAD:{name}")
+                ):
+                    refuse(f"{name}: changed outside `dependencies`")
+            elif not rel.startswith("native/src/"):
+                refuse(
+                    f"{name}: a sampled equivalence carries skill.yaml `dependencies` and "
+                    "the skill's native sources only"
+                )
+            if name not in changed_files:
+                changed_files.append(name)
+        measured_bundle = next(iter(found))
+        if tree_at_commit(root, args.from_commit, BUNDLE_PATTERNS, base=base) != measured_bundle:
+            refuse(f"{args.from_commit} is not the {skill} bundle the records measured")
+        new_bundle = evidence_tuple(skill, root)["bundle"]
+        if tree_at_commit(root, "HEAD", BUNDLE_PATTERNS, base=base) != new_bundle:
+            refuse(f"the {skill} bundle in the tree is not HEAD's")
+        bundle_map[skill] = {"from": measured_bundle, "to": str(new_bundle)}
+
     old_bins = binaries_by_os([Path(p) for p in args.old_bin])
     new_bins = binaries_by_os([Path(p) for p in args.new_bin])
     if set(old_bins) != set(new_bins):
         refuse(f"old binaries for {sorted(old_bins)}, new for {sorted(new_bins)}")
+
+    sample_run = None
+    if sampled:
+        run = Path(args.sample_run)
+        sample_run = run.as_posix()
+        # The evidence must be the committed run, not a folder that can still change.
+        for name in ("verdicts.txt", "COMPLETE", "run.sh"):
+            tracked = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", (run / name).as_posix()],
+                capture_output=True,
+                text=True,
+            )
+            if tracked.returncode != 0:
+                refuse(f"{run / name} is not committed")
+        if git("status", "--porcelain", "--", sample_run).strip():
+            refuse(f"{sample_run} has uncommitted changes")
+        problems = sample_run_problems(root / run, set(new_bins), measured_skills)
+        if problems:
+            refuse(f"{sample_run} does not vouch for this: " + "; ".join(problems))
+
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
     ).stdout.strip()
-    entry = {
+    fingerprints: dict[str, Any] = {"native": {"from": measured, "to": new_native}}
+    if bundle_map:
+        fingerprints["bundle"] = bundle_map
+    new_entry: dict[str, Any] = {
         "id": args.id,
         "date": args.date or _date.today().isoformat(),
         "reason": args.reason,
         "verified": args.verified,
         "from_commit": args.from_commit,
         "to_commit": head,
-        "replacements": [list(p) for p in pairs],
-        "changed_files": changed_files,
-        "fingerprints": {"native": {"from": measured, "to": new_native}},
-        "binaries": {os_: {"from": old_bins[os_], "to": new_bins[os_]} for os_ in sorted(old_bins)},
     }
+    if sampled:
+        new_entry["kind"] = "sampled"
+        new_entry["sample_run"] = sample_run
+    else:
+        new_entry["replacements"] = [list(p) for p in pairs]
+    new_entry.update(
+        {
+            "changed_files": changed_files,
+            "fingerprints": fingerprints,
+            "binaries": {
+                os_: {"from": old_bins[os_], "to": new_bins[os_]} for os_ in sorted(old_bins)
+            },
+        }
+    )
     try:
-        path = record_equivalence(root, entry)
+        path = record_equivalence(root, new_entry)
     except ValueError as exc:
         refuse(str(exc))
     print(f"  equivalence {args.id!r} recorded: {path}")
@@ -2610,12 +2696,19 @@ def build_parser() -> argparse.ArgumentParser:
     # equivalence — carry accepted results over to a text-only rebuild
     p_eq = sub.add_parser(
         "equivalence",
-        help="Record a rebuild whose native source differs from the measured build only by "
-        "declared text replacements, so the gate carries the accepted results over (and says so)",
+        help="Record a rebuild as equivalent to the measured build, so the gate carries the "
+        "accepted results over (and says so): a text fix (--replace) or a code change vouched "
+        "for by a committed sample run (--sample-run)",
     )
     p_eq.add_argument("--id", required=True)
     p_eq.add_argument("--from-commit", required=True, dest="from_commit")
-    p_eq.add_argument("--replace", action="append", required=True, metavar="OLD=NEW")
+    p_eq.add_argument("--replace", action="append", default=None, metavar="OLD=NEW")
+    p_eq.add_argument(
+        "--sample-run",
+        default=None,
+        dest="sample_run",
+        help="committed run dir whose verdicts.txt shows every OS and skill equivalent",
+    )
     p_eq.add_argument("--old-bin", action="append", required=True, dest="old_bin")
     p_eq.add_argument("--new-bin", action="append", required=True, dest="new_bin")
     p_eq.add_argument("--reason", required=True)
