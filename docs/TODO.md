@@ -342,6 +342,15 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 - [ ] **Safety population count is still unbound** — the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
 - [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
+- [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
+  tests; next version. Native asks `[y/N]` through `ask_yes_no` (`apps/cli/src/main.rs`: "Proceed?"
+  before running, and the model-download question), so Enter declines; the Python SDK app already
+  asks `Proceed? [Y/n]` (`python/core/knaif/app.py`) — the two runtimes disagree today. Decide with
+  it: (1) whether a *destructive* / overwrite step keeps `[y/N]` (the safety model requires an
+  explicit confirmation for `safety_category: destructive`); (2) Windows — `flush_terminal_input`
+  is a no-op off Unix, so an Enter typed during a long CPU inference would answer the prompt, which
+  with a Yes default silently approves. Flush the console input buffer on Windows first
+  (`FlushConsoleInputBuffer`). A non-tty stdin keeps meaning "no answer" either way.
 - [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
