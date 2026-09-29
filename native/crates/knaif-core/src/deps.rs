@@ -724,7 +724,20 @@ dependencies:
         };
         let path = dir.join(name);
         std::fs::write(&path, b"").unwrap();
+        // The lookup only accepts what the OS would launch: off Windows, the execute bit.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
         path
+    }
+
+    /// A declared folder, written the way `skill.yaml` does (backslashes) but with this
+    /// platform's separator: the folder search only runs on Windows in the product, while these
+    /// tests run everywhere, and a backslash is not a separator off Windows.
+    fn declared(pattern: &str) -> String {
+        pattern.replace('\\', std::path::MAIN_SEPARATOR_STR)
     }
 
     fn scratch(tag: &str) -> PathBuf {
@@ -747,7 +760,7 @@ dependencies:
         std::fs::create_dir_all(root.join("gs").join("unrelated")).unwrap();
         std::env::set_var("KNAIF_TEST_GLOB_ROOT", &root);
 
-        let dirs = expand_dirs(&[r"%KNAIF_TEST_GLOB_ROOT%\gs\gs*\bin".to_string()]);
+        let dirs = expand_dirs(&[declared(r"%KNAIF_TEST_GLOB_ROOT%\gs\gs*\bin")]);
         assert_eq!(dirs.len(), 3, "{dirs:?}");
         assert_eq!(find_in_dirs("knaiftestgs", &dirs), Some(newest));
         std::env::remove_var("KNAIF_TEST_GLOB_ROOT");
@@ -786,7 +799,7 @@ dependencies:
         let root = scratch("after");
         let bin = fake_exe(&root.join("bin"), "knaiftestafter");
         std::env::set_var("KNAIF_TEST_AFTER_ROOT", &root);
-        let dirs = vec![r"%KNAIF_TEST_AFTER_ROOT%\bin".to_string()];
+        let dirs = vec![declared(r"%KNAIF_TEST_AFTER_ROOT%\bin")];
         assert_eq!(
             resolve_command_in("knaiftestafter", &expand_dirs(&dirs)),
             Some(bin)
@@ -809,7 +822,7 @@ dependencies:
             commands: vec!["knaiftestanya".into(), "knaiftestanyb".into()],
             install: InstallHints::default(),
             windows: WindowsInstall {
-                dirs: vec![r"%KNAIF_TEST_ANY_ROOT%\bin".into()],
+                dirs: vec![declared(r"%KNAIF_TEST_ANY_ROOT%\bin")],
                 ..WindowsInstall::default()
             },
         };
