@@ -125,6 +125,20 @@ lanes:
     model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
     public_name: knaif-qwen3-1.7b-v2
     timeout_s: 600
+  # The Linux half (WSL Ubuntu 24.04, same RTX 5080): the unpacked linux-x64 tarball, models copied
+  # onto the Linux filesystem (not loaded over /mnt/c once per request).
+  r5c-linux-4b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r5c-linux-1.7b:
+    kind: native_cli
+    binary: sandbox/r5c/artifact/knaif-1.2.0-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
 
 backends:
   # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".
