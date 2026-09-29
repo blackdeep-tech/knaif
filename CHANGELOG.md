@@ -26,7 +26,8 @@ minus 0.02, on outcome and knaif score, plus every required capability slice).
 | `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
-<!-- R5c pending: 1.7B Windows CPU (T10); Linux CUDA and CPU for both models (T14, T15); the
+| `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
+<!-- R5c pending: Linux CUDA and CPU for both models (T14, T15); the
      release date in the heading. Fill before the release; remove this comment. -->
 
 Measured 2026-09-28 on an RTX 5080. The native and Python runtimes agree on every corpus request
@@ -95,10 +96,14 @@ the 60 ffmpeg and 4 documents requests where it did not.
 
 ### Known issues
 
-- **`knaif-qwen3-1.7b-v2` on Vulkan, ffmpeg batch requests:** one short of its bar (25 of 29 where
-  26 are required). The difference from CUDA is a single Chinese request ("批量将所有视频转换为HEVC",
-  batch-convert every video to HEVC), where Vulkan asks a question instead of planning the
-  conversion. Released by owner decision; CUDA and the 4B model clear the bar.
+- **`knaif-qwen3-1.7b-v2` on Vulkan and CPU, a few ffmpeg capability slices:** the 1.7B clears
+  them by a single request on CUDA, and other backends break a near-tie the other way. Vulkan
+  misses `batch` (25 of 29, 26 required); the CPU misses `codec` (19/22), `adjust_speed` (40/45)
+  and `batch` (24/29). The whole gap is three requests where the model asks a question instead of
+  planning: "re-encode all videos with h265", its Chinese twin ("批量将所有视频转换为HEVC"), and a
+  German half-speed-plus-CRF request. Overall scores and the safety gate clear on every backend;
+  the CPU's ffmpeg outcome is 0.918 against CUDA's 0.921. Released by owner decision; the 4B
+  model clears the bar on every backend.
 - **`knaif-qwen3-1.7b-v2` and unsafe chained requests** (see *Models*): it may drop the destructive
   half of a request instead of refusing it. Nothing unsafe runs.
 - **Native only, fixed in 1.2.1; none affects the evaluated corpora:**

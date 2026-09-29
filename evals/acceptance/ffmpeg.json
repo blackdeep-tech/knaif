@@ -519,7 +519,27 @@
           "outcome_accuracy": 0.9175377468060395,
           "avg_knaif_score": 0.9815989847715736,
           "lane": "r5c-win-1.7b",
-          "model": "knaif-qwen3-1.7b-v2"
+          "model": "knaif-qwen3-1.7b-v2",
+          "owner_exception": {
+            "date": "2026-09-29",
+            "reason": "not a blocker (owner, R5c T10): aggregates and safety clear; the gap to the accepted CUDA cell is three requests answered with a clarify (ffmpeg_229[1], ffmpeg_229[4], ffmpeg_129[1]); across the corpus CPU is not worse than CUDA (only-CPU 11, only-CUDA 9); stated in the 1.2.0 release notes",
+            "waives": "NOT ACCEPTED - 3 of 45 thresholds unmet: [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22) [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29)",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|cpu",
+            "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cpu\\ffmpeg_r5c-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+              "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+              "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+              "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+              "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+              "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+              "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            }
+          }
         }
       }
     }

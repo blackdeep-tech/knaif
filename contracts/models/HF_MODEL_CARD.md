@@ -92,15 +92,19 @@ capability slice.
 | `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
-<!-- R5c pending: 1.7B Windows CPU (T10); Linux CUDA and CPU for both models (T14, T15). Fill
+| `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
+<!-- R5c pending: Linux CUDA and CPU for both models (T14, T15). Fill
      before publishing; remove this comment. -->
 
 Measured 2026-09-28 on an RTX 5080 (Windows 11) with the release binary.
 ¹ The 4B CPU cell is composed: the CUDA cell's results for every request whose CPU plan was shown
 to match, and a real CPU run for every request where it did not (60 ffmpeg, 4 documents).
-² ffmpeg on 1.7B + Vulkan misses the `batch` slice by one request (25 of 29, 26 needed): a
-Chinese batch request where Vulkan asks a question and CUDA plans the conversion. Everything else
-clears the bar; released by owner decision.
+² The 1.7B clears these capability slices by a single request on CUDA, so a backend that breaks a
+near-tie the other way falls below: on Vulkan `batch` (25 of 29, 26 needed); on CPU `codec`
+(19/22), `adjust_speed` (40/45) and `batch` (24/29). The whole gap is three requests where the model
+asks a question instead of planning (two "re-encode all videos to HEVC" phrasings, one in Chinese,
+and a German speed-plus-quality request). Overall scores stay within 0.4 points of CUDA's, and
+the aggregates and the safety gate clear everywhere. Released by owner decision.
 
 ## Known limitations
 

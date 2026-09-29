@@ -283,7 +283,7 @@ The packaged Windows binary, one **fresh process per request** executing for rea
 model load, planning and the tool's own work all inside the wall time), RTX 5080,
 driver 616.92, 8 CPU threads. Quality is `success`-graded at complete coverage (ffmpeg 861,
 documents 164). Wall time is per request with a produced file (`time_to_artifact_ms`), p50 / p95.
-Source: `evals/runs/2026-09-28_r5c-windows_success` (T8, T9).
+Source: `evals/runs/2026-09-28_r5c-windows_success` (T8, T9, T10).
 
 | Model | Backend | ffmpeg outcome / knaif | documents outcome / knaif | ffmpeg p50 / p95 | documents p50 / p95 |
 |---|---|---:|---:|---:|---:|
@@ -292,7 +292,8 @@ Source: `evals/runs/2026-09-28_r5c-windows_success` (T8, T9).
 | `knaif-qwen3-4b-v2` | CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | — | — |
 | `knaif-qwen3-1.7b-v2` | CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 2.1 s / 4.2 s | 1.4 s / 1.7 s |
 | `knaif-qwen3-1.7b-v2` | Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 2.6 s / 5.0 s | 1.9 s / 2.2 s |
-<!-- R5c pending: 1.7B CPU (T10) and the Linux cells (T14/T15, `5080-WSL`). -->
+| `knaif-qwen3-1.7b-v2` | CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11.1 s / 15.4 s | 4.9 s / 6.1 s |
+<!-- R5c pending: the Linux cells (T14/T15, `5080-WSL`). -->
 
 ¹ Composed from the CUDA cell and a CPU re-run of the 64 requests whose CPU plan differs, so it has
 no whole-corpus wall time; the per-phase CPU figure above (§2, ~8.8 s inference) is the one to quote.
