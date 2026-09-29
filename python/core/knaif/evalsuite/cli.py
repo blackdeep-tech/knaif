@@ -1091,6 +1091,99 @@ GATE_MARKS = {
 }
 
 
+def cmd_equivalence(args: argparse.Namespace) -> None:
+    """Record a rebuild as equivalent to the measured build: text-only source change, verified."""
+    import subprocess
+    from datetime import date as _date
+
+    from .gate import (
+        CELL_LAYERS,
+        RUN_SCOPED,
+        binaries_by_os,
+        evidence_tuple,
+        load_acceptance_record,
+        record_equivalence,
+        replacement_only,
+    )
+
+    root = Path.cwd()
+
+    def refuse(msg: str) -> None:
+        print(f"refused: {msg}", file=sys.stderr)
+        sys.exit(2)
+
+    pairs = []
+    for spec in args.replace:
+        old, sep, new = spec.partition("=")
+        if not sep or not old or not new:
+            refuse(f"--replace wants OLD=NEW, got {spec!r}")
+        pairs.append((old, new))
+    # The whole native source tree the evidence fingerprints, as git stores it.
+    specs = [
+        ":(glob)native/crates/*/src/**/*.rs",
+        ":(glob)apps/cli/src/**/*.rs",
+        ":(glob)skills/*/native/src/**/*.rs",
+    ]
+    diff = subprocess.run(
+        ["git", "diff", "--unified=0", args.from_commit, "HEAD", "--", *specs],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
+    if not replacement_only(diff, pairs):
+        refuse("the native source change is not only the declared replacements")
+    changed_files = sorted({ln[6:] for ln in diff.splitlines() if ln.startswith("+++ b/")})
+
+    # Every L3/L4 record must differ from the tree in `native` alone (run-scoped keys aside).
+    natives: set[str] = set()
+    for skill in sorted(list_skills()):
+        record = load_acceptance_record(skill, root) or {}
+        now = evidence_tuple(skill, root)
+        for layer in CELL_LAYERS:
+            for cell, entry in (
+                (record.get("layers") or {}).get(layer, {}).get("cells") or {}
+            ).items():
+                ev = entry.get("evidence") or {}
+                moved = {
+                    k
+                    for k, v in now.items()
+                    if k not in RUN_SCOPED and ev.get(k) is not None and ev.get(k) != v
+                }
+                if moved - {"native"}:
+                    refuse(f"{skill} {layer} {cell}: {sorted(moved - {'native'})} changed too")
+                if "native" in moved:
+                    natives.add(str(ev["native"]))
+    if len(natives) != 1:
+        refuse(f"expected one measured native fingerprint, found {len(natives)}")
+    new_native = evidence_tuple(sorted(list_skills())[0], root)["native"]
+
+    old_bins = binaries_by_os([Path(p) for p in args.old_bin])
+    new_bins = binaries_by_os([Path(p) for p in args.new_bin])
+    if set(old_bins) != set(new_bins):
+        refuse(f"old binaries for {sorted(old_bins)}, new for {sorted(new_bins)}")
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    entry = {
+        "id": args.id,
+        "date": args.date or _date.today().isoformat(),
+        "reason": args.reason,
+        "verified": args.verified,
+        "from_commit": args.from_commit,
+        "to_commit": head,
+        "replacements": [list(p) for p in pairs],
+        "changed_files": changed_files,
+        "fingerprints": {"native": {"from": natives.pop(), "to": new_native}},
+        "binaries": {os_: {"from": old_bins[os_], "to": new_bins[os_]} for os_ in sorted(old_bins)},
+    }
+    try:
+        path = record_equivalence(root, entry)
+    except ValueError as exc:
+        refuse(str(exc))
+    print(f"  equivalence {args.id!r} recorded: {path}")
+
+
 def cmd_waive(args: argparse.Namespace) -> None:
     """Record the owner's exception for one failing cell (quality thresholds only)."""
     from datetime import date as _date
@@ -2491,6 +2584,21 @@ def build_parser() -> argparse.ArgumentParser:
         "its own OS's binary; without any, the gate reports the binary as not checked.",
     )
 
+    # equivalence — carry accepted results over to a text-only rebuild
+    p_eq = sub.add_parser(
+        "equivalence",
+        help="Record a rebuild whose native source differs from the measured build only by "
+        "declared text replacements, so the gate carries the accepted results over (and says so)",
+    )
+    p_eq.add_argument("--id", required=True)
+    p_eq.add_argument("--from-commit", required=True, dest="from_commit")
+    p_eq.add_argument("--replace", action="append", required=True, metavar="OLD=NEW")
+    p_eq.add_argument("--old-bin", action="append", required=True, dest="old_bin")
+    p_eq.add_argument("--new-bin", action="append", required=True, dest="new_bin")
+    p_eq.add_argument("--reason", required=True)
+    p_eq.add_argument("--verified", required=True, help="how equivalence was verified")
+    p_eq.add_argument("--date", default=None)
+
     # waive — the owner's exception to one failing cell
     p_waive = sub.add_parser(
         "waive",
@@ -2662,6 +2770,7 @@ def main() -> None:
         "native": cmd_native,
         "gate": cmd_gate,
         "waive": cmd_waive,
+        "equivalence": cmd_equivalence,
     }
     dispatch[args.command](args)
 

@@ -277,6 +277,63 @@ def _current_for_cell(
     return cell_current
 
 
+#: Rebuilds the owner accepted as equivalent to a measured build (`evalsuite equivalence`).
+EQUIVALENCES = ACCEPTANCE_DIR / "equivalences.json"
+
+
+def load_equivalences(root: Path) -> list[dict[str, Any]]:
+    path = root / EQUIVALENCES
+    if not path.is_file():
+        return []
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    return list(doc.get("equivalences") or [])
+
+
+def _equivalent(key: str, recorded: Any, current: Any, entries: list[dict[str, Any]]) -> str | None:
+    """The id of an equivalence mapping exactly *recorded* to exactly *current* for *key*: a
+    binary (`native_binary`, any OS) or a source fingerprint (`native`, ...). Nothing else."""
+    for entry in entries:
+        if key == "native_binary":
+            pairs = (entry.get("binaries") or {}).values()
+        else:
+            pairs = [(entry.get("fingerprints") or {}).get(key) or {}]
+        if any(p.get("from") == recorded and p.get("to") == current for p in pairs):
+            return str(entry.get("id") or "unnamed")
+    return None
+
+
+def replacement_only(diff: str, replacements: list[tuple[str, str]]) -> bool:
+    """True when a unified diff changes nothing but the declared text replacements: every removed
+    line is paired with an added line equal to it after the replacements, and nothing else is
+    added or removed. An empty diff is not a text fix."""
+    removed = [
+        ln[1:] for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---")
+    ]
+    added = [ln[1:] for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+    if not removed or len(removed) != len(added):
+        return False
+    for old, new in zip(removed, added, strict=True):
+        fixed = old
+        for a, b in replacements:
+            fixed = fixed.replace(a, b)
+        if fixed != new or old == new:
+            return False
+    return True
+
+
+def record_equivalence(root: Path, entry: dict[str, Any]) -> Path:
+    """Append *entry* to the equivalence record (ids are unique)."""
+    path = root / EQUIVALENCES
+    entries = load_equivalences(root)
+    if any(e.get("id") == entry.get("id") for e in entries):
+        raise ValueError(f"equivalence {entry.get('id')!r} is already recorded")
+    entries.append(entry)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = redact_local_paths({"equivalences": entries}, root=root)
+    path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
 def _pick_binary(binaries: dict[str, str], recorded: Any) -> str:
     """For a record that names no OS: the given binary it recorded, else one it did not (drift)."""
     given = list(binaries.values())
@@ -322,6 +379,7 @@ def _layer_state(
     current: dict[str, str | None],
     contract: dict[str, Any],
     cell: str | None = None,
+    equivalences: list[dict[str, Any]] | None = None,
 ) -> LayerState:
     """Evidence for one layer: present and matching the tree, present but stale, or absent.
 
@@ -336,11 +394,15 @@ def _layer_state(
 
     recorded = entry.get("evidence") or {}
     depends = (contract["layers"].get(layer) or {}).get("invalidated_by") or []
-    drifted = [
-        key
-        for key in depends
-        if key in current and recorded.get(key) is not None and recorded.get(key) != current[key]
-    ]
+    carried: list[str] = []
+    drifted = []
+    for key in depends:
+        if key in current and recorded.get(key) is not None and recorded.get(key) != current[key]:
+            via = _equivalent(key, recorded.get(key), current[key], equivalences or [])
+            if via:
+                carried.append(via)
+            else:
+                drifted.append(key)
     missing = [key for key in depends if key in current and recorded.get(key) is None]
     if drifted:
         return LayerState(layer, "stale", f"changed since the run: {', '.join(sorted(drifted))}")
@@ -354,6 +416,8 @@ def _layer_state(
         if key in RUN_SCOPED and key not in current and recorded.get(key) is not None
     ]
     note = f" [not checked here: {', '.join(unchecked)}]" if unchecked else ""
+    if carried:
+        note += f" [equivalent: {', '.join(sorted(set(carried)))}]"
     # A run that recorded its own verdict is taken at its word. Recording a FAILED run as valid
     # evidence would let a status rest on a measurement that said "no" — the exact substitution
     # of "we ran it" for "it passed" this gate exists to prevent.
@@ -473,6 +537,7 @@ def _cells_state(
     cells: list[str],
     root: Path,
     binaries: dict[str, str] | None = None,
+    equivalences: list[dict[str, Any]] | None = None,
 ) -> LayerState:
     """A cell-keyed layer (the acceptance matrix): valid only when EVERY required cell is.
 
@@ -496,6 +561,7 @@ def _cells_state(
             ),
             contract,
             cell,
+            equivalences,
         )
         for cell in cells
     }
@@ -503,6 +569,12 @@ def _cells_state(
     # A composed cell (evalsuite.compose) rests on reused evidence; it counts, and says so.
     composed = [c for c in cells if ((stored or {}).get(c) or {}).get("composed")]
     note = f" [composed, not a full run: {', '.join(composed)}]" if composed else ""
+    # Results carried over to an equivalent rebuild are named in every state.
+    carried = sorted(
+        {m for st in per_cell.values() for m in re.findall(r"\[equivalent: ([^\]]+)\]", st.detail)}
+    )
+    if carried:
+        note += f" [equivalent: {', '.join(carried)}]"
     if worst == "valid":
         # A cell that is valid only because nothing was there to compare must still say so.
         for c, st in per_cell.items():
@@ -543,17 +615,29 @@ def evaluate_skill(
     binaries = binaries_by_os(native_binary) if isinstance(native_binary, list) else None
     single = native_binary if not isinstance(native_binary, list) else None
     current = evidence_tuple(skill, root, single)
+    equivalences = load_equivalences(root)
 
     all_layers = list(contract["layers"])
     matrix = load_matrix(root)
     states = [
         (
             _cells_state(
-                name, record, current, contract, required_cells(matrix, name), root, binaries
+                name,
+                record,
+                current,
+                contract,
+                required_cells(matrix, name),
+                root,
+                binaries,
+                equivalences,
             )
             if matrix is not None and name in CELL_LAYERS
             else _layer_state(
-                name, record, _current_for_flat(name, record, current, binaries), contract
+                name,
+                record,
+                _current_for_flat(name, record, current, binaries),
+                contract,
+                equivalences=equivalences,
             )
         )
         for name in all_layers
