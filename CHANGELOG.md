@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] — unreleased (release candidate)
+## [1.2.0] — 2026-09-29
 
 **New models, and the native runtime now does what the Python one does.** knaif 1.2.0 ships with
 `knaif-qwen3-4b-v2` (desktop and CLI default) and `knaif-qwen3-1.7b-v2` (mobile / low footprint),
