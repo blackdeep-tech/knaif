@@ -86,14 +86,17 @@ the runs were kept.
 
 ## What good looks like
 
-For reference, the committed bars — **as measured in the Python lane**, on the
-`success` verifier, backend `qwen3-4b-sft-v3-flat-q4`. Every figure here is read straight
-from that skill's `data/eval_snapshot.json`:
+For reference, the committed bars for knaif 1.2.0 — **as measured in the Python lane**, on the
+`success` verifier. Every figure here is read straight from the skill's snapshot:
+`data/eval_snapshot.json` for the default model (`knaif-qwen3-4b-v2`), and
+`data/eval_snapshot.knaif-qwen3-1.7b-v2.json` for the 1.7B, which has its own bar:
 
-| Skill | Corpus | Full | Hard slice | 3-step chains |
-|---|---:|---:|---:|---:|
-| `ffmpeg` | 847 utterances | 0.902 | 0.929 | 0.969 |
-| `documents` | 164 utterances | 0.976 | 0.914 | — |
+| Skill | Model | Corpus | Full | Hard slice | 3-step chains |
+|---|---|---:|---:|---:|---:|
+| `ffmpeg` | 4B v2 | 861 utterances | 0.943 | 0.964 | 0.969 |
+| `ffmpeg` | 1.7B v2 | 861 utterances | 0.920 | 0.929 | 0.969 |
+| `documents` | 4B v2 | 164 utterances | 0.976 | 0.886 | — |
+| `documents` | 1.7B v2 | 164 utterances | 0.963 | 0.914 | — |
 
 Note that ffmpeg's *full* score is lower than its hard slice — the aggregate includes
 clarify and reject rows, which are harder to get right than they look.
@@ -102,15 +105,20 @@ clarify and reject rows, which are harder to get right than they look.
 
 **These are authoring-lane numbers.** They come from the Python runtime — the `knaif`
 package, and what the SDK gives you. The native CLI is a separate measurement (L4: the
-shipped binary, executing for real), and the two do not agree:
+shipped binary, executing for real, one fresh process per request), and it is the number that
+backs "the CLI works". For knaif 1.2.0 it was measured on every backend the release covers:
 
-| | ffmpeg `outcome_accuracy` |
+| ffmpeg `outcome_accuracy`, 4B v2 | |
 |---|---:|
-| Python lane, committed snapshot | **0.902** |
-| Native CLI, last measured L4 run | **0.887** |
+| Python lane, committed snapshot | **0.943** |
+| Native CLI, Windows · CUDA | **0.943** |
+| Native CLI, Windows · Vulkan | **0.941** |
+| Native CLI, Windows · CPU | **0.942** |
+| Native CLI, Linux · CUDA | **0.945** |
 
-Neither skill's native runtime is release-eligible yet — both sit at `in-progress`, with
-no accepted L4 record. So quote the Python figure for the library and the SDK, quote the
-native figure for the CLI, and never quote either as "knaif's accuracy" without saying
-which runtime produced it. `cheap` numbers are never published at all: a snapshot can only
-be locked from an executing run.
+Every one of these cells is accepted against the bar (the model's floor and its Python score
+minus 0.02, every required capability slice, safety at 100% on the binary); the per-backend
+table for both models and skills is in the model card and the release notes. So quote the
+Python figure for the library and the SDK, quote the native figure for the CLI, and never quote
+either as "knaif's accuracy" without saying which runtime produced it. `cheap` numbers are never
+published at all: a snapshot can only be locked from an executing run.
