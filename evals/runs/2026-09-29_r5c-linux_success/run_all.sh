@@ -34,6 +34,9 @@
 #   request on Windows CUDA, so a single flip could miss one: ~30% risk.
 set -uo pipefail
 cd "$(dirname "$0")/../../.."
+# Never from the Windows checkout through /mnt: it would unpack over that checkout's artifact and
+# let uv rebuild its .venv for Linux (a mis-quoted launch did exactly that for ~40 s, 2026-09-29).
+case "$PWD" in /mnt/*) echo "refusing to run from $PWD: use the WSL checkout" >&2; exit 2 ;; esac
 STAGE="${1:?usage: run_all.sh t14}"
 R=evals/runs/2026-09-29_r5c-linux_success
 TARBALL="$HOME/r5c/dist/knaif-1.2.0-linux-x64.tar.gz"
