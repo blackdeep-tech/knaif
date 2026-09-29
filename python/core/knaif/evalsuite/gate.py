@@ -316,11 +316,23 @@ def _valid_equivalence(entry: Any) -> bool:
 
 
 def load_equivalences(root: Path) -> list[dict[str, Any]]:
+    """The honoured entries. A `sampled` entry is honoured only while the run it names is on disk
+    and still shows every OS it maps and every measured skill equivalent — the gate re-checks the
+    evidence instead of trusting a hand-editable field (Codex, 2026-09-29)."""
     path = root / EQUIVALENCES
     if not path.is_file():
         return []
     doc = json.loads(path.read_text(encoding="utf-8"))
-    return [e for e in (doc.get("equivalences") or []) if _valid_equivalence(e)]
+    honoured = []
+    for entry in doc.get("equivalences") or []:
+        if not _valid_equivalence(entry):
+            continue
+        if entry.get("kind") == "sampled" and sample_run_problems(
+            root / str(entry["sample_run"]), set(entry["binaries"]), _measured_skills(root)
+        ):
+            continue
+        honoured.append(entry)
+    return honoured
 
 
 def _carrying_entry(
@@ -511,14 +523,17 @@ def sample_run_problems(run_dir: Path, os_ids: set[str], skills: set[str]) -> li
         return [f"{run_dir}: no verdicts.txt / COMPLETE"]
     found: dict[tuple[str, str], str] = {}
     current: tuple[str, str] | None = None
-    for line in verdicts.read_text(encoding="utf-8").splitlines():
+    for raw in verdicts.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
         if line.startswith("FAILED"):
-            problems.append(f"a failure is recorded: {line.strip()}")
-        head = re.match(r"^== (\S+) (\S+)$", line.strip())
+            problems.append(f"a failure is recorded: {line}")
+        head = re.match(r"^== (\S+) (\S+)$", line)
         if head:
             current = (SAMPLE_STAGES.get(head.group(1), head.group(1)), head.group(2))
         elif current and line.startswith("VERDICT:"):
-            found[current] = line.strip()
+            # A second block for one pair is two runs' verdicts in one file: a later good one
+            # must not hide an earlier bad one (Codex, 2026-09-29).
+            found[current] = "duplicate verdict blocks" if current in found else line
             current = None
     for os_id in sorted(os_ids):
         for skill in sorted(skills):
@@ -536,6 +551,73 @@ def sample_run_problems(run_dir: Path, os_ids: set[str], skills: set[str]) -> li
         if events.get(os_id) != ["START", "DONE"]:
             problems.append(f"{os_id}: stage log is {events.get(os_id)}, not one START then DONE")
     return problems
+
+
+def artifact_binary(artifact: Path) -> tuple[str | None, str]:
+    """(platform id, sha256) of the knaif executable inside a release zip or tarball — so an
+    equivalence maps the binary that was actually in the artifact a sample run tested."""
+    import tarfile
+    import zipfile
+
+    if zipfile.is_zipfile(artifact):
+        with zipfile.ZipFile(artifact) as z:
+            names = [n for n in z.namelist() if re.search(r"(^|/)bin/knaif(\.exe)?$", n)]
+            if len(names) != 1:
+                raise ValueError(f"{artifact}: expected one bin/knaif executable, found {names}")
+            data = z.read(names[0])
+    else:
+        with tarfile.open(artifact, "r:*") as t:
+            members = [
+                m for m in t.getmembers() if m.isfile() and re.search(r"(^|/)bin/knaif$", m.name)
+            ]
+            if len(members) != 1:
+                raise ValueError(f"{artifact}: expected one bin/knaif executable")
+            fh = t.extractfile(members[0])
+            assert fh is not None
+            data = fh.read()
+    return _binary_os(data[:4096]), hashlib.sha256(data).hexdigest()
+
+
+def run_preregistered(root: Path, run: str) -> bool:
+    """True when the run's rules (`run.sh`) were committed strictly before its results
+    (`verdicts.txt`): the commit that added the rules is an ancestor of, and not the same as, the
+    one that added the verdicts. Rules written after the results are not a pre-registration."""
+    import subprocess
+
+    def added(name: str) -> str | None:
+        out = subprocess.run(
+            ["git", "log", "--diff-filter=A", "--format=%H", "--", f"{run}/{name}"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout.split()
+        return out[-1] if out else None
+
+    rules, results = added("run.sh"), added("verdicts.txt")
+    if not rules or not results or rules == results:
+        return False
+    return (
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", rules, results], cwd=root, capture_output=True
+        ).returncode
+        == 0
+    )
+
+
+def _measured_skills(root: Path) -> set[str]:
+    """Skills whose acceptance record holds L3/L4 cells."""
+    skills = set()
+    for path in (root / ACCEPTANCE_DIR).glob("*.json"):
+        if path.name == EQUIVALENCES.name:
+            continue
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        layers = record.get("layers") if isinstance(record, dict) else None
+        if any(((layers or {}).get(layer) or {}).get("cells") for layer in CELL_LAYERS):
+            skills.add(str(record.get("skill") or path.stem))
+    return skills
 
 
 def record_equivalence(root: Path, entry: dict[str, Any]) -> Path:

@@ -476,14 +476,18 @@ uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --repla
   --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
 # a code change: vouched for by a committed, pre-registered sample run (gate says "(sampled)")
 uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sample-run evals/runs/<dir> \
-  --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
+  --old-bin <measured exe> --new-bin <rebuilt exe> --new-artifact <the zip/tarball the run tested> \
+  --reason "..." --verified "..."
 ```
 
 `--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
 entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
-and otherwise only the skill's native sources did; its run must be committed, with every OS and
-skill `VERDICT: equivalent on the sample` and each stage one START then DONE. 1.2.0: RC2 (text) and
-RC3 (sampled, supporting-tool lookup).
+and otherwise only the skill's native sources did. Its run must be committed, its `run.sh` in an
+earlier commit than its `verdicts.txt` (pre-registered), every OS and skill `VERDICT: equivalent on
+the sample` exactly once, each stage one START then DONE; binaries must cover every OS a cell was
+measured on, and each `--new-bin` must be the executable inside an artifact whose sha256 the run
+recorded. The gate re-checks the run on every read. 1.2.0: RC2 (text) and RC3 (sampled,
+supporting-tool lookup).
 
 ### Testing the Windows installer without damaging a real install
 

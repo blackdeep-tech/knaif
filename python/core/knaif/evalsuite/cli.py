@@ -10,7 +10,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 
@@ -1104,11 +1104,14 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         CELL_LAYERS,
         NATIVE_PATTERNS,
         RUN_SCOPED,
+        SAMPLE_STAGES,
+        artifact_binary,
         binaries_by_os,
         bundle_change_allowed,
         evidence_tuple,
         load_acceptance_record,
         record_equivalence,
+        run_preregistered,
         sample_run_problems,
         text_only_change,
         tree_at_commit,
@@ -1116,7 +1119,7 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
 
     root = Path.cwd()
 
-    def refuse(msg: str) -> None:
+    def refuse(msg: str) -> NoReturn:
         print(f"refused: {msg}", file=sys.stderr)
         sys.exit(2)
 
@@ -1240,8 +1243,45 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
 
     sample_run = None
     if sampled:
+        # Every OS a measured cell names must be mapped: a one-OS sample cannot vouch for the
+        # other OS's cells, which would otherwise pass "not checked here" (Codex, 2026-09-29).
+        cell_oses = {
+            parts[1]
+            for skill in measured_skills
+            for layer in CELL_LAYERS
+            for cell in (
+                ((load_acceptance_record(skill, root) or {}).get("layers") or {}).get(layer) or {}
+            ).get("cells")
+            or {}
+            if len(parts := cell.split("|")) == 3
+        }
+        if not cell_oses <= set(new_bins):
+            refuse(
+                f"cells were measured on {sorted(cell_oses)}; binaries given for "
+                f"{sorted(new_bins)}"
+            )
         run = Path(args.sample_run)
         sample_run = run.as_posix()
+        # The binaries mapped must be the ones inside the artifacts the run tested: hash each
+        # artifact against the run's own record, then the executable inside it against --new-bin.
+        tested: dict[str, str] = {}
+        for art in args.new_artifact or []:
+            os_id, bin_sha = artifact_binary(Path(art))
+            stage = next((s for s, o in SAMPLE_STAGES.items() if o == os_id), None)
+            recorded = root / run / f"{stage}_artifact.sha256"
+            art_sha = hashlib.sha256(Path(art).read_bytes()).hexdigest()
+            if not recorded.is_file() or art_sha not in recorded.read_text(encoding="utf-8"):
+                refuse(f"{art} is not the artifact {sample_run} recorded testing on {os_id}")
+            if os_id is None or new_bins.get(os_id) != bin_sha:
+                refuse(f"--new-bin for {os_id} is not the executable inside {art}")
+            tested[os_id] = bin_sha
+        if set(tested) != set(new_bins):
+            refuse(
+                f"give --new-artifact for every OS: have {sorted(tested)}, "
+                f"binaries for {sorted(new_bins)}"
+            )
+        if not run_preregistered(root, sample_run):
+            refuse(f"{sample_run}/run.sh was not committed before its verdicts.txt")
         # The evidence must be the committed run, not a folder that can still change.
         for name in ("verdicts.txt", "COMPLETE", "run.sh"):
             tracked = subprocess.run(
@@ -2708,6 +2748,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         dest="sample_run",
         help="committed run dir whose verdicts.txt shows every OS and skill equivalent",
+    )
+    p_eq.add_argument(
+        "--new-artifact",
+        action="append",
+        default=None,
+        dest="new_artifact",
+        help="with --sample-run: each release zip/tarball the run tested (its sha256 must be in "
+        "the run's <stage>_artifact.sha256, and its executable must be the --new-bin)",
     )
     p_eq.add_argument("--old-bin", action="append", required=True, dest="old_bin")
     p_eq.add_argument("--new-bin", action="append", required=True, dest="new_bin")
