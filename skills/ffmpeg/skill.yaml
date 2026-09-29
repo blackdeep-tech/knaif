@@ -42,6 +42,13 @@ dependencies:
       all_required: true          # ffmpeg AND ffprobe are both needed (distinct binaries)
       commands: [ffmpeg, ffprobe]
       install: { windows: winget, macos: brew, linux: package_manager }
+      windows:                    # how setup installs it, and where to look beyond PATH
+        winget: Gyan.FFmpeg
+        download: https://ffmpeg.org/download.html#build-windows
+        dirs:                     # winget's portable-app links, else the unpacked package
+          - '%LOCALAPPDATA%\Microsoft\WinGet\Links'
+          - '%ProgramFiles%\WinGet\Links'
+          - '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin'
 
 safety:
   unsafe_phrases:

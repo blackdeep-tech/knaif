@@ -83,6 +83,30 @@
 #endif
 ; Mark an overridden build in Add/Remove Programs so a test install is never mistaken for the real
 ; one — the two now coexist there rather than overwriting each other.
+; Supporting tools, one set of facts each, emitted into [Tasks], [Run] and [Code] so the offer,
+; the "already installed?" probe, the no-winget gray-out and the finish-page report cannot drift
+; apart. Commands, folders and winget ids MIRROR `dependencies.external_tools` in
+; skills/<skill>/skill.yaml (commands, windows.dirs, windows.winget); test_installer_iss.py
+; asserts it. Folders are `|`-separated (a `;` would split the Check parameter), `%VAR%`-expanded
+; as the 64-bit runtime sees them (see ExpandToolDir), with `*` matching within one component.
+#define DepsGroup "Install supporting tools (via winget):"
+#define NoWingetGroup "Install supporting tools (needs winget, which this PC does not have):"
+#define FfmpegTask "FFmpeg — required for the ffmpeg skill"
+#define FfmpegCmds "ffmpeg,ffprobe"
+#define FfmpegDirs "%LOCALAPPDATA%\Microsoft\WinGet\Links|%ProgramFiles%\WinGet\Links|%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin"
+#define FfmpegWinget "Gyan.FFmpeg"
+#define GsTask "Ghostscript — aggressive PDF compression (optional, AGPL)"
+#define GsCmds "gs,gswin64c,gswin32c"
+#define GsDirs "%ProgramFiles%\gs\gs*\bin|%ProgramFiles(x86)%\gs\gs*\bin"
+#define GsWinget "ArtifexSoftware.GhostScript"
+#define SofficeTask "LibreOffice — Office <-> PDF conversion (optional)"
+#define SofficeCmds "soffice,libreoffice"
+#define SofficeDirs "%ProgramFiles%\LibreOffice\program"
+#define SofficeWinget "TheDocumentFoundation.LibreOffice"
+#define TesseractTask "Tesseract OCR — scanned-PDF / image text (optional)"
+#define TesseractCmds "tesseract"
+#define TesseractDirs "%ProgramFiles%\Tesseract-OCR|%LOCALAPPDATA%\Programs\Tesseract-OCR"
+#define TesseractWinget "UB-Mannheim.TesseractOCR"
 #if AppIdGuid == "7E9F3C2A-4B6D-4E1F-9A2B-1C3D5E7F9A0B"
   #define TestSuffix ""
 #else
@@ -159,8 +183,10 @@ Name: "skills\documents"; Description: "documents — PDF & Office toolkit"; Typ
 
 [Tasks]
 Name: "addtopath"; Description: "Add knaif to my PATH (so ""knaif"" works in any terminal)"; GroupDescription: "Integration:"
-; Supporting external tools, installed for you via winget (skipped if already present, or if winget
-; is unavailable). Shown per selected skill. ffmpeg is required by the ffmpeg skill, so it defaults on.
+; Supporting external tools, installed for you via winget (skipped if already present). Shown per
+; selected skill. ffmpeg is required by the ffmpeg skill, so it defaults on. Without winget
+; (Windows Sandbox, Server, LTSC, policy-blocked) GrayOutToolTasks shows them unchecked and
+; disabled under a heading that says why, and the finish page says how to get them.
 ;
 ; Task names are FLAT and must stay that way. A dotted `deps\<x>` name declares `deps` as a parent
 ; task; when the parent is not defined in [Tasks] the children render under the preceding task and
@@ -169,10 +195,10 @@ Name: "addtopath"; Description: "Add knaif to my PATH (so ""knaif"" works in any
 ; Declaring a real `deps` parent does NOT fix it: Inno force-checks children of a checked parent,
 ; so the defaults would break again the moment anyone ticks it. Flat names are the only shape in
 ; which per-task defaults survive.
-Name: "depsffmpeg";    Description: "FFmpeg — required for the ffmpeg skill";                      GroupDescription: "Install supporting tools (via winget):"; Components: skills\ffmpeg
-Name: "depsgs";        Description: "Ghostscript — aggressive PDF compression (optional, AGPL)";    GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
-Name: "depssoffice";   Description: "LibreOffice — Office <-> PDF conversion (optional)";           GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
-Name: "depstesseract"; Description: "Tesseract OCR — scanned-PDF / image text (optional)";          GroupDescription: "Install supporting tools (via winget):"; Components: skills\documents; Flags: unchecked
+Name: "depsffmpeg";    Description: "{#FfmpegTask}";    GroupDescription: "{#DepsGroup}"; Components: skills\ffmpeg
+Name: "depsgs";        Description: "{#GsTask}";        GroupDescription: "{#DepsGroup}"; Components: skills\documents; Flags: unchecked
+Name: "depssoffice";   Description: "{#SofficeTask}";   GroupDescription: "{#DepsGroup}"; Components: skills\documents; Flags: unchecked
+Name: "depstesseract"; Description: "{#TesseractTask}"; GroupDescription: "{#DepsGroup}"; Components: skills\documents; Flags: unchecked
 ; The AI model powers `run` (turning a request into a command). ~2.5 GB, one-time — default on so
 ; knaif works out of the box. `Check: NeedsModel` hides the task (and with it the whole "AI model:"
 ; group) when the GGUF is already in the store, instead of offering a download that then no-ops.
@@ -249,18 +275,18 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 ; asserts the two agree — commands, all_required-vs-alias semantics, and the task's default checked
 ; state against the tool's `required` flag. Change a list here and that test tells you which contract
 ; it no longer matches.
-Filename: "winget"; Parameters: "install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements"; \
+Filename: "winget"; Parameters: "install -e --id {#FfmpegWinget} --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing FFmpeg via winget (this can take a minute)..."; Flags: shellexec waituntilterminated; \
-    Tasks: depsffmpeg; Check: ShouldInstallAll('ffmpeg,ffprobe')
-Filename: "winget"; Parameters: "install -e --id ArtifexSoftware.GhostScript --accept-package-agreements --accept-source-agreements"; \
+    Tasks: depsffmpeg; Check: ShouldInstallAll('{#FfmpegCmds}', '{#FfmpegDirs}')
+Filename: "winget"; Parameters: "install -e --id {#GsWinget} --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing Ghostscript via winget..."; Flags: shellexec waituntilterminated; \
-    Tasks: depsgs; Check: ShouldInstallAny('gs,gswin64c,gswin32c')
-Filename: "winget"; Parameters: "install -e --id TheDocumentFoundation.LibreOffice --accept-package-agreements --accept-source-agreements"; \
+    Tasks: depsgs; Check: ShouldInstallAny('{#GsCmds}', '{#GsDirs}')
+Filename: "winget"; Parameters: "install -e --id {#SofficeWinget} --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing LibreOffice via winget (large download, please wait)..."; Flags: shellexec waituntilterminated; \
-    Tasks: depssoffice; Check: ShouldInstallAny('soffice,libreoffice')
-Filename: "winget"; Parameters: "install -e --id UB-Mannheim.TesseractOCR --accept-package-agreements --accept-source-agreements"; \
+    Tasks: depssoffice; Check: ShouldInstallAny('{#SofficeCmds}', '{#SofficeDirs}')
+Filename: "winget"; Parameters: "install -e --id {#TesseractWinget} --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing Tesseract OCR via winget..."; Flags: shellexec waituntilterminated; \
-    Tasks: depstesseract; Check: ShouldInstallAny('tesseract')
+    Tasks: depstesseract; Check: ShouldInstallAny('{#TesseractCmds}', '{#TesseractDirs}')
 ; Download the recommended model via the just-installed knaif (its own progress bar shows in a
 ; console). Skipped when the GGUF is already in the shared store. Non-fatal if the download fails.
 Filename: "{app}\bin\knaif.exe"; Parameters: "models pull {#DefaultModel}"; \
@@ -333,10 +359,11 @@ begin
 end;
 
 { Dependency detection below mirrors the runtime probe in
-  native/crates/knaif-core/src/deps.rs (resolve_command / which / executable_extensions). Any
-  divergence means the installer offers a winget install the runtime considers unnecessary, or
-  skips one it needs. The three behaviours that must match: PATHEXT suffixes (not just `.exe`),
-  the $KNAIF_<CMD>_BIN override, and `all_required` vs alias satisfaction. }
+  native/crates/knaif-core/src/deps.rs (resolve_command_in / which / find_in_dirs /
+  expand_dirs). Any divergence means the installer offers a winget install the runtime considers
+  unnecessary, or skips one it needs. The behaviours that must match: PATHEXT suffixes (not just
+  `.exe`), the $KNAIF_<CMD>_BIN override, the declared install folders searched after PATH, and
+  `all_required` vs alias satisfaction. }
 
 { Is Cmd in Dir under any PATHEXT suffix? The bare name is tried first, as the runtime does. }
 function FoundInDir(Dir, Cmd: string): Boolean;
@@ -384,19 +411,137 @@ begin
   end;
 end;
 
-{ One command, resolved the runtime's way: $KNAIF_<CMD>_BIN wins outright — resolve_command()
-  returns it without probing, so a user who set it is considered satisfied — else scan PATH. }
-function CommandPresent(Cmd: string): Boolean;
+{ Expand the %NAME% variables of a declared install folder as the runtime sees them. The runtime
+  is a 64-bit process; setup is a 32-bit one, where %ProgramFiles% names "Program Files (x86)" —
+  so the folder variables come from Inno's constants, not from GetEnv. An unset or unclosed
+  variable yields '' and the folder is skipped, as expand_vars does. }
+function ExpandToolDir(Pattern: string): string;
+var
+  P: Integer;
+  Name, Value: string;
+begin
+  Result := '';
+  while Pos('%', Pattern) > 0 do
+  begin
+    P := Pos('%', Pattern);
+    Result := Result + Copy(Pattern, 1, P - 1);
+    Delete(Pattern, 1, P);
+    P := Pos('%', Pattern);
+    if P = 0 then
+    begin
+      Result := '';
+      Exit;
+    end;
+    Name := Copy(Pattern, 1, P - 1);
+    Delete(Pattern, 1, P);
+    if CompareText(Name, 'ProgramFiles') = 0 then
+      Value := ExpandConstant('{commonpf64}')
+    else if CompareText(Name, 'ProgramFiles(x86)') = 0 then
+      Value := ExpandConstant('{commonpf32}')
+    else if CompareText(Name, 'LOCALAPPDATA') = 0 then
+      Value := ExpandConstant('{localappdata}')
+    else
+      Value := GetEnv(Name);
+    if Value = '' then
+    begin
+      Result := '';
+      Exit;
+    end;
+    Result := Result + Value;
+  end;
+  Result := Result + Pattern;
+end;
+
+{ Is Cmd in a folder matching Path? A `*` matches within one path component (FindFirst does the
+  matching), as the runtime's glob_dirs does. Order does not matter here: any match satisfies. }
+function FoundInGlob(Path, Cmd: string): Boolean;
+var
+  Star, Cut, I: Integer;
+  Base, Comp, Tail: string;
+  Rec: TFindRec;
+begin
+  Result := False;
+  Star := Pos('*', Path);
+  if Star = 0 then
+  begin
+    Result := FoundInDir(Path, Cmd);
+    Exit;
+  end;
+  Cut := 0;
+  for I := Star - 1 downto 1 do
+    if Path[I] = '\' then
+    begin
+      Cut := I;
+      Break;
+    end;
+  if Cut = 0 then
+    Exit;
+  Base := Copy(Path, 1, Cut - 1);
+  Tail := Copy(Path, Cut + 1, Length(Path));
+  I := Pos('\', Tail);
+  if I = 0 then
+  begin
+    Comp := Tail;
+    Tail := '';
+  end
+  else
+  begin
+    Comp := Copy(Tail, 1, I - 1);
+    Tail := Copy(Tail, I, Length(Tail));
+  end;
+  if FindFirst(Base + '\' + Comp, Rec) then
+  begin
+    try
+      repeat
+        if ((Rec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and (Rec.Name <> '.') and
+           (Rec.Name <> '..') and FoundInGlob(Base + '\' + Rec.Name + Tail, Cmd) then
+        begin
+          Result := True;
+          Break;
+        end;
+      until not FindNext(Rec);
+    finally
+      FindClose(Rec);
+    end;
+  end;
+end;
+
+{ Is Cmd in any of the `|`-separated declared install folders? }
+function FoundInToolDirs(Dirs, Cmd: string): Boolean;
+var
+  P: Integer;
+  Dir: string;
+begin
+  Result := False;
+  Dirs := Dirs + '|';
+  while Pos('|', Dirs) > 0 do
+  begin
+    P := Pos('|', Dirs);
+    Dir := ExpandToolDir(Copy(Dirs, 1, P - 1));
+    Delete(Dirs, 1, P);
+    if (Dir <> '') and FoundInGlob(Dir, Cmd) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
+
+{ One command, resolved the runtime's way: $KNAIF_<CMD>_BIN wins outright — resolve_command_in()
+  returns it without probing, so a user who set it is considered satisfied — else scan PATH,
+  else the declared install folders (Ghostscript, LibreOffice and Tesseract never touch PATH,
+  and a winget install made moments ago is not on this process's PATH either). }
+function CommandPresent(Cmd, Dirs: string): Boolean;
 begin
   if GetEnv('KNAIF_' + Uppercase(Cmd) + '_BIN') <> '' then
     Result := True
   else
-    Result := OnPath(Cmd);
+    Result := OnPath(Cmd) or FoundInToolDirs(Dirs, Cmd);
 end;
 
 { `all_required: false` (the default): the commands are alternative names for one binary, so any
   one satisfies — e.g. gs / gswin64c / gswin32c. }
-function AnyPresent(List: string): Boolean;
+function AnyPresent(List, Dirs: string): Boolean;
 var
   Cmd: string;
   P: Integer;
@@ -408,7 +553,7 @@ begin
     P := Pos(',', List);
     Cmd := Copy(List, 1, P - 1);
     Delete(List, 1, P);
-    if (Cmd <> '') and CommandPresent(Cmd) then
+    if (Cmd <> '') and CommandPresent(Cmd, Dirs) then
     begin
       Result := True;
       Exit;
@@ -418,7 +563,7 @@ end;
 
 { `all_required: true`: the commands are distinct binaries and EVERY one must resolve — e.g. the
   ffmpeg skill needs ffmpeg AND ffprobe, so ffmpeg alone does not satisfy it. }
-function AllPresent(List: string): Boolean;
+function AllPresent(List, Dirs: string): Boolean;
 var
   Cmd: string;
   P: Integer;
@@ -430,7 +575,7 @@ begin
     P := Pos(',', List);
     Cmd := Copy(List, 1, P - 1);
     Delete(List, 1, P);
-    if (Cmd <> '') and not CommandPresent(Cmd) then
+    if (Cmd <> '') and not CommandPresent(Cmd, Dirs) then
     begin
       Result := False;
       Exit;
@@ -438,15 +583,91 @@ begin
   end;
 end;
 
-{ Install only when winget is available AND the dependency is not already satisfied. }
-function ShouldInstallAny(List: string): Boolean;
+{ Install only when winget is available AND the dependency is not already satisfied. The wizard
+  already grays the tasks out without winget; this check still guards a silent install. }
+function ShouldInstallAny(List, Dirs: string): Boolean;
 begin
-  Result := OnPath('winget') and not AnyPresent(List);
+  Result := OnPath('winget') and not AnyPresent(List, Dirs);
 end;
 
-function ShouldInstallAll(List: string): Boolean;
+function ShouldInstallAll(List, Dirs: string): Boolean;
 begin
-  Result := OnPath('winget') and not AllPresent(List);
+  Result := OnPath('winget') and not AllPresent(List, Dirs);
+end;
+
+{ Without winget the tool tasks cannot run, so show them unchecked and disabled, and say why in
+  the heading, instead of letting the user tick installs setup will then skip (v1.2.0-rc2 in
+  Windows Sandbox). Called each time the tasks page shows: Inno rebuilds the list whenever the
+  component selection changes, re-checking the defaults. Found by caption, since task indices
+  shift with the selected components and the hidden tasks. }
+procedure GrayOutToolTasks;
+var
+  I: Integer;
+  Caption: string;
+begin
+  if OnPath('winget') then
+    Exit;
+  for I := 0 to WizardForm.TasksList.Items.Count - 1 do
+  begin
+    Caption := WizardForm.TasksList.ItemCaption[I];
+    if (Caption = '{#FfmpegTask}') or (Caption = '{#GsTask}') or
+       (Caption = '{#SofficeTask}') or (Caption = '{#TesseractTask}') then
+    begin
+      WizardForm.TasksList.Checked[I] := False;
+      WizardForm.TasksList.ItemEnabled[I] := False;
+    end
+    else if Caption = '{#DepsGroup}' then
+      WizardForm.TasksList.ItemCaption[I] := '{#NoWingetGroup}';
+  end;
+end;
+
+{ One finish-page line for a tool of a selected skill: probed afresh, with the offer's own
+  commands and folders, because winget's exit status never reaches setup (shellexec). }
+function ToolLine(ToolName, Component, Cmds, Dirs: string; AllRequired: Boolean): string;
+var
+  Ready: Boolean;
+begin
+  Result := '';
+  if not WizardIsComponentSelected(Component) then
+    Exit;
+  if AllRequired then
+    Ready := AllPresent(Cmds, Dirs)
+  else
+    Ready := AnyPresent(Cmds, Dirs);
+  if Ready then
+    Result := '    ' + ToolName + ': ready' + #13#10
+  else
+    Result := '    ' + ToolName + ': not installed' + #13#10;
+end;
+
+var
+  ToolsReported: Boolean;
+
+{ Say on the finish page which supporting tools are ready, so a skipped or failed install is
+  visible where it happened rather than at the first `knaif run`. }
+procedure ReportTools;
+var
+  Lines: string;
+begin
+  if ToolsReported then
+    Exit;
+  ToolsReported := True;
+  Lines :=
+    ToolLine('FFmpeg', 'skills\ffmpeg', '{#FfmpegCmds}', '{#FfmpegDirs}', True) +
+    ToolLine('Ghostscript', 'skills\documents', '{#GsCmds}', '{#GsDirs}', False) +
+    ToolLine('LibreOffice', 'skills\documents', '{#SofficeCmds}', '{#SofficeDirs}', False) +
+    ToolLine('Tesseract OCR', 'skills\documents', '{#TesseractCmds}', '{#TesseractDirs}', False);
+  if Lines = '' then
+    Exit;
+  Lines := 'Supporting tools:' + #13#10 + Lines;
+  if Pos(': not installed', Lines) > 0 then
+  begin
+    if not OnPath('winget') then
+      Lines := Lines + 'Setup could not install them: this PC does not have winget.' + #13#10;
+    Lines := Lines + 'Run "knaif skills deps" in a new terminal to see how to get them.';
+  end;
+  WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 + Lines;
+  WizardForm.AdjustLabelHeight(WizardForm.FinishedLabel);
 end;
 
 // True when the recommended model GGUF isn't already in the shared store (~/.knaif/models).
@@ -642,6 +863,10 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpLicense then
     WizardForm.LicenseAcceptedRadio.Checked := True;
+  if CurPageID = wpSelectTasks then
+    GrayOutToolTasks;
+  if CurPageID = wpFinished then
+    ReportTools;
 end;
 
 function NeedsAddPath(PathDir: string): Boolean;

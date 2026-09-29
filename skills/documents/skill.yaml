@@ -32,21 +32,34 @@ runtimes:
 
 # Optional external tools. documents degrades gracefully without them (the affected
 # operations report a missing-dependency error); the installer offers them per-feature.
-# PATH is never modified without consent. Detection: see python/_deps.py.
+# PATH is never modified. Detection: $KNAIF_<CMD>_BIN, then PATH, then (Windows) the
+# `windows.dirs` each tool's own installer uses — none of these three put themselves on PATH.
 dependencies:
   external_tools:
     - name: ghostscript
       required: false
       commands: [gs, gswin64c, gswin32c]
       install: { windows: winget, macos: brew, linux: package_manager }
+      windows:
+        winget: ArtifexSoftware.GhostScript
+        download: https://ghostscript.com/releases/gsdnld.html
+        dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
     - name: libreoffice
       required: false
       commands: [soffice, libreoffice]
       install: { windows: winget, macos: brew, linux: package_manager }
+      windows:
+        winget: TheDocumentFoundation.LibreOffice
+        download: https://www.libreoffice.org/download/download-libreoffice/
+        dirs: ['%ProgramFiles%\LibreOffice\program']
     - name: tesseract
       required: false
       commands: [tesseract]
       install: { windows: winget, macos: brew, linux: package_manager }
+      windows:
+        winget: UB-Mannheim.TesseractOCR
+        download: https://github.com/UB-Mannheim/tesseract/wiki
+        dirs: ['%ProgramFiles%\Tesseract-OCR', '%LOCALAPPDATA%\Programs\Tesseract-OCR']
 
 data:
   train: data/train.jsonl

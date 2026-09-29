@@ -2,8 +2,10 @@
 //! tree (Phase 9) and the runtime `knaif setup`/doctor + execution preflight (Phase 8).
 //!
 //! Reads `dependencies.external_tools` from a bundle `skill.yaml` (the declarative source of
-//! truth, identical for every runtime), probes `PATH` for each declared tool, and reports what
-//! is satisfied plus the per-OS install hint. **Detection only** — never launches a tool and
+//! truth, identical for every runtime), probes `PATH` — then, on Windows, the install folders the
+//! entry declares, since the Ghostscript/LibreOffice/Tesseract installers never touch `PATH` —
+//! for each declared tool, and reports what is satisfied plus an actionable install hint. The
+//! skills launch the binary the same lookup picks (`resolve_declared_*`), so found means used. **Detection only** — never launches a tool and
 //! never modifies `PATH`. Third-party tools are installed via their own installers / package
 //! managers, never bundled (owner decision 2026-07-07).
 
@@ -34,6 +36,25 @@ pub struct ExternalTool {
     /// Per-OS install channel hint.
     #[serde(default)]
     pub install: InstallHints,
+    /// Windows-only install facts: the winget package, the vendor's download page, and the
+    /// folders the vendor's installer uses (most of which never put themselves on `PATH`).
+    #[serde(default)]
+    pub windows: WindowsInstall,
+}
+
+/// The `windows:` block of an external tool in `skill.yaml`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct WindowsInstall {
+    /// winget package id (`winget install -e --id <id>`); the installer's task must match it.
+    #[serde(default)]
+    pub winget: Option<String>,
+    /// The vendor's download page, for a machine without winget.
+    #[serde(default)]
+    pub download: Option<String>,
+    /// Install folders searched after `PATH`: `%VAR%` is expanded from the environment, `*`
+    /// matches within one path component, and several matches are tried newest version first.
+    #[serde(default)]
+    pub dirs: Vec<String>,
 }
 
 /// Per-OS install channel hint (`install: {windows, macos, linux}` in skill.yaml).
@@ -76,12 +97,37 @@ pub struct ToolStatus {
 }
 
 impl ExternalTool {
+    /// The declared install folders that exist on this machine, or none off Windows.
+    fn known_dirs(&self) -> Vec<PathBuf> {
+        if cfg!(windows) {
+            expand_dirs(&self.windows.dirs)
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// The binary to launch for this tool: the first of its commands to resolve, trying every
+    /// command's `$KNAIF_<CMD>_BIN` override, then every command on `PATH`, then every command
+    /// in the declared install folders. For `all_required` tools resolve each command instead.
+    pub fn resolve_any(&self) -> Option<PathBuf> {
+        self.resolve_any_in(&self.known_dirs())
+    }
+
+    fn resolve_any_in(&self, dirs: &[PathBuf]) -> Option<PathBuf> {
+        self.commands
+            .iter()
+            .find_map(|c| env_override(c))
+            .or_else(|| self.commands.iter().find_map(|c| which(c)))
+            .or_else(|| self.commands.iter().find_map(|c| find_in_dirs(c, dirs)))
+    }
+
     /// Probe the current environment for this tool.
     pub fn detect(&self) -> ToolStatus {
+        let dirs = self.known_dirs();
         let mut found = Vec::new();
         let mut missing = Vec::new();
         for cmd in &self.commands {
-            match resolve_command(cmd) {
+            match resolve_command_in(cmd, &dirs) {
                 Some(path) => found.push((cmd.clone(), path)),
                 None => missing.push(cmd.clone()),
             }
@@ -99,9 +145,44 @@ impl ExternalTool {
             satisfied,
             found,
             missing,
-            install_hint: self.install.current().map(str::to_string),
+            install_hint: hint_for(
+                &self.install,
+                &self.windows,
+                cfg!(windows),
+                cfg!(windows) && winget_available(),
+            ),
         }
     }
+}
+
+/// What to tell the user to do about a missing tool. On Windows: the exact winget command when
+/// winget is there, else the vendor's download page — a bare "winget" is no help on a machine
+/// without it. Elsewhere, or with nothing Windows-specific declared, the per-OS channel hint.
+fn hint_for(
+    install: &InstallHints,
+    win: &WindowsInstall,
+    on_windows: bool,
+    winget: bool,
+) -> Option<String> {
+    if on_windows {
+        if let (true, Some(id)) = (winget, &win.winget) {
+            return Some(format!("winget install -e --id {id}"));
+        }
+        if let Some(url) = &win.download {
+            return Some(format!("download from {url}"));
+        }
+    }
+    install.current().map(str::to_string)
+}
+
+/// Is winget usable here? It is an App Execution Alias (a zero-byte reparse point in
+/// `WindowsApps`), so accept any entry by that name on `PATH`, not only a regular file.
+fn winget_available() -> bool {
+    which("winget").is_some()
+        || std::env::var_os("PATH").is_some_and(|path| {
+            std::env::split_paths(&path)
+                .any(|dir| dir.join("winget.exe").symlink_metadata().is_ok())
+        })
 }
 
 /// Parse the declared external tools from a `skill.yaml` string. Unreadable/malformed → empty.
@@ -155,7 +236,10 @@ pub fn missing_required_message(skill: &str, statuses: &[ToolStatus]) -> Option<
     if unmet.is_empty() {
         return None;
     }
-    let mut msg = format!("The `{skill}` skill needs these tool(s), which aren't on your PATH:\n");
+    let mut msg = format!(
+        "The `{skill}` skill needs these tool(s), which knaif can't find on your PATH or in \
+         their usual install folders:\n"
+    );
     for status in unmet {
         let cmds = status.missing.join(", ");
         match &status.install_hint {
@@ -172,15 +256,191 @@ pub fn missing_required_message(skill: &str, statuses: &[ToolStatus]) -> Option<
     Some(msg)
 }
 
-/// Resolve a single command: `$KNAIF_<CMD>_BIN` override first, else a `PATH` scan.
-fn resolve_command(cmd: &str) -> Option<PathBuf> {
-    let env_key = format!("KNAIF_{}_BIN", cmd.to_uppercase());
-    if let Some(raw) = std::env::var_os(&env_key) {
-        if !raw.is_empty() {
-            return Some(PathBuf::from(raw));
+/// The binary to launch for `tool_name` as declared in a `skill.yaml` (see
+/// [`ExternalTool::resolve_any`]). `None` when the tool is undeclared or not found.
+pub fn resolve_declared_tool(skill_yaml: &str, tool_name: &str) -> Option<PathBuf> {
+    parse_external_tools(skill_yaml)
+        .into_iter()
+        .find(|t| t.name == tool_name)
+        .and_then(|t| t.resolve_any())
+}
+
+/// The binary to launch for one command: override, `PATH`, then the install folders of the
+/// `skill.yaml` entry that lists it. An undeclared command gets the override and `PATH` only.
+pub fn resolve_declared_command(skill_yaml: &str, cmd: &str) -> Option<PathBuf> {
+    let dirs = parse_external_tools(skill_yaml)
+        .into_iter()
+        .find(|t| t.commands.iter().any(|c| c == cmd))
+        .map(|t| t.known_dirs())
+        .unwrap_or_default();
+    resolve_command_in(cmd, &dirs)
+}
+
+/// `$KNAIF_<CMD>_BIN`, when set and non-empty — returned verbatim, without probing.
+fn env_override(cmd: &str) -> Option<PathBuf> {
+    let raw = std::env::var_os(format!("KNAIF_{}_BIN", cmd.to_uppercase()))?;
+    (!raw.is_empty()).then(|| PathBuf::from(raw))
+}
+
+/// Resolve a single command: `$KNAIF_<CMD>_BIN` override first, then a `PATH` scan, then `dirs`.
+fn resolve_command_in(cmd: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    env_override(cmd)
+        .or_else(|| which(cmd))
+        .or_else(|| find_in_dirs(cmd, dirs))
+}
+
+/// The first of `dirs` holding `cmd` (under any executable suffix).
+fn find_in_dirs(cmd: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    let exts = executable_extensions();
+    dirs.iter().find_map(|dir| {
+        exts.iter()
+            .map(|ext| dir.join(format!("{cmd}{ext}")))
+            .find(|candidate| is_executable(candidate))
+    })
+}
+
+/// A file the OS would launch: any file on Windows (suffixes decide), a file with an execute
+/// bit elsewhere. A bare-name launch skips a non-executable match and keeps searching, so the
+/// lookup that replaces it must too.
+fn is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        path.metadata()
+            .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
+}
+
+/// Expand declared install folders to the directories that exist, in declaration order, the
+/// matches of one wildcard pattern newest version first. A pattern naming an unset variable is
+/// dropped rather than guessed at.
+pub fn expand_dirs(patterns: &[String]) -> Vec<PathBuf> {
+    patterns
+        .iter()
+        .filter_map(|p| expand_vars(p))
+        .flat_map(|p| glob_dirs(&p))
+        .collect()
+}
+
+/// Replace each `%NAME%` with that environment variable; `None` if one is unset or unclosed.
+fn expand_vars(pattern: &str) -> Option<String> {
+    let mut out = String::new();
+    let mut rest = pattern;
+    while let Some(start) = rest.find('%') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let end = after.find('%')?;
+        let value = std::env::var_os(&after[..end])?;
+        out.push_str(&value.to_string_lossy());
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    Some(out)
+}
+
+/// The existing directories matching `pattern`, where `*` matches within one component. The
+/// literal prefix before the first wildcard is used verbatim, so every root form (drive, UNC,
+/// `\\?\`) survives; the rest is split on either slash. Several matches of one wildcard component
+/// come newest version first.
+fn glob_dirs(pattern: &str) -> Vec<PathBuf> {
+    let Some(star) = pattern.find('*') else {
+        let dir = PathBuf::from(pattern);
+        return if dir.is_dir() { vec![dir] } else { Vec::new() };
+    };
+    let Some(sep) = pattern[..star].rfind(['\\', '/']) else {
+        return Vec::new(); // a relative wildcard names no install folder
+    };
+    let prefix = &pattern[..sep];
+    // Keep the separator for a bare root (`/gs*`) or a drive (`C:\gs*`, not drive-relative `C:`).
+    let root = if prefix.is_empty() || prefix.ends_with(':') {
+        PathBuf::from(&pattern[..=sep])
+    } else {
+        PathBuf::from(prefix)
+    };
+    let mut bases = vec![root];
+    for part in pattern[sep + 1..]
+        .split(['\\', '/'])
+        .filter(|p| !p.is_empty())
+    {
+        if !part.contains('*') {
+            bases = bases.into_iter().map(|b| b.join(part)).collect();
+            continue;
+        }
+        let mut next = Vec::new();
+        for base in &bases {
+            let Ok(entries) = std::fs::read_dir(base) else {
+                continue;
+            };
+            let mut names: Vec<String> = entries
+                .filter_map(Result::ok)
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|name| wildcard_match(part, name))
+                .collect();
+            names.sort_by(|a, b| natural_cmp(b, a));
+            next.extend(names.into_iter().map(|n| base.join(n)));
+        }
+        bases = next;
+    }
+    bases.into_iter().filter(|b| b.is_dir()).collect()
+}
+
+/// `*`-only glob over one path component, ignoring case (Windows paths are case-insensitive).
+fn wildcard_match(pattern: &str, name: &str) -> bool {
+    let pattern = pattern.to_lowercase();
+    let name = name.to_lowercase();
+    let pieces: Vec<&str> = pattern.split('*').collect();
+    let (first, last) = (pieces[0], pieces[pieces.len() - 1]);
+    if pieces.len() == 1 {
+        return pattern == name;
+    }
+    if name.len() < first.len() + last.len() || !name.starts_with(first) || !name.ends_with(last) {
+        return false;
+    }
+    let mut rest = &name[first.len()..name.len() - last.len()];
+    for piece in &pieces[1..pieces.len() - 1] {
+        match rest.find(piece) {
+            Some(at) => rest = &rest[at + piece.len()..],
+            None => return false,
         }
     }
-    which(cmd)
+    true
+}
+
+/// Order names so that digit runs compare as numbers (`gs10.05.1` > `gs9.56.1`) and text runs
+/// ignore case, as the wildcard that selected them does (`GS10` > `gs9`).
+fn natural_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let (a, b) = (a.to_lowercase(), b.to_lowercase());
+    let (a, b) = (a.as_str(), b.as_str());
+    fn runs(s: &str) -> Vec<(bool, &str)> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        let bytes = s.as_bytes();
+        for i in 1..=bytes.len() {
+            if i == bytes.len() || bytes[i].is_ascii_digit() != bytes[start].is_ascii_digit() {
+                out.push((bytes[start].is_ascii_digit(), &s[start..i]));
+                start = i;
+            }
+        }
+        out
+    }
+    let (ra, rb) = (runs(a), runs(b));
+    for ((da, sa), (db, sb)) in ra.iter().zip(rb.iter()) {
+        let ord = if *da && *db {
+            let (ta, tb) = (sa.trim_start_matches('0'), sb.trim_start_matches('0'));
+            ta.len().cmp(&tb.len()).then_with(|| ta.cmp(tb))
+        } else {
+            sa.cmp(sb)
+        };
+        if ord != std::cmp::Ordering::Equal {
+            return ord;
+        }
+    }
+    ra.len().cmp(&rb.len())
 }
 
 /// Minimal `shutil.which`: scan `PATH` for `name` (trying `PATHEXT` suffixes on Windows).
@@ -190,7 +450,7 @@ fn which(name: &str) -> Option<PathBuf> {
     for dir in std::env::split_paths(&path) {
         for ext in &exts {
             let candidate = dir.join(format!("{name}{ext}"));
-            if candidate.is_file() {
+            if is_executable(&candidate) {
                 return Some(candidate);
             }
         }
@@ -286,6 +546,7 @@ dependencies:
                 "knaiftestaliasc".into(),
             ],
             install: InstallHints::default(),
+            windows: WindowsInstall::default(),
         };
         let status = tool.detect();
         assert!(status.satisfied, "any-of: one resolved alias satisfies");
@@ -304,6 +565,7 @@ dependencies:
             all_required: true,
             commands: vec!["knaiftestalla".into(), "knaiftestallb".into()],
             install: InstallHints::default(),
+            windows: WindowsInstall::default(),
         };
         // Only one of two present → not satisfied.
         let partial = tool.detect();
@@ -327,6 +589,7 @@ dependencies:
             all_required: false,
             commands: vec![],
             install: InstallHints::default(),
+            windows: WindowsInstall::default(),
         };
         assert!(!tool.detect().satisfied);
     }
@@ -423,5 +686,265 @@ dependencies:
         assert!(msg.contains("winget"));
         assert!(msg.to_lowercase().contains("path"));
         assert!(!msg.contains("tesseract"), "optional tool must not block");
+    }
+
+    #[test]
+    fn parses_the_windows_block() {
+        let yaml = "\
+dependencies:
+  external_tools:
+    - name: ghostscript
+      commands: [gs, gswin64c]
+      windows:
+        winget: ArtifexSoftware.GhostScript
+        download: https://ghostscript.com/releases/gsdnld.html
+        dirs: ['%ProgramFiles%\\gs\\gs*\\bin']
+";
+        let t = &parse_external_tools(yaml)[0];
+        assert_eq!(
+            t.windows.winget.as_deref(),
+            Some("ArtifexSoftware.GhostScript")
+        );
+        assert_eq!(
+            t.windows.download.as_deref(),
+            Some("https://ghostscript.com/releases/gsdnld.html")
+        );
+        assert_eq!(t.windows.dirs, vec![r"%ProgramFiles%\gs\gs*\bin"]);
+        // Absent block: nothing extra, and the entry still parses.
+        assert!(parse_external_tools(FFMPEG_YAML)[0].windows.dirs.is_empty());
+    }
+
+    /// A fake executable named `cmd` in `dir`, spelled the way this platform's lookup finds it.
+    fn fake_exe(dir: &Path, cmd: &str) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let name = if cfg!(windows) {
+            format!("{cmd}.exe")
+        } else {
+            cmd.to_string()
+        };
+        let path = dir.join(name);
+        std::fs::write(&path, b"").unwrap();
+        path
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("knaif-deps-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_declared_folder_expands_its_variable_and_wildcard_newest_first() {
+        let root = scratch("glob");
+        // String order would put gs9 first; the newest version must win.
+        fake_exe(&root.join("gs").join("gs9.56.1").join("bin"), "knaiftestgs");
+        let newest = fake_exe(
+            &root.join("gs").join("gs10.05.1").join("bin"),
+            "knaiftestgs",
+        );
+        fake_exe(&root.join("gs").join("gs10.4.0").join("bin"), "knaiftestgs");
+        std::fs::create_dir_all(root.join("gs").join("unrelated")).unwrap();
+        std::env::set_var("KNAIF_TEST_GLOB_ROOT", &root);
+
+        let dirs = expand_dirs(&[r"%KNAIF_TEST_GLOB_ROOT%\gs\gs*\bin".to_string()]);
+        assert_eq!(dirs.len(), 3, "{dirs:?}");
+        assert_eq!(find_in_dirs("knaiftestgs", &dirs), Some(newest));
+        std::env::remove_var("KNAIF_TEST_GLOB_ROOT");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_folder_naming_an_unset_variable_is_skipped() {
+        assert!(expand_dirs(&[r"%KNAIF_TEST_SURELY_UNSET_VAR%\bin".to_string()]).is_empty());
+        assert!(expand_dirs(&[r"%KNAIF_TEST_SURELY_UNSET_VAR".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn wildcards_match_within_one_component_case_insensitively() {
+        assert!(wildcard_match(
+            "Gyan.FFmpeg_*",
+            "gyan.ffmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        ));
+        assert!(wildcard_match("ffmpeg-*", "ffmpeg-7.1-full_build"));
+        assert!(wildcard_match("gs*", "gs"));
+        assert!(!wildcard_match("gs*", "ghostscript"));
+        assert!(wildcard_match("*-*", "a-b"));
+        assert!(!wildcard_match("a*b", "ac"));
+    }
+
+    #[test]
+    fn natural_order_compares_digit_runs_as_numbers() {
+        use std::cmp::Ordering::*;
+        assert_eq!(natural_cmp("gs10.05.1", "gs9.56.1"), Greater);
+        assert_eq!(natural_cmp("gs10.05.1", "gs10.4.0"), Greater);
+        assert_eq!(natural_cmp("ffmpeg-7.1", "ffmpeg-7.1"), Equal);
+    }
+
+    #[test]
+    fn the_known_folders_are_tried_after_path() {
+        let root = scratch("after");
+        let bin = fake_exe(&root.join("bin"), "knaiftestafter");
+        std::env::set_var("KNAIF_TEST_AFTER_ROOT", &root);
+        let dirs = vec![r"%KNAIF_TEST_AFTER_ROOT%\bin".to_string()];
+        assert_eq!(
+            resolve_command_in("knaiftestafter", &expand_dirs(&dirs)),
+            Some(bin)
+        );
+        // Nothing declared, nothing on PATH: not found.
+        assert_eq!(resolve_command_in("knaiftestafter", &[]), None);
+        std::env::remove_var("KNAIF_TEST_AFTER_ROOT");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_any_prefers_an_override_then_path_then_folders() {
+        let root = scratch("any");
+        let in_folder = fake_exe(&root.join("bin"), "knaiftestanyb");
+        std::env::set_var("KNAIF_TEST_ANY_ROOT", &root);
+        let tool = ExternalTool {
+            name: "anytool".into(),
+            required: false,
+            all_required: false,
+            commands: vec!["knaiftestanya".into(), "knaiftestanyb".into()],
+            install: InstallHints::default(),
+            windows: WindowsInstall {
+                dirs: vec![r"%KNAIF_TEST_ANY_ROOT%\bin".into()],
+                ..WindowsInstall::default()
+            },
+        };
+        let dirs = expand_dirs(&tool.windows.dirs);
+        assert_eq!(tool.resolve_any_in(&dirs), Some(in_folder));
+        std::env::set_var("KNAIF_KNAIFTESTANYA_BIN", "/opt/override/anya");
+        assert_eq!(
+            tool.resolve_any_in(&dirs),
+            Some(PathBuf::from("/opt/override/anya"))
+        );
+        std::env::remove_var("KNAIF_KNAIFTESTANYA_BIN");
+        std::env::remove_var("KNAIF_TEST_ANY_ROOT");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_windows_hint_is_the_winget_command_else_the_download_page() {
+        let install = InstallHints {
+            windows: Some("winget".into()),
+            macos: Some("brew".into()),
+            linux: Some("package_manager".into()),
+        };
+        let win = WindowsInstall {
+            winget: Some("Gyan.FFmpeg".into()),
+            download: Some("https://ffmpeg.org/download.html".into()),
+            dirs: vec![],
+        };
+        assert_eq!(
+            hint_for(&install, &win, true, true).as_deref(),
+            Some("winget install -e --id Gyan.FFmpeg")
+        );
+        assert_eq!(
+            hint_for(&install, &win, true, false).as_deref(),
+            Some("download from https://ffmpeg.org/download.html")
+        );
+        // Nothing Windows-specific declared: the plain channel hint, as before.
+        if cfg!(windows) {
+            assert_eq!(
+                hint_for(&install, &WindowsInstall::default(), true, false).as_deref(),
+                Some("winget")
+            );
+        } else {
+            // Off Windows the block is ignored.
+            let other = if cfg!(target_os = "macos") {
+                "brew"
+            } else {
+                "package_manager"
+            };
+            assert_eq!(
+                hint_for(&install, &win, false, false).as_deref(),
+                Some(other)
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_declared_finds_the_entry_that_lists_the_command() {
+        std::env::set_var("KNAIF_KNAIFTESTDECLB_BIN", "/opt/fake/declb");
+        let yaml = "\
+dependencies:
+  external_tools:
+    - name: decl
+      commands: [knaiftestdecla, knaiftestdeclb]
+";
+        assert_eq!(
+            resolve_declared_tool(yaml, "decl"),
+            Some(PathBuf::from("/opt/fake/declb"))
+        );
+        assert_eq!(
+            resolve_declared_command(yaml, "knaiftestdeclb"),
+            Some(PathBuf::from("/opt/fake/declb"))
+        );
+        // An undeclared command still gets the override and PATH; this one is on neither.
+        assert_eq!(
+            resolve_declared_command(yaml, "knaif-no-such-cmd-xyz"),
+            None
+        );
+        assert_eq!(resolve_declared_tool(yaml, "undeclared"), None);
+        std::env::remove_var("KNAIF_KNAIFTESTDECLB_BIN");
+    }
+
+    #[test]
+    fn natural_order_ignores_case() {
+        use std::cmp::Ordering::*;
+        // A capitalised older folder must not sort above a newer lower-case one.
+        assert_eq!(natural_cmp("GS10.05.1", "gs9.56.1"), Greater);
+        assert_eq!(natural_cmp("gs10.05.1", "GS9.56.1"), Greater);
+    }
+
+    #[test]
+    fn the_literal_prefix_before_a_wildcard_is_kept_verbatim() {
+        let root = scratch("prefix");
+        let bin = root.join("tools").join("v2").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        // Written with the platform's own separators, so any root form (drive, UNC, `\\?\`)
+        // reaches read_dir untouched instead of being split and rebuilt.
+        let prefix = root.join("tools");
+        let pattern = format!(
+            "{}{}v*{}bin",
+            prefix.display(),
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR
+        );
+        assert_eq!(glob_dirs(&pattern), vec![prefix.join("v2").join("bin")]);
+        // No wildcard at all: the folder itself, when it exists.
+        assert_eq!(glob_dirs(&bin.to_string_lossy()), vec![bin.clone()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_extended_length_root_survives_the_glob() {
+        let root = scratch("verbatim");
+        std::fs::create_dir_all(root.join("gs").join("gs10.1").join("bin")).unwrap();
+        let pattern = format!(r"\\?\{}\gs\gs*\bin", root.display());
+        let dirs = glob_dirs(&pattern);
+        assert_eq!(dirs.len(), 1, "{dirs:?}");
+        assert!(dirs[0].to_string_lossy().starts_with(r"\\?\"), "{dirs:?}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_non_executable_file_does_not_count() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = scratch("noexec");
+        let plain = fake_exe(&root.join("a"), "knaiftestnoexec");
+        std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let runnable = fake_exe(&root.join("b"), "knaiftestnoexec");
+        std::fs::set_permissions(&runnable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // The first folder's copy shadows nothing: the launch would fail with EACCES.
+        assert_eq!(
+            find_in_dirs("knaiftestnoexec", &[root.join("a"), root.join("b")]),
+            Some(runnable)
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

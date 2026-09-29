@@ -22,8 +22,9 @@ pub use clarify_gate::{
     output_capable_tools, required_args_clarify, unsupported_args_clarify, FileKinds,
 };
 pub use deps::{
-    detect_skill_deps, load_external_tools, missing_required_message, parse_external_tools,
-    unmet_required, ExternalTool, InstallHints, ToolStatus,
+    detect_skill_deps, expand_dirs, load_external_tools, missing_required_message,
+    parse_external_tools, resolve_declared_command, resolve_declared_tool, unmet_required,
+    ExternalTool, InstallHints, ToolStatus, WindowsInstall,
 };
 pub use extract::{extract_json, ExtractedJson};
 pub use nl_clarify_gate::nl_clarify_gate;

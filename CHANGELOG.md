@@ -99,6 +99,16 @@ was the owner's decision.
   as the Python runtime does, instead of failing with "input not found". A clarifying question in
   one step of a plan now ends the plan; the native binary used to run the next step on a file the
   first never produced.
+- **Supporting tools on Windows are found where their installers put them.** Ghostscript,
+  LibreOffice and Tesseract never add themselves to PATH, so after a successful install
+  `knaif skills deps` still said MISS, the documents skill never used them, and setup offered them
+  again on every reinstall. knaif now also looks in each tool's standard install folders (and
+  winget's ffmpeg folders), declared per tool in `skill.yaml`; it runs the binary it found, and it
+  still never changes your PATH. A missing tool's hint is now the exact `winget install` command,
+  or the vendor's download page when winget is not there.
+- **Windows installer without winget** (Windows Sandbox, Server, LTSC, or where policy blocks it):
+  the supporting-tool choices are shown grayed out with the reason, instead of being tickable and
+  then skipped without a word. The last page lists each supporting tool as ready or not installed.
 
 ### Known issues
 
@@ -119,6 +129,11 @@ was the owner's decision.
   - declining the confirmation of one step lets the next step run (the Python runtime stops), and
     `reverse_video` has no preview before confirmation. Interactive use only; `--yes` is unaffected;
   - a file name ending in a dot (`clip.`) follows Python 3.14's rule, where Python 3.10–3.13 differ.
+- **The Python runtime still finds supporting tools on PATH only** (fixed in 1.2.1). The installed
+  CLI is the native binary and is unaffected; a Python user on Windows adds the tool's folder to
+  PATH or sets `KNAIF_<CMD>_BIN`.
+- **A supporting tool that is too old is not detected as such** (1.2.1 or later): knaif checks that
+  a tool is there, not its version or, for ffmpeg, which encoders the build has.
 
 ### Platforms
 
