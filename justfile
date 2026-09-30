@@ -494,6 +494,21 @@ package-linux *args:
 package-linux *args:
     bash "{{justfile_directory()}}/installers/linux/build-in-container.sh" {{args}}
 
+# macOS: the .pkg from the staged `metal` tree (stage it first with `just package-native metal`).
+# UNSIGNED — for inspecting it (`pkgutil --expand`, E6) and trying the options page. The published
+# .pkg comes from `just release-macos`, which signs the binaries first (F2's order).
+[macos]
+package-pkg *args:
+    bash "{{justfile_directory()}}/installers/macos/build-pkg.sh" {{args}}
+
+# macOS release: sign, notarize and staple the staged `metal` tree as .zip + .pkg, in F2's order.
+# Needs the Developer ID identities and notary credentials in the environment — see
+# installers/macos/README.md. Writes no SHA256SUMS: that is generated once, over the complete
+# release set, right before publishing (RELEASE.md).
+[macos]
+release-macos *args:
+    bash "{{justfile_directory()}}/installers/macos/release.sh" {{args}}
+
 # Compile the Windows Inno Setup installer from the STAGED artifact (stage it first with
 # `just package-native vulkan`). Needs Inno Setup 6 (ISCC). kind selects which staged artifact to
 # wrap and DEFAULTS TO VULKAN, matching knaif.iss's own `#ifndef Kind` default and the one artifact

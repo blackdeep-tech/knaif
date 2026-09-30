@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Build the macOS .pkg from a staged artifact tree (F5, D13 in the 2026-08-02 macOS support plan).
 #
-#   installers/macos/build-pkg.sh <stage-dir> [--sign "Developer ID Installer: <name> (<TEAM>)"]
-#                                              [--out FILE]
+#   installers/macos/build-pkg.sh [<stage-dir>] [--sign "Developer ID Installer: <name> (<TEAM>)"]
+#                                                [--out FILE]
 #
-# <stage-dir> is dist/staging/knaif-<ver>-macos-arm64 from `just package-native metal`. For a
-# release its Mach-Os must already be signed (sign.sh) — packaging after signing is F2's order —
-# and --sign names the Developer ID *Installer* identity. Without --sign the package is unsigned:
-# fine for inspecting (`pkgutil --expand`, E6), never for publishing.
+# <stage-dir> defaults to dist/staging/knaif-<ver>-macos-arm64, what `just package-native metal`
+# stages. For a release its Mach-Os must already be signed (sign.sh) — packaging after signing is
+# F2's order — and --sign names the Developer ID *Installer* identity. Without --sign the package
+# is unsigned: fine for inspecting (`pkgutil --expand`, E6), never for publishing.
 #
 # One component package per choice on the options page: core, one per skill, the PATH link, one per
 # supporting tool, the model download. Payload packages install under /usr/local/knaif; the rest
@@ -44,13 +44,13 @@ while [ $# -gt 0 ]; do
     *) STAGE="$1"; shift ;;
   esac
 done
-[ -n "$STAGE" ] && [ -d "$STAGE" ] || { echo "ERROR: give the staged artifact directory" >&2; usage >&2; exit 2; }
+VER="$(grep -A3 '\[workspace.package\]' "$ROOT/Cargo.toml" | grep -m1 '^version' | sed -E 's/.*"([^"]+)".*/\1/')"
+STAGE="${STAGE:-$ROOT/dist/staging/knaif-$VER-macos-arm64}"
+[ -d "$STAGE" ] || { echo "ERROR: no staged tree at $STAGE — run: just package-native metal" >&2; exit 2; }
 STAGE="$(cd "$STAGE" && pwd)"
 for f in bin/knaif contracts LICENSE NOTICE README.txt licenses; do
   [ -e "$STAGE/$f" ] || { echo "ERROR: $STAGE has no $f — not a staged artifact" >&2; exit 1; }
 done
-
-VER="$(grep -A3 '\[workspace.package\]' "$ROOT/Cargo.toml" | grep -m1 '^version' | sed -E 's/.*"([^"]+)".*/\1/')"
 MODEL="$(awk '/^recommendations:/{r=1; next} r && /^[^ #]/{r=0} r && $1=="desktop:"{print $2; exit}' \
   "$ROOT/contracts/models/model-manifest.yaml")"
 MIN_OS="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
