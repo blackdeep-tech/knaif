@@ -4,10 +4,11 @@ Durable implementation plans, ordered by date. Each plan is a single self-contai
 file with inline `- [ ]` / `- [x]` checkboxes tracking its own progress. This index is
 the at-a-glance status map; the individual plan headers remain the source of truth.
 
-**Authoritative queue.** There is exactly one live work queue: the **Open / Next** section of
+**Authoritative queue.** Work assigned to a release is queued in that release's index (see
+*Releases in flight*); everything not yet assigned is in the **Open / Next** section of
 [../TODO.md](../TODO.md). This index and the plan headers are the *record* — what each plan is and
-whether it shipped — **not** a backlog. To pick what to work on next, read TODO.md Open / Next; to
-learn the state or rationale of a specific plan, read its header. The header lint
+whether it shipped — **not** a backlog. To pick what to work on next, read the release index or
+TODO.md Open / Next; to learn the state or rationale of a specific plan, read its header. The header lint
 ([../../python/core/tests/test_plan_headers.py](../../python/core/tests/test_plan_headers.py), run by
 `just check`) keeps this index's status column and every plan header conformant, so the three
 surfaces can't silently disagree.
@@ -16,6 +17,17 @@ Status legend: **Done** (shipped/closed) · **Active** (in progress) ·
 **Draft** (written, not approved — do not implement) · **Planning** (not started) ·
 **Superseded** (replaced by a later plan). "Complete" and "Implemented" both fold into
 **Done** — use Done.
+
+## Releases in flight
+
+Each open release has a branch and a release index. The index lives **on its release branch**, so
+read it there; `main`'s copy (if any) is left untouched until the release merges back. Branch rules,
+lanes and the release lifecycle: [../RELEASE.md](../RELEASE.md#branches-and-release-lanes). This
+table changes only when a release opens or ships.
+
+| Release | Lane | Branch | Index | State |
+|---|---|---|---|---|
+| — | | | | no release open |
 
 ## Plan header format
 
@@ -27,6 +39,7 @@ and goal are scannable at a glance:
 
 **Status:** Done · **Created:** YYYY-MM-DD · **Completed:** YYYY-MM-DD
 **Owner:** <area> · **Ref:** <PR # / branch / related plan, or —>
+**Release:** <X.Y.Z, — or main>
 
 > **Status note:** <free-form current state — supersession, parking rationale,
 > what's left, risks/dependencies. Optional, but where the nuance lives.>
@@ -38,6 +51,57 @@ Rules: **Created** is the plan's filename date. **Completed** is the date the pl
 reached its terminal status (Done/Superseded), or `—` for open plans or when no date
 was recorded. Use the legend statuses only. Keep the one-line `**Goal:**` even when a
 detailed `## Goal` section follows.
+
+**Release** says where the plan ships: `X.Y.Z` (that release), `—` (a release is not chosen yet)
+or `main` (it ships in no release — docs, site, CI, process). Required for plans created from
+2026-09-30 on; older plans may add it. A plan naming `X.Y.Z` must be in that release's index scope
+whenever the index is in the checkout, and the other way round — the lint checks both directions.
+
+## Release index
+
+One per release: `YYYY-MM-DD-release-X.Y.Z.md`, created when the release is proposed or opened.
+It **links to work, it does not hold it** — the work and its checkboxes stay in the feature plans,
+evidence stays in `evals/`. Keep it short; rewrite *Current state* in place rather than appending
+status notes. A feature PR edits only its own plan and its own scope row; the rest of the index is
+edited by whoever integrates the release.
+
+```markdown
+# knaif X.Y.Z — <one-line theme>
+
+**Status:** Active · **Created:** YYYY-MM-DD · **Completed:** —
+**Owner:** <area> · **Ref:** <related plans, or —>
+**Release:** X.Y.Z
+**Lane:** minor · **Branch:** `release/X.Y.Z`
+
+**Goal:** <one sentence.>
+
+## Current state
+<One paragraph, rewritten in place.>
+
+## Exit gates
+<The lane's gates from RELEASE.md, plus any this release adds.>
+
+## Scope
+| Plan | Branch | Status | User-facing line |
+|---|---|---|---|
+| [topic](YYYY-MM-DD-topic.md) | `feat/topic` | Active | <becomes the CHANGELOG entry> |
+
+## Decisions
+- YYYY-MM-DD — <decision, one line.>
+
+## Deferred
+- <item> — moved to <release or backlog>, because <reason>.
+
+## Evidence
+- <links into evals/ only.>
+```
+
+The lint checks the header: `Lane` is `minor` (version ends in `.0`) or `patch` (it does not),
+`Branch` is `release/X.Y.Z` matching the filename, and `Release` is the index's own version. Only
+links inside `## Scope` count as scope.
+
+Assigning a backlog item from [../TODO.md](../TODO.md) *Open / Next* to a release moves it into
+that release's scope table (via its plan).
 
 | Date | Plan | Status | Notes |
 |---|---|---|---|
@@ -91,6 +155,7 @@ detailed `## Goal` section follows.
 | 2026-09-25 | [release-1.2](2026-09-25-release-1.2.md) | Done | **Published 2026-09-29** (GitHub, HF, PyPI). knaif 1.2.0 and the retrained 4B + 1.7B models ship as **one** release from `release/1.2.0`. `sft-v4` is not published; the next cycle's models become the public `v2`s, bound to 1.2.0 via `released_with:`. Decisions: 1.2.0 (no breaking change vs `v1.1.0`), model numbers stay their own line, 1.7B retrained on its own pre-written bar (safety 100%), L4 on CUDA + Vulkan + CPU for the release candidate, macOS may follow in 1.2.x, the HF card moves into the repo, merge to `main` with a merge commit so eval SHAs stay reachable. |
 | 2026-09-26 | [policy-gate-and-skill-adapters](2026-09-26-policy-gate-and-skill-adapters.md) | Done | Three release-1.2 retrains failed on the shared plan/clarify/reject decision, never on skill knowledge. Tests two fixes with pre-written pass/fail rules: E1 a deterministic safety gate (offline replay, no GPU), E2 one LoRA adapter per skill on a shared base (feasibility spike, then per-skill adapters vs the union model). Pauses release 1.2 at R5. |
 | 2026-09-27 | [release-1.3-skill-adapters-and-superskill](2026-09-27-release-1.3-skill-adapters-and-superskill.md) | Draft | knaif 1.3 scope: per-skill LoRA adapters on a shared base (E2b, restated as quality of base + adapter as served), the superskill/router (design to be discussed with the owner), and more skills. Evidence from release 1.2's failed union retrains. |
+| 2026-09-30 | [release-workflow](2026-09-30-release-workflow.md) | Active | How releases are developed: a `release/X.Y.Z` branch per release (several may be open), one `feat/*` branch and plan per feature (started from `main` until its release is chosen), a short release index on the release branch, and a patch lane that may not change behavior on shipped platforms. Adds the `Release:` plan field and its lint. Worktrees postponed. |
 
 ## Open threads (not yet a plan, or spanning plans)
 

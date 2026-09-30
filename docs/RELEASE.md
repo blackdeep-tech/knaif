@@ -1,17 +1,96 @@
 # RELEASE.md — cutting a knaif release
 
-How to build, package, verify, and publish a knaif release. **v1.0.0 is cut by hand** — there is no
-`.github/workflows/` yet (CI + `release.yml` are a post-v1 follow-on, see
-[plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)),
-so a release gates on **local** green, not CI.
+How releases are developed on branches, then how to build, package, verify, and publish one. CI
+(`ci.yml`) runs on every PR, including PRs into `release/*`, and `main` requires its `ci` check.
+`release.yml` packages Linux on PRs that touch packaging paths and uploads to a **draft** Release on
+a `v*.*.*` tag. It never publishes: the tag, the public Release and the PyPI upload stay manual,
+because none of them can be undone. Windows artifacts are built by hand (§2).
 
 Background: [NATIVE.md](NATIVE.md) §5.3 (loadable backends), §9 (packaging), §10 (building).
+Decision record for the branch workflow:
+[plans/2026-09-30-release-workflow.md](plans/2026-09-30-release-workflow.md).
+
+---
+
+## Branches and release lanes
+
+Several releases can be in development at once. Each has its own branch and its own short
+**release index** in `docs/plans/` (template and fields: [plans/README.md](plans/README.md)).
+
+| Branch | Starts from | Merges into | Holds |
+|---|---|---|---|
+| `main` | — | — | released code, plus docs/site/plan records. Release tags point at commits in `main`'s history. |
+| `release/X.Y.0` | `main` | `main` (merge commit) | one minor release in development |
+| `release/X.Y.Z` (patch) | tag `vX.Y.(Z-1)` | `main` (merge commit) | fixes only |
+| `feat/<topic>` | `main` (default) or its release | a release branch, by PR | one feature = one plan |
+| `fix/<topic>` | the release it fixes | that release, by PR | one fix |
+| `exp/<topic>` | anything | **never merged** | experiments and training runs; the result reaches a release as evidence or a decision |
+| `docs/…`, `ci/…`, `site/…` | `main` | `main`, by PR | changes that ship in no release artifact |
+
+**What must go through a release branch:** anything that ends up in a published artifact — the
+binary, the installers, the wheel, a model, or the contracts and skill bundles they carry. Plans,
+site, CI and eval records may go straight to `main`.
+
+### Rules
+
+- **A feature starts from `main`** unless it needs code that exists only on a release branch. It can
+  then still land in any release. Merging `main` into it to stay current is always fine; merging a
+  release branch into it ties it to that release, so do that only once the release is chosen.
+- **Choosing a feature's release:** set `**Release:** X.Y.Z` in its plan, add its row to the release
+  index's scope, and open the PR into `release/X.Y.Z`. CI tests the merge result; resolve conflicts
+  by merging the release into the feature. The plan lint checks the index and the plan agree.
+- **An idea that may not work** starts as `exp/`. If it proves out, start a `feat/` from `main` and
+  carry over what is worth keeping.
+- **Bump the version only at freeze, on the release branch** (§0). `main` always carries the last
+  released version, so open releases do not fight over it. If a patch ships after a minor has
+  frozen, merging `main` into the minor conflicts on the version lines: keep the minor's version.
+- **Carry releases forward.** When any release merges to `main`, every other open release branch
+  merges `main` in. Merge, never rebase a shared branch; never squash a release branch into `main`
+  (eval records cite its commit SHAs, and people build on it).
+- **Tag the tested commit.** Merge `main` into the release branch before the final gates, run the
+  gates on that commit, merge it to `main` with a merge commit (same tree), then tag the tested
+  commit. The evidence SHA and the tag are the same commit.
+- **`release/*` is protected** (ruleset `release-branches`): every change arrives by PR with the
+  `ci` check green, and force-push is blocked. That includes the freeze (version bump + CHANGELOG)
+  and merging `main` in: do them on a short branch (`chore/freeze-X.Y.Z`, `chore/sync-X.Y.Z`) and
+  open a PR — `ci.yml` does not run on a direct push to a release branch, so a PR is the only way
+  those commits get tested. Batch eval-evidence commits into one PR per stage. Deletion is **not**
+  blocked: merging the release PR into `main` deletes the branch automatically (the repo's
+  *automatically delete head branches* setting), which is the lifecycle's ship step.
+
+### Lanes
+
+| | Minor `X.Y.0` | Patch `X.Y.Z` |
+|---|---|---|
+| Scope | features (plans), model changes, new platforms | code bug fixes only |
+| Not allowed | — | a new or retrained model, prompt wording, `tools.yaml` / contract changes, new CLI flags, any behavior change on a platform already shipped |
+| Starts from | `main` | the previous release tag |
+| Gates | all of §4: L3, the full L4 matrix, clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (§4), clean room, upgrade path |
+| If the rule is broken | — | the change moves to the next minor, or the patch runs the minor gates |
+
+### Lifecycle
+
+1. **Propose** (optional) — a Draft release index on `main`: goal, lane, rough scope.
+2. **Open** — create `release/X.Y.Z` from `main` (from the tag, for a patch). The index becomes
+   Active on the release branch. On `main`, add the release to *Releases in flight* in
+   [plans/README.md](plans/README.md), and leave `main`'s copy of the index alone from then on so
+   the two never conflict when the release merges back.
+3. **Develop** — `feat/*` and `fix/*` PRs into the release branch. Merge `main` in whenever it moves.
+4. **Freeze** — no new scope. Bump the version (§0). Write the `CHANGELOG.md` section from the
+   index's scope table plus `git log --first-parent release/X.Y.Z`, so it is in the commit that gets
+   tagged. Merge `main` in.
+5. **Verify** — the lane's gates (§4) on the frozen commit, evidence to `evals/`. A fix after freeze
+   goes through a `fix/*` PR, and §4's staleness rules decide which evidence reruns.
+6. **Ship** — §5: merge to `main`, tag the tested commit, publish. Merge `main` into every other
+   open release branch. Delete the release branch.
+7. **Close** — set the index to Done and remove its *Releases in flight* row.
 
 ---
 
 ## 0. Version bump
 
-Three declarations must agree, or `python/core/tests/test_version_consistency.py` fails:
+The bump happens **at freeze, on the release branch** — never on `main` or on a feature branch
+(see *Branches and release lanes*). Three declarations must agree, or `python/core/tests/test_version_consistency.py` fails:
 
 | Surface | File |
 |---|---|
@@ -635,15 +714,16 @@ The tag and every release URL must be **born in the final org** — never redire
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
 URL has ever depended on an org redirect.
 
-### Rehearse the publish flow before the first real cut
+### Rehearse any publish path that has not run before
 
-**Everything below is irreversible, and none of it has ever been executed.** No GitHub Release has
-existed, so step 5 is untested procedure — and each of its outputs is permanent: the `release-tags`
-ruleset means a pushed tag cannot be moved, a published Release URL is public the moment it exists,
-and a PyPI version can **never** be reused. There is no revision to a first release, only a second
-one that looks like an apology.
+**Every output of this section is permanent:** the `release-tags` ruleset means a pushed tag cannot
+be moved, a published Release URL is public the moment it exists, and a PyPI version can **never**
+be reused. There is no revision to a release, only a second one that looks like an apology.
 
-So run the whole path once against throwaway outputs before running it for real:
+The path below has run for real since 1.0.1 (1.2.0 published to GitHub, Hugging Face and PyPI), so
+a release that changes nothing about publishing does not rehearse. **A release that adds a publish
+path does** — a new platform's artifacts (macOS), a new asset type, a new index — and rehearses
+that path once against throwaway outputs:
 
 - **A draft GitHub Release** — create it, upload the artifacts and `SHA256SUMS`, check the rendered
   body and the asset names, then **delete it without publishing**. Drafts are invisible to everyone
@@ -654,23 +734,21 @@ So run the whole path once against throwaway outputs before running it for real:
 - **Do not push a throwaway tag.** A draft Release can be attached to an existing tag or created
   against a branch; a tag is the one artifact here with no undo, so it stays for the real cut.
 
-Cheap, and it converts "the publish procedure is written down" into "the publish procedure has been
-run". Skip it only on a release whose flow is already proven — which, until one has shipped, is
-none of them.
+### Steps
 
-1. Open the PR; review; ensure **local suites green** (not "CI green" — there is no CI).
-2. **Merge to `dev`.** *The branch is closed here; everything below is release mechanics.*
-3. **v1.0.0 only — OSS prep.** Run the OSS-prep pass to completion, ending
-   with the flattened tree pushed to `blackdeep-tech/knaif` and the repo public. **Hard gate on
-   step 4.** Later releases skip this step entirely.
-4. **Tag and push `v1.0.0`.** For v1.0.0 the tag goes on the **flatten commit** — the post-scrub
-   initial commit in the new repo — *not* the `dev` merge commit, which predates the scrub and would
-   ship pre-prep source. From v1.0.1 on, tag the release commit as normal.
+1. **Open the PR** `release/X.Y.Z → main` from the tested commit (*Branches and release lanes*:
+   `main` already merged in, the lane's gates run on this commit). Local suites green and the `ci`
+   check green.
+2. **Merge with a merge commit** — never squash. *The branch is closed here; everything below is
+   release mechanics.*
+3. **Write the release body** (§6) from the `CHANGELOG.md` section written at freeze. It names no
+   future version.
+4. **Tag and push `vX.Y.Z` on the tested commit** — the one the evidence names, now in `main`'s
+   history. The `release-tags` ruleset means the tag cannot be moved afterwards. Pushing it starts
+   `release.yml`, which uploads the Linux artifacts to a draft Release.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
-   public. Artifacts staged *before* the transfer publish *after* it **without a rebuild** — safe only
-   because no v1 artifact names the org. Re-run `installers/smoke.sh` on the staged set first anyway;
-   it takes seconds and is the last chance to catch a stale artifact. Confirm that no artifact bakes
-   a GitHub org URL.
+   public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
+   chance to catch a stale artifact.
 6. **Verify** a fresh download installs and runs, independent of the build box.
 7. **Refresh the website's download data — now automatic.** Publishing the release fires
    `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
