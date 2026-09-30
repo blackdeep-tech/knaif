@@ -708,15 +708,16 @@ The tag and every release URL must be **born in the final org** — never redire
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
 URL has ever depended on an org redirect.
 
-### Rehearse the publish flow before the first real cut
+### Rehearse any publish path that has not run before
 
-**Everything below is irreversible, and none of it has ever been executed.** No GitHub Release has
-existed, so step 5 is untested procedure — and each of its outputs is permanent: the `release-tags`
-ruleset means a pushed tag cannot be moved, a published Release URL is public the moment it exists,
-and a PyPI version can **never** be reused. There is no revision to a first release, only a second
-one that looks like an apology.
+**Every output of this section is permanent:** the `release-tags` ruleset means a pushed tag cannot
+be moved, a published Release URL is public the moment it exists, and a PyPI version can **never**
+be reused. There is no revision to a release, only a second one that looks like an apology.
 
-So run the whole path once against throwaway outputs before running it for real:
+The path below has run for real since 1.0.1 (1.2.0 published to GitHub, Hugging Face and PyPI), so
+a release that changes nothing about publishing does not rehearse. **A release that adds a publish
+path does** — a new platform's artifacts (macOS), a new asset type, a new index — and rehearses
+that path once against throwaway outputs:
 
 - **A draft GitHub Release** — create it, upload the artifacts and `SHA256SUMS`, check the rendered
   body and the asset names, then **delete it without publishing**. Drafts are invisible to everyone
@@ -727,9 +728,7 @@ So run the whole path once against throwaway outputs before running it for real:
 - **Do not push a throwaway tag.** A draft Release can be attached to an existing tag or created
   against a branch; a tag is the one artifact here with no undo, so it stays for the real cut.
 
-Cheap, and it converts "the publish procedure is written down" into "the publish procedure has been
-run". Skip it only on a release whose flow is already proven — which, until one has shipped, is
-none of them.
+### Steps
 
 1. **Open the PR** `release/X.Y.Z → main` from the tested commit (*Branches and release lanes*:
    `main` already merged in, the lane's gates run on this commit). Local suites green and the `ci`

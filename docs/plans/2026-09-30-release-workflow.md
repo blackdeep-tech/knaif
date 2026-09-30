@@ -143,6 +143,8 @@ All of W1–W5 land on `docs/release-workflow` and go to `main` as one PR.
 - [x] Fix the stale intro (no `.github/workflows/`, "local green, not CI").
 - [x] Replace §5 steps 1–4 (merge to `dev`, "there is no CI", v1.0.0 OSS prep) with the ship steps
   above; keep steps 5–8.
+- [x] §5 *Rehearse*: it said no release had ever been published; now it rehearses only a publish
+  path that has not run before (macOS in 1.3), and §5's steps get their own heading.
 
 ### - [x] W2 — plans/README.md: index template and pointer table
 
