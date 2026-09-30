@@ -73,6 +73,12 @@ Do not create new root-level planning files unless the user explicitly asks.
 Plans are single self-contained files. Use inline `- [ ]` checkboxes on task headings
 to track progress — do not create a separate todo file alongside a plan.
 
+Releases are developed on `release/X.Y.Z` branches, features on `feat/*` branches started from
+`main` until their release is chosen — branch rules, lanes and lifecycle in `docs/RELEASE.md`
+(*Branches and release lanes*). Each release has a short index, `docs/plans/YYYY-MM-DD-release-X.Y.Z.md`,
+living on its release branch; `docs/plans/README.md` (*Releases in flight*) says which are open.
+Every new plan carries `**Release:** X.Y.Z | — | main`, and the plan lint checks it against the index.
+
 ## Entry Points
 
 Skill-hosting (operator / eval path):
