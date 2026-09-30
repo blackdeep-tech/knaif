@@ -21,7 +21,7 @@ Several releases can be in development at once. Each has its own branch and its 
 |---|---|---|---|
 | `main` | — | — | released code, plus docs/site/plan records. Release tags point at commits in `main`'s history. |
 | `release/X.Y.0` | `main` | `main` (merge commit) | one minor release in development |
-| `release/X.Y.Z` (patch) | tag `vX.Y.(Z-1)` | `main` (merge commit) | fixes only |
+| `release/X.Y.Z` (patch) | `main`, if it ships the same as tag `vX.Y.(Z-1)` (else the tag) | `main` (merge commit) | fixes only |
 | `feat/<topic>` | `main` (default) or its release | a release branch, by PR | one feature = one plan |
 | `fix/<topic>` | the release it fixes | that release, by PR | one fix |
 | `exp/<topic>` | anything | **never merged** | experiments and training runs; the result reaches a release as evidence or a decision |
@@ -64,14 +64,15 @@ site, CI and eval records may go straight to `main`.
 |---|---|---|
 | Scope | features (plans), model changes, new platforms | code bug fixes only |
 | Not allowed | — | a new or retrained model, prompt wording, `tools.yaml` / contract changes, new CLI flags, any behavior change on a platform already shipped |
-| Starts from | `main` | the previous release tag |
+| Starts from | `main` | `main` when nothing it gained since the previous tag ships in an artifact (`git diff --name-only vX.Y.(Z-1) main`); otherwise that tag |
 | Gates | all of §4: L3, the full L4 matrix, clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (§4), clean room, upgrade path |
 | If the rule is broken | — | the change moves to the next minor, or the patch runs the minor gates |
 
 ### Lifecycle
 
 1. **Propose** (optional) — a Draft release index on `main`: goal, lane, rough scope.
-2. **Open** — create `release/X.Y.Z` from `main` (from the tag, for a patch). The index becomes
+2. **Open** — create `release/X.Y.Z` from `main` (a patch too, unless `main` has gained something
+   that ships since the previous tag — then from the tag). The index becomes
    Active on the release branch. On `main`, add the release to *Releases in flight* in
    [plans/README.md](plans/README.md), and leave `main`'s copy of the index alone from then on so
    the two never conflict when the release merges back.
