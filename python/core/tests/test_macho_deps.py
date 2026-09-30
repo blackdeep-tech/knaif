@@ -590,3 +590,39 @@ def test_success_message_counts_parsed_binaries_not_files(tmp_path: Path, capsys
     assert cmd.main([str(bindir), "--min-os", "12.0"]) == 0
     out = capsys.readouterr().out
     assert "1 Mach-O binaries" in out and "1 non-Mach-O skipped" in out
+
+
+# --------------------------------------------------------------------------------------
+# --list: the one enumeration signing reuses (F3: "reuse that list so the two checks cannot
+# disagree about what is in the artifact")
+# --------------------------------------------------------------------------------------
+
+
+def test_signing_order_is_every_macho_libraries_first_exe_last(artifact, tmp_path: Path) -> None:
+    bindir = artifact(
+        {
+            "knaif": {"filetype": cmd.MH_EXECUTE},
+            "libllama.dylib": {"filetype": cmd.MH_DYLIB},
+            "libggml-metal.so": {"filetype": cmd.MH_BUNDLE},
+        }
+    )
+    (bindir / "README.txt").write_text("not a binary")
+    names = [p.name for p in cmd.signing_order(bindir)]
+    # Inside-out: a signature seals what it loads, so the exe is signed after everything else.
+    assert names == ["libggml-metal.so", "libllama.dylib", "knaif"]
+
+
+def test_signing_order_refuses_a_broken_macho(tmp_path: Path) -> None:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "libtruncated.dylib").write_bytes(struct.pack("<I", cmd.MH_MAGIC_64) + b"\0" * 4)
+    with pytest.raises(cmd.MachOError):
+        cmd.signing_order(bindir)
+
+
+def test_list_cli_prints_one_path_per_line_without_needing_a_floor(artifact, capsys) -> None:
+    bindir = artifact({"knaif": {}, "libx.dylib": {"filetype": cmd.MH_DYLIB}})
+    assert cmd.main([str(bindir), "--list"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [Path(line).name for line in lines] == ["libx.dylib", "knaif"]
+    assert all(Path(line).is_absolute() for line in lines)

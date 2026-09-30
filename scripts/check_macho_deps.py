@@ -36,6 +36,7 @@ Usage::
 
     python3 scripts/check_macho_deps.py dist/staging/knaif-1.1.0-macos-arm64/bin --min-os 12.0
     python3 scripts/check_macho_deps.py <dir> --min-os 12.0 --verbose
+    python3 scripts/check_macho_deps.py <dir> --list     # the Mach-O files, in signing order
 
 Exits non-zero listing every unresolved/foreign dependency, non-arm64 slice, or floor mismatch.
 No third-party dependency (no ``otool``/``lipo`` shell-out): Mach-O headers are a short ``struct``
@@ -252,13 +253,39 @@ def _resolves(name: str, bindir: Path) -> bool:
     return False  # any other absolute/relative path is a foreign, non-system dependency
 
 
+def _candidates(bindir: Path) -> list[Path]:
+    """The regular files in bindir that could be a Mach-O: symlinks (the SONAME chain) name a file
+    already in the list, and `.DS_Store` is Finder's."""
+    return sorted(
+        p for p in bindir.iterdir() if p.is_file() and not p.is_symlink() and p.name != ".DS_Store"
+    )
+
+
+def signing_order(bindir: Path) -> list[Path]:
+    """Every Mach-O in bindir, libraries and loadable backends first, executables last.
+
+    Signing reuses this list (F3 in the macOS support plan) so the portability audit and the
+    signature check cannot disagree about what is in the artifact. Inside-out because a signature
+    seals what it loads. A file whose magic says Mach-O but will not parse raises `MachOError`:
+    left out of the list, it would ship unsigned.
+    """
+    libraries: list[Path] = []
+    executables: list[Path] = []
+    for path in _candidates(bindir):
+        try:
+            slices = parse_macho(path)
+        except NotAMachO:
+            continue
+        is_exe = any(slc.filetype == MH_EXECUTE for slc in slices)
+        (executables if is_exe else libraries).append(path.resolve())
+    return libraries + executables
+
+
 def audit(
     bindir: Path, min_os: tuple[int, int, int], verbose: bool, counts: dict[str, int] | None = None
 ) -> list[str]:
     failures: list[str] = []
-    binaries = sorted(
-        p for p in bindir.iterdir() if p.is_file() and not p.is_symlink() and p.name != ".DS_Store"
-    )
+    binaries = _candidates(bindir)
     parsed = 0
     for binary in binaries:
         try:
@@ -341,16 +368,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("bindir", type=Path, help="the artifact's bin/ directory")
     parser.add_argument(
         "--min-os",
-        required=True,
         metavar="X.Y",
         help="the declared MACOSX_DEPLOYMENT_TARGET floor every binary must carry, e.g. 12.0",
     )
     parser.add_argument("--verbose", action="store_true", help="list every resolved dependency")
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="print every Mach-O's absolute path in signing order (libraries first, exe last) "
+        "and exit; no audit",
+    )
     args = parser.parse_args(argv)
 
     if not args.bindir.is_dir():
         print(f"not a directory: {args.bindir}", file=sys.stderr)
         return 2
+
+    if args.list:
+        try:
+            files = signing_order(args.bindir)
+        except MachOError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        if not files:
+            print(f"FAIL: no Mach-O in {args.bindir}", file=sys.stderr)
+            return 1
+        print("\n".join(str(p) for p in files))
+        return 0
+
+    if args.min_os is None:
+        parser.error("--min-os is required unless --list is given")
 
     parts = args.min_os.split(".")
     if not (1 <= len(parts) <= 3) or not all(p.isdigit() for p in parts):
