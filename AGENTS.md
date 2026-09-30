@@ -32,6 +32,8 @@ byte-identical copy ships inside the wheel. Edit the canonical file, then run
 
 ## Documentation Map
 
+- **macOS port (branch `feat/macos-support`)** — start at §0 *Start here* of
+  `docs/plans/2026-08-02-macos-support.md`: git flow, who does what, what to re-verify first
 - Developer SDK (knaif.cli): `docs/SDK.md`
 - Skill authoring and skill registry format: `docs/TOOL_SCHEMA.md`
 - Core architecture and execution pipeline: `docs/ARCHITECTURE.md`

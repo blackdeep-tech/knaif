@@ -54,6 +54,53 @@ already pass, and cut by the same `RELEASE.md` procedure.
 
 ---
 
+## 0. Start here
+
+*Added 2026-09-30 — the handoff for whoever builds this on a Mac, human or agent.* Read this
+section, then §2 (decisions) and the workstream you are picking up. Everything below §2 is
+the detailed record; this section is the map.
+
+**How work flows (git).**
+
+1. Fork `blackdeep-tech/knaif`. Keep your fork's `feat/macos-support` as a **mirror** of ours
+   — never commit on it directly.
+2. For each piece of work, cut a short topic branch from it (`mac/<topic>`, for example
+   `mac/metal-rebuild`) and open a PR from your fork into **our `feat/macos-support`**. Small
+   PRs, one workstream step each, so review stays quick.
+3. Before starting a new topic, update the mirror from ours. The owner merges `release/1.3.0`
+   (and through it `main`) into `feat/macos-support` whenever they move. **Merge, never rebase** a
+   shared branch.
+4. When §13 holds, the owner opens one PR from `feat/macos-support` into `release/1.3.0`, merged
+   with a merge commit. `release/1.3.0` only ever receives finished macOS work.
+
+Why a fork: fork PRs never see repository secrets, which keeps the signing identities (F, and
+the owner's [certificate steps]([macos-signing-certificates](2026-09-30-macos-signing-certificates.md))) away from branch work by construction.
+
+**Who does what.**
+
+| Who | Does |
+|---|---|
+| Owner | Certificates and the notarization key ([macos-signing-certificates](2026-09-30-macos-signing-certificates.md)), the Homebrew tap repository, merges, release cuts |
+| Contributor (Mac) | Workstreams M–G on Apple Silicon: build, package, sign and notarize the first build **by hand**, the evals, the clean room |
+| Windows box | Static checks that must fail where the mistake is made (`check_macho_deps.py`, `package.sh` branches), plan and docs edits |
+
+**Where it stands (2026-09-30).** The branch was synced with 1.2.0 on Windows (see the note at
+the top). Nothing Darwin-only has been re-verified since. **Before building on anything, re-run
+A2/A3, B, C1 and E1/E2 on the Mac** and record the result under each task. Then continue in plan
+order: C (quality gates) → D (performance) → E (portability, clean room) → F (signing) → G
+(release integration).
+
+**Known red, on purpose.** `just check` fails at `check-gate` on this branch: the native
+sources changed, so 1.2.0's L3/L4 evidence reads as stale for both skills. It clears when L3/L4
+are re-run on this tree as part of the 1.3.0 gates. Do not "fix" it by re-locking snapshots —
+§11 forbids that.
+
+**Decisions to build to, not re-open.** D1–D9 below, plus the owner's 2026-09-30 decisions
+D10–D15. If the Mac shows one of them is wrong, record the evidence and raise it with the owner
+before changing course.
+
+---
+
 ## 1. Research: which inference stack — "Metal or llama.cpp?"
 
 **The question dissolves on contact: Metal *is* the llama.cpp backend on Apple.** `ggml-metal` is a
@@ -264,6 +311,32 @@ Two mechanical traps make it worse than it looks:
   project twice.** Assert `LC_BUILD_VERSION` on **every** staged Mach-O (E1), and run the clean-room
   VM on the **oldest supported** macOS — not merely a clean current one, which tests nothing about
   the floor.
+
+**D10–D15 — owner decisions, 2026-09-30.** Made when macOS was scoped into 1.3.0
+([release-1.3.0](2026-09-30-release-1.3.0.md)). They settle questions the tasks below had left
+open; where a task's older text disagrees, these win and the task is updated to match.
+
+- **D10 — signing: by hand first, then CI.** The first signed and notarized build is made on the
+  contributor's Mac. After that works, a tag build in GitHub Actions signs and notarizes from
+  repository secrets on a protected `release` environment, so the owner can cut a macOS release
+  without a Mac. The owner's steps and the secret names: [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). (F1, G6.)
+- **D11 — CI: a macOS arm64 job, path-filtered** to `native/`, `installers/`, `scripts/` and the
+  Cargo files, so Python-only and docs PRs do not queue for a macOS runner. (G6.)
+- **D12 — artifacts: `.pkg` (recommended) + portable `.zip` + a Homebrew tap, all in 1.3.0.** The
+  tap is `blackdeep-tech/homebrew-knaif`; the owner creates the repository. **No `.dmg`** — it
+  has no install logic to offer a CLI that is not an `.app` (D6). (G5.)
+- **D13 — the `.pkg` installs system-wide and always shows its options.** Payload in
+  `/usr/local/knaif`, a `/usr/local/bin/knaif` symlink, admin install. The options page is always
+  shown (`customize="always"` in a Distribution package), mirroring the Windows installer: skills,
+  Homebrew tools (installed as the console user; greyed out when `brew` is absent), model download
+  (setup waits for it) and the PATH symlink. Ships an `uninstall.sh`. A failed model download or
+  `brew` install **never fails the install** — it is reported and can be redone later. (F5.)
+- **D14 — evals on the Mac.** 4B and 1.7B: full L4 + safety on Metal. The CPU-only tree: sampled
+  and composed, the way 1.2.0 did Linux CPU. L3 parity. Row-level flips compared against Windows
+  (and Linux, from the WSL data) through a committed compact per-row extract of the 1.2.0 L4
+  results. (C.)
+- **D15 — floor 12.0 kept; clean room in a macOS 12 VM via `tart`.** Confirms D8/D9 with the
+  tool chosen. (E.)
 
 ---
 
@@ -1080,7 +1153,8 @@ An Apple Developer account is available (recorded in the current
 needed: **Developer ID Application** (binaries and dylibs) and **Developer ID Installer** (the
 `.pkg`).
 
-- [ ] **F1. Certificates and credentials.** Create/obtain both certs. Store notarization
+- [ ] **F1. Certificates and credentials.** The owner obtains both certs and the notarization
+      key by [macos-signing-certificates](2026-09-30-macos-signing-certificates.md) (Account Holder only; no Mac needed). The contributor then imports them. Store notarization
       credentials in the keychain with `xcrun notarytool store-credentials` (App Store Connect API
       key preferred over an app-specific password — it is revocable and scoped). **No secret enters
       the repository**, and the profile name used by scripts is a documented input, not a hard-coded
@@ -1151,6 +1225,9 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
         **running the installer is itself consent to install the CLI**. Making it a checkbox
         requires a multi-component Distribution package for little benefit. Default to placing the
         symlink and documenting it; revisit only if the simple form proves objectionable.
+      > **Superseded 2026-09-30 by D13.** The owner chose the Windows-like options page after all:
+      > a Distribution package with `customize="always"`, the PATH symlink as one of its choices,
+      > payload in `/usr/local/knaif`, and an `uninstall.sh` shipped with it.
 - [ ] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
       on the `.pkg` **and** on the `.zip` (D6 makes the `.zip` both the notarized and the published
       container, so there is no longer a mismatch to reason about), then `xcrun stapler staple` the
@@ -1191,16 +1268,19 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       staging libomp), `docs/MODELS.md` (only if D4 changes a recommendation), `README.md` platform
       support, `evals/INDEX.md` rows, `docs/TODO.md` and `docs/plans/README.md` entries. Run
       `just licenses-all` before any release cut, per the existing rule.
-- [ ] **G5. Homebrew tap — a fast-follow, scoped here so it is not forgotten.** A
+- [ ] **G5. Homebrew tap — in 1.3.0 (D12), no longer a fast-follow.** The owner creates the
+      repository. A
       `blackdeep-tech/homebrew-knaif` tap with a formula pointing at the published `.zip` and its
       `SHA256SUMS` entry. `brew install blackdeep-tech/knaif/knaif` is what a macOS CLI user expects
-      and it sidesteps the quarantine question entirely. Depends on G1's published artifact; its own
-      small plan or a TODO item, not a blocker for this one.
+      and it sidesteps the quarantine question entirely. Depends on G1's published artifact.
 - [ ] **G6. Hand off to CI.** [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
       explicitly parks macOS out of its C3 matrix *"until macOS packaging lands"*. When this plan
       closes, that condition is met: add `macos-14`/`macos-15` (arm64) runners to the matrix and note
       that signing and notarization need repository secrets, which is why they cannot simply be
       lifted into CI on day one.
+      > **2026-09-30 (D10, D11):** the macOS CI job is path-filtered, and signing/notarization move
+      > into the tag workflow **once the hand-signed first build works** — from the secrets on the
+      > protected `release` environment.
 
 ---
 
