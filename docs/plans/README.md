@@ -27,7 +27,7 @@ table changes only when a release opens or ships.
 
 | Release | Lane | Branch | Index | State |
 |---|---|---|---|---|
-| — | | | | no release open |
+| 1.3.0 | minor | `release/1.3.0` | [release-1.3.0](2026-09-30-release-1.3.0.md) | scope being planned (macOS, adapters/superskill) |
 
 ## Plan header format
 
@@ -155,6 +155,7 @@ that release's scope table (via its plan).
 | 2026-09-25 | [release-1.2](2026-09-25-release-1.2.md) | Done | **Published 2026-09-29** (GitHub, HF, PyPI). knaif 1.2.0 and the retrained 4B + 1.7B models ship as **one** release from `release/1.2.0`. `sft-v4` is not published; the next cycle's models become the public `v2`s, bound to 1.2.0 via `released_with:`. Decisions: 1.2.0 (no breaking change vs `v1.1.0`), model numbers stay their own line, 1.7B retrained on its own pre-written bar (safety 100%), L4 on CUDA + Vulkan + CPU for the release candidate, macOS may follow in 1.2.x, the HF card moves into the repo, merge to `main` with a merge commit so eval SHAs stay reachable. |
 | 2026-09-26 | [policy-gate-and-skill-adapters](2026-09-26-policy-gate-and-skill-adapters.md) | Done | Three release-1.2 retrains failed on the shared plan/clarify/reject decision, never on skill knowledge. Tests two fixes with pre-written pass/fail rules: E1 a deterministic safety gate (offline replay, no GPU), E2 one LoRA adapter per skill on a shared base (feasibility spike, then per-skill adapters vs the union model). Pauses release 1.2 at R5. |
 | 2026-09-27 | [release-1.3-skill-adapters-and-superskill](2026-09-27-release-1.3-skill-adapters-and-superskill.md) | Draft | knaif 1.3 scope: per-skill LoRA adapters on a shared base (E2b, restated as quality of base + adapter as served), the superskill/router (design to be discussed with the owner), and more skills. Evidence from release 1.2's failed union retrains. |
+| 2026-09-30 | [release-1.3.0](2026-09-30-release-1.3.0.md) | Active | Release index for 1.3.0 (minor): macOS support and the adapters/superskill plan. Lives on `release/1.3.0`; this copy is left untouched until the release merges back. |
 | 2026-09-30 | [release-workflow](2026-09-30-release-workflow.md) | Active | How releases are developed: a `release/X.Y.Z` branch per release (several may be open), one `feat/*` branch and plan per feature (started from `main` until its release is chosen), a short release index on the release branch, and a patch lane that may not change behavior on shipped platforms. Adds the `Release:` plan field and its lint. Worktrees postponed. |
 
 ## Open threads (not yet a plan, or spanning plans)

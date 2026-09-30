@@ -171,11 +171,11 @@ failing test before the code:
 - [x] *Plans and Todos*: one line each for the release index, the `Release:` field and
   *Releases in flight*, pointing at RELEASE.md for the branch rules.
 
-### - [ ] W5 — record the open work under the new rules
+### - [x] W5 — record the open work under the new rules
 
 No branch is recreated; these are the current feature branches, all started from `main`.
 
-- [ ] List them in the PR description with their proposed release, for the owner to confirm:
+- [x] List them in the PR description with their proposed release, for the owner to confirm:
   `feat/ai-skill-direct-calls`, `feat/local-site-analytics` (both hold only a plan; `Release: —`
   until chosen), `origin/feat/macos-support` (1.3.0 per decision 5).
 - [ ] Their plans get the `Release:` line on their own branches, at their next commit — not from
@@ -193,5 +193,8 @@ No branch is recreated; these are the current feature branches, all started from
 
 ### - [ ] W7 — first use: open 1.3.0 (separate, when the owner starts 1.3)
 
-- [ ] Create `release/1.3.0`; turn the 1.3 draft into the index on that branch; add the
-  *Releases in flight* row on `main`; assign features. Not part of this branch's PR.
+- [x] Release index [release-1.3.0](2026-09-30-release-1.3.0.md) and the *Releases in flight* row,
+  proposed on `main` (branch `docs/open-release-1.3.0`); the 1.3 draft stays as the
+  adapters/superskill feature plan, `Release: 1.3.0`.
+- [ ] Create `release/1.3.0` from `main` once that PR merges.
+- [ ] macOS: `feat/macos-support` takes in `release/1.3.0` and opens its PR there (with its owner).
