@@ -381,7 +381,7 @@ LICENSE, README.txt, licenses/      license notices (Rust deps always; llama.cpp
 new contract reaches the installed tree only when it is added there — `installers/smoke.sh` asserts
 all three are present, and that `backend list` can actually read the last one from an unrelated cwd.
 
-`package.sh --kind=base|cpu|vulkan|cuda`:
+`package.sh --kind=base|cpu|vulkan|cuda|metal`:
 
 | Kind | Produces |
 |---|---|
@@ -389,6 +389,7 @@ all three are present, and that `backend list` can actually read the last one fr
 | `vulkan` | **THE RELEASE ARTIFACT** — CPU **and** Vulkan backends in one tree. Gets the plain name. |
 | `cpu` | build kind only (a box with no Vulkan SDK): core libs + `ggml-cpu-*` variants, `-cpu` suffix. |
 | `cuda` | **Both OSes:** opt-in payload, not an app — `ggml-cuda` + NVIDIA redist for `~/.knaif/backends` (plus the MSVC runtime on Windows). The pre-Option-3 static-with-redist app survives only behind `--legacy-windows-cuda-app`, and is not publishable. |
+| `metal` | **macOS only, and the only functional kind there** (`cpu`/`vulkan`/`cuda` are refused on Darwin): CPU **and** Metal backends in one arm64 tree, no OpenMP. Gets the plain name. Signing, the `.pkg` and notarization: `installers/macos/README.md`. |
 
 **The CUDA payload needs an R580+ driver (CUDA 13).** This is a hard floor, and the failure it
 produces is misleading: on an older driver the payload copies in cleanly, the loader finds it,

@@ -1,6 +1,6 @@
 # macOS Support — Metal inference, packaging, signing, and a third release platform
 
-**Status:** Planning · **Created:** 2026-08-02 · **Completed:** —
+**Status:** Active · **Created:** 2026-08-02 · **Completed:** —
 **Owner:** native/packaging · **Ref:** [`installers/macos/README.md`](../../installers/macos/README.md) (placeholder this plan replaces) · [`installers/package.sh`](../../installers/package.sh) · [`docs/NATIVE.md`](../NATIVE.md) §5, §9, §10, §12 · [`docs/RELEASE.md`](../RELEASE.md) · [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) (C3 matrix, §*Out of scope*)
 **Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
 
@@ -82,13 +82,61 @@ the owner's [certificate steps]([macos-signing-certificates](2026-09-30-macos-si
 |---|---|
 | Owner | Certificates and the notarization key ([macos-signing-certificates](2026-09-30-macos-signing-certificates.md)), the Homebrew tap repository, merges, release cuts |
 | Contributor (Mac) | Workstreams M–G on Apple Silicon: build, package, sign and notarize the first build **by hand**, the evals, the clean room |
-| Windows box | Static checks that must fail where the mistake is made (`check_macho_deps.py`, `package.sh` branches), plan and docs edits |
+| Windows box | Everything that does not need a Mac to run: scripts, tests against faked Apple tools, CI, docs, the 1.2.0 reference extract |
 
 **Where it stands (2026-09-30).** The branch was synced with 1.2.0 on Windows (see the note at
-the top). Nothing Darwin-only has been re-verified since. **Before building on anything, re-run
-A2/A3, B, C1 and E1/E2 on the Mac** and record the result under each task. Then continue in plan
-order: C (quality gates) → D (performance) → E (portability, clean room) → F (signing) → G
-(release integration).
+the top), and then everything that could be written without a Mac was — each piece tested on
+Windows and on Linux (WSL) against faked Apple tools, and **none of it run on a Mac yet**:
+
+| Piece | Where | Task |
+|---|---|---|
+| a `knaif` reached through a symlink (the `.pkg`'s PATH link, Homebrew's) resolves its real folder before looking for skills, contracts and backends — macOS reports the invoked path | `knaif-core` `current_exe_real`, `llama.rs` | found here; F5, G5 |
+| the dependency probe searches `macos.dirs` (Homebrew's `bin`, the LibreOffice cask's `.app`) and hints the exact `brew install` | `deps.rs`, both `skill.yaml` | C7 |
+| `models pull` keeps `~/.knaif/models` out of Time Machine | `knaif-models`, CLI | F5b (D18) |
+| the `.pkg`: Distribution with the options page, per-choice packages, install scripts, `uninstall.sh` | `installers/macos/build-pkg.sh`, `pkg/` | F5 (D13) |
+| signing, notarization log check, stapling, the F2 order end to end | `sign.sh`, `notarize.sh`, `release.sh`, `scripts/check_macos_signing.py`, `check_macho_deps.py --list` | F2, F3, F3b, F6, F7 |
+| the clean room, guest side | `installers/macos/clean-room.sh` | E3, E4, E6 (D16) |
+| the Homebrew formula and its renderer | `installers/macos/homebrew/` | G5 (D19) |
+| CI: path-filtered macOS job; tag-time signing job, off until `MACOS_SIGNING=enabled` | `ci.yml`, `release.yml` | G6 (D10, D11) |
+| the 1.2.0 L4 per-row reference and the comparison tool | `evals/parity/1.2.0-l4-rows/`, `scripts/l4_rows.py` | C6→D14 (D17) |
+| macOS eval lanes `mac-4b`, `mac-1.7b`, `mac-cpu-4b`, `mac-cpu-1.7b` | `eval_backends.yaml` | C4 |
+| docs: RELEASE.md (§1, §2, §4, §5, §6), NATIVE.md §5.3, `installers/macos/README.md` | | G1, G2, G3 |
+
+**The Mac's list — only what needs a Mac, in this order.** Record each result under its task,
+commit it on a `mac/<topic>` branch, and PR into `feat/macos-support`. Then hand back: the Windows
+box takes over the write-ups, the gate and the release integration.
+
+1. **Re-verify the build** (A2/A3, B, C1, E1/E2): `just bootstrap`, `just check-native`,
+   `just test-native`, `just package-native metal`, `bash installers/smoke.sh
+   dist/knaif-*-macos-arm64.zip`, and the installer tests under macOS's bash 3.2: `uv run pytest
+   python/core/tests/test_installer_pkg.py python/core/tests/test_macos_release.py
+   python/core/tests/test_macos_signing.py python/core/tests/test_macho_deps.py`.
+2. **The symlink fix, for real:** `ln -s "$PWD"/dist/staging/knaif-*-macos-arm64/bin/knaif
+   /tmp/knaif && cd /tmp && ./knaif skills list && ./knaif run documents --verbose "<request>"` —
+   skills found, Metal selected, layers offloaded.
+3. **M3:** is the Command Line Tools alone enough to build? (A CLT-only tart VM answers it.)
+4. **The `.pkg` by hand (F5, E6 static):** `just package-pkg`, open it — the options page, the
+   tool choices greyed without Homebrew and enabled with it, a tool installed, the model
+   downloaded, the PATH link, the conclusion page; `pkgutil --expand` it; then
+   `sudo /usr/local/knaif/uninstall.sh`. Note anything that surprises you under F5.
+5. **The evals on Metal (C4, D14):** unpack the zip into the lanes' folders (the comment above
+   `mac-4b` in `eval_backends.yaml`), then per model and skill: `just eval-fixtures <skill>`,
+   `uv run python -m knaif.evalsuite native --skill <skill> --lane mac-<model> --verifier success
+   --config eval_backends.yaml --save <dir>`, `just eval-safety-native <skill> <save.json>`,
+   `just eval-accept-native <skill> <board> <safety>`. Then the CPU sample on `mac-cpu-<model>`
+   with `--only evals/runs/2026-09-29_r5c-linux_success/t15_sample_<model>_<skill>.json`.
+6. **Row flips (D14/D17):** `uv run python scripts/l4_rows.py compare
+   evals/parity/1.2.0-l4-rows/<platform>-<model>-<backend>-<skill>.json <mac board> --list`
+   against Windows CUDA and Linux CUDA (Metal boards) and the Linux CPU sample (CPU boards).
+7. **L3 parity (C5):** `just parity <skill>` for both skills, per C5's note on the build to use.
+8. **Performance (D1–D6)** — the PERFORMANCE.md rows.
+9. **Signing, once the owner's certificates arrive (F1, F4, D10):** `just release-macos` with no
+   entitlements first; keep `dist/notary/`.
+10. **The clean room (E3, E4, E6, D16):** the three tart runs in `installers/macos/README.md`, on
+    the files step 9 produced; then Metal on the physical Mac from a fresh user account.
+
+Known gaps the Mac will meet: `just parity` still hard-codes `target/debug/knaif` (C5's note);
+Homebrew may rewrite the dylibs' install names and drop the Developer ID signature (G5's note).
 
 **Known red, on purpose.** `just check` fails at `check-gate` on this branch: the native
 sources changed, so 1.2.0's L3/L4 evidence reads as stale for both skills. It clears when L3/L4
@@ -958,6 +1006,12 @@ already pass, on a third platform, for the first time.**
       > `retrieval/*.json`), so as committed they exist only on this Mac. If durable cross-session
       > handoff is wanted, that allowlist needs a line for these — left as a decision for whoever
       > picks this up next rather than made unilaterally here.
+      >
+      > **Superseded (D17), the reference is ready.** `evals/parity/1.2.0-l4-rows/` holds the committed
+      > per-row extract of every measured 1.2.0 board (Windows CUDA/Vulkan/CPU, Linux CUDA/CPU sample, both
+      > models); `scripts/l4_rows.py compare` reads a Mac board against it. The v1 slice files on the
+      > contributor's Mac can be deleted.
+
 - [x] **C7. Skill dependency doctor.** `knaif skills deps` on a Mac with and without the brew tools
       installed. A `[MISS]` is a **pass** — it tests the probe, not the box.
       > **Done 2026-08-07, on M3P — both states verified.** Before installing anything, `knaif
@@ -967,6 +1021,11 @@ already pass, on a third platform, for the first time.**
       > both now-installed tools with correct resolved paths (`/opt/homebrew/bin/{tesseract,gs}`),
       > `[MISS]` still correct for the untouched `libreoffice`. The probe correctly reports both
       > states — the property this task exists to verify.
+      >
+      > **Follow-up 2026-09-30 (Windows):** a LibreOffice cask keeps `soffice` inside its `.app`, never on
+      > `PATH`, and a non-login shell lacks Homebrew's `bin` — both read as `[MISS]` with the tool installed.
+      > `skill.yaml` now declares `macos.dirs` (and `macos.brew`, which the `.pkg` and the hint use), and
+      > `deps.rs` searches them. Re-run this task's check with `brew install --cask libreoffice`.
 
 ---
 
@@ -1144,6 +1203,12 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > cover at build time. Only a real inference proves that **`libggml-metal.dylib` and the
       > `ggml-cpu-apple-*` variants can actually be `dlopen`ed**, which is the single thing this
       > clean room is for. Confirm Metal is selected and layers offload (A3), not just that it ran.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `installers/macos/clean-room.sh` runs inside the VM and asserts the
+      > room, quarantines the artifact, runs `smoke.sh`, and gates on a real request from a copy
+      > with the Metal backend removed (D16). Host steps (tart): `installers/macos/README.md`.
+
 - [ ] **E4. Gatekeeper behaviour, simulated honestly — including extraction semantics.** `curl` does
       **not** set the quarantine attribute; Safari and Finder do, and they **propagate** it to
       extracted contents. So neither a `curl` download nor `xattr`-ing an archive and unpacking it
@@ -1153,6 +1218,12 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       clean launch)**, so the signing work is demonstrated to have changed something rather than
       assumed to have — and test the stapled `.pkg` **with networking disabled**, since offline is
       the only condition that distinguishes a stapled ticket from an online lookup (D6).
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `clean-room.sh` applies a browser's quarantine to the download, extracts
+      > the `.zip` the way Finder does and checks every file inherited it, and `--offline` asserts
+      > the network is really down for the stapled `.pkg` run.
+
 - [ ] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
       *Added 2026-08-02 after audit.*
       - **Static inspection:** `pkgutil --expand` the package and check payload contents, install
@@ -1163,6 +1234,12 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
         install** and the documented uninstall. [RELEASE.md](../RELEASE.md) §4 already records why
         upgrade is its own gate: on Windows, two installer directives only ever execute on an
         upgrade, so a fresh install proves nothing about them.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** The static half runs in CI (`pkgutil --expand` of the unsigned `.pkg`);
+      > `clean-room.sh --pkg [--upgrade-from OLD.pkg]` covers install, receipt version, the PATH
+      > link, upgrade and `uninstall.sh`.
+
 - [ ] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
       real build, as the release procedure requires for every platform. Also check for stray
@@ -1204,6 +1281,12 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       stapling** — a checksum taken before it describes a file that no longer exists, which is the
       same class of error as `just installer` overwriting a published setup.exe
       ([RELEASE.md](../RELEASE.md) §4).
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `installers/macos/release.sh` (`just release-macos`) runs the order
+      > above; `test_macos_release.py` replays it against fake Apple tools and fails if any step
+      > moves. It leaves `SHA256SUMS` to the release procedure, which sums after stapling.
+
 - [ ] **F3. Sign inside-out with the hardened runtime, and verify per-binary.** Every `.dylib`
       first, the exe last, `--options runtime --timestamp --sign "Developer ID Application: …"`.
       **Do not lean on `codesign --deep` over the tree** — `--deep` is a bundle-oriented convenience
@@ -1212,6 +1295,12 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       expected **Team ID**, hardened runtime enabled, and a secure timestamp present. E1 already
       enumerates the files; reuse that list so the two checks cannot disagree about what is in the
       artifact.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `sign.sh` signs the list `check_macho_deps.py --list` prints (libraries
+      > first, executable last) and `scripts/check_macos_signing.py codesign` asserts each file's
+      > Team ID, hardened runtime, timestamp and not-ad-hoc, writing the CDHashes for F3b.
+
 - [ ] **F3b. Read the notarization log even on success.** *Added 2026-08-02 after audit.*
       `xcrun notarytool log <submission-id>` after an `Accepted` result — Apple's own guidance is to
       review it, because a submission can be accepted while carrying warnings (an unsigned nested
@@ -1219,6 +1308,12 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       change. Confirm the log lists **every** Mach-O's CDHash: that is the only direct evidence the
       archive's nested binaries were covered, and it matters most for the `.zip` branch, whose
       contents cannot be stapled and are therefore verified online per-binary.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `notarize.sh` saves every log to `dist/notary/` and
+      > `check_macos_signing.py notary-log` fails on a status other than Accepted, on any issue, and
+      > on a Mach-O whose CDHash is not in the ticket.
+
 - [ ] **F4. ⚠️ Determine the minimum entitlements empirically — start with none.** Two are
       plausibly required and both weaken the hardened runtime, so neither is added speculatively:
       - `com.apple.security.cs.allow-jit` — Metal compiles the embedded shader source at runtime.
@@ -1252,9 +1347,23 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > **Superseded 2026-09-30 by D13.** The owner chose the Windows-like options page after all:
       > a Distribution package with `customize="always"`, the PATH symlink as one of its choices,
       > payload in `/usr/local/knaif`, and an `uninstall.sh` shipped with it.
+      >
+      > **Decided and implemented 2026-09-30 (Windows), per D13 — first run on a Mac pending:** package
+      > identifiers `tech.blackdeep.knaif.{core,skill.<name>,path,tool.<name>,model}`; payload in
+      > `/usr/local/knaif`, `--ownership recommended` (root:wheel), modes `u+rwX,go+rX,go-w`; the core
+      > preinstall clears `bin/ skills/ contracts/ licenses/` so an upgrade drops removed files (the
+      > Windows installer's [InstallDelete]); `/usr/local/knaif/uninstall.sh` removes the install, the link
+      > if it is ours, and the receipts, with `--purge` for `~/.knaif`. Tool and model scripts run as the
+      > console user and always exit 0. `installers/macos/build-pkg.sh`, `just package-pkg`.
+
 - [ ] **F5b. Exclude the model store from Time Machine (D18).** `tmutil addexclusion
       ~/.knaif/models` (run as the console user) in the `.pkg` postinstall and in `knaif models pull`
       on Darwin; a failure to exclude is reported, never fatal. Verify with `tmutil isexcluded`.
+      >
+      > **Done in code 2026-09-30 (Windows):** `ModelStore::exclude_from_backups` after every download
+      > (`models pull` and the first-run offer), default store only, failures reported with the manual
+      > command. Verify on the Mac: `tmutil isexcluded ~/.knaif/models`.
+
 - [ ] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
       on the `.pkg` **and** on the `.zip` (D6 makes the `.zip` both the notarized and the published
       container, so there is no longer a mismatch to reason about), then `xcrun stapler staple` the
@@ -1263,6 +1372,11 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > ticket cannot be stapled to a `.zip`, so a quarantined archive's first run needs Apple's
       > service reachable. That is the whole reason the `.pkg` exists (D6) — tell users which to
       > pick and why, the way §6 already does for SmartScreen and the AppImage's FUSE requirement.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `notarize.sh` notarizes either file and staples and validates a `.pkg`;
+      > credentials from `KNAIF_NOTARY_PROFILE` (by hand) or the API-key trio (CI).
+
 - [ ] **F7. Verify the way Gatekeeper does, not the way the signer does.** *Corrected 2026-08-02
       after audit.* For **bare command-line binaries** use
       `codesign -R="notarized" --check-notarization -vv <binary>`; `spctl --type exec` is the legacy
@@ -1270,10 +1384,18 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       remains correct for the `.pkg`). **The decisive test is neither** — it is E4's quarantined
       launch in the clean-room VM, offline for the stapled `.pkg`. Tooling reports what a policy
       engine *would* say; the quarantined run reports what it *does* say.
-- [ ] **F8. Cross-link [code-signing](2026-07-27-code-signing.md).** That plan covers Windows
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `release.sh`'s last step runs `codesign -R=notarized
+      > --check-notarization` on the exe and `spctl -a -t install` on the `.pkg`.
+
+- [x] **F8. Cross-link [code-signing](2026-07-27-code-signing.md).** That plan covers Windows
       signing and is deferred pending release history. macOS signing is **not** deferred — it is
       not optional the way Windows signing is (SmartScreen is a warning; Gatekeeper is a block) —
       but both plans should point at each other so the certificate/HSM story is designed once.
+      >
+      > **Done 2026-09-30:** the code-signing plan's out-of-scope line now points here and at the
+      > certificates plan, and says to reuse this plan's CI-signing pattern for Windows.
 
 ---
 
@@ -1283,13 +1405,26 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       (§2) alongside Linux and Windows, the signing/notarization sequence, the macOS clean-room and
       static-check rows in §4, and macOS notes in §6 (Gatekeeper, `xattr`, `.pkg` vs `.zip`,
       Intel unsupported, `brew` for external tools, uninstall/`~/.knaif` removal).
+      >
+      > **Drafted 2026-09-30 (Windows):** §1 artifact rows, §2 *macOS* build and sign, §4 static check and
+      > clean room, checksums after stapling, §5 tag upload and step 9 (Homebrew tap), §6 user notes. Check
+      > each against what actually happens on the Mac.
+
 - [ ] **G2. `docs/NATIVE.md`.** §5.3's build-kind table gains `metal`; §5.5's backend
       recommendation gains a macOS line; §9's packaging section gains the macOS layout; §10 gains
       the build commands; **§12's "macOS — no installers/notarization; explicitly out for v1" line
       is deleted**, which is the single clearest signal that this plan landed.
+      >
+      > **Partly done 2026-09-30:** §5.3 gains the `metal` row. The §12 line is deleted only when this
+      > plan lands; §5.5 and §9/§10 wait for the Mac's measured facts.
+
 - [ ] **G3. `installers/macos/README.md`.** Replace the placeholder with the real thing. Its current
       content is a promissory note and its predictions should be checked against what actually
       happened — in particular it says "universal2 if feasible, else per-arch", which D4 answers.
+      >
+      > **Drafted 2026-09-30 (Windows):** the placeholder is replaced; the file says which steps have not
+      > run on a Mac yet. Update it as they do.
+
 - [ ] **G4. The rest.** `docs/PERFORMANCE.md` (Workstream D), `docs/INFERENCE.md` (§ macOS rows are
       Python-side and already partly correct — reconcile), `docs/PROVENANCE.md` (only if D3 lands on
       staging libomp), `docs/MODELS.md` (only if D4 changes a recommendation), `README.md` platform
@@ -1302,6 +1437,14 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       `blackdeep-tech/homebrew-knaif` tap with a formula pointing at the published `.zip` and its
       `SHA256SUMS` entry. `brew install blackdeep-tech/knaif/knaif` is what a macOS CLI user expects
       and it sidesteps the quarantine question entirely. Depends on G1's published artifact.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `homebrew/knaif.rb.in` + `render-formula.sh`; `test_macos_release.py`
+      > checks the formula depends on exactly the required tools and lists the optional ones in the
+      > caveats. **Watch the first install:** Homebrew's relocation may rewrite the dylibs' install
+      > names and re-sign them ad hoc, dropping the Developer ID signature from the installed copy.
+      > If it does, record it here; a cask is the fallback shape.
+
 - [ ] **G6. Hand off to CI.** [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
       explicitly parks macOS out of its C3 matrix *"until macOS packaging lands"*. When this plan
       closes, that condition is met: add `macos-14`/`macos-15` (arm64) runners to the matrix and note
@@ -1310,6 +1453,13 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > **2026-09-30 (D10, D11):** the macOS CI job is path-filtered, and signing/notarization move
       > into the tag workflow **once the hand-signed first build works** — from the secrets on the
       > protected `release` environment.
+      >
+      > **Done in workflow 2026-09-30 (Windows), not yet run:** `ci.yml` job `macos` (macos-14,
+      > path-filtered per D11): Darwin tests, the metal package, smoke, an unsigned `.pkg` inspected, the
+      > installer tests under bash 3.2 — no Metal inference (D16). `release.yml` job `macos`: tag only,
+      > `environment: release`, off until the variable `MACOS_SIGNING=enabled`; imports the identities into
+      > a throwaway keychain and runs `just release-macos`. The owner creates the environment, the
+      > secrets (names as in the certificates plan) and the variable.
 
 ---
 

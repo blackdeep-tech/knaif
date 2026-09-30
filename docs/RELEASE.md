@@ -123,7 +123,15 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 | `knaif-<ver>-windows-x64-setup.exe` | `vulkan` | Inno installer (per-user, no admin), same tree |
 | `knaif-<ver>-linux-x64.tar.gz` | `vulkan` | portable tree — CPU + Vulkan |
 | `knaif-<ver>-linux-x86_64.AppImage` | `vulkan` | the same tree as a single file |
+| `knaif-<ver>-macos-arm64.zip` | `metal` | portable tree — CPU + Metal; signed and notarized |
+| `knaif-<ver>-macos-arm64.pkg` | `metal` | Installer package (admin, `/usr/local/knaif`, options page), same tree; signed, notarized, **stapled** |
 | `SHA256SUMS` | — | one line per published artifact |
+
+**macOS is arm64 only** (Apple Silicon; the macOS support plan, D4), and `metal` plays `vulkan`'s
+role there: the only functional kind, so it gets the plain name. It ships as two files because only
+a `.pkg` can carry a stapled notarization ticket, which lets a quarantined download run offline; the
+`.zip`'s ticket is looked up online on first run (D6). The Homebrew formula in
+`blackdeep-tech/homebrew-knaif` points at the `.zip` (§5 step 9).
 
 The **support matrix** these artifacts imply — supported OSes, the measured runtime
 floors, GPU backends, and the external-tool caveats — is declared once in
@@ -340,6 +348,27 @@ export VCToolsRedistDir='C:\Program Files\Microsoft Visual Studio\18\Community\V
 from, and it is the wrong licence path besides — the Distributable List grant the packaging relies on
 is scoped to files inside a Visual Studio installation's `VC\redist` (see `docs/PROVENANCE.md`). The
 tree comes from the MSVC v14x **build tools** component in the VS Installer, nothing else.
+
+### macOS — build on a Mac, sign and notarize by script
+
+Built on Apple Silicon (full Xcode or the Command Line Tools), never cross-compiled. The steps and
+their order are scripted, because every Mach-O modification after signing invalidates the signature
+and stapling rewrites the `.pkg` (the macOS support plan, F2):
+
+```bash
+just package-native metal     # build + stage + check_macho_deps.py + the (unsigned) .zip
+just release-macos            # sign every Mach-O → .zip → notarize → .pkg → notarize → staple → F7
+```
+
+`release-macos` needs the two Developer ID identities and notarization credentials in the
+environment — `KNAIF_SIGN_IDENTITY`, `KNAIF_INSTALLER_IDENTITY`, `KNAIF_TEAM_ID`, and
+`KNAIF_NOTARY_PROFILE` (or the API-key trio `KNAIF_NOTARY_KEY`/`_KEY_ID`/`_ISSUER`); the
+certificates come from the macOS signing-certificates plan. It reads every notarization log, not
+just the status, and fails on any issue or on a binary missing from the ticket. On a tag, CI does
+the same from the protected `release` environment once the repository variable `MACOS_SIGNING` is
+`enabled` (`release.yml`). Details, including the clean-room VM: `installers/macos/README.md`.
+
+`just package-pkg` builds the `.pkg` **unsigned**, for inspecting it — never publish that one.
 
 ### Build traps (both OSes)
 
@@ -650,7 +679,7 @@ Add/Remove row's `DisplayVersion` advances to the new version rather than adding
 Each `ISCC` run needs its `dist\staging\knaif-<ver>-windows-x64` to exist — copy the staged tree to
 the second version's name rather than rebuilding, since the payload is irrelevant to this check.
 
-### Clean-room verification — REQUIRED, both OSes
+### Clean-room verification — REQUIRED, every OS
 
 > **The rule these findings earned, which applies to every artifact shape added later:
 > a verification step that runs on the build box tests STAGING, never PORTABILITY.**
@@ -670,6 +699,7 @@ other missed.
 # Static — no VM, no container, runs anywhere. Both must exit 0.
 python scripts/check_pe_imports.py dist/staging/knaif-<ver>-windows-x64/bin
 python3 scripts/check_elf_deps.py  dist/staging/knaif-<ver>-linux-x64/bin
+python3 scripts/check_macho_deps.py dist/staging/knaif-<ver>-macos-arm64/bin --min-os 12.0
 
 # Dynamic — Linux, both artifacts, BOTH directions
 installers/linux/check-floor.sh dist/knaif-<ver>-linux-x64.tar.gz
@@ -691,6 +721,14 @@ Drive it from a `.wsb` with the artifact mapped read-only, a writable folder for
 `LogonCommand`. Assert `knaif.exe skills list` exits 0; a missing runtime exits **-1073741515**
 (`0xC0000135`) printing nothing at all.
 
+**macOS: run the FINAL signed files in a macOS 12 VM** (`tart`; the oldest supported macOS, with
+no Xcode, Command Line Tools or Homebrew — D8, D15) through `installers/macos/clean-room.sh`: once
+with the `.zip` online, once with the `.pkg` offline (the stapled ticket is what makes that work),
+and once `--upgrade-from` the previous `.pkg`. The script quarantines the file the way a browser
+does, runs `smoke.sh`, and gates on a real request from a copy of the tree **with the Metal
+backend removed**: a VM's GPU is Apple's paravirtualized one, so Metal is proven on a physical
+Mac instead (D16). Host steps: `installers/macos/README.md`.
+
 Then, per artifact set:
 
 - **Artifact hygiene** — no `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/`notebook`
@@ -704,7 +742,11 @@ Then, per artifact set:
 ```bash
 cd dist && sha256sum knaif-<ver>-* > SHA256SUMS      # Linux
 # Windows: Get-FileHash -Algorithm SHA256 <file>
+# macOS:   shasum -a 256 <file>
 ```
+
+The macOS files are summed **after** `just release-macos` has stapled the `.pkg`: stapling rewrites
+it, so an earlier checksum describes a file that no longer exists.
 
 ---
 
@@ -755,7 +797,9 @@ that path once against throwaway outputs:
    future version.
 4. **Tag and push `vX.Y.Z` on the tested commit** — the one the evidence names, now in `main`'s
    history. The `release-tags` ruleset means the tag cannot be moved afterwards. Pushing it starts
-   `release.yml`, which uploads the Linux artifacts to a draft Release.
+   `release.yml`, which uploads the Linux artifacts — and, once `MACOS_SIGNING` is enabled, the
+   signed and notarized macOS `.zip` and stapled `.pkg` — to a draft Release. The macOS files it
+   attaches still go through the clean room (§4) before publishing.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
    public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
    chance to catch a stale artifact.
@@ -777,6 +821,11 @@ that path once against throwaway outputs:
      `uv run pytest python/core/tests/test_release_data.py` verifies the snapshot's shape
      offline.
 8. **Delete** the release branch.
+9. **Update the Homebrew tap** (macOS). Render the formula from the published `.zip` — the exact
+   file `SHA256SUMS` covers — and commit it to `blackdeep-tech/homebrew-knaif` as
+   `Formula/knaif.rb`:
+   `installers/macos/homebrew/render-formula.sh dist/knaif-<ver>-macos-arm64.zip > knaif.rb`.
+   Check it with `brew install --build-from-source ./knaif.rb && brew test knaif` on a Mac.
 
 ---
 
@@ -869,6 +918,14 @@ sha256sum -c SHA256SUMS --ignore-missing                        # Linux
 **AppImage.** `chmod +x knaif-<ver>-linux-x86_64.AppImage && ./knaif-<ver>-linux-x86_64.AppImage`.
 Needs FUSE2 (`libfuse2t64` on Ubuntu 24.04); otherwise run with `--appimage-extract-and-run`.
 
+**macOS — which file.** Apple Silicon only, macOS 12 or later; Intel Macs are not supported. The
+**`.pkg` is the recommended download**: it is signed, notarized and stapled, so it opens with no
+Gatekeeper warning even offline; its options page offers the skills, the PATH link, the supporting
+tools through Homebrew, and the model download. The **`.zip`** is the portable tree, also notarized,
+but its first run needs the network for Gatekeeper to look the ticket up. With Homebrew:
+`brew install blackdeep-tech/knaif/knaif` (installs ffmpeg with it; `knaif models pull` afterwards).
+Supporting tools come from Homebrew — `knaif skills deps` prints the exact `brew install` for each.
+
 **First run.** No `--model` needed — knaif offers to download the recommended GGUF (~2.5 GB) into
 `~/.knaif/models`. Upgrading knaif re-downloads nothing while the recommendation is unchanged.
 External tools (ffmpeg, LibreOffice, Ghostscript, Tesseract) install separately — `knaif skills deps`
@@ -880,6 +937,9 @@ it too and **deletes by default** — answer No only if you plan to reinstall an
 ~2.5 GB model. Upgrades never prompt (Inno installs over an existing install without uninstalling);
 a `/SILENT` uninstall deletes without asking. The **Linux tarball and AppImage have no uninstaller** —
 delete the unpacked folder (or the `.AppImage`) and, to reclaim the model, `rm -rf ~/.knaif`.
+**macOS packages have no uninstall action of their own**, so the `.pkg` ships one:
+`sudo /usr/local/knaif/uninstall.sh` (add `--purge` to remove `~/.knaif` too); Homebrew tools stay
+with Homebrew. The `.zip`: delete the folder. On macOS the model store is kept out of Time Machine.
 
 **Unattended install — pass `/TYPE=full`.** The interactive installer defaults to the `full` type
 (all skills), but a `/VERYSILENT` install *without* `/TYPE` or `/COMPONENTS` reuses whatever component
