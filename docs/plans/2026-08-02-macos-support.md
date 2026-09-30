@@ -96,7 +96,7 @@ are re-run on this tree as part of the 1.3.0 gates. Do not "fix" it by re-lockin
 §11 forbids that.
 
 **Decisions to build to, not re-open.** D1–D9 below, plus the owner's 2026-09-30 decisions
-D10–D15. If the Mac shows one of them is wrong, record the evidence and raise it with the owner
+D10–D19. If the Mac shows one of them is wrong, record the evidence and raise it with the owner
 before changing course.
 
 ---
@@ -271,6 +271,7 @@ for `.app` bundles that communicates nothing useful for a `bin/knaif`.
 
 **Homebrew tap is a deliberate fast-follow** (G5) — the best macOS channel for a CLI, and it
 sidesteps quarantine entirely, but it depends on a published, checksummed archive existing first.
+> **Superseded 2026-09-30 by D12:** the tap ships in 1.3.0; D19 sets the formula's shape.
 
 **D7 — do NOT add a fourth version declaration; derive it.** *Reversed 2026-08-02 after audit.* The
 first draft said the `.pkg` version "joins `test_version_consistency.py`". Wrong instinct: that test
@@ -337,6 +338,25 @@ open; where a task's older text disagrees, these win and the task is updated to 
   results. (C.)
 - **D15 — floor 12.0 kept; clean room in a macOS 12 VM via `tart`.** Confirms D8/D9 with the
   tool chosen. (E.)
+- **D16 — the clean-room gate is split: portability in the VM, Metal on hardware.** A macOS guest
+  reaches Metal through Apple's paravirtualized GPU, which reports reduced capabilities, so ggml
+  may pick older kernels or fail to offload there — a VM result says nothing about Metal on a real
+  Mac. The tart macOS 12 VM (no Xcode, CLT or Homebrew; quarantined artifact) must prove the dylibs
+  load, Gatekeeper passes (the stapled `.pkg` offline) and a **real CPU inference** completes.
+  Metal offload is proven separately on physical Apple Silicon, from a fresh user account, with
+  the quarantined artifact. Whatever Metal does inside the VM is recorded, not gated. GitHub's macOS
+  runners are VMs too, so the D11 CI job is build + mock + static checks, not Metal inference.
+  (E3, E4, §13.5.)
+- **D17 — C6 is folded into D14.** The cross-OS check is the committed per-row extract of the
+  1.2.0 L4 results (Windows + Linux) compared against the Mac on the v2 models. The old v1 slice
+  (`evals/parity/c6_cross_os_*`, which exist only on the Mac that produced them) is deleted, and
+  `.gitignore` is not widened for it. (C6.)
+- **D18 — Time Machine: exclude `~/.knaif/models` only.** `tmutil addexclusion` when a model is
+  downloaded — in the `.pkg` postinstall and in `knaif models pull` on Darwin. Models can be
+  downloaded again; config and the rest of `~/.knaif` stay in backups. (§12 Q6, F5b.)
+- **D19 — the Homebrew formula depends on `ffmpeg` only.** `depends_on "ffmpeg"` (the ffmpeg skill
+  needs it); ghostscript, tesseract and LibreOffice go in `caveats`. The model is not downloaded at
+  install time — `caveats` says to run `knaif models pull`. (G5.)
 
 ---
 
@@ -826,7 +846,7 @@ already pass, on a third platform, for the first time.**
       > printed OK regardless. **Criterion 6 can now be honestly claimed.** Also corrected here: the
       > audit's "+17/+14 rows" drift figures compared utterances to `eval.jsonl` line counts — the
       > real drift was +550 / +35 utterances.
-- [ ] **C4. The eval ladder for both shipped skills** *(depends on C0)*. `just eval-fixtures <skill>`
+- [ ] **C4. The eval ladder for both shipped skills** *(C0 was discharged by 1.2.0's re-locked snapshots)*. `just eval-fixtures <skill>`
       — **always first**, since missing fixtures score correct plans ~0 — then run each snapshot's
       **exact** verifier against a single pinned production backend and **save** the scoreboard, then
       diff it explicitly:
@@ -911,7 +931,7 @@ already pass, on a third platform, for the first time.**
       > So a small diff here is **not automatically a port bug**. Triage by elimination: re-run the
       > utterance against the CPU-only tree from D2 (isolates Metal) and against the Windows/Linux
       > record (isolates the platform, via C6). Record the method — this axis exists permanently now.
-- [ ] **C6. Cross-OS plan agreement.** For a fixed slice of the ffmpeg corpus, compare macOS
+- [x] **C6. Cross-OS plan agreement.** *(Superseded 2026-09-30 by D17: folded into D14's per-row flip comparison against the committed 1.2.0 L4 extract, on the v2 models. The v1 slice below is deleted, not finished.)* For a fixed slice of the ffmpeg corpus, compare macOS
       `plan --json` output against the same slice from a Windows or Linux build. Distinct from C5,
       which compares two runtimes on one machine. This is the check that says "the same request
       produces the same plan on your Mac and your colleague's PC" — the property the whole
@@ -1109,6 +1129,10 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > construction") over what this bullet's first line said. `installers/smoke.sh` itself has not
       > been touched yet; its `.pkg` gap (second bullet) is still open, tracked under E6.
 - [ ] **E3. ⚠️ Clean-room run in a macOS VM — on the OLDEST supported macOS, with real inference.**
+      > **Split by D16 (2026-09-30).** The VM proves load, Gatekeeper and a real **CPU** inference;
+      > Metal offload is proven on physical hardware from a fresh user account, because a macOS
+      > guest's paravirtualized GPU is not evidence about a real Mac. Record what Metal does in the
+      > VM; it does not gate.
       Per D8 and D9. A VM (Virtualization.framework via `tart`, UTM, or equivalent) with **no Xcode,
       no Command Line Tools and no Homebrew**, running the **minimum** OS the deployment floor
       claims — a clean *current* macOS tests the toolchain assumption but says nothing about the
@@ -1228,6 +1252,9 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > **Superseded 2026-09-30 by D13.** The owner chose the Windows-like options page after all:
       > a Distribution package with `customize="always"`, the PATH symlink as one of its choices,
       > payload in `/usr/local/knaif`, and an `uninstall.sh` shipped with it.
+- [ ] **F5b. Exclude the model store from Time Machine (D18).** `tmutil addexclusion
+      ~/.knaif/models` (run as the console user) in the `.pkg` postinstall and in `knaif models pull`
+      on Darwin; a failure to exclude is reported, never fatal. Verify with `tmutil isexcluded`.
 - [ ] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
       on the `.pkg` **and** on the `.zip` (D6 makes the `.zip` both the notarized and the published
       container, so there is no longer a mismatch to reason about), then `xcrun stapler staple` the
@@ -1269,7 +1296,9 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       support, `evals/INDEX.md` rows, `docs/TODO.md` and `docs/plans/README.md` entries. Run
       `just licenses-all` before any release cut, per the existing rule.
 - [ ] **G5. Homebrew tap — in 1.3.0 (D12), no longer a fast-follow.** The owner creates the
-      repository. A
+      repository. **Formula shape (D19):** `depends_on "ffmpeg"`; ghostscript, tesseract and
+      LibreOffice in `caveats`; the model is not downloaded at install — `caveats` says to run
+      `knaif models pull`. A
       `blackdeep-tech/homebrew-knaif` tap with a formula pointing at the published `.zip` and its
       `SHA256SUMS` entry. `brew install blackdeep-tech/knaif/knaif` is what a macOS CLI user expects
       and it sidesteps the quarantine question entirely. Depends on G1's published artifact.
@@ -1308,15 +1337,15 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
 2. ~~What is the deployment floor?~~ **Promoted to decision D9 + task M4b** (2026-08-02) — it is a
    release gate, not a question to answer later. *Which* version to pick remains open; whether it is
    chosen deliberately does not.
-3. **Command Line Tools or full Xcode?** (M3.) Materially changes the contributor prerequisite —
+3. **Command Line Tools or full Xcode?** (M3.) *A CLT-only tart VM answers it — provision one
+   alongside E3's clean room.* Materially changes the contributor prerequisite —
    and D3's build-time-`metallib` fallback would likely force full Xcode, so the two are linked.
 4. **Does the hardened runtime need `allow-jit` for Metal shader compilation?** (F4.)
 5. **How large is the first-run Metal shader-compilation tax?** (D3.) Decides whether an
    install-time warm-up is needed — and if it is, whether the same mechanism should finally be built
    for Vulkan, where §2 has flagged it as an open item since 2026-07-14.
-6. **Does `~/.knaif` need a Time Machine / iCloud exclusion?** A 2.5 GB model store in the home
-   directory gets backed up on every machine that has Time Machine on. Low stakes, cheap to answer,
-   annoying to discover as a user.
+6. ~~Does `~/.knaif` need a Time Machine / iCloud exclusion?~~ **Decided 2026-09-30 (D18, F5b):**
+   exclude `~/.knaif/models` only, via `tmutil addexclusion`.
 
 ---
 
@@ -1325,9 +1354,8 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
 macOS support is done when **all** of the following hold. *Revised 2026-08-02 after audit — three of
 these were previously unfalsifiable.*
 
-0. **C0 is discharged**: both snapshots re-locked with an executing verifier against their current
-   corpora, and `just eval-regression` able to receive a `--current` scoreboard. Until then
-   criterion 6 cannot honestly pass, and this is repository work that does not belong to macOS.
+0. **C0 is discharged** — by 1.2.0's re-locked snapshots (the 2026-09-30 sync), not by macOS work.
+   `just eval-regression` receives an explicit `--current` scoreboard.
 1. `just check` and `just test-native` are green on macOS, with any pre-existing cross-platform test
    defects fixed or explicitly recorded.
 2. `installers/package.sh --kind=metal` produces `knaif-<ver>-macos-arm64.zip` from a clean
@@ -1338,13 +1366,15 @@ these were previously unfalsifiable.*
    non-arm64 slices, and runs as a required step inside `package.sh`.
 4. `installers/smoke.sh` passes on the `.zip`; the `.pkg` passes E6's two gates instead, because
    `smoke.sh` structurally cannot open one.
-5. The clean-room VM — **oldest supported macOS**, no Xcode, no CLT, no Homebrew — runs a
-   **quarantined** artifact through a **real GGUF inference** with Metal selected and layers
-   offloaded, with no Gatekeeper block and no dylib load failure. The stapled `.pkg` does it
-   **offline**.
-6. For each of ffmpeg and documents, a **saved** scoreboard from the snapshot's own verifier and a
-   pinned backend is diffed against the **committed** snapshot via an explicit `--current`, and
-   passes. `just parity` runs against a binary confirmed to do real inference, and is clean or has
+5. **The clean room is split (D16).** The clean-room VM — **oldest supported macOS**, no Xcode, no
+   CLT, no Homebrew — runs a **quarantined** artifact through a **real GGUF inference on CPU**, with
+   no Gatekeeper block and no dylib load failure; the stapled `.pkg` does it **offline**. **Metal
+   selected and layers offloaded** is proven on physical Apple Silicon, from a fresh user account,
+   with the quarantined artifact. What Metal does inside the VM is recorded, not gated.
+6. For each of ffmpeg and documents, and for each shipped model (4B and 1.7B, D14), a **saved**
+   scoreboard from the snapshot's own verifier and a pinned backend is diffed against the
+   **committed** `eval_snapshot.<model>.json` via an explicit `--current`, and passes; row-level
+   flips against Windows/Linux are read from the committed 1.2.0 L4 extract (D17). `just parity` runs against a binary confirmed to do real inference, and is clean or has
    every diff triaged against C5's three confounds.
 7. [PERFORMANCE.md](../PERFORMANCE.md) carries a macOS machine row and a Metal backend row, measured
    by the documented methodology, with the §4 CPU trap avoided by measuring a tree with
