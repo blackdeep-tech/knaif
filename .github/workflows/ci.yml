@@ -421,7 +421,7 @@ jobs:
         run: >-
           uv run pytest -q python/core/tests/test_installer_pkg.py
           python/core/tests/test_macos_release.py python/core/tests/test_macos_signing.py
-          python/core/tests/test_macho_deps.py
+          python/core/tests/test_macho_deps.py python/core/tests/test_l4_rows.py
 
       - uses: actions/upload-artifact@v4
         with:

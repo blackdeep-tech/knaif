@@ -291,3 +291,128 @@ def test_render_refuses_a_file_that_is_not_a_macos_release(tmp_path: Path) -> No
         text=True,
     )
     assert proc.returncode == 2
+
+
+# -- the clean room (E3/E4, D16), zip path, with the macOS tools faked --------------------------
+
+ROOM_FAKES = {
+    "sw_vers": 'echo "$FAKE_MACOS"\n',
+    "xcode-select": "exit 2\n",
+    "uuidgen": "echo 00000000-0000-0000-0000-000000000000\n",
+    # Extended attributes as sidecar files, keyed by the path's checksum.
+    "xattr": r"""
+key() { printf '%s' "$1" | cksum | cut -d' ' -f1; }
+case "$1" in
+  -w) printf '%s' "$3" > "$FAKE_XATTRS/$(key "$4")" ;;
+  -p) [ -e "$FAKE_XATTRS/$(key "$3")" ] ;;
+esac
+""",
+    # Extract like Finder: every file inherits the archive's quarantine.
+    "ditto": r"""
+"$FAKE_PY" -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$3" "$4"
+chmod +x "$4"/*/bin/*
+if xattr -p com.apple.quarantine "$3"; then
+  find "$4" -type f | while IFS= read -r f; do xattr -w com.apple.quarantine q "$f"; done
+fi
+""",
+}
+
+FAKE_KNAIF = r"""
+case "$1" in
+  --version) echo "knaif 9.9.9" ;;
+  run)
+    [ -e "$(dirname "$0")/libggml-metal.so" ] && echo "offloaded 37/37 layers to MTL" >&2
+    [ "${FAKE_RUN_EXIT:-0}" = 0 ] || exit "$FAKE_RUN_EXIT"
+    printf '%%PDF-1.7' > rotated.pdf
+    ;;
+esac
+"""
+
+
+@pytest.fixture()
+def room(tmp_path: Path):
+    """Returns (run(extra_env) -> (proc, results text, room dir))."""
+    import zipfile
+
+    fakes = tmp_path / "fakes"
+    for name, body in ROOM_FAKES.items():
+        _exe(fakes / name, body)
+    (tmp_path / "xattrs").mkdir()
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    shutil.copy(MACOS / "clean-room.sh", kit / "clean-room.sh")
+    _exe(kit / "smoke.sh", "exit 0\n")
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "sample.pdf").write_bytes(b"%PDF-1.7 sample")
+    zpath = tmp_path / "knaif-9.9.9-macos-arm64.zip"
+    with zipfile.ZipFile(zpath, "w") as z:
+        z.writestr("knaif-9.9.9-macos-arm64/bin/knaif", "#!/bin/bash\n" + FAKE_KNAIF)
+        z.writestr("knaif-9.9.9-macos-arm64/bin/libggml-metal.so", "metal")
+        z.writestr("knaif-9.9.9-macos-arm64/contracts/x.yaml", "x")
+    (tmp_path / "home").mkdir()
+    (tmp_path / "scratch").mkdir()
+    room_dir = tmp_path / "room"
+    room_dir.mkdir()
+
+    def run(**extra: str):
+        env = {
+            **os.environ,
+            "PATH": ":".join(
+                [
+                    _posix(fakes),
+                    _posix(Path(sys.executable).parent),
+                    _posix(Path(_bash()).parent),
+                    "/usr/bin",
+                    "/bin",
+                ]
+            ),
+            "HOME": tmp_path.joinpath("home").as_posix(),
+            "TMPDIR": tmp_path.joinpath("scratch").as_posix(),
+            "FAKE_MACOS": "12.7.6",
+            "FAKE_XATTRS": tmp_path.joinpath("xattrs").as_posix(),
+            "FAKE_PY": _posix(Path(sys.executable)),
+            **extra,
+        }
+        args = ["--zip", zpath.as_posix(), "--fixtures", fixtures.as_posix(), "--model", "m.gguf"]
+        proc = subprocess.run(
+            [_bash(), (kit / "clean-room.sh").as_posix(), *args],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=room_dir,
+        )
+        return proc, (room_dir / "clean-room-results.txt").read_text(), room_dir
+
+    return run
+
+
+def test_the_clean_room_passes_and_gates_on_a_cpu_run(room) -> None:
+    proc, results, room_dir = room()
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    for name in (
+        "room_floor",
+        "room_no_clt",
+        "room_no_brew",
+        "quarantined",
+        "quarantine_propagated",
+        "launch",
+        "smoke",
+        "cpu_run",
+    ):
+        assert f"PASS {name}" in results, name
+    # D16: the gating run had no Metal backend; the VM's Metal run is recorded, not gated.
+    assert "offloaded" not in (room_dir / "cpu_run.log").read_text()
+    assert "INFO metal_in_vm" in results and "offloaded 37/37" in results
+
+
+def test_the_clean_room_fails_off_the_floor(room) -> None:
+    proc, results, _ = room(FAKE_MACOS="14.5")
+    assert proc.returncode == 1
+    assert "FAIL room_floor" in results
+
+
+def test_the_clean_room_fails_when_the_real_run_fails(room) -> None:
+    proc, results, _ = room(FAKE_RUN_EXIT="3")
+    assert proc.returncode == 1
+    assert "FAIL cpu_run" in results
