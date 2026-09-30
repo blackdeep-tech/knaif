@@ -1,6 +1,7 @@
 # One directory per backend — cargo profiles for the native builds
 
-**Status:** Active — 7 of 9 tasks landed; T5 awaits an L4 re-run (see P6) · **Created:** 2026-09-21 · **Completed:** —
+**Status:** Done — T5 closed by [release-1.2](2026-09-25-release-1.2.md): the L4 lanes name the profile
+binaries and the packaged artifacts, and R5c re-ran L4 on them · **Created:** 2026-09-21 · **Completed:** 2026-09-30
 
 **Goal:** Give each native build kind (`base` / `cpu` / `vulkan` / `cuda`) its own cargo profile,
 so its binary and its staged llama/ggml libraries live in their own directory instead of
@@ -303,7 +304,7 @@ for no correctness gain. So the container deliberately stays on the default `rel
 and names `--profile` as the supported way to move that root, and the volume note records why this
 script does not use one. One mechanism per environment, each documented where it lives.
 
-### [ ] T5 — Repoint the L4 lane — **unblocked by P6; needs an L4 re-run**
+### [x] T5 — Repoint the L4 lane — **unblocked by P6; needs an L4 re-run**
 
 The intent was: point `eval_backends.yaml:81` (`binary: target/release/knaif.exe`) at the profile
 directory for the kind the lane measures.

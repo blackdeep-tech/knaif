@@ -1,6 +1,8 @@
 # Improve the 4B planner — handoff to a separate agent and branch
 
-**Status:** Planning — handoff, not started · **Created:** 2026-09-17 · **Completed:** —
+**Status:** Superseded — never picked up as a separate handoff. The 4B retrains ran in
+[release-1.2](2026-09-25-release-1.2.md) R3–R4 (sft-v4 shipped as `knaif-qwen3-4b-v2`); the next
+attempt is [release-1.3](2026-09-27-release-1.3-skill-adapters-and-superskill.md) · **Created:** 2026-09-17 · **Completed:** —
 **Owner:** whoever picks this up · **Ref:** continues S3/S4 of
 [2026-09-10-skill-quality-lifecycle.md](2026-09-10-skill-quality-lifecycle.md); the model it
 starts from was produced by [2026-09-11-reject-clarify-taxonomy.md](2026-09-11-reject-clarify-taxonomy.md)

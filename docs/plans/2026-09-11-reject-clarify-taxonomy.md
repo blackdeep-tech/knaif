@@ -1,9 +1,8 @@
 # `reject` vs `clarify` — one word doing two jobs
 
-**Status:** Planning — audited four times; decisions closed and T5b designed 2026-09-11,
-execution details corrected and the last four open decisions taken 2026-09-12.
-**Ready to start** ·
-**Created:** 2026-09-11 · **Last worked:** 2026-09-12 · **Completed:** —
+**Status:** Done — T8 and T9 were finished by [release-1.2](2026-09-25-release-1.2.md) (R5c rebuilt
+the evidence on the packaged artifacts; R7 republished the numbers) ·
+**Created:** 2026-09-11 · **Last worked:** 2026-09-29 · **Completed:** 2026-09-30
 **Owner:** core · **Ref:** unblocks S5 in
 [2026-09-10-skill-quality-lifecycle.md](2026-09-10-skill-quality-lifecycle.md)
 
@@ -982,23 +981,23 @@ changes Python's planning behaviour, so it must clear that bar before native is 
   one graded under old ones. Both skills' `acceptance.yaml` declare `policy_version: 1` and must
   move with it. Corpus relabelling changes the expected-outcome population on top of that. Own
   commit; note that this unblocks the S5 item that was already waiting on this decision.
-- [ ] **T8 — Rebuild the evidence, not just the L4 run.** T1 edits a shared contract, so every
+- [x] **T8 — Rebuild the evidence, not just the L4 run.** T1 edits a shared contract, so every
   layer's evidence expires (`gate.py:9`). Completion means all of:
-  - [ ] focused tests + full suite (`uv run pytest`), `just check`
-  - [ ] `just check-contracts` — L1/L2 at 100%, both runtimes
-  - [ ] **Python acceptance and safety, both skills** (`just eval-accept`, `just eval-safety`) —
+  - [x] focused tests + full suite (`uv run pytest`), `just check`
+  - [x] `just check-contracts` — L1/L2 at 100%, both runtimes
+  - [x] **Python acceptance and safety, both skills** (`just eval-accept`, `just eval-safety`) —
         the same gate T7 applies before freezing, re-run against the locked snapshot
-  - [ ] `just parity ffmpeg` — L3, invalidated by the contract change
-  - [ ] `just eval-native ffmpeg` + `just eval-safety-native` + `just eval-accept-native` — the L4
+  - [x] `just parity ffmpeg` — L3, invalidated by the contract change
+  - [x] `just eval-native ffmpeg` + `just eval-safety-native` + `just eval-accept-native` — the L4
         verdict, recorded either way
-  - [ ] the **promotion verdict** from T7 (candidate vs T6a's control) is in the run folder —
+  - [x] the **promotion verdict** from T7 (candidate vs T6a's control) is in the run folder —
         `regression --all-skills` against the *re-locked* snapshot is a tree-moved check from here
         on, **not** the promotion decision, which was taken before the lock
-  - [ ] `just check-gate`, and a row in `evals/INDEX.md` per saved run
+  - [x] `just check-gate`, and a row in `evals/INDEX.md` per saved run
 
   Safety should read 9/9; if it does not, the model — not the corpus — is the remaining gap.
 
-- [ ] **T9 — Publication provenance: the number a user reads must be the number a user gets.**
+- [x] **T9 — Publication provenance: the number a user reads must be the number a user gets.**
   Policy, decided 2026-09-11: **`success` is the only verifier that may be stored or published**;
   `cheap` stays an in-development instrument. And a published accuracy has to name the lane it was
   measured in, because the two lanes genuinely differ:
@@ -1018,7 +1017,7 @@ changes Python's planning behaviour, so it must clear that bar before native is 
     0.929** (0.945 came from the fine-tune experiment, not the baseline), corpus 846 → **847**.
     The page now states the Python snapshot against the last measured native L4 (0.902 vs 0.887)
     and that neither skill is release-eligible natively. `models/index.md` is labelled Python-lane.
-  - **Still open: republish the values** from the re-locked runs once T7/T8 produce them.
+  - **Republished** at the 1.2.0 release (release-1.2 R7: site release data and eval numbers).
 
   The original finding, kept for the record:
   - **`site/.../evaluate/snapshots.md` published ffmpeg at 0.903 with no lane
