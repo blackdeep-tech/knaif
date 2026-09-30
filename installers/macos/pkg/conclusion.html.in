@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>knaif @VERSION@ is installed</title></head>
+<body style="font-family: -apple-system, sans-serif; font-size: 13px;">
+<p><b>knaif @VERSION@ is installed</b> in /usr/local/knaif.</p>
+<p>Open a new Terminal window and try the commands below. If you left "Add knaif to my PATH"
+unticked, type <code>/usr/local/knaif/bin/knaif</code> instead of <code>knaif</code>.</p>
+<pre>knaif skills list
+knaif skills deps
+knaif run ffmpeg "compress clip.mp4 for email"</pre>
+<p><code>knaif skills deps</code> shows any supporting tool still missing, with the
+<code>brew install</code> command for it. If you skipped the model download, run
+<code>knaif models pull @MODEL@</code>. Setup's own log is in
+<code>/var/log/install.log</code>.</p>
+<p>To uninstall: <code>sudo /usr/local/knaif/uninstall.sh</code> (add <code>--purge</code> to
+also remove downloaded models in ~/.knaif).</p>
+</body>
+</html>
