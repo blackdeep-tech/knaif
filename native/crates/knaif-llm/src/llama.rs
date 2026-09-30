@@ -132,9 +132,19 @@ fn backend_dirs(verbose: bool) -> Vec<std::path::PathBuf> {
         }
         _ => dirs.push(payload_dir),
     }
-    // Then the artifact's own backends, beside the binary.
+    // Then the artifact's own backends, beside the binary — the real one. macOS reports the path
+    // the program was invoked by, so through the `.pkg`'s or Homebrew's `bin/knaif` symlink this
+    // would be the link's directory, where no backend lives. (Windows is left as reported:
+    // `canonicalize` there returns a `\\?\` verbatim path and no installer ships a link.)
     let exe_dir = std::env::current_exe()
         .ok()
+        .map(|exe| {
+            if cfg!(windows) {
+                exe
+            } else {
+                std::fs::canonicalize(&exe).unwrap_or(exe)
+            }
+        })
         .and_then(|e| e.parent().map(std::path::Path::to_path_buf));
     if let Some(dir) = &exe_dir {
         dirs.push(dir.clone());

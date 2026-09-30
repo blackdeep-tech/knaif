@@ -1957,7 +1957,7 @@ fn resolve_repo_file(rel: &str) -> Option<PathBuf> {
             return Some(found);
         }
     }
-    let exe = std::env::current_exe().ok()?;
+    let exe = knaif_core::current_exe_real()?;
     file_near(exe.parent()?, rel)
 }
 

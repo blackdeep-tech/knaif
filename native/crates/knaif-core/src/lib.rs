@@ -40,4 +40,4 @@ pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
 pub use retrieval::{retrieve_tools, RetrievedTools, DEFAULT_TOP_K};
 pub use safety::{is_unsafe_request, load_unsafe_phrases};
 pub use sandbox::{assert_in_sandbox, lexical_normalize, resolve_real};
-pub use skills::{list_skills, resolve_skills_root, SkillMeta};
+pub use skills::{current_exe_real, list_skills, resolve_skills_root, SkillMeta};
