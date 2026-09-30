@@ -49,6 +49,9 @@ dependencies:
           - '%LOCALAPPDATA%\Microsoft\WinGet\Links'
           - '%ProgramFiles%\WinGet\Links'
           - '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin'
+      macos:                      # what the .pkg installs, and Homebrew's bin for a non-login shell
+        brew: ffmpeg
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
 
 safety:
   unsafe_phrases:

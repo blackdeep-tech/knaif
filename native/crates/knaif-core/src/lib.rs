@@ -24,7 +24,7 @@ pub use clarify_gate::{
 pub use deps::{
     detect_skill_deps, expand_dirs, load_external_tools, missing_required_message,
     parse_external_tools, resolve_declared_command, resolve_declared_tool, unmet_required,
-    ExternalTool, InstallHints, ToolStatus, WindowsInstall,
+    ExternalTool, InstallHints, MacosInstall, ToolStatus, WindowsInstall,
 };
 pub use extract::{extract_json, ExtractedJson};
 pub use nl_clarify_gate::nl_clarify_gate;

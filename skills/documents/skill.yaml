@@ -32,8 +32,9 @@ runtimes:
 
 # Optional external tools. documents degrades gracefully without them (the affected
 # operations report a missing-dependency error); the installer offers them per-feature.
-# PATH is never modified. Detection: $KNAIF_<CMD>_BIN, then PATH, then (Windows) the
-# `windows.dirs` each tool's own installer uses — none of these three put themselves on PATH.
+# PATH is never modified. Detection: $KNAIF_<CMD>_BIN, then PATH, then the folders declared for
+# this OS — `windows.dirs` each tool's own installer uses (none of these three put themselves on
+# PATH), `macos.dirs` for Homebrew's bin and the LibreOffice cask's .app.
 dependencies:
   external_tools:
     - name: ghostscript
@@ -44,6 +45,9 @@ dependencies:
         winget: ArtifexSoftware.GhostScript
         download: https://ghostscript.com/releases/gsdnld.html
         dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
+      macos:
+        brew: ghostscript
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
     - name: libreoffice
       required: false
       commands: [soffice, libreoffice]
@@ -52,6 +56,10 @@ dependencies:
         winget: TheDocumentFoundation.LibreOffice
         download: https://www.libreoffice.org/download/download-libreoffice/
         dirs: ['%ProgramFiles%\LibreOffice\program']
+      macos:                      # a cask: soffice lives inside the .app, never on PATH
+        brew: libreoffice
+        cask: true
+        dirs: [/Applications/LibreOffice.app/Contents/MacOS, /opt/homebrew/bin, /usr/local/bin]
     - name: tesseract
       required: false
       commands: [tesseract]
@@ -60,6 +68,9 @@ dependencies:
         winget: UB-Mannheim.TesseractOCR
         download: https://github.com/UB-Mannheim/tesseract/wiki
         dirs: ['%ProgramFiles%\Tesseract-OCR', '%LOCALAPPDATA%\Programs\Tesseract-OCR']
+      macos:
+        brew: tesseract
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
 
 data:
   train: data/train.jsonl

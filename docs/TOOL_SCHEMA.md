@@ -354,7 +354,7 @@ See [NATIVE.md](NATIVE.md) §7 for how the native runtime consumes this, and §3
 
 Third-party programs a skill runs as subprocesses. knaif detects them and never bundles them or
 changes `PATH`; `knaif skills deps` reports them, a run refuses early when a `required` one is
-missing, and the Windows installer offers each through winget.
+missing, the Windows installer offers each through winget, and the macOS `.pkg` through Homebrew.
 
 ```yaml
 dependencies:
@@ -369,16 +369,23 @@ dependencies:
         winget: ArtifexSoftware.GhostScript          # `winget install -e --id …`
         download: https://ghostscript.com/releases/gsdnld.html   # hint when winget is absent
         dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
+      macos:
+        brew: ghostscript                             # `brew install …`
+        cask: false                                   # true → `brew install --cask …` (an .app)
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
 ```
 
-A command resolves to `$KNAIF_<CMD>_BIN` when set, else the first hit on `PATH`, else — on Windows
-— the first `windows.dirs` folder holding it. List the folders the vendor's own installer uses:
-most Windows installers never add themselves to `PATH`. `%VAR%` is expanded from the environment
+A command resolves to `$KNAIF_<CMD>_BIN` when set, else the first hit on `PATH`, else the first
+folder declared for this OS (`windows.dirs`, `macos.dirs`) holding it. List the folders the vendor's
+own installer uses: most Windows installers never add themselves to `PATH`. On macOS list
+Homebrew's `bin` — a knaif started outside a login shell (the `.pkg` postinstall, a GUI) does not
+have it on `PATH` — and, for a cask, the folder inside the `.app`, which is never on `PATH`. `%VAR%` is expanded from the environment
 (a folder naming an unset variable is skipped), and `*` matches within one path component, newest
 version first. The skill must **launch the binary this lookup returns** (native:
 `knaif_skill_api::tools`), not a bare name, or `skills deps` reports a tool the run cannot start.
-The installer's winget ids, commands and folders mirror this block, and
-`python/core/tests/test_installer_iss.py` fails when they drift.
+The installers mirror this block — the Windows installer's winget ids, commands and folders
+(`python/core/tests/test_installer_iss.py`) and the macOS `.pkg`'s Homebrew names
+(`python/core/tests/test_installer_pkg.py`) — and those tests fail when they drift.
 
 ### Runtime models
 
