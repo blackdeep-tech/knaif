@@ -50,7 +50,13 @@ site, CI and eval records may go straight to `main`.
 - **Tag the tested commit.** Merge `main` into the release branch before the final gates, run the
   gates on that commit, merge it to `main` with a merge commit (same tree), then tag the tested
   commit. The evidence SHA and the tag are the same commit.
-- **`release/*` is protected:** PR required, `ci` required, no force-push, no deletion.
+- **`release/*` is protected** (ruleset `release-branches`): every change arrives by PR with the
+  `ci` check green, and force-push is blocked. That includes the freeze (version bump + CHANGELOG)
+  and merging `main` in: do them on a short branch (`chore/freeze-X.Y.Z`, `chore/sync-X.Y.Z`) and
+  open a PR — `ci.yml` does not run on a direct push to a release branch, so a PR is the only way
+  those commits get tested. Batch eval-evidence commits into one PR per stage. Deletion is **not**
+  blocked: merging the release PR into `main` deletes the branch automatically (the repo's
+  *automatically delete head branches* setting), which is the lifecycle's ship step.
 
 ### Lanes
 

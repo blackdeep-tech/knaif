@@ -6,8 +6,8 @@
 **Release:** main
 
 > **Status note:** workflow agreed with the owner 2026-09-30 (decisions below); plan approved the
-> same day. W1–W4 done on `docs/release-workflow`, uncommitted, awaiting owner review. W5 rides the
-> PR description; W6 is the owner's; W7 happens when 1.3 opens.
+> same day. W1–W4 done on `docs/release-workflow` (PR #65, awaiting owner review). W5 is in the
+> PR description; W6 set and verified 2026-09-30; W7 happens when 1.3 opens.
 
 **Goal:** Let more than one release be developed at once, each on its own branch with its own
 short index of feature plans, with a fast lane for patch releases.
@@ -76,8 +76,8 @@ else (plans, site, CI, eval records) may go straight to `main`.
 - **Tag the tested commit.** Before the final gates, merge `main` into the release branch; run the
   gates on that commit; merge it to `main` with a merge commit (same tree); tag the tested commit.
   The evidence SHA and the tag are then the same commit.
-- **`release/*` is protected** by a ruleset: PR required, `ci` check required, no force-push, no
-  deletion. (Owner task W6.)
+- **`release/*` is protected** by a ruleset: PR required, `ci` check required, no force-push.
+  Deletion stays allowed, because merging the release PR auto-deletes the branch. (Owner task W6.)
 
 ### Release lanes
 
@@ -181,10 +181,15 @@ No branch is recreated; these are the current feature branches, all started from
 - [ ] Their plans get the `Release:` line on their own branches, at their next commit — not from
   this branch.
 
-### - [ ] W6 — owner: `release/*` ruleset
+### - [x] W6 — owner: `release/*` ruleset
 
-- [ ] In GitHub settings, a ruleset on `release/*`: PR required, `ci` required, no force-push,
-  no deletion. Verify with `gh api repos/blackdeep-tech/knaif/rulesets`.
+- [x] In GitHub settings, a ruleset `release-branches` on `release/*`: PR required, `ci` required,
+  no force-push; deletion allowed (the repo auto-deletes a merged PR's head branch, which is the
+  ship step). Verify with `gh api repos/blackdeep-tech/knaif/rulesets`. Set and verified
+  2026-09-30 (ruleset 24240930; status checks not required on creation).
+- [x] `release-tags`: add *Restrict updates*. Today it blocks deletion and non-fast-forward
+  updates only, so a tag can still be moved forward to a descendant commit. Done 2026-09-30:
+  deletion, non-fast-forward and update are restricted; creation is not.
 
 ### - [ ] W7 — first use: open 1.3.0 (separate, when the owner starts 1.3)
 
