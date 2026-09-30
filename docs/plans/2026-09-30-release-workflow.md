@@ -47,7 +47,7 @@ Release 1.2 shipped, but the process was hard to follow:
 |---|---|---|---|
 | `main` | — | — | released code, plus docs/site/plan records. **Release tags point at commits on `main`'s history.** |
 | `release/X.Y.0` | `main` | `main` (merge commit) | one minor release in development |
-| `release/X.Y.Z` (patch) | tag `vX.Y.(Z-1)` | `main` (merge commit) | fixes only |
+| `release/X.Y.Z` (patch) | `main`, if it ships the same as tag `vX.Y.(Z-1)` (else the tag) | `main` (merge commit) | fixes only |
 | `feat/<topic>` | `main` (default) or its release | a release branch, by PR | one feature = one plan |
 | `fix/<topic>` | the release it fixes | that release, by PR | one fix |
 | `exp/<topic>` | anything | **never merged** | experiments and training runs; the result reaches a release as evidence or a decision |
@@ -85,7 +85,7 @@ else (plans, site, CI, eval records) may go straight to `main`.
 |---|---|---|
 | Scope | features (plans), model changes, new platforms | code bug fixes only |
 | Not allowed | — | a new or retrained model, prompt wording, `tools.yaml` / contract changes, new CLI flags, any behavior change on a platform already shipped |
-| Starts from | `main` | the previous release tag |
+| Starts from | `main` | `main` when nothing it gained since the previous tag ships in an artifact; otherwise that tag |
 | Gates | all of [RELEASE.md](../RELEASE.md) §4: L3, full L4 matrix, clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (RELEASE.md §4's existing "sampled" evidence), clean room, upgrade path |
 | If the rule is broken | — | the change moves to the next minor, or the patch runs the minor gates |
 
@@ -93,7 +93,8 @@ else (plans, site, CI, eval records) may go straight to `main`.
 
 1. **Propose** (optional) — a Draft index on `main`: goal, lane, rough scope. The existing
    [release-1.3](2026-09-27-release-1.3-skill-adapters-and-superskill.md) draft is this stage.
-2. **Open** — create `release/X.Y.Z` from `main` (or from the tag, for a patch). The index becomes
+2. **Open** — create `release/X.Y.Z` from `main` (a patch too, unless `main` has gained something
+   that ships since the previous tag — then from the tag). The index becomes
    Active on the release branch. On `main`, add the row to *Releases in flight* in
    [README.md](README.md) and do not edit `main`'s copy of the index again, so the two never
    conflict when the release merges back.
@@ -124,6 +125,10 @@ header field, and the *Release index* template. In short:
   opens or ships.
 - **The backlog** — TODO.md *Open / Next* stays the list of unassigned items; assigning one to a
   release moves it into that release's scope table.
+
+**Amended 2026-09-30, at the first patch (1.2.1):** a patch starts from `main`, not the tag, when
+`main` has gained nothing that ships since the tag. A branch cut from the tag would lack the release
+index (which lives on `main` until the branch is cut) and the current plan lint.
 
 ## Out of scope
 
