@@ -413,6 +413,7 @@ fn cmd_models(action: ModelsAction) -> anyhow::Result<()> {
                 Ok(path) => {
                     bar.finish_and_clear();
                     println!("Installed {name} -> {}", path.display());
+                    exclude_store_from_backups(&store);
                     Ok(())
                 }
                 Err(e) => {
@@ -1892,6 +1893,18 @@ fn select_model_with(
 
 /// Offer to download the recommended model, then pull it with a progress bar. `Ok(None)` when the
 /// user declines or cannot be asked — the caller falls back to the mock plus first-run guidance.
+/// Keep the model store out of Time Machine after a download (macOS; a no-op elsewhere). A
+/// failure is reported with the command to run by hand, and never fails the download.
+fn exclude_store_from_backups(store: &ModelStore) {
+    if let Err(e) = store.exclude_from_backups() {
+        eprintln!(
+            "⚠  Could not exclude the model store from Time Machine ({e}).\n   \
+             To do it yourself: tmutil addexclusion {}",
+            store.dir().display()
+        );
+    }
+}
+
 /// A failed pull is surfaced as an error rather than silently degrading to the mock.
 fn offer_recommended_download(name: &str, yes: bool) -> anyhow::Result<Option<PathBuf>> {
     let store = ModelStore::open(&resolve_manifest_path()?)?;
@@ -1925,6 +1938,7 @@ fn offer_recommended_download(name: &str, yes: bool) -> anyhow::Result<Option<Pa
         Ok(path) => {
             bar.finish_and_clear();
             eprintln!("Installed {name} -> {}", path.display());
+            exclude_store_from_backups(&store);
             Ok(Some(path))
         }
         Err(e) => {
