@@ -2,6 +2,7 @@
 
 **Status:** Planning · **Created:** 2026-07-27 · **Completed:** —
 **Owner:** packaging · **Ref:** extracted from [windows-installer-polish](2026-07-25-windows-installer-polish.md) (W4, F5) · [`installers/windows/knaif.iss`](../../installers/windows/knaif.iss) · [`installers/package.sh`](../../installers/package.sh)
+**Release:** 1.2.1
 
 > **Why this is its own plan.** Signing was W4 of the installer-polish plan, but it is the only
 > workstream there gated on an **external party** — every other one is code the owner can write
@@ -22,6 +23,14 @@ providers later changes one environment variable rather than the build.
 ---
 
 ## Decision log
+
+**2026-09-30 — the owner will issue the Azure Artifact Signing certificate (~$10/mo) for Windows,
+aiming at 1.2.1.** Signing the installer changes the artifact, not what knaif does, so it is
+proposed for the patch lane; the patch gates (clean room, upgrade over an unsigned install) must
+pass with a signed installer, and if they cannot, this moves to 1.3.0. The Microsoft Store (MSIX)
+and winget are not pursued now: Store distribution is revisited with the UI app, and until then
+the direct download keeps its SmartScreen prompt. The owner-side steps are the runbook at the end
+of this plan. macOS signing is a separate plan on the 1.3.0 branch, `macos-signing-certificates`.
 
 **2026-07-27 — the SignPath Foundation application is deferred, not abandoned.** Their programme
 favours established projects, and knaif is one release old. Revisit when the project has more
@@ -149,3 +158,75 @@ describes the signed cut, including the Defender submission step.
   only CI-built artifacts; revisit the ordering at that point and not before.
 - **macOS notarization** — no macOS installer exists yet.
 - **Kernel-mode or driver signing** — knaif ships no drivers.
+
+---
+
+## Owner runbook — getting the Windows signing certificate
+
+*Added 2026-09-30.* Everything the owner has to obtain for Windows, in order. Portal labels and
+product names change often (Azure renamed Trusted Signing to Artifact Signing in 2025–26) — where a
+step says *verify*, trust the portal over this text. Nothing here goes into the repository:
+certificates, keys and identities live only in Azure or in GitHub Actions secrets. The macOS
+equivalent is its own plan, `macos-signing-certificates`, on the 1.3.0 release branch.
+
+| Item | From | Cost | Used for |
+|---|---|---|---|
+| Artifact Signing account + certificate profile | Azure | ~$9.99/mo (Basic) | `knaif.exe`, DLLs, `setup.exe`, uninstaller |
+
+**Step 0 — check eligibility before paying for anything.** The two Microsoft statements in the
+landscape section above disagree, so this is the gate. Organisations need a legal entity Microsoft
+can verify, and the published onboarding rules have required a period of verifiable business
+history (3+ years at one point) and a supported country (US, Canada, EU, UK for organisations;
+individuals US/Canada only). Read the current requirements on Microsoft Learn for *Artifact
+Signing* and check Blackdeep's registered country and incorporation date against them. **If it does
+not qualify, stop here** and take the fallback: an OV certificate on a cloud HSM (~$150–300/yr),
+or revisit SignPath Foundation. Do not build the pipeline first.
+
+1. **Azure subscription.** Use a pay-as-you-go subscription owned by the company. A free trial
+   subscription is generally not accepted for this service — *verify*.
+2. **Create the account.** Portal → *Artifact Signing accounts* → Create. Pick a region close to the
+   CI runners (for the EU, West Europe). The region fixes the signing **endpoint URL** (for example
+   `https://weu.codesigning.azure.net`) — write it down. Choose the **Basic** tier.
+3. **Identity validation.** In the account, *Identity validation* → New → **Organization**. You
+   enter the legal name, registration number, address and a contact; Microsoft's verification
+   partner checks them against official records. This takes from minutes to several days and may
+   ask for documents. You need the *Artifact Signing Identity Verifier* role on the account
+   (assign it to yourself under *Access control*).
+4. **Certificate profile.** After validation succeeds: *Certificate profiles* → Create → type
+   **Public Trust**, pick the validated identity. Write down the account name and profile name.
+   The certificate subject is taken from the validated identity — **read what it says**; it must
+   match `AppPublisher` in `installers/windows/knaif.iss` (S3 above).
+5. **A signing identity for CI.** Entra ID → App registrations → New (for example `knaif-signing`).
+   Grant it the **Artifact Signing Certificate Profile Signer** role on the account. Then add a
+   **federated credential** for GitHub Actions (repository `blackdeep-tech/knaif`, the environment
+   that runs the release job) so CI authenticates by OIDC and **no client secret exists**.
+6. **Hand over** the values in the secrets table below. The certificates Microsoft issues are
+   short-lived and rotate on their own, which is why every signature must carry a timestamp
+   (`http://timestamp.acs.microsoft.com`) — S2 already requires it.
+7. **Local signing** (before CI exists) needs `signtool` plus Microsoft's Artifact Signing client
+   (`Azure.CodeSigning.Dlib`) and a small `metadata.json` holding the endpoint, account and profile
+   names. That is what `KNAIF_SIGN_CMD` in S1 should wrap.
+
+**Expect:** the first signed installer still gets the SmartScreen prompt. Signing changes the
+publisher from "Unknown" to Blackdeep's name and lets reputation build across releases; it does
+not skip the prompt (see the landscape section). Keep the Defender submission (S0) going.
+
+### GitHub Actions secrets
+
+Create them as **environment secrets** on a protected `release` environment (required reviewer:
+the owner), so only a tag build the owner approves can reach them. Names are suggestions; the
+workflow and this table must agree when it is written.
+
+| Secret | Holds |
+|---|---|
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID` | the Entra app from step 5 (not secret in themselves; no password exists) |
+| `ARTIFACT_SIGNING_ENDPOINT`, `ARTIFACT_SIGNING_ACCOUNT`, `ARTIFACT_SIGNING_PROFILE` | endpoint URL, account name, certificate profile name |
+
+### Housekeeping
+
+- **Renewals.** The profile is continuous and the subscription bills monthly — set a budget alert so
+  a lapsed payment is noticed before a release day.
+- **Revocation.** If the signing identity leaks: remove its Azure role assignment and delete the
+  Entra app. The repository never held any secret.
+- **Public output.** The certificate subject appears inside published binaries. Follow AGENTS.md
+  *Public Output Hygiene*: no personal names or machine paths beyond what the subject itself shows.
