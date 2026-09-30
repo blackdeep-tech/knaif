@@ -495,3 +495,234 @@ def test_resync_console_handles_restores_stale_handle():
         assert wc.STDERR_HANDLE == msvcrt.get_osfhandle(2)
     finally:
         wc.STDOUT_HANDLE, wc.STDERR_HANDLE = saved_out, saved_err
+
+
+# ── timing parity with the native runtime (workbench T4 / D4) ─────────────────────────────
+#
+# Native emits, under $KNAIF_TIMING=1:
+#   [knaif-timing] prompt_decode (2442 tokens) = 234 ms
+#   [knaif-timing] generation (33 tokens) = 163 ms
+#   [knaif-timing] generate_plan TOTAL = 418 ms
+#
+# Python had only end-to-end latency, so "time" meant different things per runtime and the panel
+# could not be one table. llama.cpp keeps the same counters Python was missing; they are read
+# from `llama_perf_context`, not scraped from stderr.
+
+
+class _FakePerf:
+    """Mirrors llama_cpp.llama_perf_context_data's fields."""
+
+    t_start_ms = 0.0
+    t_load_ms = 954.0
+    t_p_eval_ms = 181.6
+    t_eval_ms = 162.2
+    n_p_eval = 28
+    n_eval = 27
+    n_reused = 0
+
+
+def test_perf_timings_mirror_the_native_field_names() -> None:
+    from knaif.orchestrator import perf_timings
+
+    t = perf_timings(_FakePerf(), wall_ms=600.0)
+    assert t["model_load_ms"] == 954.0
+    assert t["prompt_tokens"] == 28
+    assert t["prompt_decode_ms"] == 181.6
+    assert t["generation_tokens"] == 27
+    assert t["generation_ms"] == 162.2
+    assert t["generate_plan_total_ms"] == 600.0
+
+
+def test_perf_timings_report_nothing_rather_than_zero_when_nothing_ran() -> None:
+    """No tokens decoded means no figure. Zero would read as "instant", which is a claim."""
+    from knaif.orchestrator import perf_timings
+
+    class _Empty(_FakePerf):
+        t_p_eval_ms = 0.0
+        t_eval_ms = 0.0
+        n_p_eval = 0
+        n_eval = 0
+
+    t = perf_timings(_Empty(), wall_ms=5.0)
+    assert t["prompt_tokens"] is None
+    assert t["prompt_decode_ms"] is None
+    assert t["generation_tokens"] is None
+    assert t["generation_ms"] is None
+    # The wall figure is still real — it is the one thing that was measured.
+    assert t["generate_plan_total_ms"] == 5.0
+
+
+def test_a_sub_millisecond_decode_is_zero_not_missing() -> None:
+    """Measured on a repeat call: the KV cache is reused, so only ONE prompt token is decoded
+    and it takes under half a millisecond. That is a real measurement of a real event —
+    reporting it as `None` would hide the cache reuse that makes the number small.
+    """
+    from knaif.orchestrator import perf_timings
+
+    class _Warm(_FakePerf):
+        n_p_eval = 1
+        t_p_eval_ms = 0.0
+
+    t = perf_timings(_Warm(), wall_ms=132.0)
+    assert t["prompt_tokens"] == 1
+    assert t["prompt_decode_ms"] == 0.0
+
+
+def test_reused_tokens_are_the_prompt_minus_what_was_decoded() -> None:
+    """D4c is only enforceable if "warm" is visible in the data rather than asserted in a label.
+
+    llama-cpp-python keeps the previous call's KV cache and decodes only the prompt after the
+    longest shared token prefix, so `n_p_eval` is the *uncached remainder*. Measured in the
+    workbench: a 2505-token ffmpeg prompt decoded 847 tokens on the Python lane — 1658 came from
+    the cache (the shared rules block alone is 1656) — while native, a fresh process, decoded
+    all 2505. Without the reused count that reads as Python sending a third of the prompt.
+    """
+    from knaif.orchestrator import perf_timings
+
+    class _PartlyCached(_FakePerf):
+        n_p_eval = 847
+
+    t = perf_timings(_PartlyCached(), wall_ms=1715.0, total_prompt_tokens=2505)
+    assert t["prompt_tokens"] == 847
+    assert t["reused_tokens"] == 1658
+
+
+def test_reused_tokens_never_come_from_n_reused() -> None:
+    """`n_reused` counts reused *compute graphs*, not tokens (llama.h: "number of times a ggml
+    compute graph had been reused"). It rises by about one per generated token — the workbench
+    showed "reused from cache 251 tok" beside 253 generated tokens. It is not a cache figure.
+    """
+    from knaif.orchestrator import perf_timings
+
+    class _GraphReuse(_FakePerf):
+        n_reused = 251
+
+    assert perf_timings(_GraphReuse(), wall_ms=600.0)["reused_tokens"] is None
+    assert (
+        perf_timings(_GraphReuse(), wall_ms=600.0, total_prompt_tokens=28)["reused_tokens"] is None
+    )
+
+
+def test_infer_hands_the_full_prompt_length_to_the_timings(monkeypatch) -> None:
+    """The full prompt length is `usage.prompt_tokens` on the completion — the only place it is
+    known once the cache has shortened what llama.cpp decodes."""
+    import knaif.orchestrator as orchestrator_mod
+
+    seen: dict = {}
+
+    def _spy(llm, *, wall_ms, total_prompt_tokens=None):
+        seen["total"] = total_prompt_tokens
+        return {}
+
+    monkeypatch.setattr(orchestrator_mod, "_read_perf", _spy)
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
+    mock_llm = MagicMock()
+    mock_llm.create_chat_completion.return_value = {
+        "choices": [{"message": {"content": "ok"}}],
+        "usage": {"prompt_tokens": 2505, "completion_tokens": 253, "total_tokens": 2758},
+    }
+    orch.llm = mock_llm
+
+    orch.infer("sys", "usr")
+
+    assert seen["total"] == 2505
+
+
+def test_last_timings_is_none_before_any_inference() -> None:
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
+    assert orch.last_timings is None
+
+
+# ── inference config knobs (docs/plans/2026-09-23-inference-config-parity.md T1) ──────────
+
+
+def _load_with(tmp_path, config: dict) -> MagicMock:
+    """Load through a stubbed llama_cpp and return the `Llama` class mock, for its kwargs."""
+    model_file = tmp_path / "model.gguf"
+    model_file.write_bytes(b"fake")
+    mock_llama_cls = MagicMock()
+    mock_llama_module = MagicMock()
+    mock_llama_module.Llama = mock_llama_cls
+    with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
+        InferenceOrchestrator(backend="llama_cpp", model_config={"path": str(model_file), **config})
+    return mock_llama_cls
+
+
+def test_flash_attn_and_n_ubatch_reach_llama_when_set(tmp_path):
+    """Native runs flash attention at llama.cpp's default and prompt batch = n_ctx; Python ran
+    llama-cpp-python's defaults. On a borderline token that alone flipped the plan
+    (extract 0.68 -> strip 0.80). The lanes can only be aligned if both knobs are settable."""
+    kwargs = _load_with(tmp_path, {"flash_attn": True, "n_ubatch": 8192, "n_batch": 8192})
+    assert kwargs.call_args.kwargs["flash_attn"] is True
+    assert kwargs.call_args.kwargs["n_ubatch"] == 8192
+    assert kwargs.call_args.kwargs["n_batch"] == 8192
+
+
+def test_lora_path_reaches_llama_resolved(tmp_path):
+    """E2a (docs/plans/2026-09-26-policy-gate-and-skill-adapters.md): a skill adapter is applied
+    to the shared base at load, so an eval stanza can name one with `lora_path`."""
+    adapter = tmp_path / "skill-lora.gguf"
+    adapter.write_bytes(b"fake")
+    kwargs = _load_with(tmp_path, {"lora_path": str(adapter)})
+    assert kwargs.call_args.kwargs["lora_path"] == str(adapter)
+
+
+def test_no_lora_path_passes_none(tmp_path):
+    kwargs = _load_with(tmp_path, {"n_ctx": 8192})
+    assert kwargs.call_args.kwargs.get("lora_path") is None
+
+
+def test_unset_knobs_take_the_contract_config(tmp_path):
+    """T4: the defaults are the contract's (contracts/runtime/generation.yaml), not
+    llama-cpp-python's — which were what made the Python lane compute differently from native."""
+    kwargs = _load_with(tmp_path, {"n_ctx": 8192})
+    assert kwargs.call_args.kwargs["flash_attn"] is True
+    assert kwargs.call_args.kwargs["n_ubatch"] == 512
+    assert kwargs.call_args.kwargs["n_batch"] == 8192
+
+
+def test_loading_by_model_path_does_not_crash(tmp_path):
+    """`n_batch` was only bound inside the model_config branch, so a load by `model_path=`
+    raised NameError, which the broad except turned into a warning and no model."""
+    model_file = tmp_path / "model.gguf"
+    model_file.write_bytes(b"fake")
+    mock_llama_module = MagicMock()
+    with patch.dict("sys.modules", {"llama_cpp": mock_llama_module}):
+        orch = InferenceOrchestrator(backend="llama_cpp", model_path=str(model_file))
+    assert orch.llm is mock_llama_module.Llama.return_value
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_reset_cache_per_call_clears_the_prefix_before_each_call(stream):
+    """With a model kept loaded, llama-cpp-python decodes only past the prefix a call shares
+    with the previous one, so a row's numerics depend on the row before it. Resetting first
+    makes every call decode its whole prompt, as native's fresh context per call does."""
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={"reset_cache_per_call": True})
+    order: list[str] = []
+    mock_llm = MagicMock()
+    mock_llm.reset.side_effect = lambda: order.append("reset")
+
+    def _complete(**kw):
+        order.append("complete")
+        if kw.get("stream"):
+            return iter([{"choices": [{"delta": {"content": "ok"}}]}])
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    mock_llm.create_chat_completion.side_effect = _complete
+    orch.llm = mock_llm
+
+    if stream:
+        list(orch.infer_stream("sys", "usr"))
+    else:
+        orch.infer("sys", "usr")
+
+    assert order == ["reset", "complete"]
+
+
+def test_the_cache_is_kept_by_default():
+    orch = InferenceOrchestrator(backend="llama_cpp", model_config={})
+    mock_llm = MagicMock()
+    mock_llm.create_chat_completion.return_value = {"choices": [{"message": {"content": "ok"}}]}
+    orch.llm = mock_llm
+    orch.infer("sys", "usr")
+    mock_llm.reset.assert_not_called()

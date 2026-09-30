@@ -176,7 +176,7 @@ def _patch_snapshots(monkeypatch, tmp_path: Path, snaps: dict[str, dict | None])
             p.write_text(json.dumps(snap), encoding="utf-8")
         paths[skill] = p
     monkeypatch.setattr(cli, "list_skills", lambda *a, **k: list(snaps))
-    monkeypatch.setattr(cli, "_snapshot_path", lambda skill: paths[skill])
+    monkeypatch.setattr(cli, "_snapshot_path", lambda skill, model=None: paths[skill])
 
 
 def test_regression_all_skills_requires_current_run():

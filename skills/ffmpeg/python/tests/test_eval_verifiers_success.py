@@ -68,10 +68,17 @@ def _mock_ffprobe(probe_data: dict):
 def _mock_output(
     artifact: str | None = "ffmpeg -y -i in.mp4 -c:v libx264 -c:a aac out.mp4",
     artifact_path: Path | None = None,
+    artifact_commands: list[str] | None = None,
 ) -> MagicMock:
     m = MagicMock()
     m.artifact = artifact
     m.artifact_path = artifact_path
+    # Mirrors the runner: the full chain in plan order, `artifact` being its last entry.
+    # Set explicitly (not left as a MagicMock attribute) so the command-text checks read a
+    # real list.
+    m.artifact_commands = (
+        artifact_commands if artifact_commands is not None else ([artifact] if artifact else [])
+    )
     m.outcome = "plan"
     return m
 
@@ -495,3 +502,163 @@ def test_grade_outputs_prefixes_results_by_index(tmp_path: Path):
         result = grade_outputs([video, audio], spec, tmp_path)
     assert any(m.startswith("out0:") for m in result.matched)
     assert any(m.startswith("out1:") for m in result.matched)
+
+
+# ── chain rows: command-text criteria must see EVERY step, not just the last ───────────────
+#
+# Fix review, pre-existing finding: for ffmpeg_273 (rotate → compress) the model's plan was
+# correct, but `transpose` lives in the FIRST command while `artifact` is the last one, so
+# the row scored 0.667 with `filter:transpose not in command` — under-measuring a correct
+# plan. `artifact_commands` carries the whole chain for these substring checks.
+
+
+def test_success_filter_from_an_earlier_chain_step_is_found(tmp_path: Path):
+    out = _mock_output(
+        artifact="ffmpeg -y -i clip_rotated.mp4 -c:v libx264 clip_out.mp4",
+        artifact_commands=[
+            "ffmpeg -y -i clip.mp4 -vf transpose=1 clip_rotated.mp4",
+            "ffmpeg -y -i clip_rotated.mp4 -c:v libx264 clip_out.mp4",
+        ],
+    )
+    result = success(out, {"filters": ["transpose"]}, tmp_path)
+    assert result.score == pytest.approx(1.0), result.failed
+    assert any("filter:transpose" in m for m in result.matched)
+
+
+def test_success_filter_absent_from_the_whole_chain_still_fails(tmp_path: Path):
+    """The chain-aware search must not become a blanket pass: a filter in NO step fails."""
+    out = _mock_output(
+        artifact="ffmpeg -y -i clip_x.mp4 -c:v libx264 clip_out.mp4",
+        artifact_commands=[
+            "ffmpeg -y -i clip.mp4 -c:a aac clip_x.mp4",
+            "ffmpeg -y -i clip_x.mp4 -c:v libx264 clip_out.mp4",
+        ],
+    )
+    result = success(out, {"filters": ["transpose"]}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert any("transpose" in f for f in result.failed)
+
+
+# ── max_size_kb: the criterion "compress to under N" actually needs ───────────
+
+
+def test_success_max_size_kb_satisfied_passes(tmp_path: Path):
+    """`ffmpeg_020` and `ffmpeg_093` ask for a SIZE and could only assert a container.
+
+    "compress clip_ctr.mp4 to under 500 KB" was graded `{"container": "mp4", "video_codec":
+    "h264"}` — which the untouched 1.6 MB source satisfies. The row could not fail on the one
+    thing it asks for, so a plan that compressed nothing scored the same as one that worked.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(size="210901")):  # the gold's real output: 206 KB
+        result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(1.0)
+    assert any("max_size_kb" in m for m in result.matched), result.matched
+
+
+def test_success_max_size_kb_exceeded_fails(tmp_path: Path):
+    """The whole point: an output that did not shrink must score zero on this criterion."""
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(size="1658334")):  # the untouched source: 1619 KB
+        result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert any("1619" in f or "1618" in f for f in result.failed), result.failed
+
+
+def test_success_max_size_kb_unreadable_size_fails_rather_than_passes(tmp_path: Path):
+    """A missing `format.size` must not be read as "small enough".
+
+    Every other file criterion here fails closed when the probe cannot answer; a size check
+    that silently passed would reintroduce exactly the cannot-fail row it exists to remove.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    probe = _probe()
+    probe["format"].pop("size", None)
+    with _mock_ffprobe(probe):
+        result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+
+
+def test_success_max_size_kb_triggers_the_file_probe(tmp_path: Path):
+    """It must be a FILE field: a size criterion alone has to fetch the artifact.
+
+    If `max_size_kb` were not in `_FILE_FIELDS`, a row whose only criterion is a size would
+    take the command-text-only path, find no criteria to check, and score 1.0 without ever
+    looking at the output — the cannot-fail row again, wearing a criterion.
+    """
+    out = _mock_output(artifact_path=None)
+    result = success(out, {"max_size_kb": 500}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert "artifact_file_missing_or_not_produced" in result.failed
+
+
+# ── duration_s: the criterion 20 trim rows needed and none had ───────────────
+
+
+def test_success_duration_within_tolerance_passes(tmp_path: Path):
+    """20 plan rows state a length in the utterance and none asserted it.
+
+    "cut clip.mp4 from 2 seconds to 5 seconds" was graded `{container, flags}` — and the
+    untouched 10-second source satisfies both. A regression that stopped trimming entirely
+    would have passed every one of those rows.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(duration="3.02")):
+        result = success(out, {"duration_s": 3.0}, tmp_path)
+    assert result.score == pytest.approx(1.0)
+    assert any("duration_s" in m for m in result.matched), result.matched
+
+
+def test_success_duration_outside_tolerance_fails(tmp_path: Path):
+    """The untouched source is what this has to reject."""
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    with _mock_ffprobe(_probe(duration="10.0")):
+        result = success(out, {"duration_s": 3.0}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert any("10" in f for f in result.failed), result.failed
+
+
+def test_success_duration_tolerance_is_generous_enough_for_keyframes(tmp_path: Path):
+    """±0.5s, matching `output_diff`'s existing `duration_s` tolerance.
+
+    A stream copy cuts at the nearest keyframe, so an honest 3-second trim can land at 2.6s
+    or 3.4s. A tighter bound would fail correct plans for a reason the user never asked about.
+    """
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    for got in ("2.55", "3.45"):
+        with _mock_ffprobe(_probe(duration=got)):
+            assert success(out, {"duration_s": 3.0}, tmp_path).score == pytest.approx(1.0), got
+    with _mock_ffprobe(_probe(duration="3.6")):
+        assert success(out, {"duration_s": 3.0}, tmp_path).score == pytest.approx(0.0)
+
+
+def test_success_duration_unreadable_fails_rather_than_passes(tmp_path: Path):
+    """Fails closed, like every other file criterion here."""
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    out = _mock_output(artifact_path=f)
+    probe = _probe()
+    probe["format"].pop("duration", None)
+    with _mock_ffprobe(probe):
+        assert success(out, {"duration_s": 3.0}, tmp_path).score == pytest.approx(0.0)
+
+
+def test_success_duration_triggers_the_file_probe(tmp_path: Path):
+    """It must be a FILE field, or a row whose only criterion is a duration scores 1.0
+    without ever opening the output — the cannot-fail row again, wearing a criterion."""
+    out = _mock_output(artifact_path=None)
+    result = success(out, {"duration_s": 3.0}, tmp_path)
+    assert result.score == pytest.approx(0.0)
+    assert "artifact_file_missing_or_not_produced" in result.failed

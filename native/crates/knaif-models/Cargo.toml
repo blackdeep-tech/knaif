@@ -3,6 +3,7 @@ name = "knaif-models"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
 rust-version.workspace = true
 description = "ModelStore: manifest, download, checksum, atomic install, delete, store resolver. No inference deps."
 

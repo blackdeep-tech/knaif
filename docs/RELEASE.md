@@ -1,17 +1,96 @@
 # RELEASE.md — cutting a knaif release
 
-How to build, package, verify, and publish a knaif release. **v1.0.0 is cut by hand** — there is no
-`.github/workflows/` yet (CI + `release.yml` are a post-v1 follow-on, see
-[plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)),
-so a release gates on **local** green, not CI.
+How releases are developed on branches, then how to build, package, verify, and publish one. CI
+(`ci.yml`) runs on every PR, including PRs into `release/*`, and `main` requires its `ci` check.
+`release.yml` packages Linux on PRs that touch packaging paths and uploads to a **draft** Release on
+a `v*.*.*` tag. It never publishes: the tag, the public Release and the PyPI upload stay manual,
+because none of them can be undone. Windows artifacts are built by hand (§2).
 
 Background: [NATIVE.md](NATIVE.md) §5.3 (loadable backends), §9 (packaging), §10 (building).
+Decision record for the branch workflow:
+[plans/2026-09-30-release-workflow.md](plans/2026-09-30-release-workflow.md).
+
+---
+
+## Branches and release lanes
+
+Several releases can be in development at once. Each has its own branch and its own short
+**release index** in `docs/plans/` (template and fields: [plans/README.md](plans/README.md)).
+
+| Branch | Starts from | Merges into | Holds |
+|---|---|---|---|
+| `main` | — | — | released code, plus docs/site/plan records. Release tags point at commits in `main`'s history. |
+| `release/X.Y.0` | `main` | `main` (merge commit) | one minor release in development |
+| `release/X.Y.Z` (patch) | tag `vX.Y.(Z-1)` | `main` (merge commit) | fixes only |
+| `feat/<topic>` | `main` (default) or its release | a release branch, by PR | one feature = one plan |
+| `fix/<topic>` | the release it fixes | that release, by PR | one fix |
+| `exp/<topic>` | anything | **never merged** | experiments and training runs; the result reaches a release as evidence or a decision |
+| `docs/…`, `ci/…`, `site/…` | `main` | `main`, by PR | changes that ship in no release artifact |
+
+**What must go through a release branch:** anything that ends up in a published artifact — the
+binary, the installers, the wheel, a model, or the contracts and skill bundles they carry. Plans,
+site, CI and eval records may go straight to `main`.
+
+### Rules
+
+- **A feature starts from `main`** unless it needs code that exists only on a release branch. It can
+  then still land in any release. Merging `main` into it to stay current is always fine; merging a
+  release branch into it ties it to that release, so do that only once the release is chosen.
+- **Choosing a feature's release:** set `**Release:** X.Y.Z` in its plan, add its row to the release
+  index's scope, and open the PR into `release/X.Y.Z`. CI tests the merge result; resolve conflicts
+  by merging the release into the feature. The plan lint checks the index and the plan agree.
+- **An idea that may not work** starts as `exp/`. If it proves out, start a `feat/` from `main` and
+  carry over what is worth keeping.
+- **Bump the version only at freeze, on the release branch** (§0). `main` always carries the last
+  released version, so open releases do not fight over it. If a patch ships after a minor has
+  frozen, merging `main` into the minor conflicts on the version lines: keep the minor's version.
+- **Carry releases forward.** When any release merges to `main`, every other open release branch
+  merges `main` in. Merge, never rebase a shared branch; never squash a release branch into `main`
+  (eval records cite its commit SHAs, and people build on it).
+- **Tag the tested commit.** Merge `main` into the release branch before the final gates, run the
+  gates on that commit, merge it to `main` with a merge commit (same tree), then tag the tested
+  commit. The evidence SHA and the tag are the same commit.
+- **`release/*` is protected** (ruleset `release-branches`): every change arrives by PR with the
+  `ci` check green, and force-push is blocked. That includes the freeze (version bump + CHANGELOG)
+  and merging `main` in: do them on a short branch (`chore/freeze-X.Y.Z`, `chore/sync-X.Y.Z`) and
+  open a PR — `ci.yml` does not run on a direct push to a release branch, so a PR is the only way
+  those commits get tested. Batch eval-evidence commits into one PR per stage. Deletion is **not**
+  blocked: merging the release PR into `main` deletes the branch automatically (the repo's
+  *automatically delete head branches* setting), which is the lifecycle's ship step.
+
+### Lanes
+
+| | Minor `X.Y.0` | Patch `X.Y.Z` |
+|---|---|---|
+| Scope | features (plans), model changes, new platforms | code bug fixes only |
+| Not allowed | — | a new or retrained model, prompt wording, `tools.yaml` / contract changes, new CLI flags, any behavior change on a platform already shipped |
+| Starts from | `main` | the previous release tag |
+| Gates | all of §4: L3, the full L4 matrix, clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (§4), clean room, upgrade path |
+| If the rule is broken | — | the change moves to the next minor, or the patch runs the minor gates |
+
+### Lifecycle
+
+1. **Propose** (optional) — a Draft release index on `main`: goal, lane, rough scope.
+2. **Open** — create `release/X.Y.Z` from `main` (from the tag, for a patch). The index becomes
+   Active on the release branch. On `main`, add the release to *Releases in flight* in
+   [plans/README.md](plans/README.md), and leave `main`'s copy of the index alone from then on so
+   the two never conflict when the release merges back.
+3. **Develop** — `feat/*` and `fix/*` PRs into the release branch. Merge `main` in whenever it moves.
+4. **Freeze** — no new scope. Bump the version (§0). Write the `CHANGELOG.md` section from the
+   index's scope table plus `git log --first-parent release/X.Y.Z`, so it is in the commit that gets
+   tagged. Merge `main` in.
+5. **Verify** — the lane's gates (§4) on the frozen commit, evidence to `evals/`. A fix after freeze
+   goes through a `fix/*` PR, and §4's staleness rules decide which evidence reruns.
+6. **Ship** — §5: merge to `main`, tag the tested commit, publish. Merge `main` into every other
+   open release branch. Delete the release branch.
+7. **Close** — set the index to Done and remove its *Releases in flight* row.
 
 ---
 
 ## 0. Version bump
 
-Three declarations must agree, or `python/core/tests/test_version_consistency.py` fails:
+The bump happens **at freeze, on the release branch** — never on `main` or on a feature branch
+(see *Branches and release lanes*). Three declarations must agree, or `python/core/tests/test_version_consistency.py` fails:
 
 | Surface | File |
 |---|---|
@@ -45,6 +124,11 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 | `knaif-<ver>-linux-x64.tar.gz` | `vulkan` | portable tree — CPU + Vulkan |
 | `knaif-<ver>-linux-x86_64.AppImage` | `vulkan` | the same tree as a single file |
 | `SHA256SUMS` | — | one line per published artifact |
+
+The **support matrix** these artifacts imply — supported OSes, the measured runtime
+floors, GPU backends, and the external-tool caveats — is declared once in
+[`contracts/release/platforms.yaml`](../contracts/release/platforms.yaml) and read by the
+website. State a floor there, not in prose here, so the two cannot disagree.
 
 **`cpu` is a build kind, not a release artifact.** It exists for a box with no Vulkan SDK and is
 named `knaif-<ver>-<os>-<arch>-cpu.*` so it cannot overwrite the real one. Do not publish it: it
@@ -116,6 +200,34 @@ copy, so uncommitted dirt cannot reach a published artifact, file modes come fro
 from a 9p mount, and `.gitattributes` line endings are correct. `--dev` mounts the worktree instead,
 for iterating on packaging; never publish what it produces.
 
+**CI builds this half too** — [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+runs the same script on every PR that touches packaging, and on a `v*.*.*` tag attaches the result
+to a **draft** release. It is a packaging *check* that happens to upload: the value is catching
+breakage on the PR that caused it rather than on release day. It never publishes, and it never
+generates `SHA256SUMS` — see §5.
+
+### Why Windows artifacts are built by hand and Linux ones are not
+
+Not an oversight, and not something a runner could be talked into. Three reasons, each
+independently sufficient:
+
+- **The VC++ redistribution grant comes with a licensed Visual Studio install.** The CRT files
+  staged into the Windows artifact are redistributable under that licence; a hosted runner image
+  is not covered by it.
+- **The CUDA toolkit a `--kind=cuda` build needs is not on a hosted Windows image**, and
+  installing it per-run costs more than the build.
+- **Two required verifications cannot run on any runner at all** — the clean room needs Windows
+  Sandbox, and the installer upgrade path needs a GUI, because `/VERYSILENT` never builds the
+  task tree. Both are in §4 and stay human steps.
+
+A **self-hosted Windows runner** was considered and rejected. On a public repo it is the
+documented worst case — a fork's PR can execute on the maintainer's machine — it additionally
+requires that machine online at tag time, and it buys nothing `just package-*` does not already
+give. Recorded here so it is not re-proposed as an obvious improvement.
+
+The asymmetry is worth stating plainly for anyone reading the workflow: **the Linux path is fully
+available to a fork**, and the Windows one is a property of this maintainer's environment.
+
 ### Linux — native build (local artifacts only)
 
 `installers/package.sh --kind=vulkan` still works natively on any distro. **The floor is then your
@@ -140,7 +252,7 @@ bundled redist). AppImage needs `libfuse2`/`libfuse2t64` + `appimagetool`.
   run once and are then cached, so a box that built successfully can later lose `libclang-dev` or the
   Vulkan `-dev` packages and still **`--no-build` package fine** — the failure only appears when
   something invalidates the crate's fingerprint (a changed env var, a `cargo build` that errored, a
-  wiped `target/release/build/llama-cpp-sys-2-*`) and forces a fresh compile. Two ways this bites:
+  wiped `target/<profile>/build/llama-cpp-sys-2-*`) and forces a fresh compile. Two ways this bites:
   - **`libclang-dev`** — bindgen `dlopen`s `libclang.so`; absent → *"Unable to find libclang"*.
   - **Vulkan `-dev`** (`libvulkan-dev glslc glslang-tools spirv-headers`) — cmake's `find_package`
     → *"Could NOT find Vulkan (missing: Vulkan_LIBRARY Vulkan_INCLUDE_DIR glslc)"*. The runtime
@@ -159,13 +271,11 @@ installers/linux/build-appimage.sh dist/staging/knaif-<ver>-linux-x64
 `package.sh` picks the features, stages the core libs + loadable backends beside the exe, and sets an
 **`$ORIGIN` RPATH** (patchelf) so the unpacked folder relocates.
 
-### Windows (compile first in a "Developer PowerShell for VS")
+### Windows
 
-```powershell
-$env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'   # see below — required, not optional
-$env:CMAKE_GENERATOR='Ninja'
-cargo build --release -p knaif-cli --features llama,dynamic-backends,vulkan
-installers/package.sh --no-build --kind=vulkan                        # -> dist/knaif-<ver>-windows-x64.zip
+```bash
+just build-native-kind vulkan                                         # -> target/release-vulkan/
+installers/package.sh --no-build --kind=vulkan --profile=release-vulkan   # -> dist/knaif-<ver>-windows-x64.zip
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installers\windows\knaif.iss
 ```
 
@@ -176,18 +286,29 @@ variables for you** — prefer them.
 `LLAMA_OPENSSL=ON` and runs an unguarded `find_package(OpenSSL)`; because its vendored `cpp-httplib`
 is a static library linking OpenSSL `PUBLIC`, any build box that happens to have OpenSSL >= 3 dev
 files installed links `libssl`/`libcrypto` into the `llama-common` core library the artifact ships.
-`package.sh` sets it wherever it builds, so only this by-hand Windows path can miss it. Nothing ships
+`package.sh` and `scripts/build_native_kind.sh` (behind `just build-native-kind`) set it, so only
+a hand-typed cargo build can miss it. Nothing ships
 broken if you forget — `check_pe_imports.py` fails packaging — but it fails *after* the full build.
 Same trap shape as OpenMP; see the 2026-08-02 macOS support plan, E1.
+
+The build no longer needs a "Developer PowerShell for VS": `build-native-kind` locates Visual
+Studio and enters `VsDevCmd.bat` itself, and sets `CMAKE_GENERATOR` and `CUDAARCHS`. **Packaging
+still wants that shell** — see the `$VCToolsRedistDir` note below. Driving cargo by hand still
+needs it too.
 
 **Vulkan requires `CMAKE_GENERATOR=Ninja`** — the default MSBuild generator dies in
 `vulkan-shaders-gen` with `cannot find the batch label specified - VCEnd`.
 
-**Package each kind immediately after its own build.** Several feature sets coexist under
-`target/release/build/llama-cpp-sys-2-*/`, and cargo does not re-run a cached build script, so mtime
-does not identify which build is current. `out_dir()` resolves the right one by the backends it
-emitted — but only ever package the kind you just built, and never assume a rebuilt-but-cached kind
-refreshed anything.
+**Each kind now has its own directory**, so kinds no longer overwrite one another's binary or
+staged libs: `just build-native-kind <kind>` builds into `target/release-<kind>/`, and packaging
+points at it with `--profile=release-<kind>`. Several feature sets still coexist under
+`target/release-<kind>/build/llama-cpp-sys-2-*/`, and cargo does not re-run a cached build script,
+so mtime still does not identify which build is current — `out_dir()` continues to resolve the
+right one by the backends it emitted, and `just verify-build-kind <kind>` asserts it independently.
+
+Passing the matching `--profile` is what makes this hold. Package a kind out of plain
+`target/release/` and you are back to "whatever was linked last", which is what the guards below
+exist to catch.
 
 **Package from that same Developer shell, not just build from it.** `package.sh` stages the four
 VC++ runtime DLLs from `$VCToolsRedistDir`, which a Developer shell exports pointing at the redist
@@ -225,14 +346,38 @@ tree comes from the MSVC v14x **build tools** component in the VS Installer, not
 - **Changing `CUDAARCHS` or the generator needs a clean.** `always_configure(false)` means cmake will
   not reconfigure and an incremental build silently keeps the old settings. `cargo clean -p
   llama-cpp-sys-2` is the documented step, but it does **not** reliably remove the directory — wipe
-  `target/release/build/llama-cpp-sys-2-*` directly to be sure.
-- **Stale lib copies break `build.rs`.** If `target/release/lib{ggml,llama}*.so*` survive from a
-  previous feature set (possibly as dangling symlinks), build.rs's hard-link step panics with
-  `AlreadyExists`. Delete them before switching kinds.
+  `target/<profile>/build/llama-cpp-sys-2-*` directly to be sure — or, with the per-kind
+  profiles, `rm -rf target/release-<kind>` to start that kind from scratch.
+- **Stale lib copies break `build.rs`** — *fixed by the per-kind profiles, for builds that use
+  them.* If `target/<profile>/lib{ggml,llama}*.so*` survive from a **different feature set**
+  (possibly as dangling symlinks), build.rs's hard-link step panics with `AlreadyExists`. Building
+  each kind into its own `release-<kind>` directory means two kinds never share a destination, so
+  there is nothing to delete. The hazard returns the moment two feature sets are pointed at one
+  profile — a hand-run `cargo build --release` with differing `--features`, for instance.
 - **Memory.** llama.cpp's Vulkan `mul_mm` shader and nvcc are memory-hungry; on a ~7 GB box, 16
   parallel jobs OOM-kill `cc1plus`. Cap with `CARGO_BUILD_JOBS=<n>` — cmake-rs reads cargo's
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
   not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
+
+### Windows binaries must not carry the builder's home directory
+
+Rust embeds source paths as panic locations and C/C++/CUDA embed them through `__FILE__`, so every
+crate built out of the cargo registry carries `C:\Users\<name>\.cargo\registry\...` into the binary.
+The 1.1.0 Windows artifacts shipped about 1,200 of these strings, which name whoever built the
+release. The Linux artifacts, built in a container, carry none.
+
+`scripts/build_native_kind.sh` remaps the cargo home and the checkout on Windows
+(`scripts/path_hygiene.sh`: `--remap-path-prefix` for Rust, `/d1trimfile:` for cl and, through
+`-Xcompiler`, for nvcc), and `package.sh` refuses to package a tree that still contains the home
+directory (`scripts/check_no_local_paths.py`). Two consequences:
+
+- **Build with the script, not a bare `cargo build`**, or the guard fails the packaging step.
+- **The C flags reach CMake only on a fresh configure.** After first adopting them (or changing
+  them), clean the llama.cpp build once: `cargo clean -p llama-cpp-sys-2 --profile release-<kind>`.
+
+One build-directory path remains: llama.cpp compiles in its backend search folder
+(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`). It names the checkout's location,
+not a person.
 
 ### A Windows CUDA build takes about an hour, and shows nothing while it does
 
@@ -248,7 +393,7 @@ six times the nvcc work of a single-arch build.
 To tell a slow build from a stuck one, watch objects rather than stdout:
 
 ```bash
-find target/release/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
+find target/release-cuda/build/llama-cpp-sys-2-*/out -path '*cuda*' -name '*.obj' | wc -l   # of 183
 ```
 
 Two things worth knowing:
@@ -331,6 +476,107 @@ version `Cargo.toml` claims; `skills list` finds ffmpeg + documents via exe-rela
 §4(d) respectively, and `NOTICE` carries the Qwen3 derivation attribution for the models knaif
 downloads. `NOTICE` was absent from every artifact on every OS through 1.0.1 precisely because no
 check read it.
+
+### Runtime parity and shipped-path acceptance — REQUIRED before publishing
+
+`smoke.sh` proves the artifact *runs*. It does not prove the native runtime still agrees with the
+reference, or that a skill still does the job. Those are L3 and L4 of
+[the skill-quality plan](plans/2026-09-10-skill-quality-lifecycle.md), and they need a GGUF, so
+they cannot live in CI — which is exactly why they have to be a named release step rather than
+something someone remembers.
+
+```bash
+# L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
+KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v2-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
+
+# L4 — the shipped path: the binary executing for real, graded on the files it produces.
+just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
+just eval-native ffmpeg --save evals/runs/<date>_<ver>-l4-ffmpeg_success
+just eval-safety-native ffmpeg evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
+
+# L4 acceptance — the verdict. The only check that can buy `supported`.
+just eval-accept-native ffmpeg \
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/ffmpeg_native-cli_success.json \
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
+```
+
+`accept-native` is what turns the run into a verdict: it grades the lane's scoreboard against
+**both** the skill's written S2 bar and the frozen Python baseline — `native ≥ max(S2 floor,
+accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete coverage,
+with every required capability slice holding and safety at 100%. It writes its verdict into
+`evals/acceptance/<skill>.json` either way, so a failing run is recorded as **failing** rather
+than left looking unmeasured, and `just check-gate` then derives the status that evidence
+supports.
+
+**Every cell of the acceptance matrix.** `contracts/release/acceptance_matrix.yaml` lists the
+release's models and its OS × backend entries. Each `accept-native` verdict is filed under
+`model|os|backend`: the run's public model, the OS it ran on, and the backend its layers
+actually landed on. `check-gate` reports `supported` only when **every** full-coverage cell holds
+a valid verdict, so run L4 and safety once per model per full entry. For the release candidate,
+pass the packaged binary, so the gate checks that the records measured *it*:
+
+```bash
+uv run python -m knaif.evalsuite gate \
+  --native-bin <unpacked windows zip>/bin/knaif.exe --native-bin <unpacked linux tarball>/bin/knaif
+```
+
+Pass one binary per OS the release ships: the gate recognises each as Windows or Linux from its
+header and checks every `model|os|backend` cell against its own OS's binary (an L3 cell, keyed by
+model only, against whichever given binary it recorded). A cell whose OS has no binary given, or a
+gate run without `--native-bin`, prints "not checked here: native_binary" instead of comparing.
+
+**L4 runs the packaged layout.** The lane's `binary:` must be the executable inside the unpacked
+artifact, with PDFium beside it. `eval-native` and `eval-safety-native` refuse a binary without
+it, and the lane never passes `$KNAIF_PDFIUM_PATH` to the binary, so OCR is measured with the
+library users actually get. `--allow-unpackaged` runs a developer build for diagnosis only. The
+result is marked `packaged_layout: false`, and `accept-native` refuses it.
+
+Two things it refuses, both deliberately: a scoreboard that did not come from the native lane
+(Python execution locates a failure, it never certifies one — L4b), and a safety result that did
+not come from the binary (the two runtimes reach a refusal by different code, so one's answers
+are not evidence for the other).
+
+Rules, each of which exists because ignoring it produces a number that reads better than the
+product:
+
+- **Run it from a clean tree.** Both runs record the git SHA and warn when the tree is dirty; a
+  dirty run does not describe a releasable commit.
+- **Record the backend.** `$KNAIF_PARITY_BACKEND` is stamped into `meta.json` and left `null`
+  when unset. Greedy argmax over different FP accumulation can flip a near-tie, so two runs on
+  different backends are not comparable — this is measured, not theoretical (see
+  `evals/parity/2026-09-10_l3-ffmpeg-command/backend_attribution.json`).
+- **Add a row to `evals/INDEX.md`** for each saved run. A run nobody indexed is a run nobody can
+  find when the next release asks "was this better or worse?".
+- **Quote the right number.** L4 — the binary executing for real, reported *with its coverage* —
+  is the only number that may back a claim that the product works. L1's 100% proves the prompts
+  match; L3's rate proves the runtimes agree on what to do. Neither says a user's file came out
+  right.
+- **Read L3's rate as symmetric disagreement, not a native score.** It says nothing about which
+  side is correct; native has been the better answer on real rows.
+
+**A rebuild after acceptance.** Every L3/L4 cell pins the native source, the skill bundle and the
+measured binary, so any fix after acceptance stales them. Re-measure, or — owner's decision —
+carry the results over with `evalsuite equivalence`, which maps the measured values to the new
+ones in `evals/acceptance/equivalences.json` and makes the gate print `[equivalent: <id>]`:
+
+```bash
+# a text fix: the native source differs only by the declared replacements, inside strings/comments
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --replace OLD=NEW \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --reason "..." --verified "..."
+# a code change: vouched for by a committed, pre-registered sample run (gate says "(sampled)")
+uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sample-run evals/runs/<dir> \
+  --old-bin <measured exe> --new-bin <rebuilt exe> --new-artifact <the zip/tarball the run tested> \
+  --reason "..." --verified "..."
+```
+
+`--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
+entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
+and otherwise only the skill's native sources did. Its run must be committed, its `run.sh` in an
+earlier commit than its `verdicts.txt` (pre-registered), every OS and skill `VERDICT: equivalent on
+the sample` exactly once, each stage one START then DONE; binaries must cover every OS a cell was
+measured on, and each `--new-bin` must be the executable inside an artifact whose sha256 the run
+recorded. The gate re-checks the run on every read. 1.2.0: RC2 (text) and RC3 (sampled,
+supporting-tool lookup).
 
 ### Testing the Windows installer without damaging a real install
 
@@ -464,19 +710,30 @@ cd dist && sha256sum knaif-<ver>-* > SHA256SUMS      # Linux
 
 ## 5. Publish (strict order)
 
+**At the tag, record what was true for the release** (before the tree moves on):
+
+```bash
+just release-record <ver>     # -> evals/acceptance/releases/<ver>/, written once
+```
+
+It copies each skill's acceptance record and the gate's verdict at that commit. The live records
+go stale on `main` as soon as anything changes, as they should. The copy is what answers "what
+was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release.
+
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
 URL has ever depended on an org redirect.
 
-### Rehearse the publish flow before the first real cut
+### Rehearse any publish path that has not run before
 
-**Everything below is irreversible, and none of it has ever been executed.** No GitHub Release has
-existed, so step 5 is untested procedure — and each of its outputs is permanent: the `release-tags`
-ruleset means a pushed tag cannot be moved, a published Release URL is public the moment it exists,
-and a PyPI version can **never** be reused. There is no revision to a first release, only a second
-one that looks like an apology.
+**Every output of this section is permanent:** the `release-tags` ruleset means a pushed tag cannot
+be moved, a published Release URL is public the moment it exists, and a PyPI version can **never**
+be reused. There is no revision to a release, only a second one that looks like an apology.
 
-So run the whole path once against throwaway outputs before running it for real:
+The path below has run for real since 1.0.1 (1.2.0 published to GitHub, Hugging Face and PyPI), so
+a release that changes nothing about publishing does not rehearse. **A release that adds a publish
+path does** — a new platform's artifacts (macOS), a new asset type, a new index — and rehearses
+that path once against throwaway outputs:
 
 - **A draft GitHub Release** — create it, upload the artifacts and `SHA256SUMS`, check the rendered
   body and the asset names, then **delete it without publishing**. Drafts are invisible to everyone
@@ -487,25 +744,39 @@ So run the whole path once against throwaway outputs before running it for real:
 - **Do not push a throwaway tag.** A draft Release can be attached to an existing tag or created
   against a branch; a tag is the one artifact here with no undo, so it stays for the real cut.
 
-Cheap, and it converts "the publish procedure is written down" into "the publish procedure has been
-run". Skip it only on a release whose flow is already proven — which, until one has shipped, is
-none of them.
+### Steps
 
-1. Open the PR; review; ensure **local suites green** (not "CI green" — there is no CI).
-2. **Merge to `dev`.** *The branch is closed here; everything below is release mechanics.*
-3. **v1.0.0 only — OSS prep.** Run the OSS-prep pass to completion, ending
-   with the flattened tree pushed to `blackdeep-tech/knaif` and the repo public. **Hard gate on
-   step 4.** Later releases skip this step entirely.
-4. **Tag and push `v1.0.0`.** For v1.0.0 the tag goes on the **flatten commit** — the post-scrub
-   initial commit in the new repo — *not* the `dev` merge commit, which predates the scrub and would
-   ship pre-prep source. From v1.0.1 on, tag the release commit as normal.
+1. **Open the PR** `release/X.Y.Z → main` from the tested commit (*Branches and release lanes*:
+   `main` already merged in, the lane's gates run on this commit). Local suites green and the `ci`
+   check green.
+2. **Merge with a merge commit** — never squash. *The branch is closed here; everything below is
+   release mechanics.*
+3. **Write the release body** (§6) from the `CHANGELOG.md` section written at freeze. It names no
+   future version.
+4. **Tag and push `vX.Y.Z` on the tested commit** — the one the evidence names, now in `main`'s
+   history. The `release-tags` ruleset means the tag cannot be moved afterwards. Pushing it starts
+   `release.yml`, which uploads the Linux artifacts to a draft Release.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
-   public. Artifacts staged *before* the transfer publish *after* it **without a rebuild** — safe only
-   because no v1 artifact names the org. Re-run `installers/smoke.sh` on the staged set first anyway;
-   it takes seconds and is the last chance to catch a stale artifact. Confirm that no artifact bakes
-   a GitHub org URL.
+   public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
+   chance to catch a stale artifact.
 6. **Verify** a fresh download installs and runs, independent of the build box.
-7. **Delete** the release branch.
+7. **Refresh the website's download data — now automatic.** Publishing the release fires
+   `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
+   **pushes a branch** if it changed; the run summary links straight to the compare page.
+   Open that PR and merge it. The knaif.org download buttons are built from that snapshot
+   and nothing else updates them, so skipping it leaves the site advertising the previous
+   release.
+   - **You open the PR, not the workflow.** A PR created with `GITHUB_TOKEN` does not
+     trigger workflows, so it would carry no `ci` check — and `main` requires one. Nothing
+     here writes to `main`; the ruleset has no bypass actors.
+   - If the workflow lost a race with the GitHub API, re-run it from the Actions tab
+     (`workflow_dispatch`) rather than republishing. `just release-data` still works locally
+     and is the fallback if Actions is down.
+   - The URLs are deliberately *not* derived from `Cargo.toml`: step 2 bumps the version
+     before step 5 publishes the assets, so a derived link would 404 in between.
+     `uv run pytest python/core/tests/test_release_data.py` verifies the snapshot's shape
+     offline.
+8. **Delete** the release branch.
 
 ---
 
@@ -559,6 +830,25 @@ time, so no re-upload is needed. Skill bundles are deliberately excluded from th
 
 ## 6. Notes for users (put these in the release body)
 
+### Stating the quality claim honestly
+
+Every layer measures something different, and only one of them is about the product working. Quote
+accordingly (plan G5):
+
+| Layer | What it proves | What it does NOT prove |
+|---|---|---|
+| L1 contract | The two runtimes build the same prompt, retrieve the same tools, share the same settings | Nothing about behavior — a matching prompt can still produce a wrong plan |
+| L2 deterministic | Parse/validate/expand/gate agree, and native executes chains in order | Nothing about what the model chooses |
+| L3 behavioral | The runtimes **agree on what to do** for real utterances | Which side is *right*. It is symmetric disagreement; native has been the better answer on real rows |
+| L4 shipped path | **The installed binary produced the right files** | Only for the skills, corpus and coverage the run actually covered |
+
+So: **an L4 number, reported with its coverage, is the only one that may back "it works".** A
+release that quotes L1's 100% as a quality figure is claiming the prompts match and hoping the
+reader mistakes it for something else.
+
+State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
+locally, macOS unexercised** — say that rather than implying three platforms.
+
 **Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
 Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence
 of a warning, is what proves the download is intact.
@@ -600,11 +890,12 @@ explicitly, e.g.
 (add `/TASKS=""` to skip PATH, winget deps, and the model download).
 
 **GPU.** The default artifact auto-selects Vulkan when a capable driver is present, else CPU. That
-covers every vendor, and it is enough for most users — **but not for NVIDIA users on the newest
-cards.** On Blackwell (RTX 50xx, sm_120) the Vulkan path generates at roughly CPU speed: ~5.7 tok/s
-against the CPU's ~5.9, measured on knaif's real workload ([PERFORMANCE.md](PERFORMANCE.md) §2).
-That is not a slower option, it is a product that reads as broken, so say so plainly in the release
-body rather than letting "Vulkan works everywhere" stand.
+covers every vendor and is usable on every NVIDIA card measured. Through 1.1.0 this section warned
+that Blackwell (RTX 50xx, sm_120) Vulkan ran at roughly CPU speed (~5.7 tok/s, 2026-07-07); the
+2026-09-25 re-measurement on the same RTX 5080 found Vulkan at ~72% of CUDA (146.8 vs 203.8 tok/s
+generation, [PERFORMANCE.md](PERFORMANCE.md) §2), so the release body no longer needs that warning.
+If a future measurement lists an architecture in `nudge.vulkan_inadequate_compute_caps`, say so
+plainly in the release body again.
 
 NVIDIA users install the CUDA backend with one command:
 
@@ -613,8 +904,9 @@ knaif backend install cuda
 ```
 
 ~668 MB, needs an R580+ driver, and it takes effect on the next run. `knaif backend remove cuda`
-undoes it. On the newest cards it is what makes the product usable; on older NVIDIA cards it is
-faster and genuinely optional. knaif offers it on first run when it detects an eligible GPU, and the
+undoes it. It is faster on every NVIDIA card measured and genuinely optional (on an architecture
+listed in `nudge.vulkan_inadequate_compute_caps` it would be what makes the product usable; none is
+listed today). knaif offers it on first run when it detects an eligible GPU, and the
 Windows installer offers it as a task that is checked by default — the task renders only on a machine
 whose GPU and driver already qualify and that has no payload yet, so it is never shown to a user it
 cannot help. Setup blocks on the download, which the task description states.

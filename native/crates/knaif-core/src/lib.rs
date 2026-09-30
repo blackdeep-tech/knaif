@@ -8,25 +8,36 @@
 pub mod clarify_gate;
 pub mod deps;
 pub mod extract;
+pub mod nl_clarify_gate;
 pub mod planner;
 pub mod prompt;
 pub mod registry;
 pub mod retrieval;
 pub mod safety;
+pub mod sandbox;
 pub mod skills;
 
-pub use clarify_gate::{apply_clarify_gate, hallucinated_filename, output_capable_tools};
+pub use clarify_gate::{
+    apply_clarify_gate, file_kinds_from_groups, hallucinated_filename, load_file_kinds,
+    output_capable_tools, required_args_clarify, unsupported_args_clarify, FileKinds,
+};
 pub use deps::{
-    detect_skill_deps, load_external_tools, missing_required_message, parse_external_tools,
-    unmet_required, ExternalTool, InstallHints, ToolStatus,
+    detect_skill_deps, expand_dirs, load_external_tools, missing_required_message,
+    parse_external_tools, resolve_declared_command, resolve_declared_tool, unmet_required,
+    ExternalTool, InstallHints, ToolStatus, WindowsInstall,
 };
 pub use extract::{extract_json, ExtractedJson};
+pub use nl_clarify_gate::nl_clarify_gate;
 pub use planner::{
-    apply_defaults, normalize_plan, optimize_plan, parse_plan, resolve_args, validate_plan,
-    validate_step,
+    apply_defaults, normalize_plan, optimize_plan, parse_plan, resolve_args, resolve_stems,
+    validate_plan, validate_step, StemOutcome,
 };
-pub use prompt::{build_prompt, load_prompt_yaml, validator_feedback_prompt, PromptOverrides};
+pub use prompt::{
+    build_prompt, build_prompt_ordered, load_prompt_yaml, render_examples_block, select_examples,
+    validator_feedback_prompt, PromptExample, PromptOverrides, MAX_TOOL_EXAMPLES,
+};
 pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
-pub use retrieval::retrieve_tools;
+pub use retrieval::{retrieve_tools, RetrievedTools, DEFAULT_TOP_K};
 pub use safety::{is_unsafe_request, load_unsafe_phrases};
+pub use sandbox::{assert_in_sandbox, lexical_normalize, resolve_real};
 pub use skills::{list_skills, resolve_skills_root, SkillMeta};

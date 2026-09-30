@@ -284,12 +284,21 @@ scored for the right reason, not by the delta — and say which it was when repo
 
 ## Snapshot and regression gate
 
-After a confirmed-good run, lock the snapshot with the `output_diff` acceptance-bar
-verifier (this is what `just eval-snapshot ffmpeg` runs):
+After a confirmed-good run, lock the snapshot with an **executing** verifier — `success`
+by default (this is what `just eval-snapshot ffmpeg` runs):
 
 ```bash
-uv run -m knaif.evalsuite run --skill ffmpeg --verifier output_diff --snapshot
+uv run -m knaif.evalsuite run --skill ffmpeg --verifier success --snapshot
+just eval-snapshot ffmpeg output_diff     # override, only with coverage evidence
 ```
+
+Both committed bars are `success`. Pick `output_diff` only where it demonstrably grades
+more rows — measured head-to-head on ffmpeg (2026-09-08, n=847) it grades **fewer**:
+`success` 574 plan rows (91.2%) vs `output_diff` 527 (86.0%), and `output_diff`'s extra
+misses are encoder-level diffs against the baseline command's output (`pix_fmt` yuv444p
+vs yuv420p, `size` ±20%) rather than artifact correctness. Count graded rows before
+choosing; do not assume from the corpus's baseline/`success_criteria` counts, which
+mispredict it.
 
 CI regression check (exits 1 if any metric drops > 0.02):
 
@@ -337,15 +346,34 @@ So when a change touches the corpus or the tool set, do not read the aggregate. 
 the two runs per row on shared ids** and ask which previously-passing rows now fail:
 
 ```python
-b = {r["id"]: r for r in json.load(open(BASELINE))["rows"]}
-c = {r["id"]: r for r in json.load(open(CURRENT))["rows"]}
+# Key on (id, utterance) — NOT on id alone.
+def rows(path):
+    d = json.load(open(path, encoding="utf-8"))
+    return {(r["id"], r.get("utterance", "")): r
+            for r in d["rows"] if not r.get("is_warmup")}
+
+b, c = rows(BASELINE), rows(CURRENT)
 shared    = b.keys() & c.keys()
-regressed = [i for i in shared if b[i]["outcome_correct"] and not c[i]["outcome_correct"]]
-improved  = [i for i in shared if not b[i]["outcome_correct"] and c[i]["outcome_correct"]]
+regressed = [k for k in shared if b[k]["outcome_correct"] and not c[k]["outcome_correct"]]
+improved  = [k for k in shared if not b[k]["outcome_correct"] and c[k]["outcome_correct"]]
 ```
 
 New rows appear in `c.keys() - b.keys()` and are graded by their own
 `success_criteria`, not by this diff.
+
+> **`id` is not a per-row key, and this snippet used to key on it.** A corpus row expands
+> to several utterances, all sharing one `id`: ffmpeg's 314 rows produce 847 scoreboard
+> entries. Keying on `id` keeps the last utterance of each row and silently discards the
+> other 533 — 63% of the evidence — while still printing a confident regressed/improved
+> list, built from mismatched utterance pairs. Doing exactly that during the 2026-09-08
+> re-lock produced a plausible-looking "9 regressed / 21 improved"; the correct key gave
+> **0 and 0**.
+>
+> `utterance_idx` is not a safe key across older runs either — `score_corpus`
+> (`cheap`/`success`) omitted it until 2026-09-08 while `score_corpus_output_diff` always
+> emitted it, so a mixed pair mis-keys. The utterance **text** is present in every format.
+> Always print `len(shared)` and check it against the runs' `total` before believing any
+> diff.
 
 ### A non-empty `REGRESSED` list is not automatically a regression
 

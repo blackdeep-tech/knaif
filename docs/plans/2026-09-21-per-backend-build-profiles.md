@@ -1,0 +1,492 @@
+# One directory per backend — cargo profiles for the native builds
+
+**Status:** Done — T5 closed by [release-1.2](2026-09-25-release-1.2.md): the L4 lanes name the profile
+binaries and the packaged artifacts, and R5c re-ran L4 on them · **Created:** 2026-09-21 · **Completed:** 2026-09-30
+
+**Goal:** Give each native build kind (`base` / `cpu` / `vulkan` / `cuda`) its own cargo profile,
+so its binary and its staged llama/ggml libraries live in their own directory instead of
+overwriting each other in `target/release/`.
+
+This began as a prerequisite for
+[the skill workbench](2026-09-21-skill-prompt-workbench.md) — its compute selector needs two
+binaries to exist at once, which today is impossible. It is worth doing on its own merits: the
+shared directory is the documented root cause of one P1 and one P0 packaging defect, and the
+current defence against both is a hand-maintained set of guards plus a manual cleanup step in
+`docs/RELEASE.md`.
+
+## Why the collision exists
+
+Cargo's artifact path is `target/<profile>/<bin-name>`. Features are an **input** to the build,
+not part of the artifact's identity — cargo's feature model is additive and unified across the
+whole graph, so "the release build of `knaif-cli`" is one artifact no matter which features
+produced it. Two feature sets, one destination, last build wins.
+
+Cargo *does* hash features into per-unit metadata, which is why one
+`target/release/build/llama-cpp-sys-2-*/out` directory exists per feature set and they all
+coexist. The top-level binary is the exception: it is hard-linked to the stable unhashed name so
+callers can find it.
+
+The staged shared libraries collide for a second, separate reason. `llama-cpp-sys-2`'s build
+script derives its staging destination from `OUT_DIR`:
+
+```rust
+// llama-cpp-sys-2-0.1.150/build.rs:88
+fn get_cargo_target_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let out_dir = env::var("OUT_DIR")?;
+    let path = PathBuf::from(out_dir);
+    let target_dir = path.ancestors().nth(3).ok_or("OUT_DIR is not deep enough")?;
+    Ok(target_dir.to_path_buf())
+}
+```
+
+`OUT_DIR` is `target/<profile>/build/<pkg>-<hash>/out`, so `nth(3)` is `target/<profile>/`. Every
+feature set therefore hard-links `llama.dll` / `ggml.dll` / `ggml-base.dll` / `llama-common.dll`
+into the same place, with:
+
+```rust
+// build.rs:1201
+if !dst.exists() { std::fs::hard_link(asset.clone(), dst).unwrap(); }
+```
+
+**That `nth(3)` is the whole opportunity.** Change the profile and the destination moves with it,
+with no patch to the crate and no `CARGO_TARGET_DIR`.
+
+## What this has already cost
+
+Both defects are recorded, not hypothetical.
+
+| | Defect | Root cause as recorded |
+|---|---|---|
+| **C1** (P1) | `just package-linux --kind=cpu` after a `vulkan` build panics: `hard_link … AlreadyExists` | *"Every feature set gets its own `llama-cpp-sys-2` out dir but they all hard-link into the same `target/release/`… a stale SONAME symlink left by the other kind reads as absent while still occupying the name."* — [portable-builds C1](2026-07-27-portable-builds.md) |
+| **C2** (P0) | A `--kind=cpu` run built an AppImage **from the leftover `vulkan` staging tree**, smoke-tested it, and printed `PASS` | Staged-dir glob selected the wrong tree. *"A mislabelled artifact that reports success."* |
+
+The surviving defences are all compensating controls for the shared directory:
+
+- [`package.sh:151`](../../installers/package.sh#L151) — *"Cargo overwrites target/release/knaif on every
+  build"*, then two `exe_imports_llama` guards, one of which was
+  *"hit while testing this very change"*.
+- [`package.sh:191-195`](../../installers/package.sh#L191-L195) — `out_dir()` cannot pick by mtime and must
+  identify a build by the backends it emitted, because *"the dirs are indistinguishable by name.
+  Newest-wins silently staged ggml-vulkan into a CPU artifact."*
+- [`docs/RELEASE.md:250-252`](../RELEASE.md) — *"Stale lib copies break `build.rs`… Delete them before
+  switching kinds."* A manual step, in a release procedure, that a profile makes unnecessary.
+- [`build-in-container.sh:122-127`](../../installers/linux/build-in-container.sh#L122-L127) — a comment
+  warning that `CARGO_TARGET_DIR` would silently break `package.sh`'s relative paths.
+
+Profiles do not make the guards wrong. They demote them from load-bearing to belt-and-braces,
+which is where a guard should sit.
+
+## Settled design decisions
+
+### P1 — Custom profiles, not `CARGO_TARGET_DIR`, not copying the exe aside
+
+Three options were considered:
+
+| | Mechanism | Verdict |
+|---|---|---|
+| copy the exe aside | `cp target/release/knaif.exe build/knaif-cuda.exe` | **Rejected.** Works only for a statically-linked build. The shipped `dynamic-backends` build is explicitly not self-contained — [`package.sh:20-21`](../../installers/package.sh#L20-L21): *"its core libs … must ship beside it."* A bare-exe registry breaks the moment a packaging-style build is registered. |
+| `CARGO_TARGET_DIR` per kind | `target-cuda/`, `target-vulkan/` | **Rejected.** Fully independent trees, but `build-in-container.sh` already documents that it *"would silently break"* `package.sh`, and it moves the `build/` cache out from under every relative path in the repo. |
+| **custom profiles** | `--profile release-cuda` → `target/release-cuda/` | **Chosen.** Stable cargo, no env dance, and `get_cargo_target_dir`'s `nth(3)` relocates the staged libraries for free. The `target/` root and every relative path under it keep their shape. |
+
+### P2 — One profile per packaging kind, named after the kind
+
+`package.sh` already has a closed vocabulary of kinds — `base`, `cpu`, `vulkan`, `cuda` — and
+`feats_for_kind` already maps each to its feature set. The profiles mirror it exactly, so there is
+one name for a build kind across the justfile, the profiles, and the packaging script.
+
+`base` gets a profile too. It is the cheapest build and therefore the one most likely to clobber
+something expensive, which is exactly the direction
+[`package.sh:176-186`](../../installers/package.sh#L176-L186) says was *"missing"* and had to be guarded
+after the fact.
+
+### P3 — The first build of each profile is a full rebuild; flipping afterwards is free
+
+This is the cost, stated plainly rather than discovered later. A new profile is a new unit key for
+the entire graph, so nothing is shared with `release` — the first build of each profile compiles
+everything, llama.cpp included.
+
+**Measured, not estimated** (T1, this machine, 2026-09-21): the first `release-cpu` build —
+264 crates plus a from-scratch llama.cpp — took **1m 13s**. The 15-30 minute figure the justfile
+warns about is CUDA-specific and comes from its 183 CUDA translation units; it does not generalise
+to the other kinds. Only `release-cuda` is genuinely expensive to stand up.
+
+What it buys, per kind, from then on:
+
+| | today | with profiles |
+|---|---|---|
+| flip cuda → vulkan | relink, plus a manual wipe of staged libs, or C1 panics | nothing to do |
+| both binaries present | impossible | yes |
+| wrong-backend staging | prevented by a hand-written sniffing heuristic | prevented by the directory |
+| disk | one build tree | one build tree **per kind built** |
+
+`rm -rf target/release-<kind>` is the targeted cleanup, matching RELEASE.md's existing advice to
+wipe directories directly rather than trust `cargo clean`.
+
+### P6 — `pdfium` is on for every functional kind, which is what unifies the feature sets
+
+The three sets differed in two ways, and both turned out to be cheap to remove:
+
+| | before | after |
+|---|---|---|
+| packaging `cuda` | `llama,dynamic-backends,cuda` | `llama,dynamic-backends,cuda,pdfium` |
+| `just native-cuda` | `llama,cuda,pdfium` | *the same build* |
+| the L4 eval lane | `llama,cuda,pdfium` | *the same build* |
+
+**`pdfium` costs almost nothing.** `pdfium-render` binds the PDFium runtime *dynamically*
+([`pdfium_backend.rs:17`](../../skills/documents/native/src/pdfium_backend.rs#L17) — search order
+`$KNAIF_PDFIUM_PATH`, the exe directory, then the system library), so no PDF engine is linked in.
+The artifact gains a code path that looks for a library, not the library.
+
+**`dynamic-backends` in a dev build is safe**, which was the thing to check before moving the
+wrappers onto it. `backend_dirs()` falls back to the compile-time-baked
+`llama_cpp_2::llama_backend::BACKENDS_DIR` when the exe's own directory holds no loadable backend,
+and `has_backend_libs` deliberately does not count `ggml-base` or `ggml.dll`. A run out of
+`target/release-<kind>/` therefore still finds `ggml-vulkan` / `ggml-cuda` in the build's out dir,
+and GPU offload is not silently lost.
+
+**Measured cost of the feature** (this machine, 2026-09-21): the binary grows from 10,478,080 B to
+15,743,488 B — **+5.3 MB** of `pdfium-render` and `image` code — and the packaged vulkan artifact
+goes from 27 MB to 29 MB compressed. That is the code path only; the PDFium engine is not in there.
+For scale, `ggml-vulkan.dll` in the same artifact is 58 MB.
+
+**What this does not do is make PDF OCR work.** The library still is not shipped, so the failure
+moves from *"rebuild with --features pdfium"* — useless to someone holding a downloaded binary — to
+*"put the PDFium runtime next to the executable"*, which is at least actionable. Shipping it is a
+separate decision, already taken: **an opt-in per-skill payload**, reusing the mechanism
+`knaif backend install cuda` already implements (sha256-pinned loose files, a version-bound install
+receipt, nothing added to the default download). That needs its own plan; this one only stops the
+capability being unreachable by construction.
+
+**A product gap this surfaced, recorded rather than fixed here:** the shipped artifact has never
+been able to OCR a PDF or run raster PDF compression. `feats_for_kind` never set `pdfium`, and
+`package.sh` stages no PDFium runtime — though its licence-staging comment already anticipates
+*"PDFium for pdfium builds"*. Ghostscript remains the user-installed route for compression, per the
+dependency-licence policy.
+
+### P4 — `package.sh` takes `--profile`, defaulting to `release`
+
+Nothing about a hand-run `package.sh` changes unless the flag is passed. The justfile recipes pass
+it; an operator following RELEASE.md step by step is unaffected. `BIN` and the `out_dir()` glob
+both derive from it.
+
+### P5 — ~~The GPU dev wrappers move to the release profiles~~ — WITHDRAWN, see P5b
+
+The original decision was that `just native-cuda` / `just native-vulkan` — which pass no
+`--release` and so clobber each other in `target/debug/` — would move to `--profile release-<kind>`.
+
+**That is wrong, and implementing it is what showed why.** The dev wrappers and the packaging kinds
+do not build the same thing:
+
+| | feature set |
+|---|---|
+| `just native-cuda` | `llama,cuda,pdfium` — static, plus the documents rasterizer |
+| `just package-native cuda` | `llama,dynamic-backends,cuda` — loadable backends, no pdfium |
+
+Putting both in `release-cuda` would place **two different feature sets in one directory**, which
+is precisely the defect this plan exists to remove. It would move the collision rather than fix it.
+
+### P5b — The invariant is one directory per feature set — RESOLVED by P6
+
+The rule the profiles encode is not "one per kind" but **one per distinct feature set**; `kind`
+happens to name a feature set for the packaging vocabulary. The dev wrappers name a different one,
+so they need either their own profiles or the same feature set as the kind they shadow.
+
+**Resolved 2026-09-21 — see P6.** The three feature sets were collapsed into one per kind, so the
+wrappers, the eval lane and the packaged artifact now share a directory because they share a build.
+No extra profiles were needed.
+
+## The work
+
+### [x] T1 — The profiles
+
+Add to the root `Cargo.toml`, which today has no `[profile.*]` section at all:
+
+```toml
+[profile.release-base]
+inherits = "release"
+[profile.release-cpu]
+inherits = "release"
+[profile.release-vulkan]
+inherits = "release"
+[profile.release-cuda]
+inherits = "release"
+```
+
+Verify the mechanism before anything is built on it: one `--profile release-cpu` build with
+`--features llama,dynamic-backends`, then assert `target/release-cpu/` holds both the binary and
+the four staged libraries, and that `target/release/` was not touched. `release-cpu` is the cheap
+kind — prove `nth(3)` relocates staging there before paying for a CUDA compile.
+
+**Done 2026-09-21.** [`scripts/verify_build_profile.sh`](../../scripts/verify_build_profile.sh) is
+the assertion, written before the profiles existed and confirmed failing against the unbuilt tree.
+It checks the profile directory, the binary, that `llama-cpp-sys-2`'s `OUT_DIR` moved with the
+profile, that all four core libs are staged beside the exe, and — per `package.sh`'s rule — reads
+the kind from the `ggml-*` backends the build emitted rather than from its name.
+
+Result:
+
+| | `target/release/` | `target/release-cpu/` |
+|---|---|---|
+| binary | 74,577,408 B, mtime **unchanged** (Sep 16 15:55) | 10,478,080 B, new |
+| staged libs | four, mtimes **unchanged** (Sep 11) | own copies of all four |
+| `llama-cpp-sys-2` out dir | — | `target/release-cpu/build/llama-cpp-sys-2-*/out` |
+
+A before/after listing of `target/release/` is identical, so the claim under test — that the
+profile relocates both the binary and the staged libraries, leaving the shared directory alone —
+holds. The two binaries now coexist, which is what C1 made impossible.
+
+The build needed the MSVC environment: **cmake is not on PATH outside a Developer shell**, and the
+VS-bundled copy lives under `Common7/IDE/CommonExtensions/Microsoft/CMake/`. T2 must locate it
+rather than assume the caller's shell is set up.
+
+### [x] T2 — `just build-native-kind <kind>`
+
+One recipe mapping kind → features → profile, reusing the same mapping `package.sh`'s
+`feats_for_kind` holds, so the two cannot drift. `package-native` calls it instead of its inline
+`cargo build`.
+
+**Done 2026-09-21.** The logic lives in
+[`scripts/build_native_kind.sh`](../../scripts/build_native_kind.sh) — one cross-platform bash
+script rather than a PowerShell twin — with `just build-native-kind` and `just verify-build-kind`
+as thin wrappers on both platforms.
+
+- **The feature map is read, not copied.** `package.sh` gained `--print-feats=<kind>`, which
+  answers from `feats_for_kind` and exits before any build. The justfile's inline PowerShell
+  hashtable and its bash `case` twin are both gone, and with them the drift the source comment
+  warned about. `base` gained an entry (empty on purpose — callers omit `--features`).
+- **Windows enters the VS environment itself.** Per T1's finding, the script locates Visual Studio
+  with `vswhere`, and when `cl.exe` is absent re-runs the build through `VsDevCmd.bat`. An existing
+  developer shell is used as-is; a `base` build skips the dance entirely, since it is pure Rust and
+  rustc finds the MSVC linker by itself. It also puts the Installer directory on `PATH` so
+  VsDevCmd stops printing its own `'vswhere.exe' is not recognized` noise.
+- `CUDAARCHS` and `CMAKE_GENERATOR=Ninja` moved out of the justfile one-liner into the script,
+  still reading the arch list out of `package.sh` rather than copying it.
+
+Measured: `base` 32s from scratch into `target/release-base/`; `cpu` re-entered and no-op'd in
+0.22s, confirming the profile wiring rather than a rebuild.
+
+**P5 was withdrawn while implementing this** — see P5b. `native-cuda` / `native-vulkan` are
+unchanged.
+
+### [x] T3 — `package.sh --profile`
+
+`BIN="target/$PROFILE/$EXE"` and `out_dir()`'s glob become
+`target/$PROFILE/build/llama-cpp-sys-2-*/out`. Default `release`, so the un-flagged path is
+byte-identical to today.
+
+Keep both `exe_imports_llama` guards and the backend-sniffing `out_dir()`. They stop being the only
+thing standing between a release and a mislabelled artifact, but a guard that has fired in anger
+twice is not one to delete in the same change that removes its reason to fire.
+
+**Done 2026-09-21.** `--profile=<name>` defaults to `release`, and `TARGET_DIR="target/$PROFILE"`
+now backs `BIN`, the `out_dir()` glob and both error messages that name a build directory. The
+branch where `package.sh` builds for itself passes `--profile` through. Both guards kept.
+
+Verified end to end: `just build-native-kind cpu` then
+`package.sh --no-build --kind=cpu --profile=release-cpu` staged the core libs and 9 loadable
+backends out of `target/release-cpu/`, passed the self-contained check, and produced
+`dist/knaif-1.1.0-windows-x64-cpu.zip`. An unbuilt profile fails with a named path rather than
+silently packaging whatever sits in `target/release/`. `just check` green: 2367 Python tests, the
+full Rust suite, all contracts.
+
+### [x] T4 — `build-in-container.sh` — **scope reduced: no profile passed, and that is the fix**
+
+The task assumed the container had the same collision. It does not: it already solved it a
+different way — **one named Docker target volume per kind** (`knaif-target-$KIND`), mounted at
+`/src/target`, so each kind gets an entirely private `target/` tree. Its own comment describes the
+`hard_link … AlreadyExists` hazard and says separate volumes make it impossible.
+
+Passing `--profile` there would layer a second isolation mechanism on top of complete isolation,
+and would **miss every existing warm volume** — each kind recompiling llama.cpp from scratch once,
+for no correctness gain. So the container deliberately stays on the default `release` profile.
+
+**Done 2026-09-21:** comments updated only — the `CARGO_TARGET_DIR` note now says `target/<profile>`
+and names `--profile` as the supported way to move that root, and the volume note records why this
+script does not use one. One mechanism per environment, each documented where it lives.
+
+### [x] T5 — Repoint the L4 lane — **unblocked by P6; needs an L4 re-run**
+
+The intent was: point `eval_backends.yaml:81` (`binary: target/release/knaif.exe`) at the profile
+directory for the kind the lane measures.
+
+**There is no such directory, because the lane measures a third feature set.** Per
+`evals/INDEX.md`, the binary behind the accepted 2026-09-16 L4 run was built
+`--features llama,cuda,pdfium` — static, with the documents rasterizer. That is:
+
+| | feature set | has a profile? |
+|---|---|---|
+| packaging `cuda` | `llama,dynamic-backends,cuda` | `release-cuda` |
+| dev wrapper `just native-cuda` | `llama,cuda,pdfium` | no |
+| **the L4 lane's binary** | `llama,cuda,pdfium` | no |
+
+Repointing the lane at `target/release-cuda/` would therefore **change what is being measured** —
+loadable backends instead of static, and no pdfium, which the documents skill's rasterize paths
+use. That is a different experiment wearing the old experiment's name, and it would invalidate the
+accepted baseline for a reason unrelated to the model.
+
+Two further things surfaced and belong on the record rather than in a fix:
+
+- The lane is described in `evals/INDEX.md` as *"the shipped native binary"*. The shipped artifact
+  is the `dynamic-backends` vulkan/cpu build; a static `cuda,pdfium` build is not it. That gap
+  predates this plan.
+- Nothing breaks by leaving the lane alone: `--profile` defaults to `release`, so
+  `target/release/knaif.exe` and every path that names it keep working exactly as before. **L4 is
+  not marked stale by this plan.**
+
+**Unblocked 2026-09-21 by P6.** There is now exactly one `cuda` build, at
+`target/release-cuda/`, and the lane can point at it. What remains is not a decision but a cost:
+
+- The lane's binary changes shape — `dynamic-backends` instead of static, and `pdfium` present.
+  That is a different build from the one behind the accepted 2026-09-16 run, so **L4 must be
+  re-run before its verdict means anything again.** The re-run is already outstanding from the
+  reject/clarify work (its T8), so this joins that queue rather than creating a new one.
+- `target/release-cuda/` has to exist. `just build-native-kind cuda` builds it;
+  `KNAIF_CUDA_DEV_ARCHS=120-real` cuts it to this machine's GPU instead of the seven-arch release
+  list.
+
+Do T5 and the L4 re-run together, as one change with one verdict. Repointing the lane without
+re-running would leave `check-gate` describing a binary that no longer exists.
+
+### [x] T6 — Docs
+
+- `docs/RELEASE.md` — the per-OS/kind build commands gain the profile; the *"Stale lib copies break
+  `build.rs`… Delete them before switching kinds"* trap is scoped to the legacy shared-directory
+  path and marked unnecessary for profile builds.
+- `docs/NATIVE.md` — one short section: one directory per kind, and what `rm -rf target/release-<kind>`
+  is for.
+- Leave the [portable-builds](2026-07-27-portable-builds.md) C1/C2 rows alone. They are the record
+  of what happened; a line there pointing here is enough.
+
+**Done 2026-09-21.**
+
+- `docs/NATIVE.md` §10 leads with the per-kind directories, `just build-native-kind` /
+  `just verify-build-kind`, the measured first-build costs, and `rm -rf target/release-<kind>`. The
+  raw cargo commands are kept for anyone driving it by hand, now carrying `--profile`.
+- `docs/RELEASE.md`: the Windows section builds with `just build-native-kind` and packages with
+  `--profile`, and no longer opens by demanding a Developer PowerShell — while still saying that
+  *packaging* wants one, for `$VCToolsRedistDir`. *"Package each kind immediately after its own
+  build"* is rewritten around the directories, keeping `out_dir()`'s backend-sniffing as the
+  independent check. The *"Stale lib copies break build.rs"* trap is scoped: fixed for builds that
+  use the profiles, still live for two feature sets pointed at one profile. Every remaining
+  `target/release/build/...` path is now `target/<profile>/...` — the CUDA progress-watching
+  command names `release-cuda` outright.
+
+### [x] T7 — Reproduce C1, then fail to reproduce it
+
+The acceptance for this whole plan is that the recorded defect no longer occurs.
+
+1. On the shared `release` profile, build `vulkan` then `cpu` and observe the documented failure —
+   or record that a warm cache no longer reproduces it, which is evidence too.
+2. On the profiles, build two kinds back to back. Assert both binaries exist, both carry their own
+   staged libraries, and neither directory was written by the other build.
+3. `just package-native <kind>` for each kind built, with `installers/smoke.sh` on each artifact.
+
+A 15-30 minute CUDA compile cannot be a unit test. This is a rehearsal with a written result, run
+once on this machine, recorded in the plan.
+
+**Done 2026-09-21, except step 1 — which was deliberately not run.**
+
+**Step 1 (reproduce C1) was skipped, for two reasons.** First, it cannot reproduce here: C1's
+mechanism is a *dangling SONAME symlink* — `exists()` follows symlinks, so a stale one reads as
+absent while still occupying the name. Windows builds produce no SONAME symlinks, so the failure is
+Linux-specific. Second, forcing two feature sets through plain `release` would overwrite
+`target/release/knaif.exe`, which is the L4 lane's binary behind the accepted 2026-09-16 run.
+Destroying standing eval evidence to re-demonstrate a defect already recorded in
+[portable-builds](2026-07-27-portable-builds.md) is a bad trade.
+
+**Step 2 — three kinds coexist**, which before this plan was impossible:
+
+| profile | binary | emitted backend | first build |
+|---|---:|---|---:|
+| `release-base` | 10,357,248 B | none | 32s |
+| `release-cpu` | 10,478,080 B | none (CPU variants) | 1m 13s |
+| `release-vulkan` | 10,479,104 B | `ggml-vulkan.dll` | 1m 33s (2212 shaders) |
+
+`release-cpu` was listed before and after the `release-vulkan` build: **byte-identical, mtimes
+unchanged**. That is the C1 scenario — a second functional kind on a warm cache — completing
+cleanly. `target/release/` was untouched throughout.
+
+**Step 3 — both artifacts package and pass `smoke.sh`:**
+
+```
+dist/knaif-1.1.0-windows-x64.zip       27 MB  [kind=vulkan]  PASS  (19 binaries)
+dist/knaif-1.1.0-windows-x64-cpu.zip   10 MB  [kind=cpu]     PASS  (18 binaries)
+```
+
+Each was staged out of its own profile directory with `--profile=release-<kind>`, and each reports
+`✓ self-contained`. `cuda` was not built: 15-30 minutes for a kind nothing here depends on yet, and
+`release-vulkan` already exercises the GPU path end to end.
+
+### [x] T8 — Hand back to the workbench
+
+[The workbench plan](2026-09-21-skill-prompt-workbench.md) changes in two places once this lands:
+
+- **D1 / T5** — `workbench.local.yaml` registers **directories**, not bare exe paths, and the
+  fallback scan covers `target/release*/` rather than `target/release` plus the cross-compile
+  `target/*/release`. The mockup's note 3 ("keep them elsewhere") becomes "each kind already has
+  its own home".
+- **The risk row** *"Backend comparison needs builds that do not exist yet"* narrows to what it
+  should always have said: a Vulkan comparison needs a Vulkan build, and now there is somewhere
+  for it to go.
+
+**Done 2026-09-21.** Both edits applied. D1 now says the selector registers directories and that
+the label still comes from the binary, not the path — a profile directory names a kind, but nothing
+stops a hand-built binary being dropped in the wrong one. T5's scan is `target/release*/` plus the
+declared directories. A risk row was **added**, not just narrowed: the L4 lane's binary is a third
+feature set (`llama,cuda,pdfium`) that matches no `release-<kind>` directory, so the workbench must
+label it from the binary rather than infer a kind from where it sits.
+
+There is now a real Vulkan build to select: `target/release-vulkan/`.
+
+### [x] T9 — One feature set per kind
+
+Added while resolving P5b/P6, because the profiles are only honest if a kind names exactly one
+build.
+
+- `feats_for_kind` gained `pdfium` for `cpu` / `vulkan` / `cuda`. `base` stays featureless by
+  definition.
+
+Verified: all four kinds built and coexisting, `target/release/` untouched throughout.
+
+| profile | binary | emitted backend | build |
+|---|---:|---|---:|
+| `release-base` | 10,357,248 B | none | 32s |
+| `release-cpu` | 15,743,488 B | cpu variants | 21s (incremental) |
+| `release-vulkan` | 15,744,512 B | `ggml-vulkan.dll` | 19s (incremental) |
+| `release-cuda` | 15,731,712 B | `ggml-cuda.dll` | 4m 07s (`CUDAARCHS=120-real`) |
+
+The unified vulkan build packages and passes `smoke.sh` — 19 binaries, every import staged,
+`✓ self-contained`. `just check` green (2367 Python tests, full Rust suite, all contracts).
+- `just native-cuda` / `just native-vulkan` stopped passing their own feature list. They now call
+  `scripts/build_native_kind.sh <kind>` and run the binary out of `target/release-<kind>/`, so the
+  thing you test by hand is byte-identical to the thing that gets packaged. They also stop
+  producing debug builds in `target/debug/`, which was the smaller collision P5 first noticed.
+- The `cuda_arch` justfile variable no longer claims to drive the native build. It never could:
+  CMake reads `CUDAARCHS`, which `build_native_kind.sh` sets from `package.sh`'s release list.
+  `KNAIF_CUDA_DEV_ARCHS` is the dev shortcut.
+
+**Follow-on plan, not done here:** shipping the PDFium runtime as an opt-in per-skill payload.
+Decided in principle (reuse the `backend install` machinery); needs its own plan.
+
+## What this is not
+
+- **Not a change to what gets built.** Same features per kind, same `feats_for_kind` mapping, same
+  artifacts. Only the directory moves.
+- **Not a fix for the guards.** `exe_imports_llama` and the backend-sniffing `out_dir()` stay.
+- **Not `CARGO_TARGET_DIR`.** Every relative path under `target/` keeps its shape; that is the
+  point of choosing profiles over a separate root.
+- **Not a CI change.** CI runs `cargo clippy -p knaif-cli --features llama` and no feature-matrix
+  release build, so it never had the collision.
+
+## Risks
+
+- **T3 and T4 touch the release path.** Mitigated by the default: `package.sh` without `--profile`
+  behaves exactly as today, so the change is opt-in per call site, and T7 rehearses each kind
+  end to end before anything is cut from it.
+- **P5 changes what `just native-cuda` produces** — a release build where it produced a debug one,
+  which means one long first compile for anyone who used those recipes. Stated in the recipe
+  comment, which already warns about the compile.
+- **Disk.** One full build tree per kind built. On a machine that builds all four, that is real.
+  `rm -rf target/release-<kind>` is the answer and belongs in NATIVE.md, not in a footnote.
+- **T5 marks L4 stale.** Known, sequenced against an outstanding re-run, and named here so it is a
+  decision rather than a surprise.

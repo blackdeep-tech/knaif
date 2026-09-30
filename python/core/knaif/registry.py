@@ -10,7 +10,12 @@ from typing import Any
 
 import yaml
 
-_ALWAYS_INCLUDE = frozenset({"clarify", "reject", "done"})
+# A tuple, not a set: these are appended to the retrieval result in this order, and a set's
+# iteration order depends on PYTHONHASHSEED — the same query returned a different tool order
+# in different processes. Harmless inside Python (the prompt listing skips control tools) but
+# it makes the order unportable: a runtime cannot be held to a ranking the reference does not
+# reproduce. Native declares the same fixed order (`ALWAYS_INCLUDE` in knaif-core/retrieval.rs).
+_ALWAYS_INCLUDE = ("clarify", "reject", "done")
 
 # Maximal runs of non-space-delimited script (CJK ideographs + kana + Hangul).
 # Whitespace tokenization can't split these, so a query like "将clip压缩" is one
@@ -159,10 +164,16 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
     return registry
 
 
+#: How many tools retrieval surfaces to the model by default. Named rather than inlined
+#: because the eval path has to be able to record the value a run actually used, and a
+#: default nobody can reference gets copied into three places and drifts.
+DEFAULT_TOP_K = 5
+
+
 def retrieve_tools(
     query: str,
     registry: dict[str, ToolDef],
-    top_k: int = 5,
+    top_k: int = DEFAULT_TOP_K,
     min_score: int = 0,
 ) -> dict[str, ToolDef]:
     """Return the top_k most relevant tools for *query* plus system tools.

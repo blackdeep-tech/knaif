@@ -4,10 +4,11 @@ Durable implementation plans, ordered by date. Each plan is a single self-contai
 file with inline `- [ ]` / `- [x]` checkboxes tracking its own progress. This index is
 the at-a-glance status map; the individual plan headers remain the source of truth.
 
-**Authoritative queue.** There is exactly one live work queue: the **Open / Next** section of
+**Authoritative queue.** Work assigned to a release is queued in that release's index (see
+*Releases in flight*); everything not yet assigned is in the **Open / Next** section of
 [../TODO.md](../TODO.md). This index and the plan headers are the *record* — what each plan is and
-whether it shipped — **not** a backlog. To pick what to work on next, read TODO.md Open / Next; to
-learn the state or rationale of a specific plan, read its header. The header lint
+whether it shipped — **not** a backlog. To pick what to work on next, read the release index or
+TODO.md Open / Next; to learn the state or rationale of a specific plan, read its header. The header lint
 ([../../python/core/tests/test_plan_headers.py](../../python/core/tests/test_plan_headers.py), run by
 `just check`) keeps this index's status column and every plan header conformant, so the three
 surfaces can't silently disagree.
@@ -16,6 +17,17 @@ Status legend: **Done** (shipped/closed) · **Active** (in progress) ·
 **Draft** (written, not approved — do not implement) · **Planning** (not started) ·
 **Superseded** (replaced by a later plan). "Complete" and "Implemented" both fold into
 **Done** — use Done.
+
+## Releases in flight
+
+Each open release has a branch and a release index. The index lives **on its release branch**, so
+read it there; `main`'s copy (if any) is left untouched until the release merges back. Branch rules,
+lanes and the release lifecycle: [../RELEASE.md](../RELEASE.md#branches-and-release-lanes). This
+table changes only when a release opens or ships.
+
+| Release | Lane | Branch | Index | State |
+|---|---|---|---|---|
+| 1.3.0 | minor | `release/1.3.0` | [release-1.3.0](2026-09-30-release-1.3.0.md) | scope being planned (macOS, adapters/superskill) |
 
 ## Plan header format
 
@@ -27,6 +39,7 @@ and goal are scannable at a glance:
 
 **Status:** Done · **Created:** YYYY-MM-DD · **Completed:** YYYY-MM-DD
 **Owner:** <area> · **Ref:** <PR # / branch / related plan, or —>
+**Release:** <X.Y.Z, — or main>
 
 > **Status note:** <free-form current state — supersession, parking rationale,
 > what's left, risks/dependencies. Optional, but where the nuance lives.>
@@ -38,6 +51,57 @@ Rules: **Created** is the plan's filename date. **Completed** is the date the pl
 reached its terminal status (Done/Superseded), or `—` for open plans or when no date
 was recorded. Use the legend statuses only. Keep the one-line `**Goal:**` even when a
 detailed `## Goal` section follows.
+
+**Release** says where the plan ships: `X.Y.Z` (that release), `—` (a release is not chosen yet)
+or `main` (it ships in no release — docs, site, CI, process). Required for plans created from
+2026-09-30 on; older plans may add it. A plan naming `X.Y.Z` must be in that release's index scope
+whenever the index is in the checkout, and the other way round — the lint checks both directions.
+
+## Release index
+
+One per release: `YYYY-MM-DD-release-X.Y.Z.md`, created when the release is proposed or opened.
+It **links to work, it does not hold it** — the work and its checkboxes stay in the feature plans,
+evidence stays in `evals/`. Keep it short; rewrite *Current state* in place rather than appending
+status notes. A feature PR edits only its own plan and its own scope row; the rest of the index is
+edited by whoever integrates the release.
+
+```markdown
+# knaif X.Y.Z — <one-line theme>
+
+**Status:** Active · **Created:** YYYY-MM-DD · **Completed:** —
+**Owner:** <area> · **Ref:** <related plans, or —>
+**Release:** X.Y.Z
+**Lane:** minor · **Branch:** `release/X.Y.Z`
+
+**Goal:** <one sentence.>
+
+## Current state
+<One paragraph, rewritten in place.>
+
+## Exit gates
+<The lane's gates from RELEASE.md, plus any this release adds.>
+
+## Scope
+| Plan | Branch | Status | User-facing line |
+|---|---|---|---|
+| [topic](YYYY-MM-DD-topic.md) | `feat/topic` | Active | <becomes the CHANGELOG entry> |
+
+## Decisions
+- YYYY-MM-DD — <decision, one line.>
+
+## Deferred
+- <item> — moved to <release or backlog>, because <reason>.
+
+## Evidence
+- <links into evals/ only.>
+```
+
+The lint checks the header: `Lane` is `minor` (version ends in `.0`) or `patch` (it does not),
+`Branch` is `release/X.Y.Z` matching the filename, and `Release` is the index's own version. Only
+links inside `## Scope` count as scope.
+
+Assigning a backlog item from [../TODO.md](../TODO.md) *Open / Next* to a release moves it into
+that release's scope table (via its plan).
 
 | Date | Plan | Status | Notes |
 |---|---|---|---|
@@ -75,9 +139,25 @@ detailed `## Goal` section follows.
 | 2026-07-25 | [windows-installer-polish](2026-07-25-windows-installer-polish.md) | Done | **Shipped 2026-07-27 (rides 1.1.0).** Eleven findings — six from a live v1.0.1 install session, five from a follow-up script cross-read. All three P0s fixed: the undeclared `deps` parent task that defeated three `unchecked` flags (AGPL Ghostscript + a ~350 MB LibreOffice shipped pre-checked); a missing `_is1` key leaving no Add/Remove row and no upgrade detection (rescue added — the cause is still unknown, so this is recovery, not prevention); and **`NOTICE` never distributed** (Apache-2.0 §4(d)) — fixed in `package.sh`, so it covers the Linux tarball and macOS too, **but not the AppImage**, which is assembled separately. Plus `[InstallDelete]`, `AppMutex`/`SetupMutex`, a runtime-equivalent dependency probe (`PATHEXT`, `$KNAIF_<CMD>_BIN`, `all_required`), icon + VERSIONINFO, and `test_installer_iss.py` — a lint verified by injecting all 14 mutations it claims to catch. **W4 (signing) split out** to [code-signing](2026-07-27-code-signing.md). Closed rather than left hanging: the upgrade assertion moved to `RELEASE.md` §4 as a recurring release check, ARM64 warn-and-allow moved to `TODO.md` (no hardware to test on), `WizardSmallImageFile` is won't-do. The F11 "published exposure" question was **based on a false premise** — no GitHub Release ever existed, so nothing was ever downloadable without `NOTICE`. |
 | 2026-07-27 | [code-signing](2026-07-27-code-signing.md) | Planning | Extracted from windows-installer-polish's W4 — the only workstream there gated on an external party. Carries the certificate landscape (**EV no longer buys instant SmartScreen trust**; Microsoft pulled the privilege in 2024), the SignPath Foundation eligibility finding, and the payload + installer signing tasks. **Deferred 2026-07-27**: the Foundation application waits for more release history. **Deliberately not bound to the CI plan** — every path except SignPath signs fine from a dev machine, and signing may be wanted sooner than CI lands. S0 (Defender submission) is unblocked today and needs no certificate. |
 | 2026-07-27 | [portable-builds](2026-07-27-portable-builds.md) | Done | **Shipped 2026-07-27.** Artifacts inherited a runtime floor from whatever machine built them; both OSes had a verified P0. **Windows:** every binary imported `VCRUNTIME140`/`MSVCP140`/`VCOMP140` with none staged — a clean Windows 11 image died at process start with `0xC0000135` printing nothing (proven in Windows Sandbox before and after the fix). **Linux:** built on 24.04 → glibc 2.39; now built in a fully-pinned `ubuntu:22.04` container (apt via snapshot.ubuntu.com, LunarG Vulkan 1.4.313, appimagetool by checksum). Also fixed: the AppImage shipped without `NOTICE` and with a 1×1 icon, and `libgomp.so.1` — the Linux twin of `VCOMP140` — was unstaged. **The measured floor is not what anyone assumed:** the artifact needs `GLIBC_2.34` (below the build base) and is really bound by `GLIBCXX_3.4.30`/`CXXABI_1.3.13`, so RHEL 9 misses by one libstdc++ version; bundling it was rejected because `libggml-vulkan.so` dlopens a host driver built against a newer one. Adds `check_pe_imports.py`, `check_elf_deps.py` and a two-sided `check-floor.sh`. **Through-line: a check that runs on the build box tests staging, never portability** — now a rule in RELEASE.md §4. |
-| 2026-08-02 | [macos-support](2026-08-02-macos-support.md) | Planning | Third release platform: Metal inference, arm64 packaging, signing + notarization, clean-room verification. **The inference question is already settled by the pinned sources** — `GGML_METAL` defaults ON under `APPLE`, the shader library is embedded (nothing to stage), `ggml-metal` is a loadable backend under `dynamic-backends`, and `GGML_CPU_ALL_VARIANTS` covers Apple ARM — so **no new cargo feature is needed** and MLX/MoltenVK are rejected. Risk is packaging, not inference: `package.sh` has a Darwin arm but every functional branch excludes it, no `@loader_path` surgery exists, and `openmp` is a **default** feature of `llama-cpp-2`, making Homebrew's `libomp` the third instance of the `VCOMP140`/`libgomp` trap. arm64 only (D4); `.zip` + a stapled `.pkg` (D6 — Apple's notary does not accept `.tar.gz`, and only `.pkg` can be stapled). **Audited and revised 2026-08-02**, which surfaced a defect outside macOS: **the eval regression gate proves nothing today** — `cmd_regression` defaults `current = baseline`, `just eval-regression` cannot forward `--current`, `eval-success` writes nothing without `--save`, and *both* snapshots are stale (ffmpeg 297 rows on the wrong `cheap` verifier vs 314; documents 129 vs 143). Fixing that is task C0 and is a prerequisite, not macOS work. Unblocks the macOS half of [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s C3 matrix. |
-| 2026-07-17 | [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) | Active | **Workstream U is release-blocking.** The two things v1 consciously skipped: CI + `release.yml` + eval-parity (was Workstream F) and the CUDA opt-in surface (`backend install cuda` + R580 driver gate; was C6). **Workstream U became release-blocking 2026-07-28**, reversing the C6 deferral: `PERFORMANCE.md` §2 measures Vulkan at **~5.7 tok/s on Blackwell against ~80 on CUDA** — CPU speed on the newest NVIDIA cards — so a Vulkan-only artifact cannot be the first thing anyone downloads, and with no users yet there is nothing to protect by shipping sooner. Added **U6** (Windows `--kind=cuda` still emits the historical static app, not a payload — mechanism proven 2026-07-16, packaging missing) and **U7** (a CUDA build image, since the release image deliberately carries no toolkit). U3's nudge now keys on **compute capability**, because CUDA is correctness on Blackwell and a ~3% optimisation on Ampere. Workstream C stays not-started and non-blocking. |
-
+| 2026-08-02 | [macos-support](2026-08-02-macos-support.md) | Planning | **Release 1.3.0** (synced with 1.2.0 on 2026-09-30). Third release platform: Metal inference, arm64 packaging, signing + notarization, clean-room verification. **The inference question is already settled by the pinned sources** — `GGML_METAL` defaults ON under `APPLE`, the shader library is embedded (nothing to stage), `ggml-metal` is a loadable backend under `dynamic-backends`, and `GGML_CPU_ALL_VARIANTS` covers Apple ARM — so **no new cargo feature is needed** and MLX/MoltenVK are rejected. Risk is packaging, not inference: `package.sh` has a Darwin arm but every functional branch excludes it, no `@loader_path` surgery exists, and `openmp` is a **default** feature of `llama-cpp-2`, making Homebrew's `libomp` the third instance of the `VCOMP140`/`libgomp` trap. arm64 only (D4); `.zip` + a stapled `.pkg` (D6 — Apple's notary does not accept `.tar.gz`, and only `.pkg` can be stapled). **Audited and revised 2026-08-02**, which surfaced a defect outside macOS: **the eval regression gate proves nothing today** — `cmd_regression` defaults `current = baseline`, `just eval-regression` cannot forward `--current`, `eval-success` writes nothing without `--save`, and *both* snapshots are stale (ffmpeg 297 rows on the wrong `cheap` verifier vs 314; documents 129 vs 143). Fixing that is task C0 and is a prerequisite, not macOS work. Unblocks the macOS half of [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s C3 matrix. |
+| 2026-08-04 | [website-split](2026-08-04-website-split.md) | Active | **Both sites are built and every build-side item is closed (2026-08-05)** — 7 pages on `.org`, 24 on `.dev`, mkdocs retired, `amplify.yml` committed, `site-check` inside `just check`. What remains is the operator review, creating the two Amplify apps in the console, and the DNS cutover. Splits the single mkdocs page into **knaif.org** (end users — download CTA, skills catalog) and **knaif.dev** (developers — framework, SDK, skill authoring), both Astro (Starlight for `.dev`), pnpm, deployed by Amplify CI/CD from this repo. mkdocs is removed and `docs/*.md` is deliberately **not** published. The load-bearing piece is a single Python extractor over `skill.yaml`/`tools.yaml`/`prompt.yaml` emitting committed JSON both sites consume, so the contracts are not parsed twice. **Revised 2026-08-05 after an audit:** download URLs must come from a published-release snapshot, never from `Cargo.toml` (the version bump precedes publication); `pip install knaif` cannot run a skill (bundles are excluded from the wheel); the repo has never had a Node toolchain (`node_modules` is unignored). **All design decisions settled 2026-08-05** (§1) — `display:` blocks in `skill.yaml` for catalog copy, a new `contracts/release/platforms.yaml` for the support matrix, "knaif SDK" as the display name resolving the three-way `knaif`/`knaif-cli`/`knaif.cli` collision, and a dated-not-re-measured `/vs` comparison. **Launch is a single operator-gated cutover** — every page and all five `.dev` tracks (author / evaluate / fine-tune / port-to-native / SDK) written and reviewed before either domain goes live. |
+| 2026-09-10 | [skill-quality-lifecycle](2026-09-10-skill-quality-lifecycle.md) | Active | **Replaces the prompt-parity plan**, and after a 2026-09-10 review is organized around the **six-stage skill lifecycle** (implement in Python → improve → fine-tune → accept + port → evaluate in Rust → release) rather than parity alone: the first draft had no gate establishing that **Python quality is satisfactory before porting**, which let the layers certify that two runtimes agree on something not yet known to be good. **Workstream S** is that gate (per-skill thresholds, required capability slices, safety at 100%, cross-skill regression on the shared fine-tune, a frozen named baseline). whose premise was measured false (native and Python do not differ significantly, p = 0.21; the reported symptom was the *executor* refusing chains). Turns Python/Rust agreement into a four-layer measured property: **L1 contract** (same YAML → same prompt/registry/settings, no GGUF, every PR, 100%), **L2 deterministic** (same plan JSON → same expansion/validation/argv, no GGUF, every PR, 100%), **L3 behavioral** (same utterance + model → same outcome + command, ≥99% per row — mostly already built as `scripts/parity_check.py`), **L4 shipped path** (the native binary executing for real, artifacts graded by the skill's executing verifier, within 2 pts of the Python-locked bar). **L1–L3 are proxies; only L4 measures what a user gets** — a skill can pass all three at 100% and still fail on preflight, sandbox boundary, the confirmation gate or the subprocess, none of which a planner-only lane touches. Two governing rules: **Python is the reference, Rust moves** (with a measured exception), and **compare the same stage on both sides** — an ad-hoc comparison that broke the second rule reported 18.2% disagreement where the real figure was 3/847. Convergence direction is settled per axis by measurement, and one of the three goes *against* the default rule: Rust adopts Python's retrieval (+8/1) and path normalization, but **Python keeps `select_examples` and Rust gained it** — that direction was REVERSED on 2026-09-10 when the question was re-run properly (S3g): static examples do win the ffmpeg aggregate (p = 0.0226), and simultaneously push `concat_video` below its acceptance floor while doing nothing at all on documents. An average bought with a capability is not an improvement. Gated on `skill.yaml`'s `runtimes.native.status` — which is now evidence-backed and checked (`just check-gate`). **The chain blocker is cleared**: native executes ordered multi-step plans as of 2026-09-10. **Progress 2026-09-11 — 33/45 done:** V, E, L1, L2 and G complete; L3 measured (ffmpeg 0.819, which decomposes into 10 renderer port defects and 42 generation differences between the two llama.cpp builds); L4 built but not yet run over a corpus, so no skill is `supported`. |
+| 2026-09-08 | [model-output-improvement](2026-09-08-model-output-improvement.md) | Planning | ffmpeg routing-quality plan written after the 2026-09-07 audit and the F9 re-lock. Recovered 2026-09-25 from `bugfix/ffmpeg-audio-format`, where it was the only unmerged content; its training-side items feed [release-1.2](2026-09-25-release-1.2.md) R3. |
+| 2026-09-08 | [terse-no-audio-modifier](2026-09-08-terse-no-audio-modifier.md) | Draft | **Diagnosis only — no fix approved.** "convert clip.mov to mp4 with no audio" fails: `convert_video` cannot express no-audio, the one-tool prompt rule steers against chaining, and the 8 `v4`/`terse_no_audio` train rows were never trained. Recovered 2026-09-25 from `bugfix/ffmpeg-audio-format`; the retrain path (T) is taken by [release-1.2](2026-09-25-release-1.2.md) R3. |
+| 2026-07-17 | [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) | Done | **Closed 2026-08-08** — C and U complete, and the last open item (C4) moved to the native/Python planning-parity plan, where its prerequisite lived; that plan was retired 2026-09-10 and C4 now lives as Workstream L4 of [skill-quality-lifecycle](2026-09-10-skill-quality-lifecycle.md). CI is live on every PR behind one `ci` aggregate, `main` is protected by the `main-guardrails` ruleset with no bypass actors, and **Workstream U is closed** — U1's payload verified against the live release assets (16/16 files, matching sha256, `install` → `verify` clean). The two things v1 consciously skipped: CI + `release.yml` + eval-parity (was Workstream F) and the CUDA opt-in surface (`backend install cuda` + R580 driver gate; was C6). **Workstream U became release-blocking 2026-07-28**, reversing the C6 deferral: `PERFORMANCE.md` §2 measures Vulkan at **~5.7 tok/s on Blackwell against ~80 on CUDA** — CPU speed on the newest NVIDIA cards — so a Vulkan-only artifact cannot be the first thing anyone downloads, and with no users yet there is nothing to protect by shipping sooner. Added **U6** (Windows `--kind=cuda` still emits the historical static app, not a payload — mechanism proven 2026-07-16, packaging missing) and **U7** (a CUDA build image, since the release image deliberately carries no toolkit). U3's nudge now keys on **compute capability**, because CUDA is correctness on Blackwell and a ~3% optimisation on Ampere. Workstream C stays not-started and non-blocking. |
+| 2026-09-17 | [4b-audit-and-improvement](2026-09-17-4b-audit-and-improvement.md) | Done | Audit pass closed: deterministic speed fix measured; retrained model rejected for documents regressions; prompt diagnostic not adopted. No commits or promotion. |
+| 2026-09-11 | [reject-clarify-taxonomy](2026-09-11-reject-clarify-taxonomy.md) | Done | Make `reject` mean *unsafe* and `clarify` cover everything else that cannot be planned, so the contract, the prompt and the corpora stop contradicting each other; also fixes the eval harness counting failed commands as correct (T5b) and retrains. Its last evidence rebuild and republication were done by release-1.2. |
+| 2026-09-17 | [4b-model-improvement-handoff](2026-09-17-4b-model-improvement-handoff.md) | Superseded | Handoff to raise the 4B planner above the accepted bar. Never picked up separately: release-1.2 ran the retrains, release-1.3 carries the next attempt. |
+| 2026-09-21 | [per-backend-build-profiles](2026-09-21-per-backend-build-profiles.md) | Done | One cargo profile per native build kind (`base` / `cpu` / `vulkan` / `cuda`), so binaries and staged llama/ggml libraries stop overwriting each other in `target/release/`. |
+| 2026-09-21 | [skill-payloads](2026-09-21-skill-payloads.md) | Planning | A third delivery tier for skill dependencies: native libraries knaif downloads on demand, sha256-pinned, outside the install. PDFium is the first case. |
+| 2026-09-21 | [skill-prompt-workbench](2026-09-21-skill-prompt-workbench.md) | Done | One notebook at `notebooks/skill_workbench.ipynb` for exercising skills and prompts by hand: either runtime, any resolvable model, a chosen backend, dry-run or real execution, with measured timing. **Replaces rather than repairs the two skill testers**, which are stale in three ways — a pre-restructure `src/skills/` path, a `MODEL_CONFIGS` holding only untuned base models, and (the reason it is a new notebook) `infer_stream` having no `registry_override`, so the bench shows the model all 30 tools where production sends a retrieved ~8. Measured: **4 of 14 plans differ**, and the bench's prompt makes the model look worse — `crf 18` yields `visually_good` there against the correct `high_quality` in production. Two settled decisions carry most of the design: the backend selector is a **binary picker**, because backend is a compile-time cargo feature and `knaif run` has no `--backend` (only `KNAIF_N_GPU_LAYERS=0` is a genuine per-run lever); and the backend must be **measured**, because `detect_backend()` reads device enumeration and reports `CUDA0` even with every layer on CPU — a defect that reaches the L4 record and PERFORMANCE.md. Explicitly **not** an acceptance instrument. |
+| 2026-09-23 | [chain-source-threading](2026-09-23-chain-source-threading.md) | Done | `_forward_thread_reused_sources` rewrites every later reference to a producer's source onto its output, which cascades a correct fan-out plan into a wrong straight chain. Rule: thread only when the user named the file at most once, so the documents unlock→find fix survives. Includes the missing native port, fan-out corpus rows, and showing the raw model plan in the workbench. No retrain. |
+| 2026-09-23 | [inference-config-parity](2026-09-23-inference-config-parity.md) | Done | Python and native tokenize identically and decode greedily, yet disagree because llama.cpp is configured differently (flash attention off vs auto, `n_batch` 512 vs `n_ctx`, KV prefix reuse across rows vs a fresh context). Measures the per-utterance flip rate against a pre-registered rule, then pins the config in `generation.yaml` for both lanes. |
+| 2026-09-25 | [release-1.2](2026-09-25-release-1.2.md) | Done | **Published 2026-09-29** (GitHub, HF, PyPI). knaif 1.2.0 and the retrained 4B + 1.7B models ship as **one** release from `release/1.2.0`. `sft-v4` is not published; the next cycle's models become the public `v2`s, bound to 1.2.0 via `released_with:`. Decisions: 1.2.0 (no breaking change vs `v1.1.0`), model numbers stay their own line, 1.7B retrained on its own pre-written bar (safety 100%), L4 on CUDA + Vulkan + CPU for the release candidate, macOS may follow in 1.2.x, the HF card moves into the repo, merge to `main` with a merge commit so eval SHAs stay reachable. |
+| 2026-09-26 | [policy-gate-and-skill-adapters](2026-09-26-policy-gate-and-skill-adapters.md) | Done | Three release-1.2 retrains failed on the shared plan/clarify/reject decision, never on skill knowledge. Tests two fixes with pre-written pass/fail rules: E1 a deterministic safety gate (offline replay, no GPU), E2 one LoRA adapter per skill on a shared base (feasibility spike, then per-skill adapters vs the union model). Pauses release 1.2 at R5. |
+| 2026-09-27 | [release-1.3-skill-adapters-and-superskill](2026-09-27-release-1.3-skill-adapters-and-superskill.md) | Draft | knaif 1.3 scope: per-skill LoRA adapters on a shared base (E2b, restated as quality of base + adapter as served), the superskill/router (design to be discussed with the owner), and more skills. Evidence from release 1.2's failed union retrains. |
+| 2026-09-30 | [release-1.3.0](2026-09-30-release-1.3.0.md) | Active | Release index for 1.3.0 (minor): macOS support and the adapters/superskill plan. Lives on `release/1.3.0`; this copy is left untouched until the release merges back. |
+| 2026-09-30 | [release-workflow](2026-09-30-release-workflow.md) | Active | How releases are developed: a `release/X.Y.Z` branch per release (several may be open), one `feat/*` branch and plan per feature (started from `main` until its release is chosen), a short release index on the release branch, and a patch lane that may not change behavior on shipped platforms. Adds the `Release:` plan field and its lint. Worktrees postponed. |
 
 ## Open threads (not yet a plan, or spanning plans)
 

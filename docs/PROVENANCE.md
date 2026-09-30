@@ -18,10 +18,12 @@ each pinned to a commit SHA and verified against a recorded SHA-256.
 
 | Released model | Base model | Base license | Fine-tune license |
 |---|---|---|---|
+| `knaif-qwen3-4b-v2` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Apache-2.0 | Apache-2.0 |
+| `knaif-qwen3-1.7b-v2` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Apache-2.0 | Apache-2.0 |
 | `knaif-qwen3-4b-v1` | [`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) | Apache-2.0 | Apache-2.0 |
 | `knaif-qwen3-1.7b-v1` | [`Qwen/Qwen3-1.7B`](https://huggingface.co/Qwen/Qwen3-1.7B) | Apache-2.0 | Apache-2.0 |
 
-Both are **derivative works** of the Qwen3 family by Alibaba Cloud, used under
+All are **derivative works** of the Qwen3 family by Alibaba Cloud, used under
 Apache-2.0. Apache-2.0 permits redistribution of derivatives under the same
 license, which is what knaif does. The manifest records this machine-readably via
 each entry's `base_model` and `base_model_license` fields, so the provenance
@@ -72,13 +74,37 @@ Regenerate with `just eval-fixtures <skill>`.
 
 | Asset | Locations | Notes |
 |---|---|---|
-| `logo.png` | `media/`, `site/docs/assets/` | Identical file, committed twice |
-| `knaif-logo-rect.svg` | `media/`, `site/docs/assets/` | Identical file, committed twice; used by the README header |
-| `execution-pipeline.svg` | `site/docs/assets/` | Diagram of the pipeline in `ARCHITECTURE.md` |
+| `logo.png` | `media/` | Wordmark, white letterforms — a **dark-background asset**; unusable on light |
+| `logo-square.png` | `media/`, `site/shared/assets/mark-square.png` | The `[AI]` mark alone; favicon source |
+| `knaif-logo-rect.svg` | `media/`, `site/shared/assets/wordmark.svg` | Used by the README header |
+| `knaif.ico` | `media/`, `site/{org,dev}/public/favicon.ico` | Browser-tab icon for both sites |
+| `execution-pipeline.svg` | `media/` | Diagram of the pipeline in `ARCHITECTURE.md` |
 
-**No fonts are bundled** — no `.woff`/`.woff2`/`.ttf`/`.otf` file is tracked, and
-no SVG embeds an `@font-face` or references a `font-family`. The SVGs carry no
-editor metadata (no `dc:creator`, no Inkscape/Illustrator blocks).
+The wordmark is **also re-authored as inline SVG** in `site/shared/Wordmark.astro`. That is
+not a copy for convenience: the `.svg` file carries its own `prefers-color-scheme` block,
+which answers to the OS and cannot see the sites' `data-theme`, so as an `<img>` it renders
+invisible when a light-OS visitor toggles a site to dark. The component uses `currentColor`
+for the letterforms and the brand coral for `[AI]`. Same artwork, same paths, same
+provenance.
+
+### Fonts (added 2026-08-05)
+
+The websites bundle two typefaces, self-hosted rather than loaded from the Google Fonts CDN
+— faster first paint, and no transmission of visitor IPs to a third party.
+
+| Font | Package | Licence |
+|---|---|---|
+| DM Sans | `@fontsource-variable/dm-sans` | SIL Open Font License 1.1 |
+| JetBrains Mono | `@fontsource-variable/jetbrains-mono` | SIL Open Font License 1.1 |
+
+The `.woff2` files are **not tracked in this repository** — they arrive via `pnpm install`
+from the committed `site/pnpm-lock.yaml` and are emitted into each site's build output.
+OFL requires the licence text to travel with the fonts; `@fontsource` packages ship it, and
+it is therefore present in `site/node_modules/` and in any deployed bundle.
+
+No `.woff`/`.woff2`/`.ttf`/`.otf` file is **tracked**, and no SVG embeds an `@font-face` or
+references a `font-family`. The SVGs carry no editor metadata (no `dc:creator`, no
+Inkscape/Illustrator blocks).
 
 > **Owner confirmation required before publication:** these marks are assumed to
 > be original work commissioned or created for the project. If any was derived
@@ -87,8 +113,8 @@ editor metadata (no `dc:creator`, no Inkscape/Illustrator blocks).
 > not verified mechanically.
 
 The duplicated logo files are a known redundancy (`media/` for GitHub rendering,
-`site/docs/assets/` for the MkDocs build, which can only reference files under its
-own `docs_dir`). De-duplicating them is a cleanup task, not a provenance issue.
+`site/shared/assets/` and each site's `public/` because Astro resolves assets within its own
+project). De-duplicating them is a cleanup task, not a provenance issue.
 
 ## Code dependencies
 
@@ -195,6 +221,30 @@ compatibility axis, but `libggml-vulkan.so` **dlopens the host GPU driver**, whi
 commonly built against a newer `libstdc++` than ours — forcing our copy ahead via
 `$ORIGIN` risks breaking GPU support on current desktops. That choice is what sets the
 `GLIBCXX_3.4.30` floor and excludes RHEL/Rocky/Alma 9.
+
+### PDFium — every inference-capable artifact (from 1.2.0)
+
+| File | Source |
+|---|---|
+| `pdfium.dll` / `libpdfium.so` | `bblanchon/pdfium-binaries` release `chromium/7999`, pinned by archive sha256 in `contracts/release/pdfium.yaml` |
+
+The documents skill renders and OCRs PDFs through `pdfium-render`, which loads this library
+at run time: from `$KNAIF_PDFIUM_PATH`, then beside the exe. `installers/fetch_pdfium.sh`
+downloads the pinned archive, **refuses it unless the sha256 matches**, and stages the
+library in `bin/`. `package.sh` does this for every functional kind, and
+`scripts/build_native_kind.sh` for dev builds; `installers/smoke.sh` asserts it is present.
+Chosen by the owner on 2026-09-26: the build is byte-identical to the pypdfium2 copy every
+accepted L4 run had used, so bundling it changed nothing that was measured.
+
+Licensing, checked against every notice in the archive: PDFium is **BSD 3-Clause**, the
+prebuilt packaging is **MIT**, and the components compiled into it are all permissive
+(Abseil and LLVM libc Apache-2.0; Anti-Grain Geometry, fast_float, Little CMS, simdutf,
+LibTIFF, OpenJPEG, libpng and zlib under their own permissive terms; libjpeg-turbo IJG/BSD;
+FreeType under the FreeType Project License, whose credit line NOTICE carries; ICU under the
+Unicode licence). ICU's notice file also quotes GPL text, but for Autoconf build macros
+(`pkg.m4`, under the Autoconf exception), which are not compiled into the library.
+Chromium ships the same notice. Nothing copyleft is bundled. All 15 notices, plus the
+packaging licence, ship in `licenses/PDFium/`.
 
 ### CUDA opt-in payload (not part of any default artifact)
 

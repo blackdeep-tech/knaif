@@ -1,0 +1,48 @@
+== floor dist/knaif-1.2.0-linux-x64.tar.gz
+artifact: knaif-1.2.0-linux-x64.tar.gz
+
+1. MUST PASS at the claimed floor (ubuntu:22.04)
+   ldd (Ubuntu GLIBC 2.35-0ubuntu3.14) 2.35
+   ok  runs at the floor
+
+2. MUST FAIL below it (ubuntu:20.04)
+   ldd (Ubuntu GLIBC 2.31-0ubuntu9.17) 2.31
+   ok  refuses below the floor, for the right reason:
+         version `CXXABI_1.3.13' not found
+         version `GLIBCXX_3.4.29' not found
+         version `GLIBC_2.32' not found
+         version `GLIBC_2.33' not found
+         version `GLIBC_2.34' not found
+
+PASS: floor confirmed in both directions (ubuntu:22.04 runs, ubuntu:20.04 does not)
+EXIT 0
+== floor dist/knaif-1.2.0-linux-x86_64.AppImage
+artifact: knaif-1.2.0-linux-x86_64.AppImage
+
+1. MUST PASS at the claimed floor (ubuntu:22.04)
+   ldd (Ubuntu GLIBC 2.35-0ubuntu3.14) 2.35
+   ok  runs at the floor
+
+2. MUST FAIL below it (ubuntu:20.04)
+   ldd (Ubuntu GLIBC 2.31-0ubuntu9.17) 2.31
+   ok  refuses below the floor, for the right reason:
+         version `CXXABI_1.3.13' not found
+         version `GLIBCXX_3.4.29' not found
+         version `GLIBC_2.32' not found
+         version `GLIBC_2.33' not found
+         version `GLIBC_2.34' not found
+
+PASS: floor confirmed in both directions (ubuntu:22.04 runs, ubuntu:20.04 does not)
+EXIT 0
+== smoke tarball
+tar: knaif-1.2.0-linux-x64/bin/libllama-common.so.0: Cannot create symlink to 'libllama-common.so.0.0.0': No such file or directory
+tar: Exiting with failure status due to previous errors
+EXIT 2
+== path scan
+check_no_local_paths: 2 files, no builder home directory
+EXIT 0
+a884587c9bdd31aab85584bdc14d62d95ebf2dc79354cac26ed40c55c688f0d2 *dist/knaif-1.2.0-linux-x64.tar.gz
+e7d4d570a622026b6caa792c7204742e6c52899ca7851cc5457f838bf0d19529 *dist/knaif-1.2.0-linux-x86_64.AppImage
+== smoke tarball, re-run in WSL Ubuntu 24.04 (Git Bash on Windows cannot create the tarball's symlinks; instrument, not artifact)
+PASS: knaif-1.2.0-linux-x64.tar.gz (v1.2.0)
+EXIT 0

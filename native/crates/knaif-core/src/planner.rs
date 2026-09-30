@@ -57,25 +57,30 @@ fn to_abs_lexical(p: &Path, base: &Path) -> PathBuf {
 /// Resolve a path, enforcing the sandbox boundary when one is given. Mirrors Python
 /// `_resolve_path`: relative paths resolve against sandbox (or `root` in open mode); in
 /// sandbox mode the result must stay inside the sandbox.
+///
+/// The sandboxed branch resolves filesystem-real (`crate::sandbox::resolve_real`) rather
+/// than lexically: a purely lexical check accepts a path that reads as "inside" the sandbox
+/// while actually being a symlink/junction pointing outside it — Python's `Path.resolve()`
+/// already rejects that case, so this mirrors it (audit F4). The open-mode branch stays
+/// lexical: no boundary is enforced there, so there is nothing security-relevant to gain
+/// from touching the filesystem.
 fn resolve_path(raw: &str, root: &Path, sandbox: Option<&Path>) -> Result<PathBuf> {
     let p = Path::new(raw);
     match sandbox {
         Some(sb) => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            let sb_abs = to_abs_lexical(sb, &cwd);
-            let path_abs = if p.is_absolute() {
-                lexical_normalize(p)
-            } else {
-                to_abs_lexical(p, &sb_abs)
-            };
-            if !path_abs.starts_with(&sb_abs) {
+            let sb_real = crate::sandbox::resolve_real(sb, &cwd);
+            // A relative `raw` resolves against the sandbox itself, not cwd; an absolute
+            // `raw` ignores the base — resolve_real handles both from a single call.
+            let path_real = crate::sandbox::resolve_real(p, sb);
+            if !path_real.starts_with(&sb_real) {
                 bail!(
                     "Path '{}' is outside sandbox '{}'. Use a sandbox-relative path.",
-                    path_abs.display(),
+                    path_real.display(),
                     sb.display()
                 );
             }
-            Ok(path_abs)
+            Ok(path_real)
         }
         None => Ok(to_abs_lexical(p, root)),
     }
@@ -226,6 +231,21 @@ pub fn validate_step(
     root: &Path,
     sandbox: Option<&Path>,
 ) -> Result<()> {
+    validate_step_with(step, registry, root, sandbox, false)
+}
+
+/// `validate_step`, with the internal-tool gate made explicit.
+///
+/// `allow_internal` must be **false** for anything the model produced, and is true only for
+/// an already-expanded sub-plan, which the deterministic expander built rather than the
+/// model. Port of Python `validate_step(..., allow_internal=...)`.
+pub fn validate_step_with(
+    step: &Value,
+    registry: &Registry,
+    root: &Path,
+    sandbox: Option<&Path>,
+    allow_internal: bool,
+) -> Result<()> {
     let obj = step
         .as_object()
         .ok_or_else(|| anyhow::anyhow!("Each plan step must be an object."))?;
@@ -243,6 +263,20 @@ pub fn validate_step(
         .get("args")
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow::anyhow!("Each step must contain an 'args' object."))?;
+
+    // Internal tools are reachable only through an intent's expansion. The prompt never
+    // lists them, but "the model was not shown it" is obscurity, not validation: an internal
+    // tool is typically the one that runs a command with the args it is handed, so accepting
+    // a model-proposed one would skip intent expansion entirely. This check was missing
+    // here while Python had it — found by the L2 verdict contract.
+    if tool.internal && !allow_internal {
+        // Single quotes and this exact wording mirror Python's message: the parity contract
+        // compares the error *class* by substring, so the two must agree on the phrasing.
+        bail!(
+            "Tool '{}' is internal and cannot be proposed directly; it is only reachable through an intent's expansion.",
+            tool.name
+        );
+    }
 
     let missing: Vec<&str> = tool
         .required_args
@@ -340,6 +374,17 @@ pub fn validate_plan(
     root: &Path,
     sandbox: Option<&Path>,
 ) -> Result<()> {
+    validate_plan_with(payload, registry, root, sandbox, false)
+}
+
+/// `validate_plan`, with the internal-tool gate made explicit. See [`validate_step_with`].
+pub fn validate_plan_with(
+    payload: &Value,
+    registry: &Registry,
+    root: &Path,
+    sandbox: Option<&Path>,
+    allow_internal: bool,
+) -> Result<()> {
     let plan = payload
         .get("plan")
         .and_then(Value::as_array)
@@ -349,7 +394,7 @@ pub fn validate_plan(
 
     for (i, step) in plan.iter().enumerate() {
         let n = i + 1;
-        validate_step(step, registry, root, sandbox)
+        validate_step_with(step, registry, root, sandbox, allow_internal)
             .map_err(|e| anyhow::anyhow!("Plan step {n} invalid: {e}"))?;
 
         if multi_step {
@@ -665,15 +710,19 @@ pub fn normalize_plan(payload: &mut Value, registry: Option<&Registry>) {
             if enum_vals.contains(&value) {
                 continue;
             }
-            let low = value.to_lowercase();
+            // Alias keys are normalized the same way the enum values below are, and
+            // deliberately so: matching them exactly while enum values tolerated spacing was
+            // an asymmetry with no reason behind it, invisible only because every alias in the
+            // tree was a single word (`markdown`, `jpeg`). A multi-word one exposes it.
+            let target = sep_normalize(&value);
             if let Some(aliases) = &schema.aliases {
-                if let Some((_, canonical)) = aliases.iter().find(|(k, _)| k.to_lowercase() == low)
+                if let Some((_, canonical)) =
+                    aliases.iter().find(|(k, _)| sep_normalize(k) == target)
                 {
                     args.insert(name.clone(), Value::String(canonical.clone()));
                     continue;
                 }
             }
-            let target = sep_normalize(&low);
             if let Some(m) = enum_vals.iter().find(|e| sep_normalize(e) == target) {
                 args.insert(name.clone(), Value::String(m.clone()));
             }
@@ -989,6 +1038,45 @@ convert:
         }
     }
 
+    /// An alias KEY is matched on the same normalized form as an enum value.
+    ///
+    /// Pass 5's two halves used to disagree — enum values tolerated spacing and case while
+    /// alias keys were compared exactly after lowercasing. Both runtimes carried the same
+    /// asymmetry, so L2 parity never caught it: they agreed on being wrong. It stayed
+    /// invisible because every alias in the tree was a single word (`markdown`, `jpeg`),
+    /// which has no separator to get wrong; ffmpeg's `visually lossless` is the first
+    /// multi-word one. Mirrors `test_normalize_plan_alias_keys_are_separator_insensitive_too`.
+    #[test]
+    fn enum_alias_keys_are_separator_insensitive() {
+        const TOOLS3: &str = "\
+encode:
+  description: Encode
+  optional_args: [quality]
+  arg_schemas:
+    quality:
+      type: enum
+      enum: [best_possible, balanced]
+      aliases: {visually_lossless: best_possible}
+";
+        let r = load_registry_str(TOOLS3).unwrap();
+        for (input, want) in [
+            ("visually_lossless", "best_possible"), // exact, as before
+            ("visually lossless", "best_possible"), // space
+            ("visually-lossless", "best_possible"), // hyphen
+            ("Visually Lossless", "best_possible"), // case + separator
+            ("balanced", "balanced"),               // already valid, untouched
+            ("nonsense", "nonsense"),               // unknown left for validation
+        ] {
+            let mut p = json!({"plan": [{"tool": "encode", "args": {"quality": input}}]});
+            normalize_plan(&mut p, Some(&r));
+            assert_eq!(
+                p["plan"][0]["args"]["quality"],
+                json!(want),
+                "input {input}"
+            );
+        }
+    }
+
     #[test]
     fn file_type_pattern_recursive_checks() {
         let r = reg();
@@ -1041,5 +1129,274 @@ convert:
         .unwrap_err()
         .to_string();
         assert!(err.contains("outside sandbox"), "{err}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn sandbox_boundary_rejects_a_junction_escape() {
+        // The audit's literal F4 repro, exercised through the real entry point
+        // (validate_step -> resolve_path), not just the sandbox module directly: a junction
+        // placed INSIDE the sandbox, pointing to a directory OUTSIDE it, must be rejected —
+        // the previous lexical-only check accepted it because the junction's own path reads
+        // as "inside" without ever touching the filesystem.
+        let r = reg();
+        let tmp = std::env::temp_dir().join(format!(
+            "knaif-core-planner-test-{}-junction",
+            std::process::id()
+        ));
+        let sandbox = tmp.join("sandbox");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"secret").unwrap();
+
+        let link = sandbox.join("escape_link");
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &link.display().to_string(),
+                &outside.display().to_string(),
+            ])
+            .status()
+            .expect("mklink must run on Windows");
+        assert!(
+            status.success(),
+            "junction creation must succeed (no admin needed)"
+        );
+
+        let err = validate_step(
+            &json!({"tool": "find_files", "args": {"path": "escape_link/secret.txt"}}),
+            &r,
+            Path::new("."),
+            Some(&sandbox),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("outside sandbox"), "{err}");
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+}
+
+// ── stem resolution (port of `planner.resolve_stems`) ────────────────────────
+
+/// Arg keys whose values are file paths. Mirrors Python's `_PATH_ARG_KEYS`.
+const STEM_PATH_ARG_KEYS: &[&str] = &[
+    "inputs", "input", "files", "src", "dst", "path", "base", "append",
+];
+
+/// What resolving a stem produced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StemOutcome {
+    /// Nothing to do, or resolved in place.
+    Resolved(serde_json::Value),
+    /// The model named something the sandbox cannot pin down. Carries the question to ask.
+    Clarify(String),
+}
+
+/// True if *value* looks like an extension-less filename stem worth resolving.
+///
+/// The **structural marker** (`_`, `-`, or a digit) is the load-bearing half and is easy to drop
+/// when re-deriving this: without it, ordinary words like `video` or `audio` become stems, and a
+/// plan naming one gets downgraded to a clarify instead of running. Ported from Python's
+/// `_is_stem_candidate`.
+fn is_stem_candidate(value: &str) -> bool {
+    if value.starts_with('$') || value.contains('.') {
+        return false;
+    }
+    if value.contains('*') || value.contains('?') || value.contains('[') {
+        return false;
+    }
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return false;
+    }
+    value
+        .chars()
+        .any(|c| c == '_' || c == '-' || c.is_ascii_digit())
+}
+
+/// Resolve one stem against the sandbox: 0 matches → clarify, 1 → the filename, >1 → clarify.
+///
+/// The two questions are Python's, word for word, because they reach the user.
+fn resolve_one_stem(value: &str, sandbox: &Path) -> Result<String, String> {
+    if !is_stem_candidate(value) {
+        return Ok(value.to_string());
+    }
+    let Ok(entries) = std::fs::read_dir(sandbox) else {
+        return Err(format!(
+            "No file matching '{value}.*' found — please specify the filename."
+        ));
+    };
+    let mut matches: Vec<String> = entries
+        .flatten()
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| e.file_name().to_str().map(String::from))
+        .filter(|n| !n.starts_with('.'))
+        .filter(|n| {
+            n.strip_prefix(value)
+                .is_some_and(|rest| rest.starts_with('.') && rest.len() > 1)
+        })
+        .collect();
+    match matches.len() {
+        0 => Err(format!(
+            "No file matching '{value}.*' found — please specify the filename."
+        )),
+        1 => Ok(matches.remove(0)),
+        _ => {
+            matches.sort();
+            Err(format!(
+                "'{value}' matches multiple files: {} — please specify which one.",
+                matches.join(", ")
+            ))
+        }
+    }
+}
+
+/// Substitute extension-less filename stems in a step's path-bearing args.
+///
+/// Native rendered `-i clip_4k` verbatim and let ffmpeg fail on a missing file, where Python
+/// resolves the stem to `clip_4k.mp4` — or asks which file was meant when the sandbox cannot
+/// decide. Measured on the 2026-09-11 L4 re-run: the second largest native-only failure class
+/// after globs, and **the more serious of the two**, because native was acting on an ambiguous
+/// reference where Python asked (N2).
+pub fn resolve_stems(args: &serde_json::Value, sandbox: &Path) -> StemOutcome {
+    let Some(obj) = args.as_object() else {
+        return StemOutcome::Resolved(args.clone());
+    };
+    let mut out = obj.clone();
+    for key in STEM_PATH_ARG_KEYS {
+        let Some(val) = obj.get(*key) else { continue };
+        match val {
+            serde_json::Value::String(s) => match resolve_one_stem(s, sandbox) {
+                Ok(r) => {
+                    out.insert((*key).to_string(), serde_json::Value::String(r));
+                }
+                Err(q) => return StemOutcome::Clarify(q),
+            },
+            serde_json::Value::Array(items) => {
+                let mut resolved = Vec::with_capacity(items.len());
+                for item in items {
+                    match item {
+                        serde_json::Value::String(s) => match resolve_one_stem(s, sandbox) {
+                            Ok(r) => resolved.push(serde_json::Value::String(r)),
+                            Err(q) => return StemOutcome::Clarify(q),
+                        },
+                        other => resolved.push(other.clone()),
+                    }
+                }
+                out.insert((*key).to_string(), serde_json::Value::Array(resolved));
+            }
+            _ => {}
+        }
+    }
+    StemOutcome::Resolved(serde_json::Value::Object(out))
+}
+
+#[cfg(test)]
+mod stem_tests {
+    use super::*;
+
+    /// Ground truth captured by running Python's `planner.resolve_stems` over the same sandbox.
+    fn sandbox() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("knaif-stems-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in [
+            "clip_4k.mp4",
+            "clip.mp4",
+            "clip.mov",
+            "audio.mp3",
+            ".hidden.mp4",
+        ] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        dir
+    }
+
+    fn run(args: serde_json::Value) -> StemOutcome {
+        resolve_stems(&args, &sandbox())
+    }
+
+    #[test]
+    fn a_unique_stem_resolves_to_the_filename() {
+        assert_eq!(
+            run(serde_json::json!({"input": "clip_4k"})),
+            StemOutcome::Resolved(serde_json::json!({"input": "clip_4k.mp4"}))
+        );
+    }
+
+    #[test]
+    fn a_stem_with_no_match_asks_which_file() {
+        match run(serde_json::json!({"input": "silent_clip"})) {
+            StemOutcome::Clarify(q) => {
+                assert_eq!(
+                    q,
+                    "No file matching 'silent_clip.*' found — please specify the filename."
+                )
+            }
+            other => panic!("expected clarify, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_bare_word_is_not_a_stem() {
+        // THE EASY ONE TO GET WRONG. `clip`, `mov`, `video` have no `_`, `-` or digit, so Python
+        // does not treat them as stems at all — they pass through untouched. Resolving them would
+        // turn `clip` into `clip.mp4` (or a clarify) where Python leaves it alone, which is a
+        // divergence in the *opposite* direction from the bug being fixed.
+        for word in ["clip", "mov", "video", "audio"] {
+            assert_eq!(
+                run(serde_json::json!({ "input": word })),
+                StemOutcome::Resolved(serde_json::json!({ "input": word })),
+                "{word} must pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn refs_globs_and_real_filenames_pass_through() {
+        for value in ["$prev", "*.mp4", "clip.mp4"] {
+            assert_eq!(
+                run(serde_json::json!({ "input": value })),
+                StemOutcome::Resolved(serde_json::json!({ "input": value })),
+                "{value} must pass through"
+            );
+        }
+    }
+
+    #[test]
+    fn a_list_resolves_each_entry() {
+        assert_eq!(
+            run(serde_json::json!({"inputs": ["clip_4k", "audio"]})),
+            StemOutcome::Resolved(serde_json::json!({"inputs": ["clip_4k.mp4", "audio"]}))
+        );
+    }
+
+    #[test]
+    fn an_ambiguous_stem_lists_the_candidates() {
+        let dir = std::env::temp_dir().join(format!("knaif-stems-amb-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in ["take_1.mp4", "take_1.mov"] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        match resolve_stems(&serde_json::json!({"input": "take_1"}), &dir) {
+            StemOutcome::Clarify(q) => {
+                assert!(q.contains("take_1.mov, take_1.mp4"), "{q}");
+                assert!(q.contains("please specify which one"), "{q}");
+            }
+            other => panic!("expected clarify, got {other:?}"),
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

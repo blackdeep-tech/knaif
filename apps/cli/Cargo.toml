@@ -3,6 +3,7 @@ name = "knaif-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
 rust-version.workspace = true
 description = "knaif native CLI — a thin wrapper over the reusable engine crates."
 
@@ -14,6 +15,7 @@ path = "src/main.rs"
 knaif-core = { workspace = true }
 knaif-models = { workspace = true }
 knaif-llm = { workspace = true }
+knaif-skill-api = { workspace = true }
 knaif-skill-ffmpeg = { workspace = true }
 knaif-skill-documents = { workspace = true }
 clap = { workspace = true }

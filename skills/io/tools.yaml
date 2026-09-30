@@ -42,7 +42,7 @@ move_files:
     pattern: "*"
 
 clarify:
-  description: "Ask the user for clarification."
+  description: "Ask the user for clarification, or say the request is not supported by this skill."
   keywords: [clarify, question, ask, unclear, ambiguous]
   required_args: [question]
   optional_args: []
@@ -51,13 +51,13 @@ clarify:
     question: "Which folder?"
 
 reject:
-  description: "Reject the user request (unsafe or out-of-scope)."
+  description: "Refuse a request that violates the active skill's safety policy."
   keywords: [reject, refuse, deny, unsafe, forbidden, dangerous]
   required_args: [reason]
   optional_args: []
   safety_category: safe
   mock_args:
-    reason: "This request is unsafe or out of scope."
+    reason: "This request violates the skill's safety policy."
 
 done:
   description: "Signal that the task is complete."

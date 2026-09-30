@@ -122,12 +122,26 @@ def _flags(entry: dict[str, str]) -> set[str]:
     return set(entry.get("Flags", "").split())
 
 
+def _expand_defines(text: str) -> str:
+    """Inline every ``{#Name}`` whose ``#define Name "literal"`` the script makes.
+
+    The per-tool facts (commands, install folders, winget id, task caption) are defined once
+    at the top and emitted by ISPP into ``[Tasks]``, ``[Run]`` and ``[Code]``; the lint has to
+    read what Inno compiles, not the macro names. Only plain string literals are expanded —
+    computed defines (``Stage``) are not what these checks are about.
+    """
+    defines: dict[str, str] = {}
+    for match in re.finditer(r'^\s*#define (\w+) "([^"]*)"\s*$', text, flags=re.M):
+        defines.setdefault(match.group(1), match.group(2))
+    return re.sub(r"\{#(\w+)\}", lambda m: defines.get(m.group(1), m.group(0)), text)
+
+
 def _code() -> str:
-    """The raw ``[Code]`` body."""
-    return ISS.read_text(encoding="utf-8").split("[Code]", 1)[1]
+    """The ``[Code]`` body, defines expanded."""
+    return ISS_TEXT.split("[Code]", 1)[1]
 
 
-ISS_TEXT = ISS.read_text(encoding="utf-8")
+ISS_TEXT = _expand_defines(ISS.read_text(encoding="utf-8"))
 SECTIONS = _sections(ISS_TEXT)
 TASKS = _entries("Tasks")
 COMPONENTS = _entries("Components")
@@ -287,7 +301,7 @@ def _declared_offers() -> dict[tuple[str, frozenset[str]], tuple[str, bool, str]
     channel is winget: a tool with no ``install.windows`` has nothing for the installer to
     run.
 
-    Returns ``{(component, commands): (mode, default_checked, tool_name)}``.
+    Returns ``{(component, commands): (mode, default_checked, tool_name, winget_id, dirs)}``.
     """
     offers = {}
     for component in COMPONENT_NAMES:
@@ -300,23 +314,43 @@ def _declared_offers() -> dict[tuple[str, frozenset[str]], tuple[str, bool, str]
                 continue
             mode = "all" if tool.get("all_required") else "any"
             key = (component, frozenset(tool["commands"]))
-            offers[key] = (mode, bool(tool.get("required")), tool["name"])
+            win = tool.get("windows") or {}
+            offers[key] = (
+                mode,
+                bool(tool.get("required")),
+                tool["name"],
+                win.get("winget"),
+                tuple(win.get("dirs") or ()),
+            )
     return offers
 
 
-def _installer_offers() -> dict[tuple[str, frozenset[str]], tuple[str, bool, str]]:
-    """What the script actually offers: ``{(component, commands): (mode, checked, task)}``."""
+_OFFER_CHECK = re.compile(r"ShouldInstall(All|Any)\('([^']*)',\s*'([^']*)'\)")
+
+
+def _installer_offers() -> dict[tuple[str, frozenset[str]], tuple[str, bool, str, str, tuple]]:
+    """What the script actually offers:
+    ``{(component, commands): (mode, checked, task, winget_id, dirs)}``."""
     by_name = {t["Name"]: t for t in TASKS}
     offers = {}
     for entry in RUN:
         if entry.get("Filename") != "winget":
             continue
-        match = re.search(r"ShouldInstall(All|Any)\('([^']*)'\)", entry.get("Check", ""))
-        assert match, f"winget [Run] entry has no ShouldInstallAll/Any check: {entry}"
+        match = _OFFER_CHECK.search(entry.get("Check", ""))
+        assert match, f"winget [Run] entry has no ShouldInstallAll/Any(cmds, dirs) check: {entry}"
+        winget_id = re.search(r"--id (\S+)", entry.get("Parameters", ""))
+        assert winget_id, f"winget [Run] entry names no package id: {entry}"
         task_name = entry.get("Tasks", "")
         task = by_name[task_name]
         key = (task["Components"], frozenset(match.group(2).split(",")))
-        offers[key] = (match.group(1).lower(), "unchecked" not in _flags(task), task_name)
+        dirs = tuple(d for d in match.group(3).split("|") if d)
+        offers[key] = (
+            match.group(1).lower(),
+            "unchecked" not in _flags(task),
+            task_name,
+            winget_id.group(1),
+            dirs,
+        )
     return offers
 
 
@@ -350,10 +384,10 @@ def test_offer_satisfaction_mode_follows_all_required() -> None:
     then fails at runtime on a box the installer called ready.
     """
     declared = _declared_offers()
-    for key, (mode, _, task) in _installer_offers().items():
+    for key, (mode, _, task, *_rest) in _installer_offers().items():
         if key not in declared:
             continue  # reported by test_winget_offers_match_the_skill_contracts
-        expected, _, name = declared[key]
+        expected, _, name, *_ = declared[key]
         assert mode == expected, (
             f"task {task!r} uses ShouldInstall{mode.capitalize()} but {name!r} declares "
             f"all_required: {expected == 'all'}"
@@ -368,14 +402,101 @@ def test_dependency_task_defaults_follow_the_required_flag() -> None:
     arrive unchecked, which is what v1.0.1 got wrong.
     """
     declared = _declared_offers()
-    for key, (_, checked, task) in _installer_offers().items():
+    for key, (_, checked, task, *_rest) in _installer_offers().items():
         if key not in declared:
             continue
-        _, expected, name = declared[key]
+        _, expected, name, *_ = declared[key]
         assert checked == expected, (
             f"task {task!r} defaults {'checked' if checked else 'unchecked'} but {name!r} "
             f"declares required: {expected}. Optional tools need `Flags: unchecked`."
         )
+
+
+def test_winget_ids_and_install_dirs_follow_the_skill_contracts() -> None:
+    """The package setup installs and the folders it looks in are ``skill.yaml``'s.
+
+    The folders matter twice: they are where the runtime finds a tool whose installer never
+    touches PATH (Ghostscript, LibreOffice, Tesseract), and they are how setup knows the tool
+    is already there. A folder the installer probes and the runtime does not (or the reverse)
+    means setup re-offers an installed tool, or calls a box ready that ``skills deps`` says
+    is not.
+    """
+    declared = _declared_offers()
+    for key, (_, _, task, winget_id, dirs) in _installer_offers().items():
+        if key not in declared:
+            continue
+        _, _, name, want_id, want_dirs = declared[key]
+        assert winget_id == want_id, (
+            f"task {task!r} installs {winget_id!r} but {name!r} declares windows.winget "
+            f"{want_id!r}"
+        )
+        assert (
+            dirs == want_dirs
+        ), f"task {task!r} probes {dirs} but {name!r} declares windows.dirs {want_dirs}"
+        assert all(";" not in d and "'" not in d for d in dirs), dirs
+
+
+def _dependency_tasks() -> list[dict[str, str]]:
+    return [t for t in TASKS if t["Name"].startswith("deps")]
+
+
+def test_without_winget_every_tool_task_is_grayed_out() -> None:
+    """No winget → each tool task is shown unchecked and disabled, and the heading says why.
+
+    v1.2.0-rc2 showed the tasks, let the user tick them, and skipped every one because the
+    ``[Run]`` checks found no winget — Windows Sandbox, Server and LTSC ship without it. The
+    ``[Run]`` check stays (it guards silent installs), but the wizard must not promise what
+    it cannot do. The tasks are found by caption, so every caption has to be in the list.
+    """
+    code = _code()
+    assert re.search(
+        r"CurPageID\s*=\s*wpSelectTasks\s+then\s+GrayOutToolTasks\s*;", code
+    ), "the tasks page does not call GrayOutToolTasks"
+    body = re.search(r"procedure GrayOutToolTasks;(.*?)\nend;", code, flags=re.S)
+    assert body, "GrayOutToolTasks is not defined in [Code]"
+    body = body.group(1)
+    assert re.search(
+        r"if\s+OnPath\('winget'\)\s+then\s+Exit\s*;", body
+    ), "GrayOutToolTasks must leave the tasks alone when winget IS present"
+    assert re.search(r"ItemEnabled\[I\]\s*:=\s*False", body)
+    assert re.search(r"Checked\[I\]\s*:=\s*False", body)
+    code = body
+    for task in _dependency_tasks():
+        assert (
+            f"'{task['Description']}'" in code
+        ), f"task {task['Name']!r} is not in the no-winget list, so it stays tickable"
+    group = _dependency_tasks()[0]["GroupDescription"]
+    assert f"'{group}'" in code, "the heading that explains the gray-out is not rewritten"
+
+
+def test_the_finish_page_reports_every_tool() -> None:
+    """Setup says which supporting tools are ready, so a skipped or failed install is visible.
+
+    winget's exit status never reaches Inno (``shellexec``), so the report is a fresh probe
+    after the ``[Run]`` stage — with the same commands and folders the offer used.
+    """
+    code = _code()
+    assert re.search(
+        r"CurPageID\s*=\s*wpFinished\s+then\s+ReportTools\s*;", code
+    ), "the finish page does not call ReportTools"
+    body = re.search(r"procedure ReportTools;(.*?)\nend;", code, flags=re.S)
+    assert body, "ReportTools is not defined in [Code]"
+    assert "FinishedLabel.Caption" in body.group(1), "ReportTools never shows its lines"
+    code = body.group(1)
+    reported = {
+        (component, frozenset(cmds.split(","))): (
+            "all" if all_required == "True" else "any",
+            tuple(d for d in dirs.split("|") if d),
+        )
+        for component, cmds, dirs, all_required in re.findall(
+            r"ToolLine\('[^']+',\s*'([^']+)',\s*'([^']*)',\s*'([^']*)',\s*(True|False)\)", code
+        )
+    }
+    for key, (mode, _, task, _, dirs) in _installer_offers().items():
+        assert reported.get(key) == (
+            mode,
+            dirs,
+        ), f"the finish page reports {task!r} as {reported.get(key)}, the offer is {(mode, dirs)}"
 
 
 def test_dependency_tasks_share_one_group_heading() -> None:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -62,20 +61,35 @@ def test_tester_widget_loads_documents_skill_local_helper(tmp_path):
 
 
 def test_documents_corpus_review_finds_skill_eval_helpers():
-    root = Path(".")
-    helper_path = (
-        root / "skills" / "documents" / "notebooks" / "helpers" / "documents_corpus_review.py"
-    )
-    expected_eval_dir = root / "skills" / "documents" / "eval"
+    """Import the helper the way its own docstring says a notebook does.
 
-    spec = importlib.util.spec_from_file_location("documents_corpus_review_test", helper_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
+    This used to `exec_module` the file under a synthetic module name, and CI on Python
+    3.14.7 failed inside the helper's `@dataclass` with `AttributeError: 'NoneType' object
+    has no attribute '__dict__'`. The mechanism is CPython's `dataclasses._is_type`, which
+    resolves a string annotation via an **unguarded** `sys.modules.get(cls.__module__)
+    .__dict__` — the identical lookup in `_process_class` *is* guarded. A dataclass whose
+    defining module is not in `sys.modules` therefore raises before any assertion here can
+    run. Reproduced directly on 3.10 and 3.14: unregistered fails, registered succeeds. It
+    is not a version-specific bug, which is why the fix is not a version guard.
+
+    What is *not* established is why 3.14.7 tripped it when this test did register the
+    module — that could not be reproduced locally, and CI is the only environment with that
+    interpreter. Hence the fix is to stop depending on that bookkeeping at all rather than
+    to patch around a mechanism only half understood.
+
+    Importing by name is what a normal import does for you, and it exercises the path that
+    actually ships: the helper documents `from documents_corpus_review import
+    review_corpus, render_review`. `test_tester_widget_loads_documents_skill_local_helper`
+    above already does exactly this for its sibling.
+    """
+    helpers = Path("skills") / "documents" / "notebooks" / "helpers"
+    expected_eval_dir = Path("skills") / "documents" / "eval"
+
+    sys.path.insert(0, str(helpers))
     try:
-        spec.loader.exec_module(module)
+        import documents_corpus_review
     finally:
-        sys.modules.pop(spec.name, None)
+        sys.path.remove(str(helpers))
+        sys.modules.pop("documents_corpus_review", None)
 
-    assert Path(module._SKILL_EVAL).resolve() == expected_eval_dir.resolve()
+    assert Path(documents_corpus_review._SKILL_EVAL).resolve() == expected_eval_dir.resolve()

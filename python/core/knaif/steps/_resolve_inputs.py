@@ -39,6 +39,10 @@ class ResolveInputs(Step):
         if isinstance(raw_paths, str):
             raw_paths = [raw_paths]
         extensions = args.get("extensions")
+        # Filtering and recursion are separate requests. `extensions` used to imply `rglob`,
+        # so keeping only media also descended into every nested directory; nothing passed
+        # `extensions` while that held, so the coupling was never exercised.
+        recursive = bool(args.get("recursive"))
         resolved: list[str] = []
         for raw in raw_paths:
             p = Path(raw)
@@ -47,7 +51,7 @@ class ResolveInputs(Step):
                 p = (base / p).resolve()
             _assert_in_sandbox(p, ctx.sandbox)
             if p.is_dir():
-                iterable = p.rglob("*") if extensions else p.glob("*")
+                iterable = p.rglob("*") if recursive else p.glob("*")
                 for child in iterable:
                     if child.is_file():
                         if extensions and child.suffix.lstrip(".").lower() not in [

@@ -1,4 +1,15 @@
-"""Tests for the ffmpeg skill ARTIFACT_RUNNER hook."""
+"""ffmpeg exports no artifact runner, and that is the point.
+
+`Skill.run_artifact` is the extension point for a skill whose artifact is **not** a command
+line — `documents` hands over a JSON plan payload. Every ffmpeg artifact *is* a command line,
+so it goes through `knaif.evalsuite.chain.run_command_chain`: one per-row directory,
+provisioned by copy, with every path token re-rooted into it and the command run as rendered.
+
+ffmpeg used to supply `_run_artifact`, which rewrote `-i` to the fixture path and the output
+into a separate directory — so the `output == input` collision `ffmpeg_175` is about was
+removed before ffmpeg saw it, and a non-zero exit came back as the same `None` as a missing
+binary. Retired 2026-09-12; see T5b in docs/plans/2026-09-11-reject-clarify-taxonomy.md.
+"""
 
 from __future__ import annotations
 
@@ -9,16 +20,7 @@ from knaif.skill import Skill
 SKILL_DIR = Path(__file__).parents[2]
 
 
-def test_artifact_runner_registered_on_skill():
-    """The ffmpeg skill must export an ARTIFACT_RUNNER that is callable."""
+def test_ffmpeg_exports_no_artifact_runner():
+    """A second implementation of the execution rule is what let the lanes drift apart."""
     skill = Skill.load(SKILL_DIR)
-    assert skill.artifact_runner is not None
-    assert callable(skill.artifact_runner)
-
-
-def test_artifact_runner_returns_none_for_non_ffmpeg_command(tmp_path: Path):
-    """Passing a non-ffmpeg command returns None without invoking subprocess."""
-    skill = Skill.load(SKILL_DIR)
-    runner = skill.artifact_runner
-    result = runner("echo hello", tmp_path / "fixture.mp4", tmp_path / "out")
-    assert result is None
+    assert skill.artifact_runner is None

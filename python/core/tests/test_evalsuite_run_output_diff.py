@@ -76,7 +76,22 @@ def test_run_output_diff_writes_scoreboard(tmp_path: Path):
     with (
         patch("knaif.evalsuite.cli._make_agent"),
         patch("knaif.evalsuite.cli.run_corpus", return_value=[output]),
-        patch("knaif.evalsuite.cli._execute_against_fixture", return_value=baseline_path),
+        # Baselines are rendered commands, so they go through the chain now, not the
+        # skill's artifact_runner (T5b: ffmpeg retired its runner, and routing baselines
+        # through it produced no reference artifacts at all).
+        patch(
+            "knaif.evalsuite.cli.run_command_chain",
+            return_value=[
+                {
+                    "command": "",
+                    "resolved_command": "",
+                    "returncode": 0,
+                    "stderr": "",
+                    "output": baseline_path,
+                    "collapsed_paths": [],
+                }
+            ],
+        ),
         patch(
             "knaif.evalsuite.cli._load_skill_verifiers",
             return_value=({"output_diff": MagicMock(return_value=fake_result)}, {}),
@@ -137,7 +152,7 @@ def test_run_output_diff_skips_row_without_baseline(tmp_path: Path):
     with (
         patch("knaif.evalsuite.cli._make_agent"),
         patch("knaif.evalsuite.cli.run_corpus", return_value=[output]),
-        patch("knaif.evalsuite.cli._execute_against_fixture", return_value=None),
+        patch("knaif.evalsuite.cli.run_command_chain", return_value=[]),
         patch(
             "knaif.evalsuite.cli._load_skill_verifiers",
             return_value=({"output_diff": mock_diff}, {}),
@@ -164,6 +179,95 @@ def test_run_output_diff_skips_row_without_baseline(tmp_path: Path):
     mock_diff.assert_not_called()
     data = json.loads(list(save_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
     assert data["rows"][0]["knaif_score"] is None
+
+
+def test_run_stamps_backend_identity_into_scoreboard(tmp_path: Path):
+    """`run` records the eval backend key and, when the config declares it, the
+    public model name — so the report can name the arm by the shipped model."""
+    corpus_path = tmp_path / "eval.jsonl"
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "clip.mp4").write_bytes(b"fake")
+    save_corpus(
+        [
+            CorpusRow(
+                id="r001",
+                utterances=["convert to mp4"],
+                expected_outcome="plan",
+                fixture="clip.mp4",
+                baseline={"command": "ffmpeg -y -i input.mp4 out.mp4"},
+                expected_tool="convert_video",
+                tags=["convert"],
+            )
+        ],
+        corpus_path,
+    )
+
+    config = tmp_path / "backends.yaml"
+    config.write_text(
+        "backends:\n"
+        "  my-ft-q4:\n"
+        "    backend: llama_cpp\n"
+        "    public_name: knaif-demo-v1\n"
+        "    options: {path: models/x.gguf}\n",
+        encoding="utf-8",
+    )
+
+    save_dir = tmp_path / "scores"
+    output = _fake_agent_output(tmp_path)
+    baseline_path = tmp_path / "sandbox" / "my-ft-q4" / "baselines" / "r001" / "baseline.mp4"
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    baseline_path.write_bytes(b"baseline")
+    fake_result = VerifyResult(
+        score=0.9, matched=["container=mp4"], failed=[], verifier_kind="output"
+    )
+
+    with (
+        patch("knaif.evalsuite.cli._make_agent"),
+        patch("knaif.evalsuite.cli.run_corpus", return_value=[output]),
+        patch(
+            "knaif.evalsuite.cli.run_command_chain",
+            return_value=[
+                {
+                    "command": "",
+                    "resolved_command": "",
+                    "returncode": 0,
+                    "stderr": "",
+                    "output": baseline_path,
+                    "collapsed_paths": [],
+                }
+            ],
+        ),
+        patch(
+            "knaif.evalsuite.cli._load_skill_verifiers",
+            return_value=({"output_diff": MagicMock(return_value=fake_result)}, {}),
+        ),
+    ):
+        _run(
+            [
+                "run",
+                "--skill",
+                "ffmpeg",
+                "--verifier",
+                "output_diff",
+                "--corpus",
+                str(corpus_path),
+                "--fixture-dir",
+                str(fixture_dir),
+                "--sandbox",
+                str(tmp_path / "sandbox"),
+                "--save",
+                str(save_dir),
+                "--config",
+                str(config),
+                "--backends",
+                "my-ft-q4",
+            ]
+        )
+
+    data = json.loads((save_dir / "ffmpeg_my-ft-q4_output_diff.json").read_text(encoding="utf-8"))
+    assert data["backend"] == "my-ft-q4"
+    assert data["backend_public_name"] == "knaif-demo-v1"
 
 
 def test_run_output_diff_choice_in_parser():

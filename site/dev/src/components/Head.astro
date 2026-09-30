@@ -1,0 +1,13 @@
+---
+// Override of Starlight's Head. Upstream's output is rendered untouched; this only appends
+// the font preloads.
+//
+// Starlight's `head:` config array cannot do this job — the href is a hashed build artefact
+// (`/_astro/dm-sans-latin-wght-normal.<hash>.woff2`), so it has to come from a `?url` import
+// inside the Vite pipeline rather than a literal string in astro.config.mjs.
+import Default from "@astrojs/starlight/components/Head.astro";
+import FontPreload from "knaif-shared/FontPreload.astro";
+---
+
+<Default><slot /></Default>
+<FontPreload />

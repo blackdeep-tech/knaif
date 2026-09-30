@@ -321,9 +321,394 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 
 # Open / Next (no dedicated plan yet)
 
+- [x] **4B audit and measured improvement — experiment pass** — closed 2026-09-17; [results and follow-ups](plans/2026-09-17-4b-audit-and-improvement.md). Deterministic speed fix measured with no observed control regressions; model candidate rejected, prompt diagnostic not adopted. Broader model improvement remains open. Nothing committed or promoted.
+- [x] **Re-lock both snapshots — done 2026-09-17.** `POLICY_VERSION` 3 required it and the evidence is in [`2026-09-17_t7-relock-policy-v3_success`](../evals/runs/2026-09-17_t7-relock-policy-v3_success/report.md). ffmpeg **0.9388954172 / 0.9801227169** (third independent reproduction of the corrected instrument, to ten decimals), documents **0.9817073171 / 1.0** (unchanged in value). Both **S2 ACCEPTED** (39 / 36 thresholds), safety 11/11 and 9/9, suite green. The promotion verdict was recorded first, per T7's ordering rule.
+- [x] **Skill and prompt workbench** — **done 2026-09-22** (`notebooks/skill_workbench.ipynb`) — one notebook, both runtimes, any model, chosen backend, dry-run or real, with measured timing. Plan: [skill-prompt-workbench](plans/2026-09-21-skill-prompt-workbench.md). Wanted before the v2 publish decision, because the current testers cannot make it: they use a pre-restructure `src/skills/` path, list no knaif fine-tune at all, and show the model all 30 tools where production sends ~8 — which changed **4 of 14** plans and made the model look *worse* than it is. Carries two core fixes: `infer_stream` needs `registry_override` (T1), and `detect_backend()` reports `CUDA0` even when every layer is on CPU (T2), which is what the L4 lane records.
+- [x] **documents silently overwrites an existing file with its default output name** — FIXED 2026-09-24, both runtimes: a taken derived name moves to `<name>-1<ext>`; explicit outputs honoured (skills/documents/SPEC.md). Was: both runtimes. `convert sample.txt to markdown` replaces an existing `sample.md`; `protect_pdf` replaces `sample-protected.pdf`. Found by the 2026-09-24 native L4 (16 rows). Blocks the v2 publish by owner decision.
+- [x] **The native L4 lane cannot grade read-only documents tools** — FIXED 2026-09-24: native dumps each read result as a `===KNAIF-RESULT===` line in Python's shape and the lane grades it; the lane also counts rewritten files, not only new ones. Was: — `inspect_document`/`extract_text`/`find_in_document` print their answer; the lane grades files only, so every criterion reads `None` (~25 rows of the 2026-09-24 L4). Blocks the v2 publish by owner decision.
+- [x] **Native builds do not ship PDFium, so native OCR fails everywhere** — **done 2026-09-26, shipped in 1.2.0** ([release-1.2](plans/2026-09-25-release-1.2.md) R2: chromium/7999 pinned in `contracts/release/pdfium.yaml`, staged beside the binary by `package.sh`) — `build_native_kind.sh` stages no PDFium library beside the binary, and the documents OCR tools refuse with "could not load the PDFium library" (all 7 OCR rows of the 2026-09-24 L4 run). The installer decision already says bundle PDFium (BSD); until the build stages it, dev L4 runs set `KNAIF_PDFIUM_PATH` to pypdfium2's copy. Blocks documents native `supported`.
+- [x] **Inference config parity** — **done 2026-09-26** (T8 closed by release-1.2 R3) — the two lanes feed identical tokens but configure llama.cpp differently (flash attention, batch size, cross-call cache reuse), and on a borderline token that alone flipped `extract_audio`/`strip_audio` (68% → 20%). Measure the eval noise floor first, then pin the config in `generation.yaml` for both runtimes. Plan: [inference-config-parity](plans/2026-09-23-inference-config-parity.md). Before the v2 L3/L4 runs.
+- [x] **Chain source threading** — **done 2026-09-26, shipped in 1.2.0** ([plan](plans/2026-09-23-chain-source-threading.md)) — core rewrites a later step's input onto an earlier step's output whenever both read the same file, so every fan-out plan (thumbnail + compress of one video; three trims of one clip) is silently turned into a straight chain before it runs. Found in the workbench 2026-09-23. Plan: [chain-source-threading](plans/2026-09-23-chain-source-threading.md). No retrain; independent of the v2 publish. Native does not port the threader, so the runtimes already disagree.
+- [x] **Promote the model pointer to `knaif-qwen3-4b-v2`** — **done 2026-09-29:** `knaif-qwen3-4b-v2` (sft-v4) and `knaif-qwen3-1.7b-v2` (sft-v9) published with knaif 1.2.0; the 4B is both skills' `recommended_model` — **REPLACED 2026-09-25 by [release-1.2](plans/2026-09-25-release-1.2.md):** `sft-v4` is not published; the next training cycle's 4B and 1.7B ship as the public `v2`s with knaif 1.2.0. Original note: the verdict authorises it ([`PROMOTION_VERDICT.md`](../evals/runs/2026-09-15_t6g-sizing-vs-sending_success/PROMOTION_VERDICT.md): ffmpeg outcome +2.00 pp, documents +1.83 pp, 26/26 required slices vs v3's 25/26). Three steps, in order: publish the GGUF (`scripts/publish_model.py` fills `url`/`sha256`, currently `TODO` in `contracts/models/model-manifest.yaml`), then move `recommendations:`, then both skills' `recommended_model:`. Moving the pointers first would break `knaif models pull`. The 1.7B tier is a **separate open decision** — its candidate clears documents 28/28 but misses ffmpeg by 2, while the published v1 misses by 9/10 and fails `ffmpeg_safety_system_root_dir`.
+- [x] **The eval lane is not bitwise reproducible, and nothing says so** — **resolved 2026-09-24** by [inference-config parity](plans/2026-09-23-inference-config-parity.md): the lane IS deterministic (same config twice: 0 flips over 469 utterances); what moved rows was KV-prefix reuse from the previous row and the llama.cpp compute config — `documents_042#0` flips between configs, not between runs. Both are now pinned in `generation.yaml`; the measured noise floor is in `docs/EVAL_FRAMEWORK.md`. Original note: — inference runs at `temperature=0.0`, yet `documents_042#0` emitted `order: "-1"` on one run and `order: "reverse"` on two others from identical model bytes and prompt (llama.cpp GPU reduction order, not sampling). One row in 1,015, but a single documents row is **0.22 pp of `avg_knaif_score`** on a 154-row denominator. Consequence: artifact-average deltas below roughly half a point are not decision-grade on documents. The 2026-09-17 candidate rejection is unaffected — it rests on three *outcome* regressions, and outcome accuracy reproduced exactly on both skills — but its artifact component (1.0 → 0.99669) is within this noise and should not be quoted alone. Measure the actual run-to-run spread before any future decision leans on a small artifact delta.
+- [x] **Evaluation trust follow-up — gate hardening done, both gates.** [Audit findings](../evals/runs/2026-09-17_audit-control-v1_success/report.md). `check_acceptance` and `check_native_acceptance` now fail closed on:
+  - absent or incomplete **coverage**, and recorded **fixture-integrity** drift;
+  - **non-finite numbers anywhere a threshold is compared** — aggregates, slice rates, `max_failures` row counts, safety pass rates, coverage, and the native raised floor (a NaN *baseline* made `accepted - tolerance` NaN, which nothing could fail). One `_finite()` helper feeds every comparison rather than four separately-patched sites; a NaN in a `max_failures` slice used to raise `ValueError` out of the gate instead of rejecting the run;
+  - an **empty safety population**, a safety result **for a different skill** (documents' 9 rows could certify ffmpeg's 11 — same backend, same rate, minutes apart), and safety **from a different model**.
+
+  Model identity is compared as identifier *sets*, not `backend == backend`: a native scoreboard records the lane in `backend` and the model in `backend_public_name`, while its paired safety record puts the model in `backend`. A direct string compare rejects **4 of the 26 real scoreboard/safety pairs** under `evals/runs/`; the set rule rejects 0 and still catches a genuine swap. `load_acceptance` now stamps `skill` so a bar can be bound to its evidence at all.
+
+  Also: `schema_validity` no longer counts `parse_error` as valid; the train/eval verbatim-copy test covers **both** skills (it was ffmpeg-only, which is why `documents_079` was never caught). The native lane keeps its own lowerable coverage floor — `check_acceptance` takes `coverage_floor`, so there is one rule, not two that can disagree.
+- [ ] **Safety population count is still unbound** — the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
+- [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
+- [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
+- [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
+  tests; next version. Native asks `[y/N]` through `ask_yes_no` (`apps/cli/src/main.rs`: "Proceed?"
+  before running, and the model-download question), so Enter declines; the Python SDK app already
+  asks `Proceed? [Y/n]` (`python/core/knaif/app.py`) — the two runtimes disagree today.
+  Low risk (owner, 2026-09-29): `safety_category: destructive` means "writes a file" — every
+  transformation tool carries it — while nothing can delete, overwrite an existing file (a taken
+  name gets `-1`) or run a shell, and truly destructive requests are rejected. So "Proceed?"
+  approves writing new files only. Before switching: `flush_terminal_input` is a no-op off Unix,
+  so on Windows an Enter typed during a long CPU inference would answer the prompt, and with a Yes
+  default silently approve — flush the console input buffer there first (`FlushConsoleInputBuffer`).
+  A non-tty stdin keeps meaning "no answer". Consider renaming the category (`writes` vs
+  `read_only`) so "destructive" stops suggesting deletion; REQUIREMENTS.md §safety uses the term.
+- [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
+
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
 
+- [~] **2026-09-07 core-principles audit follow-ups** —
+  `docs/audits/2026-09-07-core-principles-and-rtx5080.md`, 12 findings (F1 critical, F2–F7
+  high, F8–F12 medium), reproduced/source-reviewed on the RTX 5080 box. Suggested order in
+  the audit's own "Suggested order of follow-up work".
+  **A follow-up review of the fixes** (`docs/audits/2026-09-07-fix-review.md`) found five
+  counterexamples, R1–R5 — every one independently reproduced here before fixing, and every
+  one now closed; each is recorded against its parent finding below. The review's own
+  documentation corrections are applied too: the `evals/INDEX.md` row no longer claims
+  hardware invariance (aggregate similarity across different verifiers/row sets cannot
+  establish it), the audit's ffmpeg category paragraph no longer links clarify routing
+  scores to F2, and `justfile`'s parity comment no longer says native previews chain step 1.
+  Status:
+  - [x] **F6 — regression gate was fail-open, FIXED.** `just eval-regression <skill>`
+    silently compared the snapshot to itself when no `--current` was given (always printed
+    "No regressions ... OK"); `diff_snapshots` was also fail-open on a verifier/population
+    mismatch and on a metric `current` dropped entirely. Now `cmd_regression` requires
+    `--current` to point at an existing file, and `diff_snapshots` raises `ValueError` on a
+    verifier mismatch, a `total` (population) mismatch, or a metric present in baseline but
+    absent from current — `cmd_regression` and `cmd_regression_all_skills` both surface that
+    as a failure instead of silently passing. `justfile`'s `eval-regression` recipe now takes
+    a required `current` scoreboard-path argument. Tests:
+    `python/core/tests/test_evalsuite_regression_cmd.py`.
+    **R3 follow-up (fixed):** the identity guard was itself fail-open — it only compared
+    `verifier`/`total` when *both* sides declared them, so a current scoreboard that simply
+    omitted them skipped the check entirely and could still certify. Now, when the baseline
+    declares one, the current run must declare it too (missing → actionable error), tested
+    separately from the explicitly-unequal case.
+  - [x] **F1 (critical) + F2 — same root cause, fixed together.** No trusted/untrusted
+    boundary: `internal: true` FFmpeg steps (`run_preview`/`run_batch`/`run_concat`, all
+    `safety_category: safe`) were hidden from the prompt but still accepted by
+    `validate_step` from raw model output, and `run_ffmpeg()`/`subprocess.run` executed
+    whatever argv arrived — model output could pick the executable. Separately, the
+    destructive-intent check in `agent.py` only looked at the *expanded leaf's*
+    `safety_category`, never the original intent's, so a `destructive` intent (e.g.
+    `strip_audio`) that expanded into `safe` leaves ran with `confirmed=False`. Fixed:
+    `validate_step`/`validate_plan` gained `allow_internal` (default False — rejects a
+    plan naming an internal tool directly; the one legitimate caller, the post-expansion
+    re-validation of `Intent.expand()`'s own trusted output, opts in explicitly).
+    `_execute_steps` now carries the originating intent's tool/safety_category through
+    expansion (`intent_destructive`), so a destructive intent blocks before its first
+    leaf runs even when every leaf is individually `safe`; direct destructive leaves
+    (no intent wrapper) keep their existing check too. Tests:
+    `python/core/tests/test_tool_trust_boundary.py` (registry-only) +
+    `skills/ffmpeg/python/tests/test_trust_boundary_ffmpeg.py` (the audit's two literal
+    reproductions, executed for real — both now raise before any subprocess/file write).
+    **R5 follow-up (fixed):** the inherited destructive gate also blocked a destructive
+    intent's *own terminal clarify* — `prepare_for_platform` with an unknown platform expands
+    deterministically to `clarify`, and the new check turned that recoverable question into a
+    hard error. Terminal tools (`clarify`/`reject`/`done`) are now exempt: they perform no
+    action and already `should_stop` the loop, so nothing destructive can follow one in the
+    same sub-plan regardless of step order — the exemption cannot reopen F2, and a test pins
+    that a real (non-terminal) expansion is still blocked.
+  - [x] **F7 — parity `canon_token` collapses meaningful differences, fixed.** Any
+    `/`-containing token was reduced to its basename, so `a/clip.mp4`/`b/clip.mp4`
+    compared equal and FFmpeg filter expressions with `/` (e.g. `pad=...(ow-iw)/2`)
+    collapsed to `'2'`. Fixed: `Outcome.key()` now canonicalizes argv *positionally*
+    (`_canon_argv`) — only the value after each `-i` and the trailing output token,
+    never a filter/codec argument — and resolves those path positions lexically
+    against the shared `--cwd` (`_resolve_against`, text-only, no filesystem access)
+    instead of basename alone, so `a/clip.mp4` and `b/clip.mp4` correctly stay
+    different while native-relative and python-absolute of the *same* file still
+    match. `compare()`/`main()` thread `cwd` through; `key(cwd=None)` keeps the old
+    basename fallback for callers with no shared cwd. Tests: new assertions in
+    `scripts/parity_check.py`'s `--self-test` reproducing both audit examples
+    (RED confirmed pre-fix — the filter pair literally collapsed to `'2'` — GREEN
+    post-fix).
+    **R4 follow-up (fixed):** only *command* mode was repaired; **plan** mode still ignored
+    `cwd` and routed every string through basename normalization, so `a/report.pdf` and
+    `b/report.pdf` compared equal and aspect values `4/3` / `16/3` both collapsed to `3`.
+    Plan mode now normalizes by argument contract: a new `_PLAN_PATH_ARG_KEYS` (mirroring
+    `planner._PATH_ARG_KEYS` + outputs, and now the single definition `_SIGNIFICANT_ARG_KEYS`
+    aliases so the two can't drift) marks which keys hold paths; those resolve against the
+    shared cwd, every other string compares verbatim. `plan_equiv_modulo_defaults` takes the
+    same treatment so a benign abs/rel difference on a shared path key isn't reported as
+    divergence. Self-test now covers plan comparisons, not just rendered commands.
+  - [x] **F3/F4 — native path resolution / sandbox containment, fixed.** Native FFmpeg
+    probed `inputs` directly against the process cwd, bypassing sandbox resolution
+    entirely; native sandbox checks (`documents`, `ffmpeg`, core `planner.rs`) were each
+    their own lexical-only `.`/`..` collapse and didn't resolve symlinks/junctions, so a
+    junction inside the sandbox read outside it (reproduced on Windows; Python's
+    `_resolve_path` already rejected the same case, since `Path.resolve()` calls into the
+    OS). Fixed:
+    - **F4 (shared primitive):** new `knaif-core::sandbox` module —
+      `resolve_real(p, base)` canonicalizes every *existing* ancestor (following
+      symlinks/junctions) and appends any not-yet-created tail lexically on top, falling
+      back to pure lexical normalization only when nothing on the path exists at all;
+      `assert_in_sandbox` uses it for the boundary check. Re-exported from
+      `knaif-skill-api::sandbox` (both `ffmpeg`-native and `documents`-native already
+      depend on that crate) — that's a real module now, not the "skeleton only" stub F11
+      also flags. `knaif-core::planner::resolve_path`'s sandboxed branch, ffmpeg
+      `engine.rs`'s `assert_in_sandbox`, and documents `run.rs`'s `assert_in_sandbox` all
+      now delegate to the shared primitive instead of their own local
+      `lexical_abs`/`lexical_normalize` copies (removed as dead code).
+    - **F3 (missing input check):** `expand`/`expand_concat` in ffmpeg `run.rs` now call
+      a new `assert_input_in_sandbox` — port of Python's `ResolveInputs` step (relative
+      paths resolve against the sandbox, not cwd) — on every `inputs` entry *before*
+      `probe_input` reads it. Only the derived *output* path was ever checked before;
+      that doesn't protect a read (an absolute input outside the sandbox with an
+      explicit in-sandbox output reached `ffprobe`/render with no rejection). The
+      raw/possibly-relative input string still flows into `probe_input`/`render_command`
+      unchanged — this only gates the read, it doesn't change what gets rendered.
+    - Tests: `knaif-core::sandbox` unit tests (including a real Windows junction via
+      `mklink /J`, no admin needed, plus a parallel Unix symlink test) +
+      `planner::tests::sandbox_boundary_rejects_a_junction_escape` (through the real
+      `validate_step` entry point) + `engine::tests::assert_in_sandbox_rejects_a_
+      junction_escape` (ffmpeg) + `run::tests::sandbox_junction_escape_rejected`
+      (documents) + `run::tests::sandbox_input_escape_with_in_sandbox_output_is_rejected`
+      (ffmpeg, F3's exact repro shape). RED confirmed on every junction/input-escape
+      test pre-fix, GREEN post-fix. Full workspace (`cargo test --workspace`): 260
+      passed, 0 failed; `cargo fmt --all -- --check` and
+      `cargo clippy --workspace --all-targets -- -D warnings` both clean.
+    - **R1 follow-up (fixed).** The F3 check validated the *resolved* input but still probed
+      and rendered the *raw* string, so with a working directory different from the sandbox,
+      `clip.mp4` cleared `<sandbox>/clip.mp4` while ffprobe/ffmpeg opened `<cwd>/clip.mp4` —
+      a different file. Validating one representation while reading another is not a
+      boundary. `resolve_input_in_sandbox` now *returns* the checked path and both `expand`
+      and `expand_concat` probe and render it (concat's whole input list included); open/CLI
+      mode still returns the raw string, so cwd-relative behavior there is unchanged.
+      Verified end-to-end through the rebuilt CLI with real ffmpeg: from `cwd=outside` with
+      same-named 32×32 (sandbox) and 16×16 (outside) clips, the artifact is now **32×32** —
+      it was consuming the outside file before. Test:
+      `run::tests::relative_input_renders_the_sandbox_file_not_the_cwd_one`.
+    - **R2 follow-up (fixed).** `resolve_real` lexically collapsed `..` *before* canonicalizing,
+      which is not what a filesystem does: on POSIX, `..` after a symlink resolves relative to
+      the link's **target**, so cancelling `link/..` textually erases the link and yields a
+      path the real I/O never uses — the guard would clear a read that lands outside. The raw
+      path (with `..` intact) now goes to the OS: the longest existing prefix is canonicalized
+      and only a not-yet-created tail is applied lexically, so each platform gets its own
+      semantics, matching Python's `Path.resolve()` on both. Measured on this box that Windows
+      resolves `junction\..` **lexically** (stays inside), so both behaviors are now pinned:
+      `assert_in_sandbox_rejects_a_symlink_followed_by_parent` (`#[cfg(unix)]`, the escape) and
+      `junction_followed_by_parent_matches_windows_semantics` (`#[cfg(windows)]`, the
+      in-sandbox result). Also added: `canonicalize`'s Windows `\\?\` verbatim prefix is
+      stripped for plain drive paths, so resolved inputs render as ordinary `C:\…` and still
+      line up with Python's paths in cross-runtime comparison.
+  - [x] **F5 — native `run` silently drops every plan step after the first, fixed (interim,
+    per the audit's own recommendation).** `main.rs` only dispatched `steps.first()`; a valid
+    multi-step plan (e.g. strip_audio → resize_video) previewed/executed only step one and
+    still exited 0 — reporting full success for partial completion, and for a destructive
+    plan, silently skipping a real side effect the request asked for. A full ordered
+    multi-step executor (variable binding, per-intent confirmation, chain execution) is a
+    substantially larger feature than this bug fix — the audit explicitly OKs the interim:
+    "explicitly reject unsupported multi-step execution instead of reporting success for
+    only the first step." Fixed: new `decide_steps`/`StepDecision` (`Empty` / `Single(idx)` /
+    `Unsupported { total }`) — a plan with more than one step now prints
+    `reject: this request needs N steps, ...` (no partial dispatch of step 1 at all) and
+    returns, using the same `reject:`-prefixed convention `cmd_run` already uses for a real
+    `reject` plan step, so `scripts/parity_check.py`'s `parse_native` picks it up as
+    `kind="reject"` for free — no parity-tooling code change needed, only its now-stale
+    "previews only step 1" docstring/comment (updated: a chain row's native outcome is now
+    `reject`, so it correctly falls through to `mismatch` against python's multi-command
+    outcome rather than the old lenient `chain-native-single-step` bucket, which is kept for
+    its narrower original trigger — both sides still rendering `commands` — not deleted).
+    **Superseded 2026-09-10 (a):** the refusal stopped saying `reject:` and started printing
+    `not_implemented: this request needs N steps, ...`, because a capability the port has not
+    built and a request the runtime declined are opposite facts about the product and coverage
+    cannot be computed while they share a label.
+    **CLOSED 2026-09-10 (b) — the refusal is gone, replaced by the executor** (Workstream E of
+    `docs/plans/2026-09-10-skill-quality-lifecycle.md`). Native runs a plan's steps in order:
+    control tools end the whole plan, execution stops at the first failure and names which
+    steps ran, and `--dry-run` previews every step. `StepDecision` keeps only `Empty` and
+    `Run { total }`; `Unsupported` is deleted. This is what the audit actually recommended —
+    the refusal was the interim it explicitly OK'd.
+    Two consequences worth recording: `parity_check.py`'s lenient `chain-native-single-step`
+    bucket is **deleted**, because a branch that prefix-matched the first command would now
+    pass every chain row on step 1 alone and hide exactly the step-2..n divergence the executor
+    makes possible; and `not_implemented:` still exists, now produced by an unimplemented skill
+    tool rather than by chains.
+    Tests: `decide_steps_empty_plan_is_empty` / `_single_step_is_ok` /
+    `_multi_step_runs_every_step` / `chain_failure_context_accounts_for_every_step` in
+    `apps/cli/src/main.rs`, plus six end-to-end cases in `apps/cli/tests/executor_semantics.rs`
+    — all deterministic, no model/GPU needed, per the audit's own ask.
+  - [~] **F9 — acceptance snapshots RE-LOCKED (2026-09-08). HALF DONE — the identity half is
+    outstanding.** The audit asked for two things: adopt compatible full-corpus executing
+    snapshots, *and* "store corpus hash/row IDs, model checksum/config, and code identity" in
+    them. The first is done (below). The second is **not**: the re-locked snapshots carry
+    metrics plus `backend`/`backend_public_name` (a side effect of the report-labelling
+    change) but no corpus hash, no row IDs, no model sha256, no git SHA. Until that lands the
+    gate still cannot distinguish "behavior changed" from "someone edited the corpus" — the
+    exact conflation the audit flagged, and the one that makes an aggregate verdict
+    unreadable after a corpus edit. Do not mark F9 closed on the strength of the re-lock
+    alone.
+    What IS done — both skills now
+    hold a full-corpus **`success`** bar: ffmpeg `cheap`/297 → **`success`/847** (outcome
+    0.902 / knaif 0.9738 / tool 0.891 / schema 0.985), documents `success`/129 →
+    **`success`/164** (0.976 / 1.000 / 0.976 / 0.9939). Runs:
+    `evals/runs/2026-09-08_f9-relock_success`.
+    **Two different justifications, deliberately.** ffmpeg is a *measured improvement* —
+    joined per row against the pre-fix run at the same verifier and population: 0 outcome
+    flips, 0 score drops, 4 gains, all `ffmpeg_273` at 0.667 → 1.000, precisely the rows the
+    chain-execution fix targeted. documents is a *coverage* re-lock, **not** an improvement:
+    behavior is bit-identical (0 flips over 163 joined utterances) and the aggregate move is
+    entirely the population (129 → 164, adding the harder strata). AGENTS.md's "only when
+    adopting a measured improvement" is about not hiding regressions; a bar that the
+    now-fail-closed gate *cannot evaluate* (population mismatch → raises) is the other
+    legitimate reason to re-lock, and the audit prescribes it.
+    ⚠️ **Verifier is `success`, not `output_diff`** — reversing what this entry and
+    `just eval-snapshot` previously assumed. The corpus-level counts (218 baselines vs 145
+    `success_criteria`) predict the wrong winner; measured head-to-head on the real runs,
+    `success` grades **574** plan rows (91.2%) to output_diff's **527** (86.0%), and
+    output_diff's extra misses are encoder-level diffs against the baseline command's output
+    (`pix_fmt`, `size` ±20%) rather than artifact correctness. `just eval-snapshot` now takes
+    the verifier as an argument (default `success`) instead of hardcoding `output_diff`, and
+    the SOP records how to choose. Gate verified **both ways** — exit 0 on the real run, exit
+    1 on an injected −0.05 regression.
+  - [x] **Harness defect found while doing F9: scoreboard rows had no per-utterance key.**
+    `score_corpus` (used by `cheap` **and** `success` — i.e. both committed bars) omitted
+    `utterance_idx`, which `score_corpus_output_diff` always emitted. A corpus row expands to
+    many utterances sharing one `id`, so the only available join key was `id`, which keeps the
+    last utterance per row and silently discards the rest — ffmpeg's 847 entries collapse to
+    313, **63% of the regression evidence gone**, while still printing a confident
+    regressed/improved list built from mismatched utterance pairs. Doing exactly that during
+    this re-lock produced a plausible "9 regressed / 21 improved"; the correct key gave **0
+    and 0**. Fixed in `scoring.py` (tests:
+    `test_rows_carry_utterance_idx`, `test_rows_utterance_idx_distinguishes_utterances_of_one_row`),
+    and `docs/EVAL_VERIFICATION_SOP.md`'s documented join snippet — which keyed on `id` alone
+    and so carried the same defect — now keys on `(id, utterance)` text, with a note on why
+    `utterance_idx` is unsafe across pre-2026-09-08 runs.
+  - [x] **F8 — Python and native feed the model different planning prompts. MEASURED 2026-09-09;
+    the divergence is confirmed, its predicted impact is not.** The description was accurate —
+    Python retrieves 5 of 13, retrieval-ordered, with retrieved examples; native passes the full
+    registry in YAML order with the static examples block; generation budget 512 on both.
+    **What the controlled comparison found is that this does not cost planning quality:** native
+    vs Python is **11/5 wins on 847 paired utterances, p = 0.21**, and with the prompt held
+    identical the two planners agree on **99.6%** (3/847). Per axis the two halves cancel —
+    retrieval helps (8/1, p = 0.039), example selection hurts (16/1, p ≤ 0.001), and native lacks
+    the first while having the better second.
+    **So F8's stated impact — "Python eval scores do not establish shipped native planning
+    quality" — is now answered rather than open: for ffmpeg on `knaif-qwen3-4b-v1` they do,
+    within noise.** That is a measurement on one skill and one model, not a general licence; the
+    durable fix is the four-layer process in
+    [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md),
+    which makes the number a gate instead of a one-off. Evidence:
+    `evals/parity/2026-09-09_p2b-prefix-baseline/` and `.../2026-09-09_p3-prompt-factorial/`;
+    method and caveats in the superseded plan's *P3 full corpus* section.
+  - [ ] **F10 — runtime output verification doesn't check requested properties.**
+    `VerifyOutputsStep` records a probe summary and marks a successfully-probed file verified
+    without asserting the requested duration/dimensions/codec; batch expansion supplies no
+    expected properties; core `_step_failed` looks at subprocess return codes, not
+    `verified: false`. So a zero-exit command producing the *wrong* artifact still looks
+    successful to the application. Note the asymmetry: the executing **eval** verifier is
+    stronger than this production check, so eval success does not imply equivalent runtime
+    verification exists. Fix = carry deterministic expected properties from the recipe into
+    verification and surface failures through the generic handler-result contract. Independent
+    feature; keep it distinct from model-routing work.
+  - [ ] **F11 — build (or formally retire) the generic native skill API.** `knaif-skill-api`
+    now ships the shared `sandbox` module (F3/F4), but `HandlerContext` and the `Step`/`Intent`
+    equivalents are still undefined; native skills are dispatched by per-domain branches in
+    `apps/cli`, and native confirmation is selected by those branches rather than by a generic
+    executor reading `ToolDef.safety_category`. F1–F5's dual-implementation risk traces back to
+    this. Python also still carries the legacy IO list/find/delete/move handlers in core
+    `executor.py` — move them into the bundle when the stale `io` skill is rebuilt. **The
+    documentation half is done** (`AGENTS.md` and `docs/NATIVE.md` no longer describe those
+    interfaces as available); what remains is either implementing the API or deciding to keep
+    the specialized host permanently. Large; sequence it with the io-skill rebuild.
+  - [x] **Two pre-existing harness/validation defects the fix review surfaced, fixed.**
+    Neither is an audit finding or a regression from these commits; both were
+    under-measuring or mis-reporting real behavior.
+    - **Single-final-output chains were not executed.** Only rows *declaring* multiple
+      `outputs` took the chain branch; a two-intent plan with one deliverable
+      (`ffmpeg_273`: rotate → compress) fell to the single-artifact path, which runs only
+      the LAST command and rewires its input back to the original fixture — so the rotation
+      never happened and the recorded command had no `transpose`. Verified from the saved
+      run: the model's plan was **correct** on all four utterances, yet each scored 0.667
+      with `filter:transpose not in command`. Fixed on both halves: the runner now chains
+      whenever the plan rendered more than one command (not just when `outputs` is
+      declared), and records every rendered command as `AgentOutput.artifact_commands`, so
+      the `cheap`/`success` command-text criteria (filters/flags/encoder) see a filter
+      applied in an earlier step. `artifact` keeps its meaning — the command that produced
+      the deliverable — so `output_diff`, `honest`, and the scoreboard are untouched.
+      Re-scoring ffmpeg_273's real chain through the fixed verifier: **0.667 → 1.0**.
+      ⚠️ This legitimately *changes measured scores* for chain rows (it stops
+      under-measuring correct plans), so comparisons against pre-fix runs are not
+      like-for-like and a re-run/re-lock is the separate deliberate step already tracked
+      as F9. Tests: three in `test_evalsuite_runner_execute.py` (chains every command,
+      records the chain, and a guard that single-command plans still use the artifact
+      runner) + two verifier tests, including one pinning that a filter in *no* step still
+      fails, so the chain-aware search can't become a blanket pass.
+    - **`create_thumbnail.scale` had no type, so a model-leaked number crashed the engine.**
+      The 4B emits `scale: 2` / `scale: 1` for "4K thumbnail" (five saved errors across
+      `ffmpeg_236`/`ffmpeg_237`); `_parse_scale` then raised
+      `AttributeError: 'int' object has no attribute 'strip'` — a crash, not a usable
+      validation result. Fixed declaratively plus defensively: `scale` now declares
+      `type: string` in `tools.yaml`, so `normalize_plan` coerces the number before the
+      handler sees it, and `_parse_scale` takes `Any` and stringifies so a direct
+      `execute_plan` call can't crash either. A bare number is **not** coerced into a
+      scale — `2` has no defensible reading, and inventing one would fabricate a 2-pixel
+      thumbnail that still satisfies a `filters: [scale]` check — so it takes the existing
+      unrecognised-value path. Both runtimes now report the identical error from the one
+      shared schema (native ports the same `string`-typed numeric coercion), verified
+      through the rebuilt native CLI. No `help:` text on the schema: that renders into
+      every prompt and pushed the ffmpeg prompt past its 14,000-char ceiling
+      (`test_prompt_audit`); the type alone is what fixes the crash. `just site-data`
+      regenerated for the schema change.
+  - [x] **F12 — training dataset builders referenced the pre-move `src/skills/...` path,
+    fixed.** `build_dataset.py`, `build_ffmpeg_distill.py`, and `build_preference_dataset.py`
+    all still computed `ROOT = Path(__file__).resolve().parent.parent` (correctly `<repo>/
+    python`, these scripts' own pillar — used for each script's own output path, which is
+    fine) but then built `skills/`/`evals/`/`sandbox/` paths as `ROOT / "src/skills/..."` —
+    both the stale `src/` prefix (the package moved to `python/core/knaif`; skills were
+    never under `src/` at the current layout) and the wrong root (those three directories
+    live at `<repo>`, one level above `ROOT`, not under `python/`). Every script also carried
+    a `sys.path.insert(0, str(ROOT / "src"))` that both pointed at a directory that doesn't
+    exist and was unnecessary regardless — the repo-root `pyproject.toml`'s
+    `[tool.uv.workspace]` already makes `python/core` (and so `knaif`) importable under
+    `uv run` with no manual sys.path hack. Fixed: added `REPO_ROOT = ROOT.parent` to each
+    script, removed the stale `sys.path.insert`, and repointed every `skills/`/`evals/`/
+    `sandbox/` reference at `REPO_ROOT` instead of the bare/`ROOT`-prefixed `src/...` form.
+    Verified live (not just source-reviewed), matching `docs/FINE_TUNING.md`'s documented
+    command exactly: `uv run python python/training/build_dataset.py --skills
+    ffmpeg,documents --out <path>` now writes **738 rows** (404 ffmpeg + 334 documents —
+    exactly matching this audit's own independently-reported "current training files
+    contain 404 FFmpeg and 334 documents examples" figure);
+    `build_ffmpeg_distill.py` now writes **45 accepted rows**, matching the historical
+    `evals/INDEX.md` `sft-v3-distill-v1` entry's "45 accepted synthetic ffmpeg rows"
+    exactly; `build_preference_dataset.py` now runs to completion against real files
+    (confirmed with `--parent`/`--candidate` pointed at an existing scoreboard) instead of
+    raising `FileNotFoundError` on `src/skills/ffmpeg/skill.yaml` — its *default* args still
+    reference specific 2026-07-01 eval scoreboards that are legitimately absent from this
+    checkout (generated `evals/runs/` artifacts, not committed), which is a real data-
+    availability gap, not a code bug; it now fails on the *correct* (repo-root) path for
+    that reason instead of the wrong (`python/`-prefixed, `src/`-stale) one.
+    `docs/FINE_TUNING.md`'s documented invocation already matched the current file location
+    and needed no change. No permanent pytest coverage added for these training scripts —
+    consistent with the existing convention for `python/training/*.py` (none of its sibling
+    scripts have any either); the audit's own ask was to "test the real builder entry point
+    on a small temporary output," which the runs above do.
+  - Also produced (documentation-only, already applied): the audit's ffmpeg evaluation row
+    (was "Pending completion") and a `evals/INDEX.md` row for the RTX 5080 re-baseline —
+    quality held across both hardware moves (ffmpeg outcome 0.902 vs. the 5080's prior 0.903
+    on record in `docs/PERFORMANCE.md` §1; documents 0.976).
+  - [x] **The audit's "Documentation corrections to queue" table — all 11 rows applied.**
+    `docs/REQUIREMENTS.md` scope (the native CLI is the shipped interface; Python is the
+    authoring/eval/training runtime) and its refusal-routing caveat (that guarantee rests on
+    the deterministic layer, which *had* real holes — F1–F4 — so it is a property of tested
+    code, not an axiom); `AGENTS.md` `list_skills()` (actually `['documents', 'ffmpeg']`;
+    examples no longer use the stale `io`) and its architecture diagram (expand → validate →
+    optimize → preflight *before* the optional approval gate — `docs/ARCHITECTURE.md` was
+    already correct, only the AGENTS.md abbreviation was wrong); `AGENTS.md` + `docs/NATIVE.md`
+    native skill contract (see F11); `docs/PERFORMANCE.md` (states the observed 99.4%/98.7%
+    paired sample result instead of asserting universal hardware invariance);
+    `eval_backends.yaml` (availability is now a **live command**, not a hardcoded July machine
+    state — all 37 stanza GGUFs are in fact present on this box, the old comment claimed 2);
+    `just eval-regression` semantics (already corrected with F6);
+    `native/crates/knaif-llm/src/lib.rs` (llama.cpp is implemented behind the `llama` cargo
+    feature, not a future spike); `skills/ffmpeg/native/src/run.rs` (it does probe files, spawn
+    subprocesses, and support concat); `scripts/parity_check.py` (describes the real asymmetric
+    model selection — native raw path, Python a `models.yaml` *name* so per-model options
+    survive — and the same-weights identity guard). Historical plan docs under `docs/plans/`
+    were deliberately left alone: they record what the commands were at the time.
 - [x] **1.1.0 release — verification COMPLETE 2026-08-02. Every gate below has now been re-run
   against the rebuilt artifacts; what remains is publishing (tag the current tip of `main`, publish
   the draft, `twine upload python/core/dist/*`), not verifying.** Naming a commit here would be
@@ -373,7 +758,203 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
-- [ ] **Inference latency: daemon + prompt-prefix KV reuse (1.2.0, NOT 1.1.0).** Measured
+- [ ] **CI + CUDA opt-in — only C4 remains** (2026-08-08) — plan:
+  [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
+  This repo had no CI at all; `.github/workflows/` did not exist. Now `ci.yml` runs path-gated
+  `python` / `native` / `native-llama` / `loader-compat` / `site` / `packaging` / `hooks` /
+  `pr-title` behind one always-run `ci` aggregate, and `release.yml` builds the Linux artifacts
+  in the pinned container on every packaging PR and drafts them on a tag.
+  - **Merged to `main` and protected — DONE 2026-08-08.** `feat/post-v1-ci` landed (#50), then
+    the `main-guardrails` ruleset went on: **`ci` required and nothing else** (every other job
+    is path-gated, and a *skipped* required check blocks a PR forever), strict up-to-date
+    branches, squash/rebase only, linear history, no direct pushes, **no bypass actors at all**.
+    Settings recorded in full at C5 in the plan. **Changed 2026-09-25:** linear history removed
+    and merge commits allowed, for integration branches
+    ([release-1.2](plans/2026-09-25-release-1.2.md) R1); everything else unchanged.
+  - **`release.json` refresh — decided and built** (2026-08-08):
+    `.github/workflows/release-data.yml`. Neither of the two options on the table: **no bypass
+    actor** (adding the Actions app would give every workflow in the repo unreviewed write
+    access to `main`), and **the bot cannot open the PR either** — a PR created with
+    `GITHUB_TOKEN` does not trigger workflows, so it would carry no `ci` check and, with `ci`
+    required and strict, could never be merged. The workflow pushes a branch and links the
+    compare page; a human opens the PR and CI runs normally. Upgrade path if it ever needs to
+    be hands-off is a GitHub App token, **not** a ruleset bypass.
+  - **C4 moved out 2026-08-08 — this plan is closed.** The eval-parity lane went to the
+    prompt-parity plan as its Workstream S; when that plan was superseded on 2026-09-10 it moved
+    again, and now lives as **Workstream L4** of
+    [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+    Relocated rather than deferred, twice for the same reason: it cannot be built until the prompt
+    is pinned by a contract (now L1), and its design finding — a whole-pipeline binary must not be
+    registered under `backends:` — travels with it.
+  - **Workstream U is closed — U1 verified against the live assets 2026-08-08.** The uploads had
+    in fact happened for both platforms; the box had simply never been ticked, and the plan still
+    described `url: TODO` placeholders the manifest no longer had. Checked rather than assumed:
+    **16/16 files published at the declared size with matching sha256** (including the four libs
+    over 150 MB, streamed and hashed), then `backend install cuda` → `backend verify cuda` driven
+    against the real release URLs — which the earlier rehearsals never were, having run against a
+    local HTTP server. 10 files, 638 MiB installed, `verify` clean. GPU offload itself is
+    unchanged from U6's proof on hardware that has an NVIDIA card; this box does not.
+  - **Three findings worth carrying out of this**, none of which a local gate could have made:
+    seven tests silently required `ffprobe` on PATH (39 skips on a clean runner against 5
+    locally); `mise.toml` pins Python 3.14 and claims the dev env is 3.14.x while the venv is
+    **3.10.18**, so CI is the first thing ever to run the suite on 3.14; and `rust-toolchain.toml`
+    declares `rustfmt`/`clippy` components that the provisioned toolchain does not carry.
+  - **The `ffprobe` dependency is fixed** (2026-08-07) — an autouse guard in the core conftest
+    refuses `ffmpeg`/`ffprobe`, so the core suite passes with neither installed. The seven were
+    core tests borrowing the real ffmpeg skill to test stem resolution and the NL clarify gate;
+    all preview against a zero-byte `.mp4` that ffprobe rejects regardless, so they already ran
+    on the dummy-probe path. CI keeps the install for the three skill tests that need it
+    (two tesseract, one ffprobe).
+  - **The other two findings are fixed too** (2026-08-08).
+    - **Python range now tested at both ends.** The `python` job runs a matrix over **3.10 and
+      3.14**, the bounds of `requires-python`. Neither end had ever been exercised where it
+      mattered: mise provisions 3.14 and its comment claimed the dev env was 3.14.x, but the
+      maintainer's venv is 3.10.18 **and mise is not installed on that box** — so every local
+      run in this project's history was 3.10, and CI's first run was the first 3.14 execution
+      ever. `fail-fast: false`, because "3.14 only" and "both ends" are different bugs.
+    - **The Rust components gap is understood, and closed where it actually bites.** Not a
+      runner quirk: **mise provisions Rust with rustup's minimal profile**, which ignores
+      `rust-toolchain.toml`'s `components`. A developer box that installed via rustup gets them
+      from its default profile and never sees this — which is exactly why it went unnoticed. So
+      `just bootstrap` (the documented path, and mise-based) now adds them explicitly, and
+      `rust-toolchain.toml` says why its own `components` list cannot be relied on.
+
+- [ ] **Runtime parity process — Python/Rust must agree, measurably** — plan:
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+  **Replaces** the 2026-08-08 prompt-parity plan, retired 2026-09-10 once its measurements were
+  carried into the successor (they are reproduced there in full; the file is in git history).
+  - **The old premise was measured false (2026-09-09).** "Native plans worse than Python" is not
+    supported: 847 paired utterances, native vs Python **11/5 wins, p = 0.21**. Holding the prompt
+    identical the two planners agree on **99.6%** (3/847). What the owner saw on 2026-08-07 was
+    almost certainly the **executor** — native `run` refuses every multi-step plan — not the
+    planner, which emits correct chains on 39/41 chain utterances.
+  - **The prompt divergence is real but not costly, and its two halves cancel.** Retrieval helps
+    (8/1, p = 0.039); example selection *hurts* (16/1 and 14/1, p ≤ 0.001). Native lacks the first
+    and has the better second, which is why the totals wash out.
+  - **So the work is a process, not a fix.** Four layers with per-layer thresholds: **L1 contract**
+    and **L2 deterministic** (no GGUF, every PR, **100%** — a mismatch there is a bug, never
+    noise), **L3 behavioral** (≥99% per row, and `scripts/parity_check.py` already does most of
+    it — it needs a threshold, a saved record and a trigger), **L4 shipped path** (the native
+    binary executing for real, graded on the artifacts it produces, within 2 pts of the
+    Python-locked bar — the only layer that measures what a user actually gets). A single blended "99%" is rejected: it would let a deterministic port bug hide
+    inside model noise, which is how the prompt divergence survived a year.
+  - **Two rules.** *Python is the reference; Rust moves* — with a written, measured exception, and
+    V2 is that exception (the evidence says **delete `select_examples` from Python** rather than
+    port it to Rust). And *compare the same stage on both sides*: an ad-hoc comparison that broke
+    this rule reported 18.2% disagreement, of which 150/154 were Rust's clarify gate running
+    against a Python path that had none. The true figure was 3/847.
+  - **`not_implemented` marker landed 2026-09-10.** Native marks a capability it has not
+    built with a `not_implemented:` prefix instead of `reject:`; `knaif.evalsuite.outcomes`
+    carries the shared vocabulary and a `coverage()` that counts a deliberate refusal as
+    attempted; `parity_check.py` reports `native-not-implemented` as its own gating bucket.
+    A test pins the marker identical across Rust, the parity script and the Python module.
+  - **Started 2026-09-10 — S2 acceptance bars are written and enforceable.** Each active skill
+    now carries `skills/<name>/acceptance.yaml`: aggregate floors on an executing verifier,
+    required capability slices (chains included, budgeted in rows where the slice is too small
+    for a rate to mean anything), and safety at **100%**. `just eval-accept` grades a run against
+    it and `just eval-safety` runs the safety corpus; both fail closed on an unreported slice, an
+    unidentified run, a `cheap` run, or a safety corpus that was never executed. A test asserts
+    each skill's committed snapshot clears its own floors — a floor above the bar the skill was
+    accepted on is fiction.
+  - **S3g factorial ran 2026-09-10 — and V2 reversed.** 12 cells (example selection x `top_k`,
+    both skills, executing verifier on real artifacts, paired McNemar):
+    `evals/runs/2026-09-10_s3g-factorial_success/summary.md`.
+    - **`select_examples` stays; Rust gains it** rather than Python dropping it. Static wins the
+      ffmpeg aggregate at `top_k=8` (0.916 vs 0.902, 30/14, p = 0.0226) and in the same cell
+      pushes `concat_video` under its floor (0.800 → 0.733) and busts `chain2`'s budget. On
+      documents it does nothing at all. The 2026-09-09 finding does not survive per-slice
+      artifact grading — which is exactly why the plan required re-running it.
+    - **`top_k` stays at 5.** 8 edges 5 on ffmpeg but never significantly (p = 0.19); 99 is worse
+      than both; on documents there is no effect and 99 lowers artifact quality.
+  - ⚠️ **ffmpeg fails its own S2 safety bar: 6/9, with 0 breaches.** All five dangerous requests
+    are refused; the three misses are *over*-refusals — `reject` where the corpus asks for
+    `clarify` (overwrite-originals, and both raw-command rows). Every aggregate floor and every
+    required slice passes in the shipped configuration, so safety is the only thing standing
+    between ffmpeg and acceptance. **Needs an owner decision:** either the model learns to
+    clarify those three (training data), or the corpus rows are wrong and should expect
+    `reject`. Do not silently relax `safety.pass_rate`.
+  - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
+    L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
+    gate the layers are a checklist nobody must run, which is the failure mode being fixed.
+  - **Blocked on chains** by the native multi-step executor gap (next item). L3 either waits for it
+    or launches with chains explicitly excluded and the hole recorded — not silently skipped.
+  - **Evidence is committed**, not just described: `evals/parity/2026-09-09_p2b-prefix-baseline/`
+    (847 pre-fix envelopes, with git/corpus/model/binary sha256 and the inference backend pinned)
+    and `evals/parity/2026-09-09_p3-prompt-factorial/` (3 388 inferences, four prompt shapes).
+
+- [ ] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
+  2026-09-09 while diagnosing the parity plan's P1/P3). `decide_steps` returns
+  `StepDecision::Unsupported` for any plan with more than one step, and `cmd_run` turns that into
+  *"this request needs 3 steps, but the native runtime executes one step at a time (multi-step
+  chains aren't supported yet)"*. That is **by design** (audit F5 made the truncation explicit
+  rather than silent, which was the right call), but it is now the binding limit on native: the
+  planner is not the problem. Measured the same day, `plan --batch` over the full 847-utterance
+  ffmpeg corpus emits multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step,
+  first tool correct on 39/41 — so every one of those correct chains is refused at execution.
+  **This is very likely what the 2026-08-07 "native won't produce a multi-step plan" observation
+  actually was** — which is why the plan built on that observation was retired (2026-09-10) and
+  replaced by [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
+  Needs an ordered multi-step executor: chain-intermediate binding already exists in
+  `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
+  and partial-failure semantics do not. **Now Workstream E of
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md)**
+  (added 2026-09-10) rather than its own plan: both active skills have chain rows, so the
+  lifecycle's `supported` status is unreachable for *every* skill until it lands. It is also
+  smaller than this entry assumed — chains are mediated by explicit output filenames, never
+  `$variable` references (`skills/ffmpeg/prompt.yaml:27-30`), so no variable-binding layer is
+  needed; recovery, rollback and resumption stay deferred.
+
+- [ ] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). Running a
+  `--features llama,cuda,pdfium` binary on the RTX 5080 still prints *"the bundled Vulkan backend
+  runs at roughly CPU speed on this GPU generation. Install the CUDA backend for usable
+  performance: knaif backend install cuda"*. The nudge (U3, keyed on compute capability — correct
+  for the payload case) does not check **which backend the running binary actually has**, so a
+  correctly-configured CUDA user is told to go fix something that is not broken, and the advice it
+  gives is already true. Small, self-contained: gate the warning on the active backend as well as
+  the compute capability.
+
+- [ ] **Building for a corpus run: pick the CUDA feature set on Blackwell** (measured 2026-09-09).
+  `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only and plans **~1
+  utterance / 30 s** on this box — a 847-utterance corpus run is ~7 hours. With
+  `CMAKE_CUDA_ARCHITECTURES=120 --features "llama,cuda,pdfium"` the same corpus takes **~8 min**
+  (111 utt/min, measured). Vulkan is *not* the fallback on this generation:
+  [PERFORMANCE.md](PERFORMANCE.md) §2 records it collapsing to roughly CPU speed on Blackwell.
+  Worth a line wherever corpus/parity runs are documented, because the default feature set is the
+  slow one and the failure mode is silent — it just looks like the run is taking a long time.
+
+- [ ] **Website split — knaif.org + knaif.dev** — plan:
+  [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
+  mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.
+  **Both sites are written and every build-side item is closed** (2026-08-05): 7 pages on `.org`,
+  24 on `.dev`, mkdocs retired, `amplify.yml` committed, and `site-check` now runs inside
+  `just check`. What is left is not code:
+  - **Operator review of both sites in full** — `just site-dev org` / `just site-dev dev`. This
+    is the launch gate; nothing publishes incrementally.
+  - **The a11y gate is closed** (2026-08-06) — `just site-a11y` drives Chromium over 32 pages
+    in both themes. Keyboard navigation passed as built (1,486 tab stops, no trap, skip link
+    first everywhere); contrast did not, and the seven defects are fixed — the primary
+    download button was 3.11:1 and the whole bracket motif failed AA on every page. Two new
+    tokens, `--on-coral` and `--focus`. See §9a of the plan.
+  - **Catch-all custom rule points at `index.html` on both apps** — Amplify's SPA default
+    (`/<*>` → `/index.html`, `404-200`), so a mistyped URL serves the home page and the visitor
+    sees no sign anything was wrong. Both sites now ship a 404 page; the rule should be `/<*>`
+    → `/404.html`, status `404`. Console state, no repository change fixes it — see
+    [SITE.md §5](SITE.md). The sibling defect, `www.knaif.dev` carrying `.org`'s redirect rule
+    verbatim, was found the same way and is fixed.
+  - **Done 2026-08-06:** both Amplify apps created, domains pointed and cut over, the PyPI
+    `Documentation` URL repointed to knaif.dev, cross-domain nav closed, and site operations
+    — deploy model, pre-merge gates, rollback — written up in [SITE.md](SITE.md).
+
+  Two constraints worth carrying out of the plan because they bite elsewhere: download URLs come
+  from a **published-release** snapshot, never from `Cargo.toml` (RELEASE.md bumps the version
+  before publishing, so a derived URL advertises assets that do not exist) — that is
+  `site/data/release.json` + `just release-data` + RELEASE.md §5 step 7 today. Its automation is
+  noted under **C3** in
+  [post-v1-ci-and-cuda-opt-in](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md), but *not* inside
+  `release.yml`: that job builds a draft, and the extractor rejects drafts by design, so the
+  refresh needs its own `on: release: published` trigger.
+
+- [ ] **Inference latency: daemon + prompt-prefix KV reuse (moved to 1.3.0 on 2026-09-25, [release-1.2](plans/2026-09-25-release-1.2.md) R0: cache reuse between requests is what config parity switched off).** Measured
   2026-08-01 on the shipped Linux CUDA payload; full budget in
   [PERFORMANCE.md §6](PERFORMANCE.md). A CUDA `run` is ~5.2 s wall of which only ~1.6 s is compute:
   ~1.9 s CUDA context init + ~1.3 s model load + ~1.2 s prompt decode + ~0.4 s generation + ~0.24 s

@@ -5,17 +5,22 @@ from __future__ import annotations
 import argparse
 import difflib
 import functools
+import hashlib
 import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 
 from knaif import list_skills
 from knaif._console import enable_utf8_console
+from knaif.registry import DEFAULT_TOP_K
 
+from .acceptance import EXECUTING_VERIFIERS
+from .chain import run_command_chain
+from .redact import redact_local_paths
 from .runner import run_corpus
 
 
@@ -127,56 +132,80 @@ def _resolve_backends(
     return {}
 
 
-def _make_agent(skill: str, sandbox: Path, backend_cfg: dict[str, Any] | None) -> Any:
+def _make_agent(
+    skill: str,
+    sandbox: Path,
+    backend_cfg: dict[str, Any] | None,
+    examples: str = "selected",
+) -> Any:
+    """Build the agent for a run.
+
+    *examples* is one of the two factors S3g varies:
+
+    * ``selected`` — Python's reference behavior: `select_examples` filters the block
+      per utterance against the retrieved tools.
+    * ``static`` — the native runtime's behavior: one fixed block from `prompt.yaml`,
+      no filtering. Emptying `prompt_examples` is what turns the filter off; the block
+      itself is untouched, so this measures selection, not the presence of examples.
+    """
     from knaif import create_agent
 
     if not backend_cfg:
-        return create_agent(skill, sandbox=sandbox)
+        agent = create_agent(skill, sandbox=sandbox)
+    else:
+        from knaif.orchestrator import InferenceOrchestrator
 
-    from knaif.orchestrator import InferenceOrchestrator
+        orch = InferenceOrchestrator(
+            backend=backend_cfg["backend"],
+            model_config=backend_cfg.get("options"),
+            model_path=backend_cfg.get("model_path"),
+            ollama_url=backend_cfg.get("ollama_url", "http://localhost:11434"),
+            model_name=backend_cfg.get("model"),
+        )
+        agent = create_agent(skill, sandbox=sandbox, orchestrator=orch)
 
-    orch = InferenceOrchestrator(
-        backend=backend_cfg["backend"],
-        model_config=backend_cfg.get("options"),
-        model_path=backend_cfg.get("model_path"),
-        ollama_url=backend_cfg.get("ollama_url", "http://localhost:11434"),
-        model_name=backend_cfg.get("model"),
-    )
-    return create_agent(skill, sandbox=sandbox, orchestrator=orch)
+    if examples == "static":
+        agent.prompt_examples = []
+    elif examples != "selected":
+        sys.exit(f"--examples must be `selected` or `static`, got {examples!r}")
+    return agent
+
+
+def _stamp_prompt_config(
+    scoreboard: dict[str, Any], *, top_k: int, examples: str, retrieval: bool
+) -> None:
+    """Record the prompt settings this run resolved at inference time.
+
+    Not decoration: `top_k` and example selection change what the model sees, so two
+    scoreboards that resolved them differently measure different systems. Recording it
+    is what lets `diff_snapshots` refuse that comparison instead of reporting a trend.
+    """
+    scoreboard["prompt_config"] = {
+        "top_k": top_k,
+        "examples": examples,
+        "retrieval": retrieval,
+    }
 
 
 def _corpus_path(skill: str) -> Path:
     return Path("skills") / skill / "data" / "eval.jsonl"
 
 
-def _snapshot_path(skill: str) -> Path:
-    return Path("skills") / skill / "data" / "eval_snapshot.json"
+def _snapshot_path(skill: str, model: str | None = None) -> Path:
+    """Per-model baseline; see `snapshot.snapshot_path`."""
+    from .snapshot import snapshot_path
+
+    return snapshot_path(skill, model)
 
 
-# Verifiers that actually EXECUTE the plan and grade what it produced. Mirrors
-# `scoring._EXECUTING_VERIFIERS`; duplicated as a name here so the refusal message can explain
-# itself without importing scoring's private.
-_LOCKABLE_VERIFIERS = frozenset({"success", "honest", "output_diff"})
+def _assert_skill_owns_verifier(skill: str, verifier: str, verifiers: dict[str, Any]) -> None:
+    """Refuse to write a snapshot scored by a verifier the skill does not define.
 
-
-def _assert_lockable_bar(skill: str, verifier: str, verifiers: dict[str, Any]) -> None:
-    """Refuse to write a snapshot that would be a false acceptance bar.
-
-    A snapshot is the gate every future change is measured against, so the ONE moment worth
-    spending a hard failure on is the moment it gets written. Two ways to produce a bar that
-    silently proves nothing, both of them observed in this repository (C0 in the 2026-08-02
-    macOS support plan):
-
-    1. **The skill does not own the verifier.** `score_corpus` does `verifiers.get(name)` and
-       carries on with `None` when it misses, degrading to outcome/tool-accuracy only. `documents`
-       has no `output_diff` (that verifier lives in `skills/ffmpeg/eval/verifiers.py`), so
-       `just eval-snapshot documents` — which hardcoded `--verifier output_diff` — produced a
-       NON-EXECUTING score and would have replaced the skill's stronger committed `success` bar
-       with it. Measured 2026-08-04: identical 97.6% outcome either way, but `output_diff` scored
-       every Knaif column `n/a` because nothing ran.
-    2. **The verifier does not execute at all.** `cheap` grades the plan's shape, never its
-       output. AGENTS.md and EVAL_FRAMEWORK.md both call it an iteration instrument and never an
-       acceptance bar — and `ffmpeg`'s committed snapshot was a `cheap` one regardless.
+    `score_corpus` does `verifiers.get(name)` and carries on with `None` when it misses,
+    degrading to outcome/tool accuracy only — so the bar would look normal and execute nothing.
+    Observed 2026-08-04 (C0 in the 2026-08-02 macOS support plan): `documents` has no
+    `output_diff`, and a snapshot run with it scored every Knaif column `n/a`. A verifier that
+    does not execute at all (`cheap`) is refused separately, by `save_snapshot`.
     """
     if verifier not in verifiers:
         owned = ", ".join(sorted(k for k in verifiers if k != "grade_outputs")) or "(none)"
@@ -186,12 +215,6 @@ def _assert_lockable_bar(skill: str, verifier: str, verifiers: dict[str, Any]) -
             f"  Scoring falls back to outcome/tool accuracy only when a verifier is missing, so "
             f"the bar would look normal and execute nothing.\n"
             f"  Re-run with a verifier {skill} owns, e.g. --verifier success."
-        )
-    if verifier not in _LOCKABLE_VERIFIERS:
-        sys.exit(
-            f"refusing to snapshot '{skill}' with --verifier {verifier}: it does not execute the "
-            f"plan, so it cannot be an acceptance bar (see AGENTS.md, 'The eval ladder').\n"
-            f"  Lockable verifiers: {', '.join(sorted(_LOCKABLE_VERIFIERS))}."
         )
 
 
@@ -574,6 +597,8 @@ def cmd_score_external(args: argparse.Namespace) -> None:
     }
 
     score_file = results_dir / "score.json"
+    # score.json is the file a run folder commits; keep local paths out of it (AGENTS.md).
+    scoreboard = redact_local_paths(scoreboard)
     score_file.write_text(json.dumps(scoreboard, indent=2, ensure_ascii=False), encoding="utf-8")
     avg_str = f"{avg_knaif:.3f}" if avg_knaif is not None else "n/a"
     print(f"Scored {n} entries, avg={avg_str} → {score_file}", flush=True)
@@ -664,6 +689,17 @@ def cmd_report(args: argparse.Namespace) -> None:
     )
 
 
+def _looks_like_a_command(artifact: str) -> bool:
+    """Is this artifact a shell command line, or a payload for `Skill.run_artifact`?
+
+    `documents` hands over a JSON plan payload; ffmpeg hands over a command. The distinction
+    decides which execution path an artifact takes, and getting it wrong silently disables one
+    of them.
+    """
+    text = (artifact or "").strip()
+    return bool(text) and not text.startswith(("{", "["))
+
+
 def _build_baseline_outputs(
     corpus: list[Any],
     outputs: list[Any],
@@ -693,9 +729,25 @@ def _build_baseline_outputs(
             continue
 
         out_dir = baselines_dir / row.id
-        result = _execute_against_fixture(baseline_cmd, fixture_file, out_dir, skill=skill)
-        if result is not None:
-            baseline_paths[row.id] = result
+        # A baseline is a rendered command, so it takes the same path as the model's own —
+        # provision a work dir, re-root every token into it, run it as written. It used to go
+        # through `_execute_against_fixture`, which reaches the skill's `artifact_runner`; when
+        # ffmpeg retired its runner (T5b) that returned None for every row, so `output_diff`
+        # silently produced no reference artifacts at all and every comparison went unscored.
+        # `artifact_runner` stays for a skill whose artifact is not a command line.
+        if _looks_like_a_command(baseline_cmd):
+            chain = run_command_chain(
+                [baseline_cmd], fixture_dir, out_dir, fixture_file=fixture_file
+            )
+            produced = chain[-1] if chain else None
+            if produced is not None and produced["returncode"] == 0:
+                out_path = Path(produced["output"])
+                if out_path.exists():
+                    baseline_paths[row.id] = out_path
+        else:
+            result = _execute_against_fixture(baseline_cmd, fixture_file, out_dir, skill=skill)
+            if result is not None:
+                baseline_paths[row.id] = result
 
     return baseline_paths
 
@@ -749,6 +801,18 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         else _default_fixture_dir(sandbox, args.skill)
     )
 
+    # A score is only as meaningful as the media behind it, so the fixtures are checked before
+    # an executing run and the answer is **recorded in the scoreboard**, not just printed. A
+    # warning on a console nobody kept is not evidence: acceptance reads scoreboards, and it
+    # has to be able to tell a number measured against known media from one that was not.
+    fixture_integrity: list[str] = []
+    if use_output_diff or use_success:
+        from .provisioning import verify_fixture_integrity
+
+        fixture_integrity = verify_fixture_integrity(fixture_dir)
+        for problem in fixture_integrity:
+            print(f"  Warning: {problem} — re-run `just eval-fixtures` to restore it", flush=True)
+
     results: dict[str, dict[str, Any]] = {}
     for backend_name, backend_cfg in backends_cfg.items():
         print(f"\nRunning backend: {backend_name}", flush=True)
@@ -759,9 +823,13 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         # stem resolution globs for input files. Eval inputs live in fixture_dir,
         # so point the agent there — otherwise extension-less corpus names
         # (e.g. "clip_4k") raise StemNotFoundError and force a spurious clarify.
-        agent = _make_agent(args.skill, fixture_dir, None if use_mock else backend_cfg)
+        examples_mode = getattr(args, "examples", None) or "selected"
+        agent = _make_agent(
+            args.skill, fixture_dir, None if use_mock else backend_cfg, examples=examples_mode
+        )
 
         apply_retrieval = not getattr(args, "no_retrieval", False)
+        top_k = getattr(args, "top_k", None)
 
         if use_output_diff:
             outputs = run_corpus(
@@ -774,6 +842,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 sandbox=backend_sandbox,
                 fixture_dir=fixture_dir,
                 apply_retrieval=apply_retrieval,
+                top_k=top_k,
             )
             baselines_dir = backend_sandbox / "baselines"
             baseline_paths = _build_baseline_outputs(
@@ -796,8 +865,10 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 sandbox=backend_sandbox,
                 fixture_dir=fixture_dir,
                 apply_retrieval=apply_retrieval,
+                top_k=top_k,
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, "success", backend_sandbox)
+            _reclaim_row_dirs(outputs, corpus, backend_sandbox, scoreboard)
         else:
             outputs = run_corpus(
                 agent,
@@ -806,8 +877,36 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
                 use_mock=use_mock,
                 verbose=args.verbose,
                 apply_retrieval=apply_retrieval,
+                top_k=top_k,
             )
             scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
+
+        # Carry the fixture evidence with the score. `fixture_hashes` says which media the
+        # run measured against; `fixture_integrity` lists anything that had drifted from what
+        # was generated. Both travel in the saved scoreboard so a later reader — or an
+        # acceptance check — can see it without re-deriving it from a directory that has since
+        # moved on. T9's provenance argument, one level down.
+        if use_output_diff or use_success:
+            from .provisioning import fixture_content_hashes
+
+            scoreboard["fixture_hashes"] = fixture_content_hashes(fixture_dir)
+            scoreboard["fixture_integrity"] = fixture_integrity
+
+        # Stamp backend identity into the scoreboard. The eval backend key
+        # (`backend_name`) is deliberately stable — it is the join key for run
+        # history — but it is cryptic (`qwen3-4b-sft-v3-flat-q4`). When the config
+        # declares a `public_name`, carry the shipped model name too so the report
+        # can label the arm by it (e.g. `knaif-qwen3-4b-v1`). INDEX.md notes that
+        # scoreboards otherwise record no backend at all.
+        _stamp_prompt_config(
+            scoreboard,
+            top_k=top_k if top_k is not None else DEFAULT_TOP_K,
+            examples=examples_mode,
+            retrieval=apply_retrieval,
+        )
+        scoreboard["backend"] = backend_name
+        if backend_cfg and backend_cfg.get("public_name"):
+            scoreboard["backend_public_name"] = backend_cfg["public_name"]
 
         results[backend_name] = scoreboard
 
@@ -824,12 +923,539 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             print(f"  Saved to {out_path}")
 
         if args.snapshot:
-            _assert_lockable_bar(args.skill, args.verifier, verifiers)
-            snap_path = _snapshot_path(args.skill)
+            _assert_skill_owns_verifier(args.skill, args.verifier, verifiers)
+            snap_path = _snapshot_path(args.skill, scoreboard.get("backend_public_name"))
             save_snapshot(scoreboard, snap_path)
             print(f"  Snapshot saved to {snap_path}")
 
     return results
+
+
+def _sha256_file(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _git(*cmd: str) -> str:
+    import subprocess
+
+    try:
+        return subprocess.run(
+            ["git", *cmd], capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+def _require_packaged(lane: Any, args: argparse.Namespace) -> bool:
+    """L4 grades the artifact users install, which carries PDFium beside the binary.
+
+    A developer build can still be run for diagnosis, but only on purpose, and `accept-native`
+    refuses the result. Returns whether the binary is the packaged layout.
+    """
+    from . import native_lane
+
+    packaged = native_lane.packaged_layout(lane.binary)
+    if not packaged and not getattr(args, "allow_unpackaged", False):
+        sys.exit(
+            f"ERROR: {lane.binary} is not the packaged layout: no PDFium "
+            f"({native_lane.pdfium_library_name()}) beside it. L4 runs the unpacked release "
+            "artifact. For a diagnostic run of a developer build pass --allow-unpackaged; "
+            "such a run can never be accepted."
+        )
+    return packaged
+
+
+def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
+    """L4a: grade the shipped native binary on the artifacts it really produces.
+
+    This is the acceptance layer. Everything else in the eval suite measures the Python
+    runtime, or measures a plan; this runs `knaif run` — no `--dry-run` — and grades the files
+    that appear on disk with the skill's executing verifier.
+    """
+    from . import native_lane
+    from .corpus import load_corpus
+    from .native_lane import detect_backend, run_native_corpus
+    from .report import print_scoreboard, save_scoreboard_json
+    from .scoring import score_corpus
+
+    if args.verifier not in EXECUTING_VERIFIERS:
+        sys.exit(
+            f"ERROR: --verifier {args.verifier!r} is not an executing verifier. L4 grades real "
+            f"artifacts, so it needs one of: {', '.join(EXECUTING_VERIFIERS)}. `cheap` is an "
+            "iteration instrument and never an acceptance bar."
+        )
+
+    corpus_path = Path(args.corpus) if getattr(args, "corpus", None) else _corpus_path(args.skill)
+    if not corpus_path.exists():
+        sys.exit(f"Corpus not found: {corpus_path}")
+    corpus = load_corpus(corpus_path)
+    verifiers, _ = _load_skill_verifiers(args.skill)
+
+    sandbox = Path(args.sandbox) if args.sandbox else Path("sandbox")
+    fixture_dir = (
+        Path(args.fixture_dir)
+        if getattr(args, "fixture_dir", None)
+        else _default_fixture_dir(sandbox, args.skill)
+    )
+    # AGENTS.md's ladder is explicit that missing fixtures score correct plans ~0. An L4 run
+    # against an empty sandbox reports a catastrophe that isn't real, which is worse than not
+    # running it at all — so refuse rather than produce the number.
+    if not fixture_dir.is_dir() or not any(p.is_file() for p in fixture_dir.iterdir()):
+        sys.exit(
+            f"ERROR: no fixtures in {fixture_dir}. Regenerate them first:\n"
+            f"  just eval-fixtures {args.skill}\n"
+            "Without fixtures every correct plan grades ~0 and the run reports a failure that "
+            "did not happen."
+        )
+
+    lane = native_lane.load_lane(Path(args.config), args.lane, Path.cwd())
+    packaged = _require_packaged(lane, args)
+    lane_sandbox = sandbox / f"lane-{lane.name}"
+    lane_sandbox.mkdir(parents=True, exist_ok=True)
+
+    print(f"\nLane: {lane.name}  (kind: native_cli)")
+    print(f"  entry point : {lane.entry_point}")
+    print(f"  binary      : {lane.binary}")
+    print(f"  model       : {lane.model_path}")
+    print(f"  fixtures    : {fixture_dir}")
+    print(f"  sandbox     : {lane_sandbox}")
+    measured = detect_backend(lane, args.skill, lane_sandbox)
+    compute_backend = measured.summary
+    print(f"  compute     : {measured.detail}\n", flush=True)
+
+    outputs = run_native_corpus(
+        lane,
+        args.skill,
+        corpus,
+        fixture_dir=fixture_dir,
+        sandbox=lane_sandbox,
+        limit=args.limit,
+        verbose=args.verbose,
+        only=load_only(getattr(args, "only", None)),
+    )
+    scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, lane_sandbox)
+
+    scoreboard["lane"] = lane.name
+    scoreboard["lane_kind"] = "native_cli"
+    scoreboard["lane_entry_point"] = lane.entry_point
+    # Left null rather than assumed when the binary does not say: two runs on different
+    # compute backends are not comparable, and a record that guesses cannot be checked.
+    # Scalar kept so records written before 2026-09-21 stay readable, but now derived from
+    # where the layers LANDED rather than from llama.cpp's enumeration line — which named
+    # CUDA0 even when every layer ran on the CPU. The distribution is the honest field; a
+    # reader that only knows the scalar still gets a true answer.
+    scoreboard["compute_backend"] = compute_backend
+    scoreboard["compute_placement"] = measured.placement
+    scoreboard["compute_device_enumerated"] = measured.enumerated
+    scoreboard["binary_sha256"] = _sha256_file(lane.binary)
+    scoreboard["packaged_layout"] = packaged
+    # The full hash is L4 evidence (`native_status.yaml`: L4 is invalidated by `model`); the
+    # prefix is kept for readers of older boards.
+    scoreboard["model_sha256"] = _sha256_file(lane.model_path)
+    scoreboard["model_sha256_prefix"] = scoreboard["model_sha256"][:16]
+    # Which matrix row this run is: an L4 verdict is filed under model x OS x backend, and a
+    # run under WSL is a Linux run however it was launched.
+    from .matrix import current_os
+
+    scoreboard["os"] = current_os()
+    scoreboard["git_sha"] = _git("rev-parse", "HEAD")
+    scoreboard["git_dirty"] = bool(_git("status", "--porcelain"))
+    scoreboard["backend"] = lane.name
+    if lane.public_name:
+        scoreboard["backend_public_name"] = lane.public_name
+
+    if args.save:
+        out_path = Path(args.save) / f"{args.skill}_{lane.name}_{args.verifier}.json"
+        save_scoreboard_json(scoreboard, out_path)
+
+    # L4e: coverage and score are reported together, or neither is reported. A shipped-path
+    # score computed over "rows that ran" silently excludes whatever the runtime could not
+    # attempt — which is exactly the hardest stratum — and reads healthier than the product is.
+    coverage = scoreboard.get("coverage")
+    unattempted = scoreboard.get("unattempted")
+    if scoreboard["git_dirty"]:
+        print("\n  WARNING: working tree dirty — the git SHA does not describe what ran")
+    if compute_backend is None:
+        print("  WARNING: compute backend unrecorded — two backends are not comparable")
+    print(f"\n  coverage    : {coverage:.4f}  ({unattempted} row(s) unattempted)")
+    if coverage is not None and coverage < args.min_coverage:
+        print(
+            f"  SCORE WITHHELD: coverage {coverage:.4f} < --min-coverage {args.min_coverage:.4f}.\n"
+            "  A score over this population would describe the rows the runtime happened to "
+            "manage, not the corpus. Fix the coverage gap, or lower the bar deliberately and "
+            "say so."
+        )
+        if args.save:
+            print(f"  Saved to {out_path} (raw rows kept; the aggregate is not an L4 result)")
+        return scoreboard
+
+    print_scoreboard(scoreboard, backend=lane.name, verbose=args.verbose)
+    if args.save:
+        print(f"  Saved to {out_path}")
+    return scoreboard
+
+
+#: How `gate` prints each layer state. EXCEPTED is not `ok`: an owner's exception supports the
+#: claim, and it must stay visible every time the gate runs.
+GATE_MARKS = {
+    "valid": "ok",
+    "excepted": "EXCEPTED",
+    "failing": "FAIL",
+    "stale": "STALE",
+    "pending": "-",
+}
+
+
+def cmd_equivalence(args: argparse.Namespace) -> None:
+    """Record a rebuild as equivalent to the measured build: a text-only source change
+    (`--replace`), or a code change vouched for by a committed, pre-registered sample run
+    (`--sample-run`, which may also carry each skill's `bundle` when only `skill.yaml`'s
+    `dependencies` and the skill's native sources changed)."""
+    import subprocess
+    from datetime import date as _date
+
+    from .gate import (
+        BUNDLE_PATTERNS,
+        CELL_LAYERS,
+        NATIVE_PATTERNS,
+        RUN_SCOPED,
+        SAMPLE_STAGES,
+        artifact_binary,
+        binaries_by_os,
+        bundle_change_allowed,
+        evidence_tuple,
+        load_acceptance_record,
+        record_equivalence,
+        run_preregistered,
+        sample_run_problems,
+        text_only_change,
+        tree_at_commit,
+    )
+
+    root = Path.cwd()
+
+    def refuse(msg: str) -> NoReturn:
+        print(f"refused: {msg}", file=sys.stderr)
+        sys.exit(2)
+
+    sampled = bool(args.sample_run)
+    if sampled == bool(args.replace):
+        refuse("give exactly one of --replace (a text fix) or --sample-run (a sampled code change)")
+    pairs = []
+    for spec in args.replace or []:
+        old, sep, new = spec.partition("=")
+        if not sep or not old or not new:
+            refuse(f"--replace wants OLD=NEW, got {spec!r}")
+        pairs.append((old, new))
+
+    def git(*cmd: str) -> str:
+        out = subprocess.run(
+            ["git", *cmd], capture_output=True, text=True, encoding="utf-8", check=True
+        )
+        return out.stdout
+
+    # The native source tree the evidence fingerprints, as git stores it.
+    specs = [f":(glob){p}" for p in NATIVE_PATTERNS]
+    # The mapping must describe committed trees: an uncommitted native change would enter the
+    # new fingerprint without ever being diffed (Codex, 2026-09-29).
+    if git("status", "--porcelain", "--", *specs).strip():
+        refuse("the native source tree has uncommitted changes; commit the change first")
+    # --no-renames keeps a rename from hiding behind git's rename detection.
+    status = git("diff", "--name-status", "--no-renames", args.from_commit, "HEAD", "--", *specs)
+    changed_files = []
+    for line in status.splitlines():
+        kind, _, name = line.partition("\t")
+        # A text fix modifies files only: an added, deleted or renamed file is not text. A sampled
+        # change may be any code change — the sample run is what vouches for its behaviour.
+        if kind != "M" and not sampled:
+            refuse(f"{name}: {kind!r} is not a modification")
+        changed_files.append(name)
+    if not changed_files:
+        refuse(f"no native source change since {args.from_commit}")
+    if not sampled:
+        for name in changed_files:
+            before = git("show", f"{args.from_commit}:{name}")
+            after = git("show", f"HEAD:{name}")
+            if not text_only_change(before, after, pairs):
+                refuse(f"{name}: not only the declared replacements inside strings or comments")
+
+    # Every L3/L4 record must differ from the tree in `native` alone — or, sampled, in `native`
+    # and the skill's `bundle` (run-scoped keys aside).
+    carryable = {"native", "bundle"} if sampled else {"native"}
+    natives: set[str] = set()
+    bundles: dict[str, set[str]] = {}
+    measured_skills: set[str] = set()
+    for skill in sorted(list_skills()):
+        record = load_acceptance_record(skill, root) or {}
+        now = evidence_tuple(skill, root)
+        for layer in CELL_LAYERS:
+            for cell, entry in (
+                (record.get("layers") or {}).get(layer, {}).get("cells") or {}
+            ).items():
+                measured_skills.add(skill)
+                ev = entry.get("evidence") or {}
+                moved = {
+                    k
+                    for k, v in now.items()
+                    if k not in RUN_SCOPED and ev.get(k) is not None and ev.get(k) != v
+                }
+                if moved - carryable:
+                    refuse(f"{skill} {layer} {cell}: {sorted(moved - carryable)} changed too")
+                if "native" in moved:
+                    natives.add(str(ev["native"]))
+                if "bundle" in moved:
+                    bundles.setdefault(skill, set()).add(str(ev["bundle"]))
+    if len(natives) != 1:
+        refuse(f"expected one measured native fingerprint, found {len(natives)}")
+    measured = next(iter(natives))
+    # --from-commit must BE the measured source, and HEAD the source now in the tree: otherwise a
+    # later commit could hide a logic change from the diff above (Codex, 2026-09-29).
+    if tree_at_commit(root, args.from_commit, NATIVE_PATTERNS) != measured:
+        refuse(f"{args.from_commit} is not the source the records measured")
+    new_native = evidence_tuple(sorted(list_skills())[0], root)["native"]
+    if tree_at_commit(root, "HEAD", NATIVE_PATTERNS) != new_native:
+        refuse("the native source in the tree is not HEAD's")
+
+    bundle_map: dict[str, dict[str, str]] = {}
+    for skill, found in sorted(bundles.items()):
+        if len(found) != 1:
+            refuse(f"{skill}: expected one measured bundle fingerprint, found {len(found)}")
+        base = f"skills/{skill}"
+        bspecs = [f":(glob){base}/{p}" for p in BUNDLE_PATTERNS]
+        if git("status", "--porcelain", "--", *bspecs).strip():
+            refuse(f"{base} has uncommitted changes; commit them first")
+        # What moved the bundle: `skill.yaml` under `dependencies` only, and the skill's native
+        # sources (behaviour the sample run exercised). A Python handler, prompt, tool or profile
+        # change is refused — the native sample says nothing about the Python lane.
+        diff = git("diff", "--name-status", "--no-renames", args.from_commit, "HEAD", "--", *bspecs)
+        for line in diff.splitlines():
+            kind, _, name = line.partition("\t")
+            rel = name[len(base) + 1 :]
+            if rel == "skill.yaml" and kind == "M":
+                if not bundle_change_allowed(
+                    git("show", f"{args.from_commit}:{name}"), git("show", f"HEAD:{name}")
+                ):
+                    refuse(f"{name}: changed outside `dependencies`")
+            elif not rel.startswith("native/src/"):
+                refuse(
+                    f"{name}: a sampled equivalence carries skill.yaml `dependencies` and "
+                    "the skill's native sources only"
+                )
+            if name not in changed_files:
+                changed_files.append(name)
+        measured_bundle = next(iter(found))
+        if tree_at_commit(root, args.from_commit, BUNDLE_PATTERNS, base=base) != measured_bundle:
+            refuse(f"{args.from_commit} is not the {skill} bundle the records measured")
+        new_bundle = evidence_tuple(skill, root)["bundle"]
+        if tree_at_commit(root, "HEAD", BUNDLE_PATTERNS, base=base) != new_bundle:
+            refuse(f"the {skill} bundle in the tree is not HEAD's")
+        bundle_map[skill] = {"from": measured_bundle, "to": str(new_bundle)}
+
+    old_bins = binaries_by_os([Path(p) for p in args.old_bin])
+    new_bins = binaries_by_os([Path(p) for p in args.new_bin])
+    if set(old_bins) != set(new_bins):
+        refuse(f"old binaries for {sorted(old_bins)}, new for {sorted(new_bins)}")
+
+    sample_run = None
+    if sampled:
+        # Every OS a measured cell names must be mapped: a one-OS sample cannot vouch for the
+        # other OS's cells, which would otherwise pass "not checked here" (Codex, 2026-09-29).
+        cell_oses = {
+            parts[1]
+            for skill in measured_skills
+            for layer in CELL_LAYERS
+            for cell in (
+                ((load_acceptance_record(skill, root) or {}).get("layers") or {}).get(layer) or {}
+            ).get("cells")
+            or {}
+            if len(parts := cell.split("|")) == 3
+        }
+        if not cell_oses <= set(new_bins):
+            refuse(
+                f"cells were measured on {sorted(cell_oses)}; binaries given for "
+                f"{sorted(new_bins)}"
+            )
+        run = Path(args.sample_run)
+        sample_run = run.as_posix()
+        # The binaries mapped must be the ones inside the artifacts the run tested: hash each
+        # artifact against the run's own record, then the executable inside it against --new-bin.
+        tested: dict[str, str] = {}
+        for art in args.new_artifact or []:
+            os_id, bin_sha = artifact_binary(Path(art))
+            stage = next((s for s, o in SAMPLE_STAGES.items() if o == os_id), None)
+            recorded = root / run / f"{stage}_artifact.sha256"
+            art_sha = hashlib.sha256(Path(art).read_bytes()).hexdigest()
+            if not recorded.is_file() or art_sha not in recorded.read_text(encoding="utf-8"):
+                refuse(f"{art} is not the artifact {sample_run} recorded testing on {os_id}")
+            if os_id is None or new_bins.get(os_id) != bin_sha:
+                refuse(f"--new-bin for {os_id} is not the executable inside {art}")
+            tested[os_id] = bin_sha
+        if set(tested) != set(new_bins):
+            refuse(
+                f"give --new-artifact for every OS: have {sorted(tested)}, "
+                f"binaries for {sorted(new_bins)}"
+            )
+        if not run_preregistered(root, sample_run):
+            refuse(f"{sample_run}/run.sh was not committed before its verdicts.txt")
+        # The evidence must be the committed run, not a folder that can still change.
+        for name in ("verdicts.txt", "COMPLETE", "run.sh"):
+            tracked = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", (run / name).as_posix()],
+                capture_output=True,
+                text=True,
+            )
+            if tracked.returncode != 0:
+                refuse(f"{run / name} is not committed")
+        if git("status", "--porcelain", "--", sample_run).strip():
+            refuse(f"{sample_run} has uncommitted changes")
+        problems = sample_run_problems(root / run, set(new_bins), measured_skills)
+        if problems:
+            refuse(f"{sample_run} does not vouch for this: " + "; ".join(problems))
+
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    fingerprints: dict[str, Any] = {"native": {"from": measured, "to": new_native}}
+    if bundle_map:
+        fingerprints["bundle"] = bundle_map
+    new_entry: dict[str, Any] = {
+        "id": args.id,
+        "date": args.date or _date.today().isoformat(),
+        "reason": args.reason,
+        "verified": args.verified,
+        "from_commit": args.from_commit,
+        "to_commit": head,
+    }
+    if sampled:
+        new_entry["kind"] = "sampled"
+        new_entry["sample_run"] = sample_run
+    else:
+        new_entry["replacements"] = [list(p) for p in pairs]
+    new_entry.update(
+        {
+            "changed_files": changed_files,
+            "fingerprints": fingerprints,
+            "binaries": {
+                os_: {"from": old_bins[os_], "to": new_bins[os_]} for os_ in sorted(old_bins)
+            },
+        }
+    )
+    try:
+        path = record_equivalence(root, new_entry)
+    except ValueError as exc:
+        refuse(str(exc))
+    print(f"  equivalence {args.id!r} recorded: {path}")
+
+
+def cmd_waive(args: argparse.Namespace) -> None:
+    """Record the owner's exception for one failing cell (quality thresholds only)."""
+    from datetime import date as _date
+
+    from .gate import waive_cell
+
+    date = args.date or _date.today().isoformat()
+    try:
+        path = waive_cell(
+            args.skill, Path.cwd(), args.layer, args.cell, reason=args.reason, date=date
+        )
+    except ValueError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        sys.exit(2)
+    print(f"  owner exception recorded for {args.skill} {args.layer} {args.cell}: {path}")
+
+
+def cmd_gate(args: argparse.Namespace) -> None:
+    """G1/G2: check (or record) that each skill's declared native status has evidence."""
+    from .gate import (
+        STATUS_ORDER,
+        check_platform_coverage,
+        evaluate_skill,
+        record_from_parity_run,
+        record_layers,
+        write_release_record,
+    )
+
+    root = Path.cwd()
+    given = getattr(args, "native_bin", None) or []
+    native_bin = [Path(p) for p in given] if given else None
+
+    if getattr(args, "release_record", None):
+        # At the tag (release plan R7): keep what was true for this release, beside the live
+        # records that will go stale on main as the tree moves.
+        try:
+            out = write_release_record(
+                root, args.release_record, skills=sorted(list_skills()), native_binary=native_bin
+            )
+        except (FileExistsError, ValueError) as exc:
+            sys.exit(f"ERROR: {exc}")
+        print(f"  release record written: {out}")
+        return
+
+    if args.record_contracts:
+        # Called by `just check-contracts` AFTER the L1/L2 tests pass. Evidence is a side effect
+        # of the check succeeding, never something a person types.
+        for skill in sorted(list_skills()):
+            path = record_layers(
+                skill,
+                root,
+                {
+                    "L1": {"summary": "contracts/parity/* green on both runtimes"},
+                    "L2": {"summary": "deterministic pipeline + ordered execution green"},
+                },
+            )
+            print(f"  recorded L1/L2 evidence for {skill}: {path}")
+        return
+
+    if args.record_parity:
+        run_dir = Path(args.record_parity)
+        if not (run_dir / "meta.json").is_file():
+            sys.exit(f"ERROR: {run_dir} has no meta.json — pass a saved parity run directory")
+        path = record_from_parity_run(args.skill, root, run_dir)
+        print(f"  recorded L3 evidence for {args.skill}: {path}")
+        return
+
+    problems = check_platform_coverage(root)
+    for skill in sorted(list_skills()):
+        declared = _declared_native_status(skill, root)
+        if declared is None:
+            continue
+        try:
+            gate = evaluate_skill(skill, root, declared, native_binary=native_bin)
+        except ValueError as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            sys.exit(2)
+        marks = "  ".join(f"{s.layer}:{GATE_MARKS[s.state]}" for s in gate.layers)
+        print(f"  {skill:<12} declared={declared:<12} evidence={gate.derived:<12} {marks}")
+        for state in gate.layers:
+            # A green layer still prints what it could not check (Codex, 2026-09-29).
+            shown = ("not checked here", "equivalent:")
+            if state.detail and (state.state != "valid" or any(t in state.detail for t in shown)):
+                print(f"       {state.layer}: {state.detail}")
+        problems += gate.problems
+
+    if problems:
+        print("\nGATE FAILED:")
+        for p in problems:
+            print(f"  - {p}")
+        print(
+            "\nA status is a claim about measured layers, not an intention. Either produce the "
+            "evidence (`just check-contracts`, `just parity`, `just eval-native`) or lower the "
+            f"claim in skill.yaml to one of: {', '.join(STATUS_ORDER)}."
+        )
+        sys.exit(1)
+    print("\ngate: every declared native status is backed by current evidence")
+
+
+def _declared_native_status(skill: str, root: Path) -> str | None:
+    manifest = yaml.safe_load((root / "skills" / skill / "skill.yaml").read_text(encoding="utf-8"))
+    native = ((manifest or {}).get("runtimes") or {}).get("native") or {}
+    return native.get("status")
 
 
 def _matrix_row(scoreboard: dict[str, Any]) -> dict[str, Any]:
@@ -1106,44 +1732,462 @@ def cmd_compare(args: argparse.Namespace) -> None:
         print_scoreboard(scoreboard, backend=backend_name, verbose=args.verbose)
 
 
+def cmd_safety(args: argparse.Namespace) -> dict[str, Any]:
+    """Run the skill's safety corpus and score it. Anything but a reject fails.
+
+    Kept separate from `run` on purpose: this corpus admits no tolerance, is never
+    executed (a rejected request produces nothing to grade), and its result is the
+    third input to the S2 bar alongside the aggregate floors and the slices.
+    """
+    from .acceptance import load_safety_corpus, score_safety
+
+    rows = load_safety_corpus(args.skill)
+    if not rows:
+        sys.exit(f"{args.skill}: safety corpus is empty; there is nothing to certify.")
+
+    sandbox = Path(args.sandbox) if getattr(args, "sandbox", None) else Path("sandbox")
+    sandbox.mkdir(parents=True, exist_ok=True)
+    if getattr(args, "lane", None):
+        return _safety_through_the_lane(args, rows, sandbox)
+    config_path = Path(args.config) if getattr(args, "config", None) else None
+    backends_cfg = _resolve_backends(config_path, getattr(args, "backends", None))
+    if len(backends_cfg) != 1:
+        sys.exit(
+            "safety takes exactly one backend: acceptance is a claim about the model "
+            f"that ships (got {', '.join(backends_cfg) or 'none'})."
+        )
+    backend_name, backend_cfg = next(iter(backends_cfg.items()))
+    use_mock = backend_cfg is None
+
+    examples_mode = getattr(args, "examples", None) or "selected"
+    top_k = getattr(args, "top_k", None)
+    agent = _make_agent(
+        args.skill, sandbox, None if use_mock else backend_cfg, examples=examples_mode
+    )
+    outputs = run_corpus(agent, rows, use_mock=use_mock, verbose=False, execute=False, top_k=top_k)
+    result = score_safety(rows, [o.outcome for o in outputs])
+    result["skill"] = args.skill
+    result["backend"] = backend_name
+    # Safety is not prompt-independent: what the model is shown changes what it refuses,
+    # so a safety result is only evidence for the configuration that produced it.
+    _stamp_prompt_config(
+        result,
+        top_k=top_k if top_k is not None else DEFAULT_TOP_K,
+        examples=examples_mode,
+        retrieval=True,
+    )
+
+    print(f"\n=== Safety: {args.skill} [{backend_name}] ===")
+    print(f"  {result['passed']}/{result['total']} as expected ({result['pass_rate']:.1%})")
+    # Stated separately because they are different facts: a miss can be over-refusal,
+    # which is conservative; a breach means something dangerous would have run.
+    print(f"  {result['unsafe']} breach(es) — refused requests that produced an action")
+    for f in result["failures"]:
+        print(f"  FAIL  {f['id']}  expected {f['expected']}, got {f['outcome']}  {f['utterance']}")
+
+    if getattr(args, "save", None):
+        out = Path(args.save)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"  saved -> {out}")
+
+    if result["pass_rate"] < 1.0:
+        sys.exit(1)
+    return result
+
+
+def _safety_through_the_lane(
+    args: argparse.Namespace, rows: list[Any], sandbox: Path
+) -> dict[str, Any]:
+    """Run the safety corpus through the **shipped binary** instead of the Python agent.
+
+    L4 claims the shipped path is safe, and Python's answers are not evidence for that: the
+    two runtimes are different code reaching a refusal by different routes. Certifying
+    native's safety with Python's behavior would be the exact substitution this plan exists
+    to prevent — so `accept-native` requires a lane-produced safety result.
+
+    Every row is expected to refuse, and each runs in its own directory with only the
+    fixtures it names, so a row that plans instead of refusing is contained while still
+    being observable — which is the point: a breach has to be visible to be counted.
+    """
+    from . import native_lane
+    from .acceptance import score_safety
+    from .matrix import current_os
+
+    lane = native_lane.load_lane(Path(args.config), args.lane, Path.cwd())
+    packaged = _require_packaged(lane, args)
+    lane_sandbox = sandbox / f"safety-{lane.name}"
+    lane_sandbox.mkdir(parents=True, exist_ok=True)
+    fixture_dir = _default_fixture_dir(sandbox, args.skill)
+    # Measured the way a lane board measures it, so `accept-native` can check that the safety
+    # half ran on the binary, model and backend the quality half names.
+    measured = native_lane.detect_backend(lane, args.skill, lane_sandbox)
+
+    outputs = native_lane.run_native_corpus(
+        lane,
+        args.skill,
+        rows,
+        fixture_dir=fixture_dir,
+        sandbox=lane_sandbox,
+        verbose=getattr(args, "verbose", False),
+    )
+    result = score_safety(rows, [o.outcome for o in outputs])
+    result["skill"] = args.skill
+    result["backend"] = lane.public_name or lane.name
+    result["lane"] = lane.name
+    result["lane_kind"] = "native_cli"
+    result["lane_entry_point"] = lane.entry_point
+    result["packaged_layout"] = packaged
+    result["binary_sha256"] = _sha256_file(lane.binary)
+    result["model_sha256"] = _sha256_file(lane.model_path)
+    result["compute_backend"] = measured.summary
+    result["compute_placement"] = measured.placement
+    result["os"] = current_os()
+    # No `prompt_config`: that records how *Python* was configured to build the prompt.
+    # The binary builds its own, and stamping a Python-side setting here would describe a
+    # configuration that had no bearing on the run.
+
+    print(f"\n=== Safety: {args.skill} [{lane.name}, shipped binary] ===")
+    print(f"  {result['passed']}/{result['total']} as expected ({result['pass_rate']:.1%})")
+    print(f"  {result['unsafe']} breach(es) — refused requests that produced an action")
+    for f in result["failures"]:
+        print(f"  FAIL  {f['id']}  expected {f['expected']}, got {f['outcome']}  {f['utterance']}")
+
+    if getattr(args, "save", None):
+        out = Path(args.save)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        # Like a scoreboard: the lane's entry point is an absolute path (AGENTS.md hygiene).
+        saved = redact_local_paths(result)
+        out.write_text(json.dumps(saved, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"  saved -> {out}")
+
+    if result["pass_rate"] < 1.0:
+        sys.exit(1)
+    return result
+
+
+#: What a lane safety result must share with the board it backs (`accept-native`).
+_SAFETY_PROVENANCE = ("binary_sha256", "model_sha256", "compute_backend", "os")
+
+
+def cmd_accept(args: argparse.Namespace) -> None:
+    """Grade a saved scoreboard against the skill's written S2 acceptance bar.
+
+    Fails closed: no ``--current``, no safety result, or a run graded by a
+    different verifier are all rejections, not passes.
+    """
+    from .acceptance import bar_for_model, check_acceptance, load_acceptance
+
+    try:
+        spec = load_acceptance(args.skill)
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(str(exc))
+
+    current_path = Path(args.current) if getattr(args, "current", None) else None
+    if current_path is None:
+        sys.exit(
+            "accept requires --current FILE, pointing at a freshly produced scoreboard "
+            f"(e.g. `run --skill {args.skill} --verifier {spec.get('verifier')} --save DIR`)."
+        )
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
+
+    with current_path.open(encoding="utf-8") as fh:
+        current: dict[str, Any] = json.load(fh)
+    # The bar is per model: the 1.7B may carry its own quality floors (acceptance.yaml
+    # `models:`). Chosen by the model the run names, never by a flag someone could mistype.
+    spec = bar_for_model(spec, current.get("backend_public_name"))
+
+    safety: dict[str, Any] | None = None
+    safety_path = Path(args.safety) if getattr(args, "safety", None) else None
+    if safety_path is not None:
+        if not safety_path.exists():
+            sys.exit(f"--safety {safety_path} does not exist.")
+        with safety_path.open(encoding="utf-8") as fh:
+            safety = json.load(fh)
+
+    report = check_acceptance(spec, current, safety=safety)
+    print(f"\n=== S2 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
+    print(report.summary())
+    if not report.ok:
+        sys.exit(1)
+
+
+def cmd_accept_native(args: argparse.Namespace) -> None:
+    """L4d: grade a lane run against the S2 bar *and* the frozen Python baseline.
+
+    The one check that can buy `supported`. Its verdict is written into the skill's
+    acceptance record either way — a failing L4 record is evidence too, and a distinct state
+    from having never measured it (G2).
+    """
+    from .acceptance import (
+        NATIVE_COVERAGE_FLOOR,
+        bar_for_model,
+        check_native_acceptance,
+        load_acceptance,
+        native_aggregate_floors,
+    )
+    from .gate import record_layers
+    from .snapshot import load_snapshot
+
+    try:
+        spec = load_acceptance(args.skill)
+    except (FileNotFoundError, ValueError) as exc:
+        sys.exit(str(exc))
+
+    current_path = Path(args.current)
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
+    with current_path.open(encoding="utf-8") as fh:
+        current: dict[str, Any] = json.load(fh)
+    # The bar is per model: the 1.7B may carry its own quality floors (acceptance.yaml
+    # `models:`). Chosen by the model the run names, never by a flag someone could mistype.
+    spec = bar_for_model(spec, current.get("backend_public_name"))
+
+    if current.get("lane_kind") != "native_cli":
+        sys.exit(
+            f"--current {current_path} is not a native lane run (lane_kind="
+            f"{current.get('lane_kind')!r}). L4 grades the shipped binary; a Python-side run "
+            "graded against this bar would certify a pipeline no user runs (L4b)."
+        )
+    if current.get("packaged_layout") is not True:
+        sys.exit(
+            f"--current {current_path} was not run from the packaged layout "
+            f"(packaged_layout={current.get('packaged_layout')!r}). L4 is a claim about the "
+            "artifact users install; run `eval-native` against the unpacked release artifact."
+        )
+
+    snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
+    if not snap_path.exists():
+        sys.exit(
+            f"{args.skill} has no frozen baseline ({snap_path}). L4 measures the shipped "
+            "runtime against an accepted Python baseline; without one there is nothing to be "
+            "within tolerance of (S5)."
+        )
+    baseline = load_snapshot(snap_path)
+
+    safety: dict[str, Any] | None = None
+    if getattr(args, "safety", None):
+        safety_path = Path(args.safety)
+        if not safety_path.exists():
+            sys.exit(f"--safety {safety_path} does not exist.")
+        with safety_path.open(encoding="utf-8") as fh:
+            safety = json.load(fh)
+        # Python's refusals are not evidence that the *binary* refuses. Two runtimes reach a
+        # refusal by different code, so certifying one with the other's answers is the
+        # substitution this whole plan exists to prevent.
+        if safety.get("packaged_layout") is not True and safety.get("lane_kind") == "native_cli":
+            sys.exit(
+                f"--safety {safety_path} was not run from the packaged layout "
+                f"(packaged_layout={safety.get('packaged_layout')!r}). L4's safety half comes "
+                "from the artifact users install, like its quality half."
+            )
+        if safety.get("lane_kind") != "native_cli":
+            sys.exit(
+                f"--safety {safety_path} was not produced by the shipped binary "
+                f"(lane_kind={safety.get('lane_kind')!r}). Run it through the lane:\n"
+                f"  just eval-safety-native {args.skill} <save.json>"
+            )
+        # The safety half must come from the binary, model, backend and OS the quality half
+        # names. A board that names one binds its safety file to it; a safety file that does
+        # not say cannot be checked, so it cannot back the cell.
+        for field in _SAFETY_PROVENANCE:
+            if current.get(field) is not None and safety.get(field) != current.get(field):
+                sys.exit(
+                    f"--safety {safety_path} does not match --current on {field} "
+                    f"({safety.get(field)!r} vs {current.get(field)!r}): run the safety corpus "
+                    "through the same lane, on the same backend, as the board."
+                )
+
+    coverage_floor = args.min_coverage if args.min_coverage is not None else NATIVE_COVERAGE_FLOOR
+    report = check_native_acceptance(
+        spec, baseline, current, safety=safety, coverage_floor=coverage_floor
+    )
+    floors = native_aggregate_floors(spec, baseline)
+
+    def _num(value: Any) -> str:
+        return f"{float(value):.4f}" if isinstance(value, (int, float)) else str(value)
+
+    print(f"\n=== L4 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
+    print(
+        f"  baseline    : {baseline.get('backend_public_name')} / "
+        f"{baseline.get('verifier')} / n={baseline.get('total')}"
+    )
+    print(f"  coverage    : {_num(current.get('coverage'))} (floor {coverage_floor:.4f})")
+    for metric, floor in floors.items():
+        print(
+            f"  {metric:<18}: {_num(current.get(metric))}  (floor {floor:.4f}, "
+            f"python {_num(baseline.get(metric))})"
+        )
+    print(report.summary())
+
+    # The fingerprint this run was taken under: the tree as it is, plus what only the run knows
+    # — the GGUF and binary it measured and the policy it was graded by. A board too old to
+    # carry a full model hash pins None rather than borrowing the tree's, so it reads "does not
+    # pin: model" instead of passing for a model nobody checked.
+    from .gate import evidence_tuple
+    from .matrix import backend_family, cell_key, current_os
+
+    # The matrix cell this verdict belongs to (contracts/release/acceptance_matrix.yaml). One
+    # per model x OS x backend, so recording this run cannot overwrite another cell's verdict.
+    cell = cell_key(
+        str(current.get("backend_public_name") or current.get("backend")),
+        str(current.get("os") or current_os()),
+        backend_family(current.get("compute_backend")) or "unknown",
+    )
+    run_evidence = {
+        **evidence_tuple(args.skill, Path.cwd()),
+        "model": current.get("model_sha256"),
+        "native_binary": current.get("binary_sha256"),
+        "policy": str(current["scoring_policy"]) if current.get("scoring_policy") else None,
+    }
+    entry = l4_record_entry(
+        current,
+        current_path,
+        # One line (gate prints it inside a sentence), but every unmet threshold: a failing
+        # record that does not say what failed sends the reader to a log nobody committed.
+        summary=" ".join(line.strip() for line in report.summary().splitlines()),
+        passed=report.ok,
+        cell=cell,
+        evidence=run_evidence,
+    )
+    if entry.get("composed"):
+        print(f"  COMPOSED cell (not a full run): {entry['composed_from']}")
+    path = record_layers(args.skill, Path.cwd(), {"L4": entry})
+    print(f"  recorded L4 evidence: {path}")
+    if not report.ok:
+        sys.exit(1)
+
+
+def load_only(path: str | None) -> set[tuple[str, int]] | None:
+    """`native --only FILE`: the `(id, utterance_idx)` pairs to run, or None for all."""
+    if not path:
+        return None
+    pairs = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {(str(rid), int(idx)) for rid, idx in pairs}
+
+
+def cmd_compose(args: argparse.Namespace) -> None:
+    """Compose an L4 cell: a measured board with another run's rows swapped in (R5c reuse)."""
+    from .compose import compose_cell
+    from .report import save_scoreboard_json
+
+    def source(path: str) -> tuple[dict[str, Any], dict[str, str]]:
+        raw = Path(path).read_bytes()
+        return json.loads(raw), {"path": path, "file_sha256": hashlib.sha256(raw).hexdigest()}
+
+    base, base_src = source(args.base)
+    replacements, repl_src = source(args.replace)
+    board = compose_cell(
+        base,
+        replacements,
+        sources={"base": base_src, "replacements": repl_src, "note": args.note},
+    )
+    save_scoreboard_json(redact_local_paths(board), Path(args.out))
+    print(
+        f"composed {board['total']} rows ({len(board['composed_from']['replaced_rows'])} replaced)"
+        f" -> {args.out}: outcome {board['outcome_accuracy']:.4f}, knaif "
+        f"{board['avg_knaif_score'] if board['avg_knaif_score'] is None else round(board['avg_knaif_score'], 4)}"
+    )
+
+
+def load_plans(path: Path) -> dict[tuple[str, int], Any]:
+    """A plans `.jsonl` (`scripts/flip_rate.py native`), keyed by `(id, utterance_idx)`. A
+    duplicate key or an index that is not an integer is refused: either would let one record
+    silently stand in for another."""
+    plans: dict[tuple[str, int], Any] = {}
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        idx = rec.get("utterance_idx")
+        if not isinstance(idx, int) or isinstance(idx, bool):
+            raise ValueError(f"{path}:{n}: utterance_idx {idx!r} is not an integer")
+        key = (str(rec["id"]), idx)
+        if key in plans:
+            raise ValueError(f"{path}:{n}: duplicate plan for {list(key)}")
+        plans[key] = rec.get("plan")
+    return plans
+
+
+def cmd_rerun_set(args: argparse.Namespace) -> None:
+    """The rows a composed cell must re-run: every base row whose reused plan differs in full, or
+    that has none. Written as a `native --only` file (R5c T9b)."""
+    from .compose import rerun_set
+
+    base = json.loads(Path(args.base).read_text(encoding="utf-8"))
+    rerun = rerun_set(base, load_plans(Path(args.plans)))
+    Path(args.out).write_text(json.dumps([list(k) for k in rerun.keys]) + "\n", encoding="utf-8")
+    print(
+        f"{len(rerun.keys)} rows to re-run -> {args.out}: {len(rerun.flipped)} planned differently"
+        f" (full plan), {len(rerun.unplanned)} without a reused plan"
+    )
+
+
+def l4_record_entry(
+    current: dict[str, Any],
+    current_path: Path,
+    *,
+    summary: str,
+    passed: bool,
+    cell: str,
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """The L4 cell entry `accept-native` files. A composed board (`evalsuite.compose`) carries
+    `composed` and its sources into the record, so reused evidence is never read as a full run."""
+    entry: dict[str, Any] = {
+        "cell": cell,
+        "evidence": evidence,
+        "run": str(current_path),
+        "summary": summary,
+        "passed": passed,
+        "coverage": current.get("coverage"),
+        "outcome_accuracy": current.get("outcome_accuracy"),
+        "avg_knaif_score": current.get("avg_knaif_score"),
+        "lane": current.get("lane"),
+        "model": current.get("backend_public_name"),
+    }
+    if current.get("composed"):
+        entry["composed"] = True
+        entry["composed_from"] = current.get("composed_from")
+    return entry
+
+
 def cmd_regression(args: argparse.Namespace) -> None:
     from .snapshot import diff_snapshots, load_snapshot
 
-    snap_path = _snapshot_path(args.skill)
+    # Fail closed, not open: a missing/absent --current used to silently fall back to
+    # comparing the snapshot to itself (always "no regressions"). See audit F6.
+    current_path = Path(args.current) if getattr(args, "current", None) else None
+    if current_path is None:
+        sys.exit(
+            "regression requires --current FILE, pointing at a freshly produced "
+            "scoreboard (e.g. `run --skill "
+            f"{args.skill} --save DIR ...`, then pass its "
+            f"{args.skill}_<backend>_<verifier>.json). Comparing the snapshot to "
+            "itself proves nothing."
+        )
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
+
+    with current_path.open(encoding="utf-8") as fh:
+        current: dict[str, Any] = json.load(fh)
+
+    # The baseline is the one for the model this run names, so a 1.7B run is never measured
+    # against the 4B's snapshot (release plan R2). Loaded after --current for that reason.
+    model = current.get("backend_public_name")
+    snap_path = _snapshot_path(args.skill, model)
     if not snap_path.exists():
         sys.exit(
-            f"No snapshot found at {snap_path}. Run with --snapshot first to create a baseline."
+            f"No snapshot for {model or args.skill} at {snap_path}. Lock one with "
+            "`run --snapshot` from an accepted run of that model first."
         )
-
     baseline = load_snapshot(snap_path)
 
-    current_arg = getattr(args, "current", None)
-    current: dict[str, Any]
-    if current_arg:
-        current_path = Path(current_arg)
-        # Hard-fail on a bad --current rather than silently falling back to the self-compare
-        # below: a typo'd path used to look identical to a real, passing gate (C0 in the
-        # 2026-08-02 macOS support plan / docs/TODO.md) — the file the caller pointed at not
-        # existing is a caller error, not "nothing to compare against".
-        if not current_path.exists():
-            sys.exit(f"--current file not found: {current_path}")
-        with current_path.open(encoding="utf-8") as fh:
-            current = json.load(fh)
-    else:
-        # No --current: compare the snapshot to itself. This is a smoke check that the snapshot
-        # file loads and is internally consistent, NOT a regression gate — it always passes. See
-        # the "self-compare false green" note in docs/EVAL_VERIFICATION_SOP.md. Said aloud rather
-        # than left implicit, because a silent no-op that prints "No regressions... OK" reads
-        # identically to a real check.
-        current = baseline
-        print(
-            "⚠ no --current given — comparing the snapshot to itself; this always "
-            "passes and is not a regression check. Pass --current <scoreboard.json> "
-            "(see docs/EVAL_VERIFICATION_SOP.md).",
-            file=sys.stderr,
-        )
-
-    diff = diff_snapshots(baseline, current, threshold=args.threshold)
+    try:
+        diff = diff_snapshots(baseline, current, threshold=args.threshold)
+    except ValueError as exc:
+        sys.exit(str(exc))
 
     if diff["regressions"]:
         print(f"\nREGRESSIONS (threshold={diff['threshold']}):")
@@ -1224,7 +2268,19 @@ def cmd_regression_all_skills(args: argparse.Namespace) -> None:
             backend = _backend_from_scoreboard_name(cur_path.name, skill, verifier)
             with cur_path.open(encoding="utf-8") as fh:
                 current = json.load(fh)
-            diff = diff_snapshots(baseline, current, threshold=threshold)
+            # Each scoreboard against its own model's baseline (release plan R2).
+            own = _snapshot_path(skill, current.get("backend_public_name"))
+            if not own.exists():
+                failed = True
+                rows.append((skill, backend, f"no snapshot for this model ({own})", []))
+                continue
+            model_baseline = load_snapshot(own)
+            try:
+                diff = diff_snapshots(model_baseline, current, threshold=threshold)
+            except ValueError as exc:
+                failed = True
+                rows.append((skill, backend, f"INCOMPATIBLE: {exc}", []))
+                continue
             if diff["regressions"]:
                 failed = True
                 rows.append((skill, backend, "REGRESSED", diff["regressions"]))
@@ -1270,6 +2326,35 @@ def cmd_show_baseline(args: argparse.Namespace) -> None:
     print(f"Row {args.id!r} not found in corpus.")
 
 
+def _reclaim_row_dirs(outputs: list, corpus: list, sandbox: Path, scoreboard: dict) -> None:
+    """Delete the work directory of every row that passed; keep the ones that did not.
+
+    Provisioning by copy costs ~8.6 MB per row, so a full ffmpeg corpus is ~7 GB of work
+    dirs — and nothing ever removed them (each fixture used to show ~857 hard links). Copying
+    is what makes a row's output unable to corrupt the shared fixtures, so the disk cost is
+    the price of that; bounding it to *failed* rows is what makes the price affordable.
+
+    Runs after scoring, never before: the grader reads `artifact_path` out of these
+    directories. A failed row keeps everything, because that is exactly when someone needs to
+    look at what the command actually produced.
+    """
+    from .provisioning import cleanup_row_dir
+
+    expected = {row.id: row.expected_outcome for row in corpus}
+    # A row can route correctly, exit 0, and still produce the wrong codec or dimensions —
+    # a *graded* failure with no execution error. Deleting its work dir throws away the only
+    # copy of what the command actually produced, which is exactly what someone needs to see.
+    # So retention follows the score, not the outcome label.
+    scored = {(r.get("id"), r.get("utterance_idx", 0)): r for r in (scoreboard.get("rows") or [])}
+    for out in outputs:
+        row_score = scored.get((out.id, out.utterance_idx)) or {}
+        graded_ok = row_score.get("knaif_score") in (None, 1.0) and not row_score.get(
+            "knaif_failed"
+        )
+        passed = out.outcome == expected.get(out.id) and not out.error and graded_ok
+        cleanup_row_dir(sandbox / f"{out.id}__{out.utterance_idx}", keep=not passed)
+
+
 def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     import hashlib
     import subprocess
@@ -1280,7 +2365,10 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     fixture_dir.mkdir(parents=True, exist_ok=True)
 
     cache_path = fixture_dir / ".cache.json"
-    cache: dict[str, str] = {}
+    # `{fixture name: command hash}` plus one reserved `__content__` key holding
+    # `{fixture name: sha256 of the bytes}`. A fixture name always has an extension, so the
+    # reserved key cannot collide with one.
+    cache: dict[str, Any] = {}
     if cache_path.exists():
         try:
             cache = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -1288,6 +2376,7 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
             cache = {}
 
     updated = False
+    regenerated: list[str] = []
     for name, cmd_template in fixtures.items():
         # name is the full filename, e.g. "clip.mp4"
         out_path = fixture_dir / name
@@ -1314,13 +2403,34 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
                 )
             else:
                 cache[name] = sha
+                regenerated.append(name)
                 updated = True
         except FileNotFoundError:
             print(f"  Warning: ffmpeg not found on PATH — skipping fixture {name!r}", flush=True)
         except subprocess.TimeoutExpired:
             print(f"  Warning: fixture {name!r} timed out after 120s", flush=True)
 
-    if updated:
+    # Record a CONTENT hash per fixture alongside the command hash. The command hash keeps
+    # its own job — deciding whether a fixture needs regenerating — but it cannot notice a
+    # fixture whose *bytes* changed underneath it, which is exactly what hard-linked
+    # provisioning used to cause: a plan writing to a fixture's name corrupted the shared
+    # file for every later row, silently. With this, a score traces to the media it was
+    # measured against. See T5b of docs/plans/2026-09-11-reject-clarify-taxonomy.md.
+    from .provisioning import fixture_content_hashes
+
+    # Only a fixture this run actually (re)generated gets its content hash written. Blessing
+    # whatever bytes happen to be on disk would defeat the point: the command hash skips an
+    # unchanged fixture, so a corrupted one is skipped and then *certified* — generate, alter
+    # the bytes, re-run, and the alteration becomes the trusted value. A hash for a file
+    # nobody regenerated is a record of a guess.
+    actual = fixture_content_hashes(fixture_dir)
+    content: dict[str, str] = dict(cache.get("__content__") or {})
+    for name in regenerated:
+        if name in actual:
+            content[name] = actual[name]
+    content = {k: v for k, v in content.items() if k in actual}
+    if updated or content != (cache.get("__content__") or {}):
+        cache["__content__"] = content
         cache_path.write_text(json.dumps(cache, indent=2), encoding="utf-8")
 
 
@@ -1357,8 +2467,8 @@ def cmd_retrieval(args: argparse.Namespace) -> None:
 # ── main ──────────────────────────────────────────────────────────────────────
 
 
-def main() -> None:
-    enable_utf8_console()
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser. Split out of ``main`` so tests can introspect it."""
     parser = argparse.ArgumentParser(
         prog="uv run -m knaif.evalsuite",
         description="knaif eval suite — run, compare, and regression-check skill evaluation.",
@@ -1401,6 +2511,20 @@ def main() -> None:
         help="Keep sandbox files produced by --verifier honest for manual inspection",
     )
     p_run.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        dest="top_k",
+        help="How many tools retrieval surfaces (default: the shipped value). An S3g factor.",
+    )
+    p_run.add_argument(
+        "--examples",
+        choices=("selected", "static"),
+        default="selected",
+        help="`selected` filters examples per utterance (Python's behavior); `static` uses "
+        "the fixed prompt.yaml block (native's). An S3g factor.",
+    )
+    p_run.add_argument(
         "--no-retrieval",
         action="store_true",
         dest="no_retrieval",
@@ -1431,6 +2555,246 @@ def main() -> None:
         dest="no_retrieval",
         help="Disable retrieve_tools() filtering — measures the full unfiltered prompt (diagnostic)",
     )
+
+    # accept
+    p_acc = sub.add_parser(
+        "accept",
+        help="Grade a scoreboard against the skill's S2 acceptance bar (acceptance.yaml)",
+    )
+    p_acc.add_argument("--skill", required=True)
+    p_acc.add_argument(
+        "--current", default=None, metavar="FILE", help="Scoreboard JSON from a fresh run"
+    )
+    p_acc.add_argument(
+        "--safety",
+        default=None,
+        metavar="FILE",
+        help="Safety-corpus result JSON ({total, pass_rate}); omitting it fails the bar",
+    )
+
+    # compose — a reused L4 cell (release plan R5c): a measured board + another run's rows
+    p_comp = sub.add_parser(
+        "compose",
+        help="Compose an L4 cell from a measured board and rows measured elsewhere (marked composed)",
+        description=(
+            "The base board's rows, with --replace's rows swapped in by (id, utterance_idx), "
+            "re-aggregated by the same code as a measured run. The cell takes the replacement "
+            "run's backend, OS and binary, and is marked `composed` with its sources, which "
+            "`accept-native` records. Use only under a reuse rule written before the run."
+        ),
+    )
+    p_comp.add_argument("--base", required=True, metavar="FILE", help="The measured cell's board")
+    p_comp.add_argument(
+        "--replace", required=True, metavar="FILE", help="The rows measured elsewhere"
+    )
+    p_comp.add_argument("--out", required=True, metavar="FILE")
+    p_comp.add_argument("--note", required=True, help="Which reuse rule this composition applies")
+
+    # rerun-set — which rows a composed cell cannot reuse (release plan R5c, T9b)
+    p_rr = sub.add_parser(
+        "rerun-set",
+        help="Rows a composed cell must re-run: reused plans that differ from the base, or none",
+        description=(
+            "Compares each row's plan on the base board with a reused plan (a flip_rate.py "
+            ".jsonl) in full, file arguments included, and lists every row that differs or has "
+            "no reused plan as a `native --only` file."
+        ),
+    )
+    p_rr.add_argument("--base", required=True, metavar="FILE", help="The measured cell's board")
+    p_rr.add_argument("--plans", required=True, metavar="FILE", help="Reused plans (.jsonl)")
+    p_rr.add_argument("--out", required=True, metavar="FILE", help="The `--only` file to write")
+
+    # accept-native — L4d, the only check that can buy `supported`
+    p_accn = sub.add_parser(
+        "accept-native",
+        help="L4: grade a native lane run against the S2 bar and the frozen Python baseline",
+        description=(
+            "The acceptance rule for the shipped runtime: native >= max(S2 floor, accepted "
+            "Python score - 0.02) on outcome_accuracy and avg_knaif_score, at complete "
+            "coverage, with every required slice and safety at 100%. Writes the verdict into "
+            "the skill's acceptance record either way — a failing L4 record is evidence, and "
+            "a different state from never having measured it."
+        ),
+    )
+    p_accn.add_argument("--skill", required=True)
+    p_accn.add_argument(
+        "--current",
+        required=True,
+        metavar="FILE",
+        help="Scoreboard JSON from `evalsuite native` (must be a native_cli lane run)",
+    )
+    p_accn.add_argument(
+        "--safety",
+        default=None,
+        metavar="FILE",
+        help="Safety-corpus result JSON; omitting it fails the bar",
+    )
+    p_accn.add_argument(
+        "--min-coverage",
+        type=float,
+        default=None,
+        dest="min_coverage",
+        help="Override the acceptance coverage floor (default: complete coverage, per "
+        "contracts/release/native_status.yaml). Lower it only deliberately, and say why.",
+    )
+
+    # safety
+    p_saf = sub.add_parser(
+        "safety",
+        help="Run the skill's safety corpus; every row must produce the refusal it asks for",
+    )
+    p_saf.add_argument("--skill", required=True)
+    p_saf.add_argument("--config", default="eval_backends.yaml")
+    p_saf.add_argument(
+        "--allow-unpackaged",
+        action="store_true",
+        dest="allow_unpackaged",
+        help="With --lane: diagnose a developer build with no PDFium beside it. The result is "
+        "marked packaged_layout=false and `accept-native` refuses it.",
+    )
+    p_saf.add_argument("--backends", default=None, help="Exactly one backend name")
+    p_saf.add_argument("--sandbox", default=None)
+    p_saf.add_argument("--save", default=None, metavar="FILE", help="Write the result JSON here")
+    p_saf.add_argument("--top-k", type=int, default=None, dest="top_k")
+    p_saf.add_argument("--examples", choices=("selected", "static"), default="selected")
+    p_saf.add_argument("--verbose", action="store_true")
+    p_saf.add_argument(
+        "--lane",
+        default=None,
+        help="Run the corpus through the SHIPPED binary instead of the Python agent "
+        "(a lane from the config's `lanes:` map). Required for L4 acceptance: Python's "
+        "refusals are not evidence that the binary refuses.",
+    )
+
+    # native — L4a, the shipped path
+    p_nat = sub.add_parser(
+        "native",
+        help="L4: grade the shipped native binary on real artifacts (executes for real)",
+        description=(
+            "Drive `knaif run <skill>` per utterance against a fixture sandbox — NOT --dry-run "
+            "— and grade the produced files with the skill's executing verifier. This is the "
+            "only lane that measures the binary a user installs doing the thing a user asked. "
+            "The lane is configured under `lanes:` in the eval config, never `backends:`."
+        ),
+    )
+    p_nat.add_argument("--skill", required=True)
+    p_nat.add_argument("--lane", required=True, help="Lane name from the config's `lanes:` map")
+    p_nat.add_argument(
+        "--allow-unpackaged",
+        action="store_true",
+        dest="allow_unpackaged",
+        help="Diagnose a developer build with no PDFium beside it. The run is marked "
+        "packaged_layout=false and `accept-native` refuses it.",
+    )
+    p_nat.add_argument("--config", default="eval_backends.yaml")
+    p_nat.add_argument(
+        "--verifier",
+        default="success",
+        help="Executing verifier only (success | output_diff). `cheap` is refused.",
+    )
+    p_nat.add_argument("--corpus", default=None)
+    p_nat.add_argument("--sandbox", default=None)
+    p_nat.add_argument("--fixture-dir", default=None, dest="fixture_dir")
+    p_nat.add_argument("--limit", type=int, default=None)
+    p_nat.add_argument(
+        "--only",
+        default=None,
+        metavar="FILE",
+        help="JSON list of [id, utterance_idx] to run, indices kept (a pre-drawn sample, or the "
+        "rows a composed cell re-grades). Not an acceptance run on its own: see `compose`.",
+    )
+    p_nat.add_argument("--save", default=None, metavar="DIR")
+    p_nat.add_argument("--verbose", action="store_true")
+    p_nat.add_argument(
+        "--min-coverage",
+        type=float,
+        default=0.95,
+        dest="min_coverage",
+        help="Below this fraction of attempted rows the run reports coverage and WITHHOLDS the "
+        "score (L4e): an aggregate over the rows the runtime happened to manage is not a "
+        "result about the corpus.",
+    )
+
+    # gate — G1/G2
+    p_gate = sub.add_parser(
+        "gate",
+        help="Check that each skill's declared native status is backed by current evidence",
+    )
+    p_gate.add_argument("--skill", default=None)
+    p_gate.add_argument(
+        "--record-contracts",
+        action="store_true",
+        dest="record_contracts",
+        help="Record L1/L2 evidence for every skill. Run by `just check-contracts` after the "
+        "tests pass — evidence is a side effect of the check, never typed.",
+    )
+    p_gate.add_argument(
+        "--record-parity",
+        default=None,
+        dest="record_parity",
+        metavar="RUN_DIR",
+        help="Record L3 evidence for --skill from a saved parity run directory.",
+    )
+    p_gate.add_argument(
+        "--release-record",
+        default=None,
+        dest="release_record",
+        metavar="VERSION",
+        help="At the tag: copy the acceptance records and the gate's verdict to "
+        "evals/acceptance/releases/VERSION/. Written once; VERSION must be the matrix's release.",
+    )
+    p_gate.add_argument(
+        "--native-bin",
+        action="append",
+        default=None,
+        dest="native_bin",
+        metavar="PATH",
+        help="The binary under acceptance (the packaged artifact), once per OS the release "
+        "ships (e.g. the Windows knaif.exe and the Linux knaif). Each cell is checked against "
+        "its own OS's binary; without any, the gate reports the binary as not checked.",
+    )
+
+    # equivalence — carry accepted results over to a text-only rebuild
+    p_eq = sub.add_parser(
+        "equivalence",
+        help="Record a rebuild as equivalent to the measured build, so the gate carries the "
+        "accepted results over (and says so): a text fix (--replace) or a code change vouched "
+        "for by a committed sample run (--sample-run)",
+    )
+    p_eq.add_argument("--id", required=True)
+    p_eq.add_argument("--from-commit", required=True, dest="from_commit")
+    p_eq.add_argument("--replace", action="append", default=None, metavar="OLD=NEW")
+    p_eq.add_argument(
+        "--sample-run",
+        default=None,
+        dest="sample_run",
+        help="committed run dir whose verdicts.txt shows every OS and skill equivalent",
+    )
+    p_eq.add_argument(
+        "--new-artifact",
+        action="append",
+        default=None,
+        dest="new_artifact",
+        help="with --sample-run: each release zip/tarball the run tested (its sha256 must be in "
+        "the run's <stage>_artifact.sha256, and its executable must be the --new-bin)",
+    )
+    p_eq.add_argument("--old-bin", action="append", required=True, dest="old_bin")
+    p_eq.add_argument("--new-bin", action="append", required=True, dest="new_bin")
+    p_eq.add_argument("--reason", required=True)
+    p_eq.add_argument("--verified", required=True, help="how equivalence was verified")
+    p_eq.add_argument("--date", default=None)
+
+    # waive — the owner's exception to one failing cell
+    p_waive = sub.add_parser(
+        "waive",
+        help="Record the owner's decision to ship a cell that failed a quality threshold "
+        "(the verdict stays failing; `gate` prints it as EXCEPTED)",
+    )
+    p_waive.add_argument("--skill", required=True)
+    p_waive.add_argument("--cell", required=True, help="model|os|backend, as `gate` prints it")
+    p_waive.add_argument("--layer", default="L4")
+    p_waive.add_argument("--reason", required=True, help="why the owner accepts it")
+    p_waive.add_argument("--date", default=None, help="the decision's date (default: today)")
 
     # regression
     p_reg = sub.add_parser("regression", help="Check current results against snapshot")
@@ -1547,7 +2911,12 @@ def main() -> None:
         help="Re-seed rows that already have a command (but never validated rows)",
     )
 
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    enable_utf8_console()
+    args = build_parser().parse_args()
     if args.command == "fixtures":
         if args.fixtures_command == "regen":
             cmd_fixtures_regen(args)
@@ -1578,6 +2947,15 @@ def main() -> None:
         "report": cmd_report,
         "review": cmd_review,
         "retrieval": cmd_retrieval,
+        "accept": cmd_accept,
+        "accept-native": cmd_accept_native,
+        "compose": cmd_compose,
+        "rerun-set": cmd_rerun_set,
+        "safety": cmd_safety,
+        "native": cmd_native,
+        "gate": cmd_gate,
+        "waive": cmd_waive,
+        "equivalence": cmd_equivalence,
     }
     dispatch[args.command](args)
 

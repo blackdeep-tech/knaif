@@ -60,6 +60,186 @@ def _artifact_pdf_pages(output: Any) -> int | None:
         return None
 
 
+#: Criteria graded on the produced FILE rather than on the step's result dict (release plan R3a).
+#: 87 of 132 plan rows were graded only on the tool and that a file existed, so `documents_036`
+#: ("rotate sample.pdf 90 degrees") scored 1.0 with page 1 of 3 rotated.
+ARTIFACT_KEYS = (
+    "rotation",
+    "rotation_one_of",
+    "page_texts",
+    "every_page_contains",
+    "page_numbers_from",
+    "artifact_encrypted",
+    "decrypts_with",
+    "artifact_text_contains",
+    "artifact_format",
+    "no_larger_than",
+)
+
+
+def _page_texts(reader: Any) -> list[str]:
+    return [(page.extract_text() or "") for page in reader.pages]
+
+
+def _artifact_checks(
+    final: Path | None,
+    criteria: dict[str, Any],
+    sandbox: Path,
+    matched: list[str],
+    failed: list[str],
+) -> None:
+    """Grade the transformation on the real artifact. Every requested check fails when there is
+    no artifact to open — a missing file cannot have rotated its pages."""
+    asked = [k for k in ARTIFACT_KEYS if k in criteria]
+    if not asked:
+        return
+    if final is None or not final.exists():
+        failed.extend(f"{k}: no artifact" for k in asked)
+        return
+
+    if "no_larger_than" in criteria:
+        # Beside the artifact first: the eval runs each row in its own directory, where the
+        # row's fixture was copied, so `sandbox` is not necessarily where the input lives.
+        name = criteria["no_larger_than"]
+        source = next(
+            (p for p in (final.parent / name, Path(sandbox) / name) if p.exists()),
+            final.parent / name,
+        )
+        if source.exists() and final.stat().st_size <= source.stat().st_size:
+            matched.append(f"no_larger_than:{source.name}")
+        else:
+            size = source.stat().st_size if source.exists() else None
+            failed.append(f"no_larger_than: {final.stat().st_size} bytes vs {size}")
+
+    fmt = criteria.get("artifact_format")
+    if fmt:
+        head = final.read_bytes()[:5]
+        is_pdf = head.startswith(b"%PDF")
+        ok = is_pdf if fmt == "pdf" else (not is_pdf and final.suffix.lower() == f".{fmt}")
+        (matched if ok else failed).append(
+            f"artifact_format={fmt}"
+            if ok
+            else f"artifact_format: expected {fmt}, got {final.suffix or head!r}"
+        )
+
+    pdf_keys = [k for k in asked if k not in ("no_larger_than", "artifact_format")]
+    if final.suffix.lower() != ".pdf":
+        # A text artifact: only a content check applies.
+        wanted = criteria.get("artifact_text_contains")
+        if wanted:
+            text = final.read_text(encoding="utf-8", errors="replace")
+            (matched if wanted in text else failed).append(
+                f"artifact_text_contains:{wanted}"
+                if wanted in text
+                else f"artifact_text_missing:{wanted}"
+            )
+        failed.extend(
+            f"{k}: artifact is not a PDF" for k in pdf_keys if k != "artifact_text_contains"
+        )
+        return
+    if not pdf_keys:
+        return
+
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(str(final))
+    except Exception as exc:  # noqa: BLE001
+        failed.extend(f"{k}: unreadable PDF ({exc})" for k in pdf_keys)
+        return
+
+    if "artifact_encrypted" in criteria:
+        want = bool(criteria["artifact_encrypted"])
+        (matched if reader.is_encrypted == want else failed).append(
+            f"artifact_encrypted={want}"
+            if reader.is_encrypted == want
+            else f"artifact_encrypted: expected {want}, got {reader.is_encrypted}"
+        )
+    if reader.is_encrypted:
+        password = criteria.get("decrypts_with")
+        opened = bool(password) and bool(reader.decrypt(password))
+        if "decrypts_with" in criteria:
+            (matched if opened else failed).append(
+                f"decrypts_with:{password}"
+                if opened
+                else f"decrypts_with: {password!r} does not open it"
+            )
+        if not opened:
+            content = [k for k in pdf_keys if k not in ("artifact_encrypted", "decrypts_with")]
+            failed.extend(f"{k}: cannot read an encrypted artifact" for k in content)
+            return
+    elif "decrypts_with" in criteria:
+        failed.append("decrypts_with: the artifact is not encrypted")
+
+    rotations = [int(page.rotation or 0) % 360 for page in reader.pages]
+    if "rotation" in criteria:
+        want = criteria["rotation"]
+        expected = (
+            [int(want) % 360] * len(rotations)
+            if isinstance(want, int)
+            else [int(r) % 360 for r in want]
+        )
+        ok = rotations == expected
+        (matched if ok else failed).append(
+            f"rotation={want}" if ok else f"rotation: expected {expected}, got {rotations}"
+        )
+    if "rotation_one_of" in criteria:
+        allowed = {int(r) % 360 for r in criteria["rotation_one_of"]}
+        ok = len(set(rotations)) == 1 and rotations[0] in allowed
+        (matched if ok else failed).append(
+            f"rotation_one_of={sorted(allowed)}"
+            if ok
+            else f"rotation_one_of: expected one of {sorted(allowed)} on every page, got {rotations}"
+        )
+
+    texts = (
+        _page_texts(reader)
+        if any(
+            k in criteria
+            for k in (
+                "page_texts",
+                "every_page_contains",
+                "page_numbers_from",
+                "artifact_text_contains",
+            )
+        )
+        else []
+    )
+    if "page_texts" in criteria:
+        want = list(criteria["page_texts"])
+        ok = len(texts) == len(want) and all(
+            marker in text for marker, text in zip(want, texts, strict=True)
+        )
+        got = [t.strip().splitlines()[0] if t.strip() else "" for t in texts]
+        (matched if ok else failed).append(
+            f"page_texts={want}" if ok else f"page_texts: expected {want}, got {got}"
+        )
+    if "every_page_contains" in criteria:
+        mark = criteria["every_page_contains"]
+        missing = [i + 1 for i, text in enumerate(texts) if mark not in text]
+        ok = bool(texts) and not missing
+        (matched if ok else failed).append(
+            f"every_page_contains:{mark}"
+            if ok
+            else f"every_page_contains: {mark!r} missing on page(s) {missing}"
+        )
+    if "page_numbers_from" in criteria:
+        start = int(criteria["page_numbers_from"])
+        wrong = [i + 1 for i, text in enumerate(texts) if str(start + i) not in text.split()]
+        ok = bool(texts) and not wrong
+        (matched if ok else failed).append(
+            f"page_numbers_from={start}"
+            if ok
+            else f"page_numbers_from: page(s) {wrong} lack their number counting from {start}"
+        )
+    wanted = criteria.get("artifact_text_contains")
+    if wanted:
+        ok = any(wanted in text for text in texts)
+        (matched if ok else failed).append(
+            f"artifact_text_contains:{wanted}" if ok else f"artifact_text_missing:{wanted}"
+        )
+
+
 def _score(matched: list[str], failed: list[str], *, kind: str) -> VerifyResult:
     total = len(matched) + len(failed)
     score = len(matched) / total if total else 1.0
@@ -160,6 +340,15 @@ def honest(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResult
         else:
             failed.append(f"text_missing:{text_contains}")
 
+    # "the first 2 pages" must not return page 3: containing the right text is not enough.
+    text_excludes = criteria.get("text_excludes")
+    if text_excludes:
+        text = str(result.get("text", ""))
+        if text_excludes in text:
+            failed.append(f"text_should_exclude:{text_excludes}")
+        else:
+            matched.append(f"text_excludes:{text_excludes}")
+
     if criteria.get("output_exists"):
         output_path = result.get("output")
         output_paths = result.get("outputs") if isinstance(result.get("outputs"), list) else []
@@ -192,7 +381,9 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
     delegated = {
         k: v
         for k, v in criteria.items()
-        if k != "output_exists" and not (k == "pages" and artifact_pages is not None)
+        if k != "output_exists"
+        and k not in ARTIFACT_KEYS
+        and not (k == "pages" and artifact_pages is not None)
     }
     base = honest(output, delegated, sandbox)
     matched = list(base.matched)
@@ -213,6 +404,9 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
             matched.append(f"artifact_exists:{existing[0].name}")
         else:
             failed.append("artifact_missing")
+
+    # What the transformation did, read off the final artifact (release plan R3a).
+    _artifact_checks(_final_artifact(output), criteria, sandbox, matched, failed)
 
     return _score(matched, failed, kind="output")
 

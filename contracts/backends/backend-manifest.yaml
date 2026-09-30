@@ -50,7 +50,7 @@
 # the loader refuses a payload stamped with a different one — an upgraded binary must not load the
 # previous release's ggml lib out of ~/.knaif/backends, which survives the upgrade and is scanned
 # first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
-knaif_version: "1.1.0"
+knaif_version: "1.2.0"
 
 backends:
   cuda:
@@ -68,29 +68,35 @@ backends:
     nudge:
       # Compute capabilities where the VULKAN FALLBACK IS INADEQUATE, not merely slower — i.e. where
       # this payload is what makes the product work rather than what makes it faster. Measured, never
-      # assumed: docs/PERFORMANCE.md §2, 2026-07-14, on knaif's real workload (Qwen3-4B q4_k_m,
-      # 3938-token ffmpeg prompt). On sm_120 Vulkan generates at ~5.7 tok/s against the CPU's ~5.9 —
-      # a user with the newest NVIDIA card runs the "GPU" artifact at CPU speed, which is not a
-      # slower option but a product that reads as broken. The sm_120 / coopmat2 path is the culprit.
+      # assumed (docs/PERFORMANCE.md §2).
+      #
+      # EMPTY since 2026-09-25. "12.0" (Blackwell) was listed from 2026-07-07: on an RTX 5080 Vulkan
+      # generated at ~5.7 tok/s against the CPU's ~5.9. Re-measured on the SAME RTX 5080 with the same
+      # llama-cpp-2 0.1.150, driver 616.92: Vulkan 147 tok/s generation / 8812 tok/s prompt, against
+      # CUDA 204 / 10129 and CPU 14.4 / 373. Vulkan is ~72% of CUDA there — slower, not broken — so
+      # Blackwell now gets the soft offer like everything else. Same crate both times, so the fix is
+      # most likely the driver (July's was not recorded).
       #
       # THIS IS DATA ON PURPOSE. The defect is in a llama.cpp/driver code path and may be fixed
       # upstream; a "Blackwell is broken" list baked into the code would then lie in the other
-      # direction with nothing to catch it. Re-measure each supported architecture when the
-      # llama.cpp pin moves, record it in PERFORMANCE.md, and edit this list.
+      # direction with nothing to catch it. Being data does not keep it fresh on its own: "12.0"
+      # stayed listed until someone re-measured. Re-measure each supported architecture when the
+      # llama.cpp pin OR the NVIDIA driver moves, record it (with the driver version) in
+      # PERFORMANCE.md, and edit this list.
       #
       # Everything NOT listed here gets the soft offer: CUDA is faster and optional. Note that
       # sm_86 is the only pre-Blackwell architecture ever measured — Turing, Ada and Hopper are
       # unverified, so the copy must not imply otherwise.
-      vulkan_inadequate_compute_caps: ["12.0"]
+      vulkan_inadequate_compute_caps: []
 
     platforms:
       linux-x64:
         files:
           - name: libggml-cuda.so
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/libggml-cuda.so
-            sha256: "85d0bdb66c92e84ee206c3817673938bedf08a34833bf387311a6c8d188c07f5"
-            size_bytes: 162984592
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/libggml-cuda.so
+            sha256: "785f7460ea391067ca65eec3184ae99e18c8f4abb0e6b264ef3d571849076e78"
+            size_bytes: 162996880
           - name: libcudart.so.13
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/libcudart.so.13
@@ -113,7 +119,7 @@ backends:
           # the EULA; `test_backend_payload_manifest.py` asserts this list keeps up with it.
           - name: llama.cpp-LICENSE.txt
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/llama.cpp-LICENSE.txt
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/llama.cpp-LICENSE.txt
             sha256: "bffc7e34493908aeadebf13d831b189173e6d91e612352ada29192c0c44f37e6"
             size_bytes: 1259
           - name: NVIDIA-CUDA-EULA.txt
@@ -126,9 +132,9 @@ backends:
         files:
           - name: ggml-cuda.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/ggml-cuda.dll
-            sha256: "72193fa38c4afe439ace1768b653a4d74379374fafaeb5123855336e34167f7e"
-            size_bytes: 150217216
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/ggml-cuda.dll
+            sha256: "43dd6bc22e8d7c465cae10547e7acde3efa47d9bf5cadec2580d678502abb475"
+            size_bytes: 150257664
           - name: cudart64_13.dll
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cudart64_13.dll
@@ -152,29 +158,29 @@ backends:
           # same reason. Microsoft's Distributable List grants these files; see docs/PROVENANCE.md.
           - name: vcruntime140.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcruntime140.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/vcruntime140.dll
             sha256: "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"
             size_bytes: 178616
           - name: vcruntime140_1.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcruntime140_1.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/vcruntime140_1.dll
             sha256: "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e"
             size_bytes: 50112
           - name: msvcp140.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/msvcp140.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/msvcp140.dll
             sha256: "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"
             size_bytes: 643512
           - name: vcomp140.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/vcomp140.dll
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/vcomp140.dll
             sha256: "95d4ce4a6802d1e18b5e0e1722cc30ea72ca7e033f83828f05c0b7b993fe7cbf"
             size_bytes: 212920
           # See the linux-x64 note: the licence texts are payload files, not release-page
           # attachments, because the page is not what lands on a user's disk.
           - name: llama.cpp-LICENSE.txt
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.1.0/llama.cpp-LICENSE.txt
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/llama.cpp-LICENSE.txt
             sha256: "bffc7e34493908aeadebf13d831b189173e6d91e612352ada29192c0c44f37e6"
             size_bytes: 1259
           - name: NVIDIA-CUDA-EULA.txt

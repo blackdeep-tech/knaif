@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from knaif import CommandAgent
 from knaif.evalsuite.corpus import CorpusRow
 from knaif.evalsuite.runner import (
     AgentOutput,
@@ -259,6 +262,51 @@ def test_run_corpus_multi_output_chains(tmp_path):
     assert out.artifact_paths[1].name == "clip_trimmed.mp3"
 
 
+@pytest.mark.parametrize("execute", [False, True])
+def test_preview_confirmation_does_not_truncate_executing_eval(tmp_path, monkeypatch, execute):
+    """An executing eval must reach the full batch and the intent after its preview."""
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "clip.mp4").touch()
+    agent = CommandAgent.from_skill("skills/ffmpeg", sandbox=fixtures)
+    plan = {
+        "plan": [
+            {
+                "tool": "prepare_for_platform",
+                "args": {"inputs": ["clip.mp4"], "platform": "whatsapp", "preview": True},
+            },
+            {"tool": "extract_audio", "args": {"inputs": ["clip.mp4"], "format": "mp3"}},
+        ]
+    }
+    monkeypatch.setattr(agent, "infer", lambda *args, **kwargs: plan)
+    chain = MagicMock(return_value=[])
+    monkeypatch.setattr("knaif.evalsuite.runner.run_command_chain", chain)
+    out = run_corpus(
+        agent,
+        [
+            _row(
+                utterance="Prepare clip.mp4 for WhatsApp, then extract its audio.",
+                fixture="clip.mp4",
+            )
+        ],
+        execute=execute,
+        sandbox=tmp_path / "outputs",
+        fixture_dir=fixtures,
+    )[0]
+    assert out.outcome == "plan", out.error
+    confirmations = [r for r in out.execution_results if r["tool"] == "wait_for_confirmation"]
+    assert len(confirmations) == 1
+    if execute:
+        assert confirmations[0]["result"]["status"] != "declined"
+        assert len(out.artifact_commands) == 2
+        assert "scale=" in out.artifact_commands[0]
+        assert out.artifact_commands[1].endswith(".mp3")
+        chain.assert_called_once_with(out.artifact_commands, fixtures, tmp_path / "outputs/r001__0")
+    else:
+        assert confirmations[0]["result"]["status"] == "declined"
+        chain.assert_not_called()
+
+
 # ── NL gate downgrade: execute_plan returns clarify ───────────────────────────
 
 
@@ -299,7 +347,12 @@ def test_run_corpus_gate_clarify_does_not_overwrite_model_clarify():
     agent.execute_plan.assert_not_called()
 
 
-def test_run_corpus_single_output_still_uses_artifact_runner(tmp_path):
+def test_run_corpus_single_output_goes_through_the_chain(tmp_path):
+    """One execution path for every command-based row (T5b).
+
+    The single-command branch used to rewrite `-i` to the fixture and the output elsewhere,
+    which is why Python could never reproduce `ffmpeg_175`'s `output == input` collision.
+    """
     fixture_dir = tmp_path / "fixtures"
     fixture_dir.mkdir()
     (fixture_dir / "clip.mov").write_bytes(b"src")
@@ -319,9 +372,20 @@ def test_run_corpus_single_output_still_uses_artifact_runner(tmp_path):
     )
     agent.artifact_runner = MagicMock(return_value=produced)
 
-    outputs = run_corpus(agent, [row], execute=True, sandbox=sandbox, fixture_dir=fixture_dir)
+    with patch("knaif.evalsuite.runner.run_command_chain") as chained:
+        chained.return_value = [
+            {
+                "command": "",
+                "resolved_command": "",
+                "returncode": 0,
+                "stderr": "",
+                "output": produced,
+            }
+        ]
+        outputs = run_corpus(agent, [row], execute=True, sandbox=sandbox, fixture_dir=fixture_dir)
     out = outputs[0]
-    assert agent.artifact_runner.called
+    assert chained.called
+    assert not agent.artifact_runner.called
     assert out.artifact_path == produced
     assert out.artifact_paths == [produced]
 

@@ -94,9 +94,22 @@ flat. Declaring a real `deps` parent does *not* fix it, because Inno force-check
 checked parent.
 
 "Already present" now means what the runtime means: the probe honours `PATHEXT`, the
-`KNAIF_<CMD>_BIN` overrides, and each tool's `all_required` flag from `skills/*/skill.yaml` — so
-ffmpeg counts as satisfied only when **both** `ffmpeg` and `ffprobe` resolve, while any one of
-`gs` / `gswin64c` / `gswin32c` satisfies Ghostscript.
+`KNAIF_<CMD>_BIN` overrides, the install folders each tool declares under `windows.dirs`, and each
+tool's `all_required` flag from `skills/*/skill.yaml` — so ffmpeg counts as satisfied only when
+**both** `ffmpeg` and `ffprobe` resolve, while any one of `gs` / `gswin64c` / `gswin32c` satisfies
+Ghostscript. The folders matter because Ghostscript, LibreOffice and Tesseract never put themselves
+on PATH: without them setup re-offered an installed tool on every run (1.2.0-rc2). Setup is a
+32-bit process, so `%ProgramFiles%` is taken from `{commonpf64}`, not the environment.
+
+**No winget** (Windows Sandbox, Server, LTSC, policy-blocked): the tool tasks are shown unchecked
+and disabled, under a heading that says winget is missing. Before 1.2.0-rc3 they were tickable and
+then skipped silently. The `[Run]` check on winget stays, for silent installs. The last page lists
+every supporting tool of the selected skills as *ready* or *not installed*, probed afresh, since
+winget's exit status never reaches setup (`shellexec`); `knaif skills deps` then prints the exact
+winget command or the vendor's download page.
+
+The per-tool facts are ISPP `#define`s at the top of `knaif.iss`, emitted into `[Tasks]`, `[Run]`
+and `[Code]`, so the offer, the probe, the gray-out and the report share one copy.
 
 The model task is hidden entirely when the GGUF is already in `~/.knaif/models`, and the wizard's
 final page says to open a new terminal and run `knaif skills deps` — `ChangesEnvironment` only

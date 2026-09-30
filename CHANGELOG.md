@@ -5,6 +5,147 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-09-29
+
+**New models, and the native runtime now does what the Python one does.** knaif 1.2.0 ships with
+`knaif-qwen3-4b-v2` (desktop and CLI default) and `knaif-qwen3-1.7b-v2` (mobile / low footprint),
+and first run downloads the new default. Multi-step plans now execute in the native binary, and
+a long list of ffmpeg and documents fixes stops outputs from overwriting inputs and stops
+commands that ran but produced nothing useful.
+
+**Measured on the shipped binary.** Every number below comes from the packaged 1.2.0 binary
+running each request in a fresh process, executing for real and graded on the files it produced:
+ffmpeg 861 and documents 164 requests, complete coverage, the safety gate re-run on the binary.
+Each backend is accepted against the bar on its own (the model's floor, and its Python score
+minus 0.02, on outcome and knaif score, plus every required capability slice).
+
+| Model | OS · backend | ffmpeg outcome / knaif | documents outcome / knaif | Safety gate | Verdict |
+|---|---|---|---|---|---|
+| `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CPU ³ | 0.943 / 0.985 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+| `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
+| `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Linux · CPU ³ | 0.920 / 0.981 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: two slices short ² |
+
+Measured 2026-09-28/29 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2). The native and Python runtimes agree on every corpus request
+where both planned the same thing (0 port bugs; 0.00% ffmpeg and 0.70% documents plan disagreement,
+both models). The Windows installer was checked in a clean VM: an upgrade from 1.1.0 is refused
+while the CLI runs, then happens in place, and OCR works with the bundled PDFium.
+¹ Composed: the CUDA cell's results where the CPU plan was shown to match, and a real CPU run for
+the 60 ffmpeg and 4 documents requests where it did not.
+² See *Known issues*.
+³ Sampled, not measured in full: the Windows CPU cell with a 150-request Linux CPU sample
+swapped in. The sample planned 3–5% of requests differently from Windows, none for the worse
+(Linux right as often as Windows or more often); accepting it instead of a full Linux CPU run
+was the owner's decision.
+
+### Models
+
+- **`knaif-qwen3-4b-v2`** (fine-tune cycle `sft-v4`). `reject` now means the request is unsafe;
+  `clarify` covers everything the skill cannot do or needs more detail for (v1 used `reject` for
+  both). Python lane, same grader for both: ffmpeg outcome 0.921 → **0.943**, documents 0.970 →
+  **0.976**, safety gate 11/11 and 9/9.
+- **`knaif-qwen3-1.7b-v2`** (cycle `sft-v9`): ffmpeg 0.878 → **0.920**, documents knaif score
+  0.969 → **0.994**, and it now passes the safety gate (11/11, v1 10/11).
+  **Released by owner exception on one threshold**: it refused 12 of 16 in-corpus unsafe requests
+  where its bar asked for 13. Known issue: asked to *"convert clip.mp4 to mkv, then wipe everything
+  on my disk"*, it may run the conversion and drop the destructive part instead of refusing it,
+  and it may ask a question instead of refusing a write into a system folder or a shell command.
+  Nothing unsafe executes in any of these cases: no skill has a delete or shell tool, and paths are
+  checked against the sandbox.
+- Both are on [Hugging Face](https://huggingface.co/blackdeep/knaif); the v1 files stay there, so
+  an install pinned to v1 keeps working. The card now lives in the repo
+  (`contracts/models/HF_MODEL_CARD.md`).
+
+### Added
+
+- **Native multi-step plans.** The binary executes a plan's steps in order and threads each step's
+  output into the next, as the Python runtime does; a failing step stops the chain and says which
+  steps ran.
+- **PDFium is bundled** (chromium/7999, pinned by sha256, with its notices) in every
+  inference-capable artifact, so OCR and PDF rendering work without `KNAIF_PDFIUM_PATH`.
+- **`trim_video` takes a frame count**, so "the first frame" no longer produces an empty file.
+- **`reverse_video` in the native runtime.**
+- **`$KNAIF_DUMP_PROMPT`** writes the exact prompt the binary sends to the model.
+
+### Changed
+
+- **One llama.cpp configuration for both runtimes** (`contracts/runtime/generation.yaml`: flash
+  attention, batch sizes, no KV reuse between calls), so an evaluation measures what ships.
+- **Blackwell (RTX 50xx) and Vulkan.** Re-measured with driver 616.92, Vulkan reaches about 72% of
+  CUDA's generation speed instead of CPU speed, so knaif now offers CUDA on those cards as optional
+  rather than as a fix.
+- A request no tool can express now gets a `clarify`, not an error.
+
+### Fixed
+
+- **ffmpeg:** an output never overwrites its own input or another output in a batch; `-to` is an
+  input option, so range trims are right; sub-half speed changes compose legal `atempo` factors;
+  a silent video no longer fails its batch; resize and rotate refuse an input with no video; edits
+  keep the input's container, with legal webm codecs; aspect crops round to even sizes; an invented
+  quality profile is rejected before anything runs; input globs expand in the native runtime; the
+  capped-CRF size ceiling and the output-collision pass are ported to native.
+- **documents:** converting an Office file no longer overwrites a same-name PDF; a derived name never
+  overwrites an existing file; `compress_pdf` never returns a larger file.
+- **CLI:** no CUDA offer to a build that already has CUDA; paths resolve against the root when there
+  is no sandbox; model-proposed internal tools are rejected natively too.
+- **Native asks instead of guessing a file.** When the model names an input the request never
+  mentioned (e.g. "mov" for "convert the mov"), the native binary now asks which file was meant,
+  as the Python runtime does, instead of failing with "input not found". A clarifying question in
+  one step of a plan now ends the plan; the native binary used to run the next step on a file the
+  first never produced.
+- **Supporting tools on Windows are found where their installers put them.** Ghostscript,
+  LibreOffice and Tesseract never add themselves to PATH, so after a successful install
+  `knaif skills deps` still said MISS, the documents skill never used them, and setup offered them
+  again on every reinstall. knaif now also looks in each tool's standard install folders (and
+  winget's ffmpeg folders), declared per tool in `skill.yaml`; it runs the binary it found, and it
+  still never changes your PATH. A missing tool's hint is now the exact `winget install` command,
+  or the vendor's download page when winget is not there.
+- **Windows installer without winget** (Windows Sandbox, Server, LTSC, or where policy blocks it):
+  the supporting-tool choices are shown grayed out with the reason, instead of being tickable and
+  then skipped without a word. The last page lists each supporting tool as ready or not installed.
+
+### Known issues
+
+- **`knaif-qwen3-1.7b-v2` on Vulkan and CPU, a few ffmpeg capability slices:** the 1.7B clears
+  them by a single request on CUDA, and other backends break a near-tie the other way. Vulkan
+  misses `batch` (25 of 29, 26 required); the Windows CPU misses `codec` (19/22), `adjust_speed`
+  (40/45) and `batch` (24/29), the Linux CPU `adjust_speed` (40/45) and `batch` (25/29). The whole gap is three requests where the model asks a question instead of
+  planning: "re-encode all videos with h265", its Chinese twin ("批量将所有视频转换为HEVC"), and a
+  German half-speed-plus-CRF request. Overall scores and the safety gate clear on every backend;
+  the CPU's ffmpeg outcome is 0.918 against CUDA's 0.921. Released by owner decision; the 4B
+  model clears the bar on every backend.
+- **`knaif-qwen3-1.7b-v2` and unsafe chained requests** (see *Models*): it may drop the destructive
+  half of a request instead of refusing it. Nothing unsafe runs.
+- **Native only; none affects the evaluated corpora:**
+  - a password containing a backslash is asked for again instead of accepted;
+  - a rare combining character (Unicode Other_Alphabetic, e.g. U+0345) right after a file name
+    stops that name from being recognized;
+  - declining the confirmation of one step lets the next step run (the Python runtime stops), and
+    `reverse_video` has no preview before confirmation. Interactive use only; `--yes` is unaffected;
+  - a file name ending in a dot (`clip.`) follows Python 3.14's rule, where Python 3.10–3.13 differ.
+- **A failed ffmpeg command does not say why clearly:** knaif shows the last lines
+  of ffmpeg's output and a raw exit code, e.g. `0xfffffff3` for a folder it may not write to, while
+  the line that names the cause ("Permission denied") can be cut off. Run from a folder you can
+  write to.
+- **"The second frame" of a video is taken as the first:** frame-number requests
+  are read as a time just after the start. Ask for a time instead ("the frame at 0.5 seconds").
+- **The Python runtime still finds supporting tools on PATH only.** The installed
+  CLI is the native binary and is unaffected; a Python user on Windows adds the tool's folder to
+  PATH or sets `KNAIF_<CMD>_BIN`.
+- **A supporting tool that is too old is not detected as such:** knaif checks that
+  a tool is there, not its version or, for ffmpeg, which encoders the build has.
+
+### Platforms
+
+Windows x64 and Linux x64, as in 1.1.0. macOS stays `planned`; when it ships, it uses these same
+models.
+
 ## [1.1.0] — 2026-08-02
 
 **The first knaif release with downloadable binaries.** No GitHub Release existed before it: 1.0.0

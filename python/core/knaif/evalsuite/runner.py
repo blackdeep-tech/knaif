@@ -31,6 +31,11 @@ class AgentOutput:
     # All produced output files, in plan order. Single-output rows hold one entry
     # (mirroring artifact_path); multi-output rows hold one per deliverable.
     artifact_paths: list[Path] = field(default_factory=list)
+    # Every rendered command in plan order (one per intent). `artifact` stays the command
+    # that produced the deliverable — the last one — so its meaning is unchanged; this
+    # carries the rest, which command-text criteria (filters/flags/encoder) need when a
+    # filter is applied in an EARLIER step of a chain, e.g. rotate → compress.
+    artifact_commands: list[str] = field(default_factory=list)
     utterance_idx: int = 0
 
 
@@ -95,14 +100,22 @@ def _extract_artifacts(results: list[dict[str, Any]]) -> list[str]:
     return cmds
 
 
-def _build_registry_override(agent: Any, utterance: str) -> dict[str, ToolDef] | None:
-    """Return a retrieved registry subset for *utterance*, or None if unavailable."""
+def _build_registry_override(
+    agent: Any, utterance: str, top_k: int | None = None
+) -> dict[str, ToolDef] | None:
+    """Return a retrieved registry subset for *utterance*, or None if unavailable.
+
+    *top_k* overrides how many tools retrieval surfaces. Left None it takes
+    `retrieve_tools`' own default, so the eval path measures what the product does.
+    """
     registry = getattr(agent, "registry", None)
     if not isinstance(registry, dict):
         return None
-    from knaif.registry import retrieve_tools
+    import knaif.registry as _registry
 
-    return retrieve_tools(utterance, registry)
+    if top_k is None:
+        return _registry.retrieve_tools(utterance, registry)
+    return _registry.retrieve_tools(utterance, registry, top_k=top_k)
 
 
 def run_corpus(
@@ -116,12 +129,17 @@ def run_corpus(
     sandbox: Path | None = None,
     fixture_dir: Path | None = None,
     apply_retrieval: bool = True,
+    top_k: int | None = None,
 ) -> list[AgentOutput]:
     """Run each corpus row through the agent pipeline, returning AgentOutput objects.
 
     When execute=True, iterates all utterances per row, runs the agent in dry_run
-    mode to get the command string, then executes it against the row's fixture file.
+    mode with confirmation granted to get the complete command chain, then executes
+    it against the row's fixture file. This evaluates the approved workflow; interactive
+    confirmation behavior is tested separately.
     sandbox and fixture_dir are required when execute=True.
+
+    top_k overrides how many tools retrieval surfaces (None = the shipped default).
 
     apply_retrieval controls whether retrieve_tools() is called per utterance and
     the result passed as registry_override to infer().  Defaults to True so the
@@ -144,7 +162,7 @@ def run_corpus(
             error: str | None = None
 
             registry_override = (
-                _build_registry_override(agent, utterance) if apply_retrieval else None
+                _build_registry_override(agent, utterance, top_k) if apply_retrieval else None
             )
 
             parse_error: str | None = None
@@ -171,7 +189,10 @@ def run_corpus(
                             plan_payload,
                             utterance=utterance,
                             dry_run=True,
-                            confirmed=False,
+                            # Executing evals measure the completed workflow on copied
+                            # fixtures. Declining here truncates preview-enabled plans
+                            # before the full batch (and any subsequent intents).
+                            confirmed=execute,
                         )
                         # NL gate may have downgraded the plan to a clarify step.
                         if exec_results and exec_results[0].get("tool") == "clarify":
@@ -196,7 +217,9 @@ def run_corpus(
 
             artifact_path: Path | None = None
             artifact_paths: list[Path] = []
-            row_outputs = getattr(row, "outputs", None)
+            # Every rendered command, in plan order. Recorded whether or not we execute, so
+            # command-text criteria see a chain's earlier steps even on a non-executing run.
+            artifact_commands = _extract_artifacts(exec_results) if exec_results else []
             if (
                 execute
                 and artifact
@@ -207,17 +230,39 @@ def run_corpus(
                 _fp = fixture_dir / row.fixture
                 if _fp.exists():
                     row_dir = sandbox / f"{row.id}__{utt_idx}"
-                    row_dir.mkdir(parents=True, exist_ok=True)
-                    if row_outputs:
-                        # Multi-output: run the plan's batch commands as a chain so
-                        # each intent's intermediate output materializes for the next.
-                        commands = _extract_artifacts(exec_results)
-                        chain = run_command_chain(commands, fixture_dir, row_dir)
+                    # Provision by COPY into a per-row directory and run the plan's commands
+                    # there exactly as rendered — the same shape the native lane already
+                    # uses. One execution path for every command-based row, single-command
+                    # plans included: two implementations of one rule are how the lanes
+                    # drifted apart, and the old single-command branch rewrote `-i` to the
+                    # fixture and the output elsewhere, which removed the `output == input`
+                    # collision before ffmpeg ever saw it.
+                    #
+                    # `artifact_runner` stays the extension point for a skill whose artifact
+                    # is **not** a command line: `documents` hands over a JSON plan payload,
+                    # and routing "every row" through the chain would delete its execution
+                    # entirely. What both paths share is the contract — per-row provisioning,
+                    # faithful paths, and a failure that reaches the outcome.
+                    if artifact_commands:
+                        chain = run_command_chain(artifact_commands, fixture_dir, row_dir)
                         artifact_paths = [
                             Path(r["output"]) for r in chain if Path(r["output"]).exists()
                         ]
                         artifact_path = artifact_paths[-1] if artifact_paths else None
+                        # **A non-zero exit fails the row.** It used to be invisible: the row
+                        # recorded `outcome = plan` and counted as *correct*, so a command
+                        # that could not run scored the same as one that did. A chain with any
+                        # failed step fails as a whole — which is what native already reports
+                        # ("1 of N command(s) failed"), so it needs no new rule on either side.
+                        failed = next((r for r in chain if r["returncode"] != 0), None)
+                        if failed is not None:
+                            outcome = "error"
+                            error = (
+                                f"command failed (exit {failed['returncode']}): "
+                                f"{(failed.get('stderr') or '').strip()[-300:]}"
+                            )
                     elif agent.artifact_runner is not None:
+                        row_dir.mkdir(parents=True, exist_ok=True)
                         try:
                             artifact_path = agent.artifact_runner(artifact, _fp, row_dir)
                         except Exception:  # noqa: BLE001
@@ -237,6 +282,7 @@ def run_corpus(
                 execution_results=exec_results,
                 artifact_path=artifact_path,
                 artifact_paths=artifact_paths,
+                artifact_commands=artifact_commands or ([artifact] if artifact else []),
                 utterance_idx=utt_idx,
             )
             outputs.append(output)

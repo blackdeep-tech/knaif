@@ -79,8 +79,10 @@ different ground, and both want a warm native build.
 
 ## Git conventions
 
-`main` is the only long-lived branch. It is always releasable, and nothing lands on it
-except by squash-merged pull request.
+`main` is always releasable, and nothing lands on it except by pull request. Besides
+short-lived work branches there are **integration branches** — a release (`release/X.Y.Z`)
+or a big feature that several branches, and sometimes several people, build on. Work reaches
+an integration branch by PR, and the integration branch reaches `main` by one PR.
 
 ### Branches
 
@@ -157,9 +159,21 @@ Git's own messages are exempt — merges, `git revert`'s default subject, and
 
 ### Pull requests
 
-PRs are **squash-merged**, so the **PR title becomes the commit subject on `main`** and
-must itself follow the commit convention. Your branch's individual commits are squashed
-away; they can be as messy as you like.
+Two merge methods, chosen by what the branch is:
+
+| Branch | Merged with | Why |
+|---|---|---|
+| short `fix/…`, `docs/…`, one-change `feat/…` | **squash** | one commit on the target; the branch's own commits are thrown away |
+| integration branches (`release/*`, big features others build on) | **merge commit** | others have merged these commits into their own branches; a squash makes new commits git cannot match, so their later merge conflicts and duplicates history. It also keeps every commit an eval report cites reachable from `main` |
+
+Either way the **PR title becomes the subject on the target** (the squash commit, or the
+merge commit, whose body is the PR description), so it must follow the commit convention.
+With a squash your branch's own commits can be as messy as you like. **With a merge commit
+they land on `main` unchanged**, so every one must follow the convention too. CI's
+`pr-title` job lints the title **and every non-merge commit of the PR**
+(`python scripts/check_commit_msg.py --range BASE..HEAD` runs the same check locally), but
+install the hooks (below) so you hear about it at commit time. Never rebase a branch someone
+else has merged; bring `main`'s changes in by merging. `git log --first-parent main` shows one entry per merged PR.
 
 GitHub appends ` (#123)` to the squashed subject, so a title at the full 72 characters
 lands as 78 on `main`. Keep PR titles to **about 65 characters** to leave room for the
@@ -168,17 +182,18 @@ nothing will warn you about this.
 
 Keep a PR to one reviewable change. If you find yourself writing "and also" in the
 description, it is probably two PRs — and a `snapshot` re-lock is *always* its own commit,
-which in a squash-merge world means its own PR.
+which for a squash-merged branch means its own PR.
 
 Fill in [the template](.github/PULL_REQUEST_TEMPLATE.md), and say which platform you ran
-`just check` on — there is no CI yet, so that statement is the only evidence a reviewer has.
+`just check` on — CI runs on Linux only, so for Windows and macOS that statement is the only
+evidence a reviewer has.
 
 ### Tags and releases
 
 Releases are [SemVer](https://semver.org), tagged `vMAJOR.MINOR.PATCH` (`v1.0.1`) to match
 the `v*.*.*` trigger the release workflow will use. Every release gets a
 [Keep a Changelog](https://keepachangelog.com) entry in [CHANGELOG.md](CHANGELOG.md)
-written from the squashed commit subjects. Cutting one is a documented procedure —
+written from the subjects that landed on `main` (`git log --first-parent`). Cutting one is a documented procedure —
 [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ### Git hooks
@@ -279,7 +294,7 @@ just eval-fixtures <skill>    # regenerate fixtures (idempotent) — do this fir
 just eval <skill>             # cheap verifier — fast routing gate, no external binaries
 just eval-output-diff <skill> # executes the real tool, diffs against baseline commands
 just eval-success <skill>     # honest metric — real execution + success_criteria grading
-just eval-regression <skill>  # gate against the committed snapshot
+just eval-regression <skill> <current>  # gate a saved run's scoreboard against the committed snapshot
 ```
 
 Verifiers run cheapest-first: `cheap` → `output_diff` → `success`. Use `cheap` while

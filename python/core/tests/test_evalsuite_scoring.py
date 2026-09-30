@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -363,6 +364,39 @@ def test_rows_contain_expected_keys(tmp_path: Path):
         assert key in row_entry, f"Missing key: {key}"
 
 
+def test_rows_carry_utterance_idx(tmp_path: Path):
+    """Every scoreboard row must identify WHICH utterance of its row it is.
+
+    Without it, the only per-row join key is `id`, which is not unique: a corpus
+    row expands to several utterances, so joining two runs on `id` alone silently
+    keeps one utterance per row and drops the rest (846 ffmpeg rows collapse to
+    313). `score_corpus_output_diff` always emitted this; `score_corpus` — used by
+    the `cheap` and `success` verifiers, i.e. both committed acceptance bars — did
+    not, so regression evidence taken from a `success` run was quietly lossy.
+    """
+    sb = score_corpus([_output()], [_row()], {"cheap": _perfect}, "cheap", tmp_path)
+    assert "utterance_idx" in sb["rows"][0]
+
+
+def test_rows_utterance_idx_distinguishes_utterances_of_one_row(tmp_path: Path):
+    """Two utterances of the same corpus row must be separately addressable."""
+    row = CorpusRow(
+        id="r001",
+        utterances=["convert to mp4", "make it an mp4"],
+        expected_outcome="plan",
+        expected_tool="convert_video",
+        tags=["convert"],
+    )
+    base = _output()
+    outputs = [
+        replace(base, utterance="convert to mp4", utterance_idx=0),
+        replace(base, utterance="make it an mp4", utterance_idx=1),
+    ]
+    sb = score_corpus(outputs, [row], {"cheap": _perfect}, "cheap", tmp_path)
+    keys = {(r["id"], r["utterance_idx"]) for r in sb["rows"]}
+    assert len(keys) == 2, f"utterances collapsed to {keys}"
+
+
 # ── time-to-artifact aggregates ───────────────────────────────────────────
 
 
@@ -457,3 +491,23 @@ def test_first_row_marked_is_warmup(tmp_path: Path):
     sb = score_corpus(outputs, rows, {}, "cheap", tmp_path)
     assert sb["rows"][0].get("is_warmup") is True
     assert not sb["rows"][1].get("is_warmup")
+
+
+def test_schema_validity_counts_a_parse_failure_as_invalid(tmp_path: Path):
+    """A row the model never produced parseable JSON for is not schema-valid.
+
+    `parse_error` is its own outcome (the reject/clarify taxonomy split it out of the
+    generic `error` bucket) — and the schema-validity metric was derived as
+    `outcome != "error"`, so unparseable output scored 1.0 on the very metric that is
+    supposed to say whether the model emitted well-formed JSON. Outcome accuracy failed
+    the row correctly; only the auxiliary metric lied.
+    """
+    sb = score_corpus(
+        [_output(id="r001", outcome="parse_error", plan=None)],
+        [_row(id="r001", expected_outcome="plan")],
+        {"cheap": _perfect},
+        "cheap",
+        tmp_path,
+    )
+    assert sb["outcome_accuracy"] == pytest.approx(0.0)
+    assert sb["intent_metrics"]["schema_validity"] == pytest.approx(0.0)

@@ -60,15 +60,29 @@ KIND=base
 # an artifact every user downloads, which is the thing the opt-in payload exists to avoid — so it is
 # reachable only by asking for it explicitly. Kept so a bisect or a comparison can still produce one.
 LEGACY_WINDOWS_CUDA_APP=0
+# Ask for a kind's cargo features and exit, without building or packaging anything. This is what
+# lets `just build-native-kind` use the SAME mapping instead of copying it into the justfile — the
+# drift this file's feats_for_kind comment warns about.
+PRINT_FEATS=""
+# Which cargo profile's output to package. Defaults to `release`, so an un-flagged run behaves
+# exactly as it always has. `just build-native-kind` builds into `release-<kind>` and passes the
+# matching value, which is what gives each kind its own binary and staged libs instead of the
+# whole vocabulary fighting over target/release/. See
+# docs/plans/2026-09-21-per-backend-build-profiles.md.
+PROFILE=""
 for a in "$@"; do
   case "$a" in
     --no-build)       NO_BUILD=1 ;;
     --kind=*)         KIND="${a#--kind=}" ;;
+    --profile=*)      PROFILE="${a#--profile=}" ;;
+    --print-feats=*)  PRINT_FEATS="${a#--print-feats=}" ;;
     --legacy-windows-cuda-app) LEGACY_WINDOWS_CUDA_APP=1 ;;
     base|cpu|vulkan|cuda|metal) KIND="$a" ;;
-    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda|metal] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
+    *) echo "usage: package.sh [--no-build] [--kind=base|cpu|vulkan|cuda|metal] [--profile=<cargo profile>] [--print-feats=<kind>] [--legacy-windows-cuda-app]" >&2; exit 1 ;;
   esac
 done
+PROFILE="${PROFILE:-release}"
+TARGET_DIR="target/$PROFILE"
 
 # BACKEND_LIB is the extension of the LOADABLE ggml-* backends in $OUT/backends/ (dlopen'd at
 # runtime). It equals $LIB (the core-lib extension) everywhere EXCEPT macOS: CMake's `MODULE`
@@ -118,24 +132,45 @@ VER="$(grep -A3 '\[workspace.package\]' Cargo.toml | grep -m1 '^version' | sed -
 
 # Cargo features for a functional kind. Functional kinds use `dynamic-backends` so the produced
 # backends are loadable libs (Option 3), not static-linked — that is what lets CUDA be opt-in.
+# `pdfium` is on for every functional kind. It is nearly free — pdfium-render binds the PDFium
+# runtime DYNAMICALLY, so no PDF engine is linked in and the artifact gains only the code path that
+# looks for one (`$KNAIF_PDFIUM_PATH`, then the exe dir, then the system lib). Shipping the library
+# itself is a separate decision: it will be an opt-in per-skill payload, the way the CUDA backend
+# already is. Until that lands the feature only improves the error message, which is the point —
+# "put the PDFium runtime next to the executable" beats "rebuild with --features pdfium" for
+# someone holding a downloaded binary.
 #
-# `cpu`/`vulkan`/`cuda` (Linux, and the commands this function prints for a Windows Dev Shell)
-# carry `openmp`: they have shipped with it and their staging already assumes it (VCOMP140.dll /
-# libgomp.so.1). `metal` — the ONLY kind this function ever produces on Darwin, since package.sh
-# refuses cpu/vulkan/cuda there (D2) — omits it deliberately (D3/B5): llama-cpp-2's own default
-# would otherwise link Homebrew's keg-only libomp.dylib whenever the build environment happens to
-# resolve it, an absolute-path dependency check_macho_deps.py (E1) correctly fails on a clean Mac.
+# Turning it on here is also what makes ONE feature set per kind: the dev wrappers and the L4 eval
+# lane used to build `llama,<gpu>,pdfium` while packaging built `llama,dynamic-backends,<gpu>`, so
+# neither had a profile it could share. See docs/plans/2026-09-21-per-backend-build-profiles.md.
+#
+# `openmp` is listed explicitly because knaif-llm builds llama-cpp-2 with default-features = false
+# (D3/B5 in the 2026-08-02 macOS support plan). `cpu`/`vulkan`/`cuda` carry it: they have shipped
+# with it and their staging assumes it (VCOMP140.dll / libgomp.so.1). `metal` — the only kind this
+# function produces on Darwin, since package.sh refuses cpu/vulkan/cuda there (D2) — omits it: with
+# it, llama-cpp-2 links Homebrew's keg-only libomp.dylib whenever the build environment resolves
+# it, an absolute-path dependency check_macho_deps.py (E1) correctly fails on a clean Mac. Metal
+# itself needs no cargo feature (D1): GGML_METAL defaults ON under APPLE.
 feats_for_kind() {
   case "$1" in
-    cpu)    echo "llama,dynamic-backends,openmp" ;;
-    vulkan) echo "llama,dynamic-backends,vulkan,openmp" ;;
-    cuda)   echo "llama,dynamic-backends,cuda,openmp" ;;
-    # Metal needs no cargo feature of its own for GPU offload (D1): GGML_METAL defaults ON under
-    # APPLE, so the CPU-vs-Metal distinction on macOS is made by ggml's own CMake default, not by
-    # anything knaif controls. It also omits `openmp` — see the function comment (D3/B5).
-    metal)  echo "llama,dynamic-backends" ;;
+    # No llama.cpp at all — the mock-only build. Empty on purpose: callers must omit
+    # `--features` rather than pass an empty string.
+    base)   echo "" ;;
+    cpu)    echo "llama,dynamic-backends,openmp,pdfium" ;;
+    vulkan) echo "llama,dynamic-backends,vulkan,openmp,pdfium" ;;
+    cuda)   echo "llama,dynamic-backends,cuda,openmp,pdfium" ;;
+    metal)  echo "llama,dynamic-backends,pdfium" ;;
   esac
 }
+
+# --print-feats: answer and stop. Placed here because the answer IS feats_for_kind, and a caller
+# asking the question must not also trigger a build.
+if [ -n "$PRINT_FEATS" ]; then
+  case "$PRINT_FEATS" in
+    base|cpu|vulkan|cuda|metal) feats_for_kind "$PRINT_FEATS"; exit 0 ;;
+    *) echo "ERROR: --print-feats needs base|cpu|vulkan|cuda|metal, got '$PRINT_FEATS'" >&2; exit 1 ;;
+  esac
+fi
 
 # The release CUDA arch list. Kept in step with docs/RELEASE.md §3 — `test_cuda_arch_list.py`
 # asserts the two agree, because a fatbin that silently lost an arch is invisible until a user with
@@ -156,11 +191,11 @@ fi
 
 if [ "$NO_BUILD" -eq 0 ]; then
   if [ "$KIND" = base ]; then
-    echo "Building release binary (base build — no llama/GPU features)…"
-    cargo build --release -p knaif-cli
+    echo "Building release binary into target/$PROFILE (base build — no llama/GPU features)…"
+    cargo build --profile "$PROFILE" -p knaif-cli
   elif [ "$OS" = linux ] || [ "$OS" = macos ]; then
     feats="$(feats_for_kind "$KIND")"
-    echo "Building '$KIND' release binary (--features $feats)…"
+    echo "Building '$KIND' binary into target/$PROFILE (--features $feats)…"
     # An optional dependency the BUILD BOX decides — the same trap SHAPE as OpenMP (§1.3/D3 of the
     # 2026-08-02 macOS support plan), found by check_macho_deps.py (E1) on 2026-08-03 and NOT
     # anticipated by the plan. llama.cpp's CMakeLists.txt defaults `option(LLAMA_OPENSSL ... ON)`
@@ -218,25 +253,16 @@ if [ "$NO_BUILD" -eq 0 ]; then
       echo "  CUDAARCHS=$CUDAARCHS"
     fi
     # CMAKE_GENERATOR=Ninja is required for the Vulkan shader-gen step; harmless for cpu/cuda.
-    CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
+    CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --profile "$PROFILE" -p knaif-cli --features "$feats"
   else
-    # `just package-native` is offered FIRST because it sets the build environment this script
-    # cannot reach on Windows (CMAKE_DISABLE_FIND_PACKAGE_OpenSSL, LIBCLANG_PATH, CUDAARCHS,
-    # CMAKE_GENERATOR). The manual form below has to repeat the OpenSSL guard verbatim: without it
-    # a box with OpenSSL installed links libssl/libcrypto into llama-common, and check_pe_imports.py
-    # rejects the artifact at the END of a full build. Printing a command that walks into that is
-    # worse than printing nothing.
-    echo "ERROR: a '$KIND' build needs the MSVC/C++ toolchain — compile it in a VS Developer shell." >&2
-    echo "Preferred (sets the whole build environment for you):" >&2
-    echo "  just package-native $KIND" >&2
-    echo "Or by hand, then re-run this script:" >&2
-    echo "  \$env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'" >&2
-    echo "  cargo build --release -p knaif-cli --features $(feats_for_kind "$KIND")" >&2
-    echo "  installers/package.sh --no-build --kind=$KIND" >&2
+    echo "ERROR: a '$KIND' build needs the MSVC/C++ toolchain. Build it with:" >&2
+    echo "  just build-native-kind $KIND" >&2
+    echo "(which enters the VS environment itself), then re-run:" >&2
+    echo "  installers/package.sh --no-build --kind=$KIND --profile=release-$KIND" >&2
     exit 1
   fi
 fi
-BIN="target/release/$EXE"
+BIN="$TARGET_DIR/$EXE"
 [ -f "$BIN" ] || { echo "ERROR: $BIN not found — build first." >&2; exit 1; }
 
 # Guard the one thing $BIN cannot tell us. Cargo overwrites target/release/knaif on every build, so
@@ -290,7 +316,7 @@ fi
 # Identify a build by the backends it actually emitted — the one property that separates the kinds.
 out_dir() {
   local kind="${1:-$KIND}" d be
-  for d in $(ls -dt target/release/build/llama-cpp-sys-2-*/out 2>/dev/null); do
+  for d in $(ls -dt "$TARGET_DIR"/build/llama-cpp-sys-2-*/out 2>/dev/null); do
     be="$d/backends"
     [ -d "$be" ] || continue
     case "$kind" in
@@ -469,7 +495,7 @@ verify_cuda_archs() {
     echo "       Built SASS: $(echo "$elf" | tr '\n' ' ')" >&2
     echo "       Built PTX:  $(echo "$ptx" | tr '\n' ' ')" >&2
     echo "       Changing CUDAARCHS needs a CLEAN build — cmake's always_configure(false) means an" >&2
-    echo "       incremental build keeps the old settings. Wipe target/release/build/llama-cpp-sys-2-*" >&2
+    echo "       incremental build keeps the old settings. Wipe $TARGET_DIR/build/llama-cpp-sys-2-*" >&2
     exit 1
   }
   echo "  verified fatbin archs: $(echo "$elf" | tr '\n' ' ')(SASS) $(echo "$ptx" | tr '\n' ' ')(PTX)"
@@ -486,6 +512,25 @@ verify_cuda_archs() {
 # build if `status: published` is set while any placeholder remains. Tags are assigned by what the
 # file IS — the ggml lib is ABI-coupled to this build and rides the product tag; everything NVIDIA
 # ships rides the toolkit-keyed tag and is shared across knaif releases.
+# A published file must not name the person who built it. Rust panic locations and C `__FILE__`
+# strings carry the builder's home directory (the cargo registry lives there) unless the build
+# remaps it; 1.1.0's Windows artifacts shipped ~1,200 of them, found only by looking. Hard-fails,
+# like the arch check, because a leak is invisible until someone reads the bytes.
+check_no_local_paths() {
+  local dir="$1" py=""
+  for cand in python python3; do
+    command -v "$cand" >/dev/null 2>&1 && { py="$cand"; break; }
+  done
+  [ -n "$py" ] || {
+    echo "ERROR: python not found — cannot check the staged tree for local paths." >&2
+    exit 1
+  }
+  "$py" "$ROOT/scripts/check_no_local_paths.py" "$dir" || {
+    echo "ERROR: $dir carries the builder's home directory; not packaging it." >&2
+    exit 1
+  }
+}
+
 write_manifest_fragment() {
   local stage="$1" platform="$2" f base tag sum size
   echo "      # generated by installers/package.sh for knaif $VER on $platform"
@@ -534,7 +579,7 @@ if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 0 ]; then
   if [ "$OS" = linux ]; then PFX=lib; else PFX=; fi
   CUDA_LIB="${PFX}ggml-cuda.$LIB"
   [ -n "$OUT" ] && [ -f "$OUT/backends/$CUDA_LIB" ] || {
-    echo "ERROR: $CUDA_LIB not found under target/release/build/.../out/backends —" >&2
+    echo "ERROR: $CUDA_LIB not found under $TARGET_DIR/build/.../out/backends —" >&2
     echo "       build with --features $(feats_for_kind cuda) first." >&2
     [ "$OS" = windows ] && \
       echo "       On Windows that build must run in a VS Developer shell; then re-run with --no-build." >&2
@@ -623,6 +668,7 @@ EOF
   # is a paste rather than a hand-transcription of four to eight sha256 values. URLs stay TODO until
   # the assets are uploaded — the release-readiness guard fails the build if `status: published` is
   # set while any of them is still a placeholder.
+  check_no_local_paths "$STAGE"
   write_manifest_fragment "$STAGE" "$OS-$ARCH" > "dist/$NAME.manifest-fragment.yaml"
 
   echo "Created dist/staging/$NAME/ ($(du -sh "$STAGE" | cut -f1)) [kind=cuda payload, loose files]"
@@ -921,6 +967,12 @@ mkdir -p "$STAGE/licenses"
 cp installers/licenses/THIRD-PARTY-RUST.txt "$STAGE/licenses/"
 if [ "$KIND" != base ]; then
   cp installers/licenses/llama.cpp-LICENSE.txt "$STAGE/licenses/"
+  # PDFium beside the exe — the first place pdfium-render looks after $KNAIF_PDFIUM_PATH — and
+  # its packaging licence + 15 component notices under licenses/PDFium/. Every functional kind
+  # builds with `pdfium`, so every one ships the library: without it OCR and PDF rendering fail
+  # on a user's machine (release plan R0). Pinned by sha256 in contracts/release/pdfium.yaml.
+  bash installers/fetch_pdfium.sh "$OS-$ARCH" "$STAGE/bin" "$STAGE/licenses"
+  [ "$OS" = linux ] && set_origin_rpath "$STAGE/bin/libpdfium.so"
 fi
 if [ "$KIND" = cuda ] && [ "$LEGACY_WINDOWS_CUDA_APP" -eq 1 ]; then
   # Hard failure, not a warning: we are redistributing NVIDIA's cudart/cublas/cublasLt, which their
@@ -942,6 +994,12 @@ case "$KIND" in
   metal)  INFER="Inference: Metal GPU (Apple Silicon), loadable ggml-cpu backends with runtime dispatch per Apple generation (M1/M2-M3/M4) as fallback." ;;
 esac
 
+# The recommended model, read from the manifest this artifact ships, never typed here: a hand-copied
+# name went stale at the v1 -> v2 promotion (1.2.0 release candidate).
+MODEL="$(awk '/^recommendations:/{r=1; next} r && /^[^ #]/{r=0} r && $1=="desktop:"{print $2; exit}' \
+  contracts/models/model-manifest.yaml)"
+[ -n "$MODEL" ] || { echo "ERROR: no recommendations.desktop in the model manifest" >&2; exit 1; }
+
 cat > "$STAGE/README.txt" <<EOF
 knaif $VER — native CLI ($OS-$ARCH${SUFFIX})
 
@@ -956,14 +1014,16 @@ Issues:   https://github.com/blackdeep-tech/knaif/issues
 Quick start:
   bin/$EXE skills list                        list available skills
   bin/$EXE skills deps                         check required external tools (ffmpeg, ...)
-  bin/$EXE models pull knaif-qwen3-4b-v1       download the recommended model (~2.5 GB)
-  bin/$EXE run ffmpeg "compress clip.mp4 for email" --model knaif-qwen3-4b-v1
+  bin/$EXE models pull $MODEL       download the recommended model (~2.5 GB)
+  bin/$EXE run ffmpeg "compress clip.mp4 for email"
 
 Models live in ~/.knaif/models. External tools (ffmpeg, LibreOffice, Ghostscript,
 Tesseract) install separately — run 'skills deps' to see what each skill needs.
 
 $INFER
 EOF
+
+check_no_local_paths "$STAGE"
 
 mkdir -p dist
 OUT="dist/$NAME"

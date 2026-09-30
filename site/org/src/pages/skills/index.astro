@@ -1,0 +1,131 @@
+---
+import Base from "../../layouts/Base.astro";
+import SkillCard from "../../components/SkillCard.astro";
+import { skills, categories } from "../../lib/catalog";
+
+const stable = skills.filter((s) => s.stage === "stable");
+const preview = skills.filter((s) => s.stage === "preview");
+---
+
+<Base
+  title="Skills — knaif"
+  description="Every knaif skill: what it does, what you can say to it, and what it needs installed."
+>
+  <section class="intro">
+    <p class="eyebrow">skills</p>
+    <h1>One blade per job.</h1>
+    <p class="lede">
+      Each skill wraps a tool nobody remembers the flags for. You describe the outcome;
+      knaif works out the command and shows it to you before it runs.
+    </p>
+  </section>
+
+  {/* Filter is progressive enhancement: with JS off, every card stays visible. */}
+  <div class="filter" data-filter>
+    <button type="button" class="chip is-on" data-cat="all">All</button>
+    {
+      categories.map((cat) => (
+        <button type="button" class="chip" data-cat={cat}>
+          {cat}
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="grid">
+    {stable.map((skill) => <SkillCard skill={skill} />)}
+  </div>
+
+  {
+    preview.length > 0 && (
+      <section class="preview-section">
+        <p class="eyebrow">in development</p>
+        <p class="lede small">
+          These work, but their behaviour is still changing and they have no locked
+          acceptance bar yet. Useful to try; not yet something to depend on.
+        </p>
+        <div class="grid">
+          {preview.map((skill) => (
+            <SkillCard skill={skill} />
+          ))}
+        </div>
+      </section>
+    )
+  }
+</Base>
+
+<script>
+  const bar = document.querySelector("[data-filter]");
+  if (bar) {
+    bar.addEventListener("click", (event) => {
+      const btn = (event.target as HTMLElement).closest<HTMLElement>("[data-cat]");
+      if (!btn) return;
+      const cat = btn.dataset.cat;
+      bar.querySelectorAll("[data-cat]").forEach((b) => b.classList.toggle("is-on", b === btn));
+      document.querySelectorAll<HTMLElement>(".card[data-category]").forEach((card) => {
+        card.hidden = cat !== "all" && card.dataset.category !== cat;
+      });
+    });
+  }
+</script>
+
+<style>
+  h1 {
+    font-size: var(--step-3);
+    margin: 0 0 1rem;
+    font-weight: 600;
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 52ch;
+    margin: 0;
+  }
+
+  .lede.small {
+    font-size: var(--step-0);
+    max-width: 60ch;
+  }
+
+  .filter {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    text-transform: lowercase;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    color: var(--ink);
+  }
+
+  .chip.is-on {
+    color: var(--ink);
+    border-color: var(--coral);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: var(--density-gap);
+  }
+
+  .preview-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+</style>

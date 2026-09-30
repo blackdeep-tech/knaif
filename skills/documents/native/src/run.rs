@@ -7,7 +7,7 @@
 //! wired; the overlay tools (watermark/add_page_numbers) and rasterizing tools (compress/convert/
 //! ocr) are not yet here.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -269,7 +269,8 @@ pub fn commit(
                 "-compressed.pdf",
             );
             assert_in_sandbox(&out, sandbox)?;
-            crate::compress::compress(&input, &out, &quality, &profile, gs.as_deref())?;
+            // Never a larger file: see `compress_no_larger`.
+            crate::compress::compress_no_larger(&input, &out, &quality, &profile, gs.as_deref())?;
             Ok(vec![out])
         }
         "ocr_document" => {
@@ -470,7 +471,9 @@ fn split_dir_outputs(
         .unwrap_or("output");
     specs
         .iter()
-        .map(|(label, _)| out_dir.join(format!("{stem}-pages-{}.pdf", label.replace('-', "_"))))
+        .map(|(label, _)| {
+            next_free(out_dir.join(format!("{stem}-pages-{}.pdf", label.replace('-', "_"))))
+        })
         .collect()
 }
 
@@ -559,7 +562,8 @@ fn out_arg(
 }
 
 /// `<parent>/<stem><suffix>` unless an explicit output is given. Port of `_output_path` for the
-/// suffix-based outputs (`-rotated.pdf`, …).
+/// suffix-based outputs (`-rotated.pdf`, …). An explicit output is a request and is honoured even
+/// over an existing file; a derived default that already exists moves to [`next_free`].
 fn derive_output(input: &Path, output: Option<PathBuf>, suffix: &str) -> PathBuf {
     if let Some(p) = output {
         return p;
@@ -569,10 +573,34 @@ fn derive_output(input: &Path, output: Option<PathBuf>, suffix: &str) -> PathBuf
         .and_then(|s| s.to_str())
         .unwrap_or("output");
     let name = format!("{stem}{suffix}");
-    match input.parent() {
+    next_free(match input.parent() {
         Some(p) => p.join(name),
         None => PathBuf::from(name),
+    })
+}
+
+/// `path` if nothing is there, else `<stem>-1<ext>`, `-2`, … — the first free one. Port of
+/// `_engine._next_free`. For a name the plan did not choose: a derived default that already
+/// exists is someone's file (`convert notes.txt to markdown` wrote over an existing `notes.md`,
+/// 2026-09-24 L4). Preview and commit both derive through here, so they agree.
+fn next_free(path: PathBuf) -> PathBuf {
+    if !path.exists() {
+        return path;
     }
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output")
+        .to_string();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+    (1..)
+        .map(|n| path.with_file_name(format!("{stem}-{n}{ext}")))
+        .find(|candidate| !candidate.exists())
+        .expect("an unbounded counter always finds a free name")
 }
 
 fn resolve_path(raw: &str, base: &Path) -> PathBuf {
@@ -591,35 +619,17 @@ fn write(doc: &mut lopdf::Document, path: &Path) -> anyhow::Result<()> {
     pdf::save(doc, path)
 }
 
-/// Lexically absolutize + collapse `.`/`..` (no filesystem access — works on not-yet-created files).
-fn lexical_abs(p: &Path) -> PathBuf {
-    let base = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir().unwrap_or_default().join(p)
-    };
-    let mut out = PathBuf::new();
-    for comp in base.components() {
-        match comp {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            c => out.push(c.as_os_str()),
-        }
-    }
-    out
-}
-
-/// Raise if `p` is outside `sandbox` (both lexically resolved). No-op when `sandbox` is `None`.
+/// Raise if `p` is outside `sandbox`. No-op when `sandbox` is `None`. Delegates to the
+/// shared `knaif-skill-api` primitive (filesystem-real: existing ancestors are
+/// canonicalized, following symlinks/junctions, not just lexically normalized) so this
+/// applies the identical containment rule as ffmpeg and core. A purely lexical check here
+/// previously let a Windows junction placed inside the sandbox read a file outside it — see
+/// docs/audits/2026-09-07-core-principles-and-rtx5080.md, F4.
 fn assert_in_sandbox(p: &Path, sandbox: Option<&Path>) -> anyhow::Result<()> {
     let Some(sandbox) = sandbox else {
         return Ok(());
     };
-    if !lexical_abs(p).starts_with(lexical_abs(sandbox)) {
-        anyhow::bail!("Path {:?} is outside the sandbox", p.display().to_string());
-    }
-    Ok(())
+    knaif_skill_api::sandbox::assert_in_sandbox(p, sandbox)
 }
 
 #[cfg(test)]
@@ -660,6 +670,102 @@ mod tests {
         let written = commit("rotate_pages", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
         assert_eq!(written, vec![dir.join("a-rotated.pdf")]);
         assert!(dir.join("a-rotated.pdf").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Port of skills/documents/python/tests/test_output_never_overwrites.py. The 2026-09-24 L4 run
+    // found both runtimes writing a default output name over a file that already existed.
+    #[test]
+    fn a_default_output_that_exists_moves_to_the_next_free_name() {
+        let dir = tmpdir();
+        std::fs::write(
+            dir.join("notes.txt"),
+            "Invoice Alpha
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("notes.md"),
+            "the user's own notes
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("notes-1.md"),
+            "also taken
+",
+        )
+        .unwrap();
+        let a = args(serde_json::json!({"input": "notes.txt", "to_format": "md"}));
+
+        match preview("convert_document", &a, &dir, Some(&dir), &docs_bundle()).unwrap() {
+            Preview::Write { outputs, .. } => assert_eq!(outputs, vec![dir.join("notes-2.md")]),
+            Preview::Read(_) => panic!("convert is a write op"),
+        }
+        let written = commit("convert_document", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
+        assert_eq!(written, vec![dir.join("notes-2.md")]);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("notes.md")).unwrap(),
+            "the user's own notes
+"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_suffixed_default_moves_and_a_free_one_stays() {
+        let dir = tmpdir();
+        std::fs::write(dir.join("a.pdf"), make_pdf(2)).unwrap();
+        std::fs::write(dir.join("a-rotated.pdf"), b"someone else's file").unwrap();
+        let a = args(serde_json::json!({"input": "a.pdf", "degrees": 90}));
+        let written = commit("rotate_pages", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
+        assert_eq!(written, vec![dir.join("a-rotated-1.pdf")]);
+        assert_eq!(
+            std::fs::read(dir.join("a-rotated.pdf")).unwrap(),
+            b"someone else's file"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_explicit_output_is_honoured_even_when_it_exists() {
+        let dir = tmpdir();
+        std::fs::write(
+            dir.join("notes.txt"),
+            "fresh
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("out.md"),
+            "old
+",
+        )
+        .unwrap();
+        let a =
+            args(serde_json::json!({"input": "notes.txt", "to_format": "md", "output": "out.md"}));
+        let written = commit("convert_document", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
+        assert_eq!(written, vec![dir.join("out.md")]);
+        assert!(std::fs::read_to_string(dir.join("out.md"))
+            .unwrap()
+            .contains("fresh"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn split_defaults_move_too() {
+        let dir = tmpdir();
+        std::fs::write(dir.join("doc.pdf"), make_pdf(4)).unwrap();
+        std::fs::write(dir.join("doc-pages-1_2.pdf"), b"taken").unwrap();
+        let a = args(serde_json::json!({"input": "doc.pdf", "ranges": "1-2,3-4"}));
+        let outputs = commit("split_pdf", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
+        assert_eq!(
+            outputs,
+            vec![
+                dir.join("doc-pages-1_2-1.pdf"),
+                dir.join("doc-pages-3_4.pdf")
+            ]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -713,6 +819,53 @@ mod tests {
         let dir = tmpdir();
         let a = args(serde_json::json!({"input": "../escape.pdf", "degrees": 90}));
         assert!(preview("rotate_pages", &a, &dir, Some(&dir), &docs_bundle()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn sandbox_junction_escape_rejected() {
+        // The audit's literal F4 repro: `run documents "Inspect junction/example.pdf"
+        // --sandbox <sandbox> --dry-run` read a file outside the sandbox through a junction
+        // placed inside it, because the old `assert_in_sandbox` was lexical-only. It must
+        // now be rejected the same way `sandbox_escape_rejected` above already is.
+        let dir = tmpdir();
+        let sandbox = dir.join("sandbox");
+        let outside = dir.join("outside");
+        std::fs::create_dir_all(&sandbox).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("example.pdf"), make_pdf(1)).unwrap();
+
+        let link = sandbox.join("junction");
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &link.display().to_string(),
+                &outside.display().to_string(),
+            ])
+            .status()
+            .expect("mklink must run on Windows");
+        assert!(
+            status.success(),
+            "junction creation must succeed (no admin needed)"
+        );
+
+        let a = args(serde_json::json!({"input": "junction/example.pdf"}));
+        let result = preview(
+            "inspect_document",
+            &a,
+            &sandbox,
+            Some(&sandbox),
+            &docs_bundle(),
+        );
+        let err = match result {
+            Ok(_) => panic!("junction escape must be rejected"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("outside the sandbox"), "{err}");
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,0 +1,110 @@
+---
+// The not-found page. Astro builds src/pages/404.astro to dist/404.html.
+//
+// It only reaches a visitor once the Amplify app's catch-all custom rule points at it:
+// the default `/<*> -> /index.html (404-200)` is the single-page-app pattern and serves
+// the HOME PAGE under a 404 status, so a mistyped URL looks like the front page with
+// nothing saying anything went wrong. See docs/SITE.md §5.
+import Base from "../layouts/Base.astro";
+
+// Where someone who mistyped a URL actually wanted to go. Ordered by how often that is
+// true, not alphabetically — the download is what this site is for. No "Home" entry: the
+// wordmark and the footer both already lead there, and three fills the row exactly where
+// four wrapped one orphan onto a second.
+const routes = [
+  { href: "/download/", label: "Download", note: "one binary, no Python, no account" },
+  { href: "/skills/", label: "Skills", note: "what knaif can already do" },
+  { href: "/about/", label: "About", note: "why it works the way it does" },
+];
+---
+
+<Base
+  title="Page not found — knaif"
+  description="That page does not exist on knaif.org. Links to the download, the skill catalog, and the rest of the site."
+>
+  <section class="head">
+    <p class="eyebrow">404</p>
+    <h1>That page isn't here.</h1>
+    <p class="lede">
+      The link may be out of date, or the address may have a typo in it. Nothing is broken —
+      this address just doesn't point at anything.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">where you were probably going</p>
+    <ul class="routes">
+      {
+        routes.map((route) => (
+          <li>
+            <a href={route.href}>{route.label}</a>
+            <span class="note">{route.note}</span>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="fine">
+      Building on knaif rather than using it? The developer documentation is at{" "}
+      <a href="https://knaif.dev">knaif.dev</a>.
+    </p>
+  </section>
+</Base>
+
+<style>
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  section p {
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: var(--step-3);
+  }
+
+  .routes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: var(--density-gap);
+  }
+
+  .routes li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    border-top: 2px solid var(--coral);
+    padding-top: 0.9rem;
+  }
+
+  .routes a {
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .routes a:hover {
+    text-decoration: underline;
+  }
+
+  .note {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+
+  .fine {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+</style>

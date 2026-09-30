@@ -99,7 +99,7 @@ def test_both_dims_default_crop():
 
 def test_both_dims_fit_pad():
     assert _get_geometry_vf()(1080, 1920, "pad", None) == (
-        "scale=1080:1920:force_original_aspect_ratio=decrease," "pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
+        "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
     )
 
 
@@ -108,15 +108,18 @@ def test_both_dims_fit_stretch():
 
 
 def test_aspect_square_no_dims_pure_crop():
+    # Each dimension rounded DOWN to even: libx264 with `-pix_fmt yuv420p` refuses odd
+    # dimensions, writes a 0-byte file and exits non-zero (N4). Verified by running it.
     assert _get_geometry_vf()(None, None, "crop", "1:1") == (
-        "crop=min(iw\\,ih*1/1):min(ih\\,iw*1/1)"
+        "crop=trunc(min(iw\\,ih*1/1)/2)*2:trunc(min(ih\\,iw*1/1)/2)*2"
     )
 
 
 def test_aspect_9x16_pure_crop():
-    # aw=9, ah=16 → W=min(iw,ih*9/16), H=min(ih,iw*16/9)
+    # aw=9, ah=16 → W=min(iw,ih*9/16), H=min(ih,iw*16/9), each rounded DOWN to even:
+    # libx264 + yuv420p refuse odd dimensions, and a 1280x720 source gives W=405 (N4).
     assert _get_geometry_vf()(None, None, "crop", "9:16") == (
-        "crop=min(iw\\,ih*9/16):min(ih\\,iw*16/9)"
+        "crop=trunc(min(iw\\,ih*9/16)/2)*2:trunc(min(ih\\,iw*16/9)/2)*2"
     )
 
 
@@ -133,7 +136,7 @@ def test_both_dims_take_precedence_over_aspect():
 
 def test_aspect_accepts_slash_separator():
     assert _get_geometry_vf()(None, None, "crop", "9/16") == (
-        "crop=min(iw\\,ih*9/16):min(ih\\,iw*16/9)"
+        "crop=trunc(min(iw\\,ih*9/16)/2)*2:trunc(min(ih\\,iw*16/9)/2)*2"
     )
 
 
@@ -163,7 +166,7 @@ def test_resize_square_via_aspect(media_root, stub_ffmpeg):
         {"inputs": [str(media_root / "clip.mp4")], "aspect": "1:1", "fit": "crop"},
     )
     cmd_str = " ".join(str(c) for c in cmd)
-    assert "crop=min(iw\\,ih*1/1):min(ih\\,iw*1/1)" in cmd_str
+    assert "crop=trunc(min(iw\\,ih*1/1)/2)*2:trunc(min(ih\\,iw*1/1)/2)*2" in cmd_str
 
 
 def test_resize_single_height_unchanged(media_root, stub_ffmpeg):
@@ -221,3 +224,35 @@ def test_resize_branch_still_emits_encode_flags(media_root, stub_ffmpeg):
     )
     assert "-c:v" in cmd
     assert "-crf" in cmd
+
+
+# ── N4: the aspect crop produced dimensions libx264 cannot encode ────────────
+
+
+def test_aspect_crop_rounds_to_even_dimensions():
+    r"""An aspect crop must yield EVEN width and height, or the command cannot encode.
+
+    `crop=min(iw\,ih*9/16):...` on a 1280x720 source computes width
+    min(1280, 720*9/16) = **405**, which is odd — and libx264 with `-pix_fmt yuv420p`
+    refuses it outright:
+
+        [libx264] width not divisible by 2 (405x720)
+        Error while opening encoder
+
+    ffmpeg then writes a **0-byte** file and exits non-zero. Verified by running it.
+
+    This was invisible for months because the `success` verifier grades these rows on
+    command *text* (`filter:crop` present, `container=mp4`), so a broken artifact scored
+    1.0 on BOTH runtimes. The native L4 lane surfaced it only because the shipped binary
+    propagates ffmpeg's exit code, where the Python eval harness does not (N4).
+    """
+    vf = _get_geometry_vf()(None, None, None, "9:16")
+    assert "trunc(" in vf, f"aspect crop must round to even dimensions, got {vf!r}"
+    assert "/2)*2" in vf, f"expected trunc(.../2)*2 even-rounding, got {vf!r}"
+
+
+def test_aspect_crop_still_centres_on_the_source():
+    """Rounding must not change WHICH region is cropped — only its size."""
+    vf = _get_geometry_vf()(None, None, None, "1:1")
+    assert vf.startswith("crop="), vf
+    assert "iw" in vf and "ih" in vf, vf

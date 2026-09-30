@@ -3,11 +3,36 @@
 //! The trait keeps the runtime backend-agnostic. `MockBackend` (deterministic, no model) is
 //! used by tests and offline dev. `LlamaCppBackend` (via `llama-cpp-2`, one build bundling
 //! CPU + Vulkan + CUDA / Metal with runtime device selection) is the shipped backend — it is
-//! a heavy build (cmake + C++ + GPU SDKs) and lands in a follow-on spike; the trait and the
-//! `KNAIF_LLM_BACKEND` switch accommodate it now. **No Ollama backend** — Ollama is confined
-//! to the Python dev/eval path. Depends on `knaif-models` to locate model files.
+//! **implemented**, behind the `llama` cargo feature, because it is a heavy build (cmake +
+//! C++ + GPU SDKs) that the default feature set leaves out; select it at runtime with
+//! `KNAIF_LLM_BACKEND`. **No Ollama backend** — Ollama is confined to the Python dev/eval
+//! path. Depends on `knaif-models` to locate model files.
 
 use anyhow::Result;
+
+/// Generation budget per call, in tokens.
+///
+/// Canonical in `contracts/runtime/generation.yaml`, which `models.yaml`, `eval_backends.yaml`
+/// and this constant all have to agree with — the drift guard is
+/// `native/crates/knaif-llm/tests/generation.rs` and `python/core/tests/test_generation_settings.py`.
+/// Declared outside the `llama` feature gate so the guard compiles in a default build.
+pub const MAX_TOKENS: i32 = 512;
+
+/// Context window, in tokens. Must hold the whole prompt plus the generated output; `n_batch` is
+/// set equal to it so a large planner prompt decodes in a single pass. See [`MAX_TOKENS`] for how
+/// this value is held together with the config files.
+pub const N_CTX: u32 = 8192;
+
+/// Physical batch — the chunk llama.cpp computes at a time. llama.cpp's own default, set
+/// explicitly so a crate bump cannot change the arithmetic of every plan unnoticed. Canonical in
+/// `contracts/runtime/generation.yaml` (`n_ubatch`); see
+/// `docs/plans/2026-09-23-inference-config-parity.md`.
+pub const N_UBATCH: u32 = 512;
+
+/// llama.cpp's `LLAMA_FLASH_ATTN_TYPE_AUTO`: flash attention wherever the device supports it,
+/// off otherwise. Forcing it on would run attention on the CPU on a GPU without support, and the
+/// shipped binary runs on arbitrary GPUs. Canonical in `contracts/runtime/generation.yaml`.
+pub const FLASH_ATTN_AUTO: i32 = -1;
 
 #[cfg(feature = "llama")]
 mod llama;
@@ -120,7 +145,7 @@ fn build_llama(path: &std::path::Path, verbose: bool) -> Result<Box<dyn LlmBacke
     let max_tokens = std::env::var("KNAIF_MAX_TOKENS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(512);
+        .unwrap_or(MAX_TOKENS);
     Ok(Box::new(
         LlamaCppBackend::load(path, ngl, verbose)?.with_max_tokens(max_tokens),
     ))

@@ -1,0 +1,1647 @@
+{
+  "skill": "ffmpeg",
+  "layers": {
+    "L1": {
+      "summary": "contracts/parity/* green on both runtimes",
+      "evidence": {
+        "bundle": "bbeacec1f8cd7b646d29d009d6e2373cfde575bb86cfeef05c09a136c71217ca",
+        "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+        "native": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26",
+        "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+        "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+        "policy": "3",
+        "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
+      }
+    },
+    "L2": {
+      "summary": "deterministic pipeline + ordered execution green",
+      "evidence": {
+        "bundle": "bbeacec1f8cd7b646d29d009d6e2373cfde575bb86cfeef05c09a136c71217ca",
+        "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+        "native": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26",
+        "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+        "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+        "policy": "3",
+        "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
+      }
+    },
+    "L3": {
+      "cells": {
+        "knaif-qwen3-4b-v2": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\parity\\2026-09-28_r5c-l3-rc2-4b-ffmpeg",
+          "summary": "2026-09-28_r5c-l3-rc2-4b-ffmpeg: port_bugs=0 not_implemented=0 plan_disagreement=0.0 <= 0.0411 passed=True",
+          "equivalence_rate": 1.0,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.0,
+          "max_plan_disagreement": 0.0411,
+          "passed": true,
+          "backend": "cuda",
+          "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+          "git_dirty": true
+        },
+        "knaif-qwen3-1.7b-v2": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\parity\\2026-09-28_r5c-l3-rc2-1.7b-ffmpeg",
+          "summary": "2026-09-28_r5c-l3-rc2-1.7b-ffmpeg: port_bugs=0 not_implemented=0 plan_disagreement=0.0 <= 0.0411 passed=True",
+          "equivalence_rate": 1.0,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.0,
+          "max_plan_disagreement": 0.0411,
+          "passed": true,
+          "backend": "cuda",
+          "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+          "git_dirty": true
+        }
+      }
+    },
+    "L4": {
+      "cells": {
+        "knaif-qwen3-4b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cuda\\ffmpeg_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.943089430894309,
+          "avg_knaif_score": 0.9840883668903803,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-4b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\vulkan\\ffmpeg_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9407665505226481,
+          "avg_knaif_score": 0.9857900614182021,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cuda\\ffmpeg_r5c-win-1.7b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9210220673635308,
+          "avg_knaif_score": 0.9784968979131415,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\vulkan\\ffmpeg_r5c-win-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9186991869918699,
+          "avg_knaif_score": 0.9779994340690435,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "owner_exception": {
+            "date": "2026-09-28",
+            "reason": "not a blocker (owner, R5c T8): one Chinese batch request, ffmpeg_229[4], flips on a CUDA/Vulkan near-tie; CUDA holds the slice; stated in the 1.2.0 release notes",
+            "waives": "NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|vulkan",
+            "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\vulkan\\ffmpeg_r5c-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+              "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+              "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+              "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+              "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+              "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+              "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cpu\\ffmpeg_r5c-win-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9419279907084785,
+          "avg_knaif_score": 0.9857182940516274,
+          "lane": "r5c-win-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T9b: 4B Windows CPU cell = the 4B CUDA cell + every row whose 2026-09-25 CPU plan differs in full or is missing, re-run on the CPU (T9a confirmed those plans)",
+            "base": {
+              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cuda/ffmpeg_r5c-win-4b_success.json",
+              "file_sha256": "7d7b76b70e879f99c3893c22e0bbf9a01b2f74cb12357b01be9f9db3b2b49ea1",
+              "git_sha": "4977b3b4330919c1c0b94f3215a5c8cb417f1ba6",
+              "git_dirty": false,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CUDA0",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 861
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cpu/rows/ffmpeg_r5c-win-4b_success.json",
+              "file_sha256": "a9b4fbd073e5cf659127acb8ed1624e7359799d6dee09037a43ec4922612b341",
+              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
+              "git_dirty": false,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 60
+            },
+            "replaced_rows": [
+              [
+                "ffmpeg_016",
+                0
+              ],
+              [
+                "ffmpeg_017",
+                0
+              ],
+              [
+                "ffmpeg_027",
+                0
+              ],
+              [
+                "ffmpeg_035",
+                0
+              ],
+              [
+                "ffmpeg_038",
+                0
+              ],
+              [
+                "ffmpeg_040",
+                0
+              ],
+              [
+                "ffmpeg_053",
+                0
+              ],
+              [
+                "ffmpeg_054",
+                0
+              ],
+              [
+                "ffmpeg_056",
+                0
+              ],
+              [
+                "ffmpeg_077",
+                1
+              ],
+              [
+                "ffmpeg_085b",
+                0
+              ],
+              [
+                "ffmpeg_086",
+                2
+              ],
+              [
+                "ffmpeg_090",
+                1
+              ],
+              [
+                "ffmpeg_094",
+                2
+              ],
+              [
+                "ffmpeg_096",
+                2
+              ],
+              [
+                "ffmpeg_118",
+                1
+              ],
+              [
+                "ffmpeg_118",
+                2
+              ],
+              [
+                "ffmpeg_118",
+                3
+              ],
+              [
+                "ffmpeg_119",
+                1
+              ],
+              [
+                "ffmpeg_124",
+                1
+              ],
+              [
+                "ffmpeg_131",
+                0
+              ],
+              [
+                "ffmpeg_133",
+                1
+              ],
+              [
+                "ffmpeg_134",
+                2
+              ],
+              [
+                "ffmpeg_139",
+                0
+              ],
+              [
+                "ffmpeg_148",
+                0
+              ],
+              [
+                "ffmpeg_161",
+                0
+              ],
+              [
+                "ffmpeg_166",
+                0
+              ],
+              [
+                "ffmpeg_167",
+                0
+              ],
+              [
+                "ffmpeg_167",
+                1
+              ],
+              [
+                "ffmpeg_174",
+                1
+              ],
+              [
+                "ffmpeg_190",
+                1
+              ],
+              [
+                "ffmpeg_202",
+                2
+              ],
+              [
+                "ffmpeg_203",
+                3
+              ],
+              [
+                "ffmpeg_209",
+                0
+              ],
+              [
+                "ffmpeg_229",
+                3
+              ],
+              [
+                "ffmpeg_232",
+                1
+              ],
+              [
+                "ffmpeg_243",
+                2
+              ],
+              [
+                "ffmpeg_244",
+                2
+              ],
+              [
+                "ffmpeg_244",
+                3
+              ],
+              [
+                "ffmpeg_264",
+                1
+              ],
+              [
+                "ffmpeg_264",
+                2
+              ],
+              [
+                "ffmpeg_268",
+                4
+              ],
+              [
+                "ffmpeg_271",
+                3
+              ],
+              [
+                "ffmpeg_275",
+                0
+              ],
+              [
+                "ffmpeg_284",
+                0
+              ],
+              [
+                "ffmpeg_295",
+                2
+              ],
+              [
+                "ffmpeg_296",
+                0
+              ],
+              [
+                "ffmpeg_301",
+                0
+              ],
+              [
+                "ffmpeg_301",
+                1
+              ],
+              [
+                "ffmpeg_301",
+                2
+              ],
+              [
+                "ffmpeg_301",
+                3
+              ],
+              [
+                "ffmpeg_301",
+                4
+              ],
+              [
+                "ffmpeg_302",
+                0
+              ],
+              [
+                "ffmpeg_302",
+                1
+              ],
+              [
+                "ffmpeg_302",
+                2
+              ],
+              [
+                "ffmpeg_302",
+                3
+              ],
+              [
+                "ffmpeg_302",
+                4
+              ],
+              [
+                "ffmpeg_hard_003",
+                3
+              ],
+              [
+                "ffmpeg_hard_008",
+                3
+              ],
+              [
+                "ffmpeg_hard_013",
+                1
+              ]
+            ]
+          }
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+          },
+          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cpu\\ffmpeg_r5c-win-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 3 of 45 thresholds unmet: [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22) [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29)",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9175377468060395,
+          "avg_knaif_score": 0.9815989847715736,
+          "lane": "r5c-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "owner_exception": {
+            "date": "2026-09-29",
+            "reason": "not a blocker (owner, R5c T10): aggregates and safety clear; the gap to the accepted CUDA cell is three requests answered with a clarify (ffmpeg_229[1], ffmpeg_229[4], ffmpeg_129[1]); across the corpus CPU is not worse than CUDA (only-CPU 11, only-CUDA 9); stated in the 1.2.0 release notes",
+            "waives": "NOT ACCEPTED - 3 of 45 thresholds unmet: [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22) [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29)",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|cpu",
+            "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cpu\\ffmpeg_r5c-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+              "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+              "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+              "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+              "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+              "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+              "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/4b/cuda/ffmpeg_r5c-linux-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9454123112659698,
+          "avg_knaif_score": 0.9807971014492753,
+          "lane": "r5c-linux-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cuda/ffmpeg_r5c-linux-1.7b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9221835075493612,
+          "avg_knaif_score": 0.9768440315315314,
+          "lane": "r5c-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cpu": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/4b/cpu/ffmpeg_r5c-linux-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.943089430894309,
+          "avg_knaif_score": 0.9846218487394959,
+          "lane": "r5c-linux-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T15s: 4b Linux CPU cell = the 4b Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans (4B: 4 ffmpeg + 0 documents decision flips); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/base/4b/ffmpeg_r5c-win-4b_success.json",
+              "file_sha256": "2cca3d794c4377a906b3e3abf2596fa868b716482d98e1719763918918dd5302",
+              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
+              "git_dirty": false,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-4b",
+              "total": 861
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/4b/cpu/sample/ffmpeg_r5c-linux-4b_success.json",
+              "file_sha256": "99eee2114ec4c1a78d622fac43287543cdf324d48b95c0885c0f1452e25020ba",
+              "git_sha": "9b8fab5ee17e42c99a9dafd2f5de40d31cdb99c1",
+              "git_dirty": false,
+              "binary_sha256": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "linux-x64",
+              "lane": "r5c-linux-4b",
+              "total": 115
+            },
+            "replaced_rows": [
+              [
+                "ffmpeg_008",
+                0
+              ],
+              [
+                "ffmpeg_036",
+                0
+              ],
+              [
+                "ffmpeg_039",
+                0
+              ],
+              [
+                "ffmpeg_042",
+                0
+              ],
+              [
+                "ffmpeg_046",
+                0
+              ],
+              [
+                "ffmpeg_063",
+                0
+              ],
+              [
+                "ffmpeg_064",
+                0
+              ],
+              [
+                "ffmpeg_069",
+                0
+              ],
+              [
+                "ffmpeg_077",
+                0
+              ],
+              [
+                "ffmpeg_077",
+                1
+              ],
+              [
+                "ffmpeg_077",
+                2
+              ],
+              [
+                "ffmpeg_078",
+                1
+              ],
+              [
+                "ffmpeg_078",
+                3
+              ],
+              [
+                "ffmpeg_079",
+                1
+              ],
+              [
+                "ffmpeg_081",
+                2
+              ],
+              [
+                "ffmpeg_082b",
+                1
+              ],
+              [
+                "ffmpeg_086",
+                0
+              ],
+              [
+                "ffmpeg_088",
+                1
+              ],
+              [
+                "ffmpeg_093",
+                3
+              ],
+              [
+                "ffmpeg_094",
+                3
+              ],
+              [
+                "ffmpeg_097",
+                0
+              ],
+              [
+                "ffmpeg_099",
+                4
+              ],
+              [
+                "ffmpeg_100",
+                1
+              ],
+              [
+                "ffmpeg_101",
+                4
+              ],
+              [
+                "ffmpeg_104",
+                0
+              ],
+              [
+                "ffmpeg_104",
+                1
+              ],
+              [
+                "ffmpeg_114",
+                0
+              ],
+              [
+                "ffmpeg_115",
+                0
+              ],
+              [
+                "ffmpeg_116",
+                0
+              ],
+              [
+                "ffmpeg_116",
+                3
+              ],
+              [
+                "ffmpeg_118b",
+                0
+              ],
+              [
+                "ffmpeg_119",
+                3
+              ],
+              [
+                "ffmpeg_121",
+                0
+              ],
+              [
+                "ffmpeg_121",
+                1
+              ],
+              [
+                "ffmpeg_121",
+                2
+              ],
+              [
+                "ffmpeg_122b",
+                0
+              ],
+              [
+                "ffmpeg_123",
+                3
+              ],
+              [
+                "ffmpeg_126",
+                2
+              ],
+              [
+                "ffmpeg_131b",
+                0
+              ],
+              [
+                "ffmpeg_133",
+                1
+              ],
+              [
+                "ffmpeg_133",
+                4
+              ],
+              [
+                "ffmpeg_134",
+                0
+              ],
+              [
+                "ffmpeg_135",
+                3
+              ],
+              [
+                "ffmpeg_138",
+                0
+              ],
+              [
+                "ffmpeg_146",
+                0
+              ],
+              [
+                "ffmpeg_148",
+                0
+              ],
+              [
+                "ffmpeg_150",
+                1
+              ],
+              [
+                "ffmpeg_161",
+                1
+              ],
+              [
+                "ffmpeg_162",
+                0
+              ],
+              [
+                "ffmpeg_163",
+                1
+              ],
+              [
+                "ffmpeg_166",
+                1
+              ],
+              [
+                "ffmpeg_171",
+                2
+              ],
+              [
+                "ffmpeg_173",
+                1
+              ],
+              [
+                "ffmpeg_175",
+                2
+              ],
+              [
+                "ffmpeg_180",
+                1
+              ],
+              [
+                "ffmpeg_181",
+                0
+              ],
+              [
+                "ffmpeg_184",
+                0
+              ],
+              [
+                "ffmpeg_184",
+                1
+              ],
+              [
+                "ffmpeg_188",
+                1
+              ],
+              [
+                "ffmpeg_189",
+                1
+              ],
+              [
+                "ffmpeg_195",
+                0
+              ],
+              [
+                "ffmpeg_197",
+                1
+              ],
+              [
+                "ffmpeg_200",
+                0
+              ],
+              [
+                "ffmpeg_201",
+                2
+              ],
+              [
+                "ffmpeg_201",
+                4
+              ],
+              [
+                "ffmpeg_202",
+                2
+              ],
+              [
+                "ffmpeg_202",
+                3
+              ],
+              [
+                "ffmpeg_207",
+                2
+              ],
+              [
+                "ffmpeg_208",
+                0
+              ],
+              [
+                "ffmpeg_208",
+                1
+              ],
+              [
+                "ffmpeg_210",
+                0
+              ],
+              [
+                "ffmpeg_216",
+                1
+              ],
+              [
+                "ffmpeg_218",
+                1
+              ],
+              [
+                "ffmpeg_221",
+                0
+              ],
+              [
+                "ffmpeg_221",
+                1
+              ],
+              [
+                "ffmpeg_222",
+                1
+              ],
+              [
+                "ffmpeg_224",
+                1
+              ],
+              [
+                "ffmpeg_229",
+                2
+              ],
+              [
+                "ffmpeg_232",
+                1
+              ],
+              [
+                "ffmpeg_233",
+                2
+              ],
+              [
+                "ffmpeg_236",
+                1
+              ],
+              [
+                "ffmpeg_240",
+                2
+              ],
+              [
+                "ffmpeg_240",
+                3
+              ],
+              [
+                "ffmpeg_243",
+                0
+              ],
+              [
+                "ffmpeg_246",
+                2
+              ],
+              [
+                "ffmpeg_248",
+                2
+              ],
+              [
+                "ffmpeg_248",
+                3
+              ],
+              [
+                "ffmpeg_251",
+                2
+              ],
+              [
+                "ffmpeg_252b",
+                3
+              ],
+              [
+                "ffmpeg_254",
+                0
+              ],
+              [
+                "ffmpeg_259",
+                0
+              ],
+              [
+                "ffmpeg_262",
+                3
+              ],
+              [
+                "ffmpeg_265",
+                1
+              ],
+              [
+                "ffmpeg_269",
+                2
+              ],
+              [
+                "ffmpeg_270",
+                0
+              ],
+              [
+                "ffmpeg_271",
+                3
+              ],
+              [
+                "ffmpeg_273",
+                2
+              ],
+              [
+                "ffmpeg_274",
+                0
+              ],
+              [
+                "ffmpeg_279",
+                0
+              ],
+              [
+                "ffmpeg_284",
+                0
+              ],
+              [
+                "ffmpeg_286",
+                2
+              ],
+              [
+                "ffmpeg_289",
+                2
+              ],
+              [
+                "ffmpeg_292",
+                0
+              ],
+              [
+                "ffmpeg_292",
+                3
+              ],
+              [
+                "ffmpeg_296",
+                2
+              ],
+              [
+                "ffmpeg_297",
+                0
+              ],
+              [
+                "ffmpeg_298",
+                0
+              ],
+              [
+                "ffmpeg_299",
+                1
+              ],
+              [
+                "ffmpeg_hard_001",
+                2
+              ],
+              [
+                "ffmpeg_hard_003",
+                3
+              ],
+              [
+                "ffmpeg_hard_008",
+                3
+              ],
+              [
+                "ffmpeg_hard_009",
+                1
+              ],
+              [
+                "ffmpeg_hard_009",
+                2
+              ],
+              [
+                "ffmpeg_hard_010",
+                1
+              ],
+              [
+                "ffmpeg_hard_016",
+                1
+              ]
+            ]
+          }
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cpu": {
+          "evidence": {
+            "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+          },
+          "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/ffmpeg_r5c-linux-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 2 of 45 thresholds unmet: [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9198606271777003,
+          "avg_knaif_score": 0.9814502529510961,
+          "lane": "r5c-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "R5c T15s: 1.7b Linux CPU cell = the 1.7b Windows CPU cell with the 150-request Linux CPU sample swapped in. The sample did NOT confirm the Windows CPU plans (1.7B: 6 ffmpeg + 3 documents decision flips); none of those flips was harmful, and the owner accepted the sample instead of the full Linux CPU run (2026-09-29). Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/base/1.7b/ffmpeg_r5c-win-1.7b_success.json",
+              "file_sha256": "50269b2a8e19497299ebc09ac97307b48e4f9b9089323b4498bdda14a76311bb",
+              "git_sha": "fe3954bb25e451098b32ecd1b4338f9e32405d0d",
+              "git_dirty": false,
+              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "windows-x64",
+              "lane": "r5c-win-1.7b",
+              "total": 861
+            },
+            "replacements": {
+              "path": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/sample/ffmpeg_r5c-linux-1.7b_success.json",
+              "file_sha256": "38457c01b12c43c61d65b14783c3091457587b18fca26a48f6bbc2b2242b20fa",
+              "git_sha": "9b8fab5ee17e42c99a9dafd2f5de40d31cdb99c1",
+              "git_dirty": true,
+              "binary_sha256": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "linux-x64",
+              "lane": "r5c-linux-1.7b",
+              "total": 115
+            },
+            "replaced_rows": [
+              [
+                "ffmpeg_004",
+                0
+              ],
+              [
+                "ffmpeg_024",
+                0
+              ],
+              [
+                "ffmpeg_037",
+                0
+              ],
+              [
+                "ffmpeg_044",
+                0
+              ],
+              [
+                "ffmpeg_046",
+                0
+              ],
+              [
+                "ffmpeg_048",
+                0
+              ],
+              [
+                "ffmpeg_059",
+                0
+              ],
+              [
+                "ffmpeg_064",
+                0
+              ],
+              [
+                "ffmpeg_065",
+                0
+              ],
+              [
+                "ffmpeg_070",
+                0
+              ],
+              [
+                "ffmpeg_073",
+                3
+              ],
+              [
+                "ffmpeg_074",
+                0
+              ],
+              [
+                "ffmpeg_075",
+                1
+              ],
+              [
+                "ffmpeg_076",
+                3
+              ],
+              [
+                "ffmpeg_078",
+                2
+              ],
+              [
+                "ffmpeg_083",
+                1
+              ],
+              [
+                "ffmpeg_084",
+                4
+              ],
+              [
+                "ffmpeg_090",
+                4
+              ],
+              [
+                "ffmpeg_091",
+                1
+              ],
+              [
+                "ffmpeg_091",
+                2
+              ],
+              [
+                "ffmpeg_091",
+                3
+              ],
+              [
+                "ffmpeg_094",
+                1
+              ],
+              [
+                "ffmpeg_095",
+                0
+              ],
+              [
+                "ffmpeg_097",
+                4
+              ],
+              [
+                "ffmpeg_099",
+                1
+              ],
+              [
+                "ffmpeg_104",
+                0
+              ],
+              [
+                "ffmpeg_105",
+                1
+              ],
+              [
+                "ffmpeg_106",
+                0
+              ],
+              [
+                "ffmpeg_106",
+                3
+              ],
+              [
+                "ffmpeg_110",
+                4
+              ],
+              [
+                "ffmpeg_113",
+                2
+              ],
+              [
+                "ffmpeg_114",
+                1
+              ],
+              [
+                "ffmpeg_115",
+                0
+              ],
+              [
+                "ffmpeg_115",
+                1
+              ],
+              [
+                "ffmpeg_115",
+                4
+              ],
+              [
+                "ffmpeg_117",
+                1
+              ],
+              [
+                "ffmpeg_120",
+                2
+              ],
+              [
+                "ffmpeg_121",
+                0
+              ],
+              [
+                "ffmpeg_121",
+                2
+              ],
+              [
+                "ffmpeg_123",
+                2
+              ],
+              [
+                "ffmpeg_124",
+                0
+              ],
+              [
+                "ffmpeg_124",
+                2
+              ],
+              [
+                "ffmpeg_124",
+                3
+              ],
+              [
+                "ffmpeg_125",
+                1
+              ],
+              [
+                "ffmpeg_128",
+                0
+              ],
+              [
+                "ffmpeg_129",
+                0
+              ],
+              [
+                "ffmpeg_129",
+                2
+              ],
+              [
+                "ffmpeg_133",
+                1
+              ],
+              [
+                "ffmpeg_133",
+                2
+              ],
+              [
+                "ffmpeg_134",
+                2
+              ],
+              [
+                "ffmpeg_135",
+                1
+              ],
+              [
+                "ffmpeg_136",
+                0
+              ],
+              [
+                "ffmpeg_137",
+                3
+              ],
+              [
+                "ffmpeg_138",
+                0
+              ],
+              [
+                "ffmpeg_139",
+                0
+              ],
+              [
+                "ffmpeg_139",
+                2
+              ],
+              [
+                "ffmpeg_139",
+                3
+              ],
+              [
+                "ffmpeg_139",
+                4
+              ],
+              [
+                "ffmpeg_140",
+                3
+              ],
+              [
+                "ffmpeg_160",
+                0
+              ],
+              [
+                "ffmpeg_160",
+                1
+              ],
+              [
+                "ffmpeg_160",
+                2
+              ],
+              [
+                "ffmpeg_162",
+                2
+              ],
+              [
+                "ffmpeg_167",
+                1
+              ],
+              [
+                "ffmpeg_170",
+                0
+              ],
+              [
+                "ffmpeg_171",
+                4
+              ],
+              [
+                "ffmpeg_173",
+                1
+              ],
+              [
+                "ffmpeg_177",
+                1
+              ],
+              [
+                "ffmpeg_178",
+                0
+              ],
+              [
+                "ffmpeg_180",
+                0
+              ],
+              [
+                "ffmpeg_188",
+                0
+              ],
+              [
+                "ffmpeg_190",
+                1
+              ],
+              [
+                "ffmpeg_205",
+                2
+              ],
+              [
+                "ffmpeg_210",
+                3
+              ],
+              [
+                "ffmpeg_211",
+                1
+              ],
+              [
+                "ffmpeg_214",
+                3
+              ],
+              [
+                "ffmpeg_215",
+                0
+              ],
+              [
+                "ffmpeg_218",
+                1
+              ],
+              [
+                "ffmpeg_220b",
+                0
+              ],
+              [
+                "ffmpeg_224",
+                1
+              ],
+              [
+                "ffmpeg_229",
+                0
+              ],
+              [
+                "ffmpeg_229",
+                1
+              ],
+              [
+                "ffmpeg_229",
+                3
+              ],
+              [
+                "ffmpeg_232",
+                4
+              ],
+              [
+                "ffmpeg_233",
+                1
+              ],
+              [
+                "ffmpeg_233",
+                2
+              ],
+              [
+                "ffmpeg_240",
+                1
+              ],
+              [
+                "ffmpeg_241",
+                2
+              ],
+              [
+                "ffmpeg_245",
+                1
+              ],
+              [
+                "ffmpeg_245",
+                2
+              ],
+              [
+                "ffmpeg_247",
+                2
+              ],
+              [
+                "ffmpeg_251",
+                1
+              ],
+              [
+                "ffmpeg_257",
+                2
+              ],
+              [
+                "ffmpeg_258",
+                2
+              ],
+              [
+                "ffmpeg_261",
+                1
+              ],
+              [
+                "ffmpeg_263",
+                0
+              ],
+              [
+                "ffmpeg_265",
+                0
+              ],
+              [
+                "ffmpeg_267",
+                0
+              ],
+              [
+                "ffmpeg_269",
+                2
+              ],
+              [
+                "ffmpeg_274",
+                1
+              ],
+              [
+                "ffmpeg_280",
+                0
+              ],
+              [
+                "ffmpeg_292",
+                2
+              ],
+              [
+                "ffmpeg_293",
+                3
+              ],
+              [
+                "ffmpeg_294",
+                2
+              ],
+              [
+                "ffmpeg_295",
+                1
+              ],
+              [
+                "ffmpeg_297",
+                3
+              ],
+              [
+                "ffmpeg_298",
+                2
+              ],
+              [
+                "ffmpeg_301",
+                3
+              ],
+              [
+                "ffmpeg_302",
+                4
+              ],
+              [
+                "ffmpeg_hard_002",
+                2
+              ],
+              [
+                "ffmpeg_hard_003",
+                1
+              ],
+              [
+                "ffmpeg_hard_005",
+                2
+              ],
+              [
+                "ffmpeg_hard_006",
+                3
+              ],
+              [
+                "ffmpeg_hard_007",
+                2
+              ],
+              [
+                "ffmpeg_hard_016",
+                0
+              ]
+            ]
+          },
+          "owner_exception": {
+            "date": "2026-09-29",
+            "reason": "not a blocker (owner, R5c T15s): composed on the Linux CPU sample; adjust_speed 40/45 and batch 25/29 each miss by one request, as the waived Windows CPU cell does; aggregates, safety and documents clear; stated in the 1.2.0 release notes",
+            "waives": "NOT ACCEPTED - 2 of 45 thresholds unmet: [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
+            "cell": "knaif-qwen3-1.7b-v2|linux-x64|cpu",
+            "run": "evals/runs/2026-09-29_r5c-linux_success/1.7b/cpu/ffmpeg_r5c-linux-1.7b_success.json",
+            "evidence": {
+              "bundle": "e6cddb37084d1fa6526e3d894618279d77e7166f3154cef40e438e2eb8ef6eec",
+              "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
+              "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+              "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+              "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+              "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+              "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
+            }
+          }
+        }
+      }
+    }
+  }
+}

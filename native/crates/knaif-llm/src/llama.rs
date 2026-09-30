@@ -231,14 +231,14 @@ impl LlamaCppBackend {
         let n_ctx = std::env::var("KNAIF_N_CTX")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(8192);
+            .unwrap_or(crate::N_CTX);
         Ok(Self {
             backend,
             model,
             chat_template,
             n_ctx,
             n_threads: resolve_n_threads(),
-            max_tokens: 512,
+            max_tokens: crate::MAX_TOKENS,
         })
     }
 
@@ -289,6 +289,8 @@ impl LlmBackend for LlamaCppBackend {
         let ctx_params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(self.n_ctx))
             .with_n_batch(self.n_ctx)
+            .with_n_ubatch(crate::N_UBATCH)
+            .with_flash_attention_policy(crate::FLASH_ATTN_AUTO)
             .with_n_threads(self.n_threads.0)
             .with_n_threads_batch(self.n_threads.1);
         let t_ctx0 = std::time::Instant::now();

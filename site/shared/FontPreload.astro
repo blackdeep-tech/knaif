@@ -1,0 +1,22 @@
+---
+/* Starts the two webfonts downloading at head-parse time instead of at style-match time.
+ *
+ * @fontsource ships `font-display: swap`, so without this the browser paints a first frame
+ * in the fallback face and reflows when the real one lands — visible as the text changing
+ * and the page nudging. A preload closes most of that window because the fetch begins
+ * alongside the CSS rather than after it.
+ *
+ * Latin only, and only the upright weight axis. Those cover the sites' own text; the
+ * latin-ext / greek / cyrillic / italic subsets stay lazy, which is the point of subsetting
+ * them. Preloading a file the page never uses costs bandwidth and earns a console warning.
+ *
+ * Lives in knaif-shared because only this package has @fontsource on its dependency list —
+ * the `?url` imports below resolve here and nowhere else, and it keeps the two sites
+ * preloading the same faces by construction.
+ */
+import dmSans from "@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2?url";
+import jetBrainsMono from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?url";
+---
+
+<link rel="preload" as="font" type="font/woff2" href={dmSans} crossorigin />
+<link rel="preload" as="font" type="font/woff2" href={jetBrainsMono} crossorigin />

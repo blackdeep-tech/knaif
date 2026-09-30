@@ -16,12 +16,39 @@ from ._engine import (
     _crf_to_profile_name,
     _dummy_probe,
     _load_yaml,
+    _needs_video,
     _normalize_platform,
     _preview_output_for,
     _profiles_root,
     _render_command,
     _summarise_probe,
+    _trim_past_end,
+    disambiguate_outputs,
 )
+
+
+def require_streams(output: str | Path | None) -> None:
+    """Fail when ffmpeg exited 0 but wrote a file with no audio and no video in it.
+
+    ffmpeg's exit code is not evidence of output: a trim past the end exits 0 with a 185-byte
+    container. Left alone, the chain carries on and the next step fails under that file's
+    name. A probe that errors for another reason is not this check's business.
+    """
+    if not output or not Path(output).is_file():
+        return
+    try:
+        probe = _deps.run_ffprobe(Path(output))
+    except _deps.FFmpegNotAvailable:
+        raise
+    except Exception:  # noqa: BLE001 — unprobeable is a different question
+        return
+    kinds = {s.get("codec_type") for s in probe.get("streams") or []}
+    if not kinds & {"audio", "video"}:
+        raise ValueError(
+            f"ffmpeg finished but {Path(output).name} has no audio or video in it — "
+            "the step produced nothing to work with."
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step handlers.
@@ -110,11 +137,60 @@ class BuildRecipesStep(Step):
         quality_profile = args.get("quality_profile") or None
         options = args.get("options") or {}
 
+        # ffmpeg cannot extract audio from a file that has none: it exits with "Output file
+        # does not contain any stream", and one silent video in a folder of ten takes the whole
+        # batch down. `inspect_media` already probed for this, so building the command anyway
+        # discards a fact we hold rather than lacking one.
+        #
+        # Scoped to `extract_audio` on measurement, not on principle: `adjust_volume` and
+        # `strip_audio` both succeed on a real silent file (ffmpeg treats them as no-ops), so
+        # skipping there would drop work that currently completes.
+        skipped: list[str] = []
+        if options.get("mode") == "extract_audio":
+            kept = []
+            for p in probes:
+                if p.get("has_audio") is False:
+                    skipped.append(str(p.get("file", "")))
+                else:
+                    kept.append(p)
+            if not kept:
+                names = ", ".join(Path(f).name for f in skipped) or "the input"
+                raise ValueError(
+                    f"No audio to extract: {names} has no audio track."
+                    if len(skipped) == 1
+                    else f"No audio to extract — none of these files has an audio track: {names}."
+                )
+            probes = kept
+
+        # A trim that starts at or past the end has no answer: ffmpeg would exit 0 with an
+        # empty file and the NEXT step would fail under another file's name. Real probes only.
+        if options.get("mode") == "trim" and not (ctx.dry_run or ctx.skip_execution):
+            for p in probes:
+                reason = _trim_past_end(options, p)
+                if reason:
+                    raise ValueError(reason)
+
+        # A picture operation on a sound exits 0 having done nothing. A dry run's placeholder
+        # probe decides audio vs video from the extension, which is what this reads, so it
+        # holds there too.
+        for p in probes:
+            reason = _needs_video(options, p)
+            if reason:
+                raise ValueError(reason)
+
         recipes = [
             _build_one_recipe(p, platform_profile, quality_profile, options, sandbox=ctx.sandbox)
             for p in probes
         ]
-        return {"count": len(recipes), "recipes": recipes}
+        # Only the batch knows whether two inputs land on one output path, and every command
+        # carries -y, so an unresolved clash is a silent overwrite rather than an error.
+        recipes = disambiguate_outputs(recipes)
+        out = {"count": len(recipes), "recipes": recipes}
+        # Returning fewer files than asked for without saying why reads as a tool that lost a
+        # file. Only present when something was actually dropped.
+        if skipped:
+            out["skipped"] = skipped
+        return out
 
 
 class RenderPreviewCommandStep(Step):
@@ -257,7 +333,21 @@ class RunBatchStep(Step):
             return {"mode": "dry_run", "count": len(outputs), "outputs": outputs}
 
         for c in commands:
+            # An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a
+            # parent that need not exist yet; ffmpeg does not create one and fails on open.
+            # The path is already sandbox-checked by the engine.
+            out = c.get("output")
+            if out:
+                # Create the RESOLVED parent. The stored path keeps the spelling the plan
+                # supplied, so `../escaped/../sb/out.mp4` passes containment (it resolves
+                # inside) while `os.makedirs` on its unnormalised parent walks through
+                # `../escaped` and creates it - on POSIX, which builds each component in
+                # turn. Windows normalises `..` lexically and does not, which is exactly why
+                # this needs to be right rather than observed.
+                Path(out).resolve().parent.mkdir(parents=True, exist_ok=True)
             res = _deps.run_ffmpeg(c["command"])
+            if res["returncode"] == 0:
+                require_streams(out)
             outputs.append(
                 {
                     "mode": "execute",

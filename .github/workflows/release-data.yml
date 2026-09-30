@@ -1,0 +1,100 @@
+# Refresh the website's download snapshot after a release is published.
+#
+# WHY THIS IS NOT IN release.yml. That workflow builds a DRAFT on a tag, and
+# `scripts/release_data.py` refuses drafts by design — the snapshot must describe what is
+# actually downloadable, and a draft's assets are not. The two are different moments:
+# `release.yml` fires when the tag is pushed, this fires when a human presses Publish.
+#
+# WHY IT PUSHES A BRANCH INSTEAD OF OPENING THE PR. A pull request opened with the default
+# GITHUB_TOKEN does not trigger workflows — GitHub blocks that to stop a workflow feeding
+# itself. `main` requires the `ci` check, so a bot-opened PR would sit with no check to
+# satisfy and could never be merged. Pushing the branch and letting a human press "Compare &
+# pull request" costs one click and makes the PR trigger CI like any other.
+#
+# The alternative is a GitHub App or PAT whose token *does* trigger workflows. That buys one
+# click, at the cost of a credential to store and rotate for a job that runs a few times a
+# year, so it is deliberately not done. If this ever needs to be fully hands-off, that is the
+# upgrade — not a bypass actor on the ruleset.
+#
+# IT NEVER WRITES TO `main`. The `main-guardrails` ruleset has no bypass actors, including
+# for the owner, and this workflow is not an exception to that.
+
+name: Refresh release data
+
+on:
+  release:
+    types: [published]
+  # Re-runnable without republishing: the first attempt can lose a race with the GitHub API,
+  # and a maintainer who merges the PR and later spots a mistake should not need a new release.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      # `ref: main` is load-bearing. On a `release` event actions/checkout defaults to the
+      # TAG, and a branch pushed from a detached tag would carry none of main's later commits.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # No uv, no mise, no venv: release_data.py is stdlib-only, which is what keeps this job
+      # to a few seconds. Keep it that way.
+      #
+      # Retry because publishing and API visibility are not atomic — `releases/latest` can
+      # briefly return the previous release, and SHA256SUMS may still be settling. The script
+      # exits non-zero rather than writing a partial snapshot, so a retry is the whole fix.
+      - name: Regenerate site/data/release.json
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if python3 scripts/release_data.py; then
+              exit 0
+            fi
+            echo "attempt $attempt failed; the release may not be visible to the API yet"
+            sleep 20
+          done
+          echo "::error::could not build the release snapshot after 3 attempts"
+          exit 1
+
+      - name: Push a branch if the snapshot changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || 'manual' }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- site/data/release.json; then
+            echo "release.json already matches the published release - nothing to do"
+            exit 0
+          fi
+
+          git --no-pager diff -- site/data/release.json
+
+          branch="chore/release-data-${TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add site/data/release.json
+          git commit -m "chore(site): refresh the download snapshot for ${TAG}"
+
+          # --force so a re-run replaces its own branch rather than failing. Safe because the
+          # branch name is scoped to this workflow and this tag; it can only clobber itself.
+          git push --force origin "$branch"
+
+          echo "::notice::Open the PR: https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          {
+            echo "### Download snapshot changed"
+            echo
+            echo "Branch \`$branch\` pushed. CI runs once the PR is opened by a human —"
+            echo "a PR opened by GITHUB_TOKEN would carry no checks and could not be merged."
+            echo
+            echo "[Open the pull request](https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1)"
+          } >> "$GITHUB_STEP_SUMMARY"

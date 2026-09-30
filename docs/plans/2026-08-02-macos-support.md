@@ -2,8 +2,32 @@
 
 **Status:** Planning · **Created:** 2026-08-02 · **Completed:** —
 **Owner:** native/packaging · **Ref:** [`installers/macos/README.md`](../../installers/macos/README.md) (placeholder this plan replaces) · [`installers/package.sh`](../../installers/package.sh) · [`docs/NATIVE.md`](../NATIVE.md) §5, §9, §10, §12 · [`docs/RELEASE.md`](../RELEASE.md) · [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) (C3 matrix, §*Out of scope*)
+**Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
 
-> **Status note.** Not started. macOS has been explicitly out of scope since
+> **Synced with 1.2.0 on 2026-09-30** (merge of `main` into this branch, done on Windows). What
+> changed for the remaining work:
+> - **C0 is superseded.** Release 1.2 re-locked both snapshots for the shipped models; the merge
+>   takes `main`'s snapshots. **C4/C5/C6 and the L4 run against `knaif-qwen3-4b-v2`** and those
+>   committed snapshots — no re-lock (§11).
+> - **Builds go through 1.2's per-kind profiles.** `metal` is a kind like the others:
+>   `just build-native-kind metal` → `target/release-metal/`, then
+>   `installers/package.sh --no-build --kind=metal --profile=release-metal`, or `just package-native
+>   metal` for both. `scripts/build_native_kind.sh` now sets the OpenSSL guard and
+>   `MACOSX_DEPLOYMENT_TARGET` (default 12.0).
+> - **Feature sets come from `package.sh --print-feats=<kind>`.** `openmp` is explicit on
+>   cpu/vulkan/cuda (so Windows/Linux build exactly as 1.2.0 did) and absent on metal; every kind
+>   carries `pdfium`, and `build_native_kind.sh` stages the pinned `mac-arm64` PDFium.
+> - The branch's own `just package-native` recipe, Windows notes and `eval-snapshot` default were
+>   replaced by 1.2's equivalents; its "skill must own the verifier" snapshot check was kept.
+> - **Not yet verified on a Mac after the merge:** everything Darwin-only. Re-run A2/A3, B, C1 and
+>   E1/E2 before building on them.
+> - **`just check` fails at `check-gate` on this branch, and that is correct:** the native sources
+>   changed (`knaif-llm` features, `llama.rs`), so 1.2.0's L3/L4 evidence reads stale for both
+>   skills. It clears when L3/L4 are re-run on this tree (the 1.3.0 gates). Everything else in
+>   `just check` passed on Windows at the merge (Python 3002 passed, native, contracts, site); CI
+>   does not run the gate.
+>
+> **Status note (2026-08-02).** Not started. macOS has been explicitly out of scope since
 > [monorepo-dual-runtime](2026-06-17-monorepo-dual-runtime.md) Phase 9 and is still listed as a
 > known limitation in [NATIVE.md](../NATIVE.md) §12 ("no installers/notarization; explicitly out for
 > v1"). The Rust core was kept cross-platform on purpose, so this plan is **packaging, signing, and

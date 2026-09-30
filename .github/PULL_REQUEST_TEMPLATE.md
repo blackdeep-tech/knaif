@@ -17,7 +17,7 @@
 
 - [ ] Planning, validation, or expansion changed — `just parity <skill>` shows no new divergence
 - [ ] Skill behaviour changed — `just eval-success <skill>` quoted, not `cheap`, and
-      `just eval-regression <skill>` passes
+      `just eval-regression <skill> <current>` passes
 - [ ] Snapshot re-lock — own PR, measured improvement stated
 - [ ] New dependency — permissive licence (no GPL/AGPL/LGPL/SSPL); if it ships in the
       wheel rather than a dev extra, `just licenses-all` re-run and committed

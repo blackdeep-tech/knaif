@@ -1,0 +1,607 @@
+{
+  "_comment": "Golden parity fixtures for chain linking — the stage that rewrites the model's plan in place BEFORE validation, binding a chain's intermediate files. Consumed by BOTH python/core/tests/test_chain_linking_parity.py and the Rust knaif-core tests/chain_linking_parity.rs; both must produce the identical linked plan. Covers both passes: claiming an undeclared intermediate, and forward-threading a reused source onto the producer's output. WHY: native shipped only the first pass until 2026-08-10, so 'trim clip.mp4, compress it, and remove the audio' built the silent video from the UNCOMPRESSED trim and discarded the compression — a wrong artefact that every plan-envelope comparison scored as a match. Registries are inline tools.yaml text so parity is on an identical registry, independent of skill content.",
+  "registries": {
+    "demo": "trim_video:\n  description: Trim a video to a time range\n  required_args: [input]\n  optional_args: [start, end, output]\ncompress_video:\n  description: Compress a video\n  required_args: [input]\n  optional_args: [output]\nstrip_audio:\n  description: Remove the audio track\n  required_args: [input]\n  optional_args: [output]\ninspect_media:\n  description: Report media properties\n  required_args: [input]\nmerge_videos:\n  description: Concatenate several videos\n  required_args: [inputs]\n  optional_args: [output]\nbatch_convert:\n  description: Convert every matching file\n  required_args: [pattern]\n  optional_args: [output]\ntag_media:\n  description: Write metadata tags\n  required_args: [input]\n  optional_args: [title]\n  arg_schemas:\n    output: {type: string}\n"
+  },
+  "expected_output_capable": {
+    "demo": [
+      "batch_convert",
+      "compress_video",
+      "merge_videos",
+      "strip_audio",
+      "trim_video"
+    ]
+  },
+  "cases": [
+    {
+      "name": "single_step_is_left_untouched",
+      "registry": "demo",
+      "utterance": "trim clip.mp4 to the first 4 seconds",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "undeclared_intermediate_is_claimed_by_the_producer",
+      "registry": "demo",
+      "utterance": "trim clip.mp4 to the first 4 seconds then compress it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip_trimmed.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip_trimmed.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "reused_source_is_forward_threaded",
+      "registry": "demo",
+      "utterance": "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip_trimmed.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04",
+              "output": "clip_trimmed.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip_trimmed.mp4",
+              "output": "clip_trimmed-chained.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip_trimmed-chained.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_read_only_reuse_is_left_alone",
+      "registry": "demo",
+      "utterance": "inspect clip.mp4 then compress it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "inspect_media",
+            "args": {
+              "input": "clip.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "inspect_media",
+            "args": {
+              "input": "clip.mp4"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "repeated_transforms_of_one_source_do_not_collide",
+      "registry": "demo",
+      "utterance": "compress clip.mp4, strip its audio, then trim it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4",
+              "output": "clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip-chained.mp4",
+              "output": "clip-chained-chained.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip-chained-chained.mp4",
+              "end": "00:00:04"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_minted_name_that_is_already_taken_gets_a_number",
+      "registry": "demo",
+      "utterance": "compress a.mp4 into clip-chained.mp4, then trim clip.mp4 and strip its audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "a.mp4",
+              "output": "clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "a.mp4",
+              "output": "clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04",
+              "output": "clip-chained2.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip-chained2.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_declared_output_is_reused_not_minted",
+      "registry": "demo",
+      "utterance": "compress clip.mp4 then strip its audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4",
+              "output": "small.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4",
+              "output": "small.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "small.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_directory_prefix_survives_the_intermediate_name",
+      "registry": "demo",
+      "utterance": "compress videos/clip.mp4 then strip its audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "videos/clip.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "videos/clip.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "videos/clip.mp4",
+              "output": "videos/clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "videos/clip-chained.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_glob_producer_is_not_a_single_output_target",
+      "registry": "demo",
+      "utterance": "convert every mov in the folder then compress the result",
+      "plan": {
+        "plan": [
+          {
+            "tool": "batch_convert",
+            "args": {
+              "pattern": "*.mov"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "converted.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "batch_convert",
+            "args": {
+              "pattern": "*.mov"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "converted.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_fan_in_producer_is_not_a_single_output_target",
+      "registry": "demo",
+      "utterance": "merge a.mp4 and b.mp4 then compress the result",
+      "plan": {
+        "plan": [
+          {
+            "tool": "merge_videos",
+            "args": {
+              "inputs": [
+                "a.mp4",
+                "b.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "merged.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "merge_videos",
+            "args": {
+              "inputs": [
+                "a.mp4",
+                "b.mp4"
+              ]
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "merged.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_list_valued_reference_is_rewritten_in_place",
+      "registry": "demo",
+      "utterance": "compress clip.mp4 then merge it with b.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          },
+          {
+            "tool": "merge_videos",
+            "args": {
+              "inputs": [
+                "clip.mp4",
+                "b.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4",
+              "output": "clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "merge_videos",
+            "args": {
+              "inputs": [
+                "clip-chained.mp4",
+                "b.mp4"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "terminal_steps_are_skipped_by_both_passes",
+      "registry": "demo",
+      "utterance": "compress clip.mp4 then strip its audio",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          },
+          {
+            "tool": "done",
+            "args": {}
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4",
+              "output": "clip-chained.mp4"
+            }
+          },
+          {
+            "tool": "done",
+            "args": {}
+          },
+          {
+            "tool": "strip_audio",
+            "args": {
+              "input": "clip-chained.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_filename_the_user_named_is_not_an_intermediate",
+      "registry": "demo",
+      "utterance": "trim clip.mp4 then compress backup.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "backup.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "trim_video",
+            "args": {
+              "input": "clip.mp4",
+              "end": "00:00:04"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "backup.mp4"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "arg_schemas_alone_does_not_make_a_producer",
+      "registry": "demo",
+      "utterance": "tag clip.mp4 as Draft then compress it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "tag_media",
+            "args": {
+              "input": "clip.mp4",
+              "title": "Draft"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "plan": [
+          {
+            "tool": "tag_media",
+            "args": {
+              "input": "clip.mp4",
+              "title": "Draft"
+            }
+          },
+          {
+            "tool": "compress_video",
+            "args": {
+              "input": "clip.mp4"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -13,11 +13,10 @@ skill uses and which are missing. knaif never installs them behind your back.
 
 To download the AI model later, if you skipped it during setup:
 
-    knaif models pull knaif-qwen3-4b-v1
+    knaif models pull knaif-qwen3-4b-v2
 
 NVIDIA GPU? knaif runs on Vulkan out of the box, which works on every vendor. The
-optional CUDA backend is faster, and on the newest NVIDIA cards it is the difference
-between GPU speed and CPU speed:
+optional CUDA backend is faster still on NVIDIA cards:
 
     knaif backend install cuda
 

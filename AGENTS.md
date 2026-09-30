@@ -43,6 +43,8 @@ byte-identical copy ships inside the wheel. Edit the canonical file, then run
   install per platform, GPU offload checks: `docs/INFERENCE.md`
 - Cutting a release — build/package/verify/publish per OS+kind, CUDA arch range, checksums:
   `docs/RELEASE.md`
+- Website operations — what deploys knaif.org / knaif.dev, the gates to run before merging
+  to `main`, and how to roll a bad deploy back: `docs/SITE.md`
 - Performance scorecard — hardware × runtime × backend × model, and which machine each
   latency number came from: `docs/PERFORMANCE.md` (read before quoting any speed figure)
 - Variable binding and optimizer: `docs/VARIABLE_BINDING.md`
@@ -71,6 +73,12 @@ Do not create new root-level planning files unless the user explicitly asks.
 Plans are single self-contained files. Use inline `- [ ]` checkboxes on task headings
 to track progress — do not create a separate todo file alongside a plan.
 
+Releases are developed on `release/X.Y.Z` branches, features on `feat/*` branches started from
+`main` until their release is chosen — branch rules, lanes and lifecycle in `docs/RELEASE.md`
+(*Branches and release lanes*). Each release has a short index, `docs/plans/YYYY-MM-DD-release-X.Y.Z.md`,
+living on its release branch; `docs/plans/README.md` (*Releases in flight*) says which are open.
+Every new plan carries `**Release:** X.Y.Z | — | main`, and the plan lint checks it against the index.
+
 ## Entry Points
 
 Skill-hosting (operator / eval path):
@@ -78,13 +86,14 @@ Skill-hosting (operator / eval path):
 ```python
 from knaif import create_agent, list_skills
 
-list_skills()                                    # ["documents", "ffmpeg", "io"]
-agent = create_agent("io", sandbox="./sandbox")  # fully wired CommandAgent
+list_skills()                                        # ["documents", "ffmpeg"]
+                                                     # `io` is status: stale, hidden from discovery
+agent = create_agent("ffmpeg", sandbox="./sandbox")  # fully wired CommandAgent
 
 from knaif import CommandAgent
 
-agent = CommandAgent.from_skill("skills/io", sandbox="./sandbox")
-agent = CommandAgent("skills/io/tools.yaml", sandbox="./sandbox")
+agent = CommandAgent.from_skill("skills/ffmpeg", sandbox="./sandbox")
+agent = CommandAgent("skills/ffmpeg/tools.yaml", sandbox="./sandbox")
 ```
 
 Developer SDK (embedding NL in your own CLI — see `docs/SDK.md`):
@@ -139,11 +148,13 @@ User input
   -> build_prompt()
   -> model or mock inference
   -> parse_plan()
-  -> validate_plan()
-  -> [optional] summarize_plan() → plan_display callback   (StepA, show_plan=True)
-  -> [optional] plan_confirmer approval gate               (StepB, require_approval=True)
+  -> validate_plan()                                        (model output; internal tools rejected)
   -> Intent.expand()
+  -> validate expanded plan                                 (trusted; allow_internal=True)
   -> optimize_plan()
+  -> preflight()                                            (skipped if dry_run)
+  -> [optional] summarize_plan() → plan_display callback    (StepA, show_plan=True)
+  -> [optional] plan_confirmer approval gate                (StepB, require_approval=True)
   -> resolve_args()
   -> Step.handle() with HandlerContext   (via tool_map)
 ```
@@ -245,6 +256,7 @@ training mix, and (if it ships natively) ported. The bundle holds all four conce
 ```text
 skills/<name>/
   skill.yaml tools.yaml prompt.yaml    # declarative contract — read by both runtimes
+  acceptance.yaml                      # the written "good enough" bar (S2)
   python/                              # Python handlers + tests
   native/                              # Rust crate (Cargo workspace member)
   data/                                # corpora: eval, train, safety, locked snapshot
@@ -258,7 +270,8 @@ Corpora and the acceptance bar live **in the skill**, not centrally:
 | File | Role |
 |---|---|
 | `data/eval.jsonl` | the eval corpus (row schema in `docs/EVAL_FRAMEWORK.md`) |
-| `data/eval_snapshot.json` | the committed acceptance bar; regression gate compares against it |
+| `data/eval_snapshot.json` | the committed baseline; the regression gate compares against it. Another model's baseline is `data/eval_snapshot.<model>.json`, chosen by the model a run names |
+| `acceptance.yaml` | the S2 acceptance bar — aggregate floors, required capability slices, safety at 100%. Answers "is it good enough", which a snapshot cannot. `models:` may lower one model's `aggregate`/`slices` floors (never safety, verifier or policy) |
 | `data/safety_test.jsonl` | utterances that must produce `reject` |
 | `eval/fixtures.py` | generates fixtures into `sandbox/fixtures/<skill>/` |
 | `eval/verifiers.py` | skill-specific grading beyond the shared verifiers |
@@ -277,12 +290,15 @@ just eval <skill>
 # 3. honest — ALWAYS regenerate fixtures first (missing fixtures score correct plans ~0)
 just eval-fixtures <skill>
 just eval-success <skill>
-# 4. lock the acceptance bar (own commit)
+# 4. clear the written acceptance bar (floors + required slices + safety at 100%)
+just eval-safety <skill> <save.json>
+just eval-accept <skill> <scoreboard.json> <safety.json>
+# 5. lock the baseline (own commit)
 just eval-snapshot <skill>
-# 5. native parity, if the skill ships natively
+# 6. native parity, if the skill ships natively
 just parity <skill>
 
-just eval-regression <skill>        # gate a run against the committed snapshot
+just eval-regression <skill> <current>   # gate a saved run's scoreboard against the committed snapshot
 ```
 
 **`cheap` is an iteration instrument, never an acceptance bar.** Quote an executing
@@ -310,8 +326,11 @@ Training code is in `python/training/`.
 ### 3. Native port
 
 `skills/<name>/native/` is a workspace member in the root `Cargo.toml`, consuming
-`knaif-skill-api` (the Rust `HandlerContext` / `Step` / `Intent` equivalents). `skill.yaml`
-declares which runtimes implement the skill:
+`knaif-skill-api` — which today provides the shared `sandbox` helpers only. The Rust
+`HandlerContext` / `Step` / `Intent` equivalents **do not exist yet**: native skills are
+dispatched by per-domain branches in `apps/cli`, so porting a skill means wiring it there
+too, not implementing a generic trait (audit F11). `skill.yaml` declares which runtimes
+implement the skill:
 
 ```yaml
 runtimes:
@@ -321,17 +340,44 @@ runtimes:
 
 The native runtime is a **port, not a rewrite** — same prompt, same validation, same
 expansion, so the same utterance must render the same command on both sides.
-`just parity <skill>` pins both runtimes to the identical GGUF and diffs the rendered
-output; results land in `evals/parity/`. Cross-runtime contracts (`contracts/runtime/`,
-`contracts/parity/planner_cases.json`) exist so the two implementations can't drift
-silently. See `docs/NATIVE.md`.
+
+**Porting does not start until stages 1–3 are done.** A skill that has not cleared Python
+acceptance (written thresholds, met on an executing verifier, baseline frozen — see *Evaluation*
+above) has no reference to be ported *against*: two runtimes agreeing on a behavior nobody
+accepted is not parity, it is a shared guess.
+
+**Exit criteria are four measured layers, not prose.** "Same prompt, same validation" is the
+intent; these are the checks that make it true. Full definitions in
+[docs/plans/2026-09-10-skill-quality-lifecycle.md](docs/plans/2026-09-10-skill-quality-lifecycle.md).
+
+| Layer | What it checks | Needs a model? | Bar |
+|---|---|---|---|
+| **L1** contract | prompt, retrieval, generation settings — from `contracts/parity/*.json` | no | 100%, every PR |
+| **L2** deterministic | parse → validate → defaults → expand → clarify gate, and ordered execution | no | 100%, every PR |
+| **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | **0 port bugs** (same plan, different commands) and 0 missing capabilities; plan disagreement ≤ a bound written before the run (`--max-plan-disagreement`) |
+| **L4** shipped path | `knaif run` executing for real, graded on the files produced | yes (GGUF + external binaries) | reported **with coverage**; the only number backing "it works" |
+
+`runtimes.native.status` is a claim about those layers: `in-progress` (any subset),
+`parity` (L1/L2 at 100%, L3 met), `supported` (additionally full L4 acceptance). **Only
+`supported` is release-eligible.**
 
 ```bash
+just check-contracts                # L1 + L2 on both runtimes — no model, seconds (in `just check`)
 just check-native                   # fmt + clippy, warnings are errors
 just test-native                    # cargo test --workspace
 just native-mock -- skills list     # fast build, mock backend, no llama.cpp
-just parity <skill> --limit 20      # native vs Python on real utterances
+just parity <skill> --limit 20      # L3: native vs Python on real utterances
+just eval-native <skill>            # L4: the shipped binary, executing for real
+just eval-safety-native <skill> <save.json>            # L4: safety, from the binary
+just eval-accept-native <skill> <scoreboard.json> <safety.json>   # the L4 verdict
+just check-gate                     # derive each skill's status from its evidence
 ```
+
+**L4 needs a verdict, not just a run.** `eval-accept-native` grades the lane's scoreboard
+against both the skill's S2 bar and the frozen Python baseline — `native ≥ max(S2 floor,
+accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete
+coverage, every required slice holding, safety at 100% **as measured on the binary**. It
+records the verdict either way, so a failing L4 is evidence rather than an absence.
 
 ## Safety Model
 
@@ -342,6 +388,33 @@ just parity <skill> --limit 20      # native vs Python on real utterances
 5. `safety_category: destructive` requires `confirmed=True` or `dry_run=True`.
 6. Preview gates can use a `confirmer` callback through `ctx.confirm()`.
 7. Safety policy is driven by `tool_def.safety_category`, not hard-coded tool names.
+
+## Public Output Hygiene
+
+The GitHub repo, the Hugging Face model repo and every release asset are public. Anything
+committed, uploaded or packaged must not identify the machine or the person who produced it.
+The 1.1.0 Windows binaries embedded the builder's `C:\Users\<name>\...` path ~1,200 times, and
+eval runs committed absolute checkout paths into ~27 files; both went public unnoticed.
+
+1. **No local paths in committed files.** Write paths relative to the repo. Where an absolute
+   path must be shown, write `<repo>/...` or `~/...`. Never a home directory (it names a person),
+   never this checkout's absolute path. An eval tool or report that writes an absolute path is a
+   bug in that tool: fix the tool, don't hand-edit its output each time.
+2. **Examples use placeholders**, never a real username, email address or hostname: `<name>`,
+   `alice`, `C:/Users/<name>`.
+3. **Build published binaries only through the scripts.** Windows: `scripts/build_native_kind.sh`
+   (remaps paths, `scripts/path_hygiene.sh`) then `installers/package.sh`, which refuses a tree
+   that still carries the builder's home. Linux: the container (`just package-linux`). A bare
+   `cargo build` is fine for development and never for a release.
+4. **Check the exact bytes before any upload** (HF, GitHub release, PyPI):
+   `uv run python scripts/check_no_local_paths.py <files or dir>`. For a GGUF, also read its
+   `general.*` metadata.
+5. **The guards are not optional.** The `no-local-paths` pre-commit hook and
+   `test_no_local_paths.py` (in `just check`) enforce rule 1; never bypass them with `--no-verify`.
+   If one fires, remove the path; don't widen the check.
+6. **A leak in something already public goes to the owner first.** Report what leaked, where,
+   and since when. Do not rewrite shared history or replace published assets on your own:
+   replacing a release asset changes a sha256 that installed manifests pin.
 
 ## Key Files For Each Task
 
@@ -375,3 +448,18 @@ just parity <skill> --limit 20      # native vs Python on real utterances
 Notebooks in `notebooks/` are for cross-skill model experiments and authoring tools.
 Skill-specific notebooks live in `skills/<name>/notebooks/`. They are not the
 primary source of truth.
+
+**`notebooks/skill_workbench.ipynb` is the interactive entry point** — one utterance through
+either runtime, any model that resolves, a build picker labelled by what each binary reports,
+measured placement and timing, dry-run or real execution. Its logic lives in
+`notebooks/shared/workbench/` as ordinary modules with unit tests, because a bug inside a
+notebook cell is invisible to `just check`.
+
+It answers *"is this model or prompt worth taking further"*, and **nothing else**: no corpus, no
+floors, no safety gate. `just eval-accept` remains the bar and the workbench cannot move it. The
+per-skill testers under `skills/*/notebooks/` are superseded and marked as such.
+
+Selectors are `ipywidgets`, so the notebook is meant to be **run, not read** — widgets render
+nothing on GitHub. **Open it with `uv run jupyter lab notebooks/skill_workbench.ipynb`**: the
+widget JavaScript ships in the venv and JupyterLab serves it locally, whereas VS Code's notebook
+renderer fetches it from a CDN and will prompt for permission to do so.

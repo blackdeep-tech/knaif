@@ -1,8 +1,9 @@
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
-# CUDA compiler + target arch. `cuda_nvcc` is the Linux source build of llama-cpp-python;
-# `cuda_arch` also drives the native Rust `native-cuda` recipe (as CMAKE_CUDA_ARCHITECTURES).
-# Override on the command line, e.g.:  just cuda_arch=120 native-cuda ffmpeg ...
+# CUDA compiler + target arch for the PYTHON llama-cpp-python source build (`just install-cuda`).
+# The native Rust build no longer reads this: CMake takes its arch list from `CUDAARCHS`, which
+# scripts/build_native_kind.sh sets from package.sh's CUDA_RELEASE_ARCHS (one source of truth).
+# Shorten a native dev build with `KNAIF_CUDA_DEV_ARCHS=120-real` instead.
 # cuda_arch="native" builds for the GPU present at build time (needs CMake ≥3.24); pin a number
 # (e.g. 120 for Blackwell / RTX 50xx) to cross-build without the GPU visible.
 cuda_nvcc := "/usr/local/cuda/bin/nvcc"
@@ -206,17 +207,61 @@ type-check-py: type-check
 # Full Python check: lint + type + test + generated-docs check
 check-py: lint-py type-check-py test-py gen-skills-check
 
-# Full CI check: Python now, native when the Cargo workspace exists (skips cleanly)
-check: check-py check-native
+# The deterministic parity layers — L1 (contract conformance) and L2 (deterministic pipeline)
+# — on BOTH runtimes (plan docs/plans/2026-09-10-skill-quality-lifecycle.md, G4).
+#
+# In `just check` by default because they are the layers that cost nothing to run: no model,
+# no GPU, no external binaries, seconds. Their whole purpose is to fail a PR that changes one
+# runtime's prompt, retrieval, validation or rendering without the other — which they cannot do
+# if running them is a thing you have to remember.
+#
+# The Python halves already run inside `test-py`; this recipe exists so the RUST halves run too
+# (`check-native` is fmt + clippy only) and so a failure names the layer rather than arriving as
+# an anonymous cargo test. `just test-native` remains the broader workspace run.
+check-contracts:
+    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_nl_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py python/core/tests/test_chain_linking_parity.py python/core/tests/test_expansion_parity.py python/core/tests/test_documents_expansion_parity.py -q
+    cargo test -p knaif-core --test parity
+    cargo test -p knaif-core --test chain_linking_parity
+    cargo test -p knaif-skill-ffmpeg --test expansion_parity
+    cargo test -p knaif-skill-documents --test expansion_parity
+    cargo test -p knaif-llm --test generation
+    cargo test -p knaif-cli --test executor_semantics
+    cargo test -p knaif-cli --test prompt_examples
+    cargo test -p knaif-cli --bin knaif prompt_parity
+    uv run python "{{justfile_directory()}}/scripts/parity_check.py" --self-test
+    uv run python -m knaif.evalsuite gate --record-contracts
 
-# Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent
+# At the tag: keep the acceptance records and the gate's verdict for this release under
+# evals/acceptance/releases/<version>/ (written once). e.g.: just release-record 1.2.0
+release-record version:
+    uv run python -m knaif.evalsuite gate --release-record {{version}}
+
+# G1/G2 — a skill may not claim a native status its evidence does not support. Reads
+# contracts/release/native_status.yaml; `supported` needs an L4 acceptance record, `parity`
+# needs an L3 run, and either goes stale when the tree moves underneath it. Also asserts the
+# platform matrix: a platform may not be `supported` without recorded parity coverage.
+check-gate:
+    uv run python -m knaif.evalsuite gate
+
+# Full CI check: Python, native, both websites (astro check), and the L1/L2 parity contracts.
+# Needs node + pnpm on PATH — `just bootstrap` provisions them from mise.toml. Site recipes
+# live at the bottom.
+check: check-py check-native check-contracts check-gate site-check
+
+# Provision the pinned toolchain via mise (mise.toml); prints guidance if mise is absent.
+#
+# The `rustup component add` is not redundant with rust-toolchain.toml. mise provisions Rust
+# with rustup's MINIMAL profile, which ignores that file's `components` — so a contributor who
+# bootstraps exactly as documented gets rustc + cargo + rust-std, and `just check-native` then
+# dies on a missing clippy before it lints anything. CI hit this in two separate jobs. It is
+# idempotent and costs seconds when the components are already there.
 [windows]
 bootstrap:
-    @if (Get-Command mise -ErrorAction SilentlyContinue) { mise install; Write-Host "Toolchain provisioned via mise." } else { Write-Host "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.14 + uv 0.11.x are on PATH, then 'just init'." }
+    @if (Get-Command mise -ErrorAction SilentlyContinue) { mise install; if (Get-Command rustup -ErrorAction SilentlyContinue) { rustup component add rustfmt clippy } ; Write-Host "Toolchain provisioned via mise." } else { Write-Host "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.10+ and uv 0.11.x are on PATH, then 'just init'." }
 
 [unix]
 bootstrap:
-    @if command -v mise >/dev/null 2>&1; then mise install && echo "Toolchain provisioned via mise."; else echo "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.14 + uv 0.11.x are on PATH, then 'just init'."; fi
+    @if command -v mise >/dev/null 2>&1; then mise install && { command -v rustup >/dev/null 2>&1 && rustup component add rustfmt clippy; } ; echo "Toolchain provisioned via mise."; else echo "mise not found. Install: https://mise.jdx.dev/getting-started.html  then re-run 'just bootstrap'. Fallback: ensure Python 3.10+ and uv 0.11.x are on PATH, then 'just init'."; fi
 
 # Native (Rust) recipes. Requires the Rust toolchain (cargo) on PATH — `just bootstrap`
 # provisions it via mise. Run arbitrary cargo commands with `just rs <args>`.
@@ -236,6 +281,51 @@ test-native:
 build-native:
     cargo build --workspace
 
+#   just build-native-kind cpu | vulkan | cuda | base
+#
+# Each kind gets the matching `release-<kind>` cargo profile. Without that, every feature set
+# overwrites the same target/release/knaif AND the same staged llama/ggml libs — the cause of the
+# `hard_link … AlreadyExists` kind-switch panic and of a cpu package once built from the leftover
+# vulkan tree (portable-builds C1/C2). Plain `release` is untouched.
+#
+# The feature set is read from installers/package.sh (`--print-feats`), never copied, so the two
+# cannot drift. On Windows the script locates Visual Studio and enters VsDevCmd.bat when cl.exe is
+# absent, so this does NOT need a "Developer PowerShell for VS".
+#
+# FIRST build of a kind compiles everything from scratch: ~1 min for cpu/base, ~15-30 min for cuda
+# (183 CUDA translation units). After that, switching between kinds costs nothing. To reclaim the
+# space: `rm -rf target/release-<kind>`.
+#
+# Build ONE native kind into its own directory: target/release-<kind>/
+[windows]
+build-native-kind kind="cpu":
+    & (just _bash) scripts/build_native_kind.sh {{kind}}
+
+[unix]
+build-native-kind kind="cpu":
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" {{kind}}
+
+#   just verify-build-kind cuda
+#
+# Assert a built kind got its own directory, binary and staged libs
+[windows]
+verify-build-kind kind="cpu":
+    & (just _bash) scripts/verify_build_profile.sh {{kind}}
+
+[unix]
+verify-build-kind kind="cpu":
+    bash "{{justfile_directory()}}/scripts/verify_build_profile.sh" {{kind}}
+
+# Assert every active skill bundle loads in BOTH runtimes (post-v1-ci C2).
+#
+# The bundle's YAML is read by two loaders in two languages, and a bundle that parses in
+# Python but not in Rust is invisible until someone runs the native binary. Compares what
+# each loader REPORTS — discovery, stale filtering, `runtimes:`, external tools — not that
+# each exits 0. Needs the debug binary; `just parity` is the heavier, model-pinned check
+# that answers a different question.
+loader-check: build-native
+    uv run python "{{justfile_directory()}}/scripts/check_loader_compat.py"
+
 # Build + run the native CLI with the MOCK backend (no llama.cpp — fast build, `--model` won't
 # work). For dev/plumbing/CI: `just native-mock -- --version`, `just native-mock -- skills list`,
 # `just native-mock -- models pull knaif-qwen3-4b-v1`. For real inference use `just native` below.
@@ -244,11 +334,13 @@ native-mock *args:
 
 # Cargo features for real-inference runs. Override for a GPU backend, e.g.
 # `KNAIF_FEATS=llama,vulkan,pdfium just native ...` (or cuda).
-FEATS := env_var_or_default("KNAIF_FEATS", "llama,pdfium")
+# `openmp` is explicit since knaif-llm turned llama-cpp-2's defaults off (see package.sh
+# feats_for_kind); macOS leaves it out so a dev build cannot pick up Homebrew's libomp.
+FEATS := env_var_or_default("KNAIF_FEATS", if os() == "macos" { "llama,pdfium" } else { "llama,openmp,pdfium" })
 
 # Default model for `just native`. A name resolves against the model store; a .gguf path is used
 # as-is. Override per-run with `KNAIF_MODEL=... just native ...` or an inline `--model` (last wins).
-MODEL := env_var_or_default("KNAIF_MODEL", "knaif-qwen3-4b-v1")
+MODEL := env_var_or_default("KNAIF_MODEL", "knaif-qwen3-4b-v2")
 
 # Run a skill through the native CLI with REAL local inference — the manual-testing twin of
 # `just cli`. Defaults to --model {{MODEL}}. Mirrors cli's shape:
@@ -269,11 +361,11 @@ native skill *args:
 # targets the local GPU by default (Blackwell / RTX 50xx = 120).
 [windows]
 native-cuda skill *args:
-    cd "{{invocation_directory()}}"; $env:CMAKE_CUDA_ARCHITECTURES = "{{cuda_arch}}"; cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,cuda,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    & (just _bash) scripts/build_native_kind.sh cuda; if($LASTEXITCODE){exit $LASTEXITCODE}; cd "{{invocation_directory()}}"; & "{{justfile_directory()}}/target/release-cuda/knaif.exe" run {{skill}} --model "{{MODEL}}" {{args}}
 
 [unix]
 native-cuda skill *args:
-    cd "{{invocation_directory()}}" && CMAKE_CUDA_ARCHITECTURES="{{cuda_arch}}" cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,cuda,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" cuda && cd "{{invocation_directory()}}" && "{{justfile_directory()}}/target/release-cuda/knaif" run {{skill}} --model "{{MODEL}}" {{args}}
 
 # Vulkan is the cross-vendor GPU backend (NVIDIA/AMD/Intel). Needs the Vulkan SDK, and must build
 # with the Ninja generator (this recipe forces it): the default Visual Studio/MSBuild generator
@@ -290,11 +382,11 @@ native-cuda skill *args:
 # native-cuda (lighter compile).
 [windows]
 native-vulkan skill *args:
-    cd "{{invocation_directory()}}"; $env:CMAKE_GENERATOR = "Ninja"; cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,vulkan,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    & (just _bash) scripts/build_native_kind.sh vulkan; if($LASTEXITCODE){exit $LASTEXITCODE}; cd "{{invocation_directory()}}"; & "{{justfile_directory()}}/target/release-vulkan/knaif.exe" run {{skill}} --model "{{MODEL}}" {{args}}
 
 [unix]
 native-vulkan skill *args:
-    cd "{{invocation_directory()}}" && CMAKE_GENERATOR="Ninja" cargo run --manifest-path "{{justfile_directory()}}/Cargo.toml" -p knaif-cli --features "llama,vulkan,pdfium" -- run {{skill}} --model "{{MODEL}}" {{args}}
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" vulkan && cd "{{invocation_directory()}}" && "{{justfile_directory()}}/target/release-vulkan/knaif" run {{skill}} --model "{{MODEL}}" {{args}}
 
 # Remove only the llama-cpp-sys build artifacts so the next GPU build reconfigures cleanly (e.g. to
 # switch a half-configured Vulkan build from the VS generator to Ninja). Rebuilds llama.cpp next run.
@@ -331,11 +423,12 @@ package *args:
     bash "{{justfile_directory()}}/installers/package.sh" {{args}}
 
 # Build a FUNCTIONAL release artifact (real llama.cpp inference) and package it into dist/.
-# kind = cpu | vulkan | cuda (Windows/Linux) | metal (macOS only). RUN FROM A "Developer PowerShell
-# for VS" on Windows (needs MSVC + cmake on PATH; Vulkan also needs Ninja). Sets LIBCLANG_PATH to
-# the default LLVM\bin if unset (Windows).
-#   just package-native vulkan    # THE WINDOWS/LINUX RELEASE ARTIFACT: exe + core libs + CPU *and*
-#                                 # Vulkan backends (Option 3 / C5). Gets the plain name.
+# kind = cpu | vulkan | cuda (Windows/Linux) | metal (macOS only). Builds via `just build-native-kind`, so it lands in its own
+# target/release-<kind>/ and does NOT need a "Developer PowerShell for VS" — the build script
+# locates Visual Studio and enters VsDevCmd.bat itself, and sets LIBCLANG_PATH, CMAKE_GENERATOR
+# and CUDAARCHS. package.sh is then pointed at that directory with --profile.
+#   just package-native vulkan    # THE RELEASE ARTIFACT: exe + core libs + CPU *and* Vulkan backends
+#                                 # (Option 3 / C5). Gets the plain name; forces the Ninja generator.
 #   just package-native cpu       # build kind only (a box with no Vulkan SDK) -> `-cpu` suffix.
 #                                 # NOT a release artifact: C5b ships one default artifact per OS.
 #   just package-native cuda      # opt-in CUDA payload for ~/.knaif/backends (NOT an app), BOTH OSes
@@ -353,60 +446,26 @@ package *args:
 # dynamic-backends. It is not one any more: package.sh emits the opt-in payload on both OSes, and
 # 1.1.0 publishes both payloads. The old shape survives only behind `--legacy-windows-cuda-app`.
 #
-# A cuda build must also carry CUDAARCHS, and on Windows THIS RECIPE is the only place that can set
-# it: package.sh refuses to build on Windows (no MSVC from bash), so its own CUDAARCHS export never
-# runs and the caller is the last line of defence. Left unset, ggml's default arch list fires and
-# package.sh's verify_cuda_archs rejects the result after the full ~183-TU compile. The list is read
-# out of package.sh rather than copied, so there is still one source of truth; an explicit CUDAARCHS
-# wins, and KNAIF_CUDA_DEV_ARCHS shortens the build exactly as it does on Linux.
-#
-# CMAKE_DISABLE_FIND_PACKAGE_OpenSSL is set here for the same "package.sh cannot build on Windows"
-# reason as CUDAARCHS: this recipe is the only place it can be set, and llama.cpp's LLAMA_OPENSSL
-# defaults ON with an unguarded `find_package(OpenSSL)`, so a box that happens to have OpenSSL
-# installed links libssl/libcrypto into the llama-common core library. check_pe_imports.py would
-# reject the artifact at packaging time — after the full build. See package.sh's own comment.
+# A cuda build must also carry CUDAARCHS, and on Windows nothing else can set it: package.sh
+# refuses to build on Windows (no MSVC from bash), so its own CUDAARCHS export never runs. Left
+# unset, ggml's default arch list fires and package.sh's verify_cuda_archs rejects the result after
+# the full ~183-TU compile. scripts/build_native_kind.sh is now what sets it, reading the list out
+# of package.sh rather than copying it, so there is still one source of truth; an explicit
+# CUDAARCHS wins, and KNAIF_CUDA_DEV_ARCHS shortens the build exactly as it does on Linux.
 [windows]
 package-native kind="cpu":
-    $feats=@{cpu='llama,dynamic-backends,openmp';vulkan='llama,dynamic-backends,vulkan,openmp';cuda='llama,dynamic-backends,cuda,openmp'}['{{kind}}']; if(-not $feats){throw 'kind must be cpu|vulkan|cuda'}; if(-not $env:LIBCLANG_PATH){$env:LIBCLANG_PATH='C:\Program Files\LLVM\bin'}; $env:CMAKE_DISABLE_FIND_PACKAGE_OpenSSL='ON'; if('{{kind}}' -eq 'vulkan'){$env:CMAKE_GENERATOR='Ninja'}; if('{{kind}}' -eq 'cuda' -and -not $env:CUDAARCHS){$env:CUDAARCHS=if($env:KNAIF_CUDA_DEV_ARCHS){$env:KNAIF_CUDA_DEV_ARCHS}else{(Select-String -Path '{{justfile_directory()}}/installers/package.sh' -Pattern '^CUDA_RELEASE_ARCHS="(.+)"$').Matches[0].Groups[1].Value}; Write-Host "  CUDAARCHS=$env:CUDAARCHS"}; cargo build --release -p knaif-cli --features $feats; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}}
+    if('{{kind}}' -notin @('cpu','vulkan','cuda')){throw 'kind must be cpu|vulkan|cuda'}; & (just _bash) scripts/build_native_kind.sh {{kind}}; if($LASTEXITCODE){exit $LASTEXITCODE}; & (just _bash) installers/package.sh --no-build --kind={{kind}} --profile=release-{{kind}}
 
 [unix]
 package-native kind="cpu":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{kind}}" in
-      cpu) feats=llama,dynamic-backends,openmp;;
-      vulkan) feats=llama,dynamic-backends,vulkan,openmp;;
-      cuda) feats=llama,dynamic-backends,cuda,openmp;;
-      # Metal needs no cargo feature of its own (D1) — GGML_METAL defaults ON under APPLE — so
-      # this is the same feature set as `cpu` minus `openmp`. package.sh itself refuses
-      # cpu/vulkan/cuda on Darwin and metal everywhere else (D2); this case list only has to
-      # stay in sync on names. `openmp` is deliberately omitted here (D3/B5): llama-cpp-2's own
-      # default would otherwise link Homebrew's keg-only libomp.dylib whenever the build
-      # environment happens to resolve it — an absolute-path dependency that does not exist on a
-      # clean Mac, verified 2026-08-07 and caught by check_macho_deps.py (E1).
-      metal) feats=llama,dynamic-backends;;
+      cpu|vulkan|cuda|metal) ;;
       *) echo "kind must be cpu|vulkan|cuda|metal" >&2; exit 1;;
     esac
-    # Both exports below exist in package.sh's own build step too, and are repeated HERE for one
-    # reason: this recipe builds directly via cargo and then calls package.sh with `--no-build`,
-    # so that step never runs. They must be set before the FIRST configure — neither is a
-    # `rerun-if-env-changed` input in llama-cpp-sys-2's build.rs (verified), so setting them later
-    # silently keeps a cached build's old value.
-    #
-    # NOT metal-only: llama.cpp defaults LLAMA_OPENSSL=ON and its bare `find_package(OpenSSL)` has
-    # no platform guard, so any box with OpenSSL dev files installed (routine on Linux CI) links
-    # libssl/libcrypto into the llama-common core library we ship. See package.sh's own comment on
-    # this line for the full chain and why `LLAMA_OPENSSL=OFF` is not the reachable lever.
-    export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
-    # The macOS deployment floor IS macOS-only (D9). Without it the floor silently falls back to
-    # rustc's own default for aarch64-apple-darwin (11.0, verified) rather than the chosen 12.0 —
-    # a real gap, caught 2026-08-03 by checking LC_BUILD_VERSION on the actual output.
-    if [ "{{kind}}" = "metal" ]; then
-      export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
-      echo "  MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
-    fi
-    CMAKE_GENERATOR="${CMAKE_GENERATOR:-Ninja}" cargo build --release -p knaif-cli --features "$feats"
-    bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}}
+    bash "{{justfile_directory()}}/scripts/build_native_kind.sh" {{kind}}
+    bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}} --profile=release-{{kind}}
 
 # Build the PUBLISHED Linux artifacts inside the floor-pinned container, so the glibc floor is
 # chosen rather than inherited from whichever machine ran the build. Docker is required here and
@@ -513,6 +572,14 @@ eval-output-diff skill *args:
 eval-success skill *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier success {{args}}
 
+# L4 — grade the SHIPPED native binary on the files it really produces (executes for real).
+# Needs a native build with the llama feature and the external binaries the skill uses.
+# Regenerate fixtures first: `just eval-fixtures <skill>` — a missing fixture scores a correct
+# plan ~0, so an empty sandbox reports a catastrophe that did not happen.
+# e.g.: just eval-native ffmpeg --save evals/runs/2026-09-11_l4-native_success
+eval-native skill *args:
+    uv run python -m knaif.evalsuite native --skill {{skill}} --lane native-cli --verifier success {{args}}
+
 # Score an external agent's results directory (e.g.: just eval-score-external ffmpeg results/claude-code/)
 eval-score-external skill results_dir *args:
     uv run python -m knaif.evalsuite score-external --skill {{skill}} --results-dir {{results_dir}} {{args}}
@@ -557,30 +624,64 @@ eval-stage skill stage *args:
 eval-backends skill *args:
     uv run python -m knaif.evalsuite compare --skill {{skill}} --config eval_backends.yaml --verifier cheap {{args}}
 
-# Writes the bar to skills/<skill>/data/eval_snapshot.json — do it deliberately, in its own
-# commit, and only when adopting a measured improvement. Run artifacts go under evals/ like every
+# Writes the bar to skills/<skill>/data/eval_snapshot.json — do it deliberately and in its own
+# commit. Two legitimate reasons, and say which one applies: (1) adopting a MEASURED IMPROVEMENT
+# — prove it with a per-row join at the same verifier and population, not an aggregate; or
+# (2) a COVERAGE re-lock, when the stored population or verifier can no longer evaluate the
+# current corpus at all, so the gate raises rather than judging. The 2026-09-08 re-lock was one
+# of each: ffmpeg an improvement, documents pure coverage. Never re-lock to make a red gate go
+# green. Run artifacts go under evals/ like every
 # other run; .gitignore keeps only the durable summaries (score.json, report.md), so commit the
 # run and add a row to evals/INDEX.md rather than pruning by hand.
-# RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg)
-# The VERIFIER IS A PARAMETER, not a constant: `output_diff` is defined in
-# skills/ffmpeg/eval/verifiers.py and is NOT a shared verifier. `documents` owns only
-# cheap/honest/success, and score_corpus degrades to outcome-accuracy-only when it cannot find
-# the named verifier — so hardcoding output_diff here silently produced a non-executing bar for
-# every skill that does not own one, and would have downgraded documents' committed `success`
-# snapshot (measured 2026-08-04: same 97.6% outcome, every Knaif column n/a). The CLI now refuses
-# that outright, and refuses a non-executing verifier like `cheap`; this default just stops
-# steering callers into the refusal.
-#   just eval-snapshot ffmpeg    --backends <name>                      # ffmpeg owns output_diff
-#   just eval-snapshot documents success --backends <name>              # documents does not
-eval-snapshot skill verifier="output_diff" *args:
+# The verifier is an argument, not a constant. It used to be hardcoded `output_diff`, which
+# silently disagreed with both committed bars: documents was always `success`, and measuring
+# ffmpeg both ways (2026-09-08) showed `success` grades 574 plan rows to output_diff's 527 —
+# so per EVAL_FRAMEWORK's "success, or output_diff where coverage is better", success wins.
+# Override only with evidence that output_diff covers more of the skill.
+# RE-LOCK a skill's acceptance bar (e.g.: just eval-snapshot ffmpeg [output_diff])
+eval-snapshot skill verifier="success" *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier {{verifier}} --snapshot --save evals/runs/snapshot_{{skill}}_{{verifier}} {{args}}
 
-# Regression check against saved snapshot (e.g.: just eval-regression ffmpeg --current path/to/scoreboard.json)
-# WITHOUT --current this compares the snapshot to itself and always passes (C0 in the 2026-08-02
-# macOS support plan / docs/TODO.md) — it is a smoke check that the snapshot loads, not a gate.
-# *args exists so --current is reachable at all; it was silently dropped before this fix.
-eval-regression skill *args:
-    uv run python -m knaif.evalsuite regression --skill {{skill}} {{args}}
+# Regression check against saved snapshot. `current` is a scoreboard JSON from a real run
+# (e.g.: just eval-success ffmpeg --save evals/runs/2026-01-01_check --verifier <snapshot's verifier>,
+# then: just eval-regression ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_<verifier>.json).
+# No `current` used to silently compare the snapshot to itself and always print "OK" — fixed
+# per docs/audits/2026-09-07-core-principles-and-rtx5080.md (F6); now `current` is required.
+eval-regression skill current:
+    uv run python -m knaif.evalsuite regression --skill {{skill}} --current {{current}}
+
+# S2 acceptance: grade a run against the skill's written bar (skills/<skill>/acceptance.yaml).
+# Distinct from eval-regression, which only asks "did it drop since last time" — this asks
+# "is it good enough", against floors, required capability slices, and safety at 100%.
+# Fails closed: a missing --safety result is a rejection, not an omission.
+#   just eval-safety ffmpeg evals/runs/2026-01-01_check/safety.json
+#   just eval-accept ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_success.json evals/runs/2026-01-01_check/safety.json
+eval-accept skill current safety="":
+    uv run python -m knaif.evalsuite accept --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }}
+
+# Run a skill's safety corpus — every row must reject; no tolerance, no curve.
+eval-safety skill save="" *args:
+    uv run python -m knaif.evalsuite safety --skill {{skill}} {{ if save == "" { "" } else { "--save " + save } }} {{args}}
+
+# Same corpus, through the SHIPPED BINARY. Required for L4 acceptance: Python's refusals are
+# not evidence that the binary refuses — they are different code reaching a refusal by
+# different routes. e.g.: just eval-safety-native ffmpeg evals/runs/2026-09-11_l4/safety.json
+eval-safety-native skill save="" *args:
+    uv run python -m knaif.evalsuite safety --skill {{skill}} --lane native-cli {{ if save == "" { "" } else { "--save " + save } }} {{args}}
+
+# L4 ACCEPTANCE — the only check that can buy `supported`. Grades a native lane run against
+# BOTH the skill's written S2 bar and the frozen Python baseline:
+#     native >= max(S2 floor, accepted python score - 0.02)
+# on outcome_accuracy and avg_knaif_score, at complete coverage, every required slice holding,
+# safety at 100% from the binary. Records its verdict into evals/acceptance/<skill>.json either
+# way — a FAILING L4 record is evidence too, and a different state from never having measured.
+# The three steps, in order:
+#   just eval-fixtures ffmpeg
+#   just eval-native ffmpeg --save evals/runs/2026-09-11_l4-ffmpeg_success
+#   just eval-safety-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
+#   just eval-accept-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/ffmpeg_native-cli_success.json evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
+eval-accept-native skill current safety="":
+    uv run python -m knaif.evalsuite accept-native --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }}
 
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:
@@ -594,14 +695,22 @@ eval-compare skill backends *args:
 cli skill *args:
     cd "{{invocation_directory()}}"; uv run knaif-cli run {{skill}} {{args}}
 
-# GGUF both runtimes load for the parity check — identical bytes. Native's `knaif-qwen3-4b-v1`
-# The manifest's `file` and Python's `knaif-qwen3-4b-v1` (models.yaml) both resolve to this file, but
+# GGUF both runtimes load for the parity check — identical bytes. Native's `knaif-qwen3-4b-v2`
+# The manifest's `file` and Python's `knaif-qwen3-4b-v2` (models.yaml) both resolve to this file, but
 # the harness pins BOTH to the path directly (native --model PATH, python --model-path PATH)
 # so weight identity is never in doubt. Override with KNAIF_PARITY_MODEL.
-PARITY_MODEL := env_var_or_default("KNAIF_PARITY_MODEL", "models/knaif-qwen3-4b-v1-q4_k_m.gguf")
+PARITY_MODEL := env_var_or_default("KNAIF_PARITY_MODEL", "models/knaif-qwen3-4b-v2-q4_k_m.gguf")
 
 # Cargo appends `.exe` only on Windows; every other target builds a bare `knaif`.
 EXE := if os_family() == "windows" { ".exe" } else { "" }
+
+# The cross-backend check (release plan R2/R5c): plans on the CUDA, Vulkan and CPU builds, safety on
+# each binary, decision flips vs CUDA within a bound written FIRST, and a full L4 for any kind over
+# it. Hours on CPU — pair it with scripts/watch_run_progress.sh.
+# (Not `eval-backends`, which compares inference backends from eval_backends.yaml.)
+# e.g.: just eval-native-backends ffmpeg --max-flips 35
+eval-native-backends skill *args:
+    bash "{{justfile_directory()}}/scripts/eval_backends.sh" {{skill}} {{args}}
 
 # Native-vs-Python RUNTIME PARITY over a skill's eval utterances (NOT an eval-suite — no
 # baselines, no model comparison; see scripts/parity_check.py). Confirms the ported pipeline
@@ -613,7 +722,9 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 #   just parity ffmpeg --limit 20
 # Two comparison levels (pass-through --mode): `--mode command` (default) diffs the rendered
 # ffmpeg argv from `run --dry-run` — tests intent expansion + render, but python skips
-# compress/platform/thumbnail/batch/reverse and native previews only chain step 1; `--mode plan`
+# compress/platform/thumbnail/batch/reverse and native REFUSES multi-step chains outright
+# (it executes one intent per invocation — audit F5 — so a chain row's native outcome is a
+# `reject`, which compares as a mismatch rather than a rendered command); `--mode plan`
 # diffs the `plan --json` envelope (tool+args) for EVERY intent and full chains (no render),
 # treating native's materialized optional-arg defaults as equivalent. Run both for full coverage.
 # `--batch` (plan mode only) loads each model ONCE and streams all utterances via `plan --batch`
@@ -623,24 +734,75 @@ EXE := if os_family() == "windows" { ".exe" } else { "" }
 parity skill *args:
     uv run python "{{justfile_directory()}}/scripts/parity_check.py" --skill {{skill}} --native-bin "{{justfile_directory()}}/target/debug/knaif{{EXE}}" --model-path "{{justfile_directory()}}/{{PARITY_MODEL}}" --cwd "{{justfile_directory()}}/sandbox/fixtures/{{skill}}" {{args}}
 
-# Build the website and package it for Amplify manual upload
-# Usage: just web-build
-# Then drag site/knaif-site.zip into the Amplify console.
-web-build: _web-build-mkdocs _web-zip
+# ---------------------------------------------------------------------------
+# Websites — knaif.org (site/org) and knaif.dev (site/dev).
+# Plan: docs/plans/2026-08-04-website-split.md
+#
+# pnpm workspaces, NOT npm. `just bootstrap` provisions node + pnpm from mise.toml.
+# `site-check` runs as part of `just check`; `site-build` + `site-links` do not — they
+# need a full production build of both sites, which belongs in the release/deploy gate.
+# ---------------------------------------------------------------------------
 
-_web-build-mkdocs:
-    uv pip install mkdocs-material --quiet
-    uv run python -m mkdocs build -f site/mkdocs.yml
+# Install site dependencies (respects the committed lockfile, like Amplify does)
+site-install:
+    pnpm --dir site install --frozen-lockfile
 
-[windows]
-_web-zip:
-    Compress-Archive -Path site/site/* -DestinationPath site/knaif-site.zip -Force
-    Write-Host "Ready: site/knaif-site.zip"
+# Update site dependencies within declared ranges; pass --latest to include major upgrades
+site-update *args:
+    pnpm --dir site --recursive update {{args}}
 
-[unix]
-_web-zip:
-    cd site/site && zip -r ../knaif-site.zip . -x "*.DS_Store"
-    @echo "Ready: site/knaif-site.zip"
+# Update pnpm and the site pin; migrate Corepack shims to standalone pnpm if needed
+site-pnpm-update version="latest":
+    uv run python "{{justfile_directory()}}/scripts/site_pnpm_update.py" "{{version}}"
+
+# Dev server for one site. Usage: just site-dev org   |   just site-dev dev
+site-dev app:
+    pnpm --dir site --filter knaif-{{app}} dev
+
+# Production build of both sites, exactly as Amplify builds them
+site-build:
+    pnpm --dir site install --frozen-lockfile
+    pnpm --dir site --filter knaif-org build
+    pnpm --dir site --filter knaif-dev build
+
+# Type/content check for both sites (astro check) — the site half of `just check`.
+# Installs first: `astro check` on a missing node_modules reports a package resolution
+# error, which reads as a broken site rather than as an unprovisioned checkout.
+site-check:
+    pnpm --dir site install --frozen-lockfile
+    pnpm --dir site --filter knaif-org check
+    pnpm --dir site --filter knaif-dev check
+
+# Internal link + anchor check over the BUILT sites. Needs `just site-build` first —
+# Astro checks neither, so a typo'd href or a moved heading anchor is otherwise invisible.
+site-links:
+    uv run python "{{justfile_directory()}}/scripts/check_site_links.py"
+
+# Contrast + keyboard-navigation pass over the BUILT sites, in a real browser. Needs
+# `just site-build` first, and a one-time `just site-a11y-install` for Chromium.
+#
+# Out of `just check` on purpose, and for a different reason than site-build: this one
+# drives a ~150 MB browser that a contributor has no other need for. It belongs to the
+# same deploy gate as site-links. Pass --site / --route to narrow it while iterating.
+site-a11y *args:
+    uv run --group site-a11y python "{{justfile_directory()}}/scripts/check_site_a11y.py" {{args}}
+
+# One-time provisioning for `just site-a11y`. Downloads Chromium into playwright's cache,
+# outside the repo.
+site-a11y-install:
+    uv run --group site-a11y playwright install chromium
+
+# Regenerate the committed catalog data both sites read (drift-guarded by a test)
+site-data:
+    uv run python "{{justfile_directory()}}/scripts/site_data.py"
+
+# Run AFTER publishing a release (RELEASE.md §5). URLs are never derived from
+# Cargo.toml — the version bump lands before the assets exist, so a derived URL
+# would advertise a download that 404s.
+#
+# Refresh site/data/release.json from the latest PUBLISHED GitHub release
+release-data:
+    uv run python "{{justfile_directory()}}/scripts/release_data.py"
 
 # Freeze dependencies to requirements.txt
 freeze: _freeze

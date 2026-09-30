@@ -82,3 +82,74 @@ def test_agent_caches_output_capable_set(tmp_path):
     assert {"resize_video", "trim_video", "convert_video"} <= agent._output_capable
     assert "clarify" not in agent._output_capable
     assert "prepare_for_platform" not in agent._output_capable  # has no output arg
+
+
+# ── a model-supplied output name must be a legal filename ────────────────────
+
+
+@pytest.fixture(scope="module")
+def engine():
+    sys.modules.pop("_skill_oop_ffmpeg_handlers", None)
+    Skill.load(FFMPEG_SKILL_DIR)
+    handlers = sys.modules["_skill_oop_ffmpeg_handlers"]
+    return sys.modules[handlers.__package__ + "._engine"]
+
+
+def _out(engine, raw: str) -> str:
+    return engine._resolve_output_target(
+        raw, input_path=Path("/sb/clip.mp4"), mode="convert", options={"container": "mp4"}
+    ).name
+
+
+def test_a_timestamp_derived_output_name_is_a_legal_filename(engine):
+    """`ffmpeg_268#4` — the row that costs ffmpeg its L4 `extract_audio` floor.
+
+    The model named the output after the time range it was given:
+    `clip_trimmed_00:00:00.mp4`. Colons are legal on Linux and illegal on Windows, so the
+    plan renders a filename ffmpeg cannot open — *Error opening output files: Invalid
+    argument* — and the chain dies at step 1 with nothing written.
+
+    Both runtimes fail it, so this is not a native port defect; it is the skill trusting a
+    model-supplied string as a filename. Sanitised unconditionally rather than per-platform:
+    a plan that renders different names on Linux and Windows would break L3 parity across
+    machines and make every eval result depend on where it ran.
+    """
+    assert _out(engine, "clip_trimmed_00:00:00.mp4") == "clip_trimmed_00-00-00.mp4"
+
+
+def test_the_wildcard_output_vocabulary_survives_sanitising(engine):
+    """`*` and `?` are illegal on Windows but they are this skill's own output grammar.
+
+    `videos/*.mp4` means "same name, over there" and `_resolve_output_target` expands it.
+    Stripping them here would break a documented feature to fix a different bug.
+    """
+    assert _out(engine, "*.mp4") == "clip.mp4"
+
+
+@pytest.mark.parametrize(
+    "raw,name",
+    [
+        ('clip"quoted".mp4', "clip-quoted-.mp4"),
+        ("clip<1>.mp4", "clip-1-.mp4"),
+        ("a|b.mp4", "a-b.mp4"),
+    ],
+)
+def test_the_other_windows_illegal_characters_go_too(engine, raw, name):
+    """Nothing observed these, but the same trust boundary produces them.
+
+    The model writes filenames out of the utterance; a quoted title or a `<name>`
+    placeholder is no less plausible than a timestamp, and each fails identically.
+    """
+    assert _out(engine, raw) == name
+
+
+def test_a_directory_component_keeps_its_separator(engine):
+    """Sanitising runs per path component — `/` is structure, not a stray character."""
+    got = engine._resolve_output_target(
+        "converted/clip_00:00:05.mp4",
+        input_path=Path("/sb/clip.mp4"),
+        mode="convert",
+        options={"container": "mp4"},
+    )
+    assert got.name == "clip_00-00-05.mp4"
+    assert got.parent.name == "converted"

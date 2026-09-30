@@ -55,6 +55,21 @@ def print_scoreboard(
     lines.append(f"  {label}")
     lines.append(_hr("═"))
     lines.append("")
+    if scoreboard.get("composed"):
+        src = scoreboard.get("composed_from") or {}
+
+        def _name(side: Any) -> Any:
+            return side.get("path") if isinstance(side, dict) else side
+
+        lines.append("  COMPOSED cell, not a full run: rows re-run elsewhere swapped into a base")
+        lines.append(f"    base        : {_name(src.get('base'))}")
+        lines.append(
+            f"    replacements: {_name(src.get('replacements'))} "
+            f"({len(src.get('replaced_rows') or [])} rows)"
+        )
+        if src.get("note"):
+            lines.append(f"    rule        : {src['note']}")
+        lines.append("")
     lines.append(f"  Verifier          : {scoreboard.get('verifier', '?')}")
     lines.append(f"  Total rows        : {scoreboard.get('total', 0)}")
     lines.append(f"  Outcome accuracy  : {_fmt_score(scoreboard.get('outcome_accuracy'))}")
@@ -261,6 +276,16 @@ def load_arm_entries(
             arm_name = stem[len(skill) + 1 :]
         if verifier and arm_name.endswith(f"_{verifier}"):
             arm_name = arm_name[: -len(verifier) - 1]
+        # `run` may stamp the shipped model name into the scoreboard. Prefer it for
+        # display — swapping just the backend segment so a foreign-skill prefix
+        # (e.g. "documents_" in an --skill ffmpeg report) survives.
+        public_name = data.get("backend_public_name")
+        if public_name:
+            backend_key = data.get("backend")
+            if backend_key and backend_key in arm_name:
+                arm_name = arm_name.replace(backend_key, public_name)
+            else:
+                arm_name = public_name
 
     # Prefer the local-shaped "rows" list — the local runner always has it, and
     # score-external now emits it too (richer than "entries": it also carries

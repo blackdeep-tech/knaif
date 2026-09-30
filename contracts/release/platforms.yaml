@@ -1,0 +1,118 @@
+# Language-neutral platform support matrix — the machine-readable source for the
+# knaif.org /download page, and the single place the support floors are stated.
+#
+# WHY THIS FILE EXISTS. Through 1.1.0 the same facts lived in three prose copies:
+# RELEASE.md §1 (artifact names), RELEASE.md §4 (the measured runtime floors), and the
+# website's status table. Prose cannot be wrong in a way that fails a build, and one of
+# those copies was already stale — the site quoted "CUDA is a manual opt-in build" after
+# `knaif backend install cuda` had shipped. RELEASE.md now references this file instead of
+# restating it.
+#
+# THE FLOORS ARE MEASURED, NOT ASSUMED. `scripts/check_elf_deps.py` prints the real one
+# from the built artifact. The binding constraint on Linux is **libstdc++**
+# (`GLIBCXX_3.4.30` / `CXXABI_1.3.13`), NOT glibc — the artifact needs only `GLIBC_2.34`,
+# which is *below* the 2.35 build base. Any support statement quoting a glibc number alone
+# is measuring the wrong thing, and that is exactly how RHEL 9 gets mis-listed as
+# supported. Re-measure and update here when the build container moves.
+#
+# WHAT THIS FILE IS NOT. It carries no version numbers, URLs, or checksums. Those come
+# from `site/data/release.json`, which is a snapshot of the latest PUBLISHED GitHub
+# release (see `just release-data` and RELEASE.md §5). The split is deliberate: this file
+# changes when the *support floor* moves, which is rare; release.json changes every
+# release. Deriving download URLs from a version declared in-repo would advertise assets
+# that do not exist yet, because the version bump lands before publication.
+#
+# `artifact` values are name TEMPLATES — `<ver>` is substituted from release.json, and the
+# match against real published asset names is asserted by the site build.
+
+schema_version: 1
+
+platforms:
+  - id: windows-x64
+    name: Windows
+    arch: x64
+    status: supported
+    requires: "Windows 10 or later"
+    artifacts:
+      - artifact: "knaif-<ver>-windows-x64-setup.exe"
+        kind: installer
+        recommended: true
+        notes: "Inno installer, per-user, no admin required."
+      - artifact: "knaif-<ver>-windows-x64.zip"
+        kind: portable
+        notes: "Unpack anywhere and run; everything it needs ships beside the binary."
+    warnings:
+      # Not a footnote — it is the first thing a Windows user sees, and the checksum
+      # (not the absence of a warning) is what proves the download is intact.
+      - id: unsigned
+        text: >-
+          Binaries are unsigned, so Windows SmartScreen shows "Windows protected your PC".
+          Choose More info → Run anyway. Verify the checksum first.
+
+  - id: linux-x64
+    name: Linux
+    arch: x64
+    status: supported
+    # Stated as the measured symbol versions, with distros as the derived convenience.
+    requires: "glibc 2.34+ and libstdc++ providing GLIBCXX_3.4.30 / CXXABI_1.3.13"
+    known_good:
+      - "Ubuntu 22.04+"
+      - "Debian 12+"
+      - "Fedora 36+"
+      - "Linux Mint 21+"
+    known_bad:
+      - distro: "RHEL / Rocky / AlmaLinux 9"
+        reason: >-
+          glibc is new enough, but the shipped libstdc++ is one version short of
+          GLIBCXX_3.4.30. Bundling libstdc++ was rejected: libggml-vulkan.so dlopens a host
+          driver built against the system copy.
+    artifacts:
+      - artifact: "knaif-<ver>-linux-x64.tar.gz"
+        kind: portable
+        recommended: true
+      - artifact: "knaif-<ver>-linux-x86_64.AppImage"
+        kind: appimage
+        notes: >-
+          chmod +x and run. Needs FUSE2 (libfuse2t64 on Ubuntu 24.04); otherwise run with
+          --appimage-extract-and-run.
+
+  - id: macos
+    name: macOS
+    status: planned
+    requires: null
+    notes: "Core is cross-platform; packaging is a fast-follow. No artifact is published."
+
+# Every published artifact is CPU + Vulkan. `cpu` is a build kind, not a release artifact
+# (RELEASE.md §1) — it offers a user nothing the default lacks, at the cost of making them
+# choose. Do not surface it on the website.
+gpu:
+  default:
+    backends: [cpu, vulkan]
+    text: >-
+      Every download includes CPU and Vulkan support, and auto-selects Vulkan when a
+      capable driver is present.
+  optional:
+    - id: cuda
+      name: CUDA
+      install_command: "knaif backend install cuda"
+      approx_size: "~668 MB"
+      requires: "NVIDIA driver R580 or newer"
+      # This is a correctness issue on the newest cards, not an optimisation. Saying
+      # "Vulkan works everywhere" was wrong through 1.0.x and is what this entry prevents.
+      text: >-
+        On NVIDIA Blackwell cards (RTX 50xx) the Vulkan path runs at roughly CPU speed, so
+        CUDA is what makes knaif usable there. On older NVIDIA cards it is faster and
+        genuinely optional.
+
+# External tools are NOT bundled. Skills that shell out need them installed separately.
+external_tools:
+  text: >-
+    Skills that use external programs (FFmpeg, LibreOffice, Ghostscript, Tesseract) need
+    them installed separately. Run `knaif skills deps` to see what is missing.
+
+# The model is downloaded on first run, not bundled in any artifact.
+model:
+  text: >-
+    On first run knaif offers to download the recommended model (~2.5 GB) into ~/.knaif,
+    verified against a pinned SHA-256. Upgrading knaif re-downloads nothing while the
+    recommendation is unchanged.

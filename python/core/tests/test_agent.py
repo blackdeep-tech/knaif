@@ -1046,13 +1046,18 @@ def test_post_resolution_schema_validation_rejects_wrong_type():
 FFMPEG_SKILL_DIR = Path("skills") / "ffmpeg"
 
 
-def test_agent_exposes_result_formatter_and_artifact_runner_from_skill(sandbox):
-    """Loading the ffmpeg skill wires its RESULT_FORMATTER and ARTIFACT_RUNNER."""
+def test_agent_exposes_result_formatter_from_skill(sandbox):
+    """Loading the ffmpeg skill wires its RESULT_FORMATTER.
+
+    Not ARTIFACT_RUNNER: ffmpeg's artifacts are command lines and go through the eval
+    suite's chain runner, so it exports none (T5b). The hook itself is still wired for
+    skills that need it — see `test_agent_io_skill_has_no_result_formatter` for the
+    both-are-None case.
+    """
     agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=sandbox)
     assert agent.result_formatter is not None
     assert callable(agent.result_formatter)
-    assert agent.artifact_runner is not None
-    assert callable(agent.artifact_runner)
+    assert agent.artifact_runner is None
 
 
 def test_agent_io_skill_has_no_result_formatter(sandbox):
@@ -1132,6 +1137,61 @@ def test_hallucination_guard_flags_invented_input():
     plan = [{"tool": "compress_video", "args": {"inputs": ["made_up.mp4"]}}]
     flagged = CommandAgent._hallucinated_filename(plan, "compress my video")
     assert flagged == "made_up.mp4"
+
+
+def test_hallucination_guard_allows_a_stem_the_user_named(tmp_path):
+    """The user names a file without its extension; the model supplies the real one.
+
+    People say "clip_4k", not "clip_4k.mp4". The guard used to test the FULL filename as a
+    substring of the utterance, so the model resolving the stem correctly — to a file that
+    actually exists — was overridden with a clarify. The T6a control arm lost **eight**
+    utterances this way (`evals/runs/2026-09-12_t6a-control_success/report.md`), spread across
+    `resize`, `speed`, `strip_audio`, `social`, `trim`, `complex` and `reverse`, which is why
+    no single slice made it visible.
+    """
+    plan = [{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080}}]
+    flagged = CommandAgent._hallucinated_filename(
+        plan, "downscale clip_4k to 1920x1080", known_files={"clip_4k.mp4"}
+    )
+    assert flagged is None
+
+
+def test_hallucination_guard_still_flags_a_named_stem_with_an_invented_extension():
+    """Naming the stem does not license inventing which file it is.
+
+    `ffmpeg_228`: "join clip.mov and clip_4k together" → the model planned `clip_4k.mov`,
+    guessing the extension from the other input. `clip_4k.mp4` is the file that exists, so the
+    plan names a file that does not — still a hallucination, and the clarify is right.
+    """
+    plan = [{"tool": "concat_video", "args": {"inputs": ["clip.mov", "clip_4k.mov"]}}]
+    flagged = CommandAgent._hallucinated_filename(
+        plan, "join clip.mov and clip_4k together", known_files={"clip.mov", "clip_4k.mp4"}
+    )
+    assert flagged == "clip_4k.mov"
+
+
+def test_hallucination_guard_does_not_treat_a_bare_word_as_a_stem():
+    """ "the video" is English, not a filename — even when `video.mp4` happens to exist.
+
+    This is the case that decides the rule's shape. A plain substring test on the stem would
+    pass `video.mp4` for "make the video smaller" and `drei.mp4` for the German "drei Clips"
+    ("three clips"), turning two genuine hallucinations into silent plans. So a stem must carry
+    a structural marker — `_`, `-` or a digit — the same definition `planner._is_stem_candidate`
+    already uses to decide what is resolvable.
+    """
+    plan = [{"tool": "compress_video", "args": {"inputs": ["video.mp4"]}}]
+    flagged = CommandAgent._hallucinated_filename(
+        plan, "make the video smaller and ready for WhatsApp", known_files={"video.mp4"}
+    )
+    assert flagged == "video.mp4"
+
+
+def test_hallucination_guard_without_a_sandbox_keeps_the_strict_rule():
+    """No known files → nothing can be confirmed, so every unnamed filename is flagged."""
+    plan = [{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080}}]
+    assert (
+        CommandAgent._hallucinated_filename(plan, "downscale clip_4k to 1920x1080") == "clip_4k.mp4"
+    )
 
 
 def test_hallucination_guard_ignores_output_filename():
@@ -1423,3 +1483,220 @@ def test_from_registry_inherits_core_tools(tmp_path):
     agent = CommandAgent.from_registry(registry, tool_map={}, root=tmp_path)
     assert "clarify" in agent.registry
     assert "done" in agent.registry
+
+
+# ── unsupported-arg clarify gate (NL path) ────────────────────────────────────
+
+
+def _volume_chain_plan(extra: dict) -> dict:
+    """The ffmpeg_134 shape: a valid first step, then adjust_volume with an arg
+    the tool does not declare (the model expressing a capability we don't have)."""
+    return {
+        "plan": [
+            {
+                "tool": "extract_audio",
+                "args": {"inputs": ["clip.mp3"], "audio_format": "wav", "output": "audio.wav"},
+            },
+            {"tool": "adjust_volume", "args": {"inputs": ["audio.wav"], **extra}},
+        ]
+    }
+
+
+def test_unsupported_arg_on_nl_path_clarifies(tmp_path):
+    """A capability the inventory cannot express → clarify, not a validation error.
+
+    Regression for ffmpeg_134 ("lower the sample rate to 22050 Hz"): the model
+    puts target_sample_rate on adjust_volume, which used to raise
+    "unsupported args" and score the row `error`.
+    """
+    (tmp_path / "clip.mp3").touch()
+    agent = _nl_gate_agent(tmp_path)
+    results = agent.execute_plan(
+        _volume_chain_plan({"normalize": True, "target_sample_rate": 22050}),
+        utterance="convert clip.mp3 to wav and lower the sample rate to 22050 Hz",
+        dry_run=True,
+    )
+    assert len(results) == 1
+    assert results[0]["tool"] == "clarify"
+    assert results[0]["result"]["status"] == "clarification_needed"
+    assert "target_sample_rate" in results[0]["result"]["question"]
+
+
+def test_unsupported_arg_without_utterance_still_errors(tmp_path):
+    """Direct execute_plan (no utterance) keeps strict validation — the gate is
+    an NL-path affordance, not a relaxation of the plan contract."""
+    (tmp_path / "clip.mp3").touch()
+    agent = _nl_gate_agent(tmp_path)
+    with pytest.raises(ValueError, match="unsupported args"):
+        agent.execute_plan(
+            _volume_chain_plan({"normalize": True, "target_sample_rate": 22050}),
+            dry_run=True,
+        )
+
+
+def test_supported_args_unaffected_by_gate(tmp_path):
+    """A well-formed plan is untouched — the gate only fires on undeclared args."""
+    (tmp_path / "clip.mp3").touch()
+    agent = _nl_gate_agent(tmp_path)
+    results = agent.execute_plan(
+        _volume_chain_plan({"normalize": True}),
+        utterance="convert clip.mp3 to wav and normalize it",
+        dry_run=True,
+    )
+    assert [r["tool"] for r in results] != ["clarify"]
+
+
+# ── open/CLI mode: no sandbox, paths resolve against root (= cwd) ─────────────
+#
+# Native has always done this: `let base = sandbox.unwrap_or(current_dir())`, and both the
+# clarify gate's stem exemption and stem resolution read `base` (apps/cli/src/main.rs).
+# Python gated BOTH on `sandbox is not None`, so `knaif run ffmpeg "compress clip_4k"`
+# refused a file that was sitting right there. No eval can catch it — the harness always
+# passes a sandbox — which is why this is a test and not a corpus row.
+
+
+def _open_mode_agent(root):
+    """No sandbox. `root` defaults to cwd in production; pinned here for hermeticity."""
+    return CommandAgent.from_skill(_FFMPEG_SKILL, sandbox=None, root=root)
+
+
+def test_open_mode_lists_root_for_the_stem_exemption(tmp_path):
+    (tmp_path / "clip_4k.mp4").touch()
+    agent = _open_mode_agent(tmp_path)
+    assert agent._listed_filenames() == frozenset({"clip_4k.mp4"})
+
+
+def test_open_mode_does_not_call_a_real_file_invented(tmp_path):
+    """The reported defect, at the stage that owns it.
+
+    The hallucinated-filename guard runs inside `infer`, not `execute_plan`, and is handed
+    the agent's own listing — so the defect is the *composition*: an empty listing turns the
+    stem exemption off and `clip_4k.mp4` reads as invented. Composed here exactly as
+    `infer` composes it (agent.py: `_hallucinated_filename(plan, utterance,
+    self._listed_filenames())`), because that pairing is the thing that was wrong.
+    """
+    (tmp_path / "clip_4k.mp4").touch()
+    agent = _open_mode_agent(tmp_path)
+    plan = [{"tool": "compress_video", "args": {"inputs": ["clip_4k.mp4"]}}]
+    assert agent._hallucinated_filename(plan, "compress clip_4k", agent._listed_filenames()) is None
+
+
+def test_open_mode_resolves_a_bare_stem(tmp_path):
+    """Fixing the listing alone would be worse than the bug: the guard would stop firing
+    while stem resolution stayed off, so `clip_4k` would render verbatim — acting on an
+    ambiguous reference instead of asking. Both gates move together or neither does."""
+    (tmp_path / "clip_4k.mp4").touch()
+    agent = _open_mode_agent(tmp_path)
+    results = agent.execute_plan(
+        {"plan": [{"tool": "compress_video", "args": {"inputs": ["clip_4k"]}}]},
+        utterance="compress clip_4k",
+        dry_run=True,
+    )
+    assert results[0]["tool"] != "clarify", results[0].get("result")
+    rendered = json.dumps(results)
+    assert "clip_4k.mp4" in rendered, "the bare stem was never substituted"
+
+
+def test_open_mode_still_clarifies_an_unresolvable_stem(tmp_path):
+    """Resolution failing is still a question, not a verbatim command."""
+    agent = _open_mode_agent(tmp_path)
+    results = agent.execute_plan(
+        {"plan": [{"tool": "compress_video", "args": {"inputs": ["nope_4k"]}}]},
+        utterance="compress nope_4k",
+        dry_run=True,
+    )
+    assert results[0]["tool"] == "clarify"
+
+
+def test_open_mode_still_catches_an_invented_filename(tmp_path):
+    """The guard must keep its job: a name the user never said and no file backs."""
+    agent = _open_mode_agent(tmp_path)
+    results = agent.execute_plan(
+        {"plan": [{"tool": "compress_video", "args": {"inputs": ["invented.mp4"]}}]},
+        utterance="compress my video",
+        dry_run=True,
+    )
+    assert results[0]["tool"] == "clarify"
+    assert "invented.mp4" in results[0]["result"]["question"]
+
+
+def test_infer_stream_accepts_registry_override(agent):
+    """infer_stream must show the model the same prompt infer would.
+
+    Production and the eval lane both send a *retrieved subset* of the registry, not all of
+    it. Without this parameter a caller streaming a response shows the model every tool,
+    which is a different prompt from the one the model ships with — measured at 4 differing
+    plans in 14 corpus utterances. See docs/plans/2026-09-21-skill-prompt-workbench.md T1.
+    """
+    retrieved = {
+        name: agent.registry[name] for name in ("list_files", "done") if name in agent.registry
+    }
+    expected_system, expected_user = agent.build_prompt("list files", registry_override=retrieved)
+
+    seen: dict[str, tuple[str, str]] = {}
+    real_build_prompt = agent.build_prompt
+
+    def _spy(utterance, **kwargs):
+        built = real_build_prompt(utterance, **kwargs)
+        seen["prompt"] = built
+        return built
+
+    agent.build_prompt = _spy  # type: ignore[method-assign]
+    list(agent.infer_stream("list files", use_mock=True, registry_override=retrieved))
+
+    assert seen["prompt"] == (expected_system, expected_user)
+
+
+def test_infer_stream_without_override_shows_the_whole_registry(agent):
+    """The default is unchanged: no override means the full registry, as before."""
+    expected_system, expected_user = agent.build_prompt("list files")
+
+    seen: dict[str, tuple[str, str]] = {}
+    real_build_prompt = agent.build_prompt
+
+    def _spy(utterance, **kwargs):
+        built = real_build_prompt(utterance, **kwargs)
+        seen["prompt"] = built
+        return built
+
+    agent.build_prompt = _spy  # type: ignore[method-assign]
+    list(agent.infer_stream("list files", use_mock=True))
+
+    assert seen["prompt"] == (expected_system, expected_user)
+
+
+# ── the model's own plan, kept beside the rewritten one ───────────────────────
+
+
+def test_infer_keeps_the_plan_the_model_emitted(agent, sandbox):
+    """`infer` rewrites the payload in place (chain linking, source threading), so without a
+    copy nothing downstream can show what the model actually said. The workbench read a
+    correct fan-out plan as a model failure for exactly that reason."""
+    import json as _json
+    from unittest.mock import MagicMock
+
+    emitted = {"plan": [{"tool": "list_files", "args": {"path": str(sandbox)}}]}
+    mock_orch = MagicMock()
+    mock_orch.infer.return_value = _json.dumps(emitted)
+    agent.orchestrator = mock_orch
+
+    payload = agent.infer("list files", use_mock=False)
+
+    assert agent.last_model_plan == emitted
+    # A copy, not an alias: a later in-place rewrite of the payload must not reach it.
+    payload["plan"][0]["args"]["path"] = "elsewhere"
+    assert agent.last_model_plan == emitted
+
+
+def test_last_model_plan_is_none_when_no_model_ran(agent):
+    """A pre-model refusal or an unparseable reply has no model plan to show — not a stale one."""
+    from unittest.mock import MagicMock
+
+    agent.last_model_plan = {"plan": [{"tool": "stale", "args": {}}]}
+    mock_orch = MagicMock()
+    mock_orch.infer.return_value = "TOTALLY INVALID {{{JSON"
+    agent.orchestrator = mock_orch
+
+    agent.infer("blah blah", use_mock=False)
+
+    assert agent.last_model_plan is None

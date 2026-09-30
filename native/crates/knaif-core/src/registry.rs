@@ -63,9 +63,15 @@ impl Default for ArgSchema {
 pub struct ToolDef {
     #[serde(skip)]
     pub name: String,
-    /// Position in the source `tools.yaml` mapping. The model was fine-tuned on prompts that list
-    /// tools in this insertion order, so the prompt builder sorts by it (not the alphabetical
-    /// `Registry` key order) to stay in-distribution.
+    /// Position in the source `tools.yaml` mapping, preserved because [`Registry`] is a `BTreeMap`
+    /// and would otherwise impose alphabetical order.
+    ///
+    /// It is **not** the order the fine-tune saw: training prompts are built
+    /// `retrieve_tools(utterance)` → `agent.build_prompt(registry_override=…)`
+    /// (`python/training/build_dataset.py`), so the model was trained on tools in *relevance*
+    /// order. This field is what the whole-registry [`crate::build_prompt`] sorts by, which
+    /// reproduces what the reference yields when it iterates a full registry;
+    /// [`crate::build_prompt_ordered`] is the in-distribution path and keeps retrieval's ranking.
     #[serde(skip)]
     pub order: usize,
     pub description: String,

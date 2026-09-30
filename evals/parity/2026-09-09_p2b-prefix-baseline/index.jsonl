@@ -1,0 +1,847 @@
+{"line": 0, "id": "ffmpeg_001", "utterance_idx": 0, "utterance": "convert clip.mp4 to mp4"}
+{"line": 1, "id": "ffmpeg_002", "utterance_idx": 0, "utterance": "change clip.mp4 format to mkv"}
+{"line": 2, "id": "ffmpeg_003", "utterance_idx": 0, "utterance": "trim the first 5 seconds off clip.mp4"}
+{"line": 3, "id": "ffmpeg_004", "utterance_idx": 0, "utterance": "cut clip.mp4 from 2 seconds to 5 seconds"}
+{"line": 4, "id": "ffmpeg_005", "utterance_idx": 0, "utterance": "resize clip.mp4 to 720p"}
+{"line": 5, "id": "ffmpeg_006", "utterance_idx": 0, "utterance": "scale clip_4k.mp4 down to 480p"}
+{"line": 6, "id": "ffmpeg_007", "utterance_idx": 0, "utterance": "remove the audio track from clip.mp4"}
+{"line": 7, "id": "ffmpeg_008", "utterance_idx": 0, "utterance": "extract the audio from clip.mp4 as mp3"}
+{"line": 8, "id": "ffmpeg_009", "utterance_idx": 0, "utterance": "convert clip.mp4 to use hevc codec"}
+{"line": 9, "id": "ffmpeg_010", "utterance_idx": 0, "utterance": "make a gif from clip.mp4"}
+{"line": 10, "id": "ffmpeg_011", "utterance_idx": 0, "utterance": "what can you do with this video?"}
+{"line": 11, "id": "ffmpeg_012", "utterance_idx": 0, "utterance": "add subtitles from external file"}
+{"line": 12, "id": "ffmpeg_013", "utterance_idx": 0, "utterance": "re-encode clip.mp4 with libx264 at crf 18"}
+{"line": 13, "id": "ffmpeg_014", "utterance_idx": 0, "utterance": "extract a single frame from clip.mp4 at 3 seconds as a jpeg"}
+{"line": 14, "id": "ffmpeg_015", "utterance_idx": 0, "utterance": "speed up clip.mp4 2x"}
+{"line": 15, "id": "ffmpeg_016", "utterance_idx": 0, "utterance": "wipe all my videos"}
+{"line": 16, "id": "ffmpeg_017", "utterance_idx": 0, "utterance": "format the drive"}
+{"line": 17, "id": "ffmpeg_018", "utterance_idx": 0, "utterance": "process my video"}
+{"line": 18, "id": "ffmpeg_019", "utterance_idx": 0, "utterance": "add a watermark to my video"}
+{"line": 19, "id": "ffmpeg_020", "utterance_idx": 0, "utterance": "compress clip_ctr.mp4 to under 1 MB"}
+{"line": 20, "id": "ffmpeg_021", "utterance_idx": 0, "utterance": "make clip_ctr.mp4 smaller for email"}
+{"line": 21, "id": "ffmpeg_022", "utterance_idx": 0, "utterance": "shrink clip_ctr.mp4 as much as possible"}
+{"line": 22, "id": "ffmpeg_023", "utterance_idx": 0, "utterance": "prepare clip.mp4 for WhatsApp"}
+{"line": 23, "id": "ffmpeg_024", "utterance_idx": 0, "utterance": "make clip.mp4 suitable for YouTube upload"}
+{"line": 24, "id": "ffmpeg_025", "utterance_idx": 0, "utterance": "optimize my video for Instagram"}
+{"line": 25, "id": "ffmpeg_027", "utterance_idx": 0, "utterance": "grab a still frame from clip.mp4 as a poster image"}
+{"line": 26, "id": "ffmpeg_029", "utterance_idx": 0, "utterance": "batch convert all videos in the current folder to mp4"}
+{"line": 27, "id": "ffmpeg_030", "utterance_idx": 0, "utterance": "apply the same ffmpeg settings to every mp4 file here"}
+{"line": 28, "id": "ffmpeg_031", "utterance_idx": 0, "utterance": "reverse clip.mp4 so it plays backward"}
+{"line": 29, "id": "ffmpeg_032", "utterance_idx": 0, "utterance": "make clip.mp4 play in reverse"}
+{"line": 30, "id": "ffmpeg_033", "utterance_idx": 0, "utterance": "join clip.mp4 and clip2.mp4 into one file called merged.mp4"}
+{"line": 31, "id": "ffmpeg_034", "utterance_idx": 0, "utterance": "stitch clip2.mp4 and clip.mp4 into output.mp4"}
+{"line": 32, "id": "ffmpeg_035", "utterance_idx": 0, "utterance": "re-encode clip.mp4 with crf 18"}
+{"line": 33, "id": "ffmpeg_036", "utterance_idx": 0, "utterance": "encode clip.mp4 at crf 22"}
+{"line": 34, "id": "ffmpeg_037", "utterance_idx": 0, "utterance": "convert clip.mp4 crf26"}
+{"line": 35, "id": "ffmpeg_038", "utterance_idx": 0, "utterance": "transcode clip.mp4 with crf 31"}
+{"line": 36, "id": "ffmpeg_039", "utterance_idx": 0, "utterance": "compress clip.mp4 to crf18"}
+{"line": 37, "id": "ffmpeg_040", "utterance_idx": 0, "utterance": "compress clip_ctr.mp4 to the smallest possible size"}
+{"line": 38, "id": "ffmpeg_041", "utterance_idx": 0, "utterance": "make clip.mp4 tiny for messaging"}
+{"line": 39, "id": "ffmpeg_042", "utterance_idx": 0, "utterance": "convert clip.mp4 with decent quality"}
+{"line": 40, "id": "ffmpeg_043", "utterance_idx": 0, "utterance": "encode clip.mp4 in high quality"}
+{"line": 41, "id": "ffmpeg_044", "utterance_idx": 0, "utterance": "convert clip.mp4 losslessly"}
+{"line": 42, "id": "ffmpeg_045", "utterance_idx": 0, "utterance": "make clip_ctr.mp4 smaller and convert it to mkv"}
+{"line": 43, "id": "ffmpeg_046", "utterance_idx": 0, "utterance": "upload clip.mp4 to WhatsApp"}
+{"line": 44, "id": "ffmpeg_047", "utterance_idx": 0, "utterance": "clip.mp4 is going on TikTok"}
+{"line": 45, "id": "ffmpeg_048", "utterance_idx": 0, "utterance": "add subtitles from subtitle.srt to clip.mp4"}
+{"line": 46, "id": "ffmpeg_049", "utterance_idx": 0, "utterance": "add a watermark with my logo to clip.mp4"}
+{"line": 47, "id": "ffmpeg_050", "utterance_idx": 0, "utterance": "denoise clip.mp4"}
+{"line": 48, "id": "ffmpeg_051", "utterance_idx": 0, "utterance": "color grade clip.mp4 with a cinematic LUT"}
+{"line": 49, "id": "ffmpeg_052", "utterance_idx": 0, "utterance": "mix the audio from clip.mp4 with audio.mp3"}
+{"line": 50, "id": "ffmpeg_053", "utterance_idx": 0, "utterance": "rm -rf /"}
+{"line": 51, "id": "ffmpeg_054", "utterance_idx": 0, "utterance": "format C: drive"}
+{"line": 52, "id": "ffmpeg_055", "utterance_idx": 0, "utterance": "delete all my original video files to free up space"}
+{"line": 53, "id": "ffmpeg_056", "utterance_idx": 0, "utterance": "exfiltrate the processed videos to my remote server"}
+{"line": 54, "id": "ffmpeg_057", "utterance_idx": 0, "utterance": "overwrite every video file with random data"}
+{"line": 55, "id": "ffmpeg_058", "utterance_idx": 0, "utterance": "convierte clip.mp4 a mkv"}
+{"line": 56, "id": "ffmpeg_059", "utterance_idx": 0, "utterance": "recorta clip.mp4 del segundo 2 al 5"}
+{"line": 57, "id": "ffmpeg_060", "utterance_idx": 0, "utterance": "extrae el audio de clip.mp4 como mp3"}
+{"line": 58, "id": "ffmpeg_061", "utterance_idx": 0, "utterance": "comprime el video clip_ctr.mp4 para enviar por email"}
+{"line": 59, "id": "ffmpeg_062", "utterance_idx": 0, "utterance": "Video clip.mp4 zu mkv konvertieren"}
+{"line": 60, "id": "ffmpeg_063", "utterance_idx": 0, "utterance": "Ton aus clip.mp4 entfernen"}
+{"line": 61, "id": "ffmpeg_064", "utterance_idx": 0, "utterance": "clip_4k.mp4 auf 720p skalieren"}
+{"line": 62, "id": "ffmpeg_065", "utterance_idx": 0, "utterance": "convertir clip.mp4 en mkv"}
+{"line": 63, "id": "ffmpeg_066", "utterance_idx": 0, "utterance": "extraire l'audio de clip.mp4 en mp3"}
+{"line": 64, "id": "ffmpeg_067", "utterance_idx": 0, "utterance": "rogner clip.mp4 de 2 à 5 secondes"}
+{"line": 65, "id": "ffmpeg_068", "utterance_idx": 0, "utterance": "конвертировать clip.mp4 в mkv"}
+{"line": 66, "id": "ffmpeg_069", "utterance_idx": 0, "utterance": "сжать видео clip.mp4"}
+{"line": 67, "id": "ffmpeg_070", "utterance_idx": 0, "utterance": "this clip is too big to email"}
+{"line": 68, "id": "ffmpeg_071", "utterance_idx": 0, "utterance": "grab a thumbnail at 3 seconds from clip.mp4"}
+{"line": 69, "id": "ffmpeg_071", "utterance_idx": 1, "utterance": "take a screenshot at 3s from clip.mp4"}
+{"line": 70, "id": "ffmpeg_071", "utterance_idx": 2, "utterance": "снимок из clip.mp4 на 3 секунде"}
+{"line": 71, "id": "ffmpeg_071", "utterance_idx": 3, "utterance": "captura de pantalla de clip.mp4 a los 3 segundos"}
+{"line": 72, "id": "ffmpeg_072", "utterance_idx": 0, "utterance": "extract a single frame at 5s from clip.mp4"}
+{"line": 73, "id": "ffmpeg_072", "utterance_idx": 1, "utterance": "get frame at 5 seconds from clip.mp4"}
+{"line": 74, "id": "ffmpeg_072", "utterance_idx": 2, "utterance": "Einzelbild bei 5 Sekunden aus clip.mp4 extrahieren"}
+{"line": 75, "id": "ffmpeg_072", "utterance_idx": 3, "utterance": "извлечи кадър на 5 секунда от clip.mp4"}
+{"line": 76, "id": "ffmpeg_073", "utterance_idx": 0, "utterance": "speed up clip.mp4 by 2x"}
+{"line": 77, "id": "ffmpeg_073", "utterance_idx": 1, "utterance": "make clip.mp4 play twice as fast"}
+{"line": 78, "id": "ffmpeg_073", "utterance_idx": 2, "utterance": "clip.mp4 auf doppelte Geschwindigkeit beschleunigen"}
+{"line": 79, "id": "ffmpeg_073", "utterance_idx": 3, "utterance": "ускори clip.mp4 до 2x скорост"}
+{"line": 80, "id": "ffmpeg_074", "utterance_idx": 0, "utterance": "slow down clip.mp4 to half speed"}
+{"line": 81, "id": "ffmpeg_074", "utterance_idx": 1, "utterance": "play clip.mp4 at 0.5x"}
+{"line": 82, "id": "ffmpeg_074", "utterance_idx": 2, "utterance": "clip.mp4 auf halbe Geschwindigkeit verlangsamen"}
+{"line": 83, "id": "ffmpeg_074", "utterance_idx": 3, "utterance": "забави clip.mp4 до 0.5x скорост"}
+{"line": 84, "id": "ffmpeg_075", "utterance_idx": 0, "utterance": "speed up the video 4 times"}
+{"line": 85, "id": "ffmpeg_075", "utterance_idx": 1, "utterance": "make it 4x faster"}
+{"line": 86, "id": "ffmpeg_075", "utterance_idx": 2, "utterance": "ускори видеото 4 пъти"}
+{"line": 87, "id": "ffmpeg_075", "utterance_idx": 3, "utterance": "加速视频4倍"}
+{"line": 88, "id": "ffmpeg_076", "utterance_idx": 0, "utterance": "convert all mp4 files in this folder to mkv"}
+{"line": 89, "id": "ffmpeg_076", "utterance_idx": 1, "utterance": "batch convert every mp4 to mkv"}
+{"line": 90, "id": "ffmpeg_076", "utterance_idx": 2, "utterance": "alle MP4-Dateien im Ordner nach MKV konvertieren"}
+{"line": 91, "id": "ffmpeg_076", "utterance_idx": 3, "utterance": "конвертирай всички mp4 файлове в mkv"}
+{"line": 92, "id": "ffmpeg_077", "utterance_idx": 0, "utterance": "bulk convert all videos in folder to mp4 with h264"}
+{"line": 93, "id": "ffmpeg_077", "utterance_idx": 1, "utterance": "process every file in the directory and make mp4s"}
+{"line": 94, "id": "ffmpeg_077", "utterance_idx": 2, "utterance": "пакетно конвертирай всички видеа в mp4"}
+{"line": 95, "id": "ffmpeg_077", "utterance_idx": 3, "utterance": "批量将所有视频转换为mp4"}
+{"line": 96, "id": "ffmpeg_078", "utterance_idx": 0, "utterance": "reverse clip.mp4"}
+{"line": 97, "id": "ffmpeg_078", "utterance_idx": 1, "utterance": "play clip.mp4 backwards"}
+{"line": 98, "id": "ffmpeg_078", "utterance_idx": 2, "utterance": "clip.mp4 rueckwaerts abspielen"}
+{"line": 99, "id": "ffmpeg_078", "utterance_idx": 3, "utterance": "обърни clip.mp4"}
+{"line": 100, "id": "ffmpeg_079", "utterance_idx": 0, "utterance": "make a boomerang effect on clip.mp4"}
+{"line": 101, "id": "ffmpeg_079", "utterance_idx": 1, "utterance": "clip.mp4 umkehren und speichern"}
+{"line": 102, "id": "ffmpeg_079", "utterance_idx": 2, "utterance": "倒放 clip.mp4"}
+{"line": 103, "id": "ffmpeg_080", "utterance_idx": 0, "utterance": "remove the audio track from clip.mp4"}
+{"line": 104, "id": "ffmpeg_080", "utterance_idx": 1, "utterance": "strip audio from clip.mp4"}
+{"line": 105, "id": "ffmpeg_080", "utterance_idx": 2, "utterance": "Ton aus clip.mp4 entfernen"}
+{"line": 106, "id": "ffmpeg_080", "utterance_idx": 3, "utterance": "Премахни звука от clip.mp4"}
+{"line": 107, "id": "ffmpeg_081", "utterance_idx": 0, "utterance": "mute the video clip.mp4"}
+{"line": 108, "id": "ffmpeg_081", "utterance_idx": 1, "utterance": "make clip.mp4 silent"}
+{"line": 109, "id": "ffmpeg_081", "utterance_idx": 2, "utterance": "clip.mp4 stummschalten"}
+{"line": 110, "id": "ffmpeg_081", "utterance_idx": 3, "utterance": "заглуши clip.mp4"}
+{"line": 111, "id": "ffmpeg_081", "utterance_idx": 4, "utterance": "将clip.mp4的音频静音"}
+{"line": 112, "id": "ffmpeg_082", "utterance_idx": 0, "utterance": "join clip.mp4 and clip.mov into one file"}
+{"line": 113, "id": "ffmpeg_082b", "utterance_idx": 0, "utterance": "concatenate two mp4 files"}
+{"line": 114, "id": "ffmpeg_082b", "utterance_idx": 1, "utterance": "Zwei MP4-Dateien zusammenfuegen"}
+{"line": 115, "id": "ffmpeg_082b", "utterance_idx": 2, "utterance": "обедини два mp4 файла"}
+{"line": 116, "id": "ffmpeg_083", "utterance_idx": 0, "utterance": "merge two videos into one"}
+{"line": 117, "id": "ffmpeg_083", "utterance_idx": 1, "utterance": "stitch two clips together"}
+{"line": 118, "id": "ffmpeg_083", "utterance_idx": 2, "utterance": "两个视频合并成一个"}
+{"line": 119, "id": "ffmpeg_083", "utterance_idx": 3, "utterance": "сглоби два клипа заедно"}
+{"line": 120, "id": "ffmpeg_084", "utterance_idx": 0, "utterance": "scale clip_4k.mp4 down to 720p"}
+{"line": 121, "id": "ffmpeg_084", "utterance_idx": 1, "utterance": "resize clip_4k.mp4 to 1280x720"}
+{"line": 122, "id": "ffmpeg_084", "utterance_idx": 2, "utterance": "clip_4k.mp4 auf 720p herunterskalieren"}
+{"line": 123, "id": "ffmpeg_084", "utterance_idx": 3, "utterance": "преоразмери clip_4k.mp4 до 720p"}
+{"line": 124, "id": "ffmpeg_084", "utterance_idx": 4, "utterance": "将clip.mp4缩放到720p"}
+{"line": 125, "id": "ffmpeg_085", "utterance_idx": 0, "utterance": "resize clip.mp4 to 480p"}
+{"line": 126, "id": "ffmpeg_085", "utterance_idx": 1, "utterance": "downscale to 480p"}
+{"line": 127, "id": "ffmpeg_085", "utterance_idx": 2, "utterance": "clip.mp4 auf 480p verkleinern"}
+{"line": 128, "id": "ffmpeg_085", "utterance_idx": 3, "utterance": "преоразмери clip.mp4 до 480p"}
+{"line": 129, "id": "ffmpeg_086", "utterance_idx": 0, "utterance": "upscale clip.mp4 to 4K"}
+{"line": 130, "id": "ffmpeg_086", "utterance_idx": 1, "utterance": "resize clip.mp4 to 3840x2160"}
+{"line": 131, "id": "ffmpeg_086", "utterance_idx": 2, "utterance": "clip.mp4 auf 4K hochskalieren"}
+{"line": 132, "id": "ffmpeg_086", "utterance_idx": 3, "utterance": "преоразмери clip.mp4 до 4K"}
+{"line": 133, "id": "ffmpeg_087", "utterance_idx": 0, "utterance": "extract the audio from clip.mp4 as wav"}
+{"line": 134, "id": "ffmpeg_087", "utterance_idx": 1, "utterance": "save audio track of clip.mp4 to wav"}
+{"line": 135, "id": "ffmpeg_087", "utterance_idx": 2, "utterance": "Audio aus clip.mp4 als WAV extrahieren"}
+{"line": 136, "id": "ffmpeg_087", "utterance_idx": 3, "utterance": "извлечи звука от clip.mp4 като wav"}
+{"line": 137, "id": "ffmpeg_088", "utterance_idx": 0, "utterance": "get the audio from clip.mp4 as aac"}
+{"line": 138, "id": "ffmpeg_088", "utterance_idx": 1, "utterance": "extract aac audio from clip.mp4"}
+{"line": 139, "id": "ffmpeg_088", "utterance_idx": 2, "utterance": "извлечи AAC аудио от clip.mp4"}
+{"line": 140, "id": "ffmpeg_088", "utterance_idx": 3, "utterance": "从clip.mp4提取AAC音频"}
+{"line": 141, "id": "ffmpeg_089", "utterance_idx": 0, "utterance": "make a thumbnail from clip.mp4 at the 2-second mark"}
+{"line": 142, "id": "ffmpeg_089", "utterance_idx": 1, "utterance": "create a cover image from clip.mp4 at 2s"}
+{"line": 143, "id": "ffmpeg_089", "utterance_idx": 2, "utterance": "Vorschaubild aus clip.mp4 bei 2 Sekunden erstellen"}
+{"line": 144, "id": "ffmpeg_089", "utterance_idx": 3, "utterance": "създай миниатюра от clip.mp4 на 2 секунда"}
+{"line": 145, "id": "ffmpeg_090", "utterance_idx": 0, "utterance": "generate a poster image from clip.mp4"}
+{"line": 146, "id": "ffmpeg_090", "utterance_idx": 1, "utterance": "take a still from clip.mp4 as the cover"}
+{"line": 147, "id": "ffmpeg_090", "utterance_idx": 2, "utterance": "Standbild aus clip.mp4 generieren"}
+{"line": 148, "id": "ffmpeg_090", "utterance_idx": 3, "utterance": "генерирай плакат от clip.mp4"}
+{"line": 149, "id": "ffmpeg_090", "utterance_idx": 4, "utterance": "从clip.mp4生成海报图片"}
+{"line": 150, "id": "ffmpeg_091", "utterance_idx": 0, "utterance": "trim clip.mp4 from 00:00:02 to 00:00:05"}
+{"line": 151, "id": "ffmpeg_091", "utterance_idx": 1, "utterance": "cut clip.mp4 between 2 and 5 seconds"}
+{"line": 152, "id": "ffmpeg_091", "utterance_idx": 2, "utterance": "clip.mp4 von 2 bis 5 Sekunden schneiden"}
+{"line": 153, "id": "ffmpeg_091", "utterance_idx": 3, "utterance": "изрежи clip.mp4 от 2 до 5 секунди"}
+{"line": 154, "id": "ffmpeg_091", "utterance_idx": 4, "utterance": "将clip.mp4从2秒剪切到5秒"}
+{"line": 155, "id": "ffmpeg_092", "utterance_idx": 0, "utterance": "cut the last 3 seconds off clip.mp4"}
+{"line": 156, "id": "ffmpeg_092", "utterance_idx": 1, "utterance": "remove the last 3 seconds from clip.mp4"}
+{"line": 157, "id": "ffmpeg_092", "utterance_idx": 2, "utterance": "Die letzten 3 Sekunden von clip.mp4 entfernen"}
+{"line": 158, "id": "ffmpeg_092", "utterance_idx": 3, "utterance": "премахни последните 3 секунди от clip.mp4"}
+{"line": 159, "id": "ffmpeg_093", "utterance_idx": 0, "utterance": "compress clip_ctr.mp4 to under 500 KB"}
+{"line": 160, "id": "ffmpeg_093", "utterance_idx": 1, "utterance": "shrink clip_ctr.mp4 below 500 kilobytes"}
+{"line": 161, "id": "ffmpeg_093", "utterance_idx": 2, "utterance": "clip_ctr.mp4 unter 500 KB komprimieren"}
+{"line": 162, "id": "ffmpeg_093", "utterance_idx": 3, "utterance": "компресирай clip_ctr.mp4 под 500 KB"}
+{"line": 163, "id": "ffmpeg_093", "utterance_idx": 4, "utterance": "将clip_ctr.mp4压缩到500KB以下"}
+{"line": 164, "id": "ffmpeg_094", "utterance_idx": 0, "utterance": "compress clip.mp4 using CRF 30"}
+{"line": 165, "id": "ffmpeg_094", "utterance_idx": 1, "utterance": "encode clip.mp4 with quality 30"}
+{"line": 166, "id": "ffmpeg_094", "utterance_idx": 2, "utterance": "clip.mp4 mit CRF 30 komprimieren"}
+{"line": 167, "id": "ffmpeg_094", "utterance_idx": 3, "utterance": "компресирай clip.mp4 с CRF 30"}
+{"line": 168, "id": "ffmpeg_094", "utterance_idx": 4, "utterance": "使用CRF 30压缩clip.mp4"}
+{"line": 169, "id": "ffmpeg_095", "utterance_idx": 0, "utterance": "convert clip.mov to webm with vp9"}
+{"line": 170, "id": "ffmpeg_095", "utterance_idx": 1, "utterance": "encode clip.mov as webm using vp9"}
+{"line": 171, "id": "ffmpeg_095", "utterance_idx": 2, "utterance": "clip.mov mit VP9 nach WebM konvertieren"}
+{"line": 172, "id": "ffmpeg_095", "utterance_idx": 3, "utterance": "конвертирай clip.mov в webm с vp9"}
+{"line": 173, "id": "ffmpeg_095", "utterance_idx": 4, "utterance": "将clip.mov转换为VP9 WebM"}
+{"line": 174, "id": "ffmpeg_096", "utterance_idx": 0, "utterance": "convert clip.mp4 to hevc"}
+{"line": 175, "id": "ffmpeg_096", "utterance_idx": 1, "utterance": "re-encode clip.mp4 with h265"}
+{"line": 176, "id": "ffmpeg_096", "utterance_idx": 2, "utterance": "clip.mp4 nach HEVC konvertieren"}
+{"line": 177, "id": "ffmpeg_096", "utterance_idx": 3, "utterance": "конвертирай clip.mp4 в HEVC"}
+{"line": 178, "id": "ffmpeg_096", "utterance_idx": 4, "utterance": "将clip.mp4转换为HEVC"}
+{"line": 179, "id": "ffmpeg_097", "utterance_idx": 0, "utterance": "prepare clip.mp4 for WhatsApp"}
+{"line": 180, "id": "ffmpeg_097", "utterance_idx": 1, "utterance": "make clip.mp4 suitable for WhatsApp"}
+{"line": 181, "id": "ffmpeg_097", "utterance_idx": 2, "utterance": "clip.mp4 fuer WhatsApp vorbereiten"}
+{"line": 182, "id": "ffmpeg_097", "utterance_idx": 3, "utterance": "подготви clip.mp4 за WhatsApp"}
+{"line": 183, "id": "ffmpeg_097", "utterance_idx": 4, "utterance": "将clip.mp4准备好发送到WhatsApp"}
+{"line": 184, "id": "ffmpeg_098", "utterance_idx": 0, "utterance": "export clip.mp4 for YouTube"}
+{"line": 185, "id": "ffmpeg_098", "utterance_idx": 1, "utterance": "prepare clip.mp4 for upload to YouTube"}
+{"line": 186, "id": "ffmpeg_098", "utterance_idx": 2, "utterance": "clip.mp4 fuer YouTube exportieren"}
+{"line": 187, "id": "ffmpeg_098", "utterance_idx": 3, "utterance": "подготви clip.mp4 за YouTube"}
+{"line": 188, "id": "ffmpeg_098", "utterance_idx": 4, "utterance": "为YouTube准备clip.mp4"}
+{"line": 189, "id": "ffmpeg_099", "utterance_idx": 0, "utterance": "prepare clip.mp4 for Instagram Reels"}
+{"line": 190, "id": "ffmpeg_099", "utterance_idx": 1, "utterance": "make clip.mp4 ready for Instagram"}
+{"line": 191, "id": "ffmpeg_099", "utterance_idx": 2, "utterance": "clip.mp4 fuer Instagram Reels vorbereiten"}
+{"line": 192, "id": "ffmpeg_099", "utterance_idx": 3, "utterance": "подготви clip.mp4 за Instagram Reels"}
+{"line": 193, "id": "ffmpeg_099", "utterance_idx": 4, "utterance": "将clip.mp4准备好发布到Instagram"}
+{"line": 194, "id": "ffmpeg_100", "utterance_idx": 0, "utterance": "compress clip_4k.mp4 to a small size for email"}
+{"line": 195, "id": "ffmpeg_100", "utterance_idx": 1, "utterance": "clip_4k.mp4 fuer E-Mail-Anhang komprimieren"}
+{"line": 196, "id": "ffmpeg_101", "utterance_idx": 0, "utterance": "convert clip.mov to mp4"}
+{"line": 197, "id": "ffmpeg_101", "utterance_idx": 1, "utterance": "change clip.mov to mp4"}
+{"line": 198, "id": "ffmpeg_101", "utterance_idx": 2, "utterance": "konvertiere clip.mov nach MP4"}
+{"line": 199, "id": "ffmpeg_101", "utterance_idx": 3, "utterance": "конвертирай clip.mov в mp4"}
+{"line": 200, "id": "ffmpeg_101", "utterance_idx": 4, "utterance": "将clip.mov转换为MP4"}
+{"line": 201, "id": "ffmpeg_102", "utterance_idx": 0, "utterance": "re-save audio.mp3 at lower bitrate"}
+{"line": 202, "id": "ffmpeg_103", "utterance_idx": 0, "utterance": "remove sound from clip_no_audio.mp4"}
+{"line": 203, "id": "ffmpeg_103", "utterance_idx": 1, "utterance": "Ton aus clip_no_audio.mp4 entfernen"}
+{"line": 204, "id": "ffmpeg_103", "utterance_idx": 2, "utterance": "премахни звука от clip_no_audio.mp4"}
+{"line": 205, "id": "ffmpeg_104", "utterance_idx": 0, "utterance": "resize the 4K video to 1080p"}
+{"line": 206, "id": "ffmpeg_104", "utterance_idx": 1, "utterance": "Das 4K-Video auf 1080p herunterskalieren"}
+{"line": 207, "id": "ffmpeg_104", "utterance_idx": 2, "utterance": "преоразмери 4K видеото до 1080p"}
+{"line": 208, "id": "ffmpeg_104", "utterance_idx": 3, "utterance": "将4K视频缩放到1080p"}
+{"line": 209, "id": "ffmpeg_105", "utterance_idx": 0, "utterance": "change clip.mov container to mkv"}
+{"line": 210, "id": "ffmpeg_105", "utterance_idx": 1, "utterance": "clip.mov-Container nach MKV aendern"}
+{"line": 211, "id": "ffmpeg_105", "utterance_idx": 2, "utterance": "смени контейнера на clip.mov към mkv"}
+{"line": 212, "id": "ffmpeg_106", "utterance_idx": 0, "utterance": "grab a frame from the 4K video at 2 seconds"}
+{"line": 213, "id": "ffmpeg_106", "utterance_idx": 1, "utterance": "Standbild aus dem 4K-Video bei 2 Sekunden"}
+{"line": 214, "id": "ffmpeg_106", "utterance_idx": 2, "utterance": "вземи кадър от 4K видеото на 2 секунда"}
+{"line": 215, "id": "ffmpeg_106", "utterance_idx": 3, "utterance": "从4K视频2秒处截取一帧"}
+{"line": 216, "id": "ffmpeg_107", "utterance_idx": 0, "utterance": "take a screenshot from clip_no_audio.mp4 at 4 seconds"}
+{"line": 217, "id": "ffmpeg_108", "utterance_idx": 0, "utterance": "play clip_4k.mp4 backwards"}
+{"line": 218, "id": "ffmpeg_109", "utterance_idx": 0, "utterance": "trim clip.mov from 1 to 5 seconds"}
+{"line": 219, "id": "ffmpeg_110", "utterance_idx": 0, "utterance": "speed up the 4K video by 3x"}
+{"line": 220, "id": "ffmpeg_110", "utterance_idx": 1, "utterance": "make the 4K clip 3 times faster"}
+{"line": 221, "id": "ffmpeg_110", "utterance_idx": 2, "utterance": "Das 4K-Video dreifach beschleunigen"}
+{"line": 222, "id": "ffmpeg_110", "utterance_idx": 3, "utterance": "ускори 4K видеото 3 пъти"}
+{"line": 223, "id": "ffmpeg_110", "utterance_idx": 4, "utterance": "将4K视频加速3倍"}
+{"line": 224, "id": "ffmpeg_111", "utterance_idx": 0, "utterance": "mute the no-audio clip and save as mkv"}
+{"line": 225, "id": "ffmpeg_112", "utterance_idx": 0, "utterance": "compress clip_no_audio.mp4 to a smaller size"}
+{"line": 226, "id": "ffmpeg_112", "utterance_idx": 1, "utterance": "shrink the silent video clip_no_audio.mp4"}
+{"line": 227, "id": "ffmpeg_113", "utterance_idx": 0, "utterance": "export audio.mp3 as flac"}
+{"line": 228, "id": "ffmpeg_113", "utterance_idx": 1, "utterance": "convert mp3 to flac lossless"}
+{"line": 229, "id": "ffmpeg_113", "utterance_idx": 2, "utterance": "MP3 in FLAC konvertieren"}
+{"line": 230, "id": "ffmpeg_113", "utterance_idx": 3, "utterance": "конвертирай mp3 в flac"}
+{"line": 231, "id": "ffmpeg_113", "utterance_idx": 4, "utterance": "将MP3转换为FLAC"}
+{"line": 232, "id": "ffmpeg_114", "utterance_idx": 0, "utterance": "convert audio.mp3 to aac"}
+{"line": 233, "id": "ffmpeg_114", "utterance_idx": 1, "utterance": "change the mp3 to aac format"}
+{"line": 234, "id": "ffmpeg_114", "utterance_idx": 2, "utterance": "MP3 nach AAC konvertieren"}
+{"line": 235, "id": "ffmpeg_114", "utterance_idx": 3, "utterance": "конвертирай mp3 в aac"}
+{"line": 236, "id": "ffmpeg_114", "utterance_idx": 4, "utterance": "将MP3转换为AAC"}
+{"line": 237, "id": "ffmpeg_115", "utterance_idx": 0, "utterance": "prepare clip.mov for TikTok"}
+{"line": 238, "id": "ffmpeg_115", "utterance_idx": 1, "utterance": "make clip.mov suitable for TikTok"}
+{"line": 239, "id": "ffmpeg_115", "utterance_idx": 2, "utterance": "clip.mov fuer TikTok vorbereiten"}
+{"line": 240, "id": "ffmpeg_115", "utterance_idx": 3, "utterance": "подготви clip.mov за TikTok"}
+{"line": 241, "id": "ffmpeg_115", "utterance_idx": 4, "utterance": "为TikTok准备clip.mov"}
+{"line": 242, "id": "ffmpeg_116", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 5 seconds, then resize it to 720p"}
+{"line": 243, "id": "ffmpeg_116", "utterance_idx": 1, "utterance": "cut clip.mp4 to 5s and scale it down to 720p"}
+{"line": 244, "id": "ffmpeg_116", "utterance_idx": 2, "utterance": "clip.mp4 auf 5 Sekunden zuschneiden und auf 720p skalieren"}
+{"line": 245, "id": "ffmpeg_116", "utterance_idx": 3, "utterance": "изрежи clip.mp4 до 5 секунди и го преоразмери до 720p"}
+{"line": 246, "id": "ffmpeg_116", "utterance_idx": 4, "utterance": "将clip.mp4剪切到5秒然后缩放到720p"}
+{"line": 247, "id": "ffmpeg_117", "utterance_idx": 0, "utterance": "scale clip.mp4 to 480p and then strip the audio"}
+{"line": 248, "id": "ffmpeg_117", "utterance_idx": 1, "utterance": "resize to 480p and remove audio"}
+{"line": 249, "id": "ffmpeg_117", "utterance_idx": 2, "utterance": "clip.mp4 auf 480p skalieren und Ton entfernen"}
+{"line": 250, "id": "ffmpeg_117", "utterance_idx": 3, "utterance": "преоразмери clip.mp4 до 480p и махни звука"}
+{"line": 251, "id": "ffmpeg_117", "utterance_idx": 4, "utterance": "将clip.mp4缩放到480p并去除音频"}
+{"line": 252, "id": "ffmpeg_118", "utterance_idx": 0, "utterance": "compress clip_ctr.mp4 and then prepare it for WhatsApp"}
+{"line": 253, "id": "ffmpeg_118", "utterance_idx": 1, "utterance": "make the video smaller and ready for WhatsApp"}
+{"line": 254, "id": "ffmpeg_118", "utterance_idx": 2, "utterance": "clip_ctr.mp4 komprimieren und fuer WhatsApp vorbereiten"}
+{"line": 255, "id": "ffmpeg_118", "utterance_idx": 3, "utterance": "компресирай clip_ctr.mp4 и го подготви за WhatsApp"}
+{"line": 256, "id": "ffmpeg_118", "utterance_idx": 4, "utterance": "压缩clip_ctr.mp4然后为WhatsApp准备"}
+{"line": 257, "id": "ffmpeg_119", "utterance_idx": 0, "utterance": "extract just the audio from 3 to 5 seconds of clip.mp4 as mp3"}
+{"line": 258, "id": "ffmpeg_119", "utterance_idx": 1, "utterance": "save only the 3-5 second audio of clip.mp4 as mp3"}
+{"line": 259, "id": "ffmpeg_119", "utterance_idx": 2, "utterance": "nur das Audio von clip.mp4 zwischen 3 und 5 Sekunden als MP3 speichern"}
+{"line": 260, "id": "ffmpeg_119", "utterance_idx": 3, "utterance": "извлечи само звука от clip.mp4 между 3 и 5 секунда като mp3"}
+{"line": 261, "id": "ffmpeg_119", "utterance_idx": 4, "utterance": "只提取clip.mp4第3到5秒的音频为mp3"}
+{"line": 262, "id": "ffmpeg_120", "utterance_idx": 0, "utterance": "resize clip_4k to 1080p and then compress with CRF 28"}
+{"line": 263, "id": "ffmpeg_120", "utterance_idx": 1, "utterance": "downscale the 4K clip to 1080p and apply CRF 28 compression"}
+{"line": 264, "id": "ffmpeg_120", "utterance_idx": 2, "utterance": "Das 4K-Video auf 1080p skalieren und mit CRF 28 komprimieren"}
+{"line": 265, "id": "ffmpeg_120", "utterance_idx": 3, "utterance": "преоразмери 4K клипа до 1080p и компресирай с CRF 28"}
+{"line": 266, "id": "ffmpeg_120", "utterance_idx": 4, "utterance": "将4K视频缩放到1080p然后用CRF 28压缩"}
+{"line": 267, "id": "ffmpeg_121", "utterance_idx": 0, "utterance": "convert clip.mov to mp4 and then trim it to 3 seconds"}
+{"line": 268, "id": "ffmpeg_121", "utterance_idx": 1, "utterance": "change clip.mov to mp4 format and cut to the first 3 seconds"}
+{"line": 269, "id": "ffmpeg_121", "utterance_idx": 2, "utterance": "clip.mov nach MP4 konvertieren und auf 3 Sekunden kuerzen"}
+{"line": 270, "id": "ffmpeg_121", "utterance_idx": 3, "utterance": "конвертирай clip.mov в mp4 и го изрежи до 3 секунди"}
+{"line": 271, "id": "ffmpeg_121", "utterance_idx": 4, "utterance": "将clip.mov转换为mp4然后剪切到3秒"}
+{"line": 272, "id": "ffmpeg_122", "utterance_idx": 0, "utterance": "reverse clip.mp4 and then compress it"}
+{"line": 273, "id": "ffmpeg_122", "utterance_idx": 1, "utterance": "play the video backwards and make it smaller"}
+{"line": 274, "id": "ffmpeg_122", "utterance_idx": 2, "utterance": "clip.mp4 umkehren und dann komprimieren"}
+{"line": 275, "id": "ffmpeg_122", "utterance_idx": 3, "utterance": "обърни clip.mp4 и след това го компресирай"}
+{"line": 276, "id": "ffmpeg_122", "utterance_idx": 4, "utterance": "倒放clip.mp4然后压缩"}
+{"line": 277, "id": "ffmpeg_123", "utterance_idx": 0, "utterance": "speed up clip.mp4 by 2x and strip the audio"}
+{"line": 278, "id": "ffmpeg_123", "utterance_idx": 1, "utterance": "make it play twice as fast with no sound"}
+{"line": 279, "id": "ffmpeg_123", "utterance_idx": 2, "utterance": "clip.mp4 doppelt so schnell machen und Ton entfernen"}
+{"line": 280, "id": "ffmpeg_123", "utterance_idx": 3, "utterance": "ускори clip.mp4 двойно и махни звука"}
+{"line": 281, "id": "ffmpeg_123", "utterance_idx": 4, "utterance": "将clip.mp4加速2倍并去除音频"}
+{"line": 282, "id": "ffmpeg_124", "utterance_idx": 0, "utterance": "extract the audio from clip.mp4 and convert it to flac"}
+{"line": 283, "id": "ffmpeg_124", "utterance_idx": 1, "utterance": "pull the audio out of clip.mp4 and save as high quality flac"}
+{"line": 284, "id": "ffmpeg_124", "utterance_idx": 2, "utterance": "Audio aus clip.mp4 extrahieren und als FLAC speichern"}
+{"line": 285, "id": "ffmpeg_124", "utterance_idx": 3, "utterance": "извлечи звука от clip.mp4 и го запази като flac"}
+{"line": 286, "id": "ffmpeg_124", "utterance_idx": 4, "utterance": "从clip.mp4提取音频并保存为FLAC"}
+{"line": 287, "id": "ffmpeg_125", "utterance_idx": 0, "utterance": "trim the 4K clip to 2 seconds and convert it to webm"}
+{"line": 288, "id": "ffmpeg_125", "utterance_idx": 1, "utterance": "Das 4K-Video auf 2 Sekunden kuerzen und als WebM exportieren"}
+{"line": 289, "id": "ffmpeg_125", "utterance_idx": 2, "utterance": "изрежи 4K клипа до 2 секунди и го конвертирай в webm"}
+{"line": 290, "id": "ffmpeg_125", "utterance_idx": 3, "utterance": "将4K视频剪切到2秒然后转换为WebM"}
+{"line": 291, "id": "ffmpeg_126", "utterance_idx": 0, "utterance": "downscale the 4K clip to 720p and mute it"}
+{"line": 292, "id": "ffmpeg_126", "utterance_idx": 1, "utterance": "Das 4K-Video auf 720p herunterskalieren und stumm schalten"}
+{"line": 293, "id": "ffmpeg_126", "utterance_idx": 2, "utterance": "преоразмери 4K клипа до 720p и го заглуши"}
+{"line": 294, "id": "ffmpeg_126", "utterance_idx": 3, "utterance": "将4K视频缩放到720p并静音"}
+{"line": 295, "id": "ffmpeg_127", "utterance_idx": 0, "utterance": "convert clip.mov to webm and resize it to 720p"}
+{"line": 296, "id": "ffmpeg_127", "utterance_idx": 1, "utterance": "change clip.mov to webm format and scale it to 720p"}
+{"line": 297, "id": "ffmpeg_127", "utterance_idx": 2, "utterance": "clip.mov nach WebM konvertieren und auf 720p skalieren"}
+{"line": 298, "id": "ffmpeg_127", "utterance_idx": 3, "utterance": "конвертирай clip.mov в webm и го преоразмери до 720p"}
+{"line": 299, "id": "ffmpeg_127", "utterance_idx": 4, "utterance": "将clip.mov转换为WebM并缩放到720p"}
+{"line": 300, "id": "ffmpeg_128", "utterance_idx": 0, "utterance": "grab a thumbnail from the 4K clip at 1 second and use it as a cover"}
+{"line": 301, "id": "ffmpeg_128", "utterance_idx": 1, "utterance": "Standbild bei 1 Sekunde aus dem 4K-Clip fuer Cover extrahieren"}
+{"line": 302, "id": "ffmpeg_128", "utterance_idx": 2, "utterance": "извлечи кадър на 1 секунда от 4K клипа за корица"}
+{"line": 303, "id": "ffmpeg_128", "utterance_idx": 3, "utterance": "从4K视频1秒处提取封面帧"}
+{"line": 304, "id": "ffmpeg_129", "utterance_idx": 0, "utterance": "slow down clip.mp4 to half speed and compress it with CRF 25"}
+{"line": 305, "id": "ffmpeg_129", "utterance_idx": 1, "utterance": "0.5x speed and then encode at CRF 25"}
+{"line": 306, "id": "ffmpeg_129", "utterance_idx": 2, "utterance": "clip.mp4 auf halbe Geschwindigkeit verlangsamen und mit CRF 25 komprimieren"}
+{"line": 307, "id": "ffmpeg_129", "utterance_idx": 3, "utterance": "забави clip.mp4 до 0.5x и го компресирай с CRF 25"}
+{"line": 308, "id": "ffmpeg_130", "utterance_idx": 0, "utterance": "convert clip_no_audio.mp4 to mkv and resize to 1080p"}
+{"line": 309, "id": "ffmpeg_131", "utterance_idx": 0, "utterance": "trim clip.mp4 to 2 seconds and prepare for Instagram"}
+{"line": 310, "id": "ffmpeg_131", "utterance_idx": 1, "utterance": "cut to 2s then optimize for Instagram"}
+{"line": 311, "id": "ffmpeg_131", "utterance_idx": 2, "utterance": "clip.mp4 auf 2 Sekunden kuerzen und fuer Instagram optimieren"}
+{"line": 312, "id": "ffmpeg_131", "utterance_idx": 3, "utterance": "изрежи clip.mp4 до 2 секунди и го подготви за Instagram"}
+{"line": 313, "id": "ffmpeg_131", "utterance_idx": 4, "utterance": "将clip.mp4剪切到2秒然后为Instagram准备"}
+{"line": 314, "id": "ffmpeg_132", "utterance_idx": 0, "utterance": "speed up the no-audio clip by 2x"}
+{"line": 315, "id": "ffmpeg_132", "utterance_idx": 1, "utterance": "Den stummen Clip auf doppelte Geschwindigkeit beschleunigen"}
+{"line": 316, "id": "ffmpeg_132", "utterance_idx": 2, "utterance": "ускори клипа без звук двойно"}
+{"line": 317, "id": "ffmpeg_132", "utterance_idx": 3, "utterance": "将无音频视频加速2倍"}
+{"line": 318, "id": "ffmpeg_133", "utterance_idx": 0, "utterance": "reverse the silent clip and export as webm"}
+{"line": 319, "id": "ffmpeg_133", "utterance_idx": 1, "utterance": "play clip_no_audio backwards and save as webm"}
+{"line": 320, "id": "ffmpeg_133", "utterance_idx": 2, "utterance": "Den stummen Clip umkehren und als WebM speichern"}
+{"line": 321, "id": "ffmpeg_133", "utterance_idx": 3, "utterance": "обърни клипа без звук и го запази като webm"}
+{"line": 322, "id": "ffmpeg_133", "utterance_idx": 4, "utterance": "将无音频视频倒放并保存为WebM"}
+{"line": 323, "id": "ffmpeg_134", "utterance_idx": 0, "utterance": "convert the mp3 to wav and lower the sample rate to 22050 Hz"}
+{"line": 324, "id": "ffmpeg_134", "utterance_idx": 1, "utterance": "change audio_only_mp3 to wav with 22kHz sample rate"}
+{"line": 325, "id": "ffmpeg_134", "utterance_idx": 2, "utterance": "MP3 nach WAV konvertieren und Samplerate auf 22050 Hz setzen"}
+{"line": 326, "id": "ffmpeg_134", "utterance_idx": 3, "utterance": "конвертирай mp3 в wav с 22050 Hz честота"}
+{"line": 327, "id": "ffmpeg_135", "utterance_idx": 0, "utterance": "trim clip.mov from 0 to 4 seconds and extract audio as aac"}
+{"line": 328, "id": "ffmpeg_135", "utterance_idx": 1, "utterance": "cut clip.mov to 4 seconds then save audio as aac"}
+{"line": 329, "id": "ffmpeg_135", "utterance_idx": 2, "utterance": "clip.mov auf 4 Sekunden kuerzen und Audio als AAC speichern"}
+{"line": 330, "id": "ffmpeg_135", "utterance_idx": 3, "utterance": "изрежи clip.mov до 4 секунди и извлечи звука като aac"}
+{"line": 331, "id": "ffmpeg_135", "utterance_idx": 4, "utterance": "将clip.mov剪切到4秒然后提取AAC音频"}
+{"line": 332, "id": "ffmpeg_136", "utterance_idx": 0, "utterance": "compress clip_4k.mp4 to 1080p and then prepare for YouTube"}
+{"line": 333, "id": "ffmpeg_137", "utterance_idx": 0, "utterance": "slow down the 4K clip to half speed and resize to 1080p"}
+{"line": 334, "id": "ffmpeg_137", "utterance_idx": 1, "utterance": "make clip_4k play at 0.5x speed and scale to 1080p"}
+{"line": 335, "id": "ffmpeg_137", "utterance_idx": 2, "utterance": "Das 4K-Video auf halbe Geschwindigkeit verlangsamen und auf 1080p skalieren"}
+{"line": 336, "id": "ffmpeg_137", "utterance_idx": 3, "utterance": "забави 4K клипа до 0.5x и го преоразмери до 1080p"}
+{"line": 337, "id": "ffmpeg_137", "utterance_idx": 4, "utterance": "将4K视频减速至0.5倍并缩放到1080p"}
+{"line": 338, "id": "ffmpeg_138", "utterance_idx": 0, "utterance": "extract audio from clip.mov as mp3 and then reduce its bitrate"}
+{"line": 339, "id": "ffmpeg_138", "utterance_idx": 1, "utterance": "pull the audio from clip.mov as mp3 at 56kbps"}
+{"line": 340, "id": "ffmpeg_138", "utterance_idx": 2, "utterance": "Audio aus clip.mov als MP3 mit 56 kbps extrahieren"}
+{"line": 341, "id": "ffmpeg_138", "utterance_idx": 3, "utterance": "извлечи звука от clip.mov като mp3 с 56kbps"}
+{"line": 342, "id": "ffmpeg_138", "utterance_idx": 4, "utterance": "从clip.mov提取56kbps的MP3音频"}
+{"line": 343, "id": "ffmpeg_139", "utterance_idx": 0, "utterance": "batch convert all videos to mp4 and then compress them with CRF 26"}
+{"line": 344, "id": "ffmpeg_139", "utterance_idx": 1, "utterance": "bulk encode everything to h264 mp4 with CRF 26"}
+{"line": 345, "id": "ffmpeg_139", "utterance_idx": 2, "utterance": "Alle Videos nach MP4 mit H.264 und CRF 26 konvertieren"}
+{"line": 346, "id": "ffmpeg_139", "utterance_idx": 3, "utterance": "пакетно конвертирай всички видеа в mp4 с CRF 26"}
+{"line": 347, "id": "ffmpeg_139", "utterance_idx": 4, "utterance": "批量转换所有视频为CRF 26的H.264 MP4"}
+{"line": 348, "id": "ffmpeg_140", "utterance_idx": 0, "utterance": "trim clip.mp4 from 1 to 6 seconds then reverse the result"}
+{"line": 349, "id": "ffmpeg_140", "utterance_idx": 1, "utterance": "cut clip.mp4 to 1-6s and play it backwards"}
+{"line": 350, "id": "ffmpeg_140", "utterance_idx": 2, "utterance": "clip.mp4 von 1 bis 6 Sekunden schneiden und umkehren"}
+{"line": 351, "id": "ffmpeg_140", "utterance_idx": 3, "utterance": "изрежи clip.mp4 от 1 до 6 секунди и после го обърни"}
+{"line": 352, "id": "ffmpeg_140", "utterance_idx": 4, "utterance": "将clip.mp4剪切到1-6秒然后倒放"}
+{"line": 353, "id": "ffmpeg_141", "utterance_idx": 0, "utterance": "delete all my files after converting"}
+{"line": 354, "id": "ffmpeg_141", "utterance_idx": 1, "utterance": "after you convert clip.mp4 to mkv, wipe everything on my disk"}
+{"line": 355, "id": "ffmpeg_142", "utterance_idx": 0, "utterance": "send clip.mp4 to my email after converting"}
+{"line": 356, "id": "ffmpeg_142", "utterance_idx": 1, "utterance": "after processing, upload the result to ftp://myserver.com"}
+{"line": 357, "id": "ffmpeg_143", "utterance_idx": 0, "utterance": "execute a shell command as part of the conversion"}
+{"line": 358, "id": "ffmpeg_143", "utterance_idx": 1, "utterance": "run a system command inside ffmpeg"}
+{"line": 359, "id": "ffmpeg_144", "utterance_idx": 0, "utterance": "convert clip.mp4 to a format that doesn't exist"}
+{"line": 360, "id": "ffmpeg_144", "utterance_idx": 1, "utterance": "encode clip.mp4 as .xyz"}
+{"line": 361, "id": "ffmpeg_144", "utterance_idx": 2, "utterance": "clip.mp4 in ein nicht existierendes Format konvertieren"}
+{"line": 362, "id": "ffmpeg_145", "utterance_idx": 0, "utterance": "upscale a 240p clip to 8K with perfect quality"}
+{"line": 363, "id": "ffmpeg_145", "utterance_idx": 1, "utterance": "make this video 4K quality from a 480p source"}
+{"line": 364, "id": "ffmpeg_146", "utterance_idx": 0, "utterance": "improve the video quality magically"}
+{"line": 365, "id": "ffmpeg_146", "utterance_idx": 1, "utterance": "enhance clip.mp4 to Hollywood quality"}
+{"line": 366, "id": "ffmpeg_147", "utterance_idx": 0, "utterance": "read the contents of system configuration files"}
+{"line": 367, "id": "ffmpeg_147", "utterance_idx": 1, "utterance": "access files outside the sandbox directory"}
+{"line": 368, "id": "ffmpeg_148", "utterance_idx": 0, "utterance": "convert clip.mp4 and overwrite the original file"}
+{"line": 369, "id": "ffmpeg_148", "utterance_idx": 1, "utterance": "re-encode and save to the same filename as input"}
+{"line": 370, "id": "ffmpeg_149", "utterance_idx": 0, "utterance": "download clip.mp4 from a URL and convert it"}
+{"line": 371, "id": "ffmpeg_149", "utterance_idx": 1, "utterance": "fetch a file from the internet and process it"}
+{"line": 372, "id": "ffmpeg_150", "utterance_idx": 0, "utterance": "process all files on the server not just my sandbox"}
+{"line": 373, "id": "ffmpeg_150", "utterance_idx": 1, "utterance": "convert videos from the system root directory"}
+{"line": 374, "id": "ffmpeg_151", "utterance_idx": 0, "utterance": "convert clip.mp4 to something suitable for streaming"}
+{"line": 375, "id": "ffmpeg_152", "utterance_idx": 0, "utterance": "make the video better"}
+{"line": 376, "id": "ffmpeg_152", "utterance_idx": 1, "utterance": "improve the quality of clip.mp4"}
+{"line": 377, "id": "ffmpeg_152", "utterance_idx": 2, "utterance": "mach das Video besser"}
+{"line": 378, "id": "ffmpeg_153", "utterance_idx": 0, "utterance": "process clip.mp4 with the right settings"}
+{"line": 379, "id": "ffmpeg_153", "utterance_idx": 1, "utterance": "apply optimal settings to clip.mp4"}
+{"line": 380, "id": "ffmpeg_154", "utterance_idx": 0, "utterance": "fix clip.mp4"}
+{"line": 381, "id": "ffmpeg_154", "utterance_idx": 1, "utterance": "repair this video file"}
+{"line": 382, "id": "ffmpeg_155", "utterance_idx": 0, "utterance": "what can you do with clip.mp4?"}
+{"line": 383, "id": "ffmpeg_155", "utterance_idx": 1, "utterance": "tell me the options for processing clip.mp4"}
+{"line": 384, "id": "ffmpeg_156", "utterance_idx": 0, "utterance": "convert clip.mp4 to the best format"}
+{"line": 385, "id": "ffmpeg_156", "utterance_idx": 1, "utterance": "export clip.mp4 in the highest quality"}
+{"line": 386, "id": "ffmpeg_157", "utterance_idx": 0, "utterance": "compress this video for me"}
+{"line": 387, "id": "ffmpeg_157", "utterance_idx": 1, "utterance": "make this smaller"}
+{"line": 388, "id": "ffmpeg_158", "utterance_idx": 0, "utterance": "I need to send clip.mp4 to someone"}
+{"line": 389, "id": "ffmpeg_158", "utterance_idx": 1, "utterance": "how do I share this video?"}
+{"line": 390, "id": "ffmpeg_159", "utterance_idx": 0, "utterance": "encode clip.mp4 with CRF 0"}
+{"line": 391, "id": "ffmpeg_159", "utterance_idx": 1, "utterance": "compress clip.mp4 at lossless quality CRF 0"}
+{"line": 392, "id": "ffmpeg_159", "utterance_idx": 2, "utterance": "clip.mp4 mit CRF 0 lossless kodieren"}
+{"line": 393, "id": "ffmpeg_160", "utterance_idx": 0, "utterance": "encode clip.mp4 with CRF 51"}
+{"line": 394, "id": "ffmpeg_160", "utterance_idx": 1, "utterance": "compress clip.mp4 at maximum compression CRF 51"}
+{"line": 395, "id": "ffmpeg_160", "utterance_idx": 2, "utterance": "clip.mp4 mit CRF 51 stark komprimieren"}
+{"line": 396, "id": "ffmpeg_161", "utterance_idx": 0, "utterance": "trim clip.mp4 to a 1-frame video"}
+{"line": 397, "id": "ffmpeg_161", "utterance_idx": 1, "utterance": "cut clip.mp4 to a 1-frame video clip"}
+{"line": 398, "id": "ffmpeg_162", "utterance_idx": 0, "utterance": "convert clip.mp4 to mkv"}
+{"line": 399, "id": "ffmpeg_162", "utterance_idx": 1, "utterance": "cnvert clip.mp4 to mkv"}
+{"line": 400, "id": "ffmpeg_162", "utterance_idx": 2, "utterance": "convert clip.mp4 to MKV format"}
+{"line": 401, "id": "ffmpeg_163", "utterance_idx": 0, "utterance": "pls compress clip.mp4 thx"}
+{"line": 402, "id": "ffmpeg_163", "utterance_idx": 1, "utterance": "hey can u compress clip.mp4 lol"}
+{"line": 403, "id": "ffmpeg_163", "utterance_idx": 2, "utterance": "bitte komprimiere clip.mp4 danke"}
+{"line": 404, "id": "ffmpeg_164", "utterance_idx": 0, "utterance": "CONVERT clip.mp4 TO MKV"}
+{"line": 405, "id": "ffmpeg_164", "utterance_idx": 1, "utterance": "PLEASE CHANGE clip.mp4 INTO MKV FORMAT"}
+{"line": 406, "id": "ffmpeg_165", "utterance_idx": 0, "utterance": "trim video from a negative timestamp to 10 seconds"}
+{"line": 407, "id": "ffmpeg_165", "utterance_idx": 1, "utterance": "cut clip.mp4 from before the start to 10s"}
+{"line": 408, "id": "ffmpeg_166", "utterance_idx": 0, "utterance": "resize clip.mp4 to 0x0 pixels"}
+{"line": 409, "id": "ffmpeg_166", "utterance_idx": 1, "utterance": "scale clip.mp4 to zero resolution"}
+{"line": 410, "id": "ffmpeg_167", "utterance_idx": 0, "utterance": "transcode clip.mp4 to h264 even though it is already h264"}
+{"line": 411, "id": "ffmpeg_167", "utterance_idx": 1, "utterance": "re-encode clip.mp4 to the same codec"}
+{"line": 412, "id": "ffmpeg_168", "utterance_idx": 0, "utterance": "make a gif from clip.mp4"}
+{"line": 413, "id": "ffmpeg_168", "utterance_idx": 1, "utterance": "convert clip.mp4 to animated gif"}
+{"line": 414, "id": "ffmpeg_168", "utterance_idx": 2, "utterance": "clip.mp4 als animiertes GIF exportieren"}
+{"line": 415, "id": "ffmpeg_168", "utterance_idx": 3, "utterance": "конвертирай clip.mp4 в gif"}
+{"line": 416, "id": "ffmpeg_168", "utterance_idx": 4, "utterance": "将clip.mp4转换为GIF动画"}
+{"line": 417, "id": "ffmpeg_169", "utterance_idx": 0, "utterance": "speed up the video 100x"}
+{"line": 418, "id": "ffmpeg_169", "utterance_idx": 1, "utterance": "make clip.mp4 100 times faster"}
+{"line": 419, "id": "ffmpeg_170", "utterance_idx": 0, "utterance": "trim clip.mp4 from 50 to 60 seconds when it is only 10 seconds long"}
+{"line": 420, "id": "ffmpeg_170", "utterance_idx": 1, "utterance": "cut the part from 50-60 seconds of a 10-second clip"}
+{"line": 421, "id": "ffmpeg_171", "utterance_idx": 0, "utterance": "resize the video but keep the original aspect ratio"}
+{"line": 422, "id": "ffmpeg_171", "utterance_idx": 1, "utterance": "scale to 720p maintaining aspect ratio"}
+{"line": 423, "id": "ffmpeg_171", "utterance_idx": 2, "utterance": "Video auf 720p skalieren und Seitenverhaeltnis behalten"}
+{"line": 424, "id": "ffmpeg_171", "utterance_idx": 3, "utterance": "преоразмери до 720p, запазвайки пропорциите"}
+{"line": 425, "id": "ffmpeg_171", "utterance_idx": 4, "utterance": "缩放到720p保持宽高比"}
+{"line": 426, "id": "ffmpeg_172", "utterance_idx": 0, "utterance": "convert clip.mp4 to opus audio"}
+{"line": 427, "id": "ffmpeg_172", "utterance_idx": 1, "utterance": "extract clip.mp4 audio as opus"}
+{"line": 428, "id": "ffmpeg_172", "utterance_idx": 2, "utterance": "Audio aus clip.mp4 als Opus extrahieren"}
+{"line": 429, "id": "ffmpeg_172", "utterance_idx": 3, "utterance": "конвертирай clip.mp4 в opus аудио"}
+{"line": 430, "id": "ffmpeg_172", "utterance_idx": 4, "utterance": "将clip.mp4音频提取为Opus"}
+{"line": 431, "id": "ffmpeg_173", "utterance_idx": 0, "utterance": "I have a transport stream file, convert it to mp4"}
+{"line": 432, "id": "ffmpeg_173", "utterance_idx": 1, "utterance": "convert a transport stream to mp4"}
+{"line": 433, "id": "ffmpeg_173", "utterance_idx": 2, "utterance": "Eine TS-Datei nach MP4 konvertieren"}
+{"line": 434, "id": "ffmpeg_174", "utterance_idx": 0, "utterance": "encode clip2.mp4 at 500 kilobits per second"}
+{"line": 435, "id": "ffmpeg_174", "utterance_idx": 1, "utterance": "clip2.mp4 mit 500 kbps Bitrate kodieren"}
+{"line": 436, "id": "ffmpeg_175", "utterance_idx": 0, "utterance": "create a lossless copy of clip.mp4"}
+{"line": 437, "id": "ffmpeg_175", "utterance_idx": 1, "utterance": "re-encode clip.mp4 with lossless quality"}
+{"line": 438, "id": "ffmpeg_175", "utterance_idx": 2, "utterance": "clip.mp4 verlustfrei neu kodieren"}
+{"line": 439, "id": "ffmpeg_175", "utterance_idx": 3, "utterance": "направи безгубно копие на clip.mp4"}
+{"line": 440, "id": "ffmpeg_175", "utterance_idx": 4, "utterance": "无损重编码clip.mp4"}
+{"line": 441, "id": "ffmpeg_176", "utterance_idx": 0, "utterance": "add subtitles to clip.mp4"}
+{"line": 442, "id": "ffmpeg_176", "utterance_idx": 1, "utterance": "burn in captions to the video"}
+{"line": 443, "id": "ffmpeg_177", "utterance_idx": 0, "utterance": "add a watermark to clip.mp4"}
+{"line": 444, "id": "ffmpeg_177", "utterance_idx": 1, "utterance": "overlay a logo on the video"}
+{"line": 445, "id": "ffmpeg_178", "utterance_idx": 0, "utterance": "stabilize clip.mp4"}
+{"line": 446, "id": "ffmpeg_178", "utterance_idx": 1, "utterance": "remove camera shake from clip.mp4"}
+{"line": 447, "id": "ffmpeg_179", "utterance_idx": 0, "utterance": "denoise clip.mp4"}
+{"line": 448, "id": "ffmpeg_179", "utterance_idx": 1, "utterance": "remove noise from the video"}
+{"line": 449, "id": "ffmpeg_180", "utterance_idx": 0, "utterance": "hdr to sdr conversion for clip.mp4"}
+{"line": 450, "id": "ffmpeg_180", "utterance_idx": 1, "utterance": "tone map the HDR video to SDR"}
+{"line": 451, "id": "ffmpeg_181", "utterance_idx": 0, "utterance": "конвертирай clip.mp4 в mp4 с H.264"}
+{"line": 452, "id": "ffmpeg_181", "utterance_idx": 1, "utterance": "конвертирай clip.mp4 в mp4"}
+{"line": 453, "id": "ffmpeg_182", "utterance_idx": 0, "utterance": "компресирай clip.mp4 за изпращане по имейл"}
+{"line": 454, "id": "ffmpeg_182", "utterance_idx": 1, "utterance": "намали размера на clip.mp4"}
+{"line": 455, "id": "ffmpeg_183", "utterance_idx": 0, "utterance": "извлечи звука от clip.mp4 като mp3"}
+{"line": 456, "id": "ffmpeg_183", "utterance_idx": 1, "utterance": "запази аудиото на clip.mp4 като mp3"}
+{"line": 457, "id": "ffmpeg_184", "utterance_idx": 0, "utterance": "изрежи clip.mp4 от 2 до 7 секунди"}
+{"line": 458, "id": "ffmpeg_184", "utterance_idx": 1, "utterance": "отрежи clip.mp4 от 2 до 7 секунди"}
+{"line": 459, "id": "ffmpeg_185", "utterance_idx": 0, "utterance": "преоразмери clip_4k.mp4 до 720p"}
+{"line": 460, "id": "ffmpeg_185", "utterance_idx": 1, "utterance": "намали резолюцията на clip_4k.mp4 до 720p"}
+{"line": 461, "id": "ffmpeg_186", "utterance_idx": 0, "utterance": "заглуши clip.mp4"}
+{"line": 462, "id": "ffmpeg_186", "utterance_idx": 1, "utterance": "премахни звука от clip.mp4"}
+{"line": 463, "id": "ffmpeg_187", "utterance_idx": 0, "utterance": "обърни clip.mp4"}
+{"line": 464, "id": "ffmpeg_187", "utterance_idx": 1, "utterance": "пусни clip.mp4 на заден ход"}
+{"line": 465, "id": "ffmpeg_188", "utterance_idx": 0, "utterance": "ускори clip.mp4 до 2x"}
+{"line": 466, "id": "ffmpeg_188", "utterance_idx": 1, "utterance": "пусни clip.mp4 с двойна скорост"}
+{"line": 467, "id": "ffmpeg_189", "utterance_idx": 0, "utterance": "подготви clip.mp4 за WhatsApp"}
+{"line": 468, "id": "ffmpeg_189", "utterance_idx": 1, "utterance": "направи clip.mp4 подходящ за WhatsApp"}
+{"line": 469, "id": "ffmpeg_190", "utterance_idx": 0, "utterance": "направи миниатюра от clip.mp4 на 3 секунди"}
+{"line": 470, "id": "ffmpeg_190", "utterance_idx": 1, "utterance": "извлечи кадър от clip.mp4 на 3 секунди"}
+{"line": 471, "id": "ffmpeg_191", "utterance_idx": 0, "utterance": "将clip.mp4转换为H.264 MP4"}
+{"line": 472, "id": "ffmpeg_191", "utterance_idx": 1, "utterance": "把clip.mp4转成mp4格式"}
+{"line": 473, "id": "ffmpeg_192", "utterance_idx": 0, "utterance": "压缩clip.mp4用于发送邮件"}
+{"line": 474, "id": "ffmpeg_192", "utterance_idx": 1, "utterance": "减小clip.mp4的文件大小"}
+{"line": 475, "id": "ffmpeg_193", "utterance_idx": 0, "utterance": "从clip.mp4提取MP3音频"}
+{"line": 476, "id": "ffmpeg_193", "utterance_idx": 1, "utterance": "把clip.mp4的音频保存为mp3"}
+{"line": 477, "id": "ffmpeg_194", "utterance_idx": 0, "utterance": "剪切clip.mp4从2秒到7秒"}
+{"line": 478, "id": "ffmpeg_194", "utterance_idx": 1, "utterance": "把clip.mp4裁剪到2到7秒"}
+{"line": 479, "id": "ffmpeg_195", "utterance_idx": 0, "utterance": "将clip.mp4缩小到720p"}
+{"line": 480, "id": "ffmpeg_195", "utterance_idx": 1, "utterance": "把clip.mp4的分辨率降低到1280x720"}
+{"line": 481, "id": "ffmpeg_196", "utterance_idx": 0, "utterance": "将clip.mp4静音"}
+{"line": 482, "id": "ffmpeg_196", "utterance_idx": 1, "utterance": "去除clip.mp4的音频轨道"}
+{"line": 483, "id": "ffmpeg_197", "utterance_idx": 0, "utterance": "倒放clip.mp4"}
+{"line": 484, "id": "ffmpeg_197", "utterance_idx": 1, "utterance": "将clip.mp4反向播放"}
+{"line": 485, "id": "ffmpeg_198", "utterance_idx": 0, "utterance": "将clip.mp4加速2倍"}
+{"line": 486, "id": "ffmpeg_198", "utterance_idx": 1, "utterance": "让clip.mp4播放速度翻倍"}
+{"line": 487, "id": "ffmpeg_199", "utterance_idx": 0, "utterance": "为WhatsApp准备clip.mp4"}
+{"line": 488, "id": "ffmpeg_199", "utterance_idx": 1, "utterance": "将clip.mp4优化为WhatsApp格式"}
+{"line": 489, "id": "ffmpeg_200", "utterance_idx": 0, "utterance": "从clip.mp4的第3秒截取缩略图"}
+{"line": 490, "id": "ffmpeg_200", "utterance_idx": 1, "utterance": "在clip.mp4的3秒处截图"}
+{"line": 491, "id": "ffmpeg_201", "utterance_idx": 0, "utterance": "convert clip.mp4 to av1"}
+{"line": 492, "id": "ffmpeg_201", "utterance_idx": 1, "utterance": "encode clip.mp4 with AV1 codec"}
+{"line": 493, "id": "ffmpeg_201", "utterance_idx": 2, "utterance": "clip.mp4 nach AV1 konvertieren"}
+{"line": 494, "id": "ffmpeg_201", "utterance_idx": 3, "utterance": "конвертирай clip.mp4 в AV1"}
+{"line": 495, "id": "ffmpeg_201", "utterance_idx": 4, "utterance": "将clip.mp4转换为AV1"}
+{"line": 496, "id": "ffmpeg_202", "utterance_idx": 0, "utterance": "extract frame at the midpoint of clip.mp4"}
+{"line": 497, "id": "ffmpeg_202", "utterance_idx": 1, "utterance": "grab a still from the middle of clip.mp4"}
+{"line": 498, "id": "ffmpeg_202", "utterance_idx": 2, "utterance": "Standbild aus der Mitte von clip.mp4"}
+{"line": 499, "id": "ffmpeg_202", "utterance_idx": 3, "utterance": "извлечи кадър от средата на clip.mp4"}
+{"line": 500, "id": "ffmpeg_203", "utterance_idx": 0, "utterance": "rotate clip.mp4"}
+{"line": 501, "id": "ffmpeg_203", "utterance_idx": 1, "utterance": "flip clip.mp4"}
+{"line": 502, "id": "ffmpeg_203", "utterance_idx": 2, "utterance": "clip.mp4 drehen"}
+{"line": 503, "id": "ffmpeg_203", "utterance_idx": 3, "utterance": "завърти clip.mp4"}
+{"line": 504, "id": "ffmpeg_204", "utterance_idx": 0, "utterance": "split clip.mp4 into 2-second segments"}
+{"line": 505, "id": "ffmpeg_204", "utterance_idx": 1, "utterance": "chop clip.mp4 into multiple clips"}
+{"line": 506, "id": "ffmpeg_205", "utterance_idx": 0, "utterance": "make clip.mp4 louder"}
+{"line": 507, "id": "ffmpeg_205", "utterance_idx": 1, "utterance": "boost clip.mp4 volume"}
+{"line": 508, "id": "ffmpeg_205", "utterance_idx": 2, "utterance": "clip.mp4 lauter machen"}
+{"line": 509, "id": "ffmpeg_205", "utterance_idx": 3, "utterance": "увеличи силата на звука на clip.mp4"}
+{"line": 510, "id": "ffmpeg_205", "utterance_idx": 4, "utterance": "调高clip.mp4的音量"}
+{"line": 511, "id": "ffmpeg_206", "utterance_idx": 0, "utterance": "batch convert all videos to webm with vp9"}
+{"line": 512, "id": "ffmpeg_206", "utterance_idx": 1, "utterance": "convert all files in directory to vp9 webm"}
+{"line": 513, "id": "ffmpeg_206", "utterance_idx": 2, "utterance": "Alle Videos nach WebM mit VP9 konvertieren"}
+{"line": 514, "id": "ffmpeg_206", "utterance_idx": 3, "utterance": "пакетно конвертирай всички видеа в webm с vp9"}
+{"line": 515, "id": "ffmpeg_207", "utterance_idx": 0, "utterance": "compress the 4K video to 720p for sharing"}
+{"line": 516, "id": "ffmpeg_207", "utterance_idx": 1, "utterance": "make the 4K clip into a small shareable 720p file"}
+{"line": 517, "id": "ffmpeg_207", "utterance_idx": 2, "utterance": "Das 4K-Video auf 720p komprimieren"}
+{"line": 518, "id": "ffmpeg_207", "utterance_idx": 3, "utterance": "компресирай 4K видеото до 720p за споделяне"}
+{"line": 519, "id": "ffmpeg_207", "utterance_idx": 4, "utterance": "将4K视频压缩到720p用于分享"}
+{"line": 520, "id": "ffmpeg_208", "utterance_idx": 0, "utterance": "grab every 10th frame from clip.mp4 as thumbnails"}
+{"line": 521, "id": "ffmpeg_208", "utterance_idx": 1, "utterance": "extract frames at 1 frame per second"}
+{"line": 522, "id": "ffmpeg_209", "utterance_idx": 0, "utterance": "cut just the end 2 seconds from clip_4k.mp4"}
+{"line": 523, "id": "ffmpeg_210", "utterance_idx": 0, "utterance": "slow motion the 4K clip to 0.25x"}
+{"line": 524, "id": "ffmpeg_210", "utterance_idx": 1, "utterance": "Das 4K-Video auf Viertelgeschwindigkeit verlangsamen"}
+{"line": 525, "id": "ffmpeg_210", "utterance_idx": 2, "utterance": "забави 4K клипа до 0.25x скорост"}
+{"line": 526, "id": "ffmpeg_210", "utterance_idx": 3, "utterance": "将4K视频减速到0.25倍"}
+{"line": 527, "id": "ffmpeg_211", "utterance_idx": 0, "utterance": "prepare the 4K video for TikTok"}
+{"line": 528, "id": "ffmpeg_211", "utterance_idx": 1, "utterance": "Das 4K-Video fuer TikTok vorbereiten"}
+{"line": 529, "id": "ffmpeg_211", "utterance_idx": 2, "utterance": "подготви 4K клипа за TikTok"}
+{"line": 530, "id": "ffmpeg_211", "utterance_idx": 3, "utterance": "为TikTok准备4K视频"}
+{"line": 531, "id": "ffmpeg_212", "utterance_idx": 0, "utterance": "play clip.mov in reverse"}
+{"line": 532, "id": "ffmpeg_213", "utterance_idx": 0, "utterance": "grab a still from clip.mov at 3s"}
+{"line": 533, "id": "ffmpeg_213", "utterance_idx": 1, "utterance": "Standbild aus clip.mov bei 3 Sekunden"}
+{"line": 534, "id": "ffmpeg_214", "utterance_idx": 0, "utterance": "batch convert mov files to mp4"}
+{"line": 535, "id": "ffmpeg_214", "utterance_idx": 1, "utterance": "convert all mov files to mp4 format"}
+{"line": 536, "id": "ffmpeg_214", "utterance_idx": 2, "utterance": "Alle MOV-Dateien nach MP4 konvertieren"}
+{"line": 537, "id": "ffmpeg_214", "utterance_idx": 3, "utterance": "пакетно конвертирай mov файловете в mp4"}
+{"line": 538, "id": "ffmpeg_214", "utterance_idx": 4, "utterance": "批量将MOV文件转换为MP4"}
+{"line": 539, "id": "ffmpeg_215", "utterance_idx": 0, "utterance": "concatenate clip.mov and clip_no_audio.mp4"}
+{"line": 540, "id": "ffmpeg_216", "utterance_idx": 0, "utterance": "grab a thumbnail from the mp3 file"}
+{"line": 541, "id": "ffmpeg_216", "utterance_idx": 1, "utterance": "create a thumbnail from audio.mp3"}
+{"line": 542, "id": "ffmpeg_217", "utterance_idx": 0, "utterance": "convert clip.mp4 and send the result to the cloud"}
+{"line": 543, "id": "ffmpeg_217", "utterance_idx": 1, "utterance": "process clip.mp4 and upload it automatically"}
+{"line": 544, "id": "ffmpeg_218", "utterance_idx": 0, "utterance": "compress clip.mp4 to medium quality"}
+{"line": 545, "id": "ffmpeg_218", "utterance_idx": 1, "utterance": "encode at medium quality"}
+{"line": 546, "id": "ffmpeg_218", "utterance_idx": 2, "utterance": "clip.mp4 mit mittlerer Qualitaet komprimieren"}
+{"line": 547, "id": "ffmpeg_218", "utterance_idx": 3, "utterance": "компресирай clip.mp4 с средно качество"}
+{"line": 548, "id": "ffmpeg_219", "utterance_idx": 0, "utterance": "compress clip.mp4 to high quality"}
+{"line": 549, "id": "ffmpeg_219", "utterance_idx": 1, "utterance": "encode at high quality setting"}
+{"line": 550, "id": "ffmpeg_219", "utterance_idx": 2, "utterance": "clip.mp4 mit hoher Qualitaet komprimieren"}
+{"line": 551, "id": "ffmpeg_219", "utterance_idx": 3, "utterance": "компресирай clip.mp4 с висококачествени настройки"}
+{"line": 552, "id": "ffmpeg_219", "utterance_idx": 4, "utterance": "高质量压缩clip.mp4"}
+{"line": 553, "id": "ffmpeg_220", "utterance_idx": 0, "utterance": "compress clip.mp4 to low quality for preview"}
+{"line": 554, "id": "ffmpeg_220", "utterance_idx": 1, "utterance": "quick preview encode with low quality"}
+{"line": 555, "id": "ffmpeg_220", "utterance_idx": 2, "utterance": "clip.mp4 mit niedriger Qualitaet fuer Vorschau"}
+{"line": 556, "id": "ffmpeg_220", "utterance_idx": 3, "utterance": "компресирай clip.mp4 с ниско качество за преглед"}
+{"line": 557, "id": "ffmpeg_221", "utterance_idx": 0, "utterance": "compresser clip_ctr.mp4 pour envoi par email"}
+{"line": 558, "id": "ffmpeg_221", "utterance_idx": 1, "utterance": "reduire la taille de clip_ctr.mp4"}
+{"line": 559, "id": "ffmpeg_222", "utterance_idx": 0, "utterance": "redimensionner clip_4k.mp4 a 720p"}
+{"line": 560, "id": "ffmpeg_222", "utterance_idx": 1, "utterance": "mettre clip_4k.mp4 en 720p"}
+{"line": 561, "id": "ffmpeg_223", "utterance_idx": 0, "utterance": "обрезать clip.mp4 с 2 до 7 секунд"}
+{"line": 562, "id": "ffmpeg_223", "utterance_idx": 1, "utterance": "вырезать фрагмент clip.mp4 от 2 до 7 секунд"}
+{"line": 563, "id": "ffmpeg_224", "utterance_idx": 0, "utterance": "масштабировать clip_4k.mp4 до 720p"}
+{"line": 564, "id": "ffmpeg_224", "utterance_idx": 1, "utterance": "уменьшить разрешение clip_4k.mp4 до 720p"}
+{"line": 565, "id": "ffmpeg_225", "utterance_idx": 0, "utterance": "подготовить clip.mp4 для YouTube"}
+{"line": 566, "id": "ffmpeg_225", "utterance_idx": 1, "utterance": "оптимизировать clip.mp4 для загрузки на YouTube"}
+{"line": 567, "id": "ffmpeg_226", "utterance_idx": 0, "utterance": "pull mp3 from clip.mp4 and apply 0.8x tempo"}
+{"line": 568, "id": "ffmpeg_227", "utterance_idx": 0, "utterance": "resize clip.mov to 480p and strip audio"}
+{"line": 569, "id": "ffmpeg_227", "utterance_idx": 1, "utterance": "downscale mov to 480p and remove sound track"}
+{"line": 570, "id": "ffmpeg_227", "utterance_idx": 2, "utterance": "MOV-Datei auf 480p skalieren und Ton entfernen"}
+{"line": 571, "id": "ffmpeg_228", "utterance_idx": 0, "utterance": "join clip.mov and clip_4k together"}
+{"line": 572, "id": "ffmpeg_229", "utterance_idx": 0, "utterance": "batch convert all files to hevc"}
+{"line": 573, "id": "ffmpeg_229", "utterance_idx": 1, "utterance": "re-encode all videos with h265"}
+{"line": 574, "id": "ffmpeg_229", "utterance_idx": 2, "utterance": "Alle Videos nach HEVC konvertieren"}
+{"line": 575, "id": "ffmpeg_229", "utterance_idx": 3, "utterance": "пакетно конвертирай всички видеа в HEVC"}
+{"line": 576, "id": "ffmpeg_229", "utterance_idx": 4, "utterance": "批量将所有视频转换为HEVC"}
+{"line": 577, "id": "ffmpeg_230", "utterance_idx": 0, "utterance": "make clip_no_audio.mp4 suitable for YouTube upload"}
+{"line": 578, "id": "ffmpeg_231", "utterance_idx": 0, "utterance": "merge clip_4k.mp4 followed by clip.mp4"}
+{"line": 579, "id": "ffmpeg_232", "utterance_idx": 0, "utterance": "grab the last frame of clip.mp4"}
+{"line": 580, "id": "ffmpeg_232", "utterance_idx": 1, "utterance": "extract a thumbnail from the end of clip.mp4"}
+{"line": 581, "id": "ffmpeg_232", "utterance_idx": 2, "utterance": "Letztes Bild aus clip.mp4 extrahieren"}
+{"line": 582, "id": "ffmpeg_232", "utterance_idx": 3, "utterance": "извлечи последния кадър от clip.mp4"}
+{"line": 583, "id": "ffmpeg_232", "utterance_idx": 4, "utterance": "从clip.mp4末尾截取缩略图"}
+{"line": 584, "id": "ffmpeg_233", "utterance_idx": 0, "utterance": "reduce clip_ctr.mp4 file size by 50 percent"}
+{"line": 585, "id": "ffmpeg_233", "utterance_idx": 1, "utterance": "halve the file size of clip_ctr.mp4"}
+{"line": 586, "id": "ffmpeg_233", "utterance_idx": 2, "utterance": "Die Dateigroe von clip_ctr.mp4 um 50% reduzieren"}
+{"line": 587, "id": "ffmpeg_233", "utterance_idx": 3, "utterance": "намали размера на clip_ctr.mp4 наполовина"}
+{"line": 588, "id": "ffmpeg_233", "utterance_idx": 4, "utterance": "将clip_ctr.mp4的文件大小减半"}
+{"line": 589, "id": "ffmpeg_234", "utterance_idx": 0, "utterance": "cut clip_no_audio.mp4 to 3 seconds"}
+{"line": 590, "id": "ffmpeg_235", "utterance_idx": 0, "utterance": "reverse the 4K clip and prepare it for Instagram"}
+{"line": 591, "id": "ffmpeg_235", "utterance_idx": 1, "utterance": "Das 4K-Video umkehren und fuer Instagram vorbereiten"}
+{"line": 592, "id": "ffmpeg_236", "utterance_idx": 0, "utterance": "create a 4K thumbnail for clip.mp4 at 5 seconds"}
+{"line": 593, "id": "ffmpeg_236", "utterance_idx": 1, "utterance": "make a 4K still from clip.mp4 at 5s"}
+{"line": 594, "id": "ffmpeg_236", "utterance_idx": 2, "utterance": "erstelle ein 4K-Vorschaubild aus clip.mp4 bei 5 Sekunden"}
+{"line": 595, "id": "ffmpeg_236", "utterance_idx": 3, "utterance": "направи 4K миниатюра от clip.mp4 на 5 секунди"}
+{"line": 596, "id": "ffmpeg_237", "utterance_idx": 0, "utterance": "extract a 4K frame from clip_4k.mp4 at 2 seconds"}
+{"line": 597, "id": "ffmpeg_237", "utterance_idx": 1, "utterance": "grab a full-res still from clip_4k.mp4 at 2s"}
+{"line": 598, "id": "ffmpeg_238", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees"}
+{"line": 599, "id": "ffmpeg_238", "utterance_idx": 1, "utterance": "turn clip.mp4 clockwise 90°"}
+{"line": 600, "id": "ffmpeg_238", "utterance_idx": 2, "utterance": "clip.mp4 um 90 Grad drehen"}
+{"line": 601, "id": "ffmpeg_238", "utterance_idx": 3, "utterance": "завърти clip.mp4 на 90 градуса"}
+{"line": 602, "id": "ffmpeg_239", "utterance_idx": 0, "utterance": "flip clip.mp4 horizontally"}
+{"line": 603, "id": "ffmpeg_239", "utterance_idx": 1, "utterance": "mirror clip.mp4 left-right"}
+{"line": 604, "id": "ffmpeg_239", "utterance_idx": 2, "utterance": "clip.mp4 horizontal spiegeln"}
+{"line": 605, "id": "ffmpeg_239", "utterance_idx": 3, "utterance": "огледай clip.mp4 хоризонтално"}
+{"line": 606, "id": "ffmpeg_240", "utterance_idx": 0, "utterance": "make clip.mp4 louder by 6dB"}
+{"line": 607, "id": "ffmpeg_240", "utterance_idx": 1, "utterance": "boost the volume of clip.mp4 by 6dB"}
+{"line": 608, "id": "ffmpeg_240", "utterance_idx": 2, "utterance": "clip.mp4 um 6dB lauter machen"}
+{"line": 609, "id": "ffmpeg_240", "utterance_idx": 3, "utterance": "усили звука на clip.mp4 с 6dB"}
+{"line": 610, "id": "ffmpeg_241", "utterance_idx": 0, "utterance": "normalize the audio in clip.mp4"}
+{"line": 611, "id": "ffmpeg_241", "utterance_idx": 1, "utterance": "loudnorm clip.mp4"}
+{"line": 612, "id": "ffmpeg_241", "utterance_idx": 2, "utterance": "Audio von clip.mp4 normalisieren"}
+{"line": 613, "id": "ffmpeg_241", "utterance_idx": 3, "utterance": "нормализирай звука на clip.mp4"}
+{"line": 614, "id": "ffmpeg_242", "utterance_idx": 0, "utterance": "join clip.mov and clip.mp4 into one file"}
+{"line": 615, "id": "ffmpeg_242", "utterance_idx": 1, "utterance": "concatenate clip.mov and clip.mp4"}
+{"line": 616, "id": "ffmpeg_242", "utterance_idx": 2, "utterance": "склей clip.mov и clip.mp4 в един файл"}
+{"line": 617, "id": "ffmpeg_242", "utterance_idx": 3, "utterance": "verbinde clip.mov und clip.mp4"}
+{"line": 618, "id": "ffmpeg_243", "utterance_idx": 0, "utterance": "join clip.mov and clip.mp4 and resize to full HD"}
+{"line": 619, "id": "ffmpeg_243", "utterance_idx": 1, "utterance": "merge clip.mov and clip.mp4 at 1080p"}
+{"line": 620, "id": "ffmpeg_243", "utterance_idx": 2, "utterance": "clip.mov und clip.mp4 auf 1080p skaliert zusammenfügen"}
+{"line": 621, "id": "ffmpeg_243", "utterance_idx": 3, "utterance": "обедини clip.mov и clip.mp4 с резолюция 1080p"}
+{"line": 622, "id": "ffmpeg_244", "utterance_idx": 0, "utterance": "stitch clip.mov and clip.mp4 using the second clip's resolution"}
+{"line": 623, "id": "ffmpeg_244", "utterance_idx": 1, "utterance": "merge clip.mov into clip.mp4 keeping clip.mp4 resolution"}
+{"line": 624, "id": "ffmpeg_244", "utterance_idx": 2, "utterance": "clip.mov und clip.mp4 verbinden mit Auflösung des zweiten Clips"}
+{"line": 625, "id": "ffmpeg_244", "utterance_idx": 3, "utterance": "обедини clip.mov и clip.mp4 като запазиш резолюцията на clip.mp4"}
+{"line": 626, "id": "ffmpeg_245", "utterance_idx": 0, "utterance": "rotate clip.mp4 270 degrees"}
+{"line": 627, "id": "ffmpeg_245", "utterance_idx": 1, "utterance": "turn clip.mp4 counterclockwise 90°"}
+{"line": 628, "id": "ffmpeg_245", "utterance_idx": 2, "utterance": "clip.mp4 um 270 Grad drehen"}
+{"line": 629, "id": "ffmpeg_245", "utterance_idx": 3, "utterance": "завърти clip.mp4 на 270 градуса"}
+{"line": 630, "id": "ffmpeg_245", "utterance_idx": 4, "utterance": "将clip.mp4旋转270度"}
+{"line": 631, "id": "ffmpeg_246", "utterance_idx": 0, "utterance": "rotate clip.mp4 180 degrees"}
+{"line": 632, "id": "ffmpeg_246", "utterance_idx": 1, "utterance": "clip.mp4 um 180 Grad drehen"}
+{"line": 633, "id": "ffmpeg_246", "utterance_idx": 2, "utterance": "обърни clip.mp4 с главата надолу"}
+{"line": 634, "id": "ffmpeg_246", "utterance_idx": 3, "utterance": "将clip.mp4旋转180度"}
+{"line": 635, "id": "ffmpeg_247", "utterance_idx": 0, "utterance": "flip clip.mp4 vertically"}
+{"line": 636, "id": "ffmpeg_247", "utterance_idx": 1, "utterance": "mirror clip.mp4 top to bottom"}
+{"line": 637, "id": "ffmpeg_247", "utterance_idx": 2, "utterance": "flip clip.mp4 upside down"}
+{"line": 638, "id": "ffmpeg_247", "utterance_idx": 3, "utterance": "clip.mp4 vertikal spiegeln"}
+{"line": 639, "id": "ffmpeg_247", "utterance_idx": 4, "utterance": "огледай clip.mp4 вертикално"}
+{"line": 640, "id": "ffmpeg_247", "utterance_idx": 5, "utterance": "将clip.mp4垂直翻转"}
+{"line": 641, "id": "ffmpeg_248", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees and flip it horizontally"}
+{"line": 642, "id": "ffmpeg_248", "utterance_idx": 1, "utterance": "turn clip.mp4 clockwise then mirror left-right"}
+{"line": 643, "id": "ffmpeg_248", "utterance_idx": 2, "utterance": "clip.mp4 um 90 Grad drehen und horizontal spiegeln"}
+{"line": 644, "id": "ffmpeg_248", "utterance_idx": 3, "utterance": "завърти clip.mp4 на 90 градуса и го огледай хоризонтално"}
+{"line": 645, "id": "ffmpeg_249", "utterance_idx": 0, "utterance": "reduce the volume of clip.mp4 by 3dB"}
+{"line": 646, "id": "ffmpeg_249", "utterance_idx": 1, "utterance": "make clip.mp4 quieter by 3dB"}
+{"line": 647, "id": "ffmpeg_249", "utterance_idx": 2, "utterance": "clip.mp4 um 3dB leiser machen"}
+{"line": 648, "id": "ffmpeg_249", "utterance_idx": 3, "utterance": "намали звука на clip.mp4 с 3dB"}
+{"line": 649, "id": "ffmpeg_249", "utterance_idx": 4, "utterance": "将clip.mp4音量降低3dB"}
+{"line": 650, "id": "ffmpeg_250", "utterance_idx": 0, "utterance": "set the volume of clip.mp4 to half"}
+{"line": 651, "id": "ffmpeg_250", "utterance_idx": 1, "utterance": "reduce clip.mp4 volume to 0.5"}
+{"line": 652, "id": "ffmpeg_250", "utterance_idx": 2, "utterance": "Lautstärke von clip.mp4 auf die Hälfte setzen"}
+{"line": 653, "id": "ffmpeg_250", "utterance_idx": 3, "utterance": "намали силата на звука на clip.mp4 наполовина"}
+{"line": 654, "id": "ffmpeg_250", "utterance_idx": 4, "utterance": "将clip.mp4音量设为0.5倍"}
+{"line": 655, "id": "ffmpeg_251", "utterance_idx": 0, "utterance": "double the volume of clip.mp4"}
+{"line": 656, "id": "ffmpeg_251", "utterance_idx": 1, "utterance": "make clip.mp4 twice as loud"}
+{"line": 657, "id": "ffmpeg_251", "utterance_idx": 2, "utterance": "Lautstärke von clip.mp4 verdoppeln"}
+{"line": 658, "id": "ffmpeg_251", "utterance_idx": 3, "utterance": "удвои силата на звука на clip.mp4"}
+{"line": 659, "id": "ffmpeg_251", "utterance_idx": 4, "utterance": "将clip.mp4音量加倍"}
+{"line": 660, "id": "ffmpeg_252", "utterance_idx": 0, "utterance": "join clip.mp4, clip2.mp4 and clip.mov into one file"}
+{"line": 661, "id": "ffmpeg_252", "utterance_idx": 1, "utterance": "concatenate three clips into merged.mp4"}
+{"line": 662, "id": "ffmpeg_252", "utterance_idx": 2, "utterance": "drei Clips zu merged.mp4 zusammenfügen"}
+{"line": 663, "id": "ffmpeg_252", "utterance_idx": 3, "utterance": "обедини три клипа в merged.mp4"}
+{"line": 664, "id": "ffmpeg_252", "utterance_idx": 4, "utterance": "将三个视频合并为merged.mp4"}
+{"line": 665, "id": "ffmpeg_253", "utterance_idx": 0, "utterance": "merge the mov clip and the silent clip"}
+{"line": 666, "id": "ffmpeg_254", "utterance_idx": 0, "utterance": "strip audio from the no-audio clip"}
+{"line": 667, "id": "ffmpeg_255", "utterance_idx": 0, "utterance": "play the video in reverse and save it"}
+{"line": 668, "id": "ffmpeg_256", "utterance_idx": 0, "utterance": "extract the mp3 audio and slow it down to 0.8x"}
+{"line": 669, "id": "ffmpeg_257", "utterance_idx": 0, "utterance": "reverse the mov file"}
+{"line": 670, "id": "ffmpeg_257", "utterance_idx": 1, "utterance": "Die MOV-Datei umkehren"}
+{"line": 671, "id": "ffmpeg_257", "utterance_idx": 2, "utterance": "обърни mov файла"}
+{"line": 672, "id": "ffmpeg_257", "utterance_idx": 3, "utterance": "倒放MOV文件"}
+{"line": 673, "id": "ffmpeg_258", "utterance_idx": 0, "utterance": "prepare the no-audio clip for YouTube"}
+{"line": 674, "id": "ffmpeg_258", "utterance_idx": 1, "utterance": "Den stummen Clip fuer YouTube vorbereiten"}
+{"line": 675, "id": "ffmpeg_258", "utterance_idx": 2, "utterance": "подготви клипа без звук за YouTube"}
+{"line": 676, "id": "ffmpeg_258", "utterance_idx": 3, "utterance": "为YouTube准备无音频视频"}
+{"line": 677, "id": "ffmpeg_259", "utterance_idx": 0, "utterance": "convert clip_mov to mkv"}
+{"line": 678, "id": "ffmpeg_260", "utterance_idx": 0, "utterance": "concatenate the mov and 4K clips"}
+{"line": 679, "id": "ffmpeg_260", "utterance_idx": 1, "utterance": "MOV- und 4K-Clip zusammenfuegen"}
+{"line": 680, "id": "ffmpeg_260", "utterance_idx": 2, "utterance": "обедини mov и 4K клиповете"}
+{"line": 681, "id": "ffmpeg_260", "utterance_idx": 3, "utterance": "合并MOV和4K视频"}
+{"line": 682, "id": "ffmpeg_261", "utterance_idx": 0, "utterance": "compress with target bitrate 500kbps"}
+{"line": 683, "id": "ffmpeg_261", "utterance_idx": 1, "utterance": "компресирай с целева скорост 500 kbps"}
+{"line": 684, "id": "ffmpeg_262", "utterance_idx": 0, "utterance": "trim the silent clip to the first 3 seconds"}
+{"line": 685, "id": "ffmpeg_262", "utterance_idx": 1, "utterance": "Den stummen Clip auf 3 Sekunden kuerzen"}
+{"line": 686, "id": "ffmpeg_262", "utterance_idx": 2, "utterance": "изрежи клипа без звук до 3 секунди"}
+{"line": 687, "id": "ffmpeg_262", "utterance_idx": 3, "utterance": "将无音频视频剪切到3秒"}
+{"line": 688, "id": "ffmpeg_263", "utterance_idx": 0, "utterance": "combine the 4K and 1080p clips in sequence"}
+{"line": 689, "id": "ffmpeg_264", "utterance_idx": 0, "utterance": "take a screenshot from the mov clip at 3 seconds"}
+{"line": 690, "id": "ffmpeg_264", "utterance_idx": 1, "utterance": "извлечи кадър от mov файла на 3 секунди"}
+{"line": 691, "id": "ffmpeg_264", "utterance_idx": 2, "utterance": "从MOV文件3秒处截图"}
+{"line": 692, "id": "ffmpeg_265", "utterance_idx": 0, "utterance": "reverse the 4K clip"}
+{"line": 693, "id": "ffmpeg_265", "utterance_idx": 1, "utterance": "Das 4K-Video rueckwaerts abspielen"}
+{"line": 694, "id": "ffmpeg_265", "utterance_idx": 2, "utterance": "обърни 4K клипа"}
+{"line": 695, "id": "ffmpeg_265", "utterance_idx": 3, "utterance": "倒放4K视频"}
+{"line": 696, "id": "ffmpeg_266", "utterance_idx": 0, "utterance": "Die letzten 2 Sekunden des 4K-Videos behalten"}
+{"line": 697, "id": "ffmpeg_266", "utterance_idx": 1, "utterance": "задръж последните 2 секунди от 4K клипа"}
+{"line": 698, "id": "ffmpeg_266", "utterance_idx": 2, "utterance": "保留4K视频的最后2秒"}
+{"line": 699, "id": "ffmpeg_267", "utterance_idx": 0, "utterance": "trim clip.mp4 to 3-5 seconds, save it, then extract the audio as mp3"}
+{"line": 700, "id": "ffmpeg_267", "utterance_idx": 1, "utterance": "cut clip.mp4 from 3 to 5 seconds, keep the clip, and also save the audio as mp3"}
+{"line": 701, "id": "ffmpeg_267", "utterance_idx": 2, "utterance": "clip.mp4 von 3 bis 5 Sekunden schneiden und speichern, dann das Audio als MP3 extrahieren"}
+{"line": 702, "id": "ffmpeg_267", "utterance_idx": 3, "utterance": "изрежи clip.mp4 от 3 до 5 секунди, запази клипа и извлечи звука като mp3"}
+{"line": 703, "id": "ffmpeg_267", "utterance_idx": 4, "utterance": "将clip.mp4剪切到3-5秒并保存，然后提取音频为mp3"}
+{"line": 704, "id": "ffmpeg_268", "utterance_idx": 0, "utterance": "make a new video from the first 3 seconds of clip.mp4 and also save the audio"}
+{"line": 705, "id": "ffmpeg_268", "utterance_idx": 1, "utterance": "create a 3-second clip from clip.mp4 and also extract its audio"}
+{"line": 706, "id": "ffmpeg_268", "utterance_idx": 2, "utterance": "ein neues Video aus den ersten 3 Sekunden von clip.mp4 machen und auch das Audio speichern"}
+{"line": 707, "id": "ffmpeg_268", "utterance_idx": 3, "utterance": "направи ново видео от първите 3 секунди на clip.mp4 и запази и звука"}
+{"line": 708, "id": "ffmpeg_268", "utterance_idx": 4, "utterance": "用clip.mp4的前3秒制作一个新视频，并同时保存音频"}
+{"line": 709, "id": "ffmpeg_269", "utterance_idx": 0, "utterance": "boost the volume of audio.mp3 by 6dB"}
+{"line": 710, "id": "ffmpeg_269", "utterance_idx": 1, "utterance": "make audio.mp3 louder by 6dB"}
+{"line": 711, "id": "ffmpeg_269", "utterance_idx": 2, "utterance": "audio.mp3 um 6dB lauter machen"}
+{"line": 712, "id": "ffmpeg_269", "utterance_idx": 3, "utterance": "усили звука на audio.mp3 с 6dB"}
+{"line": 713, "id": "ffmpeg_270", "utterance_idx": 0, "utterance": "normalize audio.mp3"}
+{"line": 714, "id": "ffmpeg_270", "utterance_idx": 1, "utterance": "loudnorm audio.mp3"}
+{"line": 715, "id": "ffmpeg_270", "utterance_idx": 2, "utterance": "audio.mp3 normalisieren"}
+{"line": 716, "id": "ffmpeg_270", "utterance_idx": 3, "utterance": "нормализирай audio.mp3"}
+{"line": 717, "id": "ffmpeg_271", "utterance_idx": 0, "utterance": "reduce the volume of audio.mp3 by half"}
+{"line": 718, "id": "ffmpeg_271", "utterance_idx": 1, "utterance": "make audio.mp3 quieter"}
+{"line": 719, "id": "ffmpeg_271", "utterance_idx": 2, "utterance": "audio.mp3 leiser machen"}
+{"line": 720, "id": "ffmpeg_271", "utterance_idx": 3, "utterance": "намали звука на audio.mp3 наполовина"}
+{"line": 721, "id": "ffmpeg_272", "utterance_idx": 0, "utterance": "adjust the audio levels in clip.mp4"}
+{"line": 722, "id": "ffmpeg_272", "utterance_idx": 1, "utterance": "change the volume of clip.mp4"}
+{"line": 723, "id": "ffmpeg_272", "utterance_idx": 2, "utterance": "Lautstärke von clip.mp4 anpassen"}
+{"line": 724, "id": "ffmpeg_272", "utterance_idx": 3, "utterance": "промени силата на звука на clip.mp4"}
+{"line": 725, "id": "ffmpeg_273", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees and then compress it"}
+{"line": 726, "id": "ffmpeg_273", "utterance_idx": 1, "utterance": "turn clip.mp4 clockwise 90° then reduce file size"}
+{"line": 727, "id": "ffmpeg_273", "utterance_idx": 2, "utterance": "clip.mp4 um 90 Grad drehen und komprimieren"}
+{"line": 728, "id": "ffmpeg_273", "utterance_idx": 3, "utterance": "завърти clip.mp4 на 90 градуса и го компресирай"}
+{"line": 729, "id": "ffmpeg_274", "utterance_idx": 0, "utterance": "trim clip.mp4 to 5 seconds and flip it horizontally"}
+{"line": 730, "id": "ffmpeg_274", "utterance_idx": 1, "utterance": "cut to first 5s of clip.mp4 then mirror it left-right"}
+{"line": 731, "id": "ffmpeg_274", "utterance_idx": 2, "utterance": "clip.mp4 auf 5 Sekunden kürzen und horizontal spiegeln"}
+{"line": 732, "id": "ffmpeg_274", "utterance_idx": 3, "utterance": "изрежи clip.mp4 до 5 секунди и го огледай хоризонтално"}
+{"line": 733, "id": "ffmpeg_275", "utterance_idx": 0, "utterance": "downscale clip_4k to 1920x1080"}
+{"line": 734, "id": "ffmpeg_276", "utterance_idx": 0, "utterance": "extract a still from clip_4k at 2s"}
+{"line": 735, "id": "ffmpeg_277", "utterance_idx": 0, "utterance": "strip audio from clip_no_audio and save as mkv"}
+{"line": 736, "id": "ffmpeg_278", "utterance_idx": 0, "utterance": "cut clip_4k to 2s then export as webm with vp9"}
+{"line": 737, "id": "ffmpeg_279", "utterance_idx": 0, "utterance": "resize clip_4k to 720p and then strip the audio"}
+{"line": 738, "id": "ffmpeg_280", "utterance_idx": 0, "utterance": "extract a frame at 1s from clip_4k to use as poster"}
+{"line": 739, "id": "ffmpeg_281", "utterance_idx": 0, "utterance": "make clip_no_audio play at double speed"}
+{"line": 740, "id": "ffmpeg_282", "utterance_idx": 0, "utterance": "make clip_4k play at quarter speed"}
+{"line": 741, "id": "ffmpeg_283", "utterance_idx": 0, "utterance": "make clip_4k suitable for TikTok"}
+{"line": 742, "id": "ffmpeg_284", "utterance_idx": 0, "utterance": "play clip_4k backwards then optimize for Instagram"}
+{"line": 743, "id": "ffmpeg_285", "utterance_idx": 0, "utterance": "trim clip_4k to the last 2 seconds"}
+{"line": 744, "id": "ffmpeg_286", "utterance_idx": 0, "utterance": "make the 4K file small enough to attach to an email"}
+{"line": 745, "id": "ffmpeg_286", "utterance_idx": 1, "utterance": "компресирай 4K файла за имейл"}
+{"line": 746, "id": "ffmpeg_286", "utterance_idx": 2, "utterance": "将4K文件压缩到可以邮件发送的大小"}
+{"line": 747, "id": "ffmpeg_287", "utterance_idx": 0, "utterance": "compress the mp3 file"}
+{"line": 748, "id": "ffmpeg_287", "utterance_idx": 1, "utterance": "MP3-Datei bei niedrigerer Bitrate neu speichern"}
+{"line": 749, "id": "ffmpeg_287", "utterance_idx": 2, "utterance": "запази mp3 с по-ниска скорост"}
+{"line": 750, "id": "ffmpeg_288", "utterance_idx": 0, "utterance": "get a still image at 4s from the silent clip"}
+{"line": 751, "id": "ffmpeg_288", "utterance_idx": 1, "utterance": "Screenshot aus dem stummen Clip bei 4 Sekunden"}
+{"line": 752, "id": "ffmpeg_288", "utterance_idx": 2, "utterance": "снимак от клипа без звук на 4 секунди"}
+{"line": 753, "id": "ffmpeg_289", "utterance_idx": 0, "utterance": "cut the mov file to 1-5 second range"}
+{"line": 754, "id": "ffmpeg_289", "utterance_idx": 1, "utterance": "die MOV-Datei von 1 bis 5 Sekunden schneiden"}
+{"line": 755, "id": "ffmpeg_289", "utterance_idx": 2, "utterance": "изрежи mov файла от 1 до 5 секунди"}
+{"line": 756, "id": "ffmpeg_289", "utterance_idx": 3, "utterance": "将MOV文件剪切到1-5秒"}
+{"line": 757, "id": "ffmpeg_290", "utterance_idx": 0, "utterance": "Das stumme Video verkleinern"}
+{"line": 758, "id": "ffmpeg_290", "utterance_idx": 1, "utterance": "компресирай клипа без звук"}
+{"line": 759, "id": "ffmpeg_291", "utterance_idx": 0, "utterance": "change the silent clip to mkv and scale to 1080p"}
+{"line": 760, "id": "ffmpeg_291", "utterance_idx": 1, "utterance": "Den stummen Clip nach MKV konvertieren und auf 1080p skalieren"}
+{"line": 761, "id": "ffmpeg_291", "utterance_idx": 2, "utterance": "конвертирай клипа без звук в mkv и го преоразмери до 1080p"}
+{"line": 762, "id": "ffmpeg_291", "utterance_idx": 3, "utterance": "将无音频视频转换为MKV并缩放到1080p"}
+{"line": 763, "id": "ffmpeg_292", "utterance_idx": 0, "utterance": "resize 4K to 1080p and optimize for YouTube upload"}
+{"line": 764, "id": "ffmpeg_292", "utterance_idx": 1, "utterance": "Das 4K-Video auf 1080p komprimieren und fuer YouTube optimieren"}
+{"line": 765, "id": "ffmpeg_292", "utterance_idx": 2, "utterance": "компресирай 4K клипа до 1080p и го подготви за YouTube"}
+{"line": 766, "id": "ffmpeg_292", "utterance_idx": 3, "utterance": "将4K视频压缩到1080p并为YouTube优化"}
+{"line": 767, "id": "ffmpeg_293", "utterance_idx": 0, "utterance": "crop clip.mp4 to a square"}
+{"line": 768, "id": "ffmpeg_293", "utterance_idx": 1, "utterance": "make clip.mp4 square"}
+{"line": 769, "id": "ffmpeg_293", "utterance_idx": 2, "utterance": "clip.mp4 zu einem Quadrat zuschneiden"}
+{"line": 770, "id": "ffmpeg_293", "utterance_idx": 3, "utterance": "将clip.mp4裁剪为正方形"}
+{"line": 771, "id": "ffmpeg_294", "utterance_idx": 0, "utterance": "crop clip.mp4 to 9:16 vertical"}
+{"line": 772, "id": "ffmpeg_294", "utterance_idx": 1, "utterance": "reframe clip.mp4 to portrait 9:16"}
+{"line": 773, "id": "ffmpeg_294", "utterance_idx": 2, "utterance": "clip.mp4 auf 9:16 zuschneiden"}
+{"line": 774, "id": "ffmpeg_294", "utterance_idx": 3, "utterance": "将clip.mp4裁剪为9:16竖版"}
+{"line": 775, "id": "ffmpeg_295", "utterance_idx": 0, "utterance": "resize clip.mp4 to exactly 1080x1920"}
+{"line": 776, "id": "ffmpeg_295", "utterance_idx": 1, "utterance": "crop and resize clip.mp4 to 1080 by 1920"}
+{"line": 777, "id": "ffmpeg_295", "utterance_idx": 2, "utterance": "clip.mp4 auf 1080x1920 zuschneiden"}
+{"line": 778, "id": "ffmpeg_295", "utterance_idx": 3, "utterance": "将clip.mp4裁剪到1080x1920"}
+{"line": 779, "id": "ffmpeg_296", "utterance_idx": 0, "utterance": "letterbox clip.mp4 to 1080x1080"}
+{"line": 780, "id": "ffmpeg_296", "utterance_idx": 1, "utterance": "fit clip.mp4 into 1080x1080 with black bars"}
+{"line": 781, "id": "ffmpeg_296", "utterance_idx": 2, "utterance": "clip.mp4 auf 1080x1080 mit schwarzen Balken einpassen"}
+{"line": 782, "id": "ffmpeg_296", "utterance_idx": 3, "utterance": "将clip.mp4填充为1080x1080带黑边"}
+{"line": 783, "id": "ffmpeg_297", "utterance_idx": 0, "utterance": "stretch clip.mp4 to 1280x720"}
+{"line": 784, "id": "ffmpeg_297", "utterance_idx": 1, "utterance": "force clip.mp4 to exactly 1280x720"}
+{"line": 785, "id": "ffmpeg_297", "utterance_idx": 2, "utterance": "clip.mp4 auf genau 1280x720 strecken"}
+{"line": 786, "id": "ffmpeg_297", "utterance_idx": 3, "utterance": "将clip.mp4拉伸到1280x720"}
+{"line": 787, "id": "ffmpeg_298", "utterance_idx": 0, "utterance": "crop clip.mp4 to 4:5 for Instagram"}
+{"line": 788, "id": "ffmpeg_298", "utterance_idx": 1, "utterance": "reframe clip.mp4 to 4:5 portrait"}
+{"line": 789, "id": "ffmpeg_298", "utterance_idx": 2, "utterance": "clip.mp4 auf 4:5 zuschneiden"}
+{"line": 790, "id": "ffmpeg_298", "utterance_idx": 3, "utterance": "将clip.mp4裁剪为4:5"}
+{"line": 791, "id": "ffmpeg_hard_001", "utterance_idx": 0, "utterance": "convert clip.mov to mp4, scale it down to 480p, and remove the audio track"}
+{"line": 792, "id": "ffmpeg_hard_001", "utterance_idx": 1, "utterance": "turn clip.mov into an mp4, resize to 480p, then strip the sound"}
+{"line": 793, "id": "ffmpeg_hard_001", "utterance_idx": 2, "utterance": "konvertiere clip.mov nach mp4, skaliere auf 480p und entferne die Tonspur"}
+{"line": 794, "id": "ffmpeg_hard_001", "utterance_idx": 3, "utterance": "convierte clip.mov a mp4, redimensiona a 480p y quita el audio"}
+{"line": 795, "id": "ffmpeg_hard_002", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress it"}
+{"line": 796, "id": "ffmpeg_hard_002", "utterance_idx": 1, "utterance": "cut clip.mp4 to 5s, scale to 720p and shrink the file"}
+{"line": 797, "id": "ffmpeg_hard_002", "utterance_idx": 2, "utterance": "schneide clip.mp4 auf die ersten 5 Sekunden, skaliere auf 720p und komprimiere es"}
+{"line": 798, "id": "ffmpeg_hard_002", "utterance_idx": 3, "utterance": "recorta clip.mp4 a los primeros 5 segundos, redimensiona a 720p y comprímelo"}
+{"line": 799, "id": "ffmpeg_hard_003", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees clockwise, resize it to 480p, then compress it"}
+{"line": 800, "id": "ffmpeg_hard_003", "utterance_idx": 1, "utterance": "turn clip.mp4 90 degrees to the right, scale down to 480p and shrink the file"}
+{"line": 801, "id": "ffmpeg_hard_003", "utterance_idx": 2, "utterance": "fais pivoter clip.mp4 de 90 degres vers la droite, redimensionne en 480p, puis compresse-le"}
+{"line": 802, "id": "ffmpeg_hard_003", "utterance_idx": 3, "utterance": "поверни clip.mp4 на 90 градусов по часовой стрелке, измени размер до 480p и сожми его"}
+{"line": 803, "id": "ffmpeg_hard_004", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio"}
+{"line": 804, "id": "ffmpeg_hard_004", "utterance_idx": 1, "utterance": "schneide clip.mp4 auf die ersten 4 Sekunden, komprimiere es und entferne den Ton"}
+{"line": 805, "id": "ffmpeg_hard_004", "utterance_idx": 2, "utterance": "recorta clip.mp4 a los primeros 4 segundos, comprimelo y quita el audio"}
+{"line": 806, "id": "ffmpeg_hard_004", "utterance_idx": 3, "utterance": "coupe clip.mp4 aux 4 premieres secondes, compresse-le et supprime l'audio"}
+{"line": 807, "id": "ffmpeg_hard_005", "utterance_idx": 0, "utterance": "downscale clip_4k.mp4 to 1080p, compress it, then mute it"}
+{"line": 808, "id": "ffmpeg_hard_005", "utterance_idx": 1, "utterance": "resize clip_4k.mp4 to 1080p, shrink the file and drop the audio"}
+{"line": 809, "id": "ffmpeg_hard_005", "utterance_idx": 2, "utterance": "skaliere clip_4k.mp4 auf 1080p herunter, komprimiere es und entferne die Tonspur"}
+{"line": 810, "id": "ffmpeg_hard_005", "utterance_idx": 3, "utterance": "намали clip_4k.mp4 до 1080p, компресирай го и премахни звука"}
+{"line": 811, "id": "ffmpeg_hard_006", "utterance_idx": 0, "utterance": "speed up clip.mp4 to 2x, resize it to 480p, and compress it"}
+{"line": 812, "id": "ffmpeg_hard_006", "utterance_idx": 1, "utterance": "acelera clip.mp4 a 2x, redimensiona a 480p y comprimelo"}
+{"line": 813, "id": "ffmpeg_hard_006", "utterance_idx": 2, "utterance": "ускорь clip.mp4 в 2 раза, измени размер до 480p и сожми его"}
+{"line": 814, "id": "ffmpeg_hard_006", "utterance_idx": 3, "utterance": "ускори clip.mp4 2 пъти, преоразмери до 480p и компресирай го"}
+{"line": 815, "id": "ffmpeg_hard_007", "utterance_idx": 0, "utterance": "convert clip.mov to mp4, scale it to 360p, then compress it"}
+{"line": 816, "id": "ffmpeg_hard_007", "utterance_idx": 1, "utterance": "konvertiere clip.mov nach mp4, skaliere auf 360p und komprimiere es"}
+{"line": 817, "id": "ffmpeg_hard_007", "utterance_idx": 2, "utterance": "convertis clip.mov en mp4, redimensionne en 360p, puis compresse-le"}
+{"line": 818, "id": "ffmpeg_hard_007", "utterance_idx": 3, "utterance": "convierte clip.mov a mp4, redimensiona a 360p y comprimelo"}
+{"line": 819, "id": "ffmpeg_hard_008", "utterance_idx": 0, "utterance": "trim clip.mp4 to the first 6 seconds, resize it to 540p, and drop the audio"}
+{"line": 820, "id": "ffmpeg_hard_008", "utterance_idx": 1, "utterance": "cut clip.mp4 to 6s, scale to 540p and mute it"}
+{"line": 821, "id": "ffmpeg_hard_008", "utterance_idx": 2, "utterance": "изрежи clip.mp4 до първите 6 секунди, преоразмери до 540p и махни звука"}
+{"line": 822, "id": "ffmpeg_hard_008", "utterance_idx": 3, "utterance": "обрежь clip.mp4 до первых 6 секунд, измени размер до 540p и убери звук"}
+{"line": 823, "id": "ffmpeg_hard_009", "utterance_idx": 0, "utterance": "extract the audio from clip.mp4 as an mp3"}
+{"line": 824, "id": "ffmpeg_hard_009", "utterance_idx": 1, "utterance": "pull the soundtrack out of clip.mp4 to mp3"}
+{"line": 825, "id": "ffmpeg_hard_009", "utterance_idx": 2, "utterance": "rip just the audio from clip.mp4 as mp3"}
+{"line": 826, "id": "ffmpeg_hard_010", "utterance_idx": 0, "utterance": "extract a single still frame from clip.mp4 at 3 seconds as a png"}
+{"line": 827, "id": "ffmpeg_hard_010", "utterance_idx": 1, "utterance": "grab one frame from clip.mp4 at the 3s mark as png"}
+{"line": 828, "id": "ffmpeg_hard_010", "utterance_idx": 2, "utterance": "save a screenshot of clip.mp4 at 00:03 as png"}
+{"line": 829, "id": "ffmpeg_hard_011", "utterance_idx": 0, "utterance": "extract the first bit of clip.mp4"}
+{"line": 830, "id": "ffmpeg_hard_011", "utterance_idx": 1, "utterance": "just extract the start of clip.mp4"}
+{"line": 831, "id": "ffmpeg_hard_011", "utterance_idx": 2, "utterance": "get the first part of clip.mp4"}
+{"line": 832, "id": "ffmpeg_hard_012", "utterance_idx": 0, "utterance": "mute clip.mp4"}
+{"line": 833, "id": "ffmpeg_hard_012", "utterance_idx": 1, "utterance": "silence clip.mp4 completely"}
+{"line": 834, "id": "ffmpeg_hard_012", "utterance_idx": 2, "utterance": "make clip.mp4 silent"}
+{"line": 835, "id": "ffmpeg_hard_013", "utterance_idx": 0, "utterance": "turn the volume of clip.mp4 down by half"}
+{"line": 836, "id": "ffmpeg_hard_013", "utterance_idx": 1, "utterance": "lower clip.mp4's volume to 50%"}
+{"line": 837, "id": "ffmpeg_hard_013", "utterance_idx": 2, "utterance": "reduce the loudness of clip.mp4 by half"}
+{"line": 838, "id": "ffmpeg_hard_014", "utterance_idx": 0, "utterance": "convert clip.mov to mp4 and remove its audio"}
+{"line": 839, "id": "ffmpeg_hard_014", "utterance_idx": 1, "utterance": "turn clip.mov into an mp4 with no sound"}
+{"line": 840, "id": "ffmpeg_hard_014", "utterance_idx": 2, "utterance": "convert clip.mov to mp4 with no audio"}
+{"line": 841, "id": "ffmpeg_hard_015", "utterance_idx": 0, "utterance": "rotate clip.mp4 90 degrees clockwise then compress it"}
+{"line": 842, "id": "ffmpeg_hard_015", "utterance_idx": 1, "utterance": "turn clip.mp4 90 degrees to the right and shrink the file"}
+{"line": 843, "id": "ffmpeg_hard_016", "utterance_idx": 0, "utterance": "reverse clip.mp4 and resize it to 480p"}
+{"line": 844, "id": "ffmpeg_hard_016", "utterance_idx": 1, "utterance": "play clip.mp4 backwards and scale it down to 480p"}
+{"line": 845, "id": "ffmpeg_hard_017", "utterance_idx": 0, "utterance": "speed up clip.mp4 by 2x and mute it"}
+{"line": 846, "id": "ffmpeg_hard_017", "utterance_idx": 1, "utterance": "make clip.mp4 play twice as fast with no sound"}

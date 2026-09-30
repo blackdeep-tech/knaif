@@ -189,8 +189,10 @@ just eval-review evals/review_log.json r002 rejected --notes "wrong codec"
 ```bash
 just eval-snapshot ffmpeg
 
-# Later, after changes:
-just eval-regression ffmpeg
+# Later, after changes — <current> is a freshly saved scoreboard, matching the snapshot's
+# verifier and row count (e.g. `just eval-success ffmpeg --save evals/runs/<label> && \
+#   just eval-regression ffmpeg evals/runs/<label>/ffmpeg_<backend>_success.json`):
+just eval-regression ffmpeg <current>
 ```
 
 `eval-regression` exits non-zero if any arm's average score drops by more than

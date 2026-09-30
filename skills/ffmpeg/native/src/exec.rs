@@ -3,27 +3,30 @@
 //! Port of the Python `_deps.run_ffmpeg`: run an already-rendered `ffmpeg` argv (never
 //! model-emitted shell) and return its status. Keeping the subprocess call in one function is
 //! where the future desktop/mobile UIs reuse execution (they embed the crate, they don't shell
-//! to the CLI). The binary name is overridable via `$KNAIF_FFMPEG_BIN` (custom install / tests).
+//! to the CLI). The binary is the one `knaif skills deps` reports: `$KNAIF_FFMPEG_BIN`, else
+//! `PATH`, else (Windows) the install folders `skill.yaml` declares.
 
 use std::path::Path;
 use std::process::Output;
 
 use crate::engine::{summarise_probe, Probe};
 
-/// The ffmpeg binary to launch: `$KNAIF_FFMPEG_BIN` when set, else `ffmpeg` (found on `PATH`).
+/// This bundle's `skill.yaml`, whose `external_tools` entry says where ffmpeg may live.
+const SKILL_YAML: &str = include_str!("../../skill.yaml");
+
+/// The ffmpeg binary to launch: `$KNAIF_FFMPEG_BIN` when set, else the `PATH` hit, else the
+/// declared install folders; the bare `ffmpeg` when none resolves.
 pub fn ffmpeg_bin() -> String {
-    std::env::var("KNAIF_FFMPEG_BIN")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "ffmpeg".to_string())
+    knaif_skill_api::tools::command_bin(SKILL_YAML, "ffmpeg")
+        .to_string_lossy()
+        .into_owned()
 }
 
-/// The ffprobe binary to launch: `$KNAIF_FFPROBE_BIN` when set, else `ffprobe`.
+/// The ffprobe binary to launch, resolved as [`ffmpeg_bin`] (`$KNAIF_FFPROBE_BIN` first).
 pub fn ffprobe_bin() -> String {
-    std::env::var("KNAIF_FFPROBE_BIN")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "ffprobe".to_string())
+    knaif_skill_api::tools::command_bin(SKILL_YAML, "ffprobe")
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Probe a real media file, returning the normalized [`Probe`] the engine consumes. Port of
@@ -84,6 +87,44 @@ fn run_with_bin(bin: &str, argv: &[String]) -> anyhow::Result<Output> {
         })
 }
 
+/// Does this probe describe a file with anything in it? A video stream or an audio stream.
+pub fn has_streams(probe: &Probe) -> bool {
+    probe.has_audio || probe.video_codec.is_some() || probe.width.is_some()
+}
+
+/// Byte-identical to Python's `require_streams` message — it reaches the user on both runtimes.
+pub fn empty_output_error(name: &str) -> String {
+    format!(
+        "ffmpeg finished but {name} has no audio or video in it — the step produced nothing to \
+         work with."
+    )
+}
+
+/// Fail when ffmpeg exited 0 but wrote a file with no audio and no video. Port of
+/// `steps.require_streams`.
+///
+/// ffmpeg's exit code is not evidence of output: a trim past the end exits 0 with a 185-byte
+/// container, and the chain then fails one step later under that file's name. A missing ffprobe
+/// is an error (as in Python); any other probe failure is a different question and passes.
+pub fn require_streams(output: &Path) -> anyhow::Result<()> {
+    if !output.is_file() {
+        return Ok(());
+    }
+    let probe = match run_ffprobe(output) {
+        Ok(probe) => probe,
+        Err(e) if e.to_string().starts_with("ffprobe not found") => return Err(e),
+        Err(_) => return Ok(()),
+    };
+    if has_streams(&probe) {
+        return Ok(());
+    }
+    let name = output
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| output.to_string_lossy().into_owned());
+    anyhow::bail!("{}", empty_output_error(&name))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,10 +142,61 @@ mod tests {
     }
 
     #[test]
-    fn ffmpeg_bin_defaults_without_env() {
-        // Exercises the default branch without mutating process env (parallel-test safe).
+    fn ffmpeg_bin_names_ffmpeg_without_env() {
+        // The bare name, or wherever the lookup found it; never another program. Reads the env
+        // without mutating it (parallel-test safe).
         if std::env::var_os("KNAIF_FFMPEG_BIN").is_none() {
-            assert_eq!(ffmpeg_bin(), "ffmpeg");
+            let bin = ffmpeg_bin();
+            assert_eq!(
+                Path::new(&bin).file_stem().and_then(|s| s.to_str()),
+                Some("ffmpeg"),
+                "{bin}"
+            );
         }
+    }
+
+    #[test]
+    fn ffprobe_bin_honours_its_override() {
+        // No other test reads KNAIF_FFPROBE_BIN, so setting it here cannot race.
+        std::env::set_var("KNAIF_FFPROBE_BIN", "/opt/custom/ffprobe");
+        assert_eq!(ffprobe_bin(), "/opt/custom/ffprobe");
+        std::env::remove_var("KNAIF_FFPROBE_BIN");
+    }
+
+    #[test]
+    fn a_probe_with_no_streams_is_empty() {
+        // What ffprobe reports for the 185-byte container a past-the-end trim writes.
+        let empty = summarise_probe(
+            Path::new("Test2.mov"),
+            &serde_json::json!({"streams": [], "format": {"format_name": "mov,mp4"}}),
+        );
+        assert!(!has_streams(&empty));
+
+        let silent_video = summarise_probe(
+            Path::new("clip_silent.mp4"),
+            &serde_json::json!({"streams": [{"codec_type": "video", "codec_name": "h264",
+                                             "width": 1920, "height": 1080}]}),
+        );
+        assert!(has_streams(&silent_video));
+
+        let audio_only = summarise_probe(
+            Path::new("song.mp3"),
+            &serde_json::json!({"streams": [{"codec_type": "audio", "codec_name": "mp3"}]}),
+        );
+        assert!(has_streams(&audio_only));
+    }
+
+    #[test]
+    fn the_empty_output_message_matches_python() {
+        assert_eq!(
+            empty_output_error("Test2_intermediate.mov"),
+            "ffmpeg finished but Test2_intermediate.mov has no audio or video in it — the step \
+             produced nothing to work with."
+        );
+    }
+
+    #[test]
+    fn a_missing_output_is_not_this_checks_business() {
+        assert!(require_streams(Path::new("knaif-no-such-output-xyz.mov")).is_ok());
     }
 }

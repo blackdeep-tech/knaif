@@ -458,6 +458,49 @@ def test_parse_scale_invalid_raises():
         _get_parse_scale()("ultrawide")
 
 
+# ── a model-leaked NUMERIC scale must be a domain error, never an AttributeError ──────────
+#
+# The 4B fine-tune emits `scale: 2` / `scale: 1` for "4K thumbnail" requests (five saved
+# errors across ffmpeg_236/237 in the 2026-09-07 run). `scale.strip()` then raised
+# `AttributeError: 'int' object has no attribute 'strip'` — a crash, not a usable validation
+# result. Numbers like 2 have no defensible reading as a scale, so they take the same
+# deterministic "unrecognised value" path as any other junk string: coercing them instead
+# would fabricate a 2-pixel thumbnail that still satisfies a `filters: [scale]` criterion.
+
+
+@pytest.mark.parametrize("bad", [2, 1, 2.5])
+def test_parse_scale_numeric_raises_valueerror_not_attributeerror(bad):
+    with pytest.raises(ValueError, match="[Uu]nrecognised scale"):
+        _get_parse_scale()(bad)
+
+
+def test_create_thumbnail_numeric_scale_is_a_clean_plan_error(tmp_path):
+    """End-to-end through execute_plan: the schema coerces int→str in normalize_plan, so the
+    engine reports the domain error rather than crashing on `.strip()`."""
+    agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=tmp_path, root=tmp_path)
+    payload = {
+        "plan": [
+            {
+                "tool": "create_thumbnail",
+                "args": {"input": "clip.mp4", "at_time": "00:00:05", "scale": 2},
+            }
+        ]
+    }
+    with pytest.raises(ValueError, match="[Uu]nrecognised scale"):
+        agent.execute_plan(payload, dry_run=True, confirmed=False)
+
+
+def test_create_thumbnail_scale_declares_a_string_schema():
+    """The declarative half: `scale` is typed, so normalize_plan coerces a numeric value and
+    validation has a contract to check instead of letting anything through untyped."""
+    from knaif.registry import load_registry
+
+    reg = load_registry(FFMPEG_SKILL_DIR / "tools.yaml")
+    schema = reg["create_thumbnail"].arg_schemas.get("scale")
+    assert schema is not None, "create_thumbnail.scale must declare a schema"
+    assert schema.type == "string"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Task 5.0 — fps in _summarise_probe / _dummy_probe
 # ─────────────────────────────────────────────────────────────────────────────

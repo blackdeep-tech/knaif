@@ -1,0 +1,4 @@
+cuda/vulkan: 164 shared rows (in one board only: 0)
+  decision  flips   4: both-correct 1, only cuda correct 0, only vulkan correct 2, both-wrong 1
+  canonical flips   4: both-correct 1, only cuda correct 0, only vulkan correct 2, both-wrong 1
+{"label": "cuda/vulkan", "shared": 164, "decision": {"flips": 4, "both_correct": ["documents_106#0"], "only_a": [], "only_b": ["documents_038#0", "documents_042#0"], "both_wrong": ["documents_105#0"]}, "canonical": {"flips": 4, "both_correct": ["documents_106#0"], "only_a": [], "only_b": ["documents_038#0", "documents_042#0"], "both_wrong": ["documents_105#0"]}}

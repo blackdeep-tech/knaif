@@ -1,4 +1,55 @@
 # ─────────────────────────────────────────────────────────────────────────────
+# Shared arg schemas.
+#
+# Anchored rather than repeated: `quality` is accepted by ten tools, and ten copies of one
+# vocabulary is ten chances for it to drift from `profiles/quality/`. Both loaders skip a
+# top-level entry that has no `description:`, so this block defines without declaring a tool
+# (registry.py `skip top-level non-tool entries`, registry.rs `skip entries without a
+# description`), and YAML anchors are native to both parsers.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_shared_arg_schemas:
+  # A closed vocabulary, because the model is choosing from a list it was shown, and because
+  # a profile is loaded by FILENAME — an unknown value used to survive validation and fail
+  # four steps later as `Unknown quality profile`, reporting a word the model invented as a
+  # missing file. The enum values are the stems in `profiles/quality/`; a drift guard pins
+  # them to the directory in both directions (test_quality_vocabulary.py).
+  #
+  # NOT applied to `load_quality_profile`, which is internal and must stay open: expansion
+  # routes a CRF spelling ("crf 20") through its quality slot via `_quality_from_crf`, so
+  # closing it would reject knaif's own output.
+  quality: &quality_schema
+    type: enum
+    enum: [small_file, balanced, visually_good, high_quality, best_possible, lossless]
+    # Synonym → canonical. Matched case-insensitively, and the separator-insensitive pass in
+    # normalize_plan covers the spaced and hyphenated spellings, so each entry is listed once
+    # in its snake_case form.
+    #
+    # `visually_lossless` is the one that prompted all this: a real term of art (x264 CRF
+    # ~17-18) that the model built by blending the two adjacent values in prompt.yaml's phrase
+    # table. It is not a mistake to correct but a name to honour — `best_possible` is CRF 18
+    # and its own profile notes read "Visually transparent quality".
+    aliases:
+      visually_lossless: best_possible
+      perceptually_lossless: best_possible
+      near_lossless: best_possible
+      transparent: best_possible
+      visually_transparent: best_possible
+      # The qualitative phrases prompt.yaml already maps, restated so a model that echoes the
+      # ADJECTIVE instead of the profile name lands in the same place rather than at the gate.
+      small: small_file
+      smallest: small_file
+      tiny: small_file
+      normal: balanced
+      medium: balanced
+      default: balanced
+      good: visually_good
+      decent: visually_good
+      high: high_quality
+      best: high_quality
+      great: high_quality
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Intent-level tools (model-visible). Each is "destructive" because it
 # writes new output files; the workflow gates batch writes behind a
 # wait_for_confirmation step when preview is requested.
@@ -10,6 +61,8 @@ prepare_for_platform:
   required_args: [inputs, platform]
   optional_args: [quality, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:prepare}"]
     platform: "{utterance_after:for}"
@@ -20,6 +73,8 @@ compress_video:
   required_args: [inputs]
   optional_args: [target, target_size_mb, quality, crf, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:compress}"]
 
@@ -29,6 +84,8 @@ convert_video:
   required_args: [inputs]
   optional_args: [container, video_codec, audio_codec, quality, crf, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:convert}"]
 
@@ -38,15 +95,34 @@ resize_video:
   required_args: [inputs]
   optional_args: [width, height, keep_aspect_ratio, fit, aspect, quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:resize}"]
 
 trim_video:
-  description: "Trim a single video to a time range."
-  keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切]
+  description: "Trim a single video to a time range, or grab a fixed number of frames."
+  keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切, frames]
   required_args: [input]
-  optional_args: [start, end, duration, output, preview]
+  optional_args: [start, end, duration, frames, output, preview]
   safety_category: destructive
+  arg_schemas:
+    # A frame COUNT, not a timestamp: "give me 1 frame" had nothing to bind to before, so the
+    # model emitted a zero-length range instead (ffmpeg_161) and ffmpeg wrote an empty file
+    # while exiting 0. Renders as `-vframes N`. Mutually exclusive with `end` and `duration`
+    # — enforced in preflight, because "3 frames AND a 10-second range" has no reading.
+    frames:
+      type: integer
+    # Typed so a numeric timestamp normalises the same way on both runtimes. Untyped, the
+    # model's `{"start": 0, "end": 0}` reached Python's engine as ints (empty range -> one
+    # frame) and native's `str_arg` as None (no trim flags at all) — the two lanes rendering
+    # different commands for one plan, which is precisely what L2 parity exists to catch.
+    start:
+      type: string
+    end:
+      type: string
+    duration:
+      type: string
   mock_args:
     input: "{utterance_after:trim}"
 
@@ -56,6 +132,8 @@ extract_audio:
   required_args: [inputs]
   optional_args: [audio_format, format, container, bitrate, quality, start, end, output]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:from}"]
 
@@ -65,6 +143,14 @@ create_thumbnail:
   required_args: [input]
   optional_args: [at_time, image_format, scale, output]
   safety_category: destructive
+  arg_schemas:
+    # Typed so a model-leaked number (the 4B emits `scale: 2` for "4K thumbnail") is coerced
+    # to a string by normalize_plan and then reported as an unrecognised *scale value* by the
+    # engine, instead of crashing it with `'int' object has no attribute 'strip'`.
+    # Deliberately no `help:` — that text renders into every prompt, and the ffmpeg prompt is
+    # held under a size ceiling (test_prompt_audit); the type alone is what fixes the crash.
+    scale:
+      type: string
   mock_args:
     input: "{utterance_after:from}"
 
@@ -74,6 +160,8 @@ reverse_video:
   required_args: [inputs]
   optional_args: [include_audio, quality, output]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:reverse}"]
 
@@ -83,6 +171,8 @@ strip_audio:
   required_args: [inputs]
   optional_args: [quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:strip}"]
 
@@ -93,6 +183,8 @@ adjust_speed:
   required_args: [inputs, speed]
   optional_args: [quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:speed}"]
     speed: "2.0"
@@ -105,6 +197,8 @@ adjust_volume:
   required_args: [inputs]
   optional_args: [level, normalize, quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:adjust}"]
 
@@ -115,11 +209,13 @@ rotate_video:
   required_args: [inputs]
   optional_args: [angle, flip, quality, output, preview]
   safety_category: destructive
+  arg_schemas:
+    quality: *quality_schema
   mock_args:
     inputs: ["{utterance_after:rotate}"]
 
 concat_video:
-  description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided."
+  description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input."
   keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并]
   required_args: []
   optional_args: [inputs, base, append, output, target_resolution, target_fps]
