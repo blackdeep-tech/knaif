@@ -208,11 +208,43 @@ fn hold_app_mutex() {
 #[cfg(not(windows))]
 fn hold_app_mutex() {}
 
+mod ui;
+
 fn main() -> anyhow::Result<()> {
     enable_utf8_console();
     hold_app_mutex();
-    let cli = Cli::parse();
-    match cli.command {
+    // The wordmark, before clap prints help or a usage error: bare `knaif` and `--help` only, and
+    // only in the terminal view.
+    ui::init(false);
+    if let Some(style) = ui::view() {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        if args.is_empty()
+            || args
+                .iter()
+                .any(|a| a == "--help" || a == "-h" || a == "help")
+        {
+            println!(
+                "{}
+",
+                ui::render_logo(&style)
+            );
+        }
+    }
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            // Help, `--version` and usage errors: clap's own text, then the same closing empty
+            // line as every other command in the terminal view.
+            let _ = e.print();
+            if ui::view().is_some() {
+                println!();
+            }
+            std::process::exit(e.exit_code());
+        }
+    };
+    let verbose = matches!(&cli.command, Command::Run(a) if a.verbose);
+    ui::init(verbose);
+    let result = match cli.command {
         Command::Skills { action } => match action {
             SkillsAction::List { include_stale } => cmd_skills_list(include_stale),
             SkillsAction::Deps {
@@ -223,7 +255,74 @@ fn main() -> anyhow::Result<()> {
         Command::Models { action } => cmd_models(action),
         Command::Backend { action } => cmd_backend(action),
         Command::Plan(args) => cmd_plan(args),
-        Command::Run(args) => cmd_run(args),
+        Command::Run(args) => {
+            let dry_run = args.dry_run;
+            finish_run(cmd_run(args), dry_run)
+        }
+    };
+    end_view(result)
+}
+
+/// End every command in the terminal view with one empty line, so the shell prompt does not sit
+/// against the output — help and errors included, not only `run`. The plain view returns the
+/// result untouched, so a pipe sees exactly what 1.2.0 printed.
+fn end_view(result: anyhow::Result<()>) -> anyhow::Result<()> {
+    if ui::view().is_none() {
+        return result;
+    }
+    if let Err(e) = result {
+        // anyhow's own report from `main`, followed by the empty line it cannot add.
+        eprintln!("Error: {e:?}");
+        eprintln!();
+        std::process::exit(1);
+    }
+    println!();
+    Ok(())
+}
+
+/// Close a `run` in the terminal view: the last line of the tree, with the total time (prompt
+/// waits excluded). The plain view returns the result untouched, so a pipe sees exactly what
+/// 1.2.0 printed, including anyhow's `Error:` report on stderr.
+fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
+    let Some(style) = ui::view() else {
+        return result;
+    };
+    if !ui::header_shown() {
+        return result;
+    }
+    // `end_view` adds the closing empty line; the stopped branch exits here, so it adds its own.
+    match result {
+        Ok(()) => {
+            if !ui::closed() {
+                let summary = if dry_run {
+                    "dry run, nothing executed".to_string()
+                } else {
+                    ui::files_written(ui::written())
+                };
+                println!("{}", ui::render_done(&style, &summary, ui::total()));
+            }
+            Ok(())
+        }
+        Err(e) => {
+            let chain: Vec<String> = e.chain().map(|c| c.to_string()).collect();
+            let detail: Vec<String> = if ui::verbose() {
+                chain.iter().skip(1).cloned().collect()
+            } else {
+                // The outermost line says where it stopped; the innermost says why.
+                chain
+                    .last()
+                    .filter(|_| chain.len() > 1)
+                    .cloned()
+                    .into_iter()
+                    .collect()
+            };
+            println!(
+                "{}",
+                ui::render_stopped(&style, &chain[0], &detail, ui::total())
+            );
+            println!();
+            std::process::exit(1);
+        }
     }
 }
 
@@ -724,6 +823,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             args.skill
         );
     }
+    ui::start_clock();
     let root = resolve_known_skill(&args.skill)?;
     let bundle = root.join(&args.skill);
 
@@ -739,10 +839,16 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // Pre-inference safety gate: an unsafe phrase never reaches the model.
     let unsafe_phrases = knaif_core::load_unsafe_phrases(&bundle.join("skill.yaml"));
     if knaif_core::is_unsafe_request(&request, &unsafe_phrases) {
-        println!(
-            "reject: this request is blocked by the {} skill's safety policy.",
+        let message = format!(
+            "this request is blocked by the {} skill's safety policy.",
             args.skill
         );
+        if let Some(style) = ui::view() {
+            ui::header_once(&args.skill, None);
+            ui::closing(&style, ui::Closing::Reject, &message);
+        } else {
+            println!("reject: {message}");
+        }
         return Ok(());
     }
 
@@ -759,6 +865,14 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // Only now that the request has survived every cheap rejection may we resolve (and possibly
     // download) a model — see `select_model`.
     let model = select_model(args.model.as_deref(), args.yes, DownloadPolicy::Prompt)?;
+    ui::header_once(
+        &args.skill,
+        model
+            .as_deref()
+            .and_then(|m| m.file_stem())
+            .map(|n| ui::model_label(&n.to_string_lossy()))
+            .as_deref(),
+    );
 
     // Resolve paths against the sandbox when given (and enforce its boundary), else cwd/open mode.
     let base = match &args.sandbox {
@@ -780,9 +894,10 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // no GPU device means a minute-plus wait for a 4B model, and saying so up front turns a
     // baffling "nothing happened" into an expected slow run. Only meaningful for real inference.
     if gpu == Some(false) {
-        eprintln!(
-            "⚠  No GPU detected — running on CPU. Inference will be slow \
-             (the first request can take a minute or more)."
+        advisory(
+            true,
+            "⚠  No GPU backend is active — running on CPU. Inference will be slow \
+             (the first request can take a minute or more).",
         );
     }
     // Tell an NVIDIA user about the opt-in CUDA payload, once, before the slow run rather than
@@ -799,8 +914,25 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // Model load + inference is the one silent stretch of a real run; show a live spinner so a
     // slow CPU-only run is not mistaken for a hang. Skip it for the mock (instant) and in verbose
     // mode (llama.cpp prints its own trace, which the spinner would fight).
-    let show_spinner = model.is_some() && !args.verbose;
+    let rich = ui::view();
+    let show_spinner = model.is_some() && !args.verbose && rich.is_none();
     let spinner = show_spinner.then(thinking_spinner);
+    // Terminal view: our own spinner, drawn on a private copy of stderr, while the process's
+    // stderr itself is pointed at the null device so llama.cpp and the GPU backends cannot write
+    // over the tree. Never under `--verbose`, and not when a debug dump is on (those are stderr
+    // by contract). Piped runs are left alone: the eval lane reads their stderr.
+    let quiet = rich.is_some()
+        && model.is_some()
+        && !args.verbose
+        && !debug_enabled()
+        && !plan_dump_enabled()
+        && !prompt_dump_enabled();
+    let private_stderr = if quiet { ui::real_stderr() } else { None };
+    let live = match (&rich, private_stderr) {
+        (Some(style), Some(out)) => Some(ui::Spinner::start(*style, "Planning…", out)),
+        _ => None,
+    };
+    let silence = live.as_ref().and_then(|_| ui::StderrGuard::silence());
     let built = build_plan(
         &root,
         &args.skill,
@@ -810,6 +942,10 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         model.as_deref(),
         args.verbose,
     );
+    drop(silence);
+    if let Some(l) = live {
+        l.stop();
+    }
     if let Some(s) = spinner {
         s.finish_and_clear();
     }
@@ -817,8 +953,13 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // buffer; discard it so those stray keystrokes can't answer a pending confirm prompt or spill
     // onto the shell after we exit. Gated to the slow path (a spinner was shown) so a fast run
     // never drops a deliberately typed-ahead command.
-    if show_spinner {
+    if show_spinner || rich.is_some() && model.is_some() && !args.verbose {
         flush_terminal_input();
+    }
+    // Nothing was loaded or inferred without a model (the mock), so there is no time to report.
+    if let (Some(style), Ok(_), true) = (&rich, &built, model.is_some()) {
+        let (load, infer) = ui::timings();
+        println!("{}", ui::render_planning(style, load, infer));
     }
     let payload = built?;
 
@@ -840,13 +981,15 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if args.skill == "ffmpeg" {
         let renames = knaif_skill_ffmpeg::binding::rebind_colliding_outputs(&mut steps, sandbox);
         for (requested, used) in renames.illegal {
-            eprintln!("note: {requested:?} is not a valid file name here — writing {used:?}");
+            note(&format!(
+                "note: {requested:?} is not a valid file name here — writing {used:?}"
+            ));
         }
         for (requested, used) in renames.collisions {
-            eprintln!(
+            note(&format!(
                 "note: {requested:?} would have been overwritten by the step that reads it, so \
                  the result goes to {used:?}"
-            );
+            ));
         }
     }
     let total = match decide_steps(&steps) {
@@ -868,6 +1011,12 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         StepDecision::Run { total } => total,
     };
 
+    if let Some(style) = ui::view() {
+        // A control step ends the plan by itself, so there is no plan to summarize.
+        if !steps.iter().any(is_control_step) {
+            println!("{}", ui::render_plan(&style, &plan_rows(&steps)));
+        }
+    }
     let ctx = StepContext {
         skill: &args.skill,
         bundle: &bundle,
@@ -877,6 +1026,94 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         yes: args.yes,
     };
     execute_plan(&steps, total, &ctx)
+}
+
+/// A line the run wants the user to see that is not an outcome: in the terminal view it sits in
+/// the tree, in the plain view it stays the stderr line it always was.
+fn note(text: &str) {
+    match ui::view() {
+        Some(style) => println!("{}", ui::render_detail(&style, text)),
+        None => eprintln!("{text}"),
+    }
+}
+
+/// A warning or tip about the machine rather than the request (no GPU, a CUDA offer). The plain
+/// view keeps the stderr text it always had; the terminal view frames it in color.
+fn advisory(warning: bool, plain: &str) {
+    match ui::view() {
+        Some(style) => {
+            // The plain text carries a symbol prefix and hand-wrapped continuation lines.
+            let text: String = plain
+                .trim_start_matches(['⚠', 'ℹ'])
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let (tone, title) = if warning {
+                (ui::Tone::Warn, "Heads up")
+            } else {
+                (ui::Tone::Accent, "Tip")
+            };
+            println!("{}", ui::render_box(&style, tone, title, &text));
+        }
+        None => eprintln!("{plain}"),
+    }
+}
+
+fn is_control_step(step: &serde_json::Value) -> bool {
+    matches!(
+        step.get("tool").and_then(serde_json::Value::as_str),
+        Some("clarify" | "reject" | "done")
+    )
+}
+
+/// What a step works on, for the plan summary: `clip.mp4 → out.mp4`, from whichever of the
+/// common input/output args the step carries.
+fn step_detail(args: &serde_json::Map<String, serde_json::Value>) -> String {
+    fn first(v: &serde_json::Value) -> Option<String> {
+        match v {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Array(items) => {
+                let names: Vec<String> = items.iter().filter_map(first).collect();
+                match names.len() {
+                    0 => None,
+                    1 => names.into_iter().next(),
+                    n => Some(format!("{} (+{} more)", names[0], n - 1)),
+                }
+            }
+            _ => None,
+        }
+    }
+    let input = ["inputs", "input", "files", "pdf", "paths"]
+        .iter()
+        .find_map(|k| args.get(*k).and_then(first));
+    let output = args.get("output").and_then(first);
+    match (input, output) {
+        (Some(i), Some(o)) => format!("{i} → {o}"),
+        (Some(i), None) => i,
+        (None, Some(o)) => format!("→ {o}"),
+        (None, None) => String::new(),
+    }
+}
+
+fn plan_rows(steps: &[serde_json::Value]) -> Vec<ui::PlanRow> {
+    steps
+        .iter()
+        .map(|step| {
+            let empty = serde_json::Map::new();
+            let args = step
+                .get("args")
+                .and_then(serde_json::Value::as_object)
+                .unwrap_or(&empty);
+            ui::PlanRow {
+                tool: step
+                    .get("tool")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("?")
+                    .to_string(),
+                detail: step_detail(args),
+            }
+        })
+        .collect()
 }
 
 /// Run a plan's steps in order (E2/E3).
@@ -927,19 +1164,58 @@ fn execute_plan(
     total: usize,
     ctx: &StepContext,
 ) -> anyhow::Result<()> {
+    execute_steps(steps, total, |step| run_step(step, ctx))
+}
+
+/// The ordered loop behind [`execute_plan`], with the step runner injected so the stop-on-decline
+/// and stop-on-control rules are testable without executing anything.
+fn execute_steps(
+    steps: &[serde_json::Value],
+    total: usize,
+    mut run: impl FnMut(&serde_json::Value) -> anyhow::Result<StepOutcome>,
+) -> anyhow::Result<()> {
     for (idx, step) in steps.iter().enumerate() {
         let ordinal = idx + 1;
         // Announce the position only for a real chain: a one-step plan reads better without a
         // "step 1 of 1" preamble, and every existing single-step test asserts that output.
-        if total > 1 {
-            println!("step {ordinal} of {total}:");
+        match ui::view() {
+            Some(style) if !is_control_step(step) => {
+                let tool = step
+                    .get("tool")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("?");
+                println!("{}", ui::render_step_head(&style, ordinal, total, tool));
+            }
+            Some(_) => {}
+            None if total > 1 => println!("step {ordinal} of {total}:"),
+            None => {}
         }
-        match run_step(step, ctx).with_context(|| chain_failure_context(idx, total))? {
+        match run(step).with_context(|| chain_failure_context(idx, total))? {
             StepOutcome::Continue => {}
             StepOutcome::ShortCircuit => return Ok(()),
+            StepOutcome::Declined => {
+                if let Some(text) = declined_note(idx, total) {
+                    match ui::view() {
+                        Some(style) => println!("{}", ui::render_detail(&style, &text)),
+                        None => println!("{text}"),
+                    }
+                }
+                return Ok(());
+            }
         }
     }
     Ok(())
+}
+
+/// What a declined step means for the rest of a chain. `None` for the last (or only) step: there
+/// is nothing left to say beyond "Aborted".
+fn declined_note(idx: usize, total: usize) -> Option<String> {
+    let ordinal = idx + 1;
+    match total - ordinal {
+        0 => None,
+        1 => Some(format!("Step {total} was not run.")),
+        _ => Some(format!("Steps {}-{total} were not run.", ordinal + 1)),
+    }
 }
 
 /// Everything one step needs that does not vary between the steps of a plan.
@@ -964,6 +1240,9 @@ enum StepOutcome {
     /// A core control tool answered the *request*, not this position in it — so nothing after it
     /// is meaningful. See E3: `clarify` / `reject` / `done` end the plan wherever they appear.
     ShortCircuit,
+    /// The user declined this step's confirmation. Nothing after it may run: a later step usually
+    /// consumes what this one was going to write (Python's executor stops here too).
+    Declined,
 }
 
 /// Run (or preview) exactly one step: control-tool short-circuit, then skill dispatch.
@@ -988,7 +1267,10 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
                 .get("question")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("(no question)");
-            println!("clarify: {q}");
+            match ui::view() {
+                Some(style) => ui::closing(&style, ui::Closing::Clarify, q),
+                None => println!("clarify: {q}"),
+            }
             return Ok(StepOutcome::ShortCircuit);
         }
         "reject" => {
@@ -996,14 +1278,20 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
                 .get("reason")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("(no reason)");
-            println!("reject: {r}");
+            match ui::view() {
+                Some(style) => ui::closing(&style, ui::Closing::Reject, r),
+                None => println!("reject: {r}"),
+            }
             return Ok(StepOutcome::ShortCircuit);
         }
         // `done` says the request is already satisfied. It reached a skill dispatch before E3,
         // where it could only ever produce "unknown tool" — a control tool leaking out as an
         // error. It is now what it always meant: nothing to do, and nothing after it to do.
         "done" => {
-            println!("Nothing to do.");
+            match ui::view() {
+                Some(style) => ui::closing(&style, ui::Closing::Nothing, ""),
+                None => println!("Nothing to do."),
+            }
             return Ok(StepOutcome::ShortCircuit);
         }
         _ => {}
@@ -1026,8 +1314,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
-        )
-        .map(|()| StepOutcome::Continue),
+        ),
         _ => unreachable!("skill guarded above"),
     }
 }
@@ -1055,7 +1342,10 @@ fn run_ffmpeg_step(
     let commands = match expansion {
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
-            println!("clarify: {q}");
+            match ui::view() {
+                Some(style) => ui::closing(&style, ui::Closing::Clarify, &q),
+                None => println!("clarify: {q}"),
+            }
             return Ok(StepOutcome::ShortCircuit);
         }
     };
@@ -1073,7 +1363,10 @@ fn run_ffmpeg_step(
     // Dry-run: print the copy-pasteable command line(s) and stop — no side effects.
     if dry_run {
         for cmd in &commands {
-            println!("{}", shell_join(cmd));
+            match ui::view() {
+                Some(style) => println!("{}", ui::render_command(&style, &shell_join(cmd))),
+                None => println!("{}", shell_join(cmd)),
+            }
         }
         return Ok(StepOutcome::Continue);
     }
@@ -1081,9 +1374,38 @@ fn run_ffmpeg_step(
     // Execution: every ffmpeg intent is `safety_category: destructive`, so it needs explicit
     // consent (the native equivalent of `ctx.confirmed`). `--yes`, an interactive yes, or nothing.
     let previews: Vec<String> = commands.iter().map(|c| shell_join(c)).collect();
+    // Python asks before reversing and says why; native used to list the command and nothing else.
+    // Said only when a person is about to answer: `--yes` has already decided.
+    // Terminal view: the commands are the step's content, shown before the question. (The plain
+    // view lists them inside the confirmation and again as `running:` lines, as it always has.)
+    if let Some(style) = ui::view() {
+        for p in &previews {
+            println!("{}", ui::render_command(&style, p));
+        }
+        // ffmpeg runs with `-y`: a file that is already there is replaced without a word.
+        for cmd in &commands {
+            if let Some(out) = cmd.last().filter(|o| std::path::Path::new(o).exists()) {
+                println!(
+                    "{}",
+                    ui::render_detail(
+                        &style,
+                        &style.paint(
+                            ui::Tone::Warn,
+                            &format!("⚠ {out} already exists and will be replaced")
+                        )
+                    )
+                );
+            }
+        }
+    }
+    if !yes {
+        if let Some(warning) = confirm_warning(tool, commands.len()) {
+            note(&warning);
+        }
+    }
     if !confirm_action(yes, &previews, "ffmpeg command")? {
         println!("Aborted (no changes made).");
-        return Ok(StepOutcome::Continue);
+        return Ok(StepOutcome::Declined);
     }
 
     let mut failures = 0;
@@ -1102,12 +1424,47 @@ fn run_ffmpeg_step(
                 std::fs::create_dir_all(target).ok();
             }
         }
-        eprintln!("running: {}", shell_join(cmd));
-        let result = knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?;
+        if ui::view().is_none() {
+            eprintln!("running: {}", shell_join(cmd));
+        }
+        let started = std::time::Instant::now();
+        let result = match ui::view() {
+            Some(style) => run_ffmpeg_live(&style, cmd, started)?,
+            None => knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?,
+        };
         if result.status.success() {
             // Exit 0 is not evidence of output: a trim past the end writes an empty container.
             knaif_skill_ffmpeg::exec::require_streams(std::path::Path::new(&output))?;
-            println!("✓ {output}");
+            ui::note_written(1);
+            match ui::view() {
+                Some(style) => println!(
+                    "{}",
+                    ui::render_ok(&style, &output, Some(started.elapsed()))
+                ),
+                None => println!("✓ {output}"),
+            }
+        } else if let Some(style) = ui::view() {
+            failures += 1;
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
+                .or_else(|| {
+                    stderr
+                        .lines()
+                        .rev()
+                        .find(|l| !l.trim().is_empty())
+                        .map(|l| l.trim().to_string())
+                })
+                .unwrap_or_else(|| format!("ffmpeg exited {}", result.status));
+            println!("{}", ui::render_fail(&style, &output, Some(&cause)));
+            if ui::verbose() {
+                println!(
+                    "{}",
+                    ui::render_detail(&style, &format!("ffmpeg exited {}", result.status))
+                );
+                for line in stderr.lines() {
+                    println!("{}", ui::render_detail(&style, line));
+                }
+            }
         } else {
             failures += 1;
             let stderr = String::from_utf8_lossy(&result.stderr);
@@ -1120,13 +1477,32 @@ fn run_ffmpeg_step(
                 .rev()
                 .collect::<Vec<_>>()
                 .join("\n");
-            println!("✗ {output} (ffmpeg exited {})\n{tail}", result.status);
+            // The cause first, in a sentence: the tail alone can end on a generic "Conversion
+            // failed!" with the line that explains it cut off above.
+            let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
+                .map(|c| format!("\n  cause: {c}"))
+                .unwrap_or_default();
+            println!(
+                "✗ {output} (ffmpeg exited {}){cause}\n{tail}",
+                result.status
+            );
         }
     }
     if failures > 0 {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
     Ok(StepOutcome::Continue)
+}
+
+/// The caution shown before a step's confirmation, for the tools whose cost is not obvious from
+/// the command. Mirrors the prompt in Python's `ReverseVideoIntent` (`skills/ffmpeg/python/intents.py`).
+fn confirm_warning(tool: &str, clips: usize) -> Option<String> {
+    match tool {
+        "reverse_video" => Some(format!(
+            "Reversing {clips} clip(s) re-encodes the full file and buffers it entirely in RAM —              long clips may exhaust memory."
+        )),
+        _ => None,
+    }
 }
 
 /// documents dispatch: safe read tools print their result; destructive write tools preview the
@@ -1140,7 +1516,7 @@ fn run_documents_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<StepOutcome> {
     use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
 
     if !is_supported(tool) {
@@ -1161,11 +1537,22 @@ fn run_documents_step(
             if let Some(line) = result_dump(plan_dump_enabled(), tool, &read_result_json(&result)) {
                 eprintln!("{line}");
             }
+            if let Some(style) = ui::view() {
+                print_read_result(&style, &result);
+                return Ok(StepOutcome::Continue);
+            }
             match result {
-                ReadResult::Inspection(i) => println!(
-                    "{}: {} page(s), {} bytes, encrypted={}, text_layer={}",
-                    i.format, i.pages, i.size_bytes, i.encrypted, i.has_text_layer
-                ),
+                ReadResult::Inspection(i) => {
+                    println!(
+                        "{}: {} page(s), {} bytes, encrypted={}, text_layer={}",
+                        i.format, i.pages, i.size_bytes, i.encrypted, i.has_text_layer
+                    );
+                    // An encrypted PDF reports 0 pages because its page tree is unreadable; say
+                    // why, or "0 page(s)" reads as an empty file.
+                    if i.encrypted {
+                        println!("This file is password-protected, so its pages cannot be counted. Unlock it first.");
+                    }
+                }
                 ReadResult::Text(records) => {
                     for r in records {
                         println!("--- page {} ---\n{}", r.page, r.text.trim_end());
@@ -1181,27 +1568,137 @@ fn run_documents_step(
                     }
                 }
             }
-            Ok(())
+            Ok(StepOutcome::Continue)
         }
         Preview::Write { outputs, summary } => {
-            if dry_run {
-                println!("would {summary} →");
+            if let Some(style) = ui::view() {
+                let verb = if dry_run { "would " } else { "" };
+                println!("{}", ui::render_detail(&style, &format!("{verb}{summary}")));
                 for o in &outputs {
-                    println!("  {}", o.display());
+                    println!(
+                        "{}",
+                        ui::render_detail(&style, &format!("→ {}", ui::display_rel(o, base)))
+                    );
+                    if o.exists() {
+                        println!(
+                            "{}",
+                            ui::render_detail(
+                                &style,
+                                &style.paint(
+                                    ui::Tone::Warn,
+                                    "⚠ that file already exists and will be replaced"
+                                )
+                            )
+                        );
+                    }
                 }
-                return Ok(());
+            }
+            if dry_run {
+                if ui::view().is_none() {
+                    println!("would {summary} →");
+                    for o in &outputs {
+                        println!("  {}", o.display());
+                    }
+                }
+                return Ok(StepOutcome::Continue);
             }
             // Surface the operation (incl. the compress method / text-loss warning) before acting.
-            println!("{summary}");
+            if ui::view().is_none() {
+                println!("{summary}");
+            }
             let previews: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
             if !confirm_action(yes, &previews, "output file")? {
                 println!("Aborted (no changes made).");
-                return Ok(());
+                return Ok(StepOutcome::Declined);
             }
-            for w in commit(tool, step_args, base, sandbox, bundle)? {
-                println!("✓ wrote {}", w.display());
+            let started = std::time::Instant::now();
+            let written = commit(tool, step_args, base, sandbox, bundle)?;
+            ui::note_written(written.len());
+            for w in &written {
+                match ui::view() {
+                    Some(style) => println!(
+                        "{}",
+                        ui::render_ok(&style, &ui::display_rel(w, base), Some(started.elapsed()))
+                    ),
+                    None => println!("✓ wrote {}", w.display()),
+                }
             }
-            Ok(())
+            Ok(StepOutcome::Continue)
+        }
+    }
+}
+
+/// Run one ffmpeg command with a live progress line: media time done (of the total, from probing
+/// the input), speed and wall time. The line is redrawn in place and erased when ffmpeg exits, so
+/// the step's `✓`/`✗` line replaces it. A command whose output has no timeline (a single frame)
+/// simply shows the wall time ticking only when ffmpeg reports.
+fn run_ffmpeg_live(
+    style: &ui::Style,
+    cmd: &[String],
+    started: std::time::Instant,
+) -> anyhow::Result<std::process::Output> {
+    use std::io::Write;
+    let total = knaif_skill_ffmpeg::exec::input_duration(cmd);
+    let mut frame = 0usize;
+    let mut draw = |done: f64, speed: Option<f64>| {
+        let line = ui::render_progress(style, frame, started.elapsed(), done, total, speed);
+        frame += 1;
+        let mut out = std::io::stdout();
+        let _ = write!(out, "\r{line}");
+        let _ = out.flush();
+    };
+    draw(0.0, None);
+    let result =
+        knaif_skill_ffmpeg::exec::run_ffmpeg_with_progress(cmd, |p| draw(p.out_seconds, p.speed));
+    print!("\r\x1b[2K");
+    let _ = std::io::stdout().flush();
+    result
+}
+
+/// A documents read result, in the terminal view.
+fn print_read_result(style: &ui::Style, result: &knaif_skill_documents::run::ReadResult) {
+    use knaif_skill_documents::run::ReadResult;
+    let line = |text: &str| println!("{}", ui::render_detail(style, text));
+    match result {
+        ReadResult::Inspection(i) => {
+            let kind = i.format.to_uppercase();
+            if i.encrypted {
+                line(&format!(
+                    "{kind} · {} · password-protected, so its pages cannot be counted. Unlock it first.",
+                    ui::fmt_bytes(i.size_bytes)
+                ));
+            } else {
+                let text = if i.has_text_layer {
+                    "has a text layer"
+                } else {
+                    "no text layer"
+                };
+                let pages = if i.pages == 1 {
+                    "1 page".to_string()
+                } else {
+                    format!("{} pages", i.pages)
+                };
+                line(&format!(
+                    "{kind} · {pages} · {} · {text}",
+                    ui::fmt_bytes(i.size_bytes)
+                ));
+            }
+        }
+        ReadResult::Text(records) => {
+            for r in records {
+                line(&format!("page {}", r.page));
+                for l in r.text.trim_end().lines() {
+                    line(&format!("  {l}"));
+                }
+            }
+        }
+        ReadResult::Matches(matches) => {
+            if matches.is_empty() {
+                line("No matches.");
+            }
+            for m in matches {
+                line(&format!("page {}: {}", m.page, m.snippet));
+            }
         }
     }
 }
@@ -1220,7 +1717,8 @@ fn ask_yes_no(question: &str) -> anyhow::Result<Option<bool>> {
     // stray keystroke can't silently answer this gate — the user must respond to the prompt itself.
     flush_terminal_input();
     let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
+    // The time a person takes to answer is theirs, not the run's.
+    ui::timed(|| std::io::stdin().read_line(&mut line))?;
     Ok(Some(matches!(
         line.trim().to_lowercase().as_str(),
         "y" | "yes"
@@ -1265,6 +1763,10 @@ fn confirm_action(yes: bool, previews: &[String], noun: &str) -> anyhow::Result<
             "{} destructive {noun}(s) pending. Re-run with --yes to proceed, or --dry-run to preview.",
             previews.len()
         );
+    }
+    if ui::view().is_some() {
+        // The step already listed what it will do; just ask, inside the tree.
+        return Ok(ask_yes_no(" │   Proceed?")?.unwrap_or(false));
     }
     eprintln!("About to act on {} {noun}(s):", previews.len());
     for line in previews {
@@ -1322,14 +1824,22 @@ impl PlanSession {
     fn new(root: &Path, skill: &str, model: Option<&Path>, verbose: bool) -> anyhow::Result<Self> {
         let bundle = root.join(skill);
         let mut registry = knaif_core::load_registry(&bundle.join("tools.yaml"))?;
-        if let Some(core) = resolve_repo_file("contracts/runtime/core_tools.yaml") {
-            registry.extend(knaif_core::load_registry(&core)?);
-        }
+        // The control tools (`clarify`/`reject`/`done`) are how the model says "no" or "which
+        // file?". Without them every such answer fails as `Unknown tool`, so a missing file is a
+        // broken install, not something to plan around.
+        let core = resolve_repo_file("contracts/runtime/core_tools.yaml").ok_or_else(|| {
+            anyhow::anyhow!(
+                "contracts/runtime/core_tools.yaml not found: knaif looks for it in the current                  folder and its parents, then beside the executable. Reinstall knaif, or run                  from a checkout."
+            )
+        })?;
+        registry.extend(knaif_core::load_registry(&core)?);
         let overrides = knaif_core::load_prompt_yaml(&bundle.join("prompt.yaml"));
         let output_capable = knaif_core::output_capable_tools(&registry);
         let file_kinds =
             knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+        let loading = std::time::Instant::now();
         let backend = knaif_llm::backend_for(model, verbose)?;
+        ui::set_load(loading.elapsed());
         Ok(Self {
             registry,
             overrides,
@@ -1458,11 +1968,11 @@ impl PlanSession {
         sandbox: Option<&Path>,
     ) -> anyhow::Result<serde_json::Value> {
         let planned = self.plan(utterance, base, sandbox)?;
-        Ok(knaif_core::nl_clarify_gate(
-            planned,
-            utterance,
-            &self.registry,
-        ))
+        // The text the model was shown, as in Python (`agent.py` normalizes before the gate). A
+        // grounded value the model copied from it (`a/b`) is only found in that spelling: against
+        // the raw request a password written `a` was always "invented" and asked for again.
+        let shown = normalize_path_separators(utterance);
+        Ok(knaif_core::nl_clarify_gate(planned, &shown, &self.registry))
     }
 }
 
@@ -1493,7 +2003,9 @@ fn infer_with_repair(
     repair: bool,
 ) -> anyhow::Result<serde_json::Value> {
     let debug = debug_enabled();
+    let thinking = std::time::Instant::now();
     let raw = backend.generate_plan(system, user)?;
+    ui::add_infer(thinking.elapsed());
     match try_build_payload(&raw, registry, base, sandbox) {
         Ok(payload) => Ok(payload),
         Err(first_err) if repair => {
@@ -1501,7 +2013,9 @@ fn infer_with_repair(
             emit_debug(debug, &raw, &previous);
             let feedback =
                 knaif_core::validator_feedback_prompt(user, &previous, &first_err.to_string());
+            let thinking = std::time::Instant::now();
             let retry_raw = backend.generate_plan(system, &feedback)?;
+            ui::add_infer(thinking.elapsed());
             // If the corrected plan is still bad, report the original error (as Python does).
             match try_build_payload(&retry_raw, registry, base, sandbox) {
                 Ok(payload) => Ok(payload),
@@ -2048,26 +2562,38 @@ fn print_cuda_offer() {
         CudaOffer::NotApplicable | CudaOffer::AlreadyInstalled => {}
         // Stated in correctness terms, not speed terms: on this hardware the Vulkan fallback
         // generates at CPU speed, so the payload is what makes the product work.
-        CudaOffer::Recommended { gpu } => eprintln!(
-            "⚠  {gpu}: the bundled Vulkan backend runs at roughly CPU speed on this GPU \
-             generation.\n   Install the CUDA backend for usable performance:  \
-             knaif backend install cuda"
+        CudaOffer::Recommended { gpu } => advisory(
+            true,
+            &format!(
+                "⚠  {gpu}: the bundled Vulkan backend runs at roughly CPU speed on this GPU \
+                 generation.\n   Install the CUDA backend for usable performance:  \
+                 knaif backend install cuda"
+            ),
         ),
         // No number quoted. The "~3%" this used to claim was the generation column, and knaif's
         // workload is prompt-decode-dominated; no replacement figure is quotable until
         // PERFORMANCE.md §2 is reconciled.
-        CudaOffer::Optional { gpu } => eprintln!(
-            "ℹ  {gpu}: CUDA offload is available and faster than the bundled Vulkan backend, \
-             which\n   already works here. Optional:  knaif backend install cuda"
+        CudaOffer::Optional { gpu } => advisory(
+            false,
+            &format!(
+                "ℹ  {gpu}: CUDA offload is available and faster than the bundled Vulkan backend, \
+                 which\n   already works here. Optional:  knaif backend install cuda"
+            ),
         ),
         // An offer would hand them ~668 MB that cannot load, which reaches the user as
         // "CUDA didn't work" — the least debuggable outcome available.
-        CudaOffer::DriverTooOld { gpu, have, need } => eprintln!(
-            "ℹ  {gpu}: CUDA offload needs NVIDIA driver R{need}+ and this machine has {have}.\n   \
-             Update the driver to enable it; the current run uses Vulkan or CPU."
+        CudaOffer::DriverTooOld { gpu, have, need } => advisory(
+            false,
+            &format!(
+                "ℹ  {gpu}: CUDA offload needs NVIDIA driver R{need}+ and this machine has {have}.\n   \
+                 Update the driver to enable it; the current run uses Vulkan or CPU."
+            ),
         ),
         CudaOffer::NeedsReinstall { reason } => {
-            eprintln!("⚠  {reason}.\n   Run `knaif backend install cuda` to update it.")
+            advisory(
+                true,
+                &format!("⚠  {reason}.\n   Run `knaif backend install cuda` to update it."),
+            )
         }
     }
 }
@@ -2961,5 +3487,67 @@ mod tests {
             features.contains(&"pdfium".to_string()),
             cfg!(feature = "pdfium")
         );
+    }
+    fn control_steps(n: usize) -> Vec<serde_json::Value> {
+        (0..n)
+            .map(|i| serde_json::json!({"tool": format!("t{i}"), "args": {}}))
+            .collect()
+    }
+
+    #[test]
+    fn a_declined_step_stops_the_chain() {
+        let steps = control_steps(3);
+        let mut ran = Vec::new();
+        let result = execute_steps(&steps, 3, |step| {
+            ran.push(step["tool"].as_str().unwrap().to_string());
+            Ok(if ran.len() == 1 {
+                StepOutcome::Declined
+            } else {
+                StepOutcome::Continue
+            })
+        });
+        assert!(result.is_ok());
+        assert_eq!(ran, vec!["t0"], "no step may run after a declined one");
+    }
+
+    #[test]
+    fn declining_the_last_step_has_nothing_to_report_beyond_aborted() {
+        assert_eq!(declined_note(1, 2), None);
+        assert_eq!(declined_note(0, 1), None);
+    }
+
+    #[test]
+    fn a_declined_step_says_which_steps_did_not_run() {
+        assert_eq!(declined_note(0, 2).as_deref(), Some("Step 2 was not run."));
+        assert_eq!(
+            declined_note(0, 4).as_deref(),
+            Some("Steps 2-4 were not run.")
+        );
+        assert_eq!(
+            declined_note(1, 4).as_deref(),
+            Some("Steps 3-4 were not run.")
+        );
+    }
+
+    #[test]
+    fn a_confirmed_chain_runs_every_step() {
+        let steps = control_steps(3);
+        let mut ran = 0;
+        execute_steps(&steps, 3, |_| {
+            ran += 1;
+            Ok(StepOutcome::Continue)
+        })
+        .unwrap();
+        assert_eq!(ran, 3);
+    }
+    #[test]
+    fn reverse_video_warns_about_memory_before_confirming() {
+        let w = confirm_warning("reverse_video", 2).expect("a warning");
+        assert!(w.contains("2 clip(s)") && w.contains("RAM"), "{w}");
+    }
+
+    #[test]
+    fn other_tools_carry_no_confirmation_warning() {
+        assert_eq!(confirm_warning("resize_video", 1), None);
     }
 }
