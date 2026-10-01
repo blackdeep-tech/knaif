@@ -37,8 +37,9 @@ the eval lane read.
 ## Owner's test round 1 (2026-10-01) and what changed
 
 - **Logo:** the first draft was wrong. The real wordmark is `kn[AI]f` with a coral `[AI]`
-  (`site/shared/assets/wordmark.svg`); `render_logo` now carries that SVG rasterized into 8 rows of
-  half-block characters in two colors.
+  (`site/shared/assets/wordmark.svg`). A half-block raster of the SVG came next; it looked right in
+  PowerShell but stretched and striped in the Ubuntu VS Code terminal, and filled `#`/`█` variants
+  were worse. The approved version is plain ASCII (see T6).
 - **CPU warning:** and the CUDA tips are framed and colored (`render_box`) in the terminal view; the
   plain view keeps its stderr text.
 - **Empty line at the end** of every terminal-view command: `run`, help,
@@ -178,6 +179,10 @@ under test, not just assumed.
 - Proposed placement: bare `knaif`, `knaif --help`, and the first-run welcome; never on `run`.
 - Show the owner a screenshot in Windows Terminal, conhost and a Linux terminal. Ship it, move it,
   or drop it on the owner's call; record the decision here.
+- **Decision (owner, 2026-10-01): ship it.** `LOGO` in `apps/cli/src/ui.rs` is figlet-style plain
+  ASCII, 6 rows, `kn` and `f` in the terminal's foreground and `[AI]` in coral, on bare `knaif` and
+  `--help` in the terminal view only. Plain ASCII because it does not depend on the font or the
+  cell shape; a unit test keeps it ASCII-only.
 
 ### - [ ] T7 — Verify
 
@@ -188,3 +193,8 @@ under test, not just assumed.
 - Manual: rich view in Windows Terminal, legacy conhost, VS Code's terminal, WSL/Linux; with
   `NO_COLOR=1`; and with output redirected to a file (plain).
 - Owner: T4 on the machines where the warnings were seen, and T6's decision.
+- **Open (owner's test round 2, 2026-10-01): VS Code's PowerShell terminal only.** After answering
+  `y` at a step that prints a warning before `Proceed? [y/N]` (`reverse_video`), the warning and
+  the prompt line vanished and the typed `y` ended up after the command line. Not reproduced in a
+  ConPTY at 120 or 160 columns, nor in a Linux pty (both render correctly), so it looks specific to
+  VS Code's terminal. Needs a screenshot and the terminal width to go further.

@@ -889,42 +889,20 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
     L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
     gate the layers are a checklist nobody must run, which is the failure mode being fixed.
-  - **Blocked on chains** by the native multi-step executor gap (next item). L3 either waits for it
-    or launches with chains explicitly excluded and the hole recorded — not silently skipped.
+  - ~~**Blocked on chains**~~ — cleared 2026-09-10: native executes multi-step plans (next item).
   - **Evidence is committed**, not just described: `evals/parity/2026-09-09_p2b-prefix-baseline/`
     (847 pre-fix envelopes, with git/corpus/model/binary sha256 and the inference backend pinned)
     and `evals/parity/2026-09-09_p3-prompt-factorial/` (3 388 inferences, four prompt shapes).
 
-- [ ] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
-  2026-09-09 while diagnosing the parity plan's P1/P3). `decide_steps` returns
-  `StepDecision::Unsupported` for any plan with more than one step, and `cmd_run` turns that into
-  *"this request needs 3 steps, but the native runtime executes one step at a time (multi-step
-  chains aren't supported yet)"*. That is **by design** (audit F5 made the truncation explicit
-  rather than silent, which was the right call), but it is now the binding limit on native: the
-  planner is not the problem. Measured the same day, `plan --batch` over the full 847-utterance
-  ffmpeg corpus emits multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step,
-  first tool correct on 39/41 — so every one of those correct chains is refused at execution.
-  **This is very likely what the 2026-08-07 "native won't produce a multi-step plan" observation
-  actually was** — which is why the plan built on that observation was retired (2026-09-10) and
-  replaced by [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
-  Needs an ordered multi-step executor: chain-intermediate binding already exists in
-  `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
-  and partial-failure semantics do not. **Now Workstream E of
-  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md)**
-  (added 2026-09-10) rather than its own plan: both active skills have chain rows, so the
-  lifecycle's `supported` status is unreachable for *every* skill until it lands. It is also
-  smaller than this entry assumed — chains are mediated by explicit output filenames, never
-  `$variable` references (`skills/ffmpeg/prompt.yaml:27-30`), so no variable-binding layer is
-  needed; recovery, rollback and resumption stay deferred.
+- [x] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
+  2026-09-09). **Done 2026-09-10** by Workstream E of
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md): the
+  binary executes a plan's steps in order and threads each output into the next (shipped in 1.2.0,
+  CHANGELOG *Native multi-step plans*).
 
-- [ ] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). Running a
-  `--features llama,cuda,pdfium` binary on the RTX 5080 still prints *"the bundled Vulkan backend
-  runs at roughly CPU speed on this GPU generation. Install the CUDA backend for usable
-  performance: knaif backend install cuda"*. The nudge (U3, keyed on compute capability — correct
-  for the payload case) does not check **which backend the running binary actually has**, so a
-  correctly-configured CUDA user is told to go fix something that is not broken, and the advice it
-  gives is already true. Small, self-contained: gate the warning on the active backend as well as
-  the compute capability.
+- [x] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). **Done:** the CUDA
+  offer is gated on the build itself (`cuda_payload_is_worth_offering` in `apps/cli/src/main.rs`):
+  a binary with CUDA compiled in, or one that cannot load payloads, never shows it.
 
 - [ ] **Building for a corpus run: pick the CUDA feature set on Blackwell** (measured 2026-09-09).
   `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only and plans **~1

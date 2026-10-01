@@ -57,9 +57,17 @@ runtimes or the item moves to 1.3.0. Test: both requests on the protected fixtur
 ### - [x] B5 — A password containing a backslash is accepted
 
 1.2.0 known issue: native asks for the password again instead of accepting it; Python accepts it.
-First locate where the backslash is lost or rejected. The RED test comes from the known issue's
-wording. If the cause is shared with path-separator normalization (`normalize_path_separators`,
-a port of Python's rule), confirm that Python behaves differently before changing it.
+
+**Done in two parts.** First, native grounds the password against the normalized text, as Python
+does, so it no longer asks again. Verification (2026-10-01) then found that *neither* runtime kept
+the password: `password-protect sample.pdf with the password p\ss` planned `password: "p/ss"` on
+both, because `normalize_path_separators` rewrites the token before the model sees it, so the file
+would be locked with a password the user never typed. Fixed on both runtimes (owner, 2026-10-01):
+after the clarify gate, each `grounded_args` value gets the user's own spelling back
+(`restore_grounded_spelling` / `restore_grounded_args` in `prompt.py`, `nl_clarify_gate.py` and
+`apps/cli/src/main.rs`). Paths keep their forward slashes. No prompt or contract change: the model
+still sees the same text. Tests: `python/core/tests/test_grounded_spelling.py` and the matching
+native tests; checked end to end on both runtimes.
 
 ### - [x] B6 — A missing `core_tools.yaml` is an error, not a silent drop
 
@@ -68,13 +76,40 @@ without the core tools (`PlanSession::new`), so every `reject`/`clarify` fails a
 `Unknown tool: "reject"`. Seen only with a dev binary run outside the install layout, but the
 failure mode is silent. Make it a startup error that names the file and where it was looked for.
 
-### - [ ] B7 — (optional) Combining character after a file name
-
-*Not done in this pass — left as a known issue unless the owner wants it.*
+### - [x] B7 — Combining character after a file name
 
 1.2.0 known issue: a rare combining character (Unicode Other_Alphabetic, e.g. U+0345) right after a
-file name stops the name being recognized in native. Do it only if the fix is local to native
-tokenization and the L2 cases stay at 100%. Otherwise leave it as a known issue.
+file name stops the name being recognized in native.
+
+**Done (owner, 2026-10-01).** `py_is_word` (`knaif-core/src/nl_clarify_gate.rs`) used
+`char::is_alphanumeric`, which follows the Alphabetic property and so takes in Other_Alphabetic
+marks; Python's `str.isalnum` counts letters and numbers by general category only. It now asks
+the general category (`unicode-properties`, MIT/Apache-2.0, already in every build through
+`lopdf`, so no new code or licence). Local to native tokenization; L1/L2 stay at 100%. Tests check
+U+0345, U+093E, U+05B0 and U+0301 against Python's verdicts.
+
+### - [x] B9 — Python batch requests fail when run for real
+
+Found 2026-10-01 while testing the "one silent video fails the batch" candidate (which does not
+reproduce: both runtimes skip a video without audio). Every real Python batch run ended in
+`'*.mp4' not found in working directory`: `_preflight_inputs` (`skills/ffmpeg/python/_reporting.py`)
+checked the planned glob as a file name. A glob now counts as present when it matches a file, by
+the same rule `resolve_inputs` expands it with; only a request whose every input is a pattern
+matching nothing is refused, with `no files match …`. Native was not affected. Owner: in 1.2.1.
+
+### - [x] B10 — A declined step reads as declined in the terminal view
+
+Found in the owner's test round 2 (2026-10-01): answering no printed `Aborted (no changes made).`
+outside the tree and closed the run with `Done`. The terminal view now ends the step with
+`└─ ⊘ Declined · no changes made` and the run with `Stopped at step N of M · you declined · …`.
+The plain view keeps its 1.2.0 lines (golden test unchanged).
+
+### - [x] B11 — No GPU, no "Vulkan already works here"
+
+Found in WSL (2026-10-01): with no Vulkan device the run went to the CPU and printed both "No GPU
+backend is active" and the optional CUDA tip saying Vulkan "already works here". The tip is chosen
+by `cuda_offer_text`, which now knows whether this run's backend found a GPU; without one, the
+payload is presented as the fix, as a warning.
 
 ### - [ ] B8 — Verify
 
@@ -83,6 +118,18 @@ tokenization and the L2 cases stay at 100%. Otherwise leave it as a known issue.
   1.2.0.
 - At freeze, remove the fixed items from the CHANGELOG *Known issues* and add them to 1.2.1's
   *Fixed*.
+- **Pre-freeze clean room and upgrade, 2026-10-01 — PASS, 16/16** (not the release gate, which
+  reruns at freeze on the final build). 1.2.0's T12 harness, adapted: in Windows Sandbox (no GPU, no
+  network, no developer tooling) the 1.2.1 zip runs; the published 1.2.0 installer (`c42ba04d…`)
+  installs; 1.2.1 setup refuses while a 1.2.0 CLI holds the mutex, then upgrades in place (one
+  Add/Remove row at 1.2.1, same folder, no folder-exists warning, no leftover library); the
+  installed binary is the new one (by sha256: the Cargo version is bumped only at freeze); OCR
+  through it with no `--model` produces the expected text; a PDF it locks with `p\ss` opens with
+  `p\ss` and not `p/ss`. Static: no local paths in the staged tree, every PE import staged or
+  Windows-provided. Harness in the gitignored `sandbox/r121/` (its `.wsb` names host paths).
+- Found 2026-10-01 while rebuilding: the B2 memory warning and the B6 error had lost their `\`
+  line continuations, so each sentence carried a run of spaces. Fixed; the B2 test now rejects a
+  double space.
 
 ## Not in this plan (moved to 1.3.0 or later)
 
