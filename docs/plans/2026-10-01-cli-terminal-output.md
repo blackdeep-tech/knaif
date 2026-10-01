@@ -1,10 +1,16 @@
 # CLI terminal output — a readable run, with timings
 
-**Status:** Planning · **Created:** 2026-10-01 · **Completed:** —
+**Status:** Active · **Created:** 2026-10-01 · **Completed:** —
 **Owner:** native CLI · **Ref:** [release-1.2.1](2026-09-30-release-1.2.1.md) · `apps/cli/src/main.rs`
 **Release:** 1.2.1
 
-> **Status note:** scope agreed with the owner 2026-10-01. The logo is drafted and shown to the
+> **Status note:** implemented 2026-10-01 on `fix/1.2.1` (uncommitted until the owner says so);
+> what is left is T7's manual and measured checks, run by the owner. Deviations from the draft
+> below: T2 is a `ui` module of pure renderers plus direct calls from `cmd_run`, not an `Event`
+> enum (the renderers are tested without a terminal either way); the stderr silencing and the
+> spinner on a private stderr copy apply only in the terminal view; `KNAIF_VIEW=rich|plain` is an
+> environment override (not a flag) so the tree can be tested through a pipe; `✓` lines are
+> relative paths only where the plain view's line is not pinned. Scope agreed with the owner 2026-10-01. The logo is drafted and shown to the
 > owner, who decides on it after seeing it (T6). The owner tests the llama.cpp leak fix (T4) on
 > their machines after the work is done; it was not reproduced on the dev box (see *Findings*).
 
@@ -27,6 +33,21 @@ the eval lane read.
    and a total at the end that **excludes time spent waiting for the user** at a prompt.
 6. **Colors**, which `NO_COLOR` turns off.
 7. **Logo:** a text version of the wordmark, drafted and shown. The owner decides on it after seeing it.
+
+## Owner's test round 1 (2026-10-01) and what changed
+
+- **Logo:** the first draft was wrong. The real wordmark is `kn[AI]f` with a coral `[AI]`
+  (`site/shared/assets/wordmark.svg`); `render_logo` now carries that SVG rasterized into 8 rows of
+  half-block characters in two colors.
+- **CPU warning:** and the CUDA tips are framed and colored (`render_box`) in the terminal view; the
+  plain view keeps its stderr text.
+- **Empty line at the end** of every terminal-view command: `run`, help,
+  `--version`, usage errors, `skills`/`models`/`backend`/`plan` and their errors (`end_view`).
+- **ffmpeg progress:** the terminal view runs ffmpeg with `-progress pipe:1 -nostats` (not shown in
+  the command line) and draws `⠋ 0:15 / 1:00 ███░░░ 25% · 2.4x · 1.234 s` in place; the length comes
+  from probing the first input. The plain view still uses a plain wait.
+- **Overwrites:** the terminal view warns `⚠ X already exists and will be replaced`. The behavior
+  itself is unchanged and is a 1.3.0 question (see the release index, *Deferred*).
 
 ## Constraints (patch lane)
 
@@ -90,7 +111,7 @@ a contract change and out of scope for the patch.
 TDD throughout: the rendering is pure functions over a small event model, tested without a
 terminal; the I/O layer only chooses the view and writes.
 
-### - [ ] T1 — Lock the plain form first
+### - [x] T1 — Lock the plain form first
 
 Add a golden test of the plain output for a representative set: single ffmpeg step, ffmpeg chain,
 dry-run, clarify, reject, documents write, documents read, a failing step. Run it through the mock
@@ -98,7 +119,7 @@ backend. It must pass on today's code before anything else changes, and keep pas
 later task. Also run `parse_run_output` against the golden output so the eval-lane contract is
 under test, not just assumed.
 
-### - [ ] T2 — Event model and renderer
+### - [x] T2 — Event model and renderer
 
 - An `Event` enum covering everything `cmd_run` reports: planning started/finished (with load and
   inference durations), plan summary, step started, command, prompt, step result (ok / failed with
@@ -110,7 +131,7 @@ under test, not just assumed.
 - View choice: rich iff `stdout.is_terminal() && stderr.is_terminal()`. Color iff rich and
   `NO_COLOR` unset (anstream's own detection).
 
-### - [ ] T3 — Timers
+### - [x] T3 — Timers
 
 - Measure model load and inference separately. The `KNAIF_TIMING` hook in
   `native/crates/knaif-llm/src/llama.rs` already times `load_from_file`, so expose the durations
@@ -122,7 +143,7 @@ under test, not just assumed.
 - The live spinner during planning (`thinking_spinner`) shows elapsed time in the same format
   instead of `[00:00:12]`.
 
-### - [ ] T4 — Silence llama.cpp outside `--verbose`
+### - [x] T4 — Silence llama.cpp outside `--verbose`
 
 - Keep the existing log hooks.
 - Add a stderr guard for the planning window (backend load, model load, inference). Without
@@ -137,7 +158,7 @@ under test, not just assumed.
   so it is unaffected. Under `--verbose` there is no guard at all.
 - Owner test after the work is done: the machines/backends where warnings were seen.
 
-### - [ ] T5 — Curated errors and `--verbose`
+### - [x] T5 — Curated errors and `--verbose`
 
 - Rich view: an error is one sentence naming the cause, in the tree, not anyhow's `Error: …
   Caused by:` chain. `--verbose` prints the full chain after it.
@@ -150,7 +171,7 @@ under test, not just assumed.
   `page 1: …snippet…`. Relative paths in every `✓` line in the rich view. The plain `✓ wrote` line
   keeps its absolute path, since T1 locks it.
 
-### - [ ] T6 — Logo (owner decides after seeing it)
+### - [x] T6 — Logo (owner decides after seeing it)
 
 - Draft a 2–3 line text-art version of `site/shared/assets/wordmark.svg` (lowercase *knaif*), in the
   rich view only, in color when color is on.
