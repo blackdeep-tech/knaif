@@ -26,6 +26,7 @@ from .input_refs import (
     resolve_input,
 )
 from .planner import _PATH_ARG_KEYS
+from .prompt import restore_grounded_spelling
 from .registry import ToolDef
 
 # ── batch detection ───────────────────────────────────────────────────────────
@@ -165,6 +166,38 @@ def _is_value_grounded(value: Any, utterance: str) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
     return value.strip().lower() in utterance.lower()
+
+
+def restore_grounded_args(
+    intent_plan: list[dict[str, Any]],
+    raw_utterance: str,
+    registry: dict[str, ToolDef] | None,
+) -> list[dict[str, Any]]:
+    """Give each ``grounded_args`` value back the spelling the user typed.
+
+    Runs after the grounded check, which compares against the normalized request the model saw;
+    see ``restore_grounded_spelling``. Only grounded args change: paths keep their forward
+    slashes. Returns a new plan; the model's plan is not mutated.
+    """
+    if registry is None or "\\" not in raw_utterance:
+        return intent_plan
+    out: list[dict[str, Any]] = []
+    for step in intent_plan:
+        tool_def = registry.get(step.get("tool", ""))
+        args = step.get("args") or {}
+        if tool_def is None or not tool_def.grounded_args:
+            out.append(step)
+            continue
+        restored = {
+            k: (
+                restore_grounded_spelling(v, raw_utterance)
+                if k in tool_def.grounded_args and isinstance(v, str)
+                else v
+            )
+            for k, v in args.items()
+        }
+        out.append({**step, "args": restored})
+    return out
 
 
 def _grounded_clarify_question(arg: str) -> str:

@@ -299,7 +299,13 @@ fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
                 } else {
                     ui::files_written(ui::written())
                 };
-                println!("{}", ui::render_done(&style, &summary, ui::total()));
+                let last = match ui::declined() {
+                    Some((step, steps)) => {
+                        ui::render_declined_close(&style, step, steps, &summary, ui::total())
+                    }
+                    None => ui::render_done(&style, &summary, ui::total()),
+                };
+                println!("{last}");
             }
             Ok(())
         }
@@ -909,7 +915,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // mock-only binary is noise — there is nothing for it to accelerate — and the CPU warning above
     // has always been silent in that case, so this keeps the two consistent.
     if gpu.is_some() {
-        print_cuda_offer();
+        print_cuda_offer(gpu == Some(true));
     }
     // Model load + inference is the one silent stretch of a real run; show a live spinner so a
     // slow CPU-only run is not mistaken for a hang. Skip it for the mock (instant) and in verbose
@@ -1030,6 +1036,15 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
 
 /// A line the run wants the user to see that is not an outcome: in the terminal view it sits in
 /// the tree, in the plain view it stays the stderr line it always was.
+/// A declined confirmation. The plain view keeps 1.2.0's line; the terminal view closes the step
+/// inside the tree.
+fn print_declined() {
+    match ui::view() {
+        Some(style) => println!("{}", ui::render_declined(&style)),
+        None => println!("Aborted (no changes made)."),
+    }
+}
+
 fn note(text: &str) {
     match ui::view() {
         Some(style) => println!("{}", ui::render_detail(&style, text)),
@@ -1194,10 +1209,13 @@ fn execute_steps(
             StepOutcome::Continue => {}
             StepOutcome::ShortCircuit => return Ok(()),
             StepOutcome::Declined => {
-                if let Some(text) = declined_note(idx, total) {
-                    match ui::view() {
-                        Some(style) => println!("{}", ui::render_detail(&style, &text)),
-                        None => println!("{text}"),
+                match ui::view() {
+                    // The closing line says where the run stopped, which covers the steps after.
+                    Some(_) => ui::mark_declined(ordinal, total),
+                    None => {
+                        if let Some(text) = declined_note(idx, total) {
+                            println!("{text}");
+                        }
                     }
                 }
                 return Ok(());
@@ -1404,7 +1422,7 @@ fn run_ffmpeg_step(
         }
     }
     if !confirm_action(yes, &previews, "ffmpeg command")? {
-        println!("Aborted (no changes made).");
+        print_declined();
         return Ok(StepOutcome::Declined);
     }
 
@@ -1499,7 +1517,8 @@ fn run_ffmpeg_step(
 fn confirm_warning(tool: &str, clips: usize) -> Option<String> {
     match tool {
         "reverse_video" => Some(format!(
-            "Reversing {clips} clip(s) re-encodes the full file and buffers it entirely in RAM —              long clips may exhaust memory."
+            "Reversing {clips} clip(s) re-encodes the full file and buffers it entirely in RAM — \
+             long clips may exhaust memory."
         )),
         _ => None,
     }
@@ -1608,7 +1627,7 @@ fn run_documents_step(
             }
             let previews: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
             if !confirm_action(yes, &previews, "output file")? {
-                println!("Aborted (no changes made).");
+                print_declined();
                 return Ok(StepOutcome::Declined);
             }
             let started = std::time::Instant::now();
@@ -1829,7 +1848,9 @@ impl PlanSession {
         // broken install, not something to plan around.
         let core = resolve_repo_file("contracts/runtime/core_tools.yaml").ok_or_else(|| {
             anyhow::anyhow!(
-                "contracts/runtime/core_tools.yaml not found: knaif looks for it in the current                  folder and its parents, then beside the executable. Reinstall knaif, or run                  from a checkout."
+                "contracts/runtime/core_tools.yaml not found: knaif looks for it in the current \
+                 folder and its parents, then beside the executable. Reinstall knaif, or run \
+                 from a checkout."
             )
         })?;
         registry.extend(knaif_core::load_registry(&core)?);
@@ -1970,9 +1991,10 @@ impl PlanSession {
         let planned = self.plan(utterance, base, sandbox)?;
         // The text the model was shown, as in Python (`agent.py` normalizes before the gate). A
         // grounded value the model copied from it (`a/b`) is only found in that spelling: against
-        // the raw request a password written `a` was always "invented" and asked for again.
+        // the raw request a password written `a\b` was always "invented" and asked for again.
         let shown = normalize_path_separators(utterance);
-        Ok(knaif_core::nl_clarify_gate(planned, &shown, &self.registry))
+        let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry);
+        Ok(restore_grounded_args(gated, utterance, &self.registry))
     }
 }
 
@@ -2247,6 +2269,68 @@ fn normalize_path_separators(utterance: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Undo [`normalize_path_separators`] on a value the user typed, such as a password.
+///
+/// Port of Python's `restore_grounded_spelling` (`prompt.py`). The model only saw the normalized
+/// request, so a password typed `p\ss` comes back as `p/ss`: right for a path, wrong for a secret.
+/// The rewrite is one byte for one (`\` and `/` are both ASCII), so the user's spelling sits at
+/// the same offsets in the original token. A value found verbatim in the request is left alone.
+fn restore_grounded_spelling(value: &str, raw_utterance: &str) -> String {
+    if !value.contains('/') || !raw_utterance.contains('\\') || raw_utterance.contains(value) {
+        return value.to_string();
+    }
+    for token in raw_utterance.split(' ') {
+        let normalized = normalize_path_separators(token);
+        if normalized == token {
+            continue;
+        }
+        if let Some(at) = normalized.find(value) {
+            return token[at..at + value.len()].to_string();
+        }
+    }
+    value.to_string()
+}
+
+/// Give each `grounded_args` value in a plan the spelling the user typed. Runs after the clarify
+/// gate, which grounds against the normalized text; paths keep their forward slashes.
+fn restore_grounded_args(
+    mut payload: serde_json::Value,
+    raw_utterance: &str,
+    registry: &knaif_core::Registry,
+) -> serde_json::Value {
+    if !raw_utterance.contains('\\') {
+        return payload;
+    }
+    let Some(steps) = payload
+        .get_mut("plan")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return payload;
+    };
+    for step in steps {
+        let tool = step
+            .get("tool")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let Some(def) = registry.get(&tool) else {
+            continue;
+        };
+        let Some(args) = step
+            .get_mut("args")
+            .and_then(serde_json::Value::as_object_mut)
+        else {
+            continue;
+        };
+        for arg in &def.grounded_args {
+            if let Some(serde_json::Value::String(v)) = args.get_mut(arg) {
+                *v = restore_grounded_spelling(v, raw_utterance);
+            }
+        }
+    }
+    payload
 }
 
 /// Is this space-delimited token shaped like a path?
@@ -2533,7 +2617,7 @@ fn cuda_payload_is_worth_offering(cuda_compiled_in: bool, can_load_payloads: boo
     can_load_payloads && !cuda_compiled_in
 }
 
-fn print_cuda_offer() {
+fn print_cuda_offer(gpu_active: bool) {
     // Nothing below is worth saying if this build could not use the payload anyway. This also
     // silences `NeedsReinstall`, deliberately: in a build that cannot load payloads the receipt is
     // irrelevant, and in a CUDA build a skipped payload changes nothing — CUDA still works, and
@@ -2558,43 +2642,62 @@ fn print_cuda_offer() {
     } else {
         knaif_models::probe_nvidia()
     };
-    match knaif_models::cuda_offer(&store, &gpus) {
-        CudaOffer::NotApplicable | CudaOffer::AlreadyInstalled => {}
+    if let Some((warning, text)) =
+        cuda_offer_text(&knaif_models::cuda_offer(&store, &gpus), gpu_active)
+    {
+        advisory(warning, &text);
+    }
+}
+
+/// What to say about the CUDA payload: `(is_warning, text)`, or `None` for nothing to say.
+///
+/// `gpu_active` is whether this run's own backend found a GPU. The offer only sees the NVIDIA
+/// probe, so without it an optional offer told a user already running on the CPU that Vulkan
+/// "already works here" (WSL with no Vulkan device, 2026-10-01). There the payload is the fix.
+fn cuda_offer_text(offer: &CudaOffer, gpu_active: bool) -> Option<(bool, String)> {
+    match offer {
+        CudaOffer::NotApplicable | CudaOffer::AlreadyInstalled => None,
         // Stated in correctness terms, not speed terms: on this hardware the Vulkan fallback
         // generates at CPU speed, so the payload is what makes the product work.
-        CudaOffer::Recommended { gpu } => advisory(
+        CudaOffer::Recommended { gpu } => Some((
             true,
-            &format!(
+            format!(
                 "⚠  {gpu}: the bundled Vulkan backend runs at roughly CPU speed on this GPU \
                  generation.\n   Install the CUDA backend for usable performance:  \
                  knaif backend install cuda"
             ),
-        ),
+        )),
+        CudaOffer::Optional { gpu } if !gpu_active => Some((
+            true,
+            format!(
+                "⚠  {gpu}: the bundled Vulkan backend found no usable device here, so this run \
+                 uses the CPU.\n   Install the CUDA backend to use this GPU:  \
+                 knaif backend install cuda"
+            ),
+        )),
         // No number quoted. The "~3%" this used to claim was the generation column, and knaif's
         // workload is prompt-decode-dominated; no replacement figure is quotable until
         // PERFORMANCE.md §2 is reconciled.
-        CudaOffer::Optional { gpu } => advisory(
+        CudaOffer::Optional { gpu } => Some((
             false,
-            &format!(
+            format!(
                 "ℹ  {gpu}: CUDA offload is available and faster than the bundled Vulkan backend, \
                  which\n   already works here. Optional:  knaif backend install cuda"
             ),
-        ),
+        )),
         // An offer would hand them ~668 MB that cannot load, which reaches the user as
         // "CUDA didn't work" — the least debuggable outcome available.
-        CudaOffer::DriverTooOld { gpu, have, need } => advisory(
+        CudaOffer::DriverTooOld { gpu, have, need } => Some((
             false,
-            &format!(
+            format!(
                 "ℹ  {gpu}: CUDA offload needs NVIDIA driver R{need}+ and this machine has {have}.\n   \
                  Update the driver to enable it; the current run uses Vulkan or CPU."
             ),
-        ),
-        CudaOffer::NeedsReinstall { reason } => {
-            advisory(
-                true,
-                &format!("⚠  {reason}.\n   Run `knaif backend install cuda` to update it."),
-            )
-        }
+        )),
+        CudaOffer::NeedsReinstall { reason } => Some((
+            true,
+            format!("⚠  {reason}.\n   Run `knaif backend install cuda` to update it."),
+        )),
     }
 }
 
@@ -3072,6 +3175,47 @@ mod tests {
         );
     }
 
+    // B5 (1.2.1): a password typed with a backslash came back from the model as `p/ss`, and the
+    // file would have been locked with a password the user never typed. Mirrors Python's
+    // `test_grounded_spelling.py`.
+    #[test]
+    fn a_backslash_password_gets_its_backslash_back() {
+        let raw = r"password-protect sample.pdf with the password p\ss";
+        assert_eq!(restore_grounded_spelling("p/ss", raw), r"p\ss");
+        assert_eq!(
+            restore_grounded_spelling("p/ss", r"lock it with password:p\ss"),
+            r"p\ss"
+        );
+        // A slash the user typed stays; no backslash in the request changes nothing.
+        assert_eq!(
+            restore_grounded_spelling("a/b", "password-protect x.pdf with a/b"),
+            "a/b"
+        );
+        assert_eq!(
+            restore_grounded_spelling("hunter2", "protect x.pdf with hunter2"),
+            "hunter2"
+        );
+    }
+
+    #[test]
+    fn only_grounded_args_get_the_users_spelling_back() {
+        let mut def: knaif_core::ToolDef = serde_json::from_value(serde_json::json!({
+            "description": "x", "required_args": ["input", "password"],
+            "grounded_args": ["password"]
+        }))
+        .expect("a tool definition");
+        def.name = "protect_pdf".to_string();
+        let mut registry = knaif_core::Registry::new();
+        registry.insert(def.name.clone(), def);
+        let plan = serde_json::json!({"plan": [{"tool": "protect_pdf",
+            "args": {"input": "docs/sample.pdf", "password": "p/ss"}}]});
+        let raw = r"password-protect docs\sample.pdf with the password p\ss";
+        let out = restore_grounded_args(plan, raw, &registry);
+        assert_eq!(out["plan"][0]["args"]["password"], r"p\ss");
+        // A path keeps its forward slashes: that rewrite is the point of the normalization.
+        assert_eq!(out["plan"][0]["args"]["input"], "docs/sample.pdf");
+    }
+
     #[test]
     fn debug_dump_includes_raw_and_extracted_when_enabled() {
         let msg = debug_dump(true, "RAW_OUTPUT", "EXTRACTED_JSON").expect("enabled → Some");
@@ -3434,6 +3578,32 @@ mod tests {
         assert!(cuda_payload_is_worth_offering(false, true));
     }
 
+    #[test]
+    fn an_optional_offer_never_claims_vulkan_works_when_no_gpu_is_active() {
+        // Found 2026-10-01 in WSL: Vulkan saw no device, the run went to the CPU, and the same
+        // run printed both "No GPU backend is active" and "Vulkan … already works here".
+        let offer = CudaOffer::Optional {
+            gpu: "NVIDIA GeForce RTX 5080".to_string(),
+        };
+        let (warning, text) = cuda_offer_text(&offer, false).expect("an offer");
+        assert!(
+            warning,
+            "running on the CPU makes the payload the fix, not an option"
+        );
+        assert!(!text.contains("already works"), "{text}");
+        assert!(text.contains("knaif backend install cuda"), "{text}");
+
+        let (warning, text) = cuda_offer_text(&offer, true).expect("an offer");
+        assert!(!warning);
+        assert!(text.contains("already works here"), "{text}");
+    }
+
+    #[test]
+    fn nothing_to_offer_prints_nothing() {
+        assert_eq!(cuda_offer_text(&CudaOffer::NotApplicable, false), None);
+        assert_eq!(cuda_offer_text(&CudaOffer::AlreadyInstalled, true), None);
+    }
+
     // ── `backend list --json` (workbench T2a) ──────────────────────────────────────────────
     //
     // The workbench parses this to label a build, so the KEY NAMES ARE AN INTERFACE. A build
@@ -3544,6 +3714,8 @@ mod tests {
     fn reverse_video_warns_about_memory_before_confirming() {
         let w = confirm_warning("reverse_video", 2).expect("a warning");
         assert!(w.contains("2 clip(s)") && w.contains("RAM"), "{w}");
+        // A lost `\` line continuation leaves the next line's indent inside the sentence.
+        assert!(!w.contains("  "), "{w}");
     }
 
     #[test]

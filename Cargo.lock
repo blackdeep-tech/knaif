@@ -1281,6 +1281,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "unicode-normalization",
+ "unicode-properties",
 ]
 
 [[package]]

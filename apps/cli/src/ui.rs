@@ -248,6 +248,40 @@ pub fn render_done(style: &Style, summary: &str, total: Duration) -> String {
     )
 }
 
+/// A step whose confirmation the user answered no: the step's own closing line.
+pub fn render_declined(style: &Style) -> String {
+    format!(
+        " {}   {} {} Declined · no changes made",
+        style.paint(Tone::Dim, "│"),
+        style.paint(Tone::Dim, "└─"),
+        style.paint(Tone::Warn, "⊘"),
+    )
+}
+
+/// The last line of a run the user stopped at a confirmation. Not `Done`: the request was not
+/// carried out, and a chain says how far it got.
+pub fn render_declined_close(
+    style: &Style,
+    step: usize,
+    steps: usize,
+    summary: &str,
+    total: Duration,
+) -> String {
+    let at = if steps > 1 {
+        format!("Stopped at step {step} of {steps}")
+    } else {
+        "Stopped".to_string()
+    };
+    format!(
+        " {}\n {} {} · you declined · {} {}",
+        style.paint(Tone::Dim, "│"),
+        style.paint(Tone::Dim, "└─"),
+        style.paint(Tone::Warn, &at),
+        summary,
+        style.paint(Tone::Dim, &format!("· total {}", fmt_secs(total)))
+    )
+}
+
 /// The last line of a run that stopped on an error.
 pub fn render_stopped(style: &Style, message: &str, detail: &[String], total: Duration) -> String {
     let mut out = format!(
@@ -461,6 +495,7 @@ static VERBOSE: AtomicBool = AtomicBool::new(false);
 static HEADER: AtomicBool = AtomicBool::new(false);
 static CLOSED: AtomicBool = AtomicBool::new(false);
 static WRITTEN: AtomicUsize = AtomicUsize::new(0);
+static DECLINED: Mutex<Option<(usize, usize)>> = Mutex::new(None);
 static CLOCK: Mutex<Option<Clock>> = Mutex::new(None);
 
 struct Clock {
@@ -604,6 +639,15 @@ pub fn header_once(skill: &str, model: Option<&str>) {
 
 pub fn header_shown() -> bool {
     HEADER.load(Ordering::Relaxed)
+}
+
+/// Record that the user declined step `step` of `steps`, so the run closes as stopped, not done.
+pub fn mark_declined(step: usize, steps: usize) {
+    *DECLINED.lock().unwrap_or_else(|e| e.into_inner()) = Some((step, steps));
+}
+
+pub fn declined() -> Option<(usize, usize)> {
+    *DECLINED.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Mark the run as closed by an outcome line (a question, a refusal), so [`finish`] adds nothing.
@@ -947,6 +991,27 @@ mod tests {
     }
 
     #[test]
+    fn a_declined_step_closes_inside_the_tree() {
+        assert_eq!(
+            render_declined(&PLAIN),
+            " │   └─ ⊘ Declined · no changes made"
+        );
+    }
+
+    #[test]
+    fn a_declined_run_says_where_it_stopped_not_done() {
+        assert_eq!(
+            render_declined_close(&PLAIN, 1, 2, "no files written", secs(2134)),
+            " │\n └─ Stopped at step 1 of 2 · you declined · no files written · total 2.134 s"
+        );
+        // A one-step plan has no position worth naming.
+        assert_eq!(
+            render_declined_close(&PLAIN, 1, 1, "no files written", secs(900)),
+            " │\n └─ Stopped · you declined · no files written · total 0.900 s"
+        );
+    }
+
+    #[test]
     fn a_stopped_run_names_the_error_and_keeps_detail_aligned() {
         let s = render_stopped(
             &PLAIN,
@@ -1007,10 +1072,10 @@ mod tests {
         assert!(plain.lines().all(|l| l.chars().count() <= 56), "{plain}");
         let colored = render_logo(&COLOR);
         assert!(
-            colored.contains("[38;2;255;90;95m"),
+            colored.contains("\x1b[38;2;255;90;95m"),
             "no coral in the logo"
         );
-        assert!(colored.contains("[1m"), "no dark letters in the logo");
+        assert!(colored.contains("\x1b[1m"), "no dark letters in the logo");
     }
 
     #[test]
