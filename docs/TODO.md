@@ -367,6 +367,8 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 - [ ] **Daemon mode** — keep the model resident in VRAM between `knaif run` invocations (owner,
   2026-10-01). Not present today: every run loads the GGUF (~1 s on CUDA, more on CPU). New surface
   (a background process, a socket, lifecycle and install/uninstall interplay), so 1.3.0 at the earliest.
+  **Plan: [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md)** (proposed for 1.3.0,
+  with the 2026-10-01 timing breakdown and the entry below folded in).
 - [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
@@ -945,7 +947,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `release.yml`: that job builds a draft, and the extractor rejects drafts by design, so the
   refresh needs its own `on: release: published` trigger.
 
-- [ ] **Inference latency: daemon + prompt-prefix KV reuse (moved to 1.3.0 on 2026-09-25, [release-1.2](plans/2026-09-25-release-1.2.md) R0: cache reuse between requests is what config parity switched off).** Measured
+- [ ] **Inference latency: daemon + prompt-prefix KV reuse** — now planned in
+  [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md); its first step (the start-up
+  measurement) was taken 2026-10-01 on native Windows. Original entry: **(moved to 1.3.0 on 2026-09-25, [release-1.2](plans/2026-09-25-release-1.2.md) R0: cache reuse between requests is what config parity switched off).** Measured
   2026-08-01 on the shipped Linux CUDA payload; full budget in
   [PERFORMANCE.md §6](PERFORMANCE.md). A CUDA `run` is ~5.2 s wall of which only ~1.6 s is compute:
   ~1.9 s CUDA context init + ~1.3 s model load + ~1.2 s prompt decode + ~0.4 s generation + ~0.24 s
