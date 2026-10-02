@@ -584,6 +584,10 @@ EOF
   # is a paste rather than a hand-transcription of four to eight sha256 values. URLs stay TODO until
   # the assets are uploaded — the release-readiness guard fails the build if `status: published` is
   # set while any of them is still a placeholder.
+  #
+  # Signed BEFORE the fragment is written: signing changes the bytes, so the checksums must be
+  # taken afterwards. Only ggml-cuda.dll needs it — NVIDIA's and Microsoft's DLLs arrive signed.
+  [ "$OS" = windows ] && bash installers/sign_stage.sh "$STAGE"
   check_no_local_paths "$STAGE"
   write_manifest_fragment "$STAGE" "$OS-$ARCH" > "dist/$NAME.manifest-fragment.yaml"
 
@@ -857,6 +861,10 @@ Tesseract) install separately — run 'skills deps' to see what each skill needs
 $INFER
 EOF
 
+# Authenticode-sign knaif.exe and every other unsigned DLL beside it, then verify them all. Last
+# step that touches bin/, so the archive and the installer both wrap signed bytes. A no-op with a
+# printed NOTE when $KNAIF_SIGN_CMD is unset — see installers/sign_stage.sh.
+[ "$OS" = windows ] && bash installers/sign_stage.sh "$STAGE/bin"
 check_no_local_paths "$STAGE"
 
 mkdir -p dist

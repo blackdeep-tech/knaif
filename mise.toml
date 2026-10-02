@@ -25,7 +25,8 @@ node = "22"          # websites (site/org, site/dev). Pinned, not "latest" — A
                      # against this, and a floating major is not reproducible. 22 is what the
                      # dev box runs and clears Astro 7's floor (>=22.12); bumping to 24 is a
                      # deliberate act once verified on both, not a default.
-pnpm = "10"          # package manager for the site workspaces (NOT npm)
+pnpm = "12"          # package manager for the site workspaces (NOT npm); keep the major
+                     # in step with "packageManager" in site/package.json
 
 [env]
 # Nothing pinned here yet. The shared model store resolves from $KNAIF_MODELS_DIR at

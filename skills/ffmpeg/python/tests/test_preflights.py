@@ -77,6 +77,22 @@ def test_preflight_inputs_existing_file(preflight_fn, tmp_path):
     assert errs == []
 
 
+def test_preflight_inputs_accepts_a_glob_that_matches(preflight_fn, tmp_path):
+    """A batch request plans `*.mp4`; that is a pattern, not a file name (1.2.1, found
+    2026-10-01: every real Python batch run ended in "'*.mp4' not found"). A pattern that
+    matches nothing (`*.mkv` here) is fine as long as some input matches."""
+    (tmp_path / "clip.mp4").write_bytes(b"")
+    for sandbox in (tmp_path, None):
+        errs = preflight_fn({"inputs": ["*.mp4", "*.mkv"]}, root=tmp_path, sandbox=sandbox)
+        assert errs == [], errs
+
+
+def test_preflight_inputs_reports_globs_that_match_nothing(preflight_fn, tmp_path):
+    errs = preflight_fn({"inputs": ["*.mkv", "*.webm"]}, root=tmp_path, sandbox=tmp_path)
+    assert len(errs) == 1, errs
+    assert "no files match" in errs[0] and "*.mkv" in errs[0], errs
+
+
 def test_preflight_inputs_skips_var_refs(preflight_fn, tmp_path):
     """Variable references (starting with '$') are silently skipped."""
     errs = preflight_fn(

@@ -164,8 +164,10 @@ pub struct BackendStore {
     dir: PathBuf,
     manifest: BackendManifest,
     platform: String,
-    /// The running binary's release. Normally the manifest's `knaif_version` (the manifest ships
-    /// inside the artifact, so they agree by construction); overridable for tests.
+    /// The running binary's release — never the manifest's `knaif_version`. The manifest is found
+    /// by walking up from the current directory, so inside a checkout of another release it is
+    /// THAT release's; judging payloads by it made this store contradict the loader, which checks
+    /// the binary's own version. Overridable for tests ([`Self::with_knaif_version`]).
     knaif_version: String,
 }
 
@@ -178,16 +180,18 @@ impl BackendStore {
 
     /// Construct against an explicit directory (tests, or a caller with its own resolution).
     pub fn with_dir(dir: PathBuf, manifest: BackendManifest) -> Self {
-        let knaif_version = manifest
-            .knaif_version
-            .clone()
-            .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
         Self {
             dir,
             manifest,
             platform: crate::backend_manifest::current_platform(),
-            knaif_version,
+            knaif_version: env!("CARGO_PKG_VERSION").to_string(),
         }
+    }
+
+    /// Act as a binary of another release (tests: upgrades, stale payloads).
+    pub fn with_knaif_version(mut self, version: impl Into<String>) -> Self {
+        self.knaif_version = version.into();
+        self
     }
 
     /// Override the platform key this store resolves against (tests; also lets a caller inspect a
@@ -318,6 +322,20 @@ impl BackendStore {
         progress: &mut BackendProgressFn<'_>,
     ) -> anyhow::Result<PathBuf> {
         let spec = self.spec(name)?;
+
+        // A manifest from another release lists that release's payload. The receipt below stamps
+        // THIS binary's version on whatever lands, so installing from it would make the loader
+        // trust ABI-foreign files. (No `knaif_version` at all: nothing to compare, as before.)
+        if let Some(theirs) = self.manifest.knaif_version.as_deref() {
+            if theirs != self.knaif_version {
+                anyhow::bail!(
+                    "the backend manifest in use is knaif {theirs}'s, but this is knaif {} — its \
+                     {name} payload is built for the other release. Run this from outside any \
+                     knaif checkout, or set KNAIF_BACKEND_MANIFEST to this release's manifest.",
+                    self.knaif_version
+                );
+            }
+        }
 
         if spec.status != PublishStatus::Published {
             anyhow::bail!(
@@ -563,7 +581,9 @@ backends:
     ) -> BackendStore {
         let m =
             BackendManifest::from_yaml(&manifest_yaml(version, status, lib_sha, rt_sha)).unwrap();
-        BackendStore::with_dir(dir, m).with_platform("test-x64")
+        BackendStore::with_dir(dir, m)
+            .with_platform("test-x64")
+            .with_knaif_version(version)
     }
 
     fn good_store(dir: PathBuf, version: &str) -> BackendStore {
@@ -670,7 +690,9 @@ backends:
         let m =
             BackendManifest::from_yaml(&manifest_yaml("1.1.0", "published", &sha(LIB), &sha(RT)))
                 .unwrap();
-        let s = BackendStore::with_dir(dir, m).with_platform("plan9-x64");
+        let s = BackendStore::with_dir(dir, m)
+            .with_platform("plan9-x64")
+            .with_knaif_version("1.1.0");
         let err = s.install("cuda", &fetcher()).unwrap_err();
         assert!(err.to_string().contains("test-x64"), "unhelpful: {err}");
     }
@@ -680,6 +702,51 @@ backends:
         let s = good_store(tmpdir("unknown"), "1.1.0");
         let err = s.install("rocm", &fetcher()).unwrap_err();
         assert!(err.to_string().contains("cuda"), "unhelpful: {err}");
+    }
+
+    // The store speaks for the RUNNING BINARY, which is what the loader checks too
+    // (`backend_dir_state` with CARGO_PKG_VERSION). Taking the version from whichever manifest
+    // was found made the two disagree: run from inside a checkout of another release, the CLI
+    // found the checkout's manifest, called a current payload "stale", and told the user it was
+    // being ignored — while the loader, correctly, loaded it.
+    #[test]
+    fn the_store_speaks_for_the_running_binary_not_the_manifest_it_found() {
+        let m =
+            BackendManifest::from_yaml(&manifest_yaml("0.0.1", "published", &sha(LIB), &sha(RT)))
+                .unwrap();
+        let s = BackendStore::with_dir(tmpdir("binver"), m);
+        assert_eq!(s.knaif_version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn a_payload_this_binary_installed_stays_current_under_a_foreign_manifest() {
+        let dir = tmpdir("foreign");
+        good_store(dir.clone(), env!("CARGO_PKG_VERSION"))
+            .install("cuda", &fetcher())
+            .unwrap();
+        let m =
+            BackendManifest::from_yaml(&manifest_yaml("0.0.1", "published", &sha(LIB), &sha(RT)))
+                .unwrap();
+        let s = BackendStore::with_dir(dir, m).with_platform("test-x64");
+        assert_eq!(s.state("cuda"), BackendState::Installed);
+    }
+
+    // ...and the other half: a manifest written for another release describes another release's
+    // payload. Installing from it would stamp this binary's version on ABI-foreign files, which
+    // the loader would then trust.
+    #[test]
+    fn install_refuses_a_manifest_written_for_another_release() {
+        let dir = tmpdir("foreign-install");
+        let m =
+            BackendManifest::from_yaml(&manifest_yaml("0.0.1", "published", &sha(LIB), &sha(RT)))
+                .unwrap();
+        let s = BackendStore::with_dir(dir.clone(), m).with_platform("test-x64");
+        let err = s.install("cuda", &fetcher()).unwrap_err().to_string();
+        assert!(
+            err.contains("0.0.1") && err.contains(env!("CARGO_PKG_VERSION")),
+            "unhelpful: {err}"
+        );
+        assert!(!dir.join("libggml-cuda.so").exists());
     }
 
     // The requirement install-time pinning could not meet: an upgraded binary must not load the

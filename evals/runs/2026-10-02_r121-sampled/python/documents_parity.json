@@ -1,0 +1,788 @@
+{
+  "skill": "documents",
+  "mode": "command",
+  "model": "<repo>\\models\\knaif-qwen3-4b-v2-q4_k_m.gguf",
+  "counts": {
+    "match": 31,
+    "mismatch": 0,
+    "decline-divergence": 0,
+    "not-comparable": 0,
+    "native-not-implemented": 0,
+    "port-bug": 0
+  },
+  "total": 31,
+  "elapsed_s": 298.1,
+  "rows": [
+    {
+      "id": "documents_004",
+      "utterance": "extract sample.docx",
+      "tags": [
+        "extract",
+        "office"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\nDocx Alpha paragraph\nDocx Beta paragraph\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.docx\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"Docx Alpha paragraph\\nDocx Beta paragraph\"}],\"text\":\"Docx Alpha paragraph\\nDocx Beta paragraph\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.9s\ndocuments › extract sample.docx\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.docx\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.docx\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_026",
+      "utterance": "extract the text from sample.pdf",
+      "tags": [
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\n\nAlpha page one\n--- page 2 ---\n\nBeta page two\n--- page 3 ---\n\nGamma page three\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"\\nAlpha page one\\n\"},{\"page\":2,\"text\":\"\\nBeta page two\\n\"},{\"page\":3,\"text\":\"\\nGamma page three\\n\"}],\"text\":\"\\nAlpha page one\\n\\n\\nBeta page two\\n\\n\\nGamma page three\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.3s\ndocuments › extract the text from sample.pdf\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pdf\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_040",
+      "utterance": "reorder sample.pdf to 3,2,1",
+      "tags": [
+        "reorder"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>\\sandbox\\fixtures\\documents\\sample-reordered.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"3,2,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 5.5s\ndocuments › reorder sample.pdf to 3,2,1\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=3,2,1\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"3,2,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_048",
+      "utterance": "combine sample.pdf and sample-scanned.pdf into combined.pdf",
+      "tags": [
+        "merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>\\sandbox\\fixtures\\documents\\combined.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"combined.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.9s\ndocuments › combine sample.pdf and sample-scanned.pdf into combined.pdf\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=combined.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\combined.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"combined.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_059",
+      "utterance": "password-protect sample.pdf with secret",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.3s\ndocuments › password-protect sample.pdf with secret\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_060",
+      "utterance": "encrypt sample.pdf using the password hunter2",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › encrypt sample.pdf using the password hunter2\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=hunter2\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_061",
+      "utterance": "lock sample.pdf with the password letmein",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"letmein\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › lock sample.pdf with the password letmein\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=letmein\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"letmein\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_062",
+      "utterance": "secure sample.pdf with password abc123",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"abc123\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › secure sample.pdf with password abc123\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=abc123\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"abc123\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_063",
+      "utterance": "unlock sample-protected.pdf with password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.3s\ndocuments › unlock sample-protected.pdf with password secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_064",
+      "utterance": "remove the password from sample-protected.pdf, it's secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.5s\ndocuments › remove the password from sample-protected.pdf, it's secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_065",
+      "utterance": "decrypt sample-protected.pdf using password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.1s\ndocuments › decrypt sample-protected.pdf using password secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_066",
+      "utterance": "take the password off sample-protected.pdf, the password is secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.3s\ndocuments › take the password off sample-protected.pdf, the password is secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_074",
+      "utterance": "reduce the file size of sample.pdf",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>\\sandbox\\fixtures\\documents\\sample-compressed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.5s\ndocuments › reduce the file size of sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-compressed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_076",
+      "utterance": "make sample-scanned.pdf searchable",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>\\sandbox\\fixtures\\documents\\sample-scanned-ocr.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › make sample-scanned.pdf searchable\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_081",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers",
+      "tags": [
+        "merge",
+        "number",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould merge 2 file(s) →\n  <repo>\\sandbox\\fixtures\\documents\\combined.pdf\nstep 2 of 2:\nwould add page numbers →\n  <repo>\\sandbox\\fixtures\\documents\\combined-numbered.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"combined.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"combined.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 6.0s\ndocuments › merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=combined.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\combined.pdf\n    dry-run\n  • add_page_numbers input=combined.pdf position=bottom-center start_at=1\n    ✓ <repo>\\sandbox\\fixtures\\documents\\combined-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"combined.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"combined.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_082",
+      "utterance": "rotate sample.pdf 90 degrees and then compress it",
+      "tags": [
+        "rotate",
+        "compress",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <repo>\\sandbox\\fixtures\\documents\\sample_rotated.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>\\sandbox\\fixtures\\documents\\sample_rotated-compressed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"output\":\"sample_rotated.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_rotated.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 7.2s\ndocuments › rotate sample.pdf 90 degrees and then compress it\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90 output=sample_rotated.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_rotated.pdf\n    dry-run\n  • compress sample_rotated.pdf with balanced quality\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_rotated-compressed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_rotated-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"output\": \"sample_rotated.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_rotated.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_085",
+      "utterance": "protect sample.pdf with the password lockit99",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"lockit99\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › protect sample.pdf with the password lockit99\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=lockit99\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"lockit99\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_086",
+      "utterance": "open sample-protected.pdf with the password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.3s\ndocuments › open sample-protected.pdf with the password secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_099",
+      "utterance": "Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.",
+      "tags": [
+        "split",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>\\sandbox\\fixtures\\documents\\sample-pages-2_3.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.5s\ndocuments › Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=2-3\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_104",
+      "utterance": "There's an internal note on page 3 of sample.pdf the client shouldn't see - strip that page out.",
+      "tags": [
+        "organize",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>\\sandbox\\fixtures\\documents\\sample-removed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.5s\ndocuments › There's an internal note on page 3 of sample.pdf the client shouldn't see - strip that page out.\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=3\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_111",
+      "utterance": "I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.",
+      "tags": [
+        "protect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=hunter2\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_112",
+      "utterance": "Compliance requires every outgoing PDF to be password-protected - secure sample.pdf with the password lockit99.",
+      "tags": [
+        "protect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"lockit99\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.7s\ndocuments › Compliance requires every outgoing PDF to be password-protected - secure sample.pdf with the password lockit99.\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=lockit99\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"lockit99\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_113",
+      "utterance": "I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.",
+      "tags": [
+        "unlock",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_114",
+      "utterance": "Our document system can't index sample-protected.pdf because it's encrypted - remove the password, it's secret.",
+      "tags": [
+        "unlock",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.4s\ndocuments › Our document system can't index sample-protected.pdf because it's encrypted - remove the password, it's secret.\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_123",
+      "utterance": "Раздели страници 2-3 от sample.pdf в нов файл.",
+      "tags": [
+        "split",
+        "bg",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>\\sandbox\\fixtures\\documents\\sample-pages-2_3.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.3s\ndocuments › Раздели страници 2-3 от sample.pdf в нов файл.\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=2-3\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_127",
+      "utterance": "split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it",
+      "tags": [
+        "split",
+        "watermark",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <repo>\\sandbox\\fixtures\\documents\\sample_p1-2.pdf\nstep 2 of 2:\nwould watermark →\n  <repo>\\sandbox\\fixtures\\documents\\sample_p1-2-watermarked.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"sample_p1-2.pdf\"}},{\"tool\":\"watermark\",\"args\":{\"input\":\"sample_p1-2.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 6.9s\ndocuments › split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2 output=sample_p1-2.pdf\n    split_pdf\n    dry-run\n  • watermark input=sample_p1-2.pdf text=DRAFT\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_p1-2-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"sample_p1-2.pdf\"}}, {\"tool\": \"watermark\", \"args\": {\"input\": \"sample_p1-2.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_128",
+      "utterance": "remove the last page of sample.pdf, then add page numbers to what's left",
+      "tags": [
+        "organize",
+        "number",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould remove pages →\n  <repo>\\sandbox\\fixtures\\documents\\sample_trimmed.pdf\nstep 2 of 2:\nwould add page numbers →\n  <repo>\\sandbox\\fixtures\\documents\\sample_trimmed-numbered.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"-1\",\"output\":\"sample_trimmed.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample_trimmed.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 6.1s\ndocuments › remove the last page of sample.pdf, then add page numbers to what's left\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=-1 output=sample_trimmed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_trimmed.pdf\n    dry-run\n  • add_page_numbers input=sample_trimmed.pdf position=bottom-center start_at=1\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_trimmed-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"-1\", \"output\": \"sample_trimmed.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample_trimmed.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_129",
+      "utterance": "watermark sample.pdf with CONFIDENTIAL and then compress the result",
+      "tags": [
+        "watermark",
+        "compress",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould watermark →\n  <repo>\\sandbox\\fixtures\\documents\\sample_watermarked.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>\\sandbox\\fixtures\\documents\\sample_watermarked-compressed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"CONFIDENTIAL\",\"output\":\"sample_watermarked.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_watermarked.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 6.5s\ndocuments › watermark sample.pdf with CONFIDENTIAL and then compress the result\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=CONFIDENTIAL output=sample_watermarked.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_watermarked.pdf\n    dry-run\n  • compress sample_watermarked.pdf with balanced quality\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_watermarked-compressed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_watermarked-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"CONFIDENTIAL\", \"output\": \"sample_watermarked.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_watermarked.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_138",
+      "utterance": "comprime sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>\\sandbox\\fixtures\\documents\\sample-compressed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 4.1s\ndocuments › comprime sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-compressed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_142",
+      "utterance": "rotate sample.pdf 90 degrees and then compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "rotate",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <repo>\\sandbox\\fixtures\\documents\\sample_rotated.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>\\sandbox\\fixtures\\documents\\sample_rotated-compressed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"output\":\"sample_rotated.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_rotated.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 6.3s\ndocuments › rotate sample.pdf 90 degrees and then compress it\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90 output=sample_rotated.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_rotated.pdf\n    dry-run\n  • compress sample_rotated.pdf with balanced quality\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_rotated-compressed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_rotated-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"output\": \"sample_rotated.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_rotated.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_143",
+      "utterance": "extract the first 2 pages of sample.pdf into a new pdf and compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "split",
+        "convert"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <repo>\\sandbox\\fixtures\\documents\\sample_p1-2.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>\\sandbox\\fixtures\\documents\\sample_p1-2-compressed.pdf\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"sample_p1-2.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_p1-2.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 7.0s\ndocuments › extract the first 2 pages of sample.pdf into a new pdf and compress it\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2 output=sample_p1-2.pdf\n    split_pdf\n    dry-run\n  • compress sample_p1-2.pdf with balanced quality\n    inspect_document\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_p1-2-compressed.pdf\n    ✓ <repo>\\sandbox\\fixtures\\documents\\sample_p1-2-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"sample_p1-2.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_p1-2.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    }
+  ]
+}

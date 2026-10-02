@@ -123,6 +123,20 @@ def _preflight_trim_frames(args: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _is_glob(path: str) -> bool:
+    return any(c in path for c in "*?[")
+
+
+def _glob_matches(pattern: str, base: Path) -> bool:
+    """Does `pattern` match at least one file? Same rule as `resolve_inputs`: the pattern is the
+    last path component, matched inside its (resolved) parent directory."""
+    p = Path(pattern)
+    if not p.is_absolute():
+        p = base / p
+    parent = p.parent
+    return parent.is_dir() and any(c.is_file() for c in parent.glob(p.name))
+
+
 def _preflight_inputs(
     args: dict[str, Any],
     *,
@@ -141,8 +155,18 @@ def _preflight_inputs(
         return []
     errors: list[str] = []
     base = sandbox if sandbox is not None else root
+    # A batch plans patterns (`*.mp4`), which never exist as files. Expansion (`resolve_inputs`)
+    # takes a pattern that matches nothing as an empty contribution, so one empty pattern is fine;
+    # only a request whose every input is a pattern matching nothing has nothing to work on.
+    patterns = [p for p in paths if isinstance(p, str) and not p.startswith("$") and _is_glob(p)]
+    if patterns:
+        matched = any(_glob_matches(p, base) for p in patterns)
+        if not matched and len(patterns) == len(paths):
+            location = "sandbox" if sandbox is not None else "working directory"
+            listed = ", ".join(repr(p) for p in patterns)
+            errors.append(f"no files match {listed} in the {location}")
     for raw_path in paths:
-        if not isinstance(raw_path, str) or raw_path.startswith("$"):
+        if not isinstance(raw_path, str) or raw_path.startswith("$") or _is_glob(raw_path):
             continue
         # Skip files that will be produced by an earlier step in the same plan.
         if planned_output_names and Path(raw_path).name in planned_output_names:

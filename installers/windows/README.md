@@ -141,8 +141,13 @@ Update; the remedy is to rebuild and re-release. `scripts/check_pe_imports.py` r
 table and fails the build if anything is unstaged, which — unlike running the artifact — works on
 the build machine itself.
 
-v1 ships **unsigned**, so SmartScreen shows *"Windows protected your PC"* → **More info → Run anyway**.
-Signing is tracked in [`docs/plans/2026-07-27-code-signing.md`](../../docs/plans/2026-07-27-code-signing.md).
+`setup.exe`, its uninstaller, `knaif.exe` and every bundled DLL are **signed** by Blackdeep
+Technologies Ltd (Azure Artifact Signing; Microsoft's VC++ runtime DLLs keep Microsoft's signature).
+Signing does not skip SmartScreen: a new release can still show *"Windows protected your PC"* until
+it builds download reputation, now naming the publisher → **More info → Run anyway**. It does get the
+installer past **Smart App Control**, which blocks unsigned installers outright. How releases are
+signed: [`docs/RELEASE.md`](../../docs/RELEASE.md) §2, *Signing*; background in
+[`docs/plans/2026-07-27-code-signing.md`](../../docs/plans/2026-07-27-code-signing.md).
 
 ## Uninstall
 

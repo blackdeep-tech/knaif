@@ -1,0 +1,36 @@
+== linux ffmpeg
+sample 47: 47 identical, 0 different
+VERDICT: equivalent on the sample
+FAILED linux: documents: not equivalent
+== linux documents
+sample 31: 2 identical, 29 different
+  DIFF documents_040#0: plan same True, grade same False
+  DIFF documents_048#0: plan same True, grade same False
+  DIFF documents_059#0: plan same True, grade same False
+  DIFF documents_060#0: plan same True, grade same False
+  DIFF documents_061#0: plan same True, grade same False
+  DIFF documents_062#0: plan same True, grade same False
+  DIFF documents_063#0: plan same True, grade same False
+  DIFF documents_064#0: plan same True, grade same False
+  DIFF documents_065#0: plan same True, grade same False
+  DIFF documents_066#0: plan same True, grade same False
+  DIFF documents_074#0: plan same True, grade same False
+  DIFF documents_076#0: plan same True, grade same False
+  DIFF documents_081#0: plan same True, grade same False
+  DIFF documents_082#0: plan same True, grade same False
+  DIFF documents_085#0: plan same True, grade same False
+  DIFF documents_086#0: plan same True, grade same False
+  DIFF documents_099#0: plan same True, grade same False
+  DIFF documents_104#0: plan same True, grade same False
+  DIFF documents_111#0: plan same True, grade same False
+  DIFF documents_112#0: plan same True, grade same False
+  DIFF documents_113#0: plan same True, grade same False
+  DIFF documents_114#0: plan same True, grade same False
+  DIFF documents_123#0: plan same True, grade same False
+  DIFF documents_127#0: plan same True, grade same False
+  DIFF documents_128#0: plan same True, grade same False
+  DIFF documents_129#0: plan same True, grade same False
+  DIFF documents_138#1: plan same True, grade same False
+  DIFF documents_142#0: plan same True, grade same False
+  DIFF documents_143#0: plan same True, grade same False
+VERDICT: NOT equivalent
