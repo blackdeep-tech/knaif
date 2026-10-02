@@ -71,7 +71,7 @@ as a user gets it (installers verified against winget's sha256 where winget has 
 | LibreOffice 26.8.0.3 MSI (winget) | installs and runs; knaif's docx→pdf succeeds |
 
 Cloud reputation did not rescue any of them. knaif's own signed files were never blocked. Recorded
-as 1.2.1 known issues; the fix (bundling and signing the tools knaif depends on) is 1.3.0 work.
+as 1.2.1 known issues; what to do about it is an open owner decision, unscheduled.
 
 ## Not committed
 
