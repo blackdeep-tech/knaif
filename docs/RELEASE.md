@@ -587,7 +587,13 @@ uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sampl
 
 `--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
 entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
-and otherwise only the skill's native sources did. Its run must be committed, its `run.sh` in an
+and otherwise only the skill's native sources did. **With a `python` stage** in the run (since
+1.2.1) it may also carry `python_core`, a skill's Python modules, and `contracts` when every changed
+contract is under `contracts/backends/`. That stage reruns `scripts/parity_check.py --only <sample>`
+and must match the accepted L3 rows on both runtimes, writing `== python <skill>` verdicts and a
+`python_tree.json` naming the Python tree it ran on, which must be the tree the entry carries to.
+The gate re-derives all of this from git and the run on every read, so a hand-edited entry carries
+nothing the command would have refused. Its run must be committed, its `run.sh` in an
 earlier commit than its `verdicts.txt` (pre-registered), every OS and skill `VERDICT: equivalent on
 the sample` exactly once, each stage one START then DONE; binaries must cover every OS a cell was
 measured on, and each `--new-bin` must be the executable inside an artifact whose sha256 the run
