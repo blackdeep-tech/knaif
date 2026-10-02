@@ -188,6 +188,10 @@ payload in enables GPU offload next run, and a CUDA-present-but-no-usable-GPU bo
   the loader skips the whole directory with a message naming the fix when the stamp does not match
   the running binary, or when a previous install did not finish. Install-time pinning alone cannot
   cover this: the mismatch exists *before* any `backend install` could run.
+  Everything compares against the **running binary's** version, never the manifest's: the manifest
+  is found by walking up from the current directory, so inside a checkout of another release it is
+  that release's. `backend list` and the CUDA notice once judged by it and called a current payload
+  stale; `backend install` now refuses a manifest whose `knaif_version` is not the binary's.
   A directory with **no receipt** still loads — that is the documented manual route (build a payload
   and drop it in), which is how `backend install` itself gets debugged.
 
