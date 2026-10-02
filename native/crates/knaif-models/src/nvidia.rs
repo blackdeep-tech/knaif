@@ -229,6 +229,7 @@ backends:
         std::fs::create_dir_all(&dir).unwrap();
         BackendStore::with_dir(dir, BackendManifest::from_yaml(MANIFEST).unwrap())
             .with_platform("test-x64")
+            .with_knaif_version("1.1.0")
     }
 
     /// Write the receipt a completed `backend install` would have left, so the offer logic can be

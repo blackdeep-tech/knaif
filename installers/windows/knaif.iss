@@ -120,11 +120,11 @@ AppName=knaif
 AppVersion={#AppVersion}
 ; Identity shown in Add/Remove Programs and setup.exe's Properties tab. AppPublisher must name the
 ; maintaining entity, not the product — it is what Windows displays beside the verified-publisher
-; string once W4 signs, and a user comparing the two has no way to tell a benign mismatch from a
-; malicious one. When a certificate is issued, reconcile AppPublisher with the CERT SUBJECT and
-; leave LICENSE/NOTICE alone: those are ownership statements with no matching requirement.
-; Tracked in docs/plans/2026-07-27-code-signing.md (S3).
-AppPublisher=Blackdeep Technologies Ltd.
+; string, and a user comparing the two has no way to tell a benign mismatch from a malicious one.
+; So it is the certificate subject's CN, character for character (no trailing dot), as recorded in
+; installers/windows/signing.json; python/core/tests/test_code_signing.py asserts they agree.
+; LICENSE/NOTICE are ownership statements with no matching requirement and stay as they are.
+AppPublisher=Blackdeep Technologies Ltd
 AppPublisherURL=https://blackdeep.tech
 AppSupportURL=https://github.com/blackdeep-tech/knaif/issues
 AppUpdatesURL=https://github.com/blackdeep-tech/knaif/releases
@@ -133,10 +133,18 @@ AppReadmeFile={app}\README.txt
 ; setup.exe's Properties -> Details tab is blank without these, and that tab is exactly what a
 ; cautious user checks after the SmartScreen prompt (F5).
 VersionInfoVersion={#AppVersion}
-VersionInfoCompany=Blackdeep Technologies Ltd.
+VersionInfoCompany=Blackdeep Technologies Ltd
 VersionInfoProductName=knaif
 VersionInfoDescription=knaif installer
-VersionInfoCopyright=Copyright 2026 Blackdeep Technologies Ltd.
+VersionInfoCopyright=Copyright 2026 Blackdeep Technologies Ltd
+; Signing: `just installer` passes /DSign plus the `knaifsign` tool when $KNAIF_SIGN_CMD is set.
+; Inno then signs setup.exe AND the uninstaller it embeds — without SignedUninstaller the
+; installed unins000.exe stays unsigned even though setup.exe is signed. Guarded, because naming an
+; undefined sign tool is a compile error and an unsigned local compile must keep working.
+#ifdef Sign
+SignTool=knaifsign
+SignedUninstaller=yes
+#endif
 DefaultDirName={#DefaultDir}
 DisableProgramGroupPage=yes
 ; Refuse to install over a running CLI. Without this an upgrade hits a locked bin\knaif.exe and

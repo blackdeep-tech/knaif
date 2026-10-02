@@ -17,6 +17,7 @@ from .handler_api import HandlerContext
 from .nl_clarify_gate import (
     nl_clarify_gate,
     required_args_clarify,
+    restore_grounded_args,
     unsupported_args_clarify,
 )
 from .planner import (
@@ -396,6 +397,9 @@ class CommandAgent:
         """
         # Match the normalization infer() applied before prompting, so the NL
         # clarify gate grounds plan paths against the text the model was shown.
+        # The raw text is kept to give grounded values (a password) back the
+        # spelling the user typed once the gate has passed.
+        raw_utterance = utterance
         if utterance is not None:
             utterance = normalize_path_separators(utterance)
 
@@ -479,6 +483,8 @@ class CommandAgent:
                         "duration_ms": 0.0,
                     }
                 ]
+            # `raw_utterance` is set whenever `utterance` is (same branch above).
+            intent_plan = restore_grounded_args(intent_plan, raw_utterance or "", self.registry)
 
         # Give the skill a chance to rewrite outputs that would destroy a file, and to
         # rebind the steps that referred to them. Here rather than deeper because a

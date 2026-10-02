@@ -282,6 +282,31 @@ installers/package.sh --no-build --kind=vulkan --profile=release-vulkan   # -> d
 
 `just package-native vulkan` + `just installer` wrap the same steps.
 
+**Signing.** A release is signed on this box with Azure Artifact Signing (account `knaif`, profile
+`knaif-windows`, recorded in [`installers/windows/signing.json`](../installers/windows/signing.json)).
+It is not done in CI, for the same reasons as the build (*Why Windows artifacts are built by hand*),
+and the signing right is the maintainer's own Azure login, so no key or secret exists anywhere.
+Once per box: `signtool` (Windows SDK), `winget install -e --id Microsoft.Azure.ArtifactSigningClientTools`,
+`winget install -e --id Microsoft.AzureCLI`, and the *Artifact Signing Certificate Profile Signer*
+role on the account. Then, in the shell that builds, from the repo root:
+
+```powershell
+az login        # when the session has expired; signing fails with 401/403 otherwise
+$env:KNAIF_SIGN_CMD = "powershell -NoProfile -ExecutionPolicy Bypass -File $($PWD -replace '\\','/')/scripts/sign_windows.ps1"
+```
+
+With that set, `package.sh` signs `knaif.exe` and every unsigned DLL it staged (the CUDA payload's
+`ggml-cuda.dll` included) and re-reads every signature, failing the build if any binary lacks one;
+`just installer` / `just installer-test` sign `setup.exe` and its uninstaller. Microsoft's VC++ DLLs
+and NVIDIA's redistributables already carry their vendor's signature and are left alone. Unset, all
+of it builds unsigned and `package.sh` prints a `NOTE: ... left UNSIGNED` line — never ship a build
+that printed it. Keep the value free of quotes and spaces: `just` hands it to Inno through Windows
+PowerShell 5.1, which mangles embedded quotes.
+
+Each signature is timestamped (`timestamp_url` in `signing.json`). That is not optional: Artifact
+Signing certificates are valid for about three days, and an untimestamped signature stops validating
+when its certificate expires.
+
 The build no longer needs a "Developer PowerShell for VS": `build-native-kind` locates Visual
 Studio and enters `VsDevCmd.bat` itself, and sets `CMAKE_GENERATOR` and `CUDAARCHS`. **Packaging
 still wants that shell** — see the `$VCToolsRedistDir` note below. Driving cargo by hand still
@@ -840,15 +865,19 @@ reader mistakes it for something else.
 State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
 locally, macOS unexercised** — say that rather than implying three platforms.
 
-**Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
-Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence
-of a warning, is what proves the download is intact.
+**Windows signing and SmartScreen.** The Windows binaries are signed by **Blackdeep Technologies
+Ltd** (§2, *Signing*). Say so, and tell users how to check it: `setup.exe` → Properties → Digital
+Signatures. SmartScreen can still show *"Windows protected your PC"* for a new release: no
+certificate makes that prompt disappear on day one, because Microsoft removed EV's
+instant-SmartScreen privilege in 2024 and every certificate type now accrues reputation per file
+hash through download volume. What changes is that the prompt names the publisher instead of
+"Unknown". Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not
+the absence of a warning, is what proves the download is intact.
 
-Signing is tracked in [`plans/2026-07-27-code-signing.md`](plans/2026-07-27-code-signing.md). Note
-that no certificate would make this prompt disappear on day one: Microsoft removed EV's
-instant-SmartScreen privilege in 2024, so every certificate type now accrues reputation per file
-hash through download volume. Signing is worth doing for integrity and enterprise allow-listing —
-not for the first-run prompt.
+**Smart App Control** is the real difference, so state it: on a PC with it enforcing, Windows blocks
+an **unsigned** installer outright, with no bypass ("An Application Control policy has blocked this
+file"). Earlier knaif releases were unsigned and are affected; the signed installer installs and
+upgrades an existing install with enforcement on (verified in Windows Sandbox, 2026-10-02).
 
 **Checksum verification.**
 

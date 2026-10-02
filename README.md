@@ -119,7 +119,7 @@ backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on 
 | **macOS** | not yet — core is cross-platform, packaging is a fast-follow |
 | **GPU** | CPU and Vulkan in every artifact; NVIDIA cards add CUDA with `knaif backend install cuda` |
 | **Skills** | `ffmpeg` and `documents` are production; `io` is stale and under rebuild |
-| **Windows binaries** | unsigned — SmartScreen will warn (More info → Run anyway; verify the checksum first) |
+| **Windows binaries** | signed by Blackdeep Technologies Ltd — SmartScreen may still warn on a new release until it builds download reputation (More info → Run anyway; verify the checksum first) |
 | **Python package** | on PyPI as [`knaif`](https://pypi.org/project/knaif/) — `pip install knaif` |
 
 External tools are **not bundled**. Skills that shell out to FFmpeg need FFmpeg installed.

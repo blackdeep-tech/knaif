@@ -1,0 +1,8 @@
+{
+  "provider": "azure-artifact-signing",
+  "endpoint": "https://neu.codesigning.azure.net",
+  "account": "knaif",
+  "certificate_profile": "knaif-windows",
+  "subject": "CN=Blackdeep Technologies Ltd, O=Blackdeep Technologies Ltd, L=Varna, S=Varna, C=BG",
+  "timestamp_url": "http://timestamp.acs.microsoft.com"
+}

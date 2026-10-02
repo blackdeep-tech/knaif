@@ -25,8 +25,9 @@
 #      an unchanged recommendation re-downloads nothing, because the store keys on the model's own
 #      filename. A backend is the opposite: an upgrade MUST replace the ABI-coupled lib, and an older
 #      payload under a newer binary has to be REFUSED, not tolerated. `knaif_version` below is that
-#      binding, and BackendStore stamps it into an install receipt the loader checks before scanning
-#      the directory. See docs/NATIVE.md §5.3.
+#      binding: BackendStore installs only from a manifest whose `knaif_version` is the running
+#      binary's, stamps that version into an install receipt, and the loader checks the receipt
+#      before scanning the directory. See docs/NATIVE.md §5.3.
 #   4. PLATFORM-KEYED. GGUFs are platform-independent; backend payloads are per OS and arch. Keys are
 #      `<os>-<arch>` and match what installers/package.sh names its artifacts.
 #   5. IT CARRIES THE DRIVER FLOOR the first-run nudge gates on, so bumping the CUDA toolkit is one
@@ -46,10 +47,12 @@
 # Write URLs against `blackdeep-tech/knaif`; the repo is public, so the tokenless HttpFetcher works
 # against release assets with no auth.
 
-# The knaif release this manifest ships inside. BackendStore records it in the install receipt and
-# the loader refuses a payload stamped with a different one — an upgraded binary must not load the
-# previous release's ggml lib out of ~/.knaif/backends, which survives the upgrade and is scanned
-# first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
+# The knaif release this manifest ships inside. `backend install` refuses a manifest from another
+# release (e.g. a checkout's, found by walking up from the current directory) and stamps the
+# running binary's version into the install receipt; the loader refuses a payload stamped with a
+# different one. Installed/stale is always judged against the running binary, never this field. An
+# upgraded binary must not load the previous release's ggml lib out of ~/.knaif/backends, which
+# survives the upgrade and is scanned first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
 knaif_version: "1.2.0"
 
 backends:
