@@ -189,7 +189,8 @@ under test, not just assumed.
 - `just check-native`, `just test-native`, `just check-contracts`, `just check`.
 - T1's golden test unchanged.
 - Patch gate: L4 sampled on both skills through the packaged binary. The lane runs piped, so this
-  proves the plain form held.
+  proves the plain form held. **Done 2026-10-02:** identical to 1.2.0 on both OSes
+  (`evals/runs/2026-10-02_r121-sampled`); `just check` green on the frozen build.
 - Manual: rich view in Windows Terminal, legacy conhost, VS Code's terminal, WSL/Linux; with
   `NO_COLOR=1`; and with output redirected to a file (plain).
 - Owner: T4 on the machines where the warnings were seen, and T6's decision.
