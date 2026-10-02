@@ -74,6 +74,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {n:6d}  {f}")
         if args.checkout:
             print("Write paths relative to the repo, or as <repo>/... and ~/... (AGENTS.md).")
+        elif hits(str(Path.cwd().resolve()).encode(), prefixes):
+            # No remap reaches llama.cpp's backend folder, which it compiles in as a value.
+            print("This checkout is inside the home directory, and llama.cpp compiles its backend")
+            print("folder (under target/) into the binaries. Build from a checkout outside it,")
+            print("for example under /Users/Shared (docs/RELEASE.md).")
         else:
             print("Build with scripts/build_native_kind.sh (scripts/path_hygiene.sh remaps it).")
         return 1
