@@ -111,7 +111,7 @@ backend is active" and the optional CUDA tip saying Vulkan "already works here".
 by `cuda_offer_text`, which now knows whether this run's backend found a GPU; without one, the
 payload is presented as the fix, as a warning.
 
-### - [ ] B8 — Verify
+### - [x] B8 — Verify
 
 - `just check-native`, `just test-native`, `just check-contracts` (L1/L2 at 100%), `just check`.
 - Patch gate: L4 sampled for both skills on the packaged binary, clean-room install, upgrade from
@@ -127,6 +127,11 @@ payload is presented as the fix, as a warning.
   through it with no `--model` produces the expected text; a PDF it locks with `p\ss` opens with
   `p\ss` and not `p/ss`. Static: no local paths in the staged tree, every PE import staged or
   Windows-provided. Harness in the gitignored `sandbox/r121/` (its `.wsb` names host paths).
+- **Release gates on the frozen build (`7e39b45`), 2026-10-02 — PASS.** `just check` green; L4
+  sampled on both skills through the packaged binaries, per OS on CUDA, identical to 1.2.0's
+  accepted runs (Windows 47/47 + 31/31, Linux 47/47 + 31/31) and a Python stage identical to the
+  accepted L3 rows; release clean room 24/24 with Smart App Control enforcing, upgrade from 1.2.0
+  included. `evals/runs/2026-10-02_r121-sampled`, equivalence `1.2.1-sampled`.
 - Found 2026-10-01 while rebuilding: the B2 memory warning and the B6 error had lost their `\`
   line continuations, so each sentence carried a run of spaces. Fixed; the B2 test now rejects a
   double space.

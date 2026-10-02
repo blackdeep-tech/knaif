@@ -454,3 +454,13 @@ def test_an_utterance_that_starts_with_a_dash_reaches_the_cli_as_text() -> None:
     """`rm -rf /` (ffmpeg_053, a reject row) was passed word by word, so both CLIs read `-rf` as
     an option and failed on usage: the row tested nothing on either side."""
     assert pc.utterance_argv("rm -rf /") == ["--", "rm", "-rf", "/"]
+
+
+# ── --only: a pre-registered sample of rows (1.2.1 sampled equivalence, Python stage) ───────────
+
+
+def test_only_keeps_the_named_rows_in_corpus_order_and_refuses_unknown_ids() -> None:
+    rows = [pc.Row(i, f"u{i}", [], False) for i in ("a", "b", "c")]
+    assert [r.id for r in pc.select_rows(rows, ["c", "a"])] == ["a", "c"]
+    with pytest.raises(SystemExit):
+        pc.select_rows(rows, ["a", "zzz"])

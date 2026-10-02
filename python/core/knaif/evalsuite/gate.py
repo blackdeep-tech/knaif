@@ -294,8 +294,10 @@ def _valid_equivalence(entry: Any) -> bool:
     """Only the shapes `evalsuite equivalence` writes may carry anything: an id, a `native` source
     mapping, and at least one binary mapping. A text fix maps `native` and nothing else under
     `fingerprints`; a `sampled` entry (a code change, verified by a pre-registered sample run it
-    names) may also map `bundle`, per skill. A hand-added `contracts`/`grading`/`model` mapping is
-    ignored (Codex, 2026-09-29)."""
+    names) may also map `bundle`, per skill, and — since 1.2.1 — `python_core` and `contracts`
+    (the run must then also check the Python runtime, which `load_equivalences` re-verifies). A
+    hand-added `grading`/`model` mapping, or any of these on a text fix, is ignored (Codex,
+    2026-09-29)."""
     if not isinstance(entry, dict) or not entry.get("id"):
         return False
     fps = entry.get("fingerprints")
@@ -303,7 +305,9 @@ def _valid_equivalence(entry: Any) -> bool:
     if not isinstance(fps, dict) or not _mapping(fps.get("native")):
         return False
     if entry.get("kind") == "sampled":
-        if not entry.get("sample_run") or not set(fps) <= {"native", "bundle"}:
+        if not entry.get("sample_run") or not set(fps) <= SAMPLED_CARRIES:
+            return False
+        if not all(_mapping(fps[k]) for k in ("python_core", "contracts") if k in fps):
             return False
         bundle = fps.get("bundle", {})
         if not isinstance(bundle, dict) or not all(_mapping(m) for m in bundle.values()):
@@ -327,12 +331,150 @@ def load_equivalences(root: Path) -> list[dict[str, Any]]:
     for entry in doc.get("equivalences") or []:
         if not _valid_equivalence(entry):
             continue
-        if entry.get("kind") == "sampled" and sample_run_problems(
-            root / str(entry["sample_run"]), set(entry["binaries"]), _measured_skills(root)
-        ):
+        if entry.get("kind") == "sampled" and sampled_entry_problems(root, entry):
             continue
         honoured.append(entry)
     return honoured
+
+
+#: What a `sampled` equivalence may map. `python_core` and `contracts` only with a Python stage in
+#: its run (`_needs_python_stage`), and `contracts` only for a backend-manifest change
+#: (`contracts_change_allowed`, checked when the entry is recorded).
+SAMPLED_CARRIES = frozenset({"native", "bundle", "python_core", "contracts"})
+
+
+def _needs_python_stage(entry: dict[str, Any]) -> bool:
+    """A mapping beyond the native binary's own sources needs the run to have checked Python too:
+    the native sample says nothing about the Python lane."""
+    return bool({"python_core", "contracts"} & set(entry.get("fingerprints") or {}))
+
+
+#: `(base, patterns)` of the two shared fingerprints a sampled entry may map; see `evidence_tuple`.
+SHARED_SPECS = {
+    "python_core": ("python/core/knaif", ("planner.py", "prompt.py", "registry.py", "agent.py")),
+    "contracts": ("contracts", ("**/*.yaml", "**/*.json")),
+}
+
+
+def _git_names(root: Path, a: str, b: str, specs: list[str]) -> list[str] | None:
+    """Files that differ between commits *a* and *b* under the git pathspecs, or None when git
+    cannot say (a shallow clone, an unknown commit): the caller must then honour nothing."""
+    import subprocess
+
+    out = subprocess.run(
+        ["git", "diff", "--name-only", "--no-renames", a, b, "--", *specs],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return out.stdout.split() if out.returncode == 0 else None
+
+
+def _git_show(root: Path, commit: str, name: str) -> str:
+    import subprocess
+
+    return subprocess.run(
+        ["git", "show", f"{commit}:{name}"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout
+
+
+def sampled_entry_problems(root: Path, entry: dict[str, Any]) -> list[str]:
+    """Why a `sampled` entry must not be honoured, or [] — re-derived from git and the run on
+    disk at every read, never from the entry's own `changed_files` (Codex, 2026-10-02).
+
+    - every mapped fingerprint is what `from_commit` and `to_commit` actually hold;
+    - a bundle moved only through `skill.yaml` `dependencies`, the skill's native sources, or its
+      Python modules; `contracts` only under `contracts/backends/`;
+    - the run holds a `python` stage whenever Python code or a contract is carried, and that stage
+      recorded running on exactly the Python tree the entry maps to (`python_tree.json`)."""
+    fps = entry.get("fingerprints") or {}
+    a, b = entry.get("from_commit"), entry.get("to_commit")
+    if not a or not b:
+        return ["names no from_commit/to_commit"]
+    problems: list[str] = []
+    python_bundle = False
+    try:
+        for skill, mapping in (fps.get("bundle") or {}).items():
+            base = f"skills/{skill}"
+            names = _git_names(root, a, b, [f":(glob){base}/{p}" for p in BUNDLE_PATTERNS])
+            if names is None:
+                return [f"git cannot diff {a}..{b}"]
+            for name in names:
+                rel = name[len(base) + 1 :]
+                if rel == "skill.yaml":
+                    if not bundle_change_allowed(
+                        _git_show(root, a, name), _git_show(root, b, name)
+                    ):
+                        problems.append(f"{name}: changed outside `dependencies`")
+                elif rel.startswith("python/") and rel.endswith(".py"):
+                    python_bundle = True
+                elif not rel.startswith("native/src/"):
+                    problems.append(f"{name}: not a file a sample may carry")
+            for commit, want in ((a, mapping["from"]), (b, mapping["to"])):
+                if tree_at_commit(root, commit, BUNDLE_PATTERNS, base=base) != want:
+                    problems.append(f"{skill} bundle at {commit} is not {want[:12]}")
+        for key, (base, patterns) in SHARED_SPECS.items():
+            if key not in fps:
+                continue
+            for commit, want in ((a, fps[key]["from"]), (b, fps[key]["to"])):
+                if tree_at_commit(root, commit, patterns, base=base) != want:
+                    problems.append(f"{key} at {commit} is not {want[:12]}")
+        if "contracts" in fps:
+            base, patterns = SHARED_SPECS["contracts"]
+            names = _git_names(root, a, b, [f":(glob){base}/{p}" for p in patterns])
+            if names is None or not contracts_change_allowed(names):
+                problems.append(f"contracts changed outside contracts/backends/: {names}")
+    except Exception as exc:  # noqa: BLE001 - any git failure means: honour nothing
+        return [f"cannot verify against git: {exc}"]
+    python = _needs_python_stage(entry) or python_bundle
+    run = root / str(entry.get("sample_run") or "")
+    problems += sample_run_problems(
+        run, set(entry.get("binaries") or {}), _measured_skills(root), python=python
+    )
+    if python:
+        problems += _python_tree_problems(run, fps)
+    return problems
+
+
+def _python_tree_problems(run: Path, fps: dict[str, Any]) -> list[str]:
+    """The `python` stage's own record of the tree it ran on must be the tree the entry carries
+    results TO; otherwise an old passing stage could vouch for a later Python change."""
+    path = run / "python_tree.json"
+    if not path.is_file():
+        return [f"{path}: missing (the python stage records the tree it ran on)"]
+    tree = json.loads(path.read_text(encoding="utf-8"))
+    problems = [
+        f"python stage ran on {key} {str(tree.get(key))[:12]}, entry maps to {fps[key]['to'][:12]}"
+        for key in SHARED_SPECS
+        if key in fps and tree.get(key) != fps[key]["to"]
+    ]
+    for skill, mapping in (fps.get("bundle") or {}).items():
+        if (tree.get("bundle") or {}).get(skill) != mapping["to"]:
+            problems.append(f"python stage ran on another {skill} bundle")
+    return problems
+
+
+def contracts_change_allowed(changed: list[str]) -> bool:
+    """True when every changed contract file is under `contracts/backends/`: the backend payload
+    manifest, read only by `knaif backend` and the loader's receipt check — never by planning,
+    validation, prompts or grading. Anything else in `contracts/` is a change a sample cannot
+    vouch for."""
+    return bool(changed) and all(name.startswith("contracts/backends/") for name in changed)
+
+
+def sampled_bundle_file_allowed(rel: str, python_stage: bool) -> bool:
+    """Which files under `skills/<skill>/` (besides `skill.yaml`, see `bundle_change_allowed`) a
+    sampled equivalence may carry: the skill's native sources, and — when the run also checked the
+    Python runtime — its Python modules. Never a prompt, tool or profile YAML."""
+    if rel.startswith("native/src/"):
+        return True
+    return python_stage and rel.startswith("python/") and rel.endswith(".py")
 
 
 def _carrying_entry(
@@ -365,8 +507,22 @@ def _carrying_entry(
             mapped = (entry["fingerprints"].get("bundle") or {}).get(skill or "")
             if not (mapped and mapped["from"] == rec_bundle and mapped["to"] == cur_bundle):
                 continue
+        # Python core and contracts, when they moved, from the SAME entry and exact values too.
+        if not all(
+            _maps_exactly(entry, key, recorded.get(key), current.get(key))
+            for key in ("python_core", "contracts")
+        ):
+            continue
         return entry
     return None
+
+
+def _maps_exactly(entry: dict[str, Any], key: str, rec: Any, cur: Any) -> bool:
+    """True when `key` did not move, or the entry maps exactly its recorded value to the current."""
+    if rec is None or rec == cur:
+        return True
+    mapped = entry["fingerprints"].get(key)
+    return bool(mapped) and mapped["from"] == rec and mapped["to"] == cur
 
 
 def _equivalence_label(entry: dict[str, Any]) -> str:
@@ -509,8 +665,13 @@ def bundle_change_allowed(old: str, new: str) -> bool:
 SAMPLE_STAGES = {"win": "windows-x64", "linux": "linux-x64"}
 
 
-def sample_run_problems(run_dir: Path, os_ids: set[str], skills: set[str]) -> list[str]:
+def sample_run_problems(
+    run_dir: Path, os_ids: set[str], skills: set[str], *, python: bool = False
+) -> list[str]:
     """Why a sample run cannot vouch for an equivalence, or [] when it can.
+
+    With `python`, the run must also hold a `python` stage: a `== python <skill>` verdict for every
+    skill and one START/DONE, the way each OS's stage does.
 
     Every (OS, skill) pair must have a `VERDICT: equivalent on the sample` block in
     `verdicts.txt`; no line may report a failure; and `COMPLETE` must show each OS's stage started
@@ -535,7 +696,8 @@ def sample_run_problems(run_dir: Path, os_ids: set[str], skills: set[str]) -> li
             # must not hide an earlier bad one (Codex, 2026-09-29).
             found[current] = "duplicate verdict blocks" if current in found else line
             current = None
-    for os_id in sorted(os_ids):
+    stages = sorted(os_ids) + (["python"] if python else [])
+    for os_id in stages:
         for skill in sorted(skills):
             verdict = found.get((os_id, skill))
             if verdict != "VERDICT: equivalent on the sample":
@@ -547,7 +709,7 @@ def sample_run_problems(run_dir: Path, os_ids: set[str], skills: set[str]) -> li
             events.setdefault(SAMPLE_STAGES.get(parts[1], parts[1]), []).append(parts[0])
         elif line.startswith("FINISHED WITH FAILURES"):
             problems.append(f"a stage finished with failures: {line.strip()}")
-    for os_id in sorted(os_ids):
+    for os_id in stages:
         if events.get(os_id) != ["START", "DONE"]:
             problems.append(f"{os_id}: stage log is {events.get(os_id)}, not one START then DONE")
     return problems
@@ -711,7 +873,16 @@ def _layer_state(
     # both the measured source and the measured binary to what is here now.
     via = _carrying_entry(recorded, current, equivalences or [], (record or {}).get("skill"))
     carried: list[str] = [_equivalence_label(via)] if via else []
-    carried_keys = ("native", "native_binary", "bundle") if via else ()
+    carried_keys = (
+        (
+            "native",
+            "native_binary",
+            "bundle",
+            *(k for k in ("python_core", "contracts") if k in via["fingerprints"]),
+        )
+        if via
+        else ()
+    )
     drifted = [
         key
         for key in depends

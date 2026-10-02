@@ -1,0 +1,2 @@
+sample 31: 31 identical, 0 different
+VERDICT: equivalent on the sample
