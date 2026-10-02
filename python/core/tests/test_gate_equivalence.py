@@ -180,6 +180,43 @@ def test_the_release_record_keeps_the_equivalences(tree) -> None:
     assert (Path(out) / "equivalences.json").is_file()
 
 
+def test_a_patch_carried_by_an_equivalence_gets_its_own_record(tree) -> None:
+    """1.2.1 kept 1.2.0's matrix (bumping it moves the `contracts` fingerprint and stales every
+    record) and carried the results over by equivalence `1.2.1-sampled`: the patch is recorded
+    under its own number and says what it was carried from."""
+    tree, old_native, _, old_sha, new, new_sha = tree
+    now = evidence_tuple("demo", tree)["native"]
+    _write(tree, [_entry("9.9.1-textfix", (old_native, now), {"windows-x64": (old_sha, new_sha)})])
+    out = write_release_record(tree, "9.9.1", skills=["demo"], native_binary=[new])
+    assert out == tree / "evals" / "acceptance" / "releases" / "9.9.1"
+    release = json.loads((out / "release.json").read_text(encoding="utf-8"))
+    assert release["version"] == "9.9.1"
+    assert release["carried_from"] == "9.9.0"
+    assert release["equivalences"] == ["9.9.1-textfix"]
+    assert release["matrix"]["models"] == [MODEL]
+    assert release["skills"]["demo"]["derived"] == "supported"
+
+
+def test_a_patch_without_an_equivalence_named_for_it_is_refused(tree) -> None:
+    tree, old_native, _, old_sha, new, new_sha = tree
+    now = evidence_tuple("demo", tree)["native"]
+    _write(tree, [_entry("textfix", (old_native, now), {"windows-x64": (old_sha, new_sha)})])
+    with pytest.raises(ValueError, match="9.9.0"):
+        write_release_record(tree, "9.9.1", skills=["demo"], native_binary=[new])
+
+
+def test_only_a_patch_of_the_matrix_release_can_be_carried(tree) -> None:
+    """A minor or major is a new release: it needs its own matrix, not a carried record."""
+    tree, old_native, _, old_sha, new, new_sha = tree
+    now = evidence_tuple("demo", tree)["native"]
+    for version in ("9.10.0", "10.0.0", "9.9.0-rc1"):
+        _write(
+            tree, [_entry(f"{version}-x", (old_native, now), {"windows-x64": (old_sha, new_sha)})]
+        )
+        with pytest.raises(ValueError, match="9.9.0"):
+            write_release_record(tree, version, skills=["demo"], native_binary=[new])
+
+
 # ── the text-only check ───────────────────────────────────────────────────────────────────────
 
 

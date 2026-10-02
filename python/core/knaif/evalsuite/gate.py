@@ -1336,16 +1336,27 @@ def write_release_record(
     they should; this copy is the answer to "what was true for 1.2.0?" (this module's docstring,
     and release plan R2/R7). Written once — an existing release is never overwritten — and only
     under the release the acceptance matrix names, since filing one release's evidence under
-    another's number would be a false statement about that release.
+    another's number would be a false statement about that release. The one exception is a patch
+    of that release whose results an honoured equivalence named `<patch>-…` carried over (1.2.1):
+    its record says so in `carried_from` and `equivalences`.
     """
     from .matrix import load_matrix
 
     matrix = load_matrix(root)
+    carried: list[str] = []
     if matrix is not None and matrix["current_release"] != version:
-        raise ValueError(
-            f"the acceptance matrix is for {matrix['current_release']}, not {version}; "
-            "record the release the evidence was gathered for"
-        )
+        # A patch keeps its minor's matrix: bumping the contract moves the `contracts`
+        # fingerprint and stales every record. It may be recorded under its own number only
+        # when an honoured equivalence named for it carried the results over.
+        if _is_patch_of(version, matrix["current_release"]):
+            carried = [
+                e["id"] for e in load_equivalences(root) if str(e["id"]).startswith(f"{version}-")
+            ]
+        if not carried:
+            raise ValueError(
+                f"the acceptance matrix is for {matrix['current_release']}, not {version}; "
+                "record the release the evidence was gathered for"
+            )
     out = root / RELEASES_DIR / version
     if out.exists():
         raise FileExistsError(f"{out} already exists; a release record is written once")
@@ -1371,12 +1382,25 @@ def write_release_record(
             "derived": gate.derived,
             "layers": {s.layer: {"state": s.state, "detail": s.detail} for s in gate.layers},
         }
-    release = (matrix or {}).get("releases", {}).get(version) if matrix else None
-    doc = {"version": version, "skills": verdicts, "matrix": release}
+    matrix_release = matrix["current_release"] if carried and matrix else version
+    release = (matrix or {}).get("releases", {}).get(matrix_release) if matrix else None
+    doc: dict[str, Any] = {"version": version, "skills": verdicts, "matrix": release}
+    if carried:
+        doc["carried_from"] = matrix_release
+        doc["equivalences"] = carried
     (out / "release.json").write_text(
         json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     return out
+
+
+def _is_patch_of(version: str, base: str) -> bool:
+    """`1.2.1` is a patch of `1.2.0`: same major and minor, a later patch, no suffix."""
+    parts = [p.split(".") for p in (version, base)]
+    if not all(len(p) == 3 and all(x.isdigit() for x in p) for p in parts):
+        return False
+    (vmaj, vmin, vpat), (bmaj, bmin, bpat) = parts
+    return (vmaj, vmin) == (bmaj, bmin) and int(vpat) > int(bpat)
 
 
 def _declared_status(skill: str, root: Path) -> str | None:
