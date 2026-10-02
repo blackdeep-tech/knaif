@@ -27,7 +27,7 @@ table changes only when a release opens or ships.
 
 | Release | Lane | Branch | Index | State |
 |---|---|---|---|---|
-| 1.2.1 | patch | `release/1.2.1` | [release-1.2.1](2026-09-30-release-1.2.1.md) | opened, scope not chosen yet |
+| 1.2.1 | patch | `release/1.2.1` | [release-1.2.1](2026-09-30-release-1.2.1.md) | scope chosen (native fixes, terminal output, Windows signing) |
 | 1.3.0 | minor | `release/1.3.0` | [release-1.3.0](2026-09-30-release-1.3.0.md) | scope being planned (macOS, adapters/superskill) |
 
 ## Plan header format
@@ -159,6 +159,10 @@ that release's scope table (via its plan).
 | 2026-09-30 | [release-1.2.1](2026-09-30-release-1.2.1.md) | Active | Release index for 1.2.1 (patch): bug fixes to 1.2.0 that change no behavior on shipped platforms; scope chosen in its own session. Lives on `release/1.2.1`. |
 | 2026-09-30 | [release-1.3.0](2026-09-30-release-1.3.0.md) | Active | Release index for 1.3.0 (minor): macOS support and the adapters/superskill plan. Lives on `release/1.3.0`; this copy is left untouched until the release merges back. |
 | 2026-09-30 | [release-workflow](2026-09-30-release-workflow.md) | Active | How releases are developed: a `release/X.Y.Z` branch per release (several may be open), one `feat/*` branch and plan per feature (started from `main` until its release is chosen), a short release index on the release branch, and a patch lane that may not change behavior on shipped platforms. Adds the `Release:` plan field and its lint. Worktrees postponed. |
+| 2026-10-01 | [cli-terminal-output](2026-10-01-cli-terminal-output.md) | Active | 1.2.1: in a terminal, `knaif run` shows the plan and steps as a flowchart with the ffmpeg command, curated errors, colors and per-phase timings (total excludes prompt waits); llama.cpp's own output only under `--verbose`. Piped output keeps the lines the eval lane reads. Terminal logo drafted for the owner's decision. |
+| 2026-10-01 | [native-patch-fixes](2026-10-01-native-patch-fixes.md) | Active | 1.2.1: native fixes needing no model/prompt/contract change — a declined step stops the plan, `reverse_video` previews, a failed ffmpeg command names its cause, encrypted PDFs say so, backslash passwords, a missing `core_tools.yaml` errors. |
+| 2026-10-01 | [llm-comparison-rerun](2026-10-01-llm-comparison-rerun.md) | Done | 1.2.1, not gating: rerun the knaif.org/vs head-to-head with the native CUDA build and v2 against Claude Code, Copilot CLI and Codex CLI; compare tokens, API-equivalent cost and time (no subscription cost, model load reported apart); compare with 2026-07-02 before deciding on the site. |
+| 2026-10-01 | [daemon-mode](2026-10-01-daemon-mode.md) | Draft | Proposed for 1.3.0, not assigned: keep the model loaded between runs and reuse the processed prompt prefix. Measured 2026-10-01 on this box: a CUDA run is 2.0 s, of which the daemon removes ~1.6 s; on CPU (11 s) prefix reuse removes ~6.3 s. Too big for a patch (CLI surface, long-running process, installer, minor gates). |
 
 ## Open threads (not yet a plan, or spanning plans)
 

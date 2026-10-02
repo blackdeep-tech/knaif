@@ -4,11 +4,11 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "bbeacec1f8cd7b646d29d009d6e2373cfde575bb86cfeef05c09a136c71217ca",
-        "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "bundle": "5a74d601a29973b535f6eae3400fa4b3acb746e149bbe95be900bbaf3ba7d69f",
+        "contracts": "fba273c58eb07d807d5a0518294cdacc93b8e8fdf184241de4aeb593c6e5e690",
+        "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-        "native": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26",
+        "native": "32418918ceb202c59f67575e7214214e531d454fa036c7bd591a237d31a1d7f9",
         "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
         "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
         "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
@@ -19,11 +19,11 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "bbeacec1f8cd7b646d29d009d6e2373cfde575bb86cfeef05c09a136c71217ca",
-        "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-        "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
+        "bundle": "5a74d601a29973b535f6eae3400fa4b3acb746e149bbe95be900bbaf3ba7d69f",
+        "contracts": "fba273c58eb07d807d5a0518294cdacc93b8e8fdf184241de4aeb593c6e5e690",
+        "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-        "native": "88006a259726a644b63e14179f485ab8829f6850a6d1fdb5861d739988f89c26",
+        "native": "32418918ceb202c59f67575e7214214e531d454fa036c7bd591a237d31a1d7f9",
         "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
         "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
         "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",

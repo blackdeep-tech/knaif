@@ -98,6 +98,22 @@ pub fn load(path: &std::path::Path) -> anyhow::Result<Document> {
     Document::load(path).map_err(|e| anyhow::anyhow!("could not open PDF {}: {e}", path.display()))
 }
 
+/// [`load`] for an operation that reads or rewrites the pages. An encrypted PDF opens fine but
+/// its page tree is unreadable, so an operation would fail on a page range or write a broken
+/// file; say what is wrong instead. `unlock_pdf` opens its input through [`unlock`].
+pub fn load_unlocked(path: &std::path::Path) -> anyhow::Result<Document> {
+    let doc = load(path)?;
+    if is_encrypted(&doc) {
+        anyhow::bail!(
+            "{} is password-protected. Unlock it first (with the password), then try again.",
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string())
+        );
+    }
+    Ok(doc)
+}
+
 /// Save a document to disk.
 pub fn save(doc: &mut Document, path: &std::path::Path) -> anyhow::Result<()> {
     doc.save(path)
@@ -540,6 +556,24 @@ mod tests {
         // protecting an already-encrypted doc is refused
         let mut enc = load(&protected).unwrap();
         assert!(protect(&mut enc, "again").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_encrypted_pdf_is_refused_with_a_clear_message_before_any_page_logic() {
+        let dir = std::env::temp_dir().join(format!("knaif_encmsg_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let plain = dir.join("plain.pdf");
+        let protected = dir.join("secret.pdf");
+        std::fs::write(&plain, make_pdf(3)).unwrap();
+        let mut doc = load(&plain).unwrap();
+        protect(&mut doc, "secret").unwrap();
+        save(&mut doc, &protected).unwrap();
+
+        let err = load_unlocked(&protected).unwrap_err().to_string();
+        assert!(err.contains("secret.pdf is password-protected"), "{err}");
+        assert!(!err.contains("out of range"), "{err}");
+        assert!(load_unlocked(&plain).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
