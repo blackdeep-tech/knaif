@@ -49,6 +49,10 @@ and its handling of unsafe chained requests; "the second frame" read as the firs
 ending in a dot following Python 3.14's rule; the Python runtime finding supporting tools on PATH
 only; no version check for supporting tools. Details under 1.2.0 below.
 
+- **OCR fails on a PC with Smart App Control on:** the Tesseract build that winget and its
+  installer offer (UB-Mannheim) ships unsigned DLLs, which Smart App Control blocks, so OCR ends
+  with `tesseract failed`. knaif's own files are signed and load; everything else works. There is
+  no fix on knaif's side today.
 - **An existing output file is replaced without asking:** ffmpeg commands overwrite their output,
   and documents does the same for an output name you give it. Names knaif picks for documents get
   a `-1` suffix instead. The terminal view now warns before such a step.
