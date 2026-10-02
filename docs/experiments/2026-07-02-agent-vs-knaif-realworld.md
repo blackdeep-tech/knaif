@@ -1,5 +1,10 @@
 # Experiment — local knaif vs. premium agents, on real-world requests
 
+> **Kept for history (2026-10-01).** knaif.org/vs now shows the rerun on the shipped native
+> build: [2026-10-01-agent-vs-knaif-native.md](2026-10-01-agent-vs-knaif-native.md). This
+> first measurement is unchanged below; its page data is archived in
+> `site/org/src/lib/comparison-2026-07-02.ts`.
+
 **Date:** 2026-07-02 · **Skill:** ffmpeg · **Status:** results below (3 premium agents: Claude,
 GitHub Copilot CLI, OpenAI Codex CLI)
 **Related:** [big-LLM comparison plan](../plans/2026-06-27-big-llm-comparison.md) ·

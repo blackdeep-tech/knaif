@@ -17,12 +17,14 @@
 #
 # AWS states plainly that pnpm is NOT in the default build container, so it has to be put
 # there: https://docs.aws.amazon.com/amplify/latest/userguide/monorepo-configuration.html
-# `corepack enable` is preferred over their `npm install -g pnpm` because it activates the
-# exact version pinned by "packageManager" in site/package.json — CI and a developer
-# machine then run the same pnpm, which is the point of pinning it. The `|| npm install`
-# fallback covers an image whose Node does not ship corepack, and `pnpm --version` fails
-# the build HERE, with an obvious message, rather than three commands later as a
-# mysterious "pnpm: not found".
+# It is installed with npm at exactly the version "packageManager" pins in
+# site/package.json, read from that file so the pin lives in one place — CI and a developer
+# machine then run the same pnpm, which is the point of pinning it. NOT `corepack enable`:
+# the Corepack bundled with the image's Node 22 cannot launch pnpm 12 (it looks for a
+# `bin/pnpm.cjs` pnpm 12 no longer ships), and that failed every build from 2026-09-29 to
+# 2026-09-30 while the sites kept serving the 2026-09-09 build. `pnpm --version` fails the
+# build HERE, with an obvious message, rather than three commands later as a mysterious
+# "pnpm: not found".
 #
 # WHY THE BUILD RUNS FROM `site/` WHILE appRoot IS DEEPER: both sites are workspace members
 # of one pnpm workspace and share knaif-shared, so dependencies install once at site/ and
@@ -41,12 +43,14 @@
 # HOISTED LINKING AND THE STORE, SET HERE AND NOT IN AN .npmrc. AWS requires pnpm-workspace
 # apps to link `hoisted` (their docs say via `.npmrc`); an .npmrc would also apply on a
 # developer machine, where pnpm's default symlinked layout is worth keeping — it is what
-# catches an undeclared dependency before a build does. pnpm honours `npm_config_*`
+# catches an undeclared dependency before a build does. pnpm honours `pnpm_config_*`
 # environment variables identically, so the requirement is met in the container only.
+# `pnpm_config_*`, NOT `npm_config_*`: pnpm 12 ignores the npm prefix (verified), which
+# would drop both settings silently — the build still passes, symlinked and uncached.
 # Hoisted is also what makes the node_modules cache below safe: caching pnpm's symlink
 # farm restores links into a store that may not be there.
 #
-# `npm_config_store_dir` is relative to `--dir` (verified), i.e. `site/.pnpm-store` — which
+# `pnpm_config_store_dir` is relative to `--dir` (verified), i.e. `site/.pnpm-store` — which
 # is what the cache path names. Without it pnpm stores in a home directory the cache does
 # not cover, so the store entry looks like a working cache and is a no-op.
 
@@ -56,13 +60,13 @@ applications:
   - appRoot: site/org
     env:
       variables:
-        npm_config_node_linker: hoisted
-        npm_config_store_dir: .pnpm-store
+        pnpm_config_node_linker: hoisted
+        pnpm_config_store_dir: .pnpm-store
     frontend:
       phases:
         preBuild:
           commands:
-            - corepack enable || npm install -g pnpm@10
+            - npm install -g "$(node -p "require('../../site/package.json').packageManager.split('+')[0]")"
             - pnpm --version
             - pnpm --dir ../../site install --frozen-lockfile
         build:
@@ -82,13 +86,13 @@ applications:
   - appRoot: site/dev
     env:
       variables:
-        npm_config_node_linker: hoisted
-        npm_config_store_dir: .pnpm-store
+        pnpm_config_node_linker: hoisted
+        pnpm_config_store_dir: .pnpm-store
     frontend:
       phases:
         preBuild:
           commands:
-            - corepack enable || npm install -g pnpm@10
+            - npm install -g "$(node -p "require('../../site/package.json').packageManager.split('+')[0]")"
             - pnpm --version
             - pnpm --dir ../../site install --frozen-lockfile
         build:

@@ -149,13 +149,18 @@ a ~1 GB deployable 1.7B viable at all. Two consequences worth remembering:
 
 ### 4.4 Is a local 4B actually good enough
 
-On eleven real-world ffmpeg requests, `knaif-qwen3-4b-v1` produced a correct,
-`ffprobe`-verified artifact for all nine artifact requests — matching Claude Code
-(`opus-4-8`), GitHub Copilot CLI (`sonnet-5`), and OpenAI Codex CLI (`gpt-5.5`) at 9/9 each
-— at ~1.2 s per request instead of 11–16 s, at zero marginal cost. Over the full
-846-utterance corpus the premium arm leads 0.989 vs 0.967 success, and that gap sits in the
-hard, ambiguous, and multilingual tail, not in everyday work. Full write-up:
+On eleven real-world ffmpeg requests, three runs each (2026-10-01), `knaif-qwen3-4b-v2`
+(native, CUDA, RTX 5080) produced a correct, `ffprobe`-verified file for all nine file
+requests in every run — 27/27, matching Claude Code (`opus-5.5`, `sonnet-5.5`), OpenAI Codex
+CLI (`gpt-6-astra`, `gpt-6.1-sol`) and GitHub Copilot CLI (`gpt-5.6-terra`) at 27/27 each — at
+~1.0 s per request (inference + ffmpeg; the ~1.0 s model load stated apart) instead of
+6.8–11.1 s, at zero marginal cost against $0.016–0.143 per request at API prices. Full
+write-up: [experiments/2026-10-01-agent-vs-knaif-native.md](experiments/2026-10-01-agent-vs-knaif-native.md);
+the first measurement, with v1 against older agent models, is
 [experiments/2026-07-02-agent-vs-knaif-realworld.md](experiments/2026-07-02-agent-vs-knaif-realworld.md).
+Over the full 846-utterance corpus (measured with v1 against `opus-4-8` in July, not
+re-measured since) the premium arm leads 0.989 vs 0.967 success, and that gap sits in the
+hard, ambiguous, and multilingual tail, not in everyday work.
 
 **Where the remaining gap actually is — routing, not ffmpeg.** Decomposing that same
 comparison is more useful than the headline: outcome accuracy is 1.000 vs **0.905**, a

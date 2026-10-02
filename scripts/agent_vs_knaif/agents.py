@@ -33,16 +33,17 @@ class Adapter:
     name: str
     default_model: str
     cost_unit: str
-    # build argv given the request prompt, model, and (already-created) cwd
-    build_argv: Callable[[str, str], list[str]]
+    # build argv given the request prompt, model and optional reasoning effort
+    # (`low`/`medium`/…; None leaves the CLI's own default, as on 2026-07-02)
+    build_argv: Callable[..., list[str]]
     # parse the CLI's stdout + measured wall-clock seconds into normalized metrics
     parse: Callable[[str, float], dict]
     isolated_note: str = ""
 
 
 # ── claude (Anthropic Claude Code) — full $/token/turn metering ──────────────
-def _claude_argv(prompt: str, model: str) -> list[str]:
-    return [
+def _claude_argv(prompt: str, model: str, effort: str | None = None) -> list[str]:
+    argv = [
         "claude",
         "-p",
         prompt,
@@ -52,6 +53,9 @@ def _claude_argv(prompt: str, model: str) -> list[str]:
         "json",
         "--dangerously-skip-permissions",
     ]
+    if effort:
+        argv += ["--effort", effort]
+    return argv
 
 
 def _claude_parse(stdout: str, wall_s: float) -> dict:
@@ -78,10 +82,12 @@ def _claude_parse(stdout: str, wall_s: float) -> dict:
 
 
 # ── copilot (GitHub Copilot CLI) — credits + tokens from the text footer ─────
-def _copilot_argv(prompt: str, model: str) -> list[str]:
+def _copilot_argv(prompt: str, model: str, effort: str | None = None) -> list[str]:
     argv = ["copilot", "-p", prompt, "--allow-all-tools"]
     if model:
         argv += ["--model", model]
+    if effort:
+        argv += ["--reasoning-effort", effort]
     return argv
 
 
@@ -127,7 +133,7 @@ def _codex_bin() -> str:
     return "codex"  # let it fail with a clear error if truly unavailable
 
 
-def _codex_argv(prompt: str, model: str) -> list[str]:
+def _codex_argv(prompt: str, model: str, effort: str | None = None) -> list[str]:
     # workspace-write sandboxing on this machine spawns commands in an env that
     # doesn't see ffmpeg on PATH (confirmed: it reports ffmpeg "not available"
     # even though the same PATH entry works everywhere else) — bypass it, same
@@ -142,6 +148,8 @@ def _codex_argv(prompt: str, model: str) -> list[str]:
     ]
     if model:
         argv += ["-m", model]
+    if effort:
+        argv += ["-c", f'model_reasoning_effort="{effort}"']
     return argv
 
 

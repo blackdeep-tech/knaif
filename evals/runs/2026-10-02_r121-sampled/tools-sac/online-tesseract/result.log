@@ -1,0 +1,9 @@
+tesseract-online run 2026-10-02T16:43:16
+16:43:16 Smart App Control: 1 (1 = enforcing)
+16:43:17 network: HTTP 200
+16:43:17 installer: exit 2
+16:43:17 installed: False
+16:43:33 knaif OCR: exit 1; produced []
+16:43:36 CI events: 5; blocked: [System.dll]
+16:43:36 Smart App Control at end: 1
+16:43:36 DONE

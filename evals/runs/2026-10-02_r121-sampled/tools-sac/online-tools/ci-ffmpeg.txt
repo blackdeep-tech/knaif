@@ -1,0 +1,20 @@
+2026-10-02T17:04:19 3118 Smart App Control Block Deteails
+2026-10-02T17:04:19 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:04:19 3077 Code Integrity determined that a process (\Device\HarddiskVolume2\t\knaif\knaif-1.2.1-windows-x64\bin\knaif.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffprobe.exe that did not meet the Enterprise signing level requirements or violated code integrity policy (Policy ID:{0283ac0f-fff1-49ae-ada1-8a933130cad6}).
+2026-10-02T17:04:18 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:04:18 3033 Code Integrity determined that a process (\Device\HarddiskVolume2\t\knaif\knaif-1.2.1-windows-x64\bin\knaif.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffprobe.exe that did not meet the Enterprise signing level requirements.
+2026-10-02T17:03:57 3118 Smart App Control Block Deteails
+2026-10-02T17:03:57 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:03:57 3077 Code Integrity determined that a process (\Device\HarddiskVolume2\Windows\System32\WindowsPowerShell\v1.0\powershell.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe that did not meet the Enterprise signing level requirements or violated code integrity policy (Policy ID:{0283ac0f-fff1-49ae-ada1-8a933130cad6}).
+2026-10-02T17:03:56 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:03:56 3033 Code Integrity determined that a process (\Device\HarddiskVolume2\Windows\System32\WindowsPowerShell\v1.0\powershell.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe that did not meet the Enterprise signing level requirements.
+2026-10-02T17:03:54 3118 Smart App Control Block Deteails
+2026-10-02T17:03:54 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:03:54 3077 Code Integrity determined that a process (\Device\HarddiskVolume2\Windows\System32\WindowsPowerShell\v1.0\powershell.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe that did not meet the Enterprise signing level requirements or violated code integrity policy (Policy ID:{0283ac0f-fff1-49ae-ada1-8a933130cad6}).
+2026-10-02T17:03:53 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:03:53 3033 Code Integrity determined that a process (\Device\HarddiskVolume2\Windows\System32\WindowsPowerShell\v1.0\powershell.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe that did not meet the Enterprise signing level requirements.
+2026-10-02T17:03:51 3118 Smart App Control Block Deteails
+2026-10-02T17:03:51 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:03:51 3077 Code Integrity determined that a process (\Device\HarddiskVolume2\Windows\System32\WindowsPowerShell\v1.0\powershell.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe that did not meet the Enterprise signing level requirements or violated code integrity policy (Policy ID:{0283ac0f-fff1-49ae-ada1-8a933130cad6}).
+2026-10-02T17:03:50 3089 Signature information for another event. Match using the Correlation Id.
+2026-10-02T17:03:50 3033 Code Integrity determined that a process (\Device\HarddiskVolume2\Windows\System32\WindowsPowerShell\v1.0\powershell.exe) attempted to load \Device\HarddiskVolume2\tools\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe that did not meet the Enterprise signing level requirements.

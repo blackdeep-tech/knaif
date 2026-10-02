@@ -1,0 +1,33 @@
+1.2.1 release clean-room run 2026-10-02T14:49:03
+14:49:04 machine: Microsoft Windows 11 Enterprise; GPUs: Microsoft Remote Display Adapter
+14:49:04 Smart App Control at start: 1 (1 = enforcing)
+14:49:13 PASS cleanroom_binary_is_new: sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172
+14:49:13 PASS cleanroom_version_is_121: knaif 1.2.1 (inference: llama.cpp)
+14:49:13 PASS cleanroom_skills_list: exit 0
+14:49:14 PASS zip_every_binary_signed: not valid: []
+14:49:14 PASS sac_blocks_unsigned_120: result blocked: This command cannot be run due to the error: An Application Control policy has blocked this file.; rows 0
+14:49:17 Smart App Control set off for the 1.2.0 baseline: 0
+14:49:20 PASS install_120: exit 0; rows 1; version 1.2.0; at C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+14:49:20 PASS installed_120_is_published: sha256 454e03488dde282814708d5c1f281a1a4d447d3a288aa3949cecd9b731f61e65
+14:49:28 PASS cli_running_holds_mutex: alive True; mutex True
+14:49:28 PASS upgrade_refused_while_running: exit 1; rows 1; version 1.2.0
+14:49:31 Smart App Control back on: 1
+14:49:32 PASS sac_blocks_installed_120: blocked: Program 'knaif.exe' failed to run: An Application Control policy has blocked this fileAt C:\t12\in\sandbox.ps1:45 char:14
++   try { $o = & $exe --version 2>&1 | Out-String; return ($LASTEXITCOD ...
++              ~~~~~~~~~~~~~~~~~~~~~.
+14:49:35 PASS upgrade_installs: exit 0; rows 1; version 1.2.1
+14:49:35 PASS upgrade_publisher: publisher 'Blackdeep Technologies Ltd'
+14:49:35 PASS upgrade_same_folder: before C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif; after C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+14:49:35 PASS upgrade_no_folder_exists_prompt: log mentions 'already exists': False
+14:49:35 PASS upgraded_binary_is_new: sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172
+14:49:35 PASS upgraded_version_is_121: knaif 1.2.1 (inference: llama.cpp)
+14:49:35 PASS upgrade_no_leftover_libraries: not in the 1.2.1 artifact: []; in the artifact but not installed (info): []
+14:49:36 PASS installed_every_binary_signed: not valid []; Blackdeep 17; Microsoft 4
+14:49:56 PASS b5_protect_runs: exit 0; produced [sample-protected.pdf]
+14:50:09 INFO ocr_under_enforcement: exit 1 in 13s
+14:50:11 PASS sac_blocks_nothing_of_knaif: 20 CI events; blocked: [libarchive-13.dll, libcurl-4.dll, libleptonica-6.dll, libtiff-6.dll]; ours: []
+14:50:15 Smart App Control set off for the OCR check (third-party Tesseract): 0
+14:50:29 PASS ocr_row_runs: exit 0 in 14s; produced [sample-scanned-ocr.pdf]
+14:50:29 PASS ocr_no_pdfium_error: log mentions pdfium: False
+14:50:29 Smart App Control at end: 0
+14:50:29 DONE: 22 checks, 0 failed []. Grade on the host (grade.py). Close this Sandbox window when done; it discards everything.

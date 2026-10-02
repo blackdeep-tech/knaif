@@ -2,35 +2,35 @@
   "assets": {
     "linux-x64": {
       "appimage": {
-        "name": "knaif-1.2.0-linux-x86_64.AppImage",
-        "size_bytes": 31640056,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/knaif-1.2.0-linux-x86_64.AppImage"
+        "name": "knaif-1.2.1-linux-x86_64.AppImage",
+        "size_bytes": 31701496,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/knaif-1.2.1-linux-x86_64.AppImage"
       },
       "portable": {
-        "name": "knaif-1.2.0-linux-x64.tar.gz",
-        "size_bytes": 38364513,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/knaif-1.2.0-linux-x64.tar.gz"
+        "name": "knaif-1.2.1-linux-x64.tar.gz",
+        "size_bytes": 38441784,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/knaif-1.2.1-linux-x64.tar.gz"
       }
     },
     "windows-x64": {
       "installer": {
-        "name": "knaif-1.2.0-windows-x64-setup.exe",
-        "size_bytes": 16660590,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/knaif-1.2.0-windows-x64-setup.exe"
+        "name": "knaif-1.2.1-windows-x64-setup.exe",
+        "size_bytes": 16777552,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/knaif-1.2.1-windows-x64-setup.exe"
       },
       "portable": {
-        "name": "knaif-1.2.0-windows-x64.zip",
-        "size_bytes": 33423516,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/knaif-1.2.0-windows-x64.zip"
+        "name": "knaif-1.2.1-windows-x64.zip",
+        "size_bytes": 33642042,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/knaif-1.2.1-windows-x64.zip"
       }
     }
   },
-  "checksums_url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/SHA256SUMS",
+  "checksums_url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/SHA256SUMS",
   "generated_by": "scripts/release_data.py",
-  "published_at": "2026-09-29T22:19:01Z",
-  "release_page": "https://github.com/blackdeep-tech/knaif/releases/tag/v1.2.0",
+  "published_at": "2026-10-02T17:18:31Z",
+  "release_page": "https://github.com/blackdeep-tech/knaif/releases/tag/v1.2.1",
   "releases_page": "https://github.com/blackdeep-tech/knaif/releases",
   "schema_version": 1,
-  "tag": "v1.2.0",
-  "version": "1.2.0"
+  "tag": "v1.2.1",
+  "version": "1.2.1"
 }

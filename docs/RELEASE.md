@@ -21,7 +21,7 @@ Several releases can be in development at once. Each has its own branch and its 
 |---|---|---|---|
 | `main` | — | — | released code, plus docs/site/plan records. Release tags point at commits in `main`'s history. |
 | `release/X.Y.0` | `main` | `main` (merge commit) | one minor release in development |
-| `release/X.Y.Z` (patch) | tag `vX.Y.(Z-1)` | `main` (merge commit) | fixes only |
+| `release/X.Y.Z` (patch) | `main`, if it ships the same as tag `vX.Y.(Z-1)` (else the tag) | `main` (merge commit) | fixes only |
 | `feat/<topic>` | `main` (default) or its release | a release branch, by PR | one feature = one plan |
 | `fix/<topic>` | the release it fixes | that release, by PR | one fix |
 | `exp/<topic>` | anything | **never merged** | experiments and training runs; the result reaches a release as evidence or a decision |
@@ -64,14 +64,15 @@ site, CI and eval records may go straight to `main`.
 |---|---|---|
 | Scope | features (plans), model changes, new platforms | code bug fixes only |
 | Not allowed | — | a new or retrained model, prompt wording, `tools.yaml` / contract changes, new CLI flags, any behavior change on a platform already shipped |
-| Starts from | `main` | the previous release tag |
+| Starts from | `main` | `main` when nothing it gained since the previous tag ships in an artifact (`git diff --name-only vX.Y.(Z-1) main`); otherwise that tag |
 | Gates | all of §4: L3, the full L4 matrix, clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (§4), clean room, upgrade path |
 | If the rule is broken | — | the change moves to the next minor, or the patch runs the minor gates |
 
 ### Lifecycle
 
 1. **Propose** (optional) — a Draft release index on `main`: goal, lane, rough scope.
-2. **Open** — create `release/X.Y.Z` from `main` (from the tag, for a patch). The index becomes
+2. **Open** — create `release/X.Y.Z` from `main` (a patch too, unless `main` has gained something
+   that ships since the previous tag — then from the tag). The index becomes
    Active on the release branch. On `main`, add the release to *Releases in flight* in
    [plans/README.md](plans/README.md), and leave `main`'s copy of the index alone from then on so
    the two never conflict when the release merges back.
@@ -280,6 +281,31 @@ installers/package.sh --no-build --kind=vulkan --profile=release-vulkan   # -> d
 ```
 
 `just package-native vulkan` + `just installer` wrap the same steps.
+
+**Signing.** A release is signed on this box with Azure Artifact Signing (account `knaif`, profile
+`knaif-windows`, recorded in [`installers/windows/signing.json`](../installers/windows/signing.json)).
+It is not done in CI, for the same reasons as the build (*Why Windows artifacts are built by hand*),
+and the signing right is the maintainer's own Azure login, so no key or secret exists anywhere.
+Once per box: `signtool` (Windows SDK), `winget install -e --id Microsoft.Azure.ArtifactSigningClientTools`,
+`winget install -e --id Microsoft.AzureCLI`, and the *Artifact Signing Certificate Profile Signer*
+role on the account. Then, in the shell that builds, from the repo root:
+
+```powershell
+az login        # when the session has expired; signing fails with 401/403 otherwise
+$env:KNAIF_SIGN_CMD = "powershell -NoProfile -ExecutionPolicy Bypass -File $($PWD -replace '\\','/')/scripts/sign_windows.ps1"
+```
+
+With that set, `package.sh` signs `knaif.exe` and every unsigned DLL it staged (the CUDA payload's
+`ggml-cuda.dll` included) and re-reads every signature, failing the build if any binary lacks one;
+`just installer` / `just installer-test` sign `setup.exe` and its uninstaller. Microsoft's VC++ DLLs
+and NVIDIA's redistributables already carry their vendor's signature and are left alone. Unset, all
+of it builds unsigned and `package.sh` prints a `NOTE: ... left UNSIGNED` line — never ship a build
+that printed it. Keep the value free of quotes and spaces: `just` hands it to Inno through Windows
+PowerShell 5.1, which mangles embedded quotes.
+
+Each signature is timestamped (`timestamp_url` in `signing.json`). That is not optional: Artifact
+Signing certificates are valid for about three days, and an untimestamped signature stops validating
+when its certificate expires.
 
 The build no longer needs a "Developer PowerShell for VS": `build-native-kind` locates Visual
 Studio and enters `VsDevCmd.bat` itself, and sets `CMAKE_GENERATOR` and `CUDAARCHS`. **Packaging
@@ -561,7 +587,13 @@ uv run -m knaif.evalsuite equivalence --id <id> --from-commit <measured> --sampl
 
 `--from-commit` must be the source the cells measured and HEAD the source in the tree. A sampled
 entry may also carry each skill's `bundle`, but only when `skill.yaml` changed under `dependencies`
-and otherwise only the skill's native sources did. Its run must be committed, its `run.sh` in an
+and otherwise only the skill's native sources did. **With a `python` stage** in the run (since
+1.2.1) it may also carry `python_core`, a skill's Python modules, and `contracts` when every changed
+contract is under `contracts/backends/`. That stage reruns `scripts/parity_check.py --only <sample>`
+and must match the accepted L3 rows on both runtimes, writing `== python <skill>` verdicts and a
+`python_tree.json` naming the Python tree it ran on, which must be the tree the entry carries to.
+The gate re-derives all of this from git and the run on every read, so a hand-edited entry carries
+nothing the command would have refused. Its run must be committed, its `run.sh` in an
 earlier commit than its `verdicts.txt` (pre-registered), every OS and skill `VERDICT: equivalent on
 the sample` exactly once, each stage one START then DONE; binaries must cover every OS a cell was
 measured on, and each `--new-bin` must be the executable inside an artifact whose sha256 the run
@@ -708,7 +740,10 @@ just release-record <ver>     # -> evals/acceptance/releases/<ver>/, written onc
 
 It copies each skill's acceptance record and the gate's verdict at that commit. The live records
 go stale on `main` as soon as anything changes, as they should. The copy is what answers "what
-was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release.
+was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release,
+except a patch of it whose results an equivalence named `<ver>-…` carried over (a patch keeps its
+minor's matrix: editing the contract would stale every record). That record names the release it
+was carried from and the equivalence.
 
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
@@ -839,15 +874,19 @@ reader mistakes it for something else.
 State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
 locally, macOS unexercised** — say that rather than implying three platforms.
 
-**Windows SmartScreen.** knaif ships **unsigned**, so Windows shows *"Windows protected your PC"*.
-Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not the absence
-of a warning, is what proves the download is intact.
+**Windows signing and SmartScreen.** The Windows binaries are signed by **Blackdeep Technologies
+Ltd** (§2, *Signing*). Say so, and tell users how to check it: `setup.exe` → Properties → Digital
+Signatures. SmartScreen can still show *"Windows protected your PC"* for a new release: no
+certificate makes that prompt disappear on day one, because Microsoft removed EV's
+instant-SmartScreen privilege in 2024 and every certificate type now accrues reputation per file
+hash through download volume. What changes is that the prompt names the publisher instead of
+"Unknown". Bypass: **More info → Run anyway**. Tell users to verify the checksum first — that, not
+the absence of a warning, is what proves the download is intact.
 
-Signing is tracked in [`plans/2026-07-27-code-signing.md`](plans/2026-07-27-code-signing.md). Note
-that no certificate would make this prompt disappear on day one: Microsoft removed EV's
-instant-SmartScreen privilege in 2024, so every certificate type now accrues reputation per file
-hash through download volume. Signing is worth doing for integrity and enterprise allow-listing —
-not for the first-run prompt.
+**Smart App Control** is the real difference, so state it: on a PC with it enforcing, Windows blocks
+an **unsigned** installer outright, with no bypass ("An Application Control policy has blocked this
+file"). Earlier knaif releases were unsigned and are affected; the signed installer installs and
+upgrades an existing install with enforcement on (verified in Windows Sandbox, 2026-10-02).
 
 **Checksum verification.**
 

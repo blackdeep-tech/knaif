@@ -37,6 +37,26 @@ def normalize_path_separators(utterance: str) -> str:
     )
 
 
+def restore_grounded_spelling(value: str, raw_utterance: str) -> str:
+    """Undo ``normalize_path_separators`` on a value the user typed, such as a password.
+
+    The model only ever saw the normalized request, so a password typed ``p\\ss`` comes back as
+    ``p/ss``. For a path that rewrite is the point; for a secret it silently changes what the
+    user asked for. The rewrite is one character for one, so the user's own spelling sits at the
+    same offsets in the original token. A value found verbatim in the request is left alone.
+    """
+    if "/" not in value or "\\" not in raw_utterance or value in raw_utterance:
+        return value
+    for token in raw_utterance.split(" "):
+        normalized = normalize_path_separators(token)
+        if normalized == token:
+            continue
+        at = normalized.find(value)
+        if at >= 0:
+            return token[at : at + len(value)]
+    return value
+
+
 # ── example selection helpers ─────────────────────────────────────────────────
 
 _TERMINAL_TOOLS = frozenset({"clarify", "reject", "done"})
