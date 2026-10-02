@@ -49,10 +49,18 @@ and its handling of unsafe chained requests; "the second frame" read as the firs
 ending in a dot following Python 3.14's rule; the Python runtime finding supporting tools on PATH
 only; no version check for supporting tools. Details under 1.2.0 below.
 
-- **OCR fails on a PC with Smart App Control on:** the Tesseract build that winget and its
-  installer offer (UB-Mannheim) ships unsigned DLLs, which Smart App Control blocks, so OCR ends
-  with `tesseract failed`. knaif's own files are signed and load; everything else works. There is
-  no fix on knaif's side today.
+- **On a PC with Smart App Control on, some supporting tools are blocked.** knaif itself is signed
+  and runs, but Windows blocks unsigned third-party programs there, even online:
+  - **FFmpeg** (the Gyan build winget installs) is blocked, so the `ffmpeg` skill cannot run;
+  - **Tesseract** and **Ghostscript**: their installers are blocked, so OCR and the strongest PDF
+    compression are unavailable (the `documents` skill otherwise works);
+  - **LibreOffice** installs and works.
+
+  Smart App Control is on mainly on newer Windows 11 PCs; where it is off or in evaluation mode,
+  nothing changes. Check under Windows Security → App & browser control.
+- **The Ghostscript winget package no longer exists:** `knaif skills deps` and the installer's
+  optional task suggest `winget install ArtifexSoftware.GhostScript`, which fails. Install
+  Ghostscript from https://ghostscript.com/releases/gsdnld.html instead.
 - **An existing output file is replaced without asking:** ffmpeg commands overwrite their output,
   and documents does the same for an output name you give it. Names knaif picks for documents get
   a `-1` suffix instead. The terminal view now warns before such a step.

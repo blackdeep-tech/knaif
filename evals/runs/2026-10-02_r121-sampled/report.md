@@ -57,6 +57,22 @@ Also on the frozen artifacts: Linux floor confirmed in both directions for the t
 AppImage (Ubuntu 22.04 runs, 20.04 refuses); `installers/smoke.sh` PASS; every PE import and ELF
 `DT_NEEDED` staged or system-provided; no local paths in the unpacked artifacts.
 
+## Supporting tools under Smart App Control (`tools-sac/`, networking ON)
+
+Follow-up to the Tesseract finding, because the clean room ran offline, where Smart App Control
+cannot consult Microsoft's cloud reputation. Windows Sandbox, network on, enforcement on, each tool
+as a user gets it (installers verified against winget's sha256 where winget has one):
+
+| Tool | Result |
+|---|---|
+| FFmpeg, Gyan 9.0.2 zip (winget) | `ffmpeg.exe` and `ffprobe.exe` unsigned and **blocked**; the ffmpeg skill fails |
+| Tesseract, UB-Mannheim 5.4.0 (winget) | installer **blocked** (its unsigned NSIS `System.dll`); signature also expired |
+| Ghostscript, Artifex 10.07.1 installer | installer **blocked** the same way; `ArtifexSoftware.GhostScript` is no longer in winget |
+| LibreOffice 26.8.0.3 MSI (winget) | installs and runs; knaif's docx→pdf succeeds |
+
+Cloud reputation did not rescue any of them. knaif's own signed files were never blocked. Recorded
+as 1.2.1 known issues; the fix (bundling and signing the tools knaif depends on) is 1.3.0 work.
+
 ## Not committed
 
 The per-request boards and logs of the `win` and `linux` stages (`*_success.json`, `*.log`) stay
