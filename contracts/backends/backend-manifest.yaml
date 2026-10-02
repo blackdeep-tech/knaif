@@ -53,7 +53,7 @@
 # different one. Installed/stale is always judged against the running binary, never this field. An
 # upgraded binary must not load the previous release's ggml lib out of ~/.knaif/backends, which
 # survives the upgrade and is scanned first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
-knaif_version: "1.2.0"
+knaif_version: "1.2.1"
 
 backends:
   cuda:
@@ -135,9 +135,9 @@ backends:
         files:
           - name: ggml-cuda.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/ggml-cuda.dll
-            sha256: "43dd6bc22e8d7c465cae10547e7acde3efa47d9bf5cadec2580d678502abb475"
-            size_bytes: 150257664
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/ggml-cuda.dll
+            sha256: "a3a9a8cdc6410f3756cea3c2a319c911e85a73ebc58b235d6f10666e6c66ea2a"
+            size_bytes: 150272480
           - name: cudart64_13.dll
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cudart64_13.dll

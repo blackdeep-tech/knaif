@@ -5,6 +5,54 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] — 2026-10-02
+
+**Bug fixes, a readable `knaif run`, and signed Windows binaries.** Same models, prompts and tool
+contracts as 1.2.0; nothing changes in what knaif plans for a request.
+
+### Changed
+
+- **The Windows installer, `knaif.exe` and every bundled DLL are signed** by Blackdeep
+  Technologies Ltd, as is the CUDA backend payload's `ggml-cuda.dll`. On a PC with Smart App
+  Control on, Windows blocked earlier, unsigned installers outright ("An Application Control
+  policy has blocked this file"); 1.2.1 installs, and upgrades an earlier install in place.
+  SmartScreen may still show its prompt for a new release, now naming the publisher. To check a
+  download: `setup.exe` → Properties → Digital Signatures.
+- **`knaif run` in a terminal draws the run as a tree:** the plan, each step with the command it
+  runs, colors, timings and live ffmpeg progress. llama.cpp's own output appears only with
+  `--verbose`. Piped or redirected output keeps the 1.2.0 lines, so scripts are unaffected.
+
+### Fixed
+
+- **Declining one step of a chain stops the plan**, and says which steps did not run. In 1.2.0 the
+  next step ran anyway.
+- **`reverse_video` shows its command before asking** for confirmation, like every other step.
+- **A failed ffmpeg command says why** in one sentence (permission denied, no such file, disk full,
+  unknown encoder, …) instead of a raw exit code.
+- **An encrypted PDF is reported as password-protected** instead of having 0 pages.
+- **A password containing a backslash is kept as typed.** Native asked for it again; and on both
+  runtimes, `p\ss` was turned into `p/ss` before planning, so a file could be locked with a
+  password the user never typed.
+- **A combining character right after a file name** no longer stops the name being recognized.
+- **Batch requests (`*.mp4`) run in the Python runtime** instead of failing with "not found".
+- **A missing `core_tools.yaml` is a startup error** that names the file, instead of every
+  refusal failing as an unknown tool.
+- **With no GPU, the CUDA tip no longer says Vulkan "already works here"**.
+- **Run from inside a knaif source checkout of another version, the CUDA backend is no longer
+  reported as stale** while it is in use; `backend install` refuses a backend manifest written
+  for another release.
+
+### Known issues
+
+Carried over from 1.2.0, unchanged: the `knaif-qwen3-1.7b-v2` capability slices on Vulkan and CPU
+and its handling of unsafe chained requests; "the second frame" read as the first; a file name
+ending in a dot following Python 3.14's rule; the Python runtime finding supporting tools on PATH
+only; no version check for supporting tools. Details under 1.2.0 below.
+
+- **An existing output file is replaced without asking:** ffmpeg commands overwrite their output,
+  and documents does the same for an output name you give it. Names knaif picks for documents get
+  a `-1` suffix instead. The terminal view now warns before such a step.
+
 ## [1.2.0] — 2026-09-29
 
 **New models, and the native runtime now does what the Python one does.** knaif 1.2.0 ships with
