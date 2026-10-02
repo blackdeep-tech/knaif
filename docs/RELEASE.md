@@ -740,7 +740,10 @@ just release-record <ver>     # -> evals/acceptance/releases/<ver>/, written onc
 
 It copies each skill's acceptance record and the gate's verdict at that commit. The live records
 go stale on `main` as soon as anything changes, as they should. The copy is what answers "what
-was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release.
+was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release,
+except a patch of it whose results an equivalence named `<ver>-…` carried over (a patch keeps its
+minor's matrix: editing the contract would stale every record). That record names the release it
+was carried from and the equivalence.
 
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release

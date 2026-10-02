@@ -1,6 +1,6 @@
 # Native patch fixes for 1.2.1
 
-**Status:** Active · **Created:** 2026-10-01 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-01 · **Completed:** 2026-10-02
 **Owner:** native CLI · **Ref:** [release-1.2.1](2026-09-30-release-1.2.1.md) · CHANGELOG 1.2.0 *Known issues*
 **Release:** 1.2.1
 

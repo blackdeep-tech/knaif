@@ -1,8 +1,14 @@
 # Code Signing — certificate acquisition and the signing pipeline
 
-**Status:** Planning · **Created:** 2026-07-27 · **Completed:** —
+**Status:** Active · **Created:** 2026-07-27 · **Completed:** —
 **Owner:** packaging · **Ref:** extracted from [windows-installer-polish](2026-07-25-windows-installer-polish.md) (W4, F5) · [`installers/windows/knaif.iss`](../../installers/windows/knaif.iss) · [`installers/package.sh`](../../installers/package.sh)
 **Release:** 1.2.1
+
+> **Status note (2026-10-02):** S1 and S2 shipped in 1.2.1: the installer, `knaif.exe`, every
+> bundled DLL and the CUDA payload's `ggml-cuda.dll` are signed by Blackdeep Technologies Ltd.
+> Open: S0, the Defender submission of each published artifact (a web form on the owner's Microsoft
+> account), and folding it into RELEASE.md as a standing step (S3); the landscape items are
+> research, not release work.
 
 > **Why this is its own plan.** Signing was W4 of the installer-polish plan, but it is the only
 > workstream there gated on an **external party** — every other one is code the owner can write

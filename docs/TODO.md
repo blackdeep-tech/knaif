@@ -364,6 +364,11 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   adds `-1` to auto-generated names but overwrites an explicit `output`. This contradicts the "nothing
   can overwrite an existing file" premise of the Yes-default item above. Decide: ask before replacing,
   or suffix like documents does. 1.3.0; the 1.2.1 terminal view only warns.
+- [ ] **A prompt line vanishes in VS Code's PowerShell terminal** — found in the owner's 1.2.1 test
+  round 2 (2026-10-01), shipped open in 1.2.1. After answering `y` at a step that prints a warning
+  before `Proceed? [y/N]` (`reverse_video`), the warning and the prompt line disappear and the typed
+  `y` lands after the command line. Not reproduced in a ConPTY at 120 or 160 columns nor in a Linux
+  pty. Needs a screenshot and the terminal width. Details: cli-terminal-output T7.
 - [ ] **Daemon mode** — keep the model resident in VRAM between `knaif run` invocations (owner,
   2026-10-01). Not present today: every run loads the GGUF (~1 s on CUDA, more on CPU). New surface
   (a background process, a socket, lifecycle and install/uninstall interplay), so 1.3.0 at the earliest.

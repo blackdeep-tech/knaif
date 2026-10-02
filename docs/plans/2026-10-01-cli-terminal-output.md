@@ -1,11 +1,11 @@
 # CLI terminal output — a readable run, with timings
 
-**Status:** Active · **Created:** 2026-10-01 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-01 · **Completed:** 2026-10-02
 **Owner:** native CLI · **Ref:** [release-1.2.1](2026-09-30-release-1.2.1.md) · `apps/cli/src/main.rs`
 **Release:** 1.2.1
 
-> **Status note:** implemented 2026-10-01 on `fix/1.2.1` (uncommitted until the owner says so);
-> what is left is T7's manual and measured checks, run by the owner. Deviations from the draft
+> **Status note:** shipped in 1.2.1 (2026-10-02). The VS Code-only prompt glitch found in the
+> owner's test round 2 (T7) shipped open and moved to TODO.md *Open / Next*. Deviations from the draft
 > below: T2 is a `ui` module of pure renderers plus direct calls from `cmd_run`, not an `Event`
 > enum (the renderers are tested without a terminal either way); the stderr silencing and the
 > spinner on a private stderr copy apply only in the terminal view; `KNAIF_VIEW=rich|plain` is an
@@ -184,7 +184,7 @@ under test, not just assumed.
   `--help` in the terminal view only. Plain ASCII because it does not depend on the font or the
   cell shape; a unit test keeps it ASCII-only.
 
-### - [ ] T7 — Verify
+### - [x] T7 — Verify
 
 - `just check-native`, `just test-native`, `just check-contracts`, `just check`.
 - T1's golden test unchanged.
@@ -199,3 +199,4 @@ under test, not just assumed.
   the prompt line vanished and the typed `y` ended up after the command line. Not reproduced in a
   ConPTY at 120 or 160 columns, nor in a Linux pty (both render correctly), so it looks specific to
   VS Code's terminal. Needs a screenshot and the terminal width to go further.
+  *Shipped open in 1.2.1; moved to TODO.md Open / Next.*
