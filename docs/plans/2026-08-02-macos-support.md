@@ -1110,8 +1110,14 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
 (3938 tokens), 32-token generation, `n_ctx = 8192`, fresh process, median of warm reps,
 `KNAIF_TIMING=1`.
 
-- [ ] **D1. Per-phase Metal numbers.** model load, `new_context`, prompt decode, generation,
+- [x] **D1. Per-phase Metal numbers.** model load, `new_context`, prompt decode, generation,
       teardown, wall. Add a `macos` row to §2's backend table and a machine row to §1.
+      > **Done 2026-10-03 on `M1P`** (M1 Pro, 16-core GPU, 16 GB, macOS 27.2; machine row in
+      > PERFORMANCE §1, table in §2). The packaged metal zip, median of 5 warm runs, `MTL0` 37/37:
+      > 4B load 346 ms, `new_context` ~118 ms, prompt 4824 ms (506 tok/s), generation 1894 ms
+      > (16.9 tok/s), inference 6843 ms, wall 7.35 s; 1.7B 1932 ms (1263 tok/s) / 856 ms
+      > (37.4 tok/s) / 2886 ms / 3.29 s. Teardown is not timed separately: wall minus inference minus
+      > load is ~0.15 s for process start, rendering and exit together.
 - [ ] **D2. An honest CPU comparison — from a tree with no Metal backend in it.** ⚠️ Read
       [PERFORMANCE.md](../PERFORMANCE.md) §4 **first**: with any GPU backend compiled in,
       `n_gpu_layers=0` is *not* CPU-only — `op_offload` still sends batched matmuls to the GPU, an
@@ -1120,6 +1126,10 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       `libggml-metal.dylib`, and measure that. The loader then has no Metal backend to find, which
       is a structural guarantee rather than a runtime request. Produce an honest CPU number or
       produce none; a dishonest one has already invalidated a draft of that document once.
+      > **Done 2026-10-03 on `M1P`**, by exactly that mechanism (the backend is `libggml-metal.so` in
+      > the staged tree; `load_backend` then loads only `libggml-cpu-apple_m1.so`). 4B, median of 3:
+      > load 4003 ms, prompt 25 888 ms (94 tok/s), generation 4935 ms (6.5 tok/s), inference
+      > 30 940 ms. Metal is 5.4× on prompt, 2.6× on generation, ~4.5× end to end.
 - [ ] **D3. ⚠️ The first-run shader tax — measure it, and do NOT plan to fix it at install time.**
       Vulkan's first-ever run cost **38.3 s** of pipeline compilation vs 2.1 s warm (§2), and *the
       first launch after install looks hung*. macOS is structurally similar-but-different: the Metal
@@ -1149,10 +1159,17 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       hold 4B comfortably, that is a **model-recommendation** decision, not a bug — the manifest
       already carries `knaif-qwen3-1.7b-v1` (1.32 GB, ~2× faster, ~2.4pt behind on ffmpeg per §5) for
       exactly this situation. Record the finding; do not silently change the default.
+      > **Partial 2026-10-03:** on the 16 GB `M1P` the 4B fits with room to spare — 2376 MB of
+      > weights and a 302 MB compute buffer on `MTL0` against Metal's 12 713 MB working-set cap.
+      > No 8 GB Mac was reachable, so where it stops fitting is still open.
 - [ ] **D5. Feed the OpenMP decision (D3 in §2).** If `GGML_OPENMP=OFF` is the chosen fix, measure
       the CPU-fallback path with and without it, so the trade is recorded rather than asserted.
-- [ ] **D6. Update the reproduction section** ([PERFORMANCE.md](../PERFORMANCE.md) §9) with the
+      > **Open.** D2's CPU number (2026-10-03) is the no-OpenMP build that ships; the with-OpenMP
+      > side needs a separate build with Homebrew's libomp and was not made.
+- [x] **D6. Update the reproduction section** ([PERFORMANCE.md](../PERFORMANCE.md) §9) with the
       macOS commands, and add any macOS entry to §7 *Environment gotchas*.
+      > **Done 2026-10-03:** §9 has the macOS commands (packaged zip, Metal-less copy, placement
+      > check); §7 entry 5 covers the symlinked `models/` folder and the checkout-outside-`~` rule.
 
 ---
 

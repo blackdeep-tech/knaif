@@ -22,7 +22,7 @@ Last measured 2026-07-14 (Qwen3-4B q4_k_m, ffmpeg skill prompt of **3938 tokens*
 generation, `n_ctx = 8192`, fresh process, median of warm reps). **Linux CUDA payload added
 2026-08-01** (§2, §6) — same model and prompt, measured on `3070L-WSL`. **`5080` backends
 re-measured 2026-09-25** (§2) — `knaif-qwen3-4b-v2`, the ffmpeg prompt at its current 2441 tokens,
-driver 616.92. **v2 end-to-end on the shipped binary added 2026-09-28** (§5).
+driver 616.92. **v2 end-to-end on the shipped binary added 2026-09-28** (§5). **macOS added 2026-10-03** (§2, `M1P`: Metal and an honest CPU tree).
 
 ---
 
@@ -34,12 +34,16 @@ driver 616.92. **v2 end-to-end on the shipped binary added 2026-09-28** (§5).
 | **`3070L`** | RTX 3070 **Laptop** | Ampere, sm_86 | 8 GB | AMD, **8 physical / 16 logical** |
 | **`3070L-WSL`** | the **same box** as `3070L`, under WSL2 | Ampere, sm_86 | 8 GB | same (driver 610.88) |
 | **`M3P`** | Apple M3 Pro, integrated (Metal), 18-core GPU | Apple Silicon, arm64 | 18 GB unified (soft-capped via `iogpu.wired_limit_pct`) | Apple M3 Pro, 6 P + 6 E |
+| **`M1P`** | Apple M1 Pro, integrated (Metal), 16-core GPU | Apple Silicon, arm64 | 16 GB unified (Metal's `recommendedMaxWorkingSetSize` 12 713 MB) | Apple M1 Pro, 8 P + 2 E |
 
 `M3P` — macOS 26.6 (build 25G72), Xcode 26.6 / CLT 26.6.0 (full Xcode installed; §7 of the
 [2026-08-02 macOS support plan](plans/2026-08-02-macos-support.md) M3 still needs to test whether
 CLT alone suffices). `MACOSX_DEPLOYMENT_TARGET=12.0` is the chosen floor for the shipped artifact
 (D9) — this machine's own OS is far newer, so it proves nothing about the floor by itself; the E3
 clean-room VM must run the floor OS.
+
+`M1P` — macOS 27.2 (build 26B5086k), Xcode 27.0 / CLT 27.0. Builds the shipped `metal` kind with the
+Command Line Tools alone (macOS plan M3). Its §2 numbers are the first macOS ones in this document.
 
 `3070L-WSL` is the **Linux** artifact measured on the `3070L` hardware through WSL2, not a third
 machine. Its GPU numbers land ~10–12% behind bare-metal `3070L` (§2), which is small enough to
@@ -120,6 +124,36 @@ at default threads (16 generation / 32 prompt).
   likely cause; July's driver version was not recorded, so that is an inference, not a proof.
 - Corpus-scale confirmation (2026-09-25, `evals/runs/2026-09-25_backend-parity-v2_plans`, 1015
   utterances, plan-only): CUDA 0.46 s, Vulkan 0.78 s, CPU at 8 threads ~12 s per utterance.
+
+### `M1P` (Apple M1 Pro) — **2026-10-03**, native, Metal and CPU
+
+The packaged `knaif-1.2.0-macos-arm64.zip` (`metal` kind, `llama-cpp-2` 0.1.150, `dynamic-backends`,
+built by `just package-native metal`), `run --dry-run`, `KNAIF_TIMING=1`, the ffmpeg prompt (2441
+tokens), 32-token generation, `n_ctx = 8192`, fresh process each run. Median of 5 warm runs (CPU: 3)
+after one warm-up; placement checked (`MTL0` 37/37 layers for 4B, 29/29 for 1.7B). **CPU is the same
+tree with `libggml-metal.so` deleted** (no Metal backend to load: `load_backend` finds only
+`libggml-cpu-apple_m1.so`), never `KNAIF_N_GPU_LAYERS=0` (§4); default threads, no OpenMP (the macOS
+kind is built without it).
+
+| Model | Backend | prompt decode | generation | inference total | model load | wall (`time`) |
+|---|---|---:|---:|---:|---:|---:|
+| `knaif-qwen3-4b-v2` q4_k_m | Metal | **506 tok/s** (4824 ms) | **16.9 tok/s** (1894 ms) | **6843 ms** | 346 ms | 7.35 s |
+| `knaif-qwen3-4b-v2` q4_k_m | CPU | 94 tok/s (25 888 ms) | 6.5 tok/s (4935 ms) | 30 940 ms | 4003 ms | 34.8 s |
+| `knaif-qwen3-1.7b-v2` q6_k | Metal | **1263 tok/s** (1932 ms) | **37.4 tok/s** (856 ms) | **2886 ms** | 264 ms | 3.29 s |
+
+- **Metal is 5.4× the CPU on prompt decode and 2.6× on generation** for the 4B; the prompt dominates
+  (§6), so the end-to-end gain is ~4.5×.
+- Generation scales with the model (1.7B 2.2× the 4B's tokens per second), so the 4B's 16.9 tok/s is
+  the model on this GPU, not a fixed per-token cost in knaif.
+- The 1.7B is 2.4× faster in inference (2.2× wall) at the quality cost §5 records; on Metal it holds the macOS L4
+  bar on documents and misses one ffmpeg slice (`evals/runs/2026-10-03_mac-l4_success`).
+- Unified memory: the 4B puts 2376 MB of weights and a 302 MB compute buffer on `MTL0` against a
+  12 713 MB working-set cap on this 16 GB machine. An 8 GB Mac was not available; where the 4B stops
+  fitting is still open (macOS plan D4).
+- Not measured here: the first-run shader tax (needs a fresh user account; macOS plan D3) and
+  OpenMP's effect on the CPU path (the macOS build has none to compare against; plan D5).
+- Corpus scale, same tree (`evals/runs/2026-10-03_mac-l4_success`, one process per request, executing
+  for real): time to artifact p50 7.98 s (4B) / 4.05 s (1.7B) on ffmpeg, 3.36 s / 1.67 s on documents.
 
 ### `5080` (Blackwell) — **2026-07-07, SUPERSEDED** by the table above ([investigation](plans/2026-07-07-inference-backend-performance.md)), native only
 
@@ -407,6 +441,12 @@ Two caveats on that work:
    all inference and **before** `--save`. Now the writer degrades unencodable characters, and
    `cli.py` **saves before it prints**. A cosmetic failure can no longer destroy an hour of compute.
 
+5. **macOS: a symlinked `models/` folder leaks your home directory into tools that print paths.**
+   The eval lanes read `models/*.gguf`, often linked to `~/.knaif/models`; `parity_check.py` resolves
+   the link and records the real path, then redacts the home directory to `~` before saving. Check
+   anything you write by hand with `scripts/check_no_local_paths.py` — and build releases from a
+   checkout outside `~` (RELEASE.md), since llama.cpp compiles one checkout path into the binary.
+
 ---
 
 ## 8. Model files on disk — one name per model
@@ -471,6 +511,17 @@ KNAIF_TIMING=1 KNAIF_BACKENDS_DIR=/tmp/kbench/backends \
 # Confirm the payload actually won device selection (not the bundled Vulkan backend):
 #   --verbose | grep -E 'load_backend|prepare_model_devices'
 # Isolate the non-inference wall-clock: KNAIF_LLM_BACKEND=mock  -> pipeline only, no llama.
+```
+
+```bash
+# macOS (Apple Silicon), against the packaged metal zip — §2 `M1P`. From a checkout outside ~:
+just package-native metal
+ditto -x -k dist/knaif-<ver>-macos-arm64.zip sandbox/macos && mv sandbox/macos/knaif-* sandbox/macos/knaif
+cp -R sandbox/macos/knaif sandbox/macos/knaif-cpu && rm sandbox/macos/knaif-cpu/bin/libggml-metal.*
+cd sandbox/fixtures/ffmpeg   # after `just eval-fixtures ffmpeg`
+KNAIF_TIMING=1 ../../macos/knaif/bin/knaif run ffmpeg "compress clip.mp4 for email" \
+  --model knaif-qwen3-4b-v2 --dry-run          # Metal; knaif-cpu/ for the honest CPU number
+# Confirm placement first: --verbose | grep -E 'offloaded|found device|load_backend'
 ```
 
 ## 10. Open items
