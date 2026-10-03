@@ -436,6 +436,22 @@ open; where a task's older text disagrees, these win and the task is updated to 
       > destructive and was not done. Test this in the E3 clean-room VM instead, which is being built
       > without Xcode/CLT/Homebrew anyway (D8) — if the build step were ever run there, it would
       > answer this for free; failing that, provision a disposable VM with CLT only.
+      >
+      > **Answered 2026-10-03 (M1 Pro, macOS 27.2, CLT 27.0): the Command Line Tools alone build
+      > and package the metal kind. Full Xcode is not needed.** Method: not a VM, but the toolchain
+      > switched for one build with `DEVELOPER_DIR=/Library/Developer/CommandLineTools`, which every
+      > `/usr/bin` shim (`cc`, `ld`, `xcrun`) honours, in a fresh checkout outside `~` with an empty
+      > `target/`: `just package-native metal` on the `mac/build-fixes` tree (A2's strip fix is
+      > needed on macOS 27). Finished in 1m41s; `check_macho_deps.py` passed 9 Mach-Os,
+      > `check_no_local_paths.py` 65 files, `installers/smoke.sh` the zip, and the binary offloads
+      > 37/37 layers to `Apple M1 Pro`. Proof the CLT was what ran: llama.cpp's ninja dependency log
+      > names `/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk` for all 202,724 header
+      > references and Xcode's SDK for none; the same build without the variable names only
+      > Xcode's. The CLT have no `metal` compiler and nothing asked for one (shaders embed as
+      > source, §1.1). For F: the CLT carry `notarytool` and `stapler`; `codesign`, `pkgbuild` and
+      > `productbuild` are in `/usr/bin`. **Limit:** Xcode stayed installed, so a tool reached by an
+      > absolute path into `Xcode.app` would not have been caught; nothing in the logs or the
+      > dependency data shows one. The E3 VM (no Xcode at all) remains the stronger proof if wanted.
 - [x] **M4. Skill-dependency tooling via Homebrew** for the eval/quality work: `ffmpeg`,
       `ghostscript`, `libreoffice`, `tesseract`. `deps.rs` already maps macOS → `brew`
       (`deps.rs:45,55,338,343`) — verify the probe actually resolves `/opt/homebrew/bin` entries
