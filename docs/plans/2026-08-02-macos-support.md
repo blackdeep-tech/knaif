@@ -1379,6 +1379,17 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > Windows installer's [InstallDelete]); `/usr/local/knaif/uninstall.sh` removes the install, the link
       > if it is ours, and the receipts, with `--purge` for `~/.knaif`. Tool and model scripts run as the
       > console user and always exit 0. `installers/macos/build-pkg.sh`, `just package-pkg`.
+      >
+      > **The PATH link's precondition, 2026-10-03 (M1 Pro, macOS 27.2): passed.** A `knaif` reached
+      > through a symlink finds its real folder. `just package-native metal` from a checkout outside
+      > `~`, then the staged `bin/knaif` symlinked into an unrelated folder and run from there:
+      > `skills list` lists `documents` and `ffmpeg` (both native); `run documents --verbose` loads
+      > `libggml-metal.so` and `libggml-cpu-apple_m1.so` from the real `bin/`, not the link's folder,
+      > reports `found device: Apple M1 Pro` and `offloaded 37/37 layers to GPU` with every KV-cache
+      > layer on `MTL0` (`knaif-qwen3-4b-v2`). "extract the text from report.pdf" through the link
+      > executed and printed the page. One request ("how many pages does report.pdf have") came back
+      > as a `clarify`: the model proposed an `output_key` argument no documents tool has, and
+      > validation refused it. The real path gives the same answer, so it is the model, not the link.
 
 - [ ] **F5b. Exclude the model store from Time Machine (D18).** `tmutil addexclusion
       ~/.knaif/models` (run as the console user) in the `.pkg` postinstall and in `knaif models pull`
