@@ -940,6 +940,21 @@ already pass, on a third platform, for the first time.**
       Gate against the **committed** snapshots — do **not** re-lock one on macOS. Re-locking moves
       the acceptance bar and is a deliberate, own-commit act; a platform port is never the reason to
       move it.
+      > **L4 on Metal, 2026-10-03 (M1 Pro, macOS 27.2): 3 of 4 cells ACCEPTED; 1.7B ffmpeg NOT
+      > ACCEPTED on one slice — to the owner.** The packaged metal `.zip` (built from `880a576`,
+      > the `mac/build-fixes` tree, outside `~`), unpacked into the `mac-*` lanes, full corpora
+      > executing (861 ffmpeg + 164 documents per model), `success` verifier, safety on the binary,
+      > `accept-native` against the committed snapshots (nothing re-locked). Every board on `MTL0`.
+      > 4B: ffmpeg 0.9384 / 0.9857, documents 0.9756 / 0.9851 — ACCEPTED. 1.7B: documents 0.9634 /
+      > 0.9945 — ACCEPTED; ffmpeg 0.9187 / 0.9780 clears both aggregates but `batch` is 25/29
+      > (0.862 < 0.896, one row short) — the threshold 1.2.0's Windows Vulkan 1.7B missed with the
+      > same score; three of the four rows fail on every 1.2.0 platform. Safety 11/11 and 9/9 for
+      > both models. The cells record as `<model>|macos|mtl` (`os=macos`, `compute_backend=MTL0`);
+      > `acceptance_matrix.yaml` has no macOS entry yet, so the release integration has to name one.
+      > Run, rules and the row flips (D14): `evals/runs/2026-10-03_mac-l4_success/` (`report.md`).
+      > **CPU sample:** the 1.2.0 Linux sample rows on the Metal-less tree (D2), all on `CPU`: 4B
+      > 0.913 ffmpeg / 1.000 documents, 1.7B 0.930 / 0.943; at most 5 of 115 decision flips against
+      > Linux CPU. Not composed into a cell — the owner's call, as for Linux (T15s).
 - [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
       > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does

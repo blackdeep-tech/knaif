@@ -1,0 +1,20 @@
+{
+  "reference": "linux/knaif-qwen3-4b-v2/cpu-sample/documents",
+  "shared": 35,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 0,
+    "both_correct": [],
+    "only_reference": [],
+    "only_other": [],
+    "both_wrong": []
+  },
+  "canonical": {
+    "flips": 0,
+    "both_correct": [],
+    "only_reference": [],
+    "only_other": [],
+    "both_wrong": []
+  },
+  "grades_differ": []
+}
