@@ -1267,6 +1267,35 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > yet run on a Mac.** The static half runs in CI (`pkgutil --expand` of the unsigned `.pkg`);
       > `clean-room.sh --pkg [--upgrade-from OLD.pkg]` covers install, receipt version, the PATH
       > link, upgrade and `uninstall.sh`.
+      >
+      > **First run on a Mac, 2026-10-03 (M1 Pro, macOS 27.2): the unsigned `.pkg` by hand —
+      > static half passed, install and uninstall passed, two findings.** `just package-pkg` on the
+      > staged metal tree (`880a576`, checkout outside `~`). Static (`pkgutil --expand`): 9
+      > component packages (`tech.blackdeep.knaif.{core,skill.ffmpeg,skill.documents,path,model,
+      > tool.ffmpeg,tool.ghostscript,tool.libreoffice,tool.tesseract}`), every one at version `1.2.0`
+      > from `Cargo.toml` (D7); payloads at `/usr/local/knaif`, `root:wheel`, `LICENSE`, `NOTICE`,
+      > `README.txt`, `licenses/` and `uninstall.sh` inside; Distribution `customize="always"`,
+      > `hostArchitectures="arm64"`, `os-version min="12.0"`, tool choices enabled by `brewPresent()`;
+      > no signature (expected without `--sign`). Installed on this Mac (Homebrew present, model
+      > already downloaded, artifact not quarantined): `/usr/local/bin/knaif` →
+      > `/usr/local/knaif/bin/knaif` and `knaif skills list` through it finds both skills;
+      > `tmutil isexcluded ~/.knaif/models` → `[Excluded]` (not proof of the postinstall: an earlier
+      > `models pull` on this Mac may have set it). `sudo /usr/local/knaif/uninstall.sh` removed the
+      > link, the install and the receipts, kept `~/.knaif`; nothing left behind.
+      > **Finding 1 — AppleDouble entries in the payload.** Every staged file carries
+      > `com.apple.provenance` (macOS sets it on files a process writes), and `pkgbuild` stores
+      > extended attributes as `._*` entries: 51 in `core`, 22 in `skill-ffmpeg`, 10 in
+      > `skill-documents` (the `.zip` has none). Installer folds them back into attributes — no
+      > `._*` file reached `/usr/local/knaif` — so they are harmless to users, but they ship a
+      > build-machine attribute. Stripping attributes from the staged copy before `pkgbuild`
+      > (`xattr -cr`) would remove them; not changed here (to raise with the owner, then test-first).
+      > **Finding 2 — the script-only choices leave no receipt.** Only `core` and the two skills
+      > appear in `pkgutil --pkgs`; `path`, `model` and the `tool.*` packages are `--nopayload`, and
+      > macOS records no receipt for those (their scripts did run: the link exists). `uninstall.sh`
+      > does not depend on them, but nothing records afterwards which of those choices were taken.
+      > **Still open:** the installer's own screens (the options page, greying of tool choices
+      > without Homebrew, the conclusion page) as judged by the person installing, and the
+      > disposable-VM half on the final stapled package (steps 9–10).
 
 - [ ] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
