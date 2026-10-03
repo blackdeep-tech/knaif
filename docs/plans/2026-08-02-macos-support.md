@@ -1022,6 +1022,37 @@ already pass, on a third platform, for the first time.**
       > So a small diff here is **not automatically a port bug**. Triage by elimination: re-run the
       > utterance against the CPU-only tree from D2 (isolates Metal) and against the Windows/Linux
       > record (isolates the platform, via C6). Record the method — this axis exists permanently now.
+      >
+      > **L3 on the v2 models, 2026-10-03 (M1 Pro, macOS 27.2): 3 of 4 PASS; 4B documents FAIL on
+      > one port bug — a native dry-run gap, not a macOS one. To the owner.** Native: the PACKAGED
+      > metal binary (`sandbox/macos/knaif` from the zip whose L4 C4 records), passed with
+      > `--native-bin` — it needs neither the static debug build above nor rpath surgery, and it is
+      > the binary L4 measured. Python: `llama-cpp-python` 0.3.36, built here with Metal on.
+      > `KNAIF_PARITY_BACKEND=metal`, command mode, full corpora, 1.2.0's bounds written before the
+      > run (`evals/runs/2026-10-03_mac-l4_success/run_l3.sh`). Reports:
+      > `evals/parity/2026-10-03_mac-l3-<model>-<skill>/`.
+      >
+      > | L3 | equivalent / gated | port bugs | plan disagreement (bound) | verdict |
+      > |---|---|---|---|---|
+      > | 4B ffmpeg | 298 / 298 (30 not comparable) | 0 | 0.00% (4.11%) | PASS |
+      > | 4B documents | 141 / 143 | **1** (`documents_105`) | 0.70% (1.83%) | **FAIL** |
+      > | 1.7B ffmpeg | 298 / 298 (30 not comparable) | 0 | 0.00% (4.11%) | PASS |
+      > | 1.7B documents | 142 / 143 | 0 | 0.70% (1.83%) | PASS |
+      >
+      > The 0.70% on documents is `documents_057` (`position: bottom-center` vs `bottom`), the row
+      > 1.2.0 found on Windows. **The port bug, `documents_105`:** on Metal the 4B plans
+      > `reorder_pages` with `order: "original"` (a wrong plan; on Windows CUDA it planned
+      > `"1,2,3,4"`). Python's dry run rejects it (`Unrecognized page reference: 'original'`); native's
+      > dry run prints `would reorder pages → …-reordered.pdf` — and native *executing* the same plan
+      > fails with the same error (the L4 row, and reproduced with no model:
+      > `KNAIF_LLM_BACKEND=mock KNAIF_LLM_MOCK_RESPONSE='{"plan":[{"tool":"reorder_pages","args":
+      > {"input":"sample.pdf","order":"original"}}]}'`). So native's dry run promises an output its
+      > execution cannot make: `ReorderPagesStep` (`skills/documents/python/steps.py`) parses `order`
+      > before it honours dry-run, while native's dry run returns the `Preview::Write` summary
+      > (`apps/cli/src/main.rs`, the `if dry_run` branch) without calling `reorder_sequence`
+      > (`skills/documents/native/src/run.rs`), which only the execute path reaches. Platform-
+      > independent code; Metal's near-tie is only what exposed it. Other page-list arguments were
+      > not checked. Not fixed here: a fix changes the native binary, so L3 and L4 would re-run.
 - [x] **C6. Cross-OS plan agreement.** *(Superseded 2026-09-30 by D17: folded into D14's per-row flip comparison against the committed 1.2.0 L4 extract, on the v2 models. The v1 slice below is deleted, not finished.)* For a fixed slice of the ffmpeg corpus, compare macOS
       `plan --json` output against the same slice from a Windows or Linux build. Distinct from C5,
       which compares two runtimes on one machine. This is the check that says "the same request
