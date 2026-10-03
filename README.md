@@ -262,6 +262,13 @@ Security issues go through [`SECURITY.md`](SECURITY.md), never a public issue.
 Found a case where it plans the wrong thing? That's the
 [most useful issue you can file](https://github.com/blackdeep-tech/knaif/issues/new/choose).
 
+## Disclaimer
+
+knaif's plans come from a small AI model and can be wrong: read the plan and the command before you
+confirm, and keep backups, because knaif writes files and can replace existing ones. Supporting
+tools (FFmpeg, LibreOffice, Ghostscript, Tesseract) are third-party software under their own
+licenses. knaif and its models are provided "as is", without warranty, under the license below.
+
 ## License
 
 knaif is built and maintained by **[Blackdeep Technologies](https://blackdeep.tech)**.

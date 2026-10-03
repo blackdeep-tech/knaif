@@ -756,8 +756,11 @@ site-pnpm-update version="latest":
     uv run python "{{justfile_directory()}}/scripts/site_pnpm_update.py" "{{version}}"
 
 # Dev server for one site. Usage: just site-dev org   |   just site-dev dev
+# Runs astro's entry point with node directly. Through `pnpm … dev`, Windows starts it via
+# cmd.exe and the `astro.cmd` batch shim, so Ctrl+C left a "Terminate batch job (Y/N)?"
+# prompt fighting the shell for the keyboard after pnpm and just had already exited.
 site-dev app:
-    pnpm --dir site --filter knaif-{{app}} dev
+    cd site/{{app}}; node node_modules/astro/bin/astro.mjs dev
 
 # Production build of both sites, exactly as Amplify builds them
 site-build:
