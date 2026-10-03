@@ -73,8 +73,14 @@ quarantine() { xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Sa
 ver="$(sw_vers -productVersion)"
 case "$ver" in 12.*) check room_floor 0 "macOS $ver" ;; *) check room_floor 1 "macOS $ver, not 12" ;; esac
 if xcode-select -p >/dev/null 2>&1; then check room_no_clt 1 "$(xcode-select -p)"; else check room_no_clt 0; fi
-if [ -x /opt/homebrew/bin/brew ] || [ -x /usr/local/bin/brew ]; then
-  check room_no_brew 1 "Homebrew is installed"
+# Homebrew's own install locations, not PATH: a non-login shell may not have them on PATH. The
+# override exists for the tests, which cannot fake an absolute path on a Mac that has Homebrew.
+brew_found=""
+for d in ${KNAIF_ROOM_BREW_DIRS:-/opt/homebrew/bin /usr/local/bin}; do
+  [ -x "$d/brew" ] && brew_found="$d/brew"
+done
+if [ -n "$brew_found" ]; then
+  check room_no_brew 1 "Homebrew is installed ($brew_found)"
 else
   check room_no_brew 0
 fi

@@ -414,7 +414,7 @@ the same from the protected `release` environment once the repository variable `
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
   not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
 
-### Windows binaries must not carry the builder's home directory
+### Windows and macOS binaries must not carry the builder's home directory
 
 Rust embeds source paths as panic locations and C/C++/CUDA embed them through `__FILE__`, so every
 crate built out of the cargo registry carries `C:\Users\<name>\.cargo\registry\...` into the binary.
@@ -430,9 +430,20 @@ directory (`scripts/check_no_local_paths.py`). Two consequences:
 - **The C flags reach CMake only on a fresh configure.** After first adopting them (or changing
   them), clean the llama.cpp build once: `cargo clean -p llama-cpp-sys-2 --profile release-<kind>`.
 
+macOS does the same with clang's `-ffile-prefix-map` (`path_hygiene_env ... clang`).
+
 One build-directory path remains: llama.cpp compiles in its backend search folder
-(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`). It names the checkout's location,
-not a person.
+(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`) into `knaif` and `libggml`. It is
+a value, not a source path, so no remap reaches it. It names the checkout's location, not a person —
+**as long as the checkout is outside the home directory**, which is the norm on Windows (`C:\src\...`)
+and not on a Mac. A macOS release builds from a checkout outside it (under `/Users/Shared`, say);
+one under `~` fails the guard on exactly those files, and the guard says so.
+
+On a GitHub-hosted runner the guard forbids nothing: the runner's account (`/Users/runner`,
+`/home/runner`, `C:\Users\runneradmin`) names nobody, exactly like a container's `/root`. It has to
+be exempt there, not just tolerated: the prebuilt PDFium every macOS package ships was built on such a
+runner and carries `/Users/runner/work/pdfium-binaries/...` about 650 times. The exemption applies
+only when `GITHUB_ACTIONS=true`, so a person whose account is named `runner` is still protected.
 
 ### A Windows CUDA build takes about an hour, and shows nothing while it does
 

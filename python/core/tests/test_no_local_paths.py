@@ -55,6 +55,25 @@ def test_a_different_user_or_a_longer_name_is_not_a_hit() -> None:
 def test_a_linux_home_is_forbidden_but_a_container_root_is_not() -> None:
     assert guard.forbidden_prefixes(home="/home/alice", windows=False) == ["/home/alice"]
     assert guard.forbidden_prefixes(home="/root", windows=False) == []
+    assert guard.forbidden_prefixes(home="/", windows=False) == []
+
+
+def test_a_github_runner_home_is_not_forbidden_but_only_under_actions() -> None:
+    # The prebuilt PDFium carries /Users/runner/work/pdfium-binaries/... ~650 times; on a macOS
+    # runner that is also the builder's home, so the guard refused every CI package.
+    for home, windows in (
+        ("/Users/runner", False),
+        ("/home/runner/", False),
+        ("C:\\Users\\runneradmin", True),
+        ("c:/users/RunnerAdmin", True),
+    ):
+        assert guard.forbidden_prefixes(home=home, windows=windows, ci=True) == [], home
+    # Off Actions, a person called `runner` is still a person.
+    assert guard.forbidden_prefixes(home="/Users/runner", windows=False, ci=False) == [
+        "/Users/runner"
+    ]
+    # And on Actions, any other account still is.
+    assert guard.forbidden_prefixes(home="/Users/alice", windows=False, ci=True) == ["/Users/alice"]
 
 
 def test_the_cli_fails_on_a_staged_file_with_the_home_directory(tmp_path: Path) -> None:
@@ -66,6 +85,28 @@ def test_the_cli_fails_on_a_staged_file_with_the_home_directory(tmp_path: Path) 
     assert guard.main([str(tmp_path), "--forbid", "C:\\Users\\bob"]) == 0
 
 
+def test_a_checkout_inside_the_home_directory_is_named_as_the_cause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # llama.cpp compiles its backend folder (under target/) into the binaries as a value, which no
+    # remap reaches. A Mac checkout usually lives under ~, so "use the build script" misleads there.
+    home = tmp_path / "alice"
+    checkout = home / "src" / "knaif"
+    staged = checkout / "dist" / "staging"
+    staged.mkdir(parents=True)
+    (staged / "knaif").write_bytes(
+        f"x {checkout}/target/release-metal/build/out/backends y".encode()
+    )
+
+    monkeypatch.chdir(checkout)
+    assert guard.main([str(staged), "--forbid", str(home)]) == 1
+    assert "checkout is inside" in capsys.readouterr().out
+
+    monkeypatch.chdir(tmp_path)
+    assert guard.main([str(staged), "--forbid", str(home)]) == 1
+    assert "checkout is inside" not in capsys.readouterr().out
+
+
 def test_package_runs_the_guard_on_what_it_staged() -> None:
     text = (ROOT / "installers" / "package.sh").read_text(encoding="utf-8")
     assert "check_no_local_paths.py" in text
@@ -74,13 +115,13 @@ def test_package_runs_the_guard_on_what_it_staged() -> None:
 # ── the Windows build flags ────────────────────────────────────────────────────────────────
 
 
-def _hygiene(cargo_home: str, root: str) -> dict[str, str]:
+def _hygiene(cargo_home: str, root: str, *compiler: str) -> dict[str, str]:
     bash = shutil.which("bash")
     if not bash:
         pytest.skip("no bash")
     script = (ROOT / "scripts" / "path_hygiene.sh").as_posix()
     out = subprocess.run(
-        [bash, "-c", f'source "{script}"; path_hygiene_env "$1" "$2"', "_", cargo_home, root],
+        [bash, "-c", f'source "{script}"; path_hygiene_env "$@"', "_", cargo_home, root, *compiler],
         capture_output=True,
         text=True,
         timeout=30,
@@ -135,15 +176,35 @@ def test_the_windows_build_applies_the_hygiene_flags() -> None:
     assert "path_hygiene.sh" in text and "path_hygiene_env" in text
 
 
+# ── the macOS build flags ──────────────────────────────────────────────────────────────────
+
+
+def test_clang_maps_the_file_macros_for_both_and_remaps_rust_the_same_way() -> None:
+    env = _hygiene("/Users/alice/.cargo/", "/Users/alice/src/knaif", "clang")
+    flags = env["CARGO_ENCODED_RUSTFLAGS"].split("\x1f")
+    assert "--remap-path-prefix=/Users/alice/.cargo=/cargo" in flags
+    assert "--remap-path-prefix=/Users/alice/src/knaif=/knaif" in flags
+    for var in ("CFLAGS", "CXXFLAGS"):
+        assert "-ffile-prefix-map=/Users/alice/.cargo=/cargo" in env[var].split()
+        assert "-ffile-prefix-map=/Users/alice/src/knaif=/knaif" in env[var].split()
+    assert "CUDAFLAGS" not in env
+
+
+def test_the_macos_build_applies_the_clang_hygiene_flags() -> None:
+    text = (ROOT / "scripts" / "build_native_kind.sh").read_text(encoding="utf-8")
+    assert 'path_hygiene_env "${CARGO_HOME:-$HOME/.cargo}" "$ROOT" clang' in text
+
+
 # ── the repo itself ────────────────────────────────────────────────────────────────────────
 
 
 def test_no_tracked_file_carries_this_machine_s_home_or_checkout() -> None:
     """Eval runs used to record absolute fixture and model paths (`C:/.../knaif/sandbox/...`,
     a home-directory model store), and the repo is public. Scrubbed to `<repo>` and `~` on
-    2026-09-27. Checked against wherever this test runs, so no username is written down here."""
-    home = Path.home()
-    prefixes = [str(ROOT)] + ([str(home)] if str(home) not in ("/", "/root") else [])
+    2026-09-27. Checked against wherever this test runs, so no username is written down here.
+    The home part comes from the guard itself, so a runner's account (which names nobody, and which
+    the guard's own source has to spell out) is exempt here exactly as it is when packaging."""
+    prefixes = [str(ROOT), *guard.forbidden_prefixes()]
     files = subprocess.run(
         ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True
     ).stdout.split(b"\0")

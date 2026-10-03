@@ -499,6 +499,18 @@ open; where a task's older text disagrees, these win and the task is updated to 
       > **Done 2026-08-03**, with `MACOSX_DEPLOYMENT_TARGET=12.0` exported per M4b/D9. Compiled in
       > 1m36s wall (9m14s user — genuinely compiled ggml/llama.cpp C++ across all cores, not a
       > cache hit). Much faster than the "budget real time" warning implied on this hardware.
+      >
+      > **Re-verified 2026-10-02 (M1 Pro, macOS 27.2, Xcode 27.0, Rust 1.96.0): failed, then fixed.**
+      > `just package-native metal` stopped before compiling knaif with `E0463 can't find crate for
+      > zerofrom_derive` (also `serde_derive`, `thiserror_impl`, `equator_macro`). The dylibs were
+      > there; dyld refused to load them: `mis-aligned LINKEDIT string pool`. Cause: with
+      > `MACOSX_DEPLOYMENT_TARGET` ≥ 12 (D9 pins 12.0), release's default `strip = "debuginfo"`
+      > leaves a proc-macro dylib whose string pool is not 8-byte aligned, and macOS 27's dyld rejects
+      > it. Reproduced outside the repo with `serde_derive`: 11.0 loads, 12.0–15.0 fail, with Xcode
+      > 27.0, the 27.2 beta and the Command Line Tools alike; an unstripped dylib loads. Fix
+      > (`fix(native): keep macOS proc macros unstripped…`):
+      > `[profile.release-metal.build-override] strip = "none"`. Proc macros never ship; the shipped
+      > `knaif` is stripped as before and runs. Not a D9 change — the floor stays 12.0.
 - [x] **A3. Prove Metal is actually selected, not merely compiled.** Run with `--verbose` and
       confirm the device line reports Metal rather than CPU, and that all model layers offload.
       This is the macOS instance of the trap [PERFORMANCE.md](../PERFORMANCE.md) §2 documents twice
@@ -1244,6 +1256,18 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
       real build, as the release procedure requires for every platform. Also check for stray
       `.DS_Store` files, which is a macOS-specific way to fail this.
+      > **Home-directory paths, 2026-10-02 (M1 Pro, macOS 27.2): failed, then fixed.** The first real
+      > `just package-native metal` was refused by `check_no_local_paths.py`: about 1,000 strings in
+      > `knaif` and the llama/ggml libraries named the builder's home (`~/.cargo/registry/...` source
+      > paths), because `scripts/path_hygiene.sh` only ran on Windows. Fix
+      > (`fix(macos): remap the builder's paths…`): a `clang` mode (`-ffile-prefix-map` for C/C++,
+      > the same `--remap-path-prefix` for Rust), applied by `build_native_kind.sh` on macOS. That
+      > leaves one string per binary, in `knaif` and `libggml`: llama.cpp's backend folder under
+      > `target/`, compiled in as a value, which no remap reaches. It names the checkout's location,
+      > and a Mac checkout usually lives under `~`. **So a macOS release builds from a checkout
+      > outside the home directory** (RELEASE.md says so, and the guard now names the cause). From
+      > such a checkout the guard passes (65 files) and `installers/smoke.sh` passes the zip. The
+      > allowlist and `.DS_Store` checks above are still to do.
 
 ---
 
@@ -1460,6 +1484,11 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > `environment: release`, off until the variable `MACOS_SIGNING=enabled`; imports the identities into
       > a throwaway keychain and runs `just release-macos`. The owner creates the environment, the
       > secrets (names as in the certificates plan) and the variable.
+      >
+      > **2026-10-03:** both macOS jobs moved from `macos-14` to `macos-15`. The first CI runs (PR #77)
+      > failed in `just package-native metal`: Xcode 15.4's clang cannot compile llama.cpp's `apple_m4`
+      > CPU variant (SVE intrinsics under `-march=armv9.2-a+...+nosve+sme`). The 12.0 deployment target
+      > is unchanged.
 
 ---
 
