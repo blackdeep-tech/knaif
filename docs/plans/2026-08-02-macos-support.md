@@ -1460,6 +1460,11 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > `environment: release`, off until the variable `MACOS_SIGNING=enabled`; imports the identities into
       > a throwaway keychain and runs `just release-macos`. The owner creates the environment, the
       > secrets (names as in the certificates plan) and the variable.
+      >
+      > **2026-10-03:** both macOS jobs moved from `macos-14` to `macos-15`. The first CI runs (PR #77)
+      > failed in `just package-native metal`: Xcode 15.4's clang cannot compile llama.cpp's `apple_m4`
+      > CPU variant (SVE intrinsics under `-march=armv9.2-a+...+nosve+sme`). The 12.0 deployment target
+      > is unchanged.
 
 ---
 
