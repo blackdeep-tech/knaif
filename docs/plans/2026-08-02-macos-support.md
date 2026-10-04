@@ -955,6 +955,11 @@ already pass, on a third platform, for the first time.**
       > **CPU sample:** the 1.2.0 Linux sample rows on the Metal-less tree (D2), all on `CPU`: 4B
       > 0.913 ffmpeg / 1.000 documents, 1.7B 0.930 / 0.943; at most 5 of 115 decision flips against
       > Linux CPU. Not composed into a cell — the owner's call, as for Linux (T15s).
+      > **Re-run 2026-10-04 on the merged `af05956` (contributor request): identical, row for row.** Same
+      > script and rules, a fresh build whose `knaif` is byte-identical to the first run's; all 2,350
+      > requests (both Metal cells in full, both CPU samples) gave the same plan and grade, so the same
+      > four verdicts — the 1.7B `batch` miss included. The acceptance records now name this run, the
+      > one pinned to a commit on the branch. `evals/runs/2026-10-03_mac-l4-rerun_success/`.
 - [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
       > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does

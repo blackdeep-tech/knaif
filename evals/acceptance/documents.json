@@ -675,7 +675,7 @@
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
             "native_binary": "d3e91b27b24c815f413dd7b219bd648057d8364b9fc41ff2d686fdc64945de6c"
           },
-          "run": "evals/runs/2026-10-03_mac-l4_success/4b/metal/documents_mac-4b_success.json",
+          "run": "evals/runs/2026-10-03_mac-l4-rerun_success/4b/metal/documents_mac-4b_success.json",
           "summary": "ACCEPTED - 42 thresholds met.",
           "passed": true,
           "coverage": 1.0,
@@ -698,7 +698,7 @@
             "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
             "native_binary": "d3e91b27b24c815f413dd7b219bd648057d8364b9fc41ff2d686fdc64945de6c"
           },
-          "run": "evals/runs/2026-10-03_mac-l4_success/1.7b/metal/documents_mac-1.7b_success.json",
+          "run": "evals/runs/2026-10-03_mac-l4-rerun_success/1.7b/metal/documents_mac-1.7b_success.json",
           "summary": "ACCEPTED - 42 thresholds met.",
           "passed": true,
           "coverage": 1.0,
