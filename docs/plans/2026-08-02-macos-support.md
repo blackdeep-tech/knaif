@@ -147,6 +147,54 @@ are re-run on this tree as part of the 1.3.0 gates. Do not "fix" it by re-lockin
 D10–D19. If the Mac shows one of them is wrong, record the evidence and raise it with the owner
 before changing course.
 
+**Handback from the Mac, 2026-10-05 (M1 Pro, macOS 27.2).** Steps 1–8 of the Mac's list are done
+and recorded under their tasks; steps 9–10 are blocked on the certificates. No decision D1–D19
+was found wrong. PRs, all merged into the fork's `feat/macos-support` (`deyanzz/knaif-macos-cli`):
+#1 build fixes (step 1), #2 symlink (2), #3 Command Line Tools (3), #4 `.pkg` (4), #5 L4 and row
+flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tree, #10 the merge of
+`main` (1.2.1). The upstream PRs `blackdeep-tech/knaif#77` and `#78` were closed in favour of #1.
+
+| Step | Result | Where |
+|---|---|---|
+| 1 Build re-check | **passed after three fixes**: proc macros unstripped for macOS 27's dyld, the path remap on macOS, CI on `macos-15` | A2, E5, G6 |
+| 2 Symlinked `knaif` | **passed**: skills, contracts and backends found through the link; Metal 37/37 | F5 |
+| 3 M3 | **the Command Line Tools alone build and package the metal kind** | M3 |
+| 4 `.pkg` | static half, install and uninstall **passed**; two findings (below) | E6 |
+| 5 L4 Metal | 4B **ACCEPTED** on both skills, 1.7B documents **ACCEPTED**, 1.7B ffmpeg **NOT ACCEPTED** (one slice); safety 100%; a re-run on `af05956` was identical row for row | C4 |
+| 5 CPU sample | recorded on the Metal-less tree; not composed into a cell | C4 |
+| 6 Row flips | vs Windows/Linux CUDA: 4B 31/861 + 2/164, 1.7B 10/861 + 0/164; vs Linux CPU: at most 5/115 | C4, `evals/runs/2026-10-03_mac-l4_success` |
+| 7 L3 | 3 of 4 **PASS**; 4B documents **FAIL** on one port bug | C5 |
+| 8 Performance | `M1P` rows: Metal 4B 506 tok/s prompt / 16.9 tok/s generation, CPU 94 / 6.5 | D1, D2, D6, PERFORMANCE.md §2 |
+| 9 Signing | **blocked**: no Developer ID Application/Installer identity and no notary credentials on the Mac | F1 |
+| 10 Clean room | **blocked** on step 9's files | E3, E4, E6 |
+
+**Needs the owner:**
+1. **1.7B ffmpeg misses `batch`** by one row (25/29 against 0.896, the 1.7B's own Python score). The
+   same rows fail in both Mac runs; three fail on every 1.2.0 platform, and 1.2.0 recorded the same
+   miss for Windows Vulkan 1.7B. Waive, retrain, or keep the 4B as the macOS recommendation (C4).
+2. **`documents_105`: native's dry run accepts a `reorder_pages` order its execution rejects**;
+   Python rejects it in both. Platform-independent; a fix changes the native binary, so L3/L4
+   re-run after it (C5).
+3. **`.pkg` findings** (E6): `._*` AppleDouble entries in the payload from `com.apple.provenance`
+   (harmless on install; `xattr -cr` on the staged copy before `pkgbuild` removes them), and the
+   script-only choices (PATH link, model, tools) leave no receipt.
+4. **`acceptance_matrix.yaml` and `platforms.yaml` have no macOS entry**; the recorded cells are
+   keyed `<model>|macos|mtl` (C4).
+5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
+6. **Certificates and notary credentials** for steps 9–10 (F1, the certificates plan).
+
+**Stale since the 1.2.1 merge (#10).** 1.2.1 changed native code, so `just check-gate` reads L3/L4
+stale for every cell, the macOS ones included; L1/L2 were re-recorded on the merged tree. The
+macOS L3/L4 have to be re-run on the 1.3.0 tree, on a Mac.
+
+**Still needs a person:** the installer's screens judged by whoever installs (E6); the first-run
+shader tax from a fresh user account (D3); D4 on an 8 GB Mac; D5's OpenMP comparison; and step 10's
+offline pass and Metal check from a fresh account.
+
+**macOS 27.2 Beta 2 (2026-10-05)** needs no re-build or re-run: the toolchain is unchanged, dyld's
+proc-macro rejection is fixed, the merged tree builds and packages, and the 1.2.0 binary gives the
+same plan and grade on 339 probed rows (A2). E5 and F5b were closed and M3 ticked the same day.
+
 ---
 
 ## 1. Research: which inference stack — "Metal or llama.cpp?"
@@ -423,7 +471,7 @@ open; where a task's older text disagrees, these win and the task is updated to 
       the `aarch64-apple-darwin` host. Record anything mise cannot provide.
       > **Done 2026-08-03.** `just bootstrap` → "Toolchain provisioned via mise." with no gaps.
       > `rustc -vV` confirms `host: aarch64-apple-darwin`. Nothing mise could not provide.
-- [ ] **M3. Confirm the *build* prerequisites and write them down as a list that can be wrong in a
+- [x] **M3. Confirm the *build* prerequisites and write them down as a list that can be wrong in a
       way that stops the build.** Expected: Xcode Command Line Tools (`xcode-select --install`) for
       `clang`, `ld`, `xcrun`, `codesign`, `otool`, `install_name_tool`, `pkgbuild`, `notarytool`;
       `cmake` and `ninja`. **Explicitly test whether a full Xcode is required** or CLT suffices —
@@ -527,6 +575,16 @@ open; where a task's older text disagrees, these win and the task is updated to 
       > (`fix(native): keep macOS proc macros unstripped…`):
       > `[profile.release-metal.build-override] strip = "none"`. Proc macros never ship; the shipped
       > `knaif` is stripped as before and runs. Not a D9 change — the floor stays 12.0.
+      >
+      > **macOS 27.2 Beta 2 (build `26B5091g`), 2026-10-05: dyld fixed.** The same probe outside the
+      > repo (`serde_derive`, `strip = "debuginfo"`, `MACOSX_DEPLOYMENT_TARGET=12.0`) now builds and
+      > loads; on Beta 1 it failed with `E0463`. The build-override stays: it is harmless, and a Mac
+      > still on Beta 1 needs it. Xcode 27.0, the CLT and clang were unchanged by the OS update.
+      > The merged tree (`bdd01b5`, 1.2.1) builds, packages and passes `check_macho_deps.py`,
+      > `check_no_local_paths.py` and `smoke.sh` on Beta 2. **Metal inference is unchanged:** the
+      > 1.2.0 binary (`d3e91b27`) on 339 rows — the 1.2.0 sample plus every row that flips between
+      > Metal and CUDA — gave the same plan and grade as on Beta 1 for all of them, at the same
+      > latency (`evals/runs/2026-10-05_mac-beta2-probe_success`, not committed: boards).
 - [x] **A3. Prove Metal is actually selected, not merely compiled.** Run with `--verbose` and
       confirm the device line reports Metal rather than CPU, and that all model layers offload.
       This is the macOS instance of the trap [PERFORMANCE.md](../PERFORMANCE.md) §2 documents twice
@@ -1365,7 +1423,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > without Homebrew, the conclusion page) as judged by the person installing, and the
       > disposable-VM half on the final stapled package (steps 9–10).
 
-- [ ] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
+- [x] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
       real build, as the release procedure requires for every platform. Also check for stray
       `.DS_Store` files, which is a macOS-specific way to fail this.
@@ -1381,6 +1439,12 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > outside the home directory** (RELEASE.md says so, and the guard now names the cause). From
       > such a checkout the guard passes (65 files) and `installers/smoke.sh` passes the zip. The
       > allowlist and `.DS_Store` checks above are still to do.
+      >
+      > **Done 2026-10-05 (M1 Pro, macOS 27.2 Beta 2), on the 1.2.1 metal build of `bdd01b5`.** The
+      > `.zip` (82 entries) and every `.pkg` payload (169 entries) hold no `*.gguf`, `*.ipynb`,
+      > `*.jsonl`, `*.py`/`*.pyc`, `.DS_Store` or `__MACOSX`, and no `eval`/`evals`/`sandbox`/`notebook`
+      > path; the zip has no `._*` entries. The `.pkg`'s 83 AppleDouble entries are E6's finding
+      > (extended attributes, not files on disk). The home-path guard passes (65 files).
 
 ---
 
@@ -1504,13 +1568,17 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > as a `clarify`: the model proposed an `output_key` argument no documents tool has, and
       > validation refused it. The real path gives the same answer, so it is the model, not the link.
 
-- [ ] **F5b. Exclude the model store from Time Machine (D18).** `tmutil addexclusion
+- [x] **F5b. Exclude the model store from Time Machine (D18).** `tmutil addexclusion
       ~/.knaif/models` (run as the console user) in the `.pkg` postinstall and in `knaif models pull`
       on Darwin; a failure to exclude is reported, never fatal. Verify with `tmutil isexcluded`.
       >
       > **Done in code 2026-09-30 (Windows):** `ModelStore::exclude_from_backups` after every download
       > (`models pull` and the first-run offer), default store only, failures reported with the manual
       > command. Verify on the Mac: `tmutil isexcluded ~/.knaif/models`.
+      >
+      > **Verified 2026-10-03** after installing the `.pkg` (E6): `tmutil isexcluded ~/.knaif/models`
+      > → `[Excluded]`. Not proof that the postinstall set it: an earlier `knaif models pull` on this
+      > Mac may have. A fresh account (the E3/E4 room) would separate the two.
 
 - [ ] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
       on the `.pkg` **and** on the `.zip` (D6 makes the `.zip` both the notarized and the published
