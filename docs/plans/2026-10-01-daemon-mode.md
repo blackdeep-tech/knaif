@@ -4,7 +4,7 @@
 **Owner:** native CLI · **Ref:** [TODO.md](../TODO.md) (*Daemon mode*; *Inference latency: daemon +
 prompt-prefix KV reuse*) · [PERFORMANCE.md §6](../PERFORMANCE.md) ·
 [release-1.2.1](2026-09-30-release-1.2.1.md) (*Deferred*)
-**Release:** —
+**Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
 
 **Goal:** Cut the time of a `knaif run` by keeping the model loaded between runs (daemon mode)
 and by not re-processing the fixed part of the prompt on every request (prefix reuse), without
