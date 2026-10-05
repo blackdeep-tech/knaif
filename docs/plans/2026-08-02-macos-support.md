@@ -184,8 +184,10 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
 6. **Certificates and notary credentials** for steps 9–10 (F1, the certificates plan).
 
 **Stale since the 1.2.1 merge (#10).** 1.2.1 changed native code, so `just check-gate` reads L3/L4
-stale for every cell, the macOS ones included; L1/L2 were re-recorded on the merged tree. The
-macOS L3/L4 have to be re-run on the 1.3.0 tree, on a Mac.
+stale for the Windows and Linux cells; L1/L2 were re-recorded on the merged tree. **The macOS L3/L4
+were re-run on that tree on 2026-10-05** with the same decisions as before (C4, C5); its four
+`macos|mtl` cells are current. They need re-running again only if the native code changes once more
+(for example a `documents_105` fix).
 
 **Still needs a person:** the installer's screens judged by whoever installs (E6); the first-run
 shader tax from a fresh user account (D3); D4 on an 8 GB Mac; D5's OpenMP comparison; and step 10's
@@ -1018,6 +1020,13 @@ already pass, on a third platform, for the first time.**
       > requests (both Metal cells in full, both CPU samples) gave the same plan and grade, so the same
       > four verdicts — the 1.7B `batch` miss included. The acceptance records now name this run, the
       > one pinned to a commit on the branch. `evals/runs/2026-10-03_mac-l4-rerun_success/`.
+      > **On the merged 1.2.1 tree, 2026-10-05 (`bdd01b5`, macOS 27.2 Beta 2): the same decisions.**
+      > The merge of `main` made these cells stale, so L4 (and L3, C5) ran again with the same rules on
+      > a fresh build (new `knaif`, `c67fcb99…`). All 2,350 requests gave the same plan and grade as on
+      > 1.2.0: 4B ACCEPTED on both skills, 1.7B documents ACCEPTED, 1.7B ffmpeg NOT ACCEPTED on `batch`
+      > 25/29. The four `macos|mtl` cells now match the merged tree's fingerprints. Metal p50 rose ~5%
+      > on three cells, most likely from the 1.2.1 binary (the 1.2.0 binary on Beta 2 did not).
+      > `evals/runs/2026-10-05_mac-l3l4-1.2.1_success/`.
 - [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
       > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does
@@ -1116,6 +1125,12 @@ already pass, on a third platform, for the first time.**
       > (`skills/documents/native/src/run.rs`), which only the execute path reaches. Platform-
       > independent code; Metal's near-tie is only what exposed it. Other page-list arguments were
       > not checked. Not fixed here: a fix changes the native binary, so L3 and L4 would re-run.
+      >
+      > **On the merged 1.2.1 tree, 2026-10-05 (`bdd01b5`, macOS 27.2 Beta 2): the same result.** 4B
+      > ffmpeg PASS (0 port bugs, 0.00%), 4B documents **FAIL** (`documents_105` again, 0.70%), 1.7B
+      > ffmpeg PASS (0.00%), 1.7B documents PASS (0.70%). The dry-run gap reproduces on 1.2.1 with the
+      > mock backend, so 1.2.1 did not change it. Reports:
+      > `evals/parity/2026-10-05_mac-l3-1.2.1-<model>-<skill>/`.
 - [x] **C6. Cross-OS plan agreement.** *(Superseded 2026-09-30 by D17: folded into D14's per-row flip comparison against the committed 1.2.0 L4 extract, on the v2 models. The v1 slice below is deleted, not finished.)* For a fixed slice of the ffmpeg corpus, compare macOS
       `plan --json` output against the same slice from a Windows or Linux build. Distinct from C5,
       which compares two runtimes on one machine. This is the check that says "the same request
