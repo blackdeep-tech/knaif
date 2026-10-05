@@ -76,10 +76,12 @@ request
 ```
 
 - `--dry-run` previews commands/output paths with no side effects (stubs missing
-  inputs) — **every step of a chain, not just the first**. Execution requires explicit consent
-  (`--yes`, or an interactive `y`); non-interactive execution without `--yes` errors with the
-  preview. Consent is **per step**: a destructive step in the middle of a chain is confirmed as
-  one, so an N-step chain asks N times without `--yes`.
+  inputs) — **every step of a chain, not just the first**. Since 1.3.0 execution **acts without
+  asking**: `--confirm` opts into `Proceed? [Y/n]` (Enter approves; per step, so an N-step chain
+  asks N times); `--yes` is accepted and skips that question. **Replacing an existing file is the one
+  thing that always asks**, whatever `--yes` says: `Replace <file>? [y/N]` (Enter keeps the file),
+  and with no terminal the step stops naming `--overwrite`, the only way to approve it up front.
+  The gate runs before the command, because every rendered ffmpeg command still carries `-y`.
 - **Chains are mediated by files, not variables.** `skills/<name>/prompt.yaml` instructs the model
   to give an earlier step an explicit `output` filename and reuse that same name as the later
   step's input, and never to chain with `$variable` references; `apply_clarify_gate` binds
@@ -336,7 +338,7 @@ was going to work.
 
 **Consent / download.** `run` asks `Download recommended model <name> (~2.5 GB)? [y/N]` (size read
 from the manifest's `size_bytes`) and pulls it with a progress bar on `y`. `--yes` skips the
-question and downloads. When stdin is not a tty and `--yes` was not passed, the run falls back to
+question and downloads (the model download keeps its own `[y/N]` consent). When stdin is not a tty and `--yes` was not passed, the run falls back to
 the mock with first-run guidance — a multi-GB download **never** happens without consent, so CI and
 piped runs never block. Prompts and the progress bar go to **stderr**; stdout stays clean.
 

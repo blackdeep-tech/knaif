@@ -141,8 +141,9 @@ $ knaif plan --skill ffmpeg "..."            # the validated plan envelope, as J
 $ knaif skills deps                          # which external tools are missing
 ```
 
-`run` executes for real behind a confirmation prompt; `--yes` skips it. The native `run`
-covers `ffmpeg` and `documents`.
+`run` executes for real and acts straight away; `--confirm` asks `Proceed? [Y/n]` first. It never
+replaces a file that already exists unless you pass `--overwrite` (or answer `y` to
+`Replace <file>? [y/N]`). The native `run` covers `ffmpeg` and `documents`.
 
 **As a library or SDK** — put a natural-language front end on your own CLI:
 

@@ -157,10 +157,20 @@ struct RunArgs {
     /// Restrict input/output paths to this directory (open/CLI mode when omitted).
     #[arg(long)]
     sandbox: Option<PathBuf>,
-    /// Don't ask, proceed: auto-confirm destructive/overwrite steps, and download the
-    /// recommended model without prompting when none is given or installed.
+    /// Download the recommended model without prompting when none is given or installed.
+    /// Steps already run without asking (see `--confirm`), so this no longer changes them; it is
+    /// kept so existing scripts and `--yes` habits keep working. It never approves replacing a
+    /// file: that is `--overwrite`.
     #[arg(long)]
     yes: bool,
+    /// Ask `Proceed? [Y/n]` before each step instead of acting straight away (Enter approves).
+    /// Without a terminal there is nobody to ask, so combine it with `--yes` or leave it off.
+    #[arg(long)]
+    confirm: bool,
+    /// Replace a file that already exists. Without it, a step whose output exists asks
+    /// `Replace <file>? [y/N]` (Enter keeps the file), and without a terminal it stops.
+    #[arg(long)]
+    overwrite: bool,
     /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
@@ -1029,7 +1039,8 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         base: &base,
         sandbox,
         dry_run: args.dry_run,
-        yes: args.yes,
+        yes: approves_without_asking(args.yes, args.confirm),
+        overwrite: args.overwrite,
     };
     execute_plan(&steps, total, &ctx)
 }
@@ -1247,7 +1258,10 @@ struct StepContext<'a> {
     base: &'a Path,
     sandbox: Option<&'a Path>,
     dry_run: bool,
+    /// Act without asking `Proceed?` — the default; `--confirm` turns the question on.
     yes: bool,
+    /// `--overwrite`: replacing an existing file needs no question.
+    overwrite: bool,
 }
 
 /// What one step means for the steps after it.
@@ -1323,6 +1337,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
+            ctx.overwrite,
         ),
         "documents" => run_documents_step(
             ctx.bundle,
@@ -1332,6 +1347,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
+            ctx.overwrite,
         ),
         _ => unreachable!("skill guarded above"),
     }
@@ -1349,6 +1365,7 @@ fn run_ffmpeg_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
+    overwrite: bool,
 ) -> anyhow::Result<StepOutcome> {
     let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
@@ -1400,21 +1417,31 @@ fn run_ffmpeg_step(
         for p in &previews {
             println!("{}", ui::render_command(&style, p));
         }
-        // ffmpeg runs with `-y`: a file that is already there is replaced without a word.
+        // Say it in the tree too, before the question below asks.
         for cmd in &commands {
             if let Some(out) = cmd.last().filter(|o| std::path::Path::new(o).exists()) {
                 println!(
                     "{}",
                     ui::render_detail(
                         &style,
-                        &style.paint(
-                            ui::Tone::Warn,
-                            &format!("⚠ {out} already exists and will be replaced")
-                        )
+                        &style.paint(ui::Tone::Warn, &format!("⚠ {out} already exists"))
                     )
                 );
             }
         }
+    }
+    // Every command carries `-y` (the rendered command is part of the parity contract), so a
+    // file that is already there would be replaced without a word: ask first, whatever `--yes`
+    // says. The chain's own intermediate files are not "existing" until an earlier step wrote
+    // them, so only what is on disk now is asked about.
+    let outputs: Vec<String> = commands.iter().filter_map(|c| c.last().cloned()).collect();
+    if !overwrite_gate(
+        &existing_outputs(&outputs),
+        overwrite,
+        &mut ask_yes_no_default,
+    )? {
+        print_declined();
+        return Ok(StepOutcome::Declined);
     }
     if !yes {
         if let Some(warning) = confirm_warning(tool, commands.len()) {
@@ -1535,6 +1562,7 @@ fn run_documents_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
+    overwrite: bool,
 ) -> anyhow::Result<StepOutcome> {
     use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
 
@@ -1603,10 +1631,7 @@ fn run_documents_step(
                             "{}",
                             ui::render_detail(
                                 &style,
-                                &style.paint(
-                                    ui::Tone::Warn,
-                                    "⚠ that file already exists and will be replaced"
-                                )
+                                &style.paint(ui::Tone::Warn, "⚠ that file already exists")
                             )
                         );
                     }
@@ -1626,6 +1651,14 @@ fn run_documents_step(
                 println!("{summary}");
             }
             let previews: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
+            if !overwrite_gate(
+                &existing_outputs(&previews),
+                overwrite,
+                &mut ask_yes_no_default,
+            )? {
+                print_declined();
+                return Ok(StepOutcome::Declined);
+            }
             if !confirm_action(yes, &previews, "output file")? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
@@ -1726,11 +1759,28 @@ fn print_read_result(style: &ui::Style, result: &knaif_skill_documents::run::Rea
 /// obtained, and each caller decides what that means (a destructive action errors; an optional
 /// download silently declines). Prompt goes to stderr so stdout stays machine-readable.
 fn ask_yes_no(question: &str) -> anyhow::Result<Option<bool>> {
+    ask_yes_no_default(question, false)
+}
+
+/// What a typed line means: Enter takes `default_yes`; `y`/`yes` is yes; anything else is no.
+fn answer_from_line(line: &str, default_yes: bool) -> bool {
+    match line.trim().to_lowercase().as_str() {
+        "" => default_yes,
+        "y" | "yes" => true,
+        _ => false,
+    }
+}
+
+/// [`ask_yes_no`] with the answer Enter gives: `[Y/n]` when `default_yes`, else `[y/N]`.
+fn ask_yes_no_default(question: &str, default_yes: bool) -> anyhow::Result<Option<bool>> {
     use std::io::{IsTerminal, Write};
     if !std::io::stdin().is_terminal() {
         return Ok(None);
     }
-    eprint!("{question} [y/N] ");
+    eprint!(
+        "{question} {} ",
+        if default_yes { "[Y/n]" } else { "[y/N]" }
+    );
     std::io::stderr().flush()?;
     // Drop anything typed *before* the prompt appeared (e.g. during a long inference wait) so a
     // stray keystroke can't silently answer this gate — the user must respond to the prompt itself.
@@ -1738,16 +1788,52 @@ fn ask_yes_no(question: &str) -> anyhow::Result<Option<bool>> {
     let mut line = String::new();
     // The time a person takes to answer is theirs, not the run's.
     ui::timed(|| std::io::stdin().read_line(&mut line))?;
-    Ok(Some(matches!(
-        line.trim().to_lowercase().as_str(),
-        "y" | "yes"
-    )))
+    Ok(Some(answer_from_line(&line, default_yes)))
+}
+
+/// Whether a step may run without the `Proceed?` question: the default, unless `--confirm` asked
+/// for it. `--yes` always skips it, so `--confirm --yes` is `--yes`.
+fn approves_without_asking(yes: bool, confirm: bool) -> bool {
+    yes || !confirm
+}
+
+/// The outputs among `paths` that already exist on disk.
+fn existing_outputs(paths: &[String]) -> Vec<String> {
+    paths
+        .iter()
+        .filter(|p| std::path::Path::new(p.as_str()).exists())
+        .cloned()
+        .collect()
+}
+
+/// Replacing a file is the one thing knaif asks about whatever `--yes` or the default says:
+/// `Replace <file>? [y/N]`, Enter keeps it. `--overwrite` is the only way to approve it up front.
+/// With nobody to ask it stops, naming the flag, rather than replacing silently. `Ok(false)` is a
+/// "no" — the step is declined.
+fn overwrite_gate(
+    existing: &[String],
+    overwrite: bool,
+    ask: &mut dyn FnMut(&str, bool) -> anyhow::Result<Option<bool>>,
+) -> anyhow::Result<bool> {
+    if existing.is_empty() || overwrite {
+        return Ok(true);
+    }
+    for path in existing {
+        match ask(&format!("Replace {path}?"), false)? {
+            Some(true) => {}
+            Some(false) => return Ok(false),
+            None => anyhow::bail!(
+                "{path} already exists. Re-run with --overwrite to replace it, or name a different output."
+            ),
+        }
+    }
+    Ok(true)
 }
 
 /// Discard any pending terminal input. During the long, silent model-load + inference wait a user
 /// may type (assuming nothing is happening); those keystrokes linger in the tty input buffer and
 /// would otherwise be consumed by the next confirm prompt or handed to the shell on exit. Flushing
-/// afterwards drops them. No-op when stdin is not a terminal, and (for now) on non-Unix platforms.
+/// afterwards drops them. No-op when stdin is not a terminal.
 #[cfg(unix)]
 fn flush_terminal_input() {
     use std::io::IsTerminal;
@@ -1763,7 +1849,26 @@ fn flush_terminal_input() {
     }
 }
 
-#[cfg(not(unix))]
+/// Windows keeps typed-ahead keys in the console input buffer too, so an Enter pressed during a
+/// long CPU inference would answer a `[Y/n]` prompt as Yes.
+#[cfg(windows)]
+fn flush_terminal_input() {
+    use std::io::IsTerminal;
+    use std::os::windows::io::AsRawHandle;
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        return;
+    }
+    // SAFETY: `FlushConsoleInputBuffer` on stdin's console handle only drops unread input events.
+    // A failed flush is ignored — the worst case is the pre-existing leak.
+    unsafe {
+        windows_sys::Win32::System::Console::FlushConsoleInputBuffer(
+            stdin.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE
+        );
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn flush_terminal_input() {}
 
 /// Gate a destructive action on explicit consent: `--yes`, or an interactive `y` when stdin is a
@@ -1785,14 +1890,14 @@ fn confirm_action(yes: bool, previews: &[String], noun: &str) -> anyhow::Result<
     }
     if ui::view().is_some() {
         // The step already listed what it will do; just ask, inside the tree.
-        return Ok(ask_yes_no(" │   Proceed?")?.unwrap_or(false));
+        return Ok(ask_yes_no_default(" │   Proceed?", true)?.unwrap_or(false));
     }
     eprintln!("About to act on {} {noun}(s):", previews.len());
     for line in previews {
         eprintln!("  {line}");
     }
     // Tty confirmed above, so a `None` (non-interactive) answer is unreachable; decline defensively.
-    Ok(ask_yes_no("Proceed?")?.unwrap_or(false))
+    Ok(ask_yes_no_default("Proceed?", true)?.unwrap_or(false))
 }
 
 /// Resolve the skills root and confirm `skill` is a known bundle.
@@ -2878,6 +2983,128 @@ mod tests {
                 }
             }
             let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    // --- 1.3.0: Yes by default, and an existing file always asks ---------------------------
+
+    #[test]
+    fn a_step_asks_only_when_confirm_is_opted_into() {
+        assert!(approves_without_asking(false, false), "the default acts");
+        assert!(
+            !approves_without_asking(false, true),
+            "--confirm asks first"
+        );
+        assert!(
+            approves_without_asking(true, true),
+            "--yes still skips the question"
+        );
+        assert!(approves_without_asking(true, false));
+    }
+
+    #[test]
+    fn enter_follows_the_default_and_anything_else_is_no() {
+        assert!(answer_from_line("", true));
+        assert!(answer_from_line("  \n", true));
+        assert!(
+            !answer_from_line("", false),
+            "an overwrite question defaults to No"
+        );
+        assert!(answer_from_line("Y", false));
+        assert!(answer_from_line("yes", false));
+        assert!(!answer_from_line("n", true));
+        assert!(!answer_from_line("nope", true));
+    }
+
+    fn ask_returning(
+        answer: Option<bool>,
+        seen: &RefCell<Vec<(String, bool)>>,
+    ) -> impl FnMut(&str, bool) -> anyhow::Result<Option<bool>> + '_ {
+        move |q, default_yes| {
+            seen.borrow_mut().push((q.to_string(), default_yes));
+            Ok(answer)
+        }
+    }
+
+    #[test]
+    fn nothing_to_replace_never_asks() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(false), &seen);
+        assert!(overwrite_gate(&[], false, &mut ask).unwrap());
+        assert!(seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn overwrite_flag_replaces_without_asking() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(false), &seen);
+        assert!(overwrite_gate(&["out.mp4".into()], true, &mut ask).unwrap());
+        assert!(seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn an_existing_output_asks_with_no_as_the_default() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(true), &seen);
+        assert!(overwrite_gate(&["out.mp4".into()], false, &mut ask).unwrap());
+        let seen = seen.borrow();
+        assert_eq!(seen.len(), 1);
+        assert!(
+            seen[0].0.contains("out.mp4"),
+            "names the file: {}",
+            seen[0].0
+        );
+        assert!(!seen[0].1, "the default for replacing a file is No");
+    }
+
+    #[test]
+    fn declining_to_replace_declines_the_step() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(false), &seen);
+        assert!(!overwrite_gate(&["a.mp4".into(), "b.mp4".into()], false, &mut ask).unwrap());
+    }
+
+    #[test]
+    fn without_a_terminal_an_existing_output_is_an_error_naming_the_flag() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(None, &seen);
+        let err = overwrite_gate(&["out.mp4".into()], false, &mut ask)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("out.mp4") && err.contains("--overwrite"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn existing_outputs_are_the_paths_that_exist() {
+        let dir = std::env::temp_dir().join(format!("knaif_existing_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let there = dir.join("there.mp4");
+        std::fs::write(&there, b"x").unwrap();
+        let gone = dir.join("gone.mp4");
+        let found = existing_outputs(&[there.display().to_string(), gone.display().to_string()]);
+        assert_eq!(found, vec![there.display().to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn run_accepts_confirm_and_overwrite_and_keeps_yes() {
+        use clap::Parser;
+        let cli = Cli::try_parse_from([
+            "knaif",
+            "run",
+            "ffmpeg",
+            "--confirm",
+            "--overwrite",
+            "--yes",
+            "x",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Run(a) => assert!(a.confirm && a.overwrite && a.yes),
+            _ => panic!("expected run"),
         }
     }
 
