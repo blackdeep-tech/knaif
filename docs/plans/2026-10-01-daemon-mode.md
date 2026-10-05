@@ -10,8 +10,7 @@ prompt-prefix KV reuse*) · [PERFORMANCE.md §6](../PERFORMANCE.md) ·
 and by not re-processing the fixed part of the prompt on every request (prefix reuse), without
 changing a single plan the model produces.
 
-Proposed for **1.3.0** (owner, 2026-10-01). Not assigned yet: 1.3.0's scope is decided in its own
-session, and this plan goes into that index's scope only then. Too big for the 1.2.1 patch: it
+In **1.3.0** (owner, 2026-10-05; proposed 2026-10-01). Too big for the 1.2.1 patch: it
 adds CLI surface, a long-running process, installer changes, and needs the minor release's gates.
 
 ---
@@ -87,6 +86,10 @@ not measured yet; the daemon's design should not depend on it, but quote no Linu
 ### - [ ] D0 — Owner decisions
 
 Surface (start/stop and their names), idle timeout, whether the daemon is on by default.
+
+- 2026-10-05 (owner): **opt-in, started explicitly** — off by default; a `start`/`stop`/`status`
+  surface; `run` uses a running daemon and otherwise loads the model itself; it shuts down after an
+  idle timeout. Still open: the exact names and the timeout value.
 
 ### - [ ] D1 — Daemon
 
