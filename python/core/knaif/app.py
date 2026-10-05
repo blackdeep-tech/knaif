@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -204,6 +205,28 @@ def approval_required(*, auto_approve: bool | None, confirm: bool) -> bool:
     return confirm or auto_approve is False
 
 
+_SEQUENCE_TOKEN = re.compile(r"%0?\d*d")
+
+
+def _existing_matches(value: str) -> list[str]:
+    """The files an output path names that exist. An image-sequence pattern (`frame_%03d.png`) is
+    expanded by ffmpeg into many files, so it names every file in its folder that fits."""
+    path = Path(value)
+    token = _SEQUENCE_TOKEN.search(path.name)
+    if token is None:
+        return [value] if path.exists() else []
+    fits = re.compile(
+        re.escape(path.name[: token.start()]) + r"\d+" + re.escape(path.name[token.end() :]) + "$"
+    )
+    folder = path.parent
+    if not folder.is_dir():
+        return []
+    shown = folder if str(path.parent) != "." else None
+    return sorted(
+        str(shown / f.name) if shown else f.name for f in folder.iterdir() if fits.match(f.name)
+    )
+
+
 def planned_outputs(results: list[dict[str, Any]]) -> list[str]:
     """Paths a dry-run preview says the plan would write, that already exist on disk.
 
@@ -214,8 +237,11 @@ def planned_outputs(results: list[dict[str, Any]]) -> list[str]:
     found: list[str] = []
 
     def add(value: Any) -> None:
-        if isinstance(value, str) and value and value not in found and Path(value).exists():
-            found.append(value)
+        if not isinstance(value, str) or not value:
+            return
+        for hit in _existing_matches(value):
+            if hit not in found:
+                found.append(hit)
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
@@ -238,8 +264,31 @@ def planned_outputs(results: list[dict[str, Any]]) -> list[str]:
     return found
 
 
+def _named_outputs(node: Any) -> list[str]:
+    """Output paths the plan itself names (`output` / `output_path` args), for when it cannot be
+    previewed."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in ("output", "output_path") and isinstance(value, str):
+                found.extend(_existing_matches(value))
+            else:
+                found.extend(_named_outputs(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_named_outputs(item))
+    return found
+
+
 def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[str]:
-    """Preview *payload* silently (no prompts, no per-intent rendering, nothing written)."""
+    """Preview *payload* (no prompts, no per-intent rendering, nothing written) and return the
+    outputs it would replace.
+
+    `confirmed=True` so an internal `wait_for_confirmation` (reverse_video expands through one)
+    lets the preview reach the intents after it; `dry_run=True` is what keeps it side-effect free.
+    A chain that cannot be previewed (a later step reads a file an earlier step has not written)
+    falls back to the outputs the plan names, and the real run reports the error in its own words.
+    """
     import copy
 
     saved = agent.intent_completed
@@ -249,12 +298,12 @@ def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[
             copy.deepcopy(payload),
             utterance=prompt,
             dry_run=True,
-            confirmed=False,
+            confirmed=True,
             show_plan=False,
             require_approval=False,
         )
-    except ValueError:
-        return []  # the real run reports it, once, in its own words
+    except Exception:  # noqa: BLE001 - any preview failure falls back, never fails open
+        return list(dict.fromkeys(_named_outputs(payload.get("plan"))))
     finally:
         agent.intent_completed = saved
     return planned_outputs(preview)
@@ -562,7 +611,7 @@ def run_cmd(
     # destructive tools; pass confirmed=True so those tools don't double-block.
     confirmed = not dry_run
 
-    if not dry_run:
+    if not dry_run and not overwrite:
         # Replacing a file is the one thing that always asks, whatever -y says: preview the
         # plan (no side effects) to learn which outputs it would write, and ask before any
         # of them is replaced. Decline = the same "plan declined" as a declined Proceed?.

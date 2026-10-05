@@ -1787,8 +1787,14 @@ fn ask_yes_no_default(question: &str, default_yes: bool) -> anyhow::Result<Optio
     flush_terminal_input();
     let mut line = String::new();
     // The time a person takes to answer is theirs, not the run's.
-    ui::timed(|| std::io::stdin().read_line(&mut line))?;
-    Ok(Some(answer_from_line(&line, default_yes)))
+    let read = ui::timed(|| std::io::stdin().read_line(&mut line))?;
+    Ok(Some(answer_from_input(read, &line, default_yes)))
+}
+
+/// [`answer_from_line`] for what `read_line` returned: zero bytes is end of input (a closed
+/// terminal), not Enter, and never approves anything.
+fn answer_from_input(bytes_read: usize, line: &str, default_yes: bool) -> bool {
+    bytes_read > 0 && answer_from_line(line, default_yes)
 }
 
 /// Whether a step may run without the `Proceed?` question: the default, unless `--confirm` asked
@@ -1797,13 +1803,67 @@ fn approves_without_asking(yes: bool, confirm: bool) -> bool {
     yes || !confirm
 }
 
-/// The outputs among `paths` that already exist on disk.
+/// The files an output path names that already exist on disk. A plain path names itself. An
+/// image-sequence pattern (`frame_%03d.png`, `%d`) is expanded by ffmpeg's image2 muxer into many
+/// files, so it names every file in its folder that fits: the literal text never exists, and the
+/// check would pass while `frame_001.png` is replaced.
 fn existing_outputs(paths: &[String]) -> Vec<String> {
-    paths
-        .iter()
-        .filter(|p| std::path::Path::new(p.as_str()).exists())
-        .cloned()
-        .collect()
+    let mut found = Vec::new();
+    for p in paths {
+        match split_sequence_pattern(p) {
+            Some((prefix, suffix)) => {
+                let path = std::path::Path::new(prefix);
+                let dir = path
+                    .parent()
+                    .filter(|d| !d.as_os_str().is_empty())
+                    .unwrap_or(std::path::Path::new("."));
+                let stem = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                let Ok(entries) = std::fs::read_dir(dir) else {
+                    continue;
+                };
+                let mut hits: Vec<String> = entries
+                    .flatten()
+                    .filter_map(|e| {
+                        let name = e.file_name().into_string().ok()?;
+                        let middle = name.strip_prefix(stem)?.strip_suffix(suffix)?;
+                        let digits =
+                            !middle.is_empty() && middle.chars().all(|c| c.is_ascii_digit());
+                        digits.then(|| {
+                            if path.parent().is_some_and(|d| !d.as_os_str().is_empty()) {
+                                dir.join(&name).display().to_string()
+                            } else {
+                                name
+                            }
+                        })
+                    })
+                    .collect();
+                hits.sort();
+                found.extend(hits);
+            }
+            None if std::path::Path::new(p.as_str()).exists() => found.push(p.clone()),
+            None => {}
+        }
+    }
+    found
+}
+
+/// `(before, after)` around a `%d` / `%0Nd` frame-number token in the file name, if there is one.
+fn split_sequence_pattern(path: &str) -> Option<(&str, &str)> {
+    let name_start = path.rfind(['/', '\\']).map_or(0, |i| i + 1);
+    let mut from = name_start;
+    while let Some(i) = path[from..].find('%') {
+        let at = from + i;
+        let rest = &path[at + 1..];
+        let digits = rest.chars().take_while(char::is_ascii_digit).count();
+        if rest[digits..].starts_with('d') {
+            return Some((&path[..at], &path[at + 1 + digits + 1..]));
+        }
+        from = at + 1;
+    }
+    None
 }
 
 /// Replacing a file is the one thing knaif asks about whatever `--yes` or the default says:
@@ -1871,9 +1931,9 @@ fn flush_terminal_input() {
 #[cfg(not(any(unix, windows)))]
 fn flush_terminal_input() {}
 
-/// Gate a destructive action on explicit consent: `--yes`, or an interactive `y` when stdin is a
-/// terminal. Non-interactive without `--yes` errors with the preview + how to proceed (never acts
-/// silently). `noun` names the previewed items (e.g. "ffmpeg command", "output file").
+/// Ask `Proceed? [Y/n]` before a step. Only reached under `--confirm`: the default (and `--yes`)
+/// acts without asking. With `--confirm` and no terminal there is nobody to ask, so it errors with
+/// the preview + how to proceed (never acts silently). `noun` names the previewed items (e.g. "ffmpeg command", "output file").
 fn confirm_action(yes: bool, previews: &[String], noun: &str) -> anyhow::Result<bool> {
     use std::io::IsTerminal;
     if yes {
@@ -3087,6 +3147,30 @@ mod tests {
         let found = existing_outputs(&[there.display().to_string(), gone.display().to_string()]);
         assert_eq!(found, vec![there.display().to_string()]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_image_sequence_pattern_matches_the_files_it_would_write() {
+        let dir = std::env::temp_dir().join(format!("knaif_pattern_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("frame_001.png"), b"x").unwrap();
+        std::fs::write(dir.join("frame_x.png"), b"x").unwrap();
+        std::fs::write(dir.join("other_002.png"), b"x").unwrap();
+        let hit = dir.join("frame_001.png").display().to_string();
+        for pattern in ["frame_%03d.png", "frame_%d.png"] {
+            let found = existing_outputs(&[dir.join(pattern).display().to_string()]);
+            assert_eq!(found, vec![hit.clone()], "{pattern}");
+        }
+        assert!(existing_outputs(&[dir.join("shot_%03d.png").display().to_string()]).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn end_of_input_never_approves_a_prompt() {
+        assert!(!answer_from_input(0, "", true), "EOF is not Enter");
+        assert!(answer_from_input(1, "\n", true), "Enter takes the default");
+        assert!(!answer_from_input(1, "\n", false));
+        assert!(answer_from_input(2, "y\n", false));
     }
 
     #[test]
