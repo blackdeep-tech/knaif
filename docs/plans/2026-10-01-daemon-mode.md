@@ -90,6 +90,9 @@ Surface (start/stop and their names), idle timeout, whether the daemon is on by 
 - 2026-10-05 (owner): **opt-in, started explicitly** — off by default; a `start`/`stop`/`status`
   surface; `run` uses a running daemon and otherwise loads the model itself; it shuts down after an
   idle timeout. Still open: the exact names and the timeout value.
+- 2026-10-05 (owner): the daemon can also be started **from a run**: `knaif run <skill> "…" --daemon`
+  starts it if none is running and serves that request through it; later runs use it without the
+  flag. `--daemon` with a daemon already running just uses it.
 
 ### - [ ] D1 — Daemon
 
