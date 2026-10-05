@@ -127,9 +127,12 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 | `SHA256SUMS` | — | one line per published artifact |
 
 The **support matrix** these artifacts imply — supported OSes, the measured runtime
-floors, GPU backends, and the external-tool caveats — is declared once in
+floors and GPU backends — is declared once in
 [`contracts/release/platforms.yaml`](../contracts/release/platforms.yaml) and read by the
-website. State a floor there, not in prose here, so the two cannot disagree.
+website. State a floor there, not in prose here, so the two cannot disagree. The download page's
+*wording* (warnings, artifact notes, the GPU, external-tool and model paragraphs) is in
+[`site/data/download-copy.yaml`](../site/data/download-copy.yaml), outside `contracts/` so that
+rewording it does not stale the eval gate; run `just site-data` after editing it.
 
 **`cpu` is a build kind, not a release artifact.** It exists for a box with no Vulkan SDK and is
 named `knaif-<ver>-<os>-<arch>-cpu.*` so it cannot overwrite the real one. Do not publish it: it

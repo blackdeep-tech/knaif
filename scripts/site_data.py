@@ -20,7 +20,9 @@ Sources:
     skills/*/tools.yaml          tool registry (via the loader)
     skills/*/prompt.yaml         curated example utterances (already model-facing)
     contracts/models/model-manifest.yaml
-    contracts/release/platforms.yaml
+    contracts/release/platforms.yaml     the support facts
+    site/data/download-copy.yaml         the download page's sentences (not under contracts/, so
+                                         rewording them does not stale the eval gate)
 
 Deliberately NOT a source: `models.yaml`, which is a *runtime backend config* (paths,
 n_ctx, n_gpu_layers) and omits the released 1.7B entirely.
@@ -259,6 +261,43 @@ def _models_json() -> dict[str, Any]:
     return {"models": models, "recommendations": recommendations}
 
 
+DOWNLOAD_COPY = REPO / "site" / "data" / "download-copy.yaml"
+
+
+def _apply_download_copy(platforms: dict[str, Any], path: Path = DOWNLOAD_COPY) -> dict[str, Any]:
+    """Overlay the download page's sentences on the support matrix, in the shape the page
+    has always read. Wording for an id the contract does not declare fails the build."""
+    copy = _load_yaml(path)
+    by_id = {p["id"]: p for p in platforms.get("platforms", [])}
+    for pid, extra in (copy.get("platforms") or {}).items():
+        if pid not in by_id:
+            raise ExtractError(f"{path.name}: wording for unknown platform {pid!r}")
+        entry = by_id[pid]
+        for template, notes in (extra.get("artifacts") or {}).items():
+            artifact = next(
+                (a for a in entry.get("artifacts", []) if a.get("artifact") == template), None
+            )
+            if artifact is None:
+                raise ExtractError(f"{path.name}: {pid} has no artifact {template!r}")
+            artifact.update(notes)
+        for key in ("warnings", "notes"):
+            if key in extra:
+                entry[key] = extra[key]
+    gpu = platforms.get("gpu", {})
+    copy_gpu = copy.get("gpu") or {}
+    if "default" in copy_gpu:
+        gpu.setdefault("default", {}).update(copy_gpu["default"])
+    options = {o["id"]: o for o in gpu.get("optional", [])}
+    for oid, extra in (copy_gpu.get("optional") or {}).items():
+        if oid not in options:
+            raise ExtractError(f"{path.name}: wording for unknown GPU option {oid!r}")
+        options[oid].update(extra)
+    for key in ("external_tools", "model"):
+        if key in copy:
+            platforms.setdefault(key, {}).update(copy[key])
+    return platforms
+
+
 def build() -> dict[str, Any]:
     names = list_skills()  # already excludes `status: stale` — io stays off the catalog
     skills = [entry for entry in (_skill_json(n) for n in names) if entry is not None]
@@ -269,7 +308,9 @@ def build() -> dict[str, Any]:
         "generated_by": "scripts/site_data.py",
         "skills": skills,
         **_models_json(),
-        "platforms": _load_yaml(REPO / "contracts" / "release" / "platforms.yaml"),
+        "platforms": _apply_download_copy(
+            _load_yaml(REPO / "contracts" / "release" / "platforms.yaml")
+        ),
     }
 
 

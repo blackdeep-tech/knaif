@@ -1,0 +1,64 @@
+# The sentences knaif.org's /download page shows, kept apart from the support facts in
+# contracts/release/platforms.yaml.
+#
+# WHY THIS IS NOT UNDER contracts/. The eval gate fingerprints all of contracts/, so one
+# reworded sentence here used to mark every L1-L4 record stale (the "signed" fix,
+# 2026-10-03) without changing a byte of what the runtimes read. Nothing but the website
+# reads this file: scripts/site_data.py overlays it on the platform matrix and writes the
+# result to site/data/site-data.json, in the same shape the page has always consumed.
+#
+# Facts stay in the contract: ids, status, `requires`, `known_good`/`known_bad`, artifact
+# name templates, backends, install commands, sizes. Anything that is a sentence for a
+# reader lives here, keyed by the contract's ids (an unknown id fails the site build).
+
+platforms:
+  windows-x64:
+    artifacts:
+      "knaif-<ver>-windows-x64-setup.exe":
+        notes: "Inno installer, per-user, no admin required."
+      "knaif-<ver>-windows-x64.zip":
+        notes: "Unpack anywhere and run; everything it needs ships beside the binary."
+    warnings:
+      # Not a footnote — it is the first thing a Windows user sees, and the checksum
+      # (not the absence of a warning) is what proves the download is intact.
+      - id: smartscreen
+        text: >-
+          Signed by Blackdeep Technologies Ltd. A new release has no download reputation yet, so
+          Edge may say the file "isn't commonly downloaded": open the download's "…" menu, choose
+          Keep, then Show more → Keep anyway. If Windows then shows "Windows protected your PC",
+          choose More info → Run anyway. Verify the checksum first.
+
+  linux-x64:
+    artifacts:
+      "knaif-<ver>-linux-x86_64.AppImage":
+        notes: >-
+          chmod +x and run. Needs FUSE2 (libfuse2t64 on Ubuntu 24.04); otherwise run with
+          --appimage-extract-and-run.
+
+  macos:
+    notes: "Core is cross-platform; packaging is a fast-follow. No artifact is published."
+
+gpu:
+  default:
+    text: >-
+      Every download includes CPU and Vulkan support, and auto-selects Vulkan when a
+      capable driver is present.
+  optional:
+    cuda:
+      # This is a correctness issue on the newest cards, not an optimisation. Saying
+      # "Vulkan works everywhere" was wrong through 1.0.x and is what this entry prevents.
+      text: >-
+        On NVIDIA Blackwell cards (RTX 50xx) the Vulkan path runs at roughly CPU speed, so
+        CUDA is what makes knaif usable there. On older NVIDIA cards it is faster and
+        genuinely optional.
+
+external_tools:
+  text: >-
+    Skills that use external programs (FFmpeg, LibreOffice, Ghostscript, Tesseract) need
+    them installed separately. Run `knaif skills deps` to see what is missing.
+
+model:
+  text: >-
+    On first run knaif offers to download the recommended model (~2.5 GB) into ~/.knaif,
+    verified against a pinned SHA-256. Upgrading knaif re-downloads nothing while the
+    recommendation is unchanged.

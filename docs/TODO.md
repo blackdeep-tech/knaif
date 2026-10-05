@@ -364,7 +364,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   adds `-1` to auto-generated names but overwrites an explicit `output`. This contradicts the "nothing
   can overwrite an existing file" premise of the Yes-default item above. Decide: ask before replacing,
   or suffix like documents does. 1.3.0; the 1.2.1 terminal view only warns.
-- [ ] **Move the download page's wording out of `contracts/`** — owner, 2026-10-03: chosen for
+- [x] **Move the download page's wording out of `contracts/`** — DONE 2026-10-05 on `feat/1.3.0`: wording is in `site/data/download-copy.yaml`, `site-data.json` is byte-identical. Was: — owner, 2026-10-03: chosen for
   1.3.0. The `warnings` (and other display text) in `contracts/release/platforms.yaml` are read only
   by knaif.org's download page (`scripts/site_data.py` → `site/data/site-data.json` →
   `download.astro`), yet the gate fingerprints all of `contracts/`, so one sentence of site copy
