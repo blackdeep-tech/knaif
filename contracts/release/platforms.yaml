@@ -53,10 +53,6 @@ platforms:
       - "Linux Mint 21+"
     known_bad:
       - distro: "RHEL / Rocky / AlmaLinux 9"
-        reason: >-
-          glibc is new enough, but the shipped libstdc++ is one version short of
-          GLIBCXX_3.4.30. Bundling libstdc++ was rejected: libggml-vulkan.so dlopens a host
-          driver built against the system copy.
     artifacts:
       - artifact: "knaif-<ver>-linux-x64.tar.gz"
         kind: portable

@@ -11,10 +11,10 @@ particular one.
 
 The sentences the page shows (warnings, artifact notes, the GPU, external-tool and first-run-model
 paragraphs) live in [`site/data/download-copy.yaml`](../../site/data/download-copy.yaml).
-The eval gate fingerprints every file under `contracts/`, so a reworded sentence here marks all
+The eval gate fingerprints every YAML and JSON file under `contracts/`, so a reworded sentence here marks all
 L1–L4 evidence stale without changing anything the runtimes read.
 `scripts/site_data.py` overlays that file on `platforms.yaml`; a test fails if a `warnings`,
-`notes` or `text` key returns here.
+`notes`, `text` or `reason` key returns here.
 
 ## This directory holds no version numbers
 

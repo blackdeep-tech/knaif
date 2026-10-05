@@ -258,7 +258,7 @@ def test_model_urls_and_hashes_are_not_copied_into_the_site():
 COPY = ROOT / "site" / "data" / "download-copy.yaml"
 PLATFORMS = ROOT / "contracts" / "release" / "platforms.yaml"
 #: Keys whose values are sentences for the download page, not support facts.
-DISPLAY_KEYS = {"warnings", "notes", "text"}
+DISPLAY_KEYS = {"warnings", "notes", "text", "reason"}
 
 
 def _display_keys(node, path=""):
@@ -294,3 +294,37 @@ def test_wording_for_an_unknown_platform_fails_the_build(tmp_path):
     bad.write_text("platforms:\n  amiga:\n    notes: hi\n", encoding="utf-8")
     with pytest.raises(sd.ExtractError, match="amiga"):
         sd._apply_download_copy({"platforms": [{"id": "windows-x64"}]}, bad)
+
+
+_ZIP = "knaif-<ver>-windows-x64.zip"
+
+
+@pytest.mark.parametrize(
+    "doc, needle",
+    [
+        ({"platforms": {"windows-x64": {"artifacts": {"nope": {"notes": "x"}}}}}, "nope"),
+        ({"platforms": {"windows-x64": {"artifacts": {_ZIP: {"noets": "x"}}}}}, "noets"),
+        ({"platforms": {"windows-x64": {"artifacts": {_ZIP: {"kind": "installer"}}}}}, "kind"),
+        ({"platforms": {"windows-x64": {"requires": "hi"}}}, "requires"),
+        ({"platforms": {"windows-x64": {"warnings": [{"id": "a"}]}}}, "warnings"),
+        ({"gpu": {"optional": {"nope": {"text": "x"}}}}, "nope"),
+        ({"gpu": {"default": {"backends": ["cpu"]}}}, "backends"),
+        ({"model": {"texxt": "x"}}, "texxt"),
+    ],
+)
+def test_malformed_wording_fails_the_build(tmp_path, doc, needle):
+    contract = {
+        "platforms": [{"id": "windows-x64", "artifacts": [{"artifact": _ZIP, "kind": "portable"}]}],
+        "gpu": {"default": {"backends": ["cpu"]}, "optional": [{"id": "cuda"}]},
+    }
+    bad = tmp_path / "copy.yaml"
+    bad.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    with pytest.raises(sd.ExtractError, match=needle):
+        sd._apply_download_copy(contract, bad)
+
+
+def test_the_python_job_runs_when_only_the_wording_changes():
+    """site/ alone skips the Python job, and test_site_data.py is the drift guard for
+    site/data/site-data.json (Codex audit, 2026-10-05)."""
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "contracts/|site/data/|" in ci
