@@ -197,6 +197,102 @@ def cli() -> None:
 # ── run ───────────────────────────────────────────────────────────────────────
 
 
+def approval_required(*, auto_approve: bool | None, confirm: bool) -> bool:
+    """Whether `run` asks `Proceed?`: only when opted into (--confirm / -Y); -y always skips it."""
+    if auto_approve:
+        return False
+    return confirm or auto_approve is False
+
+
+def planned_outputs(results: list[dict[str, Any]]) -> list[str]:
+    """Paths a dry-run preview says the plan would write, that already exist on disk.
+
+    Walks the nested preview results for the keys the skills use (`output`, `outputs`,
+    `preview_output`) and for a rendered ffmpeg `command`, whose last argument is its output path
+    (any other program's last argument might be an input, so it is not read).
+    """
+    found: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str) and value and value not in found and Path(value).exists():
+            found.append(value)
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ("output", "preview_output"):
+                    add(value)
+                elif key == "outputs" and isinstance(value, list):
+                    for item in value:
+                        add(item)
+                elif key == "command" and isinstance(value, list) and value:
+                    if Path(str(value[0])).stem.lower() == "ffmpeg":
+                        add(value[-1])
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    for step in results:
+        walk(step.get("result"))
+    return found
+
+
+def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[str]:
+    """Preview *payload* silently (no prompts, no per-intent rendering, nothing written)."""
+    import copy
+
+    saved = agent.intent_completed
+    agent.intent_completed = None
+    try:
+        preview = agent.execute_plan(
+            copy.deepcopy(payload),
+            utterance=prompt,
+            dry_run=True,
+            confirmed=False,
+            show_plan=False,
+            require_approval=False,
+        )
+    except ValueError:
+        return []  # the real run reports it, once, in its own words
+    finally:
+        agent.intent_completed = saved
+    return planned_outputs(preview)
+
+
+def _ask_yes_no(question: str, default_yes: bool) -> bool | None:
+    """`question [y/N]` on the terminal (Enter takes the default); None when there is no terminal."""
+    if not sys.stdin.isatty():
+        return None
+    click.echo(f"{question} {'[Y/n]' if default_yes else '[y/N]'} ", nl=False, err=True)
+    try:
+        c = click.getchar()
+    except (KeyboardInterrupt, EOFError):
+        click.echo(err=True)
+        return False
+    click.echo(err=True)
+    if c in ("\r", "\n"):
+        return default_yes
+    return c in ("y", "Y")
+
+
+def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
+    """Ask before replacing each existing output (default No). --overwrite approves up front;
+    with nobody to ask it stops, naming the flag. False means the user said no."""
+    if not existing or overwrite:
+        return True
+    for path in existing:
+        answer = ask(f"Replace {path}?", False)
+        if answer is None:
+            raise click.ClickException(
+                f"{path} already exists. Re-run with --overwrite to replace it, "
+                "or name a different output."
+            )
+        if not answer:
+            return False
+    return True
+
+
 @cli.command("run")
 @click.argument("skill")
 @click.argument("prompt", nargs=-1, required=True)
@@ -217,9 +313,21 @@ def cli() -> None:
 @click.option(
     "-y/-Y",
     "--auto-approve/--require-approval",
+    default=None,
+    help="-y: never ask Proceed? (the default). -Y: ask, like --confirm.",
+)
+@click.option(
+    "--confirm",
+    is_flag=True,
     default=False,
-    show_default=True,
-    help="Skip y/n approval prompt before executing the plan.",
+    help="Ask 'Proceed? [Y/n]' before each step instead of acting straight away.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    default=False,
+    help="Replace files that already exist. Otherwise an existing output asks "
+    "'Replace <file>? [y/N]' (Enter keeps it) and, without a terminal, stops.",
 )
 @click.option(
     "-v",
@@ -281,7 +389,9 @@ def run_cmd(
     prompt: tuple[str, ...],
     dry_run: bool,
     show_plan: bool,
-    auto_approve: bool,
+    auto_approve: bool | None,
+    confirm: bool,
+    overwrite: bool,
     verbose: bool,
     silent: bool,
     backend: str,
@@ -310,7 +420,11 @@ def run_cmd(
     # --silent suppresses all informational output and skips interactive prompts.
     # --dry-run makes no changes, so the approval gate would be pointless noise.
     effective_show_plan = False if silent else show_plan
-    effective_require_approval = False if (silent or dry_run) else (not auto_approve)
+    effective_require_approval = (
+        False
+        if (silent or dry_run)
+        else approval_required(auto_approve=auto_approve, confirm=confirm)
+    )
 
     from . import _DEFAULT_SKILLS_ROOT
 
@@ -447,6 +561,15 @@ def run_cmd(
     # When running for real, the user's y/n via plan_confirmer authorises
     # destructive tools; pass confirmed=True so those tools don't double-block.
     confirmed = not dry_run
+
+    if not dry_run:
+        # Replacing a file is the one thing that always asks, whatever -y says: preview the
+        # plan (no side effects) to learn which outputs it would write, and ask before any
+        # of them is replaced. Decline = the same "plan declined" as a declined Proceed?.
+        existing = _existing_outputs(agent, payload, prompt_str)
+        if not overwrite_gate(existing, overwrite, _ask_yes_no):
+            click.echo(click.style("\n  (plan declined — no steps executed)", fg="yellow"))
+            sys.exit(0)
 
     try:
         results = agent.execute_plan(
