@@ -371,7 +371,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   marked every L1–L4 record stale (the "signed" fix, 2026-10-03). Give the site its own file for it;
   do it before 1.3.0's evidence runs, since the move itself changes the fingerprint once. Add it to
   the 1.3.0 index on `release/1.3.0`.
-- [ ] **A prompt line vanishes in VS Code's PowerShell terminal** — found in the owner's 1.2.1 test
+- [ ] **A prompt line vanishes in VS Code's PowerShell terminal** — PARKED 2026-10-06 (owner): not reproducible; reopen when seen again, with a screenshot and the terminal width. Found in the owner's 1.2.1 test
   round 2 (2026-10-01), shipped open in 1.2.1. After answering `y` at a step that prints a warning
   before `Proceed? [y/N]` (`reverse_video`), the warning and the prompt line disappear and the typed
   `y` lands after the command line. Not reproduced in a ConPTY at 120 or 160 columns nor in a Linux
@@ -983,7 +983,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
     ~120 ms warm for all four CUDA libs, so it buys no startup time. Weigh against the
     `90-virtual` forward-compat PTX rationale in NATIVE.md §10.
 
-- [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
+- [ ] **Warn on ARM64 Windows before installing the x64 build** *(out of 1.3.0, owner 2026-10-06: not a priority; blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
   2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
   is what it means, as opposed to `x64os`. So an ARM64 box installs the x64 build and runs llama.cpp

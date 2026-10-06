@@ -75,8 +75,12 @@ not measured yet; the daemon's design should not depend on it, but quote no Linu
 
 ## Gates
 
-- `eval-success` on both skills and `just parity` (L3) with the daemon and prefix reuse on, against
-  the current snapshots: **no plan may change**. Any change is a finding to explain, not noise.
+- **No plan may change through the daemon.** Revised 2026-10-06 (owner asked what requires L3/L4
+  with the daemon on — nothing does): the daemon carries only `(system, user) -> raw text`; prompt,
+  retrieval, validation, repair, gates and execution stay in the CLI, and the fingerprint refuses a
+  daemon whose model/build/backends/settings differ. So the check is a **plan-equality diff**:
+  `plan --batch` over both corpora in-process and through the daemon, outputs byte-identical. The
+  release's own L3/L4 run on the default (daemon off) path, as for any minor.
 - The full L4 matrix and the clean room with the installer stopping and upgrading over a running
   daemon. These are the minor release's gates, which is why this cannot be a patch.
 - The timing table above re-run with the same request, as the before/after evidence.
