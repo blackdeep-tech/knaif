@@ -149,7 +149,7 @@ before changing course.
 
 **Handback from the Mac, 2026-10-05 (M1 Pro, macOS 27.2).** Steps 1–8 of the Mac's list are done
 and recorded under their tasks; steps 9–10 are blocked on the certificates. No decision D1–D19
-was found wrong. PRs, all merged into the fork's `feat/macos-support` (`deyanzz/knaif-macos-cli`):
+was found wrong. PRs, all merged into the `feat/macos-support` of the Mac contributor's fork:
 #1 build fixes (step 1), #2 symlink (2), #3 Command Line Tools (3), #4 `.pkg` (4), #5 L4 and row
 flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tree, #10 the merge of
 `main` (1.2.1). The upstream PRs `blackdeep-tech/knaif#77` and `#78` were closed in favour of #1.
@@ -176,10 +176,14 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
    Python rejects it in both. Platform-independent; a fix changes the native binary, so L3/L4
    re-run after it (C5).
 3. **`.pkg` findings** (E6): `._*` AppleDouble entries in the payload from `com.apple.provenance`
-   (harmless on install; `xattr -cr` on the staged copy before `pkgbuild` removes them), and the
-   script-only choices (PATH link, model, tools) leave no receipt.
-4. **`acceptance_matrix.yaml` and `platforms.yaml` have no macOS entry**; the recorded cells are
-   keyed `<model>|macos|mtl` (C4).
+   (harmless on install; on this Mac neither `xattr -cr` nor `COPYFILE_DISABLE=1` removes them,
+   because macOS re-adds the attribute to every file written, see E6), and the script-only choices
+   (PATH link, model, tools) leave no receipt: `uninstall.sh` does not need one (it checks the
+   link's target and removes the install folder), but nothing records which choices were taken.
+4. **Release contracts:** `platforms.yaml` lists `macos` as `planned` but without artifacts or
+   requirements, and `acceptance_matrix.yaml` has no macOS cells; the recorded cells are keyed
+   `<model>|macos|mtl` (C4). *(Corrected 2026-10-06: this item first said `platforms.yaml` had no
+   macOS entry, which was wrong.)*
 5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
 6. **Certificates and notary credentials** for steps 9–10 (F1, the certificates plan).
 
@@ -1012,8 +1016,9 @@ already pass, on a third platform, for the first time.**
       > both models. The cells record as `<model>|macos|mtl` (`os=macos`, `compute_backend=MTL0`);
       > `acceptance_matrix.yaml` has no macOS entry yet, so the release integration has to name one.
       > Run, rules and the row flips (D14): `evals/runs/2026-10-03_mac-l4_success/` (`report.md`).
-      > **CPU sample:** the 1.2.0 Linux sample rows on the Metal-less tree (D2), all on `CPU`: 4B
-      > 0.913 ffmpeg / 1.000 documents, 1.7B 0.930 / 0.943; at most 5 of 115 decision flips against
+      > **CPU sample:** the 1.2.0 Linux sample rows on the Metal-less tree (D2), all on `CPU`, outcome
+      > accuracy: 4B 0.913 ffmpeg / 1.000 documents, 1.7B 0.930 / 0.943 (115 and 35 rows, so the
+      > 1.7B-above-4B gap on ffmpeg is within noise); at most 5 of 115 decision flips against
       > Linux CPU. Not composed into a cell — the owner's call, as for Linux (T15s).
       > **Re-run 2026-10-04 on the merged `af05956` (contributor request): identical, row for row.** Same
       > script and rules, a fresh build whose `knaif` is byte-identical to the first run's; all 2,350
@@ -1190,7 +1195,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
 
 - [x] **D1. Per-phase Metal numbers.** model load, `new_context`, prompt decode, generation,
       teardown, wall. Add a `macos` row to §2's backend table and a machine row to §1.
-      > **Done 2026-10-03 on `M1P`** (M1 Pro, 16-core GPU, 16 GB, macOS 27.2; machine row in
+      > **Done 2026-10-03 on `M1P`** (M1 Pro, 16-core GPU, 16 GB, **macOS 27.2 Beta 1**; machine row in
       > PERFORMANCE §1, table in §2). The packaged metal zip, median of 5 warm runs, `MTL0` 37/37:
       > 4B load 346 ms, `new_context` ~118 ms, prompt 4824 ms (506 tok/s), generation 1894 ms
       > (16.9 tok/s), inference 6843 ms, wall 7.35 s; 1.7B 1932 ms (1263 tok/s) / 856 ms
@@ -1428,8 +1433,18 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > extended attributes as `._*` entries: 51 in `core`, 22 in `skill-ffmpeg`, 10 in
       > `skill-documents` (the `.zip` has none). Installer folds them back into attributes — no
       > `._*` file reached `/usr/local/knaif` — so they are harmless to users, but they ship a
-      > build-machine attribute. Stripping attributes from the staged copy before `pkgbuild`
-      > (`xattr -cr`) would remove them; not changed here (to raise with the owner, then test-first).
+      > build-machine attribute.
+      > **Tested 2026-10-06 (macOS 27.2 Beta 2): no packaging-script fix removes them on this Mac.**
+      > On the 1.2.1 staged tree, `build-pkg.sh` as is gives 83 `._*` entries; with
+      > `COPYFILE_DISABLE=1` around it, 83; on a staged copy after `xattr -cr`, 83; and one file
+      > copied with `ditto --norsrc --noextattr --noqtn` into a fresh `pkgbuild` root still gets its
+      > `._LICENSE`. The reason: `xattr -c`/`-d` cannot remove `com.apple.provenance` (57 files keep
+      > it after `xattr -cr`, and `xattr -d` leaves it in place silently), and macOS adds it to every
+      > file a process here writes, including the copies `build-pkg.sh` makes with `cp -Rp`. So an
+      > attribute strip in the script (the interim analysis's suggestion, and this note's first
+      > guess) does not work here. What remains: accept the entries as harmless (no file reaches the
+      > disk), or check whether another build environment (the CI `macos` job, a different account)
+      > writes files without the attribute. An owner decision.
       > **Finding 2 — the script-only choices leave no receipt.** Only `core` and the two skills
       > appear in `pkgutil --pkgs`; `path`, `model` and the `tool.*` packages are `--nopayload`, and
       > macOS records no receipt for those (their scripts did run: the link exists). `uninstall.sh`

@@ -42,7 +42,9 @@ CLT alone suffices). `MACOSX_DEPLOYMENT_TARGET=12.0` is the chosen floor for the
 (D9) — this machine's own OS is far newer, so it proves nothing about the floor by itself; the E3
 clean-room VM must run the floor OS.
 
-`M1P` — macOS 27.2 (build 26B5086k), Xcode 27.0 / CLT 27.0. Builds the shipped `metal` kind with the
+`M1P` — **macOS 27.2 Beta 1** (build 26B5086k, a pre-release), Xcode 27.0 / CLT 27.0. Its numbers are
+beta measurements: the shipped floor is macOS 12.0, which only the clean room covers. A Beta 2 probe
+(2026-10-05, build 26B5091g) gave the same plans and grades at the same latency. Builds the shipped `metal` kind with the
 Command Line Tools alone (macOS plan M3). Its §2 numbers are the first macOS ones in this document.
 
 `3070L-WSL` is the **Linux** artifact measured on the `3070L` hardware through WSL2, not a third
@@ -125,7 +127,7 @@ at default threads (16 generation / 32 prompt).
 - Corpus-scale confirmation (2026-09-25, `evals/runs/2026-09-25_backend-parity-v2_plans`, 1015
   utterances, plan-only): CUDA 0.46 s, Vulkan 0.78 s, CPU at 8 threads ~12 s per utterance.
 
-### `M1P` (Apple M1 Pro) — **2026-10-03**, native, Metal and CPU
+### `M1P` (Apple M1 Pro) — **2026-10-03**, native, Metal and CPU, on macOS 27.2 Beta 1
 
 The packaged `knaif-1.2.0-macos-arm64.zip` (`metal` kind, `llama-cpp-2` 0.1.150, `dynamic-backends`,
 built by `just package-native metal`), `run --dry-run`, `KNAIF_TIMING=1`, the ffmpeg prompt (2441
