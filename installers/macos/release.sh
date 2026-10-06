@@ -41,6 +41,20 @@ done
 NAME="$(basename "$STAGE")"
 : "${KNAIF_INSTALLER_IDENTITY:?set KNAIF_INSTALLER_IDENTITY to the Developer ID Installer identity}"
 
+# The same guard package.sh runs, again here: package.sh stops only after staging, so a refused
+# tree can still be sitting in dist/staging. Nothing that names the builder is signed or sent to
+# Apple (AGENTS.md, Public Output Hygiene; 2026-10-06, a build under ~ was).
+echo "== 0/5 the staged tree carries no builder home directory"
+PY=""
+for cand in python python3; do
+  command -v "$cand" >/dev/null 2>&1 && { PY="$cand"; break; }
+done
+[ -n "$PY" ] || { echo "ERROR: python not found — cannot check $STAGE for local paths." >&2; exit 1; }
+"$PY" "$ROOT/scripts/check_no_local_paths.py" "$STAGE" || {
+  echo "ERROR: $STAGE carries the builder's home directory; not signing it." >&2
+  exit 1
+}
+
 echo "== 1/5 sign and verify every Mach-O"
 bash "$HERE/sign.sh" "$STAGE"
 CDHASHES="$DIST/notary/$NAME.cdhashes.json"
