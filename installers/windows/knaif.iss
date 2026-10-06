@@ -911,6 +911,36 @@ end;
 // reinstall does not re-download the model. The flip side is that plain file removal orphans it,
 // so a real uninstall has to ask.
 // NOTE: use // here, not a { } comment — a brace constant like {app} inside one CLOSES it early.
+// Stop the model daemon (`knaif daemon start`, `knaif run --daemon`) of the install in {app}, so its
+// files can be replaced or removed. The daemon deliberately does NOT hold AppMutex (it is meant to
+// outlive every run, and a resident holder would make setup refuse to start for as long as the
+// model stays loaded), so setup cannot see it and must ask it to go. It keeps knaif.exe and the
+// ggml DLLs open: without this an upgrade defers their replacement to the next reboot, the same
+// failure AppMutex exists to prevent for a running CLI. A release without the command, or no
+// daemon running, makes this a no-op.
+// Returns False only when a release that has the command ran it and it FAILED (exit code 1: the
+// daemon is busy or would not exit), i.e. files may still be locked. An older release has no
+// `daemon` command (clap exits 2) and a missing exe or failed launch means nothing is running.
+function StopDaemon: Boolean;
+var
+  Exe: string;
+  Code: Integer;
+begin
+  Result := True;
+  Exe := ExpandConstant('{app}\bin\knaif.exe');
+  if FileExists(Exe) then
+    if Exec(Exe, 'daemon stop', '', SW_HIDE, ewWaitUntilTerminated, Code) then
+      Result := (Code <> 1);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if not StopDaemon then
+    Result := 'knaif''s model daemon is still running and could not be stopped, so its files cannot be ' +
+      'replaced. Run "knaif daemon stop" (or end knaif.exe in Task Manager) and try again.';
+end;
+
 function KnaifDataDir: string;
 begin
   Result := ExpandConstant('{%USERPROFILE}\.knaif');
@@ -921,7 +951,13 @@ var
   DataDir: string;
 begin
   if CurUninstallStep = usUninstall then
+  begin
+    if not StopDaemon then
+      SuppressibleMsgBox(
+        'knaif''s model daemon is still running; some files may remain until it exits or you restart.',
+        mbInformation, MB_OK, IDOK);
     RemovePath(ExpandConstant('{app}\bin'));
+  end;
 
   { Offer to remove the data dir after the files are gone. KEEPING IS THE DEFAULT (changed
     2026-07-26, W2). The default is also what SuppressibleMsgBox answers under /SILENT and

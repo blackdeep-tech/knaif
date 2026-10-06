@@ -56,6 +56,11 @@ enum Command {
         #[command(subcommand)]
         action: BackendAction,
     },
+    /// Keep the model loaded between runs, so repeat requests skip the load.
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonAction,
+    },
     /// Produce a validated plan envelope for a request (JSON to stdout).
     Plan(PlanArgs),
     /// Render (dry-run) or execute a skill workflow from a natural-language request.
@@ -114,6 +119,36 @@ enum BackendAction {
     Verify { name: String },
     /// Remove an installed backend payload (falls back to CPU/Vulkan).
     Remove { name: String },
+}
+
+#[derive(Subcommand)]
+enum DaemonAction {
+    /// Load the model in a background process that later runs reuse.
+    Start {
+        /// Model to keep loaded: an installed/manifest NAME or a GGUF file PATH. Without it, the
+        /// recommended model is used when installed.
+        #[arg(long, value_name = "NAME|PATH")]
+        model: Option<String>,
+        /// Shut down after this many idle minutes, freeing the model's memory.
+        #[arg(long, value_name = "MINUTES", default_value_t = daemon::DEFAULT_IDLE_MINUTES)]
+        idle_minutes: u64,
+    },
+    /// Stop the daemon and free its memory.
+    Stop,
+    /// Show whether a daemon is running and what it has loaded.
+    Status {
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// The daemon process itself. Started by `daemon start` and `run --daemon`; not for direct use.
+    #[command(hide = true)]
+    Serve {
+        #[arg(long)]
+        model: PathBuf,
+        #[arg(long, default_value_t = daemon::DEFAULT_IDLE_MINUTES)]
+        idle_minutes: u64,
+    },
 }
 
 #[derive(Args)]
@@ -181,6 +216,10 @@ struct RunArgs {
     /// on stderr. Quiet by default.
     #[arg(long)]
     verbose: bool,
+    /// Serve this request through the model daemon, starting it first if none is running. Later
+    /// runs use the daemon without the flag; stop it with `knaif daemon stop`.
+    #[arg(long)]
+    daemon: bool,
     /// Natural-language request.
     request: Vec<String>,
 }
@@ -218,11 +257,22 @@ fn hold_app_mutex() {
 #[cfg(not(windows))]
 fn hold_app_mutex() {}
 
+mod daemon;
 mod ui;
+
+/// Whether this process is the daemon itself (`knaif daemon serve`). It must NOT hold the
+/// installer's `AppMutex`: it is meant to outlive every run, and a resident holder would make setup
+/// refuse to start for as long as the model stays loaded. Setup stops it instead (`daemon stop`).
+fn is_daemon_process() -> bool {
+    let mut args = std::env::args().skip(1);
+    args.next().as_deref() == Some("daemon") && args.next().as_deref() == Some("serve")
+}
 
 fn main() -> anyhow::Result<()> {
     enable_utf8_console();
-    hold_app_mutex();
+    if !is_daemon_process() {
+        hold_app_mutex();
+    }
     // The wordmark, before clap prints help or a usage error: bare `knaif` and `--help` only, and
     // only in the terminal view.
     ui::init(false);
@@ -264,6 +314,7 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Models { action } => cmd_models(action),
         Command::Backend { action } => cmd_backend(action),
+        Command::Daemon { action } => cmd_daemon(action),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
             let dry_run = args.dry_run;
@@ -340,6 +391,129 @@ fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
             std::process::exit(1);
         }
     }
+}
+
+/// `knaif daemon ...`.
+fn cmd_daemon(action: DaemonAction) -> anyhow::Result<()> {
+    let dir = daemon::state_dir();
+    match action {
+        DaemonAction::Start {
+            model,
+            idle_minutes,
+        } => {
+            let path =
+                select_model(model.as_deref(), false, DownloadPolicy::Never)?.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "no model to load: install one with `knaif models pull <name>` or pass --model"
+                    )
+                })?;
+            ensure_daemon(&dir, &path, idle_minutes)?;
+            println!("knaif daemon is running with {}.", model_stem(&path));
+            println!("Later runs use it automatically; stop it with `knaif daemon stop`.");
+            Ok(())
+        }
+        DaemonAction::Stop => {
+            if daemon::stop(&dir)? {
+                println!("knaif daemon stopped.");
+            } else {
+                println!("knaif daemon is not running.");
+            }
+            Ok(())
+        }
+        DaemonAction::Status { json } => {
+            let found = daemon::query(&dir);
+            if json {
+                let body = match &found {
+                    Some((_, s)) => serde_json::json!({"running": true, "status": s}),
+                    None => serde_json::json!({"running": false}),
+                };
+                println!("{}", serde_json::to_string_pretty(&body)?);
+                return Ok(());
+            }
+            match found {
+                Some((_, s)) => {
+                    println!("knaif daemon is running (pid {}).", s.pid);
+                    println!("  model:    {}", model_stem(Path::new(&s.model)));
+                    println!("  requests: {}", s.requests);
+                    println!(
+                        "  idle:     {} (stops after {} min)",
+                        daemon::human_duration(s.idle_seconds),
+                        s.idle_minutes
+                    );
+                }
+                None => println!("knaif daemon is not running."),
+            }
+            Ok(())
+        }
+        DaemonAction::Serve {
+            model,
+            idle_minutes,
+        } => serve_daemon(&dir, &model, idle_minutes),
+    }
+}
+
+/// A model file's name without the folder or `.gguf`, for messages.
+fn model_stem(path: &Path) -> String {
+    path.file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+/// Make sure a daemon holding `model` is running, starting one when it is not.
+fn ensure_daemon(dir: &Path, model: &Path, idle_minutes: u64) -> anyhow::Result<()> {
+    if daemon::connect(dir, model, &daemon::build_id(), false).is_some() {
+        return Ok(());
+    }
+    if daemon::disabled_by_env() {
+        anyhow::bail!(
+            "the daemon is switched off here: unset KNAIF_NO_DAEMON and the KNAIF_MAX_TOKENS / \
+             KNAIF_N_CTX / KNAIF_N_GPU_LAYERS / KNAIF_N_THREADS* overrides first"
+        );
+    }
+    note(&format!(
+        "Starting the model daemon ({})...",
+        model_stem(model)
+    ));
+    daemon::start(dir, model, idle_minutes, &daemon::build_id())
+}
+
+/// The daemon process: load the model once, then answer until stopped or idle.
+fn serve_daemon(dir: &Path, model: &Path, idle_minutes: u64) -> anyhow::Result<()> {
+    // A daemon serves every client with whatever it was loaded with, so it must be loaded with the
+    // defaults: refuse generation overrides (clients with overrides never borrow a daemon anyway).
+    if daemon::disabled_by_env() {
+        anyhow::bail!(
+            "the daemon must be started without KNAIF_NO_DAEMON or KNAIF_MAX_TOKENS / KNAIF_N_CTX / \
+             KNAIF_N_GPU_LAYERS / KNAIF_N_THREADS* set"
+        );
+    }
+    // Stamp the model and backends *before* loading them: a file replaced while it loads then shows
+    // up as a mismatch, instead of publishing the new stamp for the old bytes.
+    let settings = daemon::settings_fingerprint(model);
+    let backend = knaif_llm::backend_for(Some(model), false)?;
+    let cfg = daemon::ServeConfig {
+        dir: dir.to_path_buf(),
+        model: model.display().to_string(),
+        version: daemon::build_id(),
+        settings,
+        idle: std::time::Duration::from_secs(idle_minutes.max(1) * 60),
+    };
+    let (listener, info) = daemon::bind(&cfg)?;
+    eprintln!(
+        "knaif daemon: pid {} serving {} on port {} (idle stop after {} min)",
+        info.pid,
+        model_stem(model),
+        info.port,
+        idle_minutes.max(1)
+    );
+    let served = daemon::serve(listener, &info, &cfg, backend.as_ref());
+    // Free the model first, then withdraw the record: `daemon stop` and the installer treat "the
+    // record is gone" as "the model's memory and files are released".
+    drop(backend);
+    daemon::retire(dir, &info);
+    served?;
+    eprintln!("knaif daemon: stopped");
+    Ok(())
 }
 
 fn cmd_skills_list(include_stale: bool) -> anyhow::Result<()> {
@@ -881,6 +1055,12 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // Only now that the request has survived every cheap rejection may we resolve (and possibly
     // download) a model — see `select_model`.
     let model = select_model(args.model.as_deref(), args.yes, DownloadPolicy::Prompt)?;
+    if args.daemon {
+        match model.as_deref() {
+            Some(m) => ensure_daemon(&daemon::state_dir(), m, daemon::DEFAULT_IDLE_MINUTES)?,
+            None => note("--daemon needs a real model; this run uses the offline mock."),
+        }
+    }
     ui::header_once(
         &args.skill,
         model
@@ -2024,7 +2204,15 @@ impl PlanSession {
         let file_kinds =
             knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
         let loading = std::time::Instant::now();
-        let backend = knaif_llm::backend_for(model, verbose)?;
+        // A running daemon that holds this very model stands in for the load; anything else
+        // (none running, another model or build, a generation setting overridden here) loads the
+        // model in this process exactly as before.
+        let resident = model
+            .and_then(|m| daemon::connect(&daemon::state_dir(), m, &daemon::build_id(), verbose));
+        let backend: Box<dyn knaif_llm::LlmBackend> = match resident {
+            Some(remote) => Box::new(remote),
+            None => knaif_llm::backend_for(model, verbose)?,
+        };
         ui::set_load(loading.elapsed());
         Ok(Self {
             registry,

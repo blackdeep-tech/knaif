@@ -352,6 +352,40 @@ so selecting a model could only turn a working mock run into a load error.
 Model selection happens **after** request parsing, the safety gate, and dependency preflight, so a
 rejected request never triggers a 2.5 GB download.
 
+### 5.7 Daemon mode
+
+`knaif daemon start | stop | status`, and `knaif run <skill> "..." --daemon`, keep the model loaded in
+a background process between runs. It is **opt-in** and off by default; a run uses a daemon that is
+running and otherwise loads the model itself, exactly as before.
+
+- **What crosses the process boundary is inference only.** The CLI still builds the prompt and
+  validates, repairs, gates and executes the plan; the daemon answers `(system, user) -> raw text`.
+  A plan through the daemon is therefore the plan the same model produces in-process.
+- **One resident model.** `daemon start --model X` loads it; `status` shows model, request count and
+  idle time. Starting for a different model, or from a different build, replaces the running one.
+  `run` borrows the daemon only when the model, the build (version + executable size and mtime) and the
+  generation settings all match; any `KNAIF_MAX_TOKENS` / `KNAIF_N_CTX` / `KNAIF_N_GPU_LAYERS` /
+  `KNAIF_N_THREADS*` override, or `KNAIF_NO_DAEMON=1`, loads in-process instead.
+- **Idle shutdown.** 10 minutes by default (`--idle-minutes`), because a loaded 4B model holds ~3 GB
+  of GPU memory.
+- **Who may talk to it, and to whom.** It listens on `127.0.0.1` on an OS-chosen port, which any local
+  user can reach, so both ends prove they hold a random secret kept in `~/.knaif/daemon.json`
+  (owner-only: mode 0600 on Unix, the user profile's ACL on Windows) **without sending it**: a nonce
+  exchange where the server proves itself first, so a process that grabs the port after a crash learns
+  neither the secret nor the prompt. The folder is always the user's profile (or `KNAIF_DAEMON_DIR`),
+  never derived from a shared override. Unauthenticated connections have a 5 s deadline and a size cap,
+  and do not count as activity.
+- **Failure is a fallback.** No record, a dead process (its record is removed), a mismatch, an I/O
+  error, or a daemon that dies mid-request all mean the CLI loads the model itself. A daemon that
+  answers that the *model* failed is reported, not retried. A daemon is borrowed only when model,
+  build, and a settings fingerprint (model file size/mtime, the loadable-backend folder, prefix reuse)
+  all match. One request is served at a time; a second client waits. Starts are serialised by a lock
+  file, and `daemon stop` returns only when the process has exited.
+- **Installers stop it.** The daemon deliberately does not hold the `knaif-cli-running` mutex, so
+  setup cannot see it; the Windows installer runs `knaif daemon stop` before replacing or removing
+  files. On Linux (tarball/AppImage) stop it before replacing the folder.
+- Logs go to `~/.knaif/daemon.log`. `KNAIF_DAEMON_DIR` moves the state folder (tests).
+
 ## 6. Model management
 
 - **Manifest** (`contracts/models/model-manifest.yaml`) — the catalog the `ModelStore`
@@ -580,6 +614,9 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 | `KNAIF_N_GPU_LAYERS` | GPU offload layer count (`0` = CPU) | `999` |
 | `KNAIF_N_CTX` | Context / batch size | `8192` |
 | `KNAIF_MAX_TOKENS` | Generation cap | `512` |
+| `KNAIF_NO_DAEMON` | Never use a running model daemon (§5.7) | off |
+| `KNAIF_DAEMON_DIR` | Where the daemon keeps `daemon.json` / `daemon.log` | `~/.knaif` |
+| `KNAIF_PREFIX_REUSE` | `1` keeps the processed start of the previous prompt between requests (§5.7) | off |
 | `KNAIF_TIMING` | Print `[knaif-timing]` per-phase inference timing to stderr | off |
 | `KNAIF_DEBUG` | Dump raw model output on a parse/validate failure | off |
 | `KNAIF_VIEW` | `rich` or `plain`: force the terminal view or the plain lines (§4.1) | detected |

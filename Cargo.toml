@@ -89,6 +89,7 @@ indicatif = "0.17"
 # Terminal input-buffer flush (tcflush) so keystrokes typed during a long silent inference wait
 # don't leak into a later confirm prompt or the shell. Unix only; permissive (MIT/Apache).
 libc = "0.2"
+getrandom = "0.3"
 # Pure-Rust PDF document model (MIT) for the documents skill's structural ops
 # (merge/split/rotate/remove/reorder/inspect) + encryption (encrypt/decrypt, added post-0.34).
 # Permissive per the dependency-license policy.
