@@ -248,12 +248,6 @@ def required_args_clarify(
     return None
 
 
-def _join_args(args: list[str]) -> str:
-    if len(args) == 1:
-        return args[0]
-    return f"{', '.join(args[:-1])} and {args[-1]}"
-
-
 def unsupported_args_clarify(
     intent_plan: list[dict[str, Any]],
     registry: dict[str, ToolDef] | None,
@@ -300,8 +294,8 @@ def unsupported_args_clarify(
                     "tool": "clarify",
                     "args": {
                         "question": (
-                            f"I can't {verb} with {_join_args(extra)} — that isn't "
-                            "supported. Could you rephrase?"
+                            f"I can't {verb} that way — that isn't supported. "
+                            "Could you rephrase?"
                         )
                     },
                 }
