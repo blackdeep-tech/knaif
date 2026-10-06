@@ -323,7 +323,10 @@ fn write_outputs(
         }
         "reorder_pages" => {
             let input = input_path(args, base, sandbox)?;
-            require_str(args, "order")?;
+            // Validate the order against the page count, as `run` and Python's dry run do: a
+            // preview must not promise an output the real run refuses (documents_105).
+            let doc = pdf::load_unlocked(&input)?;
+            reorder_sequence(&require_str(args, "order")?, pdf::page_count(&doc) as i64)?;
             let out = derive_output(
                 &input,
                 out_arg(args, base, sandbox, "output")?,

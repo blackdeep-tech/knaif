@@ -173,8 +173,9 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
    same rows fail in both Mac runs; three fail on every 1.2.0 platform, and 1.2.0 recorded the same
    miss for Windows Vulkan 1.7B. Waive, retrain, or keep the 4B as the macOS recommendation (C4).
 2. **`documents_105`: native's dry run accepts a `reorder_pages` order its execution rejects**;
-   Python rejects it in both. Platform-independent; a fix changes the native binary, so L3/L4
-   re-run after it (C5).
+   Python rejects it in both. Platform-independent. **A fix with its L2 case is prepared and
+   measured on the Mac (L3 now passes), waiting for the owner's approval**; documents L3/L4 then
+   re-run on Windows and Linux (C5).
 3. **`.pkg` findings** (E6): `._*` AppleDouble entries in the payload from `com.apple.provenance`
    (harmless on install; on this Mac neither `xattr -cr` nor `COPYFILE_DISABLE=1` removes them,
    because macOS re-adds the attribute to every file written, see E6), and the script-only choices
@@ -1136,6 +1137,16 @@ already pass, on a third platform, for the first time.**
       > ffmpeg PASS (0.00%), 1.7B documents PASS (0.70%). The dry-run gap reproduces on 1.2.1 with the
       > mock backend, so 1.2.1 did not change it. Reports:
       > `evals/parity/2026-10-05_mac-l3-1.2.1-<model>-<skill>/`.
+      >
+      > **Fixed 2026-10-06, pending the owner's approval** (`fix(documents): validate reorder_pages
+      > order in the native dry run`). Native's dry-run branch for `reorder_pages` now validates
+      > `order` with `reorder_sequence` against the page count, as its execution and Python do. L2
+      > gains `rejected_cases` in `documents_expansion_cases.json` (plans both runtimes must refuse in
+      > a dry run), which failed on native before the fix. On the Mac with the fixed binary
+      > (`3da78a28…`): L3 4B documents **PASS** with 0 port bugs, 1.7B documents PASS; L4 documents
+      > unchanged row for row, both ACCEPTED (`evals/runs/2026-10-06_mac-documents-105-fix_success/`).
+      > Still to do: documents L3/L4 on Windows and Linux, and ffmpeg on this binary for the macOS
+      > cells' fingerprint.
 - [x] **C6. Cross-OS plan agreement.** *(Superseded 2026-09-30 by D17: folded into D14's per-row flip comparison against the committed 1.2.0 L4 extract, on the v2 models. The v1 slice below is deleted, not finished.)* For a fixed slice of the ffmpeg corpus, compare macOS
       `plan --json` output against the same slice from a Windows or Linux build. Distinct from C5,
       which compares two runtimes on one machine. This is the check that says "the same request

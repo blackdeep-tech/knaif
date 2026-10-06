@@ -1,0 +1,3552 @@
+{
+  "skill": "documents",
+  "mode": "command",
+  "model": "~/.knaif/models/knaif-qwen3-1.7b-v2-q6_k.gguf",
+  "counts": {
+    "match": 142,
+    "mismatch": 1,
+    "decline-divergence": 0,
+    "not-comparable": 0,
+    "native-not-implemented": 0,
+    "port-bug": 0
+  },
+  "total": 143,
+  "elapsed_s": 580.1,
+  "rows": [
+    {
+      "id": "documents_001",
+      "utterance": "inspect sample.png",
+      "tags": [
+        "inspect",
+        "image"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "png: 1 page(s), 1396 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.png\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"png\",\"size_bytes\":1396,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.1s\ndocuments › inspect sample.png\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample.png\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.png\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_002",
+      "utterance": "inspect sample-scanned.pdf",
+      "tags": [
+        "inspect",
+        "scan"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample-scanned.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":5707,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.1s\ndocuments › inspect sample-scanned.pdf\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample-scanned.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample-scanned.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_003",
+      "utterance": "extract sample.pdf",
+      "tags": [
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What text should I extract from sample.pdf?",
+        "raw": "clarify: What text should I extract from sample.pdf?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What text should I extract from sample.pdf?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What text should I extract from sample.pdf?",
+        "raw": "intent: 1.2s\ndocuments › extract sample.pdf\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: What text should I extract from sample.pdf?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What text should I extract from sample.pdf?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_004",
+      "utterance": "extract sample.docx",
+      "tags": [
+        "extract",
+        "office"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\nDocx Alpha paragraph\nDocx Beta paragraph\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.docx\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"Docx Alpha paragraph\\nDocx Beta paragraph\"}],\"text\":\"Docx Alpha paragraph\\nDocx Beta paragraph\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.1s\ndocuments › extract sample.docx\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.docx\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.docx\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_005",
+      "utterance": "within sample.pdf find gamma",
+      "tags": [
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [1..6]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"gamma\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[1,6]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › within sample.pdf find gamma\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=gamma ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"gamma\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_006",
+      "utterance": "convert sample.txt to markdown",
+      "tags": [
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  <repo>/sandbox/fixtures/documents/sample-1.md\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.txt\",\"to_format\":\"md\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › convert sample.txt to markdown\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.txt to_format=md\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.md\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.txt\", \"to_format\": \"md\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_007",
+      "utterance": "compress sample.pdf",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › compress sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_008",
+      "utterance": "ocr sample-scanned.pdf",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › ocr sample-scanned.pdf\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_009",
+      "utterance": "split pages 2-3 of sample.pdf into a new pdf",
+      "tags": [
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › split pages 2-3 of sample.pdf into a new pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=2-3\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_010",
+      "utterance": "turn all pages of sample.pdf 90 degrees",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › turn all pages of sample.pdf 90 degrees\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_011",
+      "utterance": "remove page 3 from sample.pdf",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › remove page 3 from sample.pdf\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=3\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_012",
+      "utterance": "reorder sample.pdf to 2,3,1",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"2,3,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › reorder sample.pdf to 2,3,1\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=2,3,1\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"2,3,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_013",
+      "utterance": "watermark sample.pdf with DRAFT",
+      "tags": [
+        "watermark"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › watermark sample.pdf with DRAFT\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=DRAFT\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_014",
+      "utterance": "number sample.pdf",
+      "tags": [
+        "page_numbers"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-right\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › number sample.pdf\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf position=bottom-right start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-right\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_015",
+      "utterance": "protect sample.pdf",
+      "tags": [
+        "security",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What password should I use to protect sample.pdf?",
+        "raw": "clarify: What password should I use to protect sample.pdf?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What password should I use to protect sample.pdf?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What password should I use to protect sample.pdf?",
+        "raw": "intent: 1.2s\ndocuments › protect sample.pdf\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: What password should I use to protect sample.pdf?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What password should I use to protect sample.pdf?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_016",
+      "utterance": "unlock sample.pdf",
+      "tags": [
+        "security",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What is the password for sample.pdf?",
+        "raw": "clarify: What is the password for sample.pdf?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What is the password for sample.pdf?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What is the password for sample.pdf?",
+        "raw": "intent: 1.1s\ndocuments › unlock sample.pdf\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: What is the password for sample.pdf?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What is the password for sample.pdf?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_017",
+      "utterance": "merge these documents",
+      "tags": [
+        "merge",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which documents should I merge?",
+        "raw": "clarify: Which documents should I merge?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which documents should I merge?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which documents should I merge?",
+        "raw": "intent: 1.2s\ndocuments › merge these documents\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Which documents should I merge?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which documents should I merge?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_018",
+      "utterance": "process my document",
+      "tags": [
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What document should I process?",
+        "raw": "clarify: What document should I process?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What document should I process?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What document should I process?",
+        "raw": "intent: 1.1s\ndocuments › process my document\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: What document should I process?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What document should I process?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_019",
+      "utterance": "make it better",
+      "tags": [
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What should I do to make it better — compress, convert, OCR, or something else?",
+        "raw": "clarify: What should I do to make it better — compress, convert, OCR, or something else?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What should I do to make it better — compress, convert, OCR, or something else?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What should I do to make it better — compress, convert, OCR, or something else?",
+        "raw": "intent: 1.3s\ndocuments › make it better\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: What should I do to make it better — compress, convert, OCR, or something else?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should I do to make it better — compress, convert, OCR, or something else?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_020",
+      "utterance": "delete all documents",
+      "tags": [
+        "reject"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "this request is blocked by the documents skill's safety policy.",
+        "raw": "reject: this request is blocked by the documents skill's safety policy.\n"
+      },
+      "python": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "{}",
+        "raw": "intent: 0.0s\ndocuments › delete all documents\n  mode: dry-run (no files will be modified)\n\n🚫 REJECT: {}\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reject\", \"args\": {}}]}\n"
+      }
+    },
+    {
+      "id": "documents_021",
+      "utterance": "save pages 1-2 of sample.pdf to their own file",
+      "tags": [
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › save pages 1-2 of sample.pdf to their own file\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_022",
+      "utterance": "make a pdf with just pages 1-2 of sample.pdf",
+      "tags": [
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › make a pdf with just pages 1-2 of sample.pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_023",
+      "utterance": "delete page 2 from sample.pdf",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › delete page 2 from sample.pdf\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=2\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_024",
+      "utterance": "extract the last page of sample.pdf into a new pdf",
+      "tags": [
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-last.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"last\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › extract the last page of sample.pdf into a new pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=last\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"last\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_025",
+      "utterance": "extract page 2 of sample.pdf into a new pdf",
+      "tags": [
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › extract page 2 of sample.pdf into a new pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=2\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_026",
+      "utterance": "extract the text from sample.pdf",
+      "tags": [
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\n\nAlpha page one\n--- page 2 ---\n\nBeta page two\n--- page 3 ---\n\nGamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"\\nAlpha page one\\n\"},{\"page\":2,\"text\":\"\\nBeta page two\\n\"},{\"page\":3,\"text\":\"\\nGamma page three\\n\"}],\"text\":\"\\nAlpha page one\\n\\n\\nBeta page two\\n\\n\\nGamma page three\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › extract the text from sample.pdf\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pdf\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_027",
+      "utterance": "inspect sample.pdf",
+      "tags": [
+        "inspect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2221 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2221,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.1s\ndocuments › inspect sample.pdf\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_028",
+      "utterance": "how many pages is sample.pdf",
+      "tags": [
+        "inspect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2221 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2221,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.1s\ndocuments › how many pages is sample.pdf\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_029",
+      "utterance": "does sample-scanned.pdf have a text layer",
+      "tags": [
+        "inspect",
+        "scan"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample-scanned.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":5707,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › does sample-scanned.pdf have a text layer\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample-scanned.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample-scanned.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_030",
+      "utterance": "get the text from sample.pptx",
+      "tags": [
+        "extract",
+        "office"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\nSlide Alpha\n--- page 2 ---\nSlide Beta\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pptx\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"Slide Alpha\"},{\"page\":2,\"text\":\"Slide Beta\"}],\"text\":\"Slide Alpha\\nSlide Beta\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › get the text from sample.pptx\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pptx\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pptx\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_031",
+      "utterance": "read the contents of sample.txt",
+      "tags": [
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\nSample document\nInvoice Alpha\nTotal: 42 EUR\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.txt\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"Sample document\\nInvoice Alpha\\nTotal: 42 EUR\\n\"}],\"text\":\"Sample document\\nInvoice Alpha\\nTotal: 42 EUR\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › read the contents of sample.txt\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.txt\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.txt\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_032",
+      "utterance": "find Gamma in sample.pdf",
+      "tags": [
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [1..6]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Gamma\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[1,6]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › find Gamma in sample.pdf\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Gamma ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Gamma\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_033",
+      "utterance": "search sample.pdf for Beta",
+      "tags": [
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p2 [1..5]: Beta page two\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Beta\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":2,\"snippet\":\"Beta page two\",\"span\":[1,5]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › search sample.pdf for Beta\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Beta ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Beta\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_034",
+      "utterance": "does sample.pdf mention Delta",
+      "tags": [
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "No matches.\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Delta\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[],\"count\":0}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › does sample.pdf mention Delta\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Delta ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Delta\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_035",
+      "utterance": "where does Alpha appear in sample.pdf",
+      "tags": [
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p1 [1..6]: Alpha page one\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Alpha\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":1,\"snippet\":\"Alpha page one\",\"span\":[1,6]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › where does Alpha appear in sample.pdf\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Alpha ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Alpha\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_036",
+      "utterance": "rotate sample.pdf 90 degrees",
+      "tags": [
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › rotate sample.pdf 90 degrees\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_037",
+      "utterance": "turn page 2 of sample.pdf 180 degrees",
+      "tags": [
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":180}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › turn page 2 of sample.pdf 180 degrees\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=180\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 180}}]}\n"
+      }
+    },
+    {
+      "id": "documents_038",
+      "utterance": "rotate every page of sample.pdf clockwise",
+      "tags": [
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › rotate every page of sample.pdf clockwise\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_039",
+      "utterance": "rotate sample.pdf by 270 degrees",
+      "tags": [
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":270}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › rotate sample.pdf by 270 degrees\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=270\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 270}}]}\n"
+      }
+    },
+    {
+      "id": "documents_040",
+      "utterance": "reorder sample.pdf to 3,2,1",
+      "tags": [
+        "reorder"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"3,2,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › reorder sample.pdf to 3,2,1\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=3,2,1\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"3,2,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_041",
+      "utterance": "move page 3 of sample.pdf to the front",
+      "tags": [
+        "reorder"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"3,1,2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › move page 3 of sample.pdf to the front\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=3,1,2\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"3,1,2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_042",
+      "utterance": "put sample.pdf pages in reverse order",
+      "tags": [
+        "reorder"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"reverse\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › put sample.pdf pages in reverse order\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=reverse\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"reverse\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_043",
+      "utterance": "rearrange sample.pdf as 2,1,3",
+      "tags": [
+        "reorder"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"2,1,3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › rearrange sample.pdf as 2,1,3\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=2,1,3\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"2,1,3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_044",
+      "utterance": "delete the last page of sample.pdf",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"last\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › delete the last page of sample.pdf\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=last\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"last\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_045",
+      "utterance": "remove the first page of sample.pdf",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › remove the first page of sample.pdf\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_046",
+      "utterance": "drop pages 1-2 from sample.pdf",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › drop pages 1-2 from sample.pdf\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=1-2\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_047",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into merged.pdf",
+      "tags": [
+        "merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/merged.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"merged.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › merge sample.pdf and sample-scanned.pdf into merged.pdf\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=merged.pdf\n    ✓ <repo>/sandbox/fixtures/documents/merged.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"merged.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_048",
+      "utterance": "combine sample.pdf and sample-scanned.pdf into combined.pdf",
+      "tags": [
+        "merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/combined.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"combined.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › combine sample.pdf and sample-scanned.pdf into combined.pdf\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=combined.pdf\n    ✓ <repo>/sandbox/fixtures/documents/combined.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"combined.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_049",
+      "utterance": "join sample.pdf and sample-scanned.pdf together as one.pdf",
+      "tags": [
+        "merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/one.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"one.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › join sample.pdf and sample-scanned.pdf together as one.pdf\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=one.pdf\n    ✓ <repo>/sandbox/fixtures/documents/one.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"one.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_050",
+      "utterance": "stitch sample.pdf and sample-scanned.pdf into out.pdf",
+      "tags": [
+        "merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/out.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"out.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › stitch sample.pdf and sample-scanned.pdf into out.pdf\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=out.pdf\n    ✓ <repo>/sandbox/fixtures/documents/out.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"out.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_051",
+      "utterance": "stamp DRAFT across every page of sample.pdf",
+      "tags": [
+        "watermark"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › stamp DRAFT across every page of sample.pdf\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=DRAFT\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_052",
+      "utterance": "add a CONFIDENTIAL watermark to sample.pdf",
+      "tags": [
+        "watermark"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"CONFIDENTIAL\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › add a CONFIDENTIAL watermark to sample.pdf\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=CONFIDENTIAL\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"CONFIDENTIAL\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_053",
+      "utterance": "watermark sample.pdf with the text SAMPLE",
+      "tags": [
+        "watermark"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"SAMPLE\",\"position\":\"center\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › watermark sample.pdf with the text SAMPLE\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=SAMPLE position=center\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"SAMPLE\", \"position\": \"center\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_054",
+      "utterance": "put a DRAFT stamp on sample.pdf",
+      "tags": [
+        "watermark"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › put a DRAFT stamp on sample.pdf\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=DRAFT\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_055",
+      "utterance": "number the pages of sample.pdf",
+      "tags": [
+        "number"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › number the pages of sample.pdf\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf position=bottom-center start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-center\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_056",
+      "utterance": "add page numbers to sample.pdf",
+      "tags": [
+        "number"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › add page numbers to sample.pdf\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf position=bottom-center start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_057",
+      "utterance": "put page numbers at the bottom of sample.pdf",
+      "tags": [
+        "number"
+      ],
+      "is_chain": false,
+      "status": "mismatch",
+      "note": "no command on either side, different plans",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › put page numbers at the bottom of sample.pdf\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf position=bottom-center start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_058",
+      "utterance": "add page numbers to sample.pdf starting at 5",
+      "tags": [
+        "number"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"start_at\":5,\"position\":\"bottom-center\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › add page numbers to sample.pdf starting at 5\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf start_at=5 position=bottom-center\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"start_at\": 5}}]}\n"
+      }
+    },
+    {
+      "id": "documents_059",
+      "utterance": "password-protect sample.pdf with secret",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.1s\ndocuments › password-protect sample.pdf with secret\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_060",
+      "utterance": "encrypt sample.pdf using the password hunter2",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › encrypt sample.pdf using the password hunter2\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=hunter2\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_061",
+      "utterance": "lock sample.pdf with the password letmein",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"letmein\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › lock sample.pdf with the password letmein\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=letmein\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"letmein\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_062",
+      "utterance": "secure sample.pdf with password abc123",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"abc123\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › secure sample.pdf with password abc123\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=abc123\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"abc123\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_063",
+      "utterance": "unlock sample-protected.pdf with password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › unlock sample-protected.pdf with password secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_064",
+      "utterance": "remove the password from sample-protected.pdf, it's secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › remove the password from sample-protected.pdf, it's secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_065",
+      "utterance": "decrypt sample-protected.pdf using password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › decrypt sample-protected.pdf using password secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_066",
+      "utterance": "take the password off sample-protected.pdf, the password is secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › take the password off sample-protected.pdf, the password is secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_067",
+      "utterance": "convert sample.txt to markdown",
+      "tags": [
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  <repo>/sandbox/fixtures/documents/sample-1.md\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.txt\",\"to_format\":\"md\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › convert sample.txt to markdown\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.txt to_format=md\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.md\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.txt\", \"to_format\": \"md\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_068",
+      "utterance": "convert sample.md to a text file",
+      "tags": [
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to txt →\n  <repo>/sandbox/fixtures/documents/sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.md\",\"to_format\":\"txt\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › convert sample.md to a text file\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.md to_format=txt\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.txt\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.md\", \"to_format\": \"txt\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_069",
+      "utterance": "save sample.txt as a markdown file",
+      "tags": [
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  <repo>/sandbox/fixtures/documents/sample-1.md\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.txt\",\"to_format\":\"md\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › save sample.txt as a markdown file\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.txt to_format=md\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.md\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.txt\", \"to_format\": \"md\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_070",
+      "utterance": "export sample.md as txt",
+      "tags": [
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to txt →\n  <repo>/sandbox/fixtures/documents/sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.md\",\"to_format\":\"txt\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › export sample.md as txt\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.md to_format=txt\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.txt\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.md\", \"to_format\": \"txt\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_071",
+      "utterance": "compress sample.pdf",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › compress sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_072",
+      "utterance": "make sample.pdf smaller",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"small\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › make sample.pdf smaller\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with small quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"small\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_073",
+      "utterance": "shrink sample.pdf",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (lossless-optimize) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"high\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › shrink sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with high quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"high\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_074",
+      "utterance": "reduce the file size of sample.pdf",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › reduce the file size of sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_075",
+      "utterance": "ocr sample-scanned.pdf",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › ocr sample-scanned.pdf\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_076",
+      "utterance": "make sample-scanned.pdf searchable",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › make sample-scanned.pdf searchable\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_077",
+      "utterance": "run ocr on sample-scanned.pdf",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › run ocr on sample-scanned.pdf\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_078",
+      "utterance": "turn sample-scanned.pdf into a searchable pdf",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › turn sample-scanned.pdf into a searchable pdf\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_079",
+      "utterance": "do something with a file",
+      "tags": [
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which file, and what would you like done with it?",
+        "raw": "clarify: Which file, and what would you like done with it?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which file, and what would you like done with it?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which file, and what would you like done with it?",
+        "raw": "intent: 1.2s\ndocuments › do something with a file\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Which file, and what would you like done with it?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file, and what would you like done with it?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_080",
+      "utterance": "rotate it",
+      "tags": [
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which PDF should I rotate, and in which direction?",
+        "raw": "clarify: Which PDF should I rotate, and in which direction?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which PDF should I rotate, and in which direction?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which PDF should I rotate, and in which direction?",
+        "raw": "intent: 1.2s\ndocuments › rotate it\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Which PDF should I rotate, and in which direction?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which PDF should I rotate, and in which direction?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_081",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers",
+      "tags": [
+        "merge",
+        "number",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/combined.pdf\nstep 2 of 2:\nwould add page numbers →\n  <repo>/sandbox/fixtures/documents/combined-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"combined.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"combined.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.5s\ndocuments › merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=combined.pdf\n    ✓ <repo>/sandbox/fixtures/documents/combined.pdf\n    dry-run\n  • add_page_numbers input=combined.pdf position=bottom-center start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/combined-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"combined.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"combined.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_082",
+      "utterance": "rotate sample.pdf 90 degrees and then compress it",
+      "tags": [
+        "rotate",
+        "compress",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <repo>/sandbox/fixtures/documents/sample_rotated.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample_rotated-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"output\":\"sample_rotated.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_rotated.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.6s\ndocuments › rotate sample.pdf 90 degrees and then compress it\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90 output=sample_rotated.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_rotated.pdf\n    dry-run\n  • compress sample_rotated.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample_rotated-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_rotated-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"output\": \"sample_rotated.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_rotated.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_083",
+      "utterance": "delete everything on my computer",
+      "tags": [
+        "reject"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "this request is blocked by the documents skill's safety policy.",
+        "raw": "reject: this request is blocked by the documents skill's safety policy.\n"
+      },
+      "python": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "{}",
+        "raw": "intent: 0.0s\ndocuments › delete everything on my computer\n  mode: dry-run (no files will be modified)\n\n🚫 REJECT: {}\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reject\", \"args\": {}}]}\n"
+      }
+    },
+    {
+      "id": "documents_084",
+      "utterance": "wipe my hard drive",
+      "tags": [
+        "reject"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "this request is blocked by the documents skill's safety policy.",
+        "raw": "reject: this request is blocked by the documents skill's safety policy.\n"
+      },
+      "python": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "{}",
+        "raw": "intent: 0.0s\ndocuments › wipe my hard drive\n  mode: dry-run (no files will be modified)\n\n🚫 REJECT: {}\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reject\", \"args\": {}}]}\n"
+      }
+    },
+    {
+      "id": "documents_085",
+      "utterance": "protect sample.pdf with the password lockit99",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"lockit99\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › protect sample.pdf with the password lockit99\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=lockit99\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"lockit99\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_086",
+      "utterance": "open sample-protected.pdf with the password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › open sample-protected.pdf with the password secret\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_087",
+      "utterance": "I just got handed sample.pdf and have no clue what's inside - how many pages is it and is the text actually selectable?",
+      "tags": [
+        "inspect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2221 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2221,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I just got handed sample.pdf and have no clue what's inside - how many pages is it and is the text actually selectable?\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_088",
+      "utterance": "Before I send sample-scanned.pdf to the print shop, can you confirm whether it has a real text layer or it's just an image?",
+      "tags": [
+        "inspect",
+        "scan",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample-scanned.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":5707,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Before I send sample-scanned.pdf to the print shop, can you confirm whether it has a real text layer or it's just an image?\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample-scanned.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample-scanned.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_089",
+      "utterance": "I need to paste the wording from sample.docx into an email - can you pull all the text out for me?",
+      "tags": [
+        "extract",
+        "office",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\nDocx Alpha paragraph\nDocx Beta paragraph\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.docx\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"Docx Alpha paragraph\\nDocx Beta paragraph\"}],\"text\":\"Docx Alpha paragraph\\nDocx Beta paragraph\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I need to paste the wording from sample.docx into an email - can you pull all the text out for me?\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.docx\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.docx\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_090",
+      "utterance": "My screen reader chokes on sample.pdf; just give me the plain text so I can read it.",
+      "tags": [
+        "extract",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\n\nAlpha page one\n--- page 2 ---\n\nBeta page two\n--- page 3 ---\n\nGamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"\\nAlpha page one\\n\"},{\"page\":2,\"text\":\"\\nBeta page two\\n\"},{\"page\":3,\"text\":\"\\nGamma page three\\n\"}],\"text\":\"\\nAlpha page one\\n\\n\\nBeta page two\\n\\n\\nGamma page three\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › My screen reader chokes on sample.pdf; just give me the plain text so I can read it.\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pdf\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_091",
+      "utterance": "A coworker swears the word Gamma shows up somewhere in sample.pdf but I can't spot it - which page is it on?",
+      "tags": [
+        "find",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [1..6]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Gamma\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[1,6]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › A coworker swears the word Gamma shows up somewhere in sample.pdf but I can't spot it - which page is it on?\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Gamma ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Gamma\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_092",
+      "utterance": "I need to know whether sample.pdf mentions Delta at all before I forward it to legal.",
+      "tags": [
+        "find",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "No matches.\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Delta\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[],\"count\":0}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I need to know whether sample.pdf mentions Delta at all before I forward it to legal.\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Delta ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Delta\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_093",
+      "utterance": "My manager only accepts plain .txt files, so I need a .txt copy of sample.md saved out to send him.",
+      "tags": [
+        "convert",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to txt →\n  <repo>/sandbox/fixtures/documents/sample.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.md\",\"to_format\":\"txt\",\"output\":\"sample.txt\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.5s\ndocuments › My manager only accepts plain .txt files, so I need a .txt copy of sample.md saved out to send him.\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.md to_format=txt output=sample.txt\n    ✓ <repo>/sandbox/fixtures/documents/sample.txt\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.md\", \"to_format\": \"txt\", \"output\": \"sample.txt\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_094",
+      "utterance": "Marketing wants sample.docx as a PDF so the layout doesn't shift on their computers - can you make that?",
+      "tags": [
+        "convert",
+        "office",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to pdf →\n  <repo>/sandbox/fixtures/documents/sample-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.docx\",\"to_format\":\"pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Marketing wants sample.docx as a PDF so the layout doesn't shift on their computers - can you make that?\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.docx to_format=pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.docx\", \"to_format\": \"pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_095",
+      "utterance": "sample.pdf is too big for our email server, which rejects anything over 10 MB - can you slim it down?",
+      "tags": [
+        "compress",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"small\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › sample.pdf is too big for our email server, which rejects anything over 10 MB - can you slim it down?\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with small quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"small\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_096",
+      "utterance": "I'm uploading sample.pdf to a portal with a tiny size limit; make it as small as you reasonably can.",
+      "tags": [
+        "compress",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"small\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I'm uploading sample.pdf to a portal with a tiny size limit; make it as small as you reasonably can.\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with small quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"small\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_097",
+      "utterance": "sample-scanned.pdf is basically a photo of a contract - I can't select or search any of the text. Make it searchable.",
+      "tags": [
+        "ocr",
+        "scan",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › sample-scanned.pdf is basically a photo of a contract - I can't select or search any of the text. Make it searchable.\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_098",
+      "utterance": "I want to be able to Ctrl+F through sample-scanned.pdf, but right now it behaves like a flat image.",
+      "tags": [
+        "ocr",
+        "scan",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › I want to be able to Ctrl+F through sample-scanned.pdf, but right now it behaves like a flat image.\n  mode: dry-run (no files will be modified)\n  • make sample-scanned.pdf searchable with OCR language eng\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-scanned-ocr.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_099",
+      "utterance": "Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.",
+      "tags": [
+        "split",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=2-3\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_100",
+      "utterance": "I just need the cover page of sample.pdf on its own; pull page 1 out into a separate file.",
+      "tags": [
+        "split",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I just need the cover page of sample.pdf on its own; pull page 1 out into a separate file.\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_101",
+      "utterance": "Someone scanned sample.pdf sideways and every page is turned 90 degrees the wrong way - fix the orientation.",
+      "tags": [
+        "rotate",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Someone scanned sample.pdf sideways and every page is turned 90 degrees the wrong way - fix the orientation.\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_102",
+      "utterance": "Page 2 of sample.pdf is upside down; flip it 180 degrees so it reads the right way up.",
+      "tags": [
+        "rotate",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":180,\"pages\":\"2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › Page 2 of sample.pdf is upside down; flip it 180 degrees so it reads the right way up.\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=180 pages=2\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 180, \"pages\": \"2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_103",
+      "utterance": "The last page of sample.pdf is just a blank sheet - drop it before I archive this.",
+      "tags": [
+        "organize",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"last\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › The last page of sample.pdf is just a blank sheet - drop it before I archive this.\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=last\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"last\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_104",
+      "utterance": "There's an internal note on page 3 of sample.pdf the client shouldn't see - strip that page out.",
+      "tags": [
+        "organize",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › There's an internal note on page 3 of sample.pdf the client shouldn't see - strip that page out.\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=3\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_105",
+      "utterance": "sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.",
+      "tags": [
+        "reorder",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"reverse\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=reverse\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"reverse\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_106",
+      "utterance": "The appendix landed on page 3 of sample.pdf but it should be the first thing readers see - move it to the front.",
+      "tags": [
+        "reorder",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"3,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › The appendix landed on page 3 of sample.pdf but it should be the first thing readers see - move it to the front.\n  mode: dry-run (no files will be modified)\n  • reorder_pages input=sample.pdf order=3,1\n    ✓ <repo>/sandbox/fixtures/documents/sample-reordered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"3,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_107",
+      "utterance": "I'd rather send the client one attachment than two - combine sample.pdf and sample-scanned.pdf into one.pdf.",
+      "tags": [
+        "merge",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/combined.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"combined.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › I'd rather send the client one attachment than two - combine sample.pdf and sample-scanned.pdf into one.pdf.\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=combined.pdf\n    ✓ <repo>/sandbox/fixtures/documents/combined.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"combined.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_108",
+      "utterance": "This copy of sample.pdf isn't final - stamp DRAFT across it so nobody mistakes it for the signed version.",
+      "tags": [
+        "watermark",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › This copy of sample.pdf isn't final - stamp DRAFT across it so nobody mistakes it for the signed version.\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=DRAFT\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_109",
+      "utterance": "Before I circulate sample.pdf internally, put a CONFIDENTIAL watermark on every page.",
+      "tags": [
+        "watermark",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"CONFIDENTIAL\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Before I circulate sample.pdf internally, put a CONFIDENTIAL watermark on every page.\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=CONFIDENTIAL\n    ✓ <repo>/sandbox/fixtures/documents/sample-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"CONFIDENTIAL\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_110",
+      "utterance": "The printed copies of sample.pdf keep getting shuffled in meetings - add page numbers so people can follow along.",
+      "tags": [
+        "number",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-right\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › The printed copies of sample.pdf keep getting shuffled in meetings - add page numbers so people can follow along.\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf position=bottom-right start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-right\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_111",
+      "utterance": "I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.",
+      "tags": [
+        "protect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=hunter2\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_112",
+      "utterance": "Compliance requires every outgoing PDF to be password-protected - secure sample.pdf with the password lockit99.",
+      "tags": [
+        "protect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention 'secure-sample.pdf' in your request — which file should I work on?",
+        "raw": "clarify: You didn't mention 'secure-sample.pdf' in your request — which file should I work on?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"You didn't mention 'secure-sample.pdf' in your request — which file should I work on?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention 'secure-sample.pdf' in your request — which file should I work on?",
+        "raw": "intent: 1.3s\ndocuments › Compliance requires every outgoing PDF to be password-protected - secure sample.pdf with the password lockit99.\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: You didn't mention 'secure-sample.pdf' in your request — which file should I work on?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"You didn't mention 'secure-sample.pdf' in your request — which file should I work on?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_113",
+      "utterance": "I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.",
+      "tags": [
+        "unlock",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_114",
+      "utterance": "Our document system can't index sample-protected.pdf because it's encrypted - remove the password, it's secret.",
+      "tags": [
+        "unlock",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Our document system can't index sample-protected.pdf because it's encrypted - remove the password, it's secret.\n  mode: dry-run (no files will be modified)\n  • unlock_pdf input=sample-protected.pdf password=secret\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-unlocked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_115",
+      "utterance": "Drehe sample.pdf um 90 Grad.",
+      "tags": [
+        "rotate",
+        "de",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Drehe sample.pdf um 90 Grad.\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_116",
+      "utterance": "Komprimiere sample.pdf, sie ist zu groß.",
+      "tags": [
+        "compress",
+        "de",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Komprimiere sample.pdf, sie ist zu groß.\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_117",
+      "utterance": "Combina sample.pdf y sample-scanned.pdf en uno.pdf.",
+      "tags": [
+        "merge",
+        "es",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  <repo>/sandbox/fixtures/documents/one.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"one.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Combina sample.pdf y sample-scanned.pdf en uno.pdf.\n  mode: dry-run (no files will be modified)\n  • merge_pdfs inputs=sample.pdf,sample-scanned.pdf output=one.pdf\n    ✓ <repo>/sandbox/fixtures/documents/one.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"one.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_118",
+      "utterance": "Extrae el texto de sample.pdf.",
+      "tags": [
+        "extract",
+        "es",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\n\nAlpha page one\n--- page 2 ---\n\nBeta page two\n--- page 3 ---\n\nGamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"\\nAlpha page one\\n\"},{\"page\":2,\"text\":\"\\nBeta page two\\n\"},{\"page\":3,\"text\":\"\\nGamma page three\\n\"}],\"text\":\"\\nAlpha page one\\n\\n\\nBeta page two\\n\\n\\nGamma page three\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Extrae el texto de sample.pdf.\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pdf\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_119",
+      "utterance": "Numérote les pages de sample.pdf.",
+      "tags": [
+        "number",
+        "fr",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-right\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Numérote les pages de sample.pdf.\n  mode: dry-run (no files will be modified)\n  • add_page_numbers input=sample.pdf position=bottom-right start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-right\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_120",
+      "utterance": "Protège sample.pdf avec le mot de passe hunter2.",
+      "tags": [
+        "protect",
+        "fr",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Protège sample.pdf avec le mot de passe hunter2.\n  mode: dry-run (no files will be modified)\n  • protect_pdf input=sample.pdf password=hunter2\n    ✓ <repo>/sandbox/fixtures/documents/sample-protected-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_121",
+      "utterance": "Сожми sample.pdf, файл слишком большой.",
+      "tags": [
+        "compress",
+        "ru",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Sample.pdf is too big. Should I compress it?",
+        "raw": "clarify: Sample.pdf is too big. Should I compress it?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Sample.pdf is too big. Should I compress it?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Sample.pdf is too big. Should I compress it?",
+        "raw": "intent: 1.3s\ndocuments › Сожми sample.pdf, файл слишком большой.\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Sample.pdf is too big. Should I compress it?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Sample.pdf is too big. Should I compress it?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_122",
+      "utterance": "Найди Gamma в sample.pdf.",
+      "tags": [
+        "find",
+        "ru",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [1..6]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Gamma\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[1,6]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Найди Gamma в sample.pdf.\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=Gamma ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Gamma\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_123",
+      "utterance": "Раздели страници 2-3 от sample.pdf в нов файл.",
+      "tags": [
+        "split",
+        "bg",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › Раздели страници 2-3 от sample.pdf в нов файл.\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=2-3\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_124",
+      "utterance": "Завърти sample.pdf на 90 градуса.",
+      "tags": [
+        "rotate",
+        "bg",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › Завърти sample.pdf на 90 градуса.\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_125",
+      "utterance": "压缩 sample.pdf。",
+      "tags": [
+        "compress",
+        "zh",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › 压缩 sample.pdf。\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_126",
+      "utterance": "把 sample.pdf 旋转 90 度。",
+      "tags": [
+        "rotate",
+        "zh",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › 把 sample.pdf 旋转 90 度。\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_127",
+      "utterance": "split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it",
+      "tags": [
+        "split",
+        "watermark",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/draft_pages.pdf\nstep 2 of 2:\nwould watermark →\n  <repo>/sandbox/fixtures/documents/draft_pages-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"draft_pages.pdf\"}},{\"tool\":\"watermark\",\"args\":{\"input\":\"draft_pages.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.8s\ndocuments › split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2 output=draft_pages.pdf\n    split_pdf\n    dry-run\n  • watermark input=draft_pages.pdf text=DRAFT\n    ✓ <repo>/sandbox/fixtures/documents/draft_pages-watermarked.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"draft_pages.pdf\"}}, {\"tool\": \"watermark\", \"args\": {\"input\": \"draft_pages.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_128",
+      "utterance": "remove the last page of sample.pdf, then add page numbers to what's left",
+      "tags": [
+        "organize",
+        "number",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould remove pages →\n  <repo>/sandbox/fixtures/documents/sample_trimmed.pdf\nstep 2 of 2:\nwould add page numbers →\n  <repo>/sandbox/fixtures/documents/sample_trimmed-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"last\",\"output\":\"sample_trimmed.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample_trimmed.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.7s\ndocuments › remove the last page of sample.pdf, then add page numbers to what's left\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=last output=sample_trimmed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_trimmed.pdf\n    dry-run\n  • add_page_numbers input=sample_trimmed.pdf position=bottom-center start_at=1\n    ✓ <repo>/sandbox/fixtures/documents/sample_trimmed-numbered.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"last\", \"output\": \"sample_trimmed.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample_trimmed.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_129",
+      "utterance": "watermark sample.pdf with CONFIDENTIAL and then compress the result",
+      "tags": [
+        "watermark",
+        "compress",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould watermark →\n  <repo>/sandbox/fixtures/documents/sample_confidential.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample_confidential-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"CONFIDENTIAL\",\"position\":\"center\",\"output\":\"sample_confidential.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_confidential.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.8s\ndocuments › watermark sample.pdf with CONFIDENTIAL and then compress the result\n  mode: dry-run (no files will be modified)\n  • watermark input=sample.pdf text=CONFIDENTIAL position=center output=sample_confidential.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_confidential.pdf\n    dry-run\n  • compress sample_confidential.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample_confidential-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_confidential-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"CONFIDENTIAL\", \"position\": \"center\", \"output\": \"sample_confidential.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_confidential.pdf\", \"compress_qual"
+      }
+    },
+    {
+      "id": "documents_130",
+      "utterance": "extract the first 2 pages of sample.pdf into a new pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › extract the first 2 pages of sample.pdf into a new pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_131",
+      "utterance": "extract the text from the first 2 pages of sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\n\nAlpha page one\n--- page 2 ---\n\nBeta page two\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"1-2\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"\\nAlpha page one\\n\"},{\"page\":2,\"text\":\"\\nBeta page two\\n\"}],\"text\":\"\\nAlpha page one\\n\\n\\nBeta page two\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.4s\ndocuments › extract the text from the first 2 pages of sample.pdf\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pdf pages=1-2\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_132",
+      "utterance": "extract the first 2 pages of sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › extract the first 2 pages of sample.pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_133",
+      "utterance": "pull page 3 out of sample.pdf as its own file",
+      "tags": [
+        "hard",
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › pull page 3 out of sample.pdf as its own file\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=3\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_134",
+      "utterance": "delete page 3 from sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "remove"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  <repo>/sandbox/fixtures/documents/sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › delete page 3 from sample.pdf\n  mode: dry-run (no files will be modified)\n  • remove_pages input=sample.pdf pages=3\n    ✓ <repo>/sandbox/fixtures/documents/sample-removed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_135",
+      "utterance": "find the word invoice in sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "No matches.\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"invoice\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[],\"count\":0}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › find the word invoice in sample.pdf\n  mode: dry-run (no files will be modified)\n  • find_in_document input=sample.pdf query=invoice ignore_case=True\n    find_in_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"invoice\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_136",
+      "utterance": "save sample.docx as a pdf",
+      "tags": [
+        "hard",
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to pdf →\n  <repo>/sandbox/fixtures/documents/sample-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.docx\",\"to_format\":\"pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.3s\ndocuments › save sample.docx as a pdf\n  mode: dry-run (no files will be modified)\n  • convert_document input=sample.docx to_format=pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-1.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.docx\", \"to_format\": \"pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_137",
+      "utterance": "drehe sample.pdf um 90 Grad",
+      "tags": [
+        "hard",
+        "multilingual",
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › drehe sample.pdf um 90 Grad\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90\n    ✓ <repo>/sandbox/fixtures/documents/sample-rotated.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_138",
+      "utterance": "comprime sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › comprime sample.pdf\n  mode: dry-run (no files will be modified)\n  • compress sample.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_139",
+      "utterance": "extrais le texte de sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "--- page 1 ---\n\nAlpha page one\n--- page 2 ---\n\nBeta page two\n--- page 3 ---\n\nGamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"extract_text\",\"result\":{\"pages\":[{\"page\":1,\"text\":\"\\nAlpha page one\\n\"},{\"page\":2,\"text\":\"\\nBeta page two\\n\"},{\"page\":3,\"text\":\"\\nGamma page three\\n\"}],\"text\":\"\\nAlpha page one\\n\\n\\nBeta page two\\n\\n\\nGamma page three\\n\"}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › extrais le texte de sample.pdf\n  mode: dry-run (no files will be modified)\n  • extract_text input=sample.pdf\n    extract_text\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_140",
+      "utterance": "раздели sample.pdf и сохрани первые 2 страницы в новый pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › раздели sample.pdf и сохрани первые 2 страницы в новый pdf\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2\n    split_pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_141",
+      "utterance": "разгледай sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "inspect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2221 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2221,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.2s\ndocuments › разгледай sample.pdf\n  mode: dry-run (no files will be modified)\n  • inspect_document input=sample.pdf\n    inspect_document\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_142",
+      "utterance": "rotate sample.pdf 90 degrees and then compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "rotate",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <repo>/sandbox/fixtures/documents/sample_rotated.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample_rotated-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"output\":\"sample_rotated.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_rotated.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.7s\ndocuments › rotate sample.pdf 90 degrees and then compress it\n  mode: dry-run (no files will be modified)\n  • rotate_pages input=sample.pdf degrees=90 output=sample_rotated.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_rotated.pdf\n    dry-run\n  • compress sample_rotated.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample_rotated-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_rotated-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"output\": \"sample_rotated.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_rotated.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_143",
+      "utterance": "extract the first 2 pages of sample.pdf into a new pdf and compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "split",
+        "convert"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <repo>/sandbox/fixtures/documents/sample_p1-2.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  <repo>/sandbox/fixtures/documents/sample_p1-2-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"sample_p1-2.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_p1-2.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 1.8s\ndocuments › extract the first 2 pages of sample.pdf into a new pdf and compress it\n  mode: dry-run (no files will be modified)\n  • split_pdf input=sample.pdf ranges=1-2 output=sample_p1-2.pdf\n    split_pdf\n    dry-run\n  • compress sample_p1-2.pdf with balanced quality\n    inspect_document\n    ✓ <repo>/sandbox/fixtures/documents/sample_p1-2-compressed.pdf\n    ✓ <repo>/sandbox/fixtures/documents/sample_p1-2-compressed.pdf\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"sample_p1-2.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_p1-2.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    }
+  ]
+}
