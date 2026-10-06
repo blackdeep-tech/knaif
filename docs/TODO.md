@@ -342,7 +342,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 - [ ] **Safety population count is still unbound** — the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
 - [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
-- [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
+- [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
   an opt-in flag to ask first; keep `--yes` as an accepted no-op, and keep the first-run model
   download behind its own consent. **Scope (owner, 2026-10-01, after testing 1.2.1):** the Yes default
@@ -359,7 +359,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   default silently approve — flush the console input buffer there first (`FlushConsoleInputBuffer`).
   A non-tty stdin keeps meaning "no answer". Consider renaming the category (`writes` vs
   `read_only`) so "destructive" stops suggesting deletion; REQUIREMENTS.md §safety uses the term.
-- [ ] **Overwrite policy for outputs** — found 2026-10-01 in the owner's 1.2.1 test: ffmpeg commands
+- [x] **Overwrite policy for outputs** — BUILT 2026-10-06 on `feat/1.3.0`: `Replace <file>? [y/N]`, `--overwrite`, a non-terminal stops — — found 2026-10-01 in the owner's 1.2.1 test: ffmpeg commands
   carry `-y`, so an existing output (explicit or auto-generated name) is replaced silently; documents
   adds `-1` to auto-generated names but overwrites an explicit `output`. This contradicts the "nothing
   can overwrite an existing file" premise of the Yes-default item above. Decide: ask before replacing,
@@ -376,7 +376,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   before `Proceed? [y/N]` (`reverse_video`), the warning and the prompt line disappear and the typed
   `y` lands after the command line. Not reproduced in a ConPTY at 120 or 160 columns nor in a Linux
   pty. Needs a screenshot and the terminal width. Details: cli-terminal-output T7.
-- [ ] **Daemon mode** — keep the model resident in VRAM between `knaif run` invocations (owner,
+- [x] **Daemon mode** — BUILT 2026-10-06 on `feat/1.3.0` (`knaif daemon start|stop|status`, `run --daemon`; gates open, see its plan) — — keep the model resident in VRAM between `knaif run` invocations (owner,
   2026-10-01). Not present today: every run loads the GGUF (~1 s on CUDA, more on CPU). New surface
   (a background process, a socket, lifecycle and install/uninstall interplay), so 1.3.0 at the earliest.
   **Plan: [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md)** (proposed for 1.3.0,
