@@ -174,7 +174,7 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
    miss for Windows Vulkan 1.7B. Waive, retrain, or keep the 4B as the macOS recommendation (C4).
 2. **`documents_105`: native's dry run accepts a `reorder_pages` order its execution rejects**;
    Python rejects it in both. Platform-independent. **A fix with its L2 case is prepared and
-   measured on the Mac (L3 now passes), waiting for the owner's approval**; documents L3/L4 then
+   measured on the Mac (L3 now passes), and merged in #14**; documents L3/L4 still to
    re-run on Windows and Linux (C5).
 3. **`.pkg` findings** (E6): `._*` AppleDouble entries in the payload from `com.apple.provenance`
    (harmless on install; on this Mac neither `xattr -cr` nor `COPYFILE_DISABLE=1` removes them,
@@ -1142,7 +1142,7 @@ already pass, on a third platform, for the first time.**
       > mock backend, so 1.2.1 did not change it. Reports:
       > `evals/parity/2026-10-05_mac-l3-1.2.1-<model>-<skill>/`.
       >
-      > **Fixed 2026-10-06, pending the owner's approval** (`fix(documents): validate reorder_pages
+      > **Fixed 2026-10-06, merged in #14** (`fix(documents): validate reorder_pages
       > order in the native dry run`). Native's dry-run branch for `reorder_pages` now validates
       > `order` with `reorder_sequence` against the page count, as its execution and Python do. L2
       > gains `rejected_cases` in `documents_expansion_cases.json` (plans both runtimes must refuse in
@@ -1216,7 +1216,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > (16.9 tok/s), inference 6843 ms, wall 7.35 s; 1.7B 1932 ms (1263 tok/s) / 856 ms
       > (37.4 tok/s) / 2886 ms / 3.29 s. Teardown is not timed separately: wall minus inference minus
       > load is ~0.15 s for process start, rendering and exit together.
-- [ ] **D2. An honest CPU comparison — from a tree with no Metal backend in it.** ⚠️ Read
+- [x] **D2. An honest CPU comparison — from a tree with no Metal backend in it.** ⚠️ Read
       [PERFORMANCE.md](../PERFORMANCE.md) §4 **first**: with any GPU backend compiled in,
       `n_gpu_layers=0` is *not* CPU-only — `op_offload` still sends batched matmuls to the GPU, an
       11× difference on the measurement that matters. **`KNAIF_N_GPU_LAYERS=0` is therefore not a
@@ -1540,6 +1540,13 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > yet run on a Mac.** `installers/macos/release.sh` (`just release-macos`) runs the order
       > above; `test_macos_release.py` replays it against fake Apple tools and fails if any step
       > moves. It leaves `SHA256SUMS` to the release procedure, which sums after stapling.
+      >
+      > **Ran on the Mac 2026-10-06** (step 9, `just release-macos`): sign → verify → `.zip` → notarize,
+      > then `.pkg` → Installer-sign → notarize → staple → validate → F7, in that order, both
+      > notarizations Accepted (`evals/runs/2026-10-06_mac-signing-first_notary/`). That tree carried a
+      > home path, so it is not the release; the script now refuses such a tree before step 1 (`== 0/5`,
+      > `test_release_refuses_a_tree_that_carries_the_builders_home`). To tick on the clean release
+      > build.
 
 - [ ] **F3. Sign inside-out with the hardened runtime, and verify per-binary.** Every `.dylib`
       first, the exe last, `--options runtime --timestamp --sign "Developer ID Application: …"`.
@@ -1554,6 +1561,10 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > yet run on a Mac.** `sign.sh` signs the list `check_macho_deps.py --list` prints (libraries
       > first, executable last) and `scripts/check_macos_signing.py codesign` asserts each file's
       > Team ID, hardened runtime, timestamp and not-ad-hoc, writing the CDHashes for F3b.
+      >
+      > **Ran 2026-10-06:** 10 Mach-O signed libraries first, executable last, hardened runtime
+      > (`flags=0x10000(runtime)`), secure timestamp, team `8YJ4KKV9SJ`; every one verified. No
+      > entitlements (F4). To tick on the clean release build.
 
 - [ ] **F3b. Read the notarization log even on success.** *Added 2026-08-02 after audit.*
       `xcrun notarytool log <submission-id>` after an `Accepted` result — Apple's own guidance is to
@@ -1567,6 +1578,10 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > yet run on a Mac.** `notarize.sh` saves every log to `dist/notary/` and
       > `check_macos_signing.py notary-log` fails on a status other than Accepted, on any issue, and
       > on a Mach-O whose CDHash is not in the ticket.
+      >
+      > **Read 2026-10-06:** both logs `Accepted`, `issues: null`, "Ready for distribution"; the `.zip`
+      > ticket lists all 10 Mach-O, the `.pkg` ticket the same 10 plus the package. Kept in
+      > `evals/runs/2026-10-06_mac-signing-first_notary/``notary/`.
 
 - [ ] **F4. ⚠️ Determine the minimum entitlements empirically — start with none.** Two are
       plausibly required and both weaken the hardened runtime, so neither is added speculatively:
@@ -1655,6 +1670,10 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
       > yet run on a Mac.** `notarize.sh` notarizes either file and staples and validates a `.pkg`;
       > credentials from `KNAIF_NOTARY_PROFILE` (by hand) or the API-key trio (CI).
+      >
+      > **Ran 2026-10-06:** the `.zip` notarized (cannot be stapled, as designed) and the `.pkg`
+      > notarized, stapled and validated (`The staple and validate action worked!`). To tick on the
+      > clean release build.
 
 - [ ] **F7. Verify the way Gatekeeper does, not the way the signer does.** *Corrected 2026-08-02
       after audit.* For **bare command-line binaries** use
@@ -1667,6 +1686,10 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
       > yet run on a Mac.** `release.sh`'s last step runs `codesign -R=notarized
       > --check-notarization` on the exe and `spctl -a -t install` on the `.pkg`.
+      >
+      > **Ran 2026-10-06:** `codesign -R=notarized --check-notarization` on `knaif` (valid, Designated
+      > Requirement satisfied) and `spctl -a -t install` on the `.pkg` (`accepted`, `source=Notarized
+      > Developer ID`). The decisive check is still the quarantined launch in the clean room (E4).
 
 - [x] **F8. Cross-link [code-signing](2026-07-27-code-signing.md).** That plan covers Windows
       signing and is deferred pending release history. macOS signing is **not** deferred — it is
