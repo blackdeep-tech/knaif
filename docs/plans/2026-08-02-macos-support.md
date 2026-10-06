@@ -165,8 +165,8 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
 | 6 Row flips | vs Windows/Linux CUDA: 4B 31/861 + 2/164, 1.7B 10/861 + 0/164; vs Linux CPU: at most 5/115 | C4, `evals/runs/2026-10-03_mac-l4_success` |
 | 7 L3 | 3 of 4 **PASS**; 4B documents **FAIL** on one port bug | C5 |
 | 8 Performance | `M1P` rows: Metal 4B 506 tok/s prompt / 16.9 tok/s generation, CPU 94 / 6.5 | D1, D2, D6, PERFORMANCE.md §2 |
-| 9 Signing | **blocked**: no Developer ID Application/Installer identity and no notary credentials on the Mac | F1 |
-| 10 Clean room | **blocked** on step 9's files | E3, E4, E6 |
+| 9 Signing | **done 2026-10-06** with the owner's certificates: both notarizations Accepted, `.pkg` stapled, no entitlements needed; that build carries a home path and must be rebuilt outside `~` before release | F1, F4 |
+| 10 Clean room | **next**: the three tart runs on a release build signed from a checkout outside `~` | E3, E4, E6 |
 
 **Needs the owner:**
 1. **1.7B ffmpeg misses `batch`** by one row (25/29 against 0.896, the 1.7B's own Python score). The
@@ -186,7 +186,7 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
    `<model>|macos|mtl` (C4). *(Corrected 2026-10-06: this item first said `platforms.yaml` had no
    macOS entry, which was wrong.)*
 5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
-6. **Certificates and notary credentials** for steps 9–10 (F1, the certificates plan).
+6. **Certificates and notary credentials**: received and working (F1, 2026-10-06).
 
 **Stale since the 1.2.1 merge (#10).** 1.2.1 changed native code, so `just check-gate` reads L3/L4
 stale for the Windows and Linux cells; L1/L2 were re-recorded on the merged tree. **The macOS L3/L4
@@ -1496,12 +1496,20 @@ An Apple Developer account is available (recorded in the current
 needed: **Developer ID Application** (binaries and dylibs) and **Developer ID Installer** (the
 `.pkg`).
 
-- [ ] **F1. Certificates and credentials.** The owner obtains both certs and the notarization
+- [x] **F1. Certificates and credentials.** The owner obtains both certs and the notarization
       key by [macos-signing-certificates](2026-09-30-macos-signing-certificates.md) (Account Holder only; no Mac needed). The contributor then imports them. Store notarization
       credentials in the keychain with `xcrun notarytool store-credentials` (App Store Connect API
       key preferred over an app-specific password — it is revocable and scoped). **No secret enters
       the repository**, and the profile name used by scripts is a documented input, not a hard-coded
       value.
+      > **Done 2026-10-06.** The owner's Developer ID Application and Developer ID Installer identities
+      > (team `8YJ4KKV9SJ`) are in the Mac's login keychain, and the notary credentials are a keychain
+      > profile / environment input of `notarize.sh`; nothing secret is in the repository. They signed,
+      > notarized and stapled the first build (step 9): both submissions **Accepted** with no issues
+      > (`evals/runs/2026-10-06_mac-signing-first_notary/`, which keeps `dist/notary/`).
+      > **That build is not releasable:** it was made in a checkout under `~`, so `knaif` and
+      > `libggml` carry one home-directory path each, and `release.sh` does not re-run the path guard
+      > before signing. The release build is to be made again outside `~` and signed again.
 - [ ] **F2. ⚠️ Order of operations — and it is a DAG with two branches, not one line.** *Revised
       2026-08-02 after audit.* Any modification to a Mach-O invalidates its signature, and
       `install_name_tool` (B3) and `strip` are modifications. **Stapling also mutates the `.pkg`**,
@@ -1567,6 +1575,16 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
         and its absence is a *feature*: a user dropping an unsigned dylib into `~/.knaif/backends`
         being refused is correct behaviour on macOS, not a defect. Add it only if a real,
         reproduced failure demands it, and record the failure in the plan if so.
+      > **No entitlements needed on the Mac, 2026-10-06** (step 9, `just release-macos` with none). The
+      > signed `knaif`, hardened runtime, no entitlements: `codesign --verify --strict --deep` passes;
+      > it loads its team-signed backends and PDFium (no `disable-library-validation`); Metal compiles
+      > its embedded shaders at run time and offloads 37/37 layers (no `allow-jit`, §12 question 4);
+      > a real documents request runs; the CPU fallback runs with the Metal backend removed. A local,
+      > non-quarantined launch on macOS 27.2 Beta 2, so the clean-room VM check this task asks for
+      > (and E4's quarantined launch) is still to do.
+      > Notarization: both submissions Accepted, `issues: null`, all 10 CDHashes in each ticket (F3b,
+      > F6); the `.pkg` stapled; `spctl` accepts it as `Notarized Developer ID` (F7).
+      > Evidence: `evals/runs/2026-10-06_mac-signing-first_notary/` (`notary/` is `dist/notary/`).
 - [ ] **F5. The `.pkg`, specified rather than gestured at.** `pkgbuild` (payload + install location
       + identifier + `--version` **derived from `package.sh`'s `VER`**, D7) → `productbuild`
       (distribution + Developer ID Installer signature). Decide and document, because each is
