@@ -164,8 +164,11 @@ Timing, same request as the table above (`convert clip.mov to mp4 --dry-run`, CU
 in-process **2.64 s**; first run with `--daemon` 2.05 s (it loads the model once); later runs
 **0.70 s**, same plan.
 
-- [x] Linux functional check — **done** (owner, 2026-10-06). The gates above (eval-success / L3 with
-  the daemon on, L4, the clean room) remain open, so D4 stays unticked.
+- [x] Plan-equality gate — **passed** 2026-10-06: `plan --batch` over both corpora (861 ffmpeg + 164
+  documents utterances), in-process vs through the daemon, CUDA, 4B v2: **byte-identical** on both
+  skills. Evidence: [evals/parity/2026-10-06_daemon-plan-equality](../../evals/parity/2026-10-06_daemon-plan-equality/README.md).
+- [x] Linux functional check — **done** (owner, 2026-10-06). What remains is the clean room with setup
+  run over a live daemon (a release gate, run with 1.3.0's clean room), so D4 stays unticked.
 
 Linux, 2026-10-06 — WSL Ubuntu 24.04 on the same box, **CPU build** (`build_native_kind.sh cpu`),
 `knaif-qwen3-1.7b-v2`, same request. Everything works: same plan, `daemon.json` 0600, the daemon
