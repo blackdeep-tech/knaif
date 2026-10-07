@@ -56,6 +56,11 @@ enum Command {
         #[command(subcommand)]
         action: BackendAction,
     },
+    /// Keep the model loaded between runs, so repeat requests skip the load.
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonAction,
+    },
     /// Produce a validated plan envelope for a request (JSON to stdout).
     Plan(PlanArgs),
     /// Render (dry-run) or execute a skill workflow from a natural-language request.
@@ -116,6 +121,36 @@ enum BackendAction {
     Remove { name: String },
 }
 
+#[derive(Subcommand)]
+enum DaemonAction {
+    /// Load the model in a background process that later runs reuse.
+    Start {
+        /// Model to keep loaded: an installed/manifest NAME or a GGUF file PATH. Without it, the
+        /// recommended model is used when installed.
+        #[arg(long, value_name = "NAME|PATH")]
+        model: Option<String>,
+        /// Shut down after this many idle minutes, freeing the model's memory.
+        #[arg(long, value_name = "MINUTES", default_value_t = daemon::DEFAULT_IDLE_MINUTES)]
+        idle_minutes: u64,
+    },
+    /// Stop the daemon and free its memory.
+    Stop,
+    /// Show whether a daemon is running and what it has loaded.
+    Status {
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// The daemon process itself. Started by `daemon start` and `run --daemon`; not for direct use.
+    #[command(hide = true)]
+    Serve {
+        #[arg(long)]
+        model: PathBuf,
+        #[arg(long, default_value_t = daemon::DEFAULT_IDLE_MINUTES)]
+        idle_minutes: u64,
+    },
+}
+
 #[derive(Args)]
 struct PlanArgs {
     /// Skill to plan against.
@@ -157,10 +192,20 @@ struct RunArgs {
     /// Restrict input/output paths to this directory (open/CLI mode when omitted).
     #[arg(long)]
     sandbox: Option<PathBuf>,
-    /// Don't ask, proceed: auto-confirm destructive/overwrite steps, and download the
-    /// recommended model without prompting when none is given or installed.
+    /// Download the recommended model without prompting when none is given or installed.
+    /// Steps already run without asking (see `--confirm`), so this no longer changes them; it is
+    /// kept so existing scripts and `--yes` habits keep working. It never approves replacing a
+    /// file: that is `--overwrite`.
     #[arg(long)]
     yes: bool,
+    /// Ask `Proceed? [Y/n]` before each step instead of acting straight away (Enter approves).
+    /// Without a terminal there is nobody to ask, so combine it with `--yes` or leave it off.
+    #[arg(long)]
+    confirm: bool,
+    /// Replace a file that already exists. Without it, a step whose output exists asks
+    /// `Replace <file>? [y/N]` (Enter keeps the file), and without a terminal it stops.
+    #[arg(long)]
+    overwrite: bool,
     /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
@@ -171,6 +216,10 @@ struct RunArgs {
     /// on stderr. Quiet by default.
     #[arg(long)]
     verbose: bool,
+    /// Serve this request through the model daemon, starting it first if none is running. Later
+    /// runs use the daemon without the flag; stop it with `knaif daemon stop`.
+    #[arg(long)]
+    daemon: bool,
     /// Natural-language request.
     request: Vec<String>,
 }
@@ -208,11 +257,22 @@ fn hold_app_mutex() {
 #[cfg(not(windows))]
 fn hold_app_mutex() {}
 
+mod daemon;
 mod ui;
+
+/// Whether this process is the daemon itself (`knaif daemon serve`). It must NOT hold the
+/// installer's `AppMutex`: it is meant to outlive every run, and a resident holder would make setup
+/// refuse to start for as long as the model stays loaded. Setup stops it instead (`daemon stop`).
+fn is_daemon_process() -> bool {
+    let mut args = std::env::args().skip(1);
+    args.next().as_deref() == Some("daemon") && args.next().as_deref() == Some("serve")
+}
 
 fn main() -> anyhow::Result<()> {
     enable_utf8_console();
-    hold_app_mutex();
+    if !is_daemon_process() {
+        hold_app_mutex();
+    }
     // The wordmark, before clap prints help or a usage error: bare `knaif` and `--help` only, and
     // only in the terminal view.
     ui::init(false);
@@ -254,6 +314,7 @@ fn main() -> anyhow::Result<()> {
         },
         Command::Models { action } => cmd_models(action),
         Command::Backend { action } => cmd_backend(action),
+        Command::Daemon { action } => cmd_daemon(action),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
             let dry_run = args.dry_run;
@@ -332,6 +393,129 @@ fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
     }
 }
 
+/// `knaif daemon ...`.
+fn cmd_daemon(action: DaemonAction) -> anyhow::Result<()> {
+    let dir = daemon::state_dir();
+    match action {
+        DaemonAction::Start {
+            model,
+            idle_minutes,
+        } => {
+            let path =
+                select_model(model.as_deref(), false, DownloadPolicy::Never)?.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "no model to load: install one with `knaif models pull <name>` or pass --model"
+                    )
+                })?;
+            ensure_daemon(&dir, &path, idle_minutes)?;
+            println!("knaif daemon is running with {}.", model_stem(&path));
+            println!("Later runs use it automatically; stop it with `knaif daemon stop`.");
+            Ok(())
+        }
+        DaemonAction::Stop => {
+            if daemon::stop(&dir)? {
+                println!("knaif daemon stopped.");
+            } else {
+                println!("knaif daemon is not running.");
+            }
+            Ok(())
+        }
+        DaemonAction::Status { json } => {
+            let found = daemon::query(&dir);
+            if json {
+                let body = match &found {
+                    Some((_, s)) => serde_json::json!({"running": true, "status": s}),
+                    None => serde_json::json!({"running": false}),
+                };
+                println!("{}", serde_json::to_string_pretty(&body)?);
+                return Ok(());
+            }
+            match found {
+                Some((_, s)) => {
+                    println!("knaif daemon is running (pid {}).", s.pid);
+                    println!("  model:    {}", model_stem(Path::new(&s.model)));
+                    println!("  requests: {}", s.requests);
+                    println!(
+                        "  idle:     {} (stops after {} min)",
+                        daemon::human_duration(s.idle_seconds),
+                        s.idle_minutes
+                    );
+                }
+                None => println!("knaif daemon is not running."),
+            }
+            Ok(())
+        }
+        DaemonAction::Serve {
+            model,
+            idle_minutes,
+        } => serve_daemon(&dir, &model, idle_minutes),
+    }
+}
+
+/// A model file's name without the folder or `.gguf`, for messages.
+fn model_stem(path: &Path) -> String {
+    path.file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+/// Make sure a daemon holding `model` is running, starting one when it is not.
+fn ensure_daemon(dir: &Path, model: &Path, idle_minutes: u64) -> anyhow::Result<()> {
+    if daemon::connect(dir, model, &daemon::build_id(), false).is_some() {
+        return Ok(());
+    }
+    if daemon::disabled_by_env() {
+        anyhow::bail!(
+            "the daemon is switched off here: unset KNAIF_NO_DAEMON and the KNAIF_MAX_TOKENS / \
+             KNAIF_N_CTX / KNAIF_N_GPU_LAYERS / KNAIF_N_THREADS* overrides first"
+        );
+    }
+    note(&format!(
+        "Starting the model daemon ({})...",
+        model_stem(model)
+    ));
+    daemon::start(dir, model, idle_minutes, &daemon::build_id())
+}
+
+/// The daemon process: load the model once, then answer until stopped or idle.
+fn serve_daemon(dir: &Path, model: &Path, idle_minutes: u64) -> anyhow::Result<()> {
+    // A daemon serves every client with whatever it was loaded with, so it must be loaded with the
+    // defaults: refuse generation overrides (clients with overrides never borrow a daemon anyway).
+    if daemon::disabled_by_env() {
+        anyhow::bail!(
+            "the daemon must be started without KNAIF_NO_DAEMON or KNAIF_MAX_TOKENS / KNAIF_N_CTX / \
+             KNAIF_N_GPU_LAYERS / KNAIF_N_THREADS* set"
+        );
+    }
+    // Stamp the model and backends *before* loading them: a file replaced while it loads then shows
+    // up as a mismatch, instead of publishing the new stamp for the old bytes.
+    let settings = daemon::settings_fingerprint(model);
+    let backend = knaif_llm::backend_for(Some(model), false)?;
+    let cfg = daemon::ServeConfig {
+        dir: dir.to_path_buf(),
+        model: model.display().to_string(),
+        version: daemon::build_id(),
+        settings,
+        idle: std::time::Duration::from_secs(idle_minutes.max(1) * 60),
+    };
+    let (listener, info) = daemon::bind(&cfg)?;
+    eprintln!(
+        "knaif daemon: pid {} serving {} on port {} (idle stop after {} min)",
+        info.pid,
+        model_stem(model),
+        info.port,
+        idle_minutes.max(1)
+    );
+    let served = daemon::serve(listener, &info, &cfg, backend.as_ref());
+    // Free the model first, then withdraw the record: `daemon stop` and the installer treat "the
+    // record is gone" as "the model's memory and files are released".
+    drop(backend);
+    daemon::retire(dir, &info);
+    served?;
+    eprintln!("knaif daemon: stopped");
+    Ok(())
+}
+
 fn cmd_skills_list(include_stale: bool) -> anyhow::Result<()> {
     let root = knaif_core::resolve_skills_root().ok_or_else(|| {
         anyhow::anyhow!(
@@ -381,6 +565,8 @@ fn cmd_skills_deps(name: Option<&str>, include_stale: bool) -> anyhow::Result<()
         None => skills,
     };
 
+    let sac_on = smart_app_control_on();
+    let mut all = Vec::new();
     for skill in &selected {
         let statuses = knaif_core::detect_skill_deps(&root.join(&skill.name));
         println!("{}:", skill.name);
@@ -391,27 +577,131 @@ fn cmd_skills_deps(name: Option<&str>, include_stale: bool) -> anyhow::Result<()
         for s in &statuses {
             let mark = if s.satisfied { "OK  " } else { "MISS" };
             let kind = if s.required { "required" } else { "optional" };
-            let detail = if s.satisfied {
-                let paths: Vec<_> = s
-                    .found
-                    .iter()
-                    .map(|(_, p)| p.display().to_string())
-                    .collect();
-                paths.join(", ")
-            } else {
-                match &s.install_hint {
-                    Some(hint) => format!("install: {hint}"),
-                    None => "not found".to_string(),
-                }
-            };
-            println!("  [{mark}] {:<14} ({kind}) {detail}", s.name);
+            println!(
+                "  [{mark}] {:<14} ({kind}) {}",
+                s.name,
+                deps_detail(s, sac_on)
+            );
         }
         // Call out the blocking set explicitly so it's actionable, not just tabular.
-        if let Some(msg) = knaif_core::missing_required_message(&skill.name, &statuses) {
+        if let Some(msg) = required_tools_advice(&skill.name, &statuses, sac_on) {
             println!("{msg}");
         }
+        all.extend(statuses);
+    }
+    if let Some(note) = smart_app_control_note(&all.iter().collect::<Vec<_>>(), sac_on) {
+        println!("\n{note}");
     }
     Ok(())
+}
+
+/// One `skills deps` row's detail: where the tool is, or how to get it — and, where Smart App
+/// Control is on and the tool declares it blocks it, that neither will help.
+fn deps_detail(s: &knaif_core::ToolStatus, sac_on: bool) -> String {
+    let blocked = sac_on && s.smart_app_control_blocks;
+    if s.satisfied {
+        let paths: Vec<_> = s
+            .found
+            .iter()
+            .map(|(_, p)| p.display().to_string())
+            .collect();
+        let paths = paths.join(", ");
+        if blocked {
+            format!("{paths} — but Smart App Control blocks it on this PC")
+        } else {
+            paths
+        }
+    } else if blocked {
+        "not installed — Smart App Control blocks it on this PC".to_string()
+    } else {
+        match &s.install_hint {
+            Some(hint) => format!("install: {hint}"),
+            None => "not found".to_string(),
+        }
+    }
+}
+
+/// What to say about a skill's required tools before it can run: where Smart App Control is on
+/// and blocks one, that (installing would not help, and an installed one would not start);
+/// otherwise the usual missing-tool advice.
+fn required_tools_advice(
+    skill: &str,
+    statuses: &[knaif_core::ToolStatus],
+    sac_on: bool,
+) -> Option<String> {
+    if sac_on {
+        let blocked: Vec<&str> = statuses
+            .iter()
+            .filter(|s| s.required && s.smart_app_control_blocks)
+            .map(|s| s.name.as_str())
+            .collect();
+        if !blocked.is_empty() {
+            return Some(format!(
+                "The `{skill}` skill needs {}, which Smart App Control blocks on this PC: \
+                 Windows runs only programs that are validly signed or that it trusts, and this \
+                 one is not. It works only with Smart App Control off: Windows Security > App & \
+                 browser control > Smart App Control.",
+                blocked.join(", ")
+            ));
+        }
+    }
+    knaif_core::missing_required_message(skill, statuses)
+}
+
+/// Said once under the table when Smart App Control is on and blocks a listed tool: why, and
+/// that it is Windows' decision, not something knaif can work around.
+fn smart_app_control_note(statuses: &[&knaif_core::ToolStatus], sac_on: bool) -> Option<String> {
+    if !sac_on {
+        return None;
+    }
+    let mut names: Vec<&str> = Vec::new();
+    for s in statuses.iter().filter(|s| s.smart_app_control_blocks) {
+        if !names.contains(&s.name.as_str()) {
+            names.push(&s.name);
+        }
+    }
+    if names.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Smart App Control is on. Windows then runs only programs that are validly signed or that \
+         it trusts, and it blocks {} (knaif itself is signed). They work only with Smart App \
+         Control off: Windows Security > App & browser control > Smart App Control.",
+        names.join(", ")
+    ))
+}
+
+/// Is Windows' Smart App Control enforcing? `VerifiedAndReputablePolicyState` is 0 off, 1 on,
+/// 2 evaluation (which only watches); anything unreadable counts as off.
+#[cfg(windows)]
+fn smart_app_control_on() -> bool {
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD,
+    };
+    let key: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\CI\\Policy\0"
+        .encode_utf16()
+        .collect();
+    let value: Vec<u16> = "VerifiedAndReputablePolicyState\0".encode_utf16().collect();
+    let mut data: u32 = 0;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: both names are NUL-terminated UTF-16, `data` is a u32 and `size` says so.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            (&mut data as *mut u32).cast(),
+            &mut size,
+        )
+    };
+    status == 0 && data == 1
+}
+
+#[cfg(not(windows))]
+fn smart_app_control_on() -> bool {
+    false
 }
 
 /// A byte-oriented progress bar for a model download (percent, rate, ETA). The length is set
@@ -862,7 +1152,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // missing and we intend to execute. Dry-run still previews the command without the binary.
     if !args.dry_run {
         let statuses = knaif_core::detect_skill_deps(&bundle);
-        if let Some(msg) = knaif_core::missing_required_message(&args.skill, &statuses) {
+        if let Some(msg) = required_tools_advice(&args.skill, &statuses, smart_app_control_on()) {
             println!("{msg}");
             return Ok(());
         }
@@ -871,6 +1161,12 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // Only now that the request has survived every cheap rejection may we resolve (and possibly
     // download) a model — see `select_model`.
     let model = select_model(args.model.as_deref(), args.yes, DownloadPolicy::Prompt)?;
+    if args.daemon {
+        match model.as_deref() {
+            Some(m) => ensure_daemon(&daemon::state_dir(), m, daemon::DEFAULT_IDLE_MINUTES)?,
+            None => note("--daemon needs a real model; this run uses the offline mock."),
+        }
+    }
     ui::header_once(
         &args.skill,
         model
@@ -1029,7 +1325,8 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         base: &base,
         sandbox,
         dry_run: args.dry_run,
-        yes: args.yes,
+        yes: approves_without_asking(args.yes, args.confirm),
+        overwrite: args.overwrite,
     };
     execute_plan(&steps, total, &ctx)
 }
@@ -1247,7 +1544,10 @@ struct StepContext<'a> {
     base: &'a Path,
     sandbox: Option<&'a Path>,
     dry_run: bool,
+    /// Act without asking `Proceed?` — the default; `--confirm` turns the question on.
     yes: bool,
+    /// `--overwrite`: replacing an existing file needs no question.
+    overwrite: bool,
 }
 
 /// What one step means for the steps after it.
@@ -1323,6 +1623,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
+            ctx.overwrite,
         ),
         "documents" => run_documents_step(
             ctx.bundle,
@@ -1332,6 +1633,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.sandbox,
             ctx.dry_run,
             ctx.yes,
+            ctx.overwrite,
         ),
         _ => unreachable!("skill guarded above"),
     }
@@ -1349,6 +1651,7 @@ fn run_ffmpeg_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
+    overwrite: bool,
 ) -> anyhow::Result<StepOutcome> {
     let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
@@ -1400,21 +1703,31 @@ fn run_ffmpeg_step(
         for p in &previews {
             println!("{}", ui::render_command(&style, p));
         }
-        // ffmpeg runs with `-y`: a file that is already there is replaced without a word.
+        // Say it in the tree too, before the question below asks.
         for cmd in &commands {
             if let Some(out) = cmd.last().filter(|o| std::path::Path::new(o).exists()) {
                 println!(
                     "{}",
                     ui::render_detail(
                         &style,
-                        &style.paint(
-                            ui::Tone::Warn,
-                            &format!("⚠ {out} already exists and will be replaced")
-                        )
+                        &style.paint(ui::Tone::Warn, &format!("⚠ {out} already exists"))
                     )
                 );
             }
         }
+    }
+    // Every command carries `-y` (the rendered command is part of the parity contract), so a
+    // file that is already there would be replaced without a word: ask first, whatever `--yes`
+    // says. The chain's own intermediate files are not "existing" until an earlier step wrote
+    // them, so only what is on disk now is asked about.
+    let outputs: Vec<String> = commands.iter().filter_map(|c| c.last().cloned()).collect();
+    if !overwrite_gate(
+        &existing_outputs(&outputs),
+        overwrite,
+        &mut ask_yes_no_default,
+    )? {
+        print_declined();
+        return Ok(StepOutcome::Declined);
     }
     if !yes {
         if let Some(warning) = confirm_warning(tool, commands.len()) {
@@ -1535,6 +1848,7 @@ fn run_documents_step(
     sandbox: Option<&Path>,
     dry_run: bool,
     yes: bool,
+    overwrite: bool,
 ) -> anyhow::Result<StepOutcome> {
     use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
 
@@ -1603,10 +1917,7 @@ fn run_documents_step(
                             "{}",
                             ui::render_detail(
                                 &style,
-                                &style.paint(
-                                    ui::Tone::Warn,
-                                    "⚠ that file already exists and will be replaced"
-                                )
+                                &style.paint(ui::Tone::Warn, "⚠ that file already exists")
                             )
                         );
                     }
@@ -1626,6 +1937,14 @@ fn run_documents_step(
                 println!("{summary}");
             }
             let previews: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
+            if !overwrite_gate(
+                &existing_outputs(&previews),
+                overwrite,
+                &mut ask_yes_no_default,
+            )? {
+                print_declined();
+                return Ok(StepOutcome::Declined);
+            }
             if !confirm_action(yes, &previews, "output file")? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
@@ -1726,28 +2045,141 @@ fn print_read_result(style: &ui::Style, result: &knaif_skill_documents::run::Rea
 /// obtained, and each caller decides what that means (a destructive action errors; an optional
 /// download silently declines). Prompt goes to stderr so stdout stays machine-readable.
 fn ask_yes_no(question: &str) -> anyhow::Result<Option<bool>> {
+    ask_yes_no_default(question, false)
+}
+
+/// What a typed line means: Enter takes `default_yes`; `y`/`yes` is yes; anything else is no.
+fn answer_from_line(line: &str, default_yes: bool) -> bool {
+    match line.trim().to_lowercase().as_str() {
+        "" => default_yes,
+        "y" | "yes" => true,
+        _ => false,
+    }
+}
+
+/// [`ask_yes_no`] with the answer Enter gives: `[Y/n]` when `default_yes`, else `[y/N]`.
+fn ask_yes_no_default(question: &str, default_yes: bool) -> anyhow::Result<Option<bool>> {
     use std::io::{IsTerminal, Write};
     if !std::io::stdin().is_terminal() {
         return Ok(None);
     }
-    eprint!("{question} [y/N] ");
+    eprint!(
+        "{question} {} ",
+        if default_yes { "[Y/n]" } else { "[y/N]" }
+    );
     std::io::stderr().flush()?;
     // Drop anything typed *before* the prompt appeared (e.g. during a long inference wait) so a
     // stray keystroke can't silently answer this gate — the user must respond to the prompt itself.
     flush_terminal_input();
     let mut line = String::new();
     // The time a person takes to answer is theirs, not the run's.
-    ui::timed(|| std::io::stdin().read_line(&mut line))?;
-    Ok(Some(matches!(
-        line.trim().to_lowercase().as_str(),
-        "y" | "yes"
-    )))
+    let read = ui::timed(|| std::io::stdin().read_line(&mut line))?;
+    Ok(Some(answer_from_input(read, &line, default_yes)))
+}
+
+/// [`answer_from_line`] for what `read_line` returned: zero bytes is end of input (a closed
+/// terminal), not Enter, and never approves anything.
+fn answer_from_input(bytes_read: usize, line: &str, default_yes: bool) -> bool {
+    bytes_read > 0 && answer_from_line(line, default_yes)
+}
+
+/// Whether a step may run without the `Proceed?` question: the default, unless `--confirm` asked
+/// for it. `--yes` always skips it, so `--confirm --yes` is `--yes`.
+fn approves_without_asking(yes: bool, confirm: bool) -> bool {
+    yes || !confirm
+}
+
+/// The files an output path names that already exist on disk. A plain path names itself. An
+/// image-sequence pattern (`frame_%03d.png`, `%d`) is expanded by ffmpeg's image2 muxer into many
+/// files, so it names every file in its folder that fits: the literal text never exists, and the
+/// check would pass while `frame_001.png` is replaced.
+fn existing_outputs(paths: &[String]) -> Vec<String> {
+    let mut found = Vec::new();
+    for p in paths {
+        match split_sequence_pattern(p) {
+            Some((prefix, suffix)) => {
+                let path = std::path::Path::new(prefix);
+                let dir = path
+                    .parent()
+                    .filter(|d| !d.as_os_str().is_empty())
+                    .unwrap_or(std::path::Path::new("."));
+                let stem = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                let Ok(entries) = std::fs::read_dir(dir) else {
+                    continue;
+                };
+                let mut hits: Vec<String> = entries
+                    .flatten()
+                    .filter_map(|e| {
+                        let name = e.file_name().into_string().ok()?;
+                        let middle = name.strip_prefix(stem)?.strip_suffix(suffix)?;
+                        let digits =
+                            !middle.is_empty() && middle.chars().all(|c| c.is_ascii_digit());
+                        digits.then(|| {
+                            if path.parent().is_some_and(|d| !d.as_os_str().is_empty()) {
+                                dir.join(&name).display().to_string()
+                            } else {
+                                name
+                            }
+                        })
+                    })
+                    .collect();
+                hits.sort();
+                found.extend(hits);
+            }
+            None if std::path::Path::new(p.as_str()).exists() => found.push(p.clone()),
+            None => {}
+        }
+    }
+    found
+}
+
+/// `(before, after)` around a `%d` / `%0Nd` frame-number token in the file name, if there is one.
+fn split_sequence_pattern(path: &str) -> Option<(&str, &str)> {
+    let name_start = path.rfind(['/', '\\']).map_or(0, |i| i + 1);
+    let mut from = name_start;
+    while let Some(i) = path[from..].find('%') {
+        let at = from + i;
+        let rest = &path[at + 1..];
+        let digits = rest.chars().take_while(char::is_ascii_digit).count();
+        if rest[digits..].starts_with('d') {
+            return Some((&path[..at], &path[at + 1 + digits + 1..]));
+        }
+        from = at + 1;
+    }
+    None
+}
+
+/// Replacing a file is the one thing knaif asks about whatever `--yes` or the default says:
+/// `Replace <file>? [y/N]`, Enter keeps it. `--overwrite` is the only way to approve it up front.
+/// With nobody to ask it stops, naming the flag, rather than replacing silently. `Ok(false)` is a
+/// "no" — the step is declined.
+fn overwrite_gate(
+    existing: &[String],
+    overwrite: bool,
+    ask: &mut dyn FnMut(&str, bool) -> anyhow::Result<Option<bool>>,
+) -> anyhow::Result<bool> {
+    if existing.is_empty() || overwrite {
+        return Ok(true);
+    }
+    for path in existing {
+        match ask(&format!("Replace {path}?"), false)? {
+            Some(true) => {}
+            Some(false) => return Ok(false),
+            None => anyhow::bail!(
+                "{path} already exists. Re-run with --overwrite to replace it, or name a different output."
+            ),
+        }
+    }
+    Ok(true)
 }
 
 /// Discard any pending terminal input. During the long, silent model-load + inference wait a user
 /// may type (assuming nothing is happening); those keystrokes linger in the tty input buffer and
 /// would otherwise be consumed by the next confirm prompt or handed to the shell on exit. Flushing
-/// afterwards drops them. No-op when stdin is not a terminal, and (for now) on non-Unix platforms.
+/// afterwards drops them. No-op when stdin is not a terminal.
 #[cfg(unix)]
 fn flush_terminal_input() {
     use std::io::IsTerminal;
@@ -1763,12 +2195,31 @@ fn flush_terminal_input() {
     }
 }
 
-#[cfg(not(unix))]
+/// Windows keeps typed-ahead keys in the console input buffer too, so an Enter pressed during a
+/// long CPU inference would answer a `[Y/n]` prompt as Yes.
+#[cfg(windows)]
+fn flush_terminal_input() {
+    use std::io::IsTerminal;
+    use std::os::windows::io::AsRawHandle;
+    let stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        return;
+    }
+    // SAFETY: `FlushConsoleInputBuffer` on stdin's console handle only drops unread input events.
+    // A failed flush is ignored — the worst case is the pre-existing leak.
+    unsafe {
+        windows_sys::Win32::System::Console::FlushConsoleInputBuffer(
+            stdin.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE
+        );
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn flush_terminal_input() {}
 
-/// Gate a destructive action on explicit consent: `--yes`, or an interactive `y` when stdin is a
-/// terminal. Non-interactive without `--yes` errors with the preview + how to proceed (never acts
-/// silently). `noun` names the previewed items (e.g. "ffmpeg command", "output file").
+/// Ask `Proceed? [Y/n]` before a step. Only reached under `--confirm`: the default (and `--yes`)
+/// acts without asking. With `--confirm` and no terminal there is nobody to ask, so it errors with
+/// the preview + how to proceed (never acts silently). `noun` names the previewed items (e.g. "ffmpeg command", "output file").
 fn confirm_action(yes: bool, previews: &[String], noun: &str) -> anyhow::Result<bool> {
     use std::io::IsTerminal;
     if yes {
@@ -1785,14 +2236,14 @@ fn confirm_action(yes: bool, previews: &[String], noun: &str) -> anyhow::Result<
     }
     if ui::view().is_some() {
         // The step already listed what it will do; just ask, inside the tree.
-        return Ok(ask_yes_no(" │   Proceed?")?.unwrap_or(false));
+        return Ok(ask_yes_no_default(" │   Proceed?", true)?.unwrap_or(false));
     }
     eprintln!("About to act on {} {noun}(s):", previews.len());
     for line in previews {
         eprintln!("  {line}");
     }
     // Tty confirmed above, so a `None` (non-interactive) answer is unreachable; decline defensively.
-    Ok(ask_yes_no("Proceed?")?.unwrap_or(false))
+    Ok(ask_yes_no_default("Proceed?", true)?.unwrap_or(false))
 }
 
 /// Resolve the skills root and confirm `skill` is a known bundle.
@@ -1859,7 +2310,15 @@ impl PlanSession {
         let file_kinds =
             knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
         let loading = std::time::Instant::now();
-        let backend = knaif_llm::backend_for(model, verbose)?;
+        // A running daemon that holds this very model stands in for the load; anything else
+        // (none running, another model or build, a generation setting overridden here) loads the
+        // model in this process exactly as before.
+        let resident = model
+            .and_then(|m| daemon::connect(&daemon::state_dir(), m, &daemon::build_id(), verbose));
+        let backend: Box<dyn knaif_llm::LlmBackend> = match resident {
+            Some(remote) => Box::new(remote),
+            None => knaif_llm::backend_for(model, verbose)?,
+        };
         ui::set_load(loading.elapsed());
         Ok(Self {
             registry,
@@ -2806,6 +3265,86 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::VecDeque;
 
+    fn tool_status(satisfied: bool, blocks: bool) -> knaif_core::ToolStatus {
+        knaif_core::ToolStatus {
+            name: "ffmpeg".into(),
+            required: true,
+            satisfied,
+            found: if satisfied {
+                vec![(
+                    "ffmpeg".into(),
+                    std::path::PathBuf::from("C:/tools/ffmpeg.exe"),
+                )]
+            } else {
+                vec![]
+            },
+            missing: if satisfied {
+                vec![]
+            } else {
+                vec!["ffmpeg".into()]
+            },
+            install_hint: Some("winget install -e --id Gyan.FFmpeg".into()),
+            smart_app_control_blocks: blocks,
+        }
+    }
+
+    #[test]
+    fn deps_rows_say_when_smart_app_control_blocks_a_tool() {
+        // Off, or a tool it does not block: the row is unchanged.
+        assert_eq!(
+            deps_detail(&tool_status(true, true), false),
+            "C:/tools/ffmpeg.exe"
+        );
+        assert_eq!(
+            deps_detail(&tool_status(false, false), true),
+            "install: winget install -e --id Gyan.FFmpeg"
+        );
+        // On: a found tool will not start, and installing a missing one will not help.
+        assert_eq!(
+            deps_detail(&tool_status(true, true), true),
+            "C:/tools/ffmpeg.exe — but Smart App Control blocks it on this PC"
+        );
+        assert_eq!(
+            deps_detail(&tool_status(false, true), true),
+            "not installed — Smart App Control blocks it on this PC"
+        );
+    }
+
+    #[test]
+    fn a_required_tool_smart_app_control_blocks_is_named_not_advised() {
+        // Off: the usual missing-tool advice, install hint included.
+        let missing = tool_status(false, true);
+        let advice =
+            required_tools_advice("ffmpeg", std::slice::from_ref(&missing), false).unwrap();
+        assert!(advice.contains("winget install"), "{advice}");
+        // On: installing would not help, and a found ffmpeg would not start either.
+        for s in [missing, tool_status(true, true)] {
+            let advice = required_tools_advice("ffmpeg", &[s], true).unwrap();
+            assert!(advice.contains("Smart App Control"), "{advice}");
+            assert!(!advice.contains("winget install"), "{advice}");
+        }
+        // On, but the tool is not one it blocks: nothing to say when it is installed.
+        assert_eq!(
+            required_tools_advice("ffmpeg", &[tool_status(true, false)], true),
+            None
+        );
+    }
+
+    #[test]
+    fn the_smart_app_control_note_names_the_blocked_tools_once() {
+        let blocked = tool_status(true, true);
+        let fine = knaif_core::ToolStatus {
+            name: "libreoffice".into(),
+            ..tool_status(true, false)
+        };
+        assert_eq!(smart_app_control_note(&[&fine], true), None);
+        assert_eq!(smart_app_control_note(&[&blocked], false), None);
+        let note = smart_app_control_note(&[&blocked, &fine, &blocked], true).unwrap();
+        assert!(note.contains("Smart App Control is on"), "{note}");
+        assert_eq!(note.matches("ffmpeg").count(), 1, "{note}");
+        assert!(!note.contains("libreoffice"), "{note}");
+    }
+
     /// `select_model` reads process-global env, so its tests serialize on this lock rather than
     /// racing each other's `set_var`.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -2878,6 +3417,152 @@ mod tests {
                 }
             }
             let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    // --- 1.3.0: Yes by default, and an existing file always asks ---------------------------
+
+    #[test]
+    fn a_step_asks_only_when_confirm_is_opted_into() {
+        assert!(approves_without_asking(false, false), "the default acts");
+        assert!(
+            !approves_without_asking(false, true),
+            "--confirm asks first"
+        );
+        assert!(
+            approves_without_asking(true, true),
+            "--yes still skips the question"
+        );
+        assert!(approves_without_asking(true, false));
+    }
+
+    #[test]
+    fn enter_follows_the_default_and_anything_else_is_no() {
+        assert!(answer_from_line("", true));
+        assert!(answer_from_line("  \n", true));
+        assert!(
+            !answer_from_line("", false),
+            "an overwrite question defaults to No"
+        );
+        assert!(answer_from_line("Y", false));
+        assert!(answer_from_line("yes", false));
+        assert!(!answer_from_line("n", true));
+        assert!(!answer_from_line("nope", true));
+    }
+
+    fn ask_returning(
+        answer: Option<bool>,
+        seen: &RefCell<Vec<(String, bool)>>,
+    ) -> impl FnMut(&str, bool) -> anyhow::Result<Option<bool>> + '_ {
+        move |q, default_yes| {
+            seen.borrow_mut().push((q.to_string(), default_yes));
+            Ok(answer)
+        }
+    }
+
+    #[test]
+    fn nothing_to_replace_never_asks() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(false), &seen);
+        assert!(overwrite_gate(&[], false, &mut ask).unwrap());
+        assert!(seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn overwrite_flag_replaces_without_asking() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(false), &seen);
+        assert!(overwrite_gate(&["out.mp4".into()], true, &mut ask).unwrap());
+        assert!(seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn an_existing_output_asks_with_no_as_the_default() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(true), &seen);
+        assert!(overwrite_gate(&["out.mp4".into()], false, &mut ask).unwrap());
+        let seen = seen.borrow();
+        assert_eq!(seen.len(), 1);
+        assert!(
+            seen[0].0.contains("out.mp4"),
+            "names the file: {}",
+            seen[0].0
+        );
+        assert!(!seen[0].1, "the default for replacing a file is No");
+    }
+
+    #[test]
+    fn declining_to_replace_declines_the_step() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(Some(false), &seen);
+        assert!(!overwrite_gate(&["a.mp4".into(), "b.mp4".into()], false, &mut ask).unwrap());
+    }
+
+    #[test]
+    fn without_a_terminal_an_existing_output_is_an_error_naming_the_flag() {
+        let seen = RefCell::new(Vec::new());
+        let mut ask = ask_returning(None, &seen);
+        let err = overwrite_gate(&["out.mp4".into()], false, &mut ask)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("out.mp4") && err.contains("--overwrite"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn existing_outputs_are_the_paths_that_exist() {
+        let dir = std::env::temp_dir().join(format!("knaif_existing_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let there = dir.join("there.mp4");
+        std::fs::write(&there, b"x").unwrap();
+        let gone = dir.join("gone.mp4");
+        let found = existing_outputs(&[there.display().to_string(), gone.display().to_string()]);
+        assert_eq!(found, vec![there.display().to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_image_sequence_pattern_matches_the_files_it_would_write() {
+        let dir = std::env::temp_dir().join(format!("knaif_pattern_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("frame_001.png"), b"x").unwrap();
+        std::fs::write(dir.join("frame_x.png"), b"x").unwrap();
+        std::fs::write(dir.join("other_002.png"), b"x").unwrap();
+        let hit = dir.join("frame_001.png").display().to_string();
+        for pattern in ["frame_%03d.png", "frame_%d.png"] {
+            let found = existing_outputs(&[dir.join(pattern).display().to_string()]);
+            assert_eq!(found, vec![hit.clone()], "{pattern}");
+        }
+        assert!(existing_outputs(&[dir.join("shot_%03d.png").display().to_string()]).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn end_of_input_never_approves_a_prompt() {
+        assert!(!answer_from_input(0, "", true), "EOF is not Enter");
+        assert!(answer_from_input(1, "\n", true), "Enter takes the default");
+        assert!(!answer_from_input(1, "\n", false));
+        assert!(answer_from_input(2, "y\n", false));
+    }
+
+    #[test]
+    fn run_accepts_confirm_and_overwrite_and_keeps_yes() {
+        use clap::Parser;
+        let cli = Cli::try_parse_from([
+            "knaif",
+            "run",
+            "ffmpeg",
+            "--confirm",
+            "--overwrite",
+            "--yes",
+            "x",
+        ])
+        .unwrap();
+        match cli.command {
+            Command::Run(a) => assert!(a.confirm && a.overwrite && a.yes),
+            _ => panic!("expected run"),
         }
     }
 

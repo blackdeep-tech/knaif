@@ -95,10 +95,13 @@
 #define FfmpegCmds "ffmpeg,ffprobe"
 #define FfmpegDirs "%LOCALAPPDATA%\Microsoft\WinGet\Links|%ProgramFiles%\WinGet\Links|%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin"
 #define FfmpegWinget "Gyan.FFmpeg"
-#define GsTask "Ghostscript — aggressive PDF compression (optional, AGPL)"
+; Ghostscript has no checkbox: its winget package left the catalog (2026-10), so setup only reports
+; it on the finish page and `knaif skills deps` names Artifex's download page.
+; The tools Smart App Control blocks (`windows.smart_app_control: blocked` in skill.yaml), by
+; their finish-page names; test_installer_iss.py asserts the two agree.
+#define SacBlockedTools "FFmpeg|Ghostscript|Tesseract OCR"
 #define GsCmds "gs,gswin64c,gswin32c"
 #define GsDirs "%ProgramFiles%\gs\gs*\bin|%ProgramFiles(x86)%\gs\gs*\bin"
-#define GsWinget "ArtifexSoftware.GhostScript"
 #define SofficeTask "LibreOffice — Office <-> PDF conversion (optional)"
 #define SofficeCmds "soffice,libreoffice"
 #define SofficeDirs "%ProgramFiles%\LibreOffice\program"
@@ -204,7 +207,6 @@ Name: "addtopath"; Description: "Add knaif to my PATH (so ""knaif"" works in any
 ; so the defaults would break again the moment anyone ticks it. Flat names are the only shape in
 ; which per-task defaults survive.
 Name: "depsffmpeg";    Description: "{#FfmpegTask}";    GroupDescription: "{#DepsGroup}"; Components: skills\ffmpeg
-Name: "depsgs";        Description: "{#GsTask}";        GroupDescription: "{#DepsGroup}"; Components: skills\documents; Flags: unchecked
 Name: "depssoffice";   Description: "{#SofficeTask}";   GroupDescription: "{#DepsGroup}"; Components: skills\documents; Flags: unchecked
 Name: "depstesseract"; Description: "{#TesseractTask}"; GroupDescription: "{#DepsGroup}"; Components: skills\documents; Flags: unchecked
 ; The AI model powers `run` (turning a request into a command). ~2.5 GB, one-time — default on so
@@ -286,9 +288,6 @@ Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; Value
 Filename: "winget"; Parameters: "install -e --id {#FfmpegWinget} --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing FFmpeg via winget (this can take a minute)..."; Flags: shellexec waituntilterminated; \
     Tasks: depsffmpeg; Check: ShouldInstallAll('{#FfmpegCmds}', '{#FfmpegDirs}')
-Filename: "winget"; Parameters: "install -e --id {#GsWinget} --accept-package-agreements --accept-source-agreements"; \
-    StatusMsg: "Installing Ghostscript via winget..."; Flags: shellexec waituntilterminated; \
-    Tasks: depsgs; Check: ShouldInstallAny('{#GsCmds}', '{#GsDirs}')
 Filename: "winget"; Parameters: "install -e --id {#SofficeWinget} --accept-package-agreements --accept-source-agreements"; \
     StatusMsg: "Installing LibreOffice via winget (large download, please wait)..."; Flags: shellexec waituntilterminated; \
     Tasks: depssoffice; Check: ShouldInstallAny('{#SofficeCmds}', '{#SofficeDirs}')
@@ -618,14 +617,53 @@ begin
   for I := 0 to WizardForm.TasksList.Items.Count - 1 do
   begin
     Caption := WizardForm.TasksList.ItemCaption[I];
-    if (Caption = '{#FfmpegTask}') or (Caption = '{#GsTask}') or
-       (Caption = '{#SofficeTask}') or (Caption = '{#TesseractTask}') then
+    if (Caption = '{#FfmpegTask}') or (Caption = '{#SofficeTask}') or
+       (Caption = '{#TesseractTask}') then
     begin
       WizardForm.TasksList.Checked[I] := False;
       WizardForm.TasksList.ItemEnabled[I] := False;
     end
     else if Caption = '{#DepsGroup}' then
       WizardForm.TasksList.ItemCaption[I] := '{#NoWingetGroup}';
+  end;
+end;
+
+{ Is Windows' Smart App Control enforcing? VerifiedAndReputablePolicyState is 0 off, 1 on,
+  2 evaluation (which only watches); unreadable counts as off. The runtime reads the same value
+  for `knaif skills deps`. }
+function SmartAppControlOn: Boolean;
+var
+  State: Cardinal;
+begin
+  Result := RegQueryDWordValue(HKLM, 'SYSTEM\CurrentControlSet\Control\CI\Policy',
+    'VerifiedAndReputablePolicyState', State) and (State = 1);
+end;
+
+{ Does Smart App Control block this tool? From SacBlockedTools, which follows skill.yaml. }
+function SacBlocks(ToolName: string): Boolean;
+begin
+  Result := SmartAppControlOn and (Pos('|' + ToolName + '|', '|{#SacBlockedTools}|') > 0);
+end;
+
+{ With Smart App Control on, the tools it blocks cannot be installed usefully: winget installed
+  FFmpeg in Windows Sandbox and Windows then refused to run it, and the Tesseract installer never
+  started (2026-10-02). Show those tasks unchecked and disabled, saying why. }
+procedure GrayOutBlockedToolTasks;
+var
+  I: Integer;
+  Caption: string;
+begin
+  if not SmartAppControlOn then
+    Exit;
+  for I := 0 to WizardForm.TasksList.Items.Count - 1 do
+  begin
+    Caption := WizardForm.TasksList.ItemCaption[I];
+    if (Caption = '{#FfmpegTask}') or (Caption = '{#TesseractTask}') then
+    begin
+      WizardForm.TasksList.Checked[I] := False;
+      WizardForm.TasksList.ItemEnabled[I] := False;
+      WizardForm.TasksList.ItemCaption[I] := Caption + ' (blocked by Smart App Control on this PC)';
+    end;
   end;
 end;
 
@@ -642,8 +680,12 @@ begin
     Ready := AllPresent(Cmds, Dirs)
   else
     Ready := AnyPresent(Cmds, Dirs);
-  if Ready then
+  if Ready and SacBlocks(ToolName) then
+    Result := '    ' + ToolName + ': installed, but Smart App Control blocks it' + #13#10
+  else if Ready then
     Result := '    ' + ToolName + ': ready' + #13#10
+  else if SacBlocks(ToolName) then
+    Result := '    ' + ToolName + ': not installed (Smart App Control blocks it)' + #13#10
   else
     Result := '    ' + ToolName + ': not installed' + #13#10;
 end;
@@ -668,7 +710,11 @@ begin
   if Lines = '' then
     Exit;
   Lines := 'Supporting tools:' + #13#10 + Lines;
-  if Pos(': not installed', Lines) > 0 then
+  if Pos('Smart App Control blocks', Lines) > 0 then
+    Lines := Lines + 'Smart App Control is on: Windows blocks tools that are not validly signed by ' +
+      'their makers (knaif itself is signed). They work only with Smart App Control off.' + #13#10;
+  { A plain "not installed" line (not a blocked one) still gets the usual advice. }
+  if Pos(': not installed' + #13#10, Lines) > 0 then
   begin
     if not OnPath('winget') then
       Lines := Lines + 'Setup could not install them: this PC does not have winget.' + #13#10;
@@ -872,7 +918,10 @@ begin
   if CurPageID = wpLicense then
     WizardForm.LicenseAcceptedRadio.Checked := True;
   if CurPageID = wpSelectTasks then
+  begin
     GrayOutToolTasks;
+    GrayOutBlockedToolTasks;
+  end;
   if CurPageID = wpFinished then
     ReportTools;
 end;
@@ -911,6 +960,36 @@ end;
 // reinstall does not re-download the model. The flip side is that plain file removal orphans it,
 // so a real uninstall has to ask.
 // NOTE: use // here, not a { } comment — a brace constant like {app} inside one CLOSES it early.
+// Stop the model daemon (`knaif daemon start`, `knaif run --daemon`) of the install in {app}, so its
+// files can be replaced or removed. The daemon deliberately does NOT hold AppMutex (it is meant to
+// outlive every run, and a resident holder would make setup refuse to start for as long as the
+// model stays loaded), so setup cannot see it and must ask it to go. It keeps knaif.exe and the
+// ggml DLLs open: without this an upgrade defers their replacement to the next reboot, the same
+// failure AppMutex exists to prevent for a running CLI. A release without the command, or no
+// daemon running, makes this a no-op.
+// Returns False only when a release that has the command ran it and it FAILED (exit code 1: the
+// daemon is busy or would not exit), i.e. files may still be locked. An older release has no
+// `daemon` command (clap exits 2) and a missing exe or failed launch means nothing is running.
+function StopDaemon: Boolean;
+var
+  Exe: string;
+  Code: Integer;
+begin
+  Result := True;
+  Exe := ExpandConstant('{app}\bin\knaif.exe');
+  if FileExists(Exe) then
+    if Exec(Exe, 'daemon stop', '', SW_HIDE, ewWaitUntilTerminated, Code) then
+      Result := (Code <> 1);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if not StopDaemon then
+    Result := 'knaif''s model daemon is still running and could not be stopped, so its files cannot be ' +
+      'replaced. Run "knaif daemon stop" (or end knaif.exe in Task Manager) and try again.';
+end;
+
 function KnaifDataDir: string;
 begin
   Result := ExpandConstant('{%USERPROFILE}\.knaif');
@@ -921,7 +1000,13 @@ var
   DataDir: string;
 begin
   if CurUninstallStep = usUninstall then
+  begin
+    if not StopDaemon then
+      SuppressibleMsgBox(
+        'knaif''s model daemon is still running; some files may remain until it exits or you restart.',
+        mbInformation, MB_OK, IDOK);
     RemovePath(ExpandConstant('{app}\bin'));
+  end;
 
   { Offer to remove the data dir after the files are gone. KEEPING IS THE DEFAULT (changed
     2026-07-26, W2). The default is also what SuppressibleMsgBox answers under /SILENT and

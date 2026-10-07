@@ -1,0 +1,19 @@
+---
+// Override of Starlight's Footer. Upstream's output is rendered untouched; this only appends
+// the link to this site's privacy policy.
+import Default from "@astrojs/starlight/components/Footer.astro";
+---
+
+<Default><slot /></Default>
+<p class="legal"><a href="/privacy/">Privacy policy</a></p>
+
+<style>
+  .legal {
+    margin-top: 1.5rem;
+    font-size: var(--sl-text-sm);
+  }
+
+  .legal a {
+    color: var(--sl-color-gray-3);
+  }
+</style>

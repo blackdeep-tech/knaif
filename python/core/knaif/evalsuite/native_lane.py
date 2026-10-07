@@ -28,8 +28,10 @@ Lane configuration lives under `lanes:` in the eval config, never `backends:` (L
 under `backends:` is handed straight to `InferenceOrchestrator(backend=…)`, so a lane key there
 is not inert — it is a token-generation backend that would be constructed and fail.
 
-**One honest limit on "the shipped path".** The lane passes `--yes`, so the confirmation gate
-executes but is auto-answered; the interactive branch — the prompt a user actually sees, and
+**One honest limit on "the shipped path".** Since 1.3.0 a step acts without asking by default, and
+replacing an existing file asks. The lane passes `--yes` (the model download) and `--overwrite`
+(a corpus run has nobody to answer, and its fixtures are regenerated), so neither question is
+exercised; the interactive branch — the prompt a user actually sees, and
 its refusal path — is not what this measures. A non-interactive corpus run has no alternative,
 and Python's executing verifiers make the same choice, so the two stay comparable. It is a gap
 in what the number covers, not a difference between the runtimes.
@@ -148,7 +150,7 @@ class LaneConfig:
     @property
     def entry_point(self) -> str:
         """What this lane runs, stated for the record (rule 2)."""
-        return f"{self.binary} run <skill> --yes  --model {self.model_path.name}"
+        return f"{self.binary} run <skill> --yes --overwrite --model {self.model_path.name}"
 
 
 def load_lane(config_path: Path, lane: str, root: Path) -> LaneConfig:
@@ -280,6 +282,7 @@ def build_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
         "run",
         skill,
         "--yes",
+        "--overwrite",
         "--model",
         str(lane.model_path),
         "--",

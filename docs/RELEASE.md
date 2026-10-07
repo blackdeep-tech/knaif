@@ -127,9 +127,12 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 | `SHA256SUMS` | — | one line per published artifact |
 
 The **support matrix** these artifacts imply — supported OSes, the measured runtime
-floors, GPU backends, and the external-tool caveats — is declared once in
+floors and GPU backends — is declared once in
 [`contracts/release/platforms.yaml`](../contracts/release/platforms.yaml) and read by the
-website. State a floor there, not in prose here, so the two cannot disagree.
+website. State a floor there, not in prose here, so the two cannot disagree. The download page's
+*wording* (warnings, artifact notes, the GPU, external-tool and model paragraphs) is in
+[`site/data/download-copy.yaml`](../site/data/download-copy.yaml), outside `contracts/` so that
+rewording it does not stale the eval gate; run `just site-data` after editing it.
 
 **`cpu` is a build kind, not a release artifact.** It exists for a box with no Vulkan SDK and is
 named `knaif-<ver>-<os>-<arch>-cpu.*` so it cannot overwrite the real one. Do not publish it: it
@@ -785,6 +788,12 @@ that path once against throwaway outputs:
    public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
    chance to catch a stale artifact.
 6. **Verify** a fresh download installs and runs, independent of the build box.
+   **Submit the Windows `setup.exe` and the `.zip` to Microsoft's Security Intelligence portal**
+   (<https://www.microsoft.com/wdsi/filesubmission>, *Software developer*, "Incorrectly detected as
+   malware/malicious" or "new software"). Free, every release. A signature
+   does not exempt a binary from Defender's heuristics, and an installer that ships loadable
+   `ggml-*.dll` backends and then downloads a 2.5 GB file is the shape that draws a false positive.
+   Note the submission IDs in the release index.
 7. **Refresh the website's download data — now automatic.** Publishing the release fires
    `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
    **pushes a branch** if it changed; the run summary links straight to the compare page.
@@ -887,6 +896,11 @@ the absence of a warning, is what proves the download is intact.
 an **unsigned** installer outright, with no bypass ("An Application Control policy has blocked this
 file"). Earlier knaif releases were unsigned and are affected; the signed installer installs and
 upgrades an existing install with enforcement on (verified in Windows Sandbox, 2026-10-02).
+The **supporting tools** are another matter: Windows blocks FFmpeg (so the ffmpeg skill cannot
+run) and the Ghostscript and Tesseract installers, because their makers do not sign them validly;
+LibreOffice works. Setup and `knaif skills deps` say so when Smart App Control is on
+(`windows.smart_app_control: blocked` in each skill's `skill.yaml`). Say it in the release body
+until it changes.
 
 **Checksum verification.**
 

@@ -22,6 +22,10 @@ clap = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 indicatif = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+# The daemon's access token (see daemon.rs).
+getrandom = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 # SetConsoleOutputCP at startup — see `enable_utf8_console` in main.rs.

@@ -5,6 +5,47 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **An optional model daemon makes repeat runs faster on a GPU.** `knaif daemon start` keeps the
+  model loaded between runs (`status`, `stop`; it shuts down after 10 idle minutes,
+  `--idle-minutes`), and `knaif run … --daemon` starts one if none is running. A run uses a
+  running daemon by itself and otherwise loads the model as before. On an NVIDIA GPU a repeat run
+  drops from about 2.6 s to 0.7 s; on a CPU it saves nothing measurable, because there the time
+  goes to reading the prompt, not loading the model. Plans are identical either way.
+- **`knaif` and `knaif --help` show the version** under the logo.
+
+### Changed
+
+- **`knaif run` acts without asking**, and `--confirm` asks `Proceed? [Y/n]` before each step
+  (Enter approves). **Replacing a file that already exists always asks** `Replace <file>? [y/N]`
+  (Enter keeps it); `--yes` never approves that, `--overwrite` does, and without a terminal the
+  step stops. Both runtimes behave the same.
+- **The Windows installer no longer offers Ghostscript**: its winget package was withdrawn, so the
+  checkbox could not work. `knaif skills deps` points to Artifex's download page instead.
+- **Setup and `knaif skills deps` say when Smart App Control blocks a supporting tool.** With it
+  on, Windows blocks FFmpeg and the Ghostscript and Tesseract installers, which their makers do not
+  validly sign; setup now shows those choices disabled with the reason instead of installing tools
+  that cannot run.
+- **An unsupported request no longer names an internal argument**: "I can't adjust volume that
+  way — that isn't supported. Could you rephrase?"
+- **The Python runtime finds supporting tools where the native runtime does**: the override
+  variable, `PATH`, then the folders each tool's installer uses.
+- Each skill's SPEC lists the supporting-tool versions knaif is tested with.
+
+### Fixed
+
+- **A `--dry-run` of `remove_pages` checks the pages** against the document, as the real run does,
+  instead of promising an output the run then refuses.
+- **Removing every page of a PDF is refused** in both runtimes; the Python runtime wrote an empty
+  document.
+
+### Known issues
+
+- With Smart App Control on, the ffmpeg skill cannot run on Windows: Windows blocks FFmpeg.
+
 ## [1.2.1] — 2026-10-02
 
 **Bug fixes, a readable `knaif run`, and signed Windows binaries.** Same models, prompts and tool

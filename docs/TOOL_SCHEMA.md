@@ -354,22 +354,26 @@ See [NATIVE.md](NATIVE.md) §7 for how the native runtime consumes this, and §3
 
 Third-party programs a skill runs as subprocesses. knaif detects them and never bundles them or
 changes `PATH`; `knaif skills deps` reports them, a run refuses early when a `required` one is
-missing, and the Windows installer offers each through winget.
+missing, and the Windows installer offers each `install.windows: winget` tool through winget.
 
 ```yaml
 dependencies:
   external_tools:
-    - name: ghostscript            # one vendor package = one installer task
+    - name: libreoffice            # one vendor package = one installer task
       required: false              # true → blocks execution and defaults the task on
       all_required: false          # true → every command is needed (ffmpeg + ffprobe);
                                    # false → the commands are aliases, any one satisfies
-      commands: [gs, gswin64c, gswin32c]
+      commands: [soffice, libreoffice]
       install: { windows: winget, macos: brew, linux: package_manager }
       windows:
-        winget: ArtifexSoftware.GhostScript          # `winget install -e --id …`
-        download: https://ghostscript.com/releases/gsdnld.html   # hint when winget is absent
-        dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
+        winget: TheDocumentFoundation.LibreOffice    # `winget install -e --id …`
+        download: https://www.libreoffice.org/download/download-libreoffice/   # hint without winget
+        dirs: ['%ProgramFiles%\LibreOffice\program']
 ```
+
+A tool with no winget package declares `install.windows: download` and omits `winget:`: the
+installer offers no checkbox for it, and `skills deps` names the `download` page (Ghostscript,
+whose package left the winget catalog in 2026).
 
 A command resolves to `$KNAIF_<CMD>_BIN` when set, else the first hit on `PATH`, else — on Windows
 — the first `windows.dirs` folder holding it. List the folders the vendor's own installer uses:

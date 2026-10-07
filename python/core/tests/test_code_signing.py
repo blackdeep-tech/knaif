@@ -277,3 +277,28 @@ def test_a_failing_signer_is_fatal(tmp_path: Path) -> None:
     proc = _run(_stage(tmp_path), "false")
     assert proc.returncode != 0
     assert "sign" in proc.stderr.lower()
+
+
+# ── what the public pages say about signing ─────────────────────────────────────────────────
+
+#: Pages that describe the CURRENT release to users. Release notes are left out: they record
+#: what was true for their own version (1.2.0's rightly says "unsigned").
+LIVE_PAGES = ("site/org/src", "site/dev/src", "site/data/download-copy.yaml", "README.md")
+UNSIGNED_CLAIM = re.compile(
+    r"\b(binaries|knaif|installer|artifacts?|downloads?)\s+(is|are)\s+unsigned\b", re.I
+)
+
+
+def test_no_live_page_calls_the_signed_binaries_unsigned() -> None:
+    """1.2.1 shipped signed while knaif.org's download page still said "Binaries are unsigned":
+    nothing tied the site's wording to the signing pipeline (found 2026-10-03)."""
+    assert (ROOT / "installers" / "windows" / "signing.json").is_file(), "signing is configured"
+    offenders = []
+    for rel in LIVE_PAGES:
+        path = ROOT / rel
+        files = [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]
+        for f in files:
+            text = f.read_text(encoding="utf-8", errors="ignore")
+            for m in UNSIGNED_CLAIM.finditer(" ".join(text.split())):
+                offenders.append(f"{f.relative_to(ROOT).as_posix()}: {m.group(0)!r}")
+    assert not offenders, "\n".join(offenders)

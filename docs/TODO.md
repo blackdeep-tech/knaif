@@ -339,10 +339,23 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   Model identity is compared as identifier *sets*, not `backend == backend`: a native scoreboard records the lane in `backend` and the model in `backend_public_name`, while its paired safety record puts the model in `backend`. A direct string compare rejects **4 of the 26 real scoreboard/safety pairs** under `evals/runs/`; the set rule rejects 0 and still catches a genuine swap. `load_acceptance` now stamps `skill` so a bar can be bound to its evidence at all.
 
   Also: `schema_validity` no longer counts `parse_error` as valid; the train/eval verbatim-copy test covers **both** skills (it was ffmpeg-only, which is why `documents_079` was never caught). The native lane keeps its own lowerable coverage floor — `check_acceptance` takes `coverage_floor`, so there is one rule, not two that can disagree.
-- [ ] **Safety population count is still unbound** — the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
+- [x] **Safety population count is still unbound** — DONE 2026-10-07: `accept` and `accept-native` pass the corpus row ids, and a safety record that misses a row, or has one the corpus does not, fails `safety/coverage` (by ids, else by total). Was: the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
+- [ ] **Previewing a chain that changes pages of a file an earlier step creates** — found
+  2026-10-07 while fixing the `remove_pages` preview (documents_105's sibling). Native now checks
+  the pages in a preview only when the input exists, so "merge, then remove page 2" still
+  previews. **Python fails that preview** (it always read the input's page count), and the Mac
+  contributor's `reorder_pages` preview check (documents_105, lands with `feat/macos-support`)
+  has no such guard yet: add the same `input.exists()` guard there at the merge, and make
+  Python's preview skip the count for an input an earlier step writes. Add an L2 case
+  (preceding step → page removal) in `contracts/parity/documents_expansion_cases.json`.
+- [ ] **FFmpeg under Smart App Control** — Windows blocks the Gyan build (unsigned), so on a PC with
+  Smart App Control on the ffmpeg skill cannot run; setup and `skills deps` now say so (1.3.0),
+  but there is no fix. A validly signed FFmpeg is the only one, which is the parked media-runtime
+  plan (branch `docs/media-runtime-and-mobile`; owner, 2026-10-07: leave it for now). Ghostscript and Tesseract are blocked too: neither maker signs validly (Tesseract's
+  certificate expired in 2023, including on the newer `tesseract-ocr.tesseract` 5.5.3 package).
 - [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
-- [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
+- [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
   an opt-in flag to ask first; keep `--yes` as an accepted no-op, and keep the first-run model
   download behind its own consent. **Scope (owner, 2026-10-01, after testing 1.2.1):** the Yes default
@@ -359,17 +372,24 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   default silently approve — flush the console input buffer there first (`FlushConsoleInputBuffer`).
   A non-tty stdin keeps meaning "no answer". Consider renaming the category (`writes` vs
   `read_only`) so "destructive" stops suggesting deletion; REQUIREMENTS.md §safety uses the term.
-- [ ] **Overwrite policy for outputs** — found 2026-10-01 in the owner's 1.2.1 test: ffmpeg commands
+- [x] **Overwrite policy for outputs** — BUILT 2026-10-06 on `feat/1.3.0`: `Replace <file>? [y/N]`, `--overwrite`, a non-terminal stops — — found 2026-10-01 in the owner's 1.2.1 test: ffmpeg commands
   carry `-y`, so an existing output (explicit or auto-generated name) is replaced silently; documents
   adds `-1` to auto-generated names but overwrites an explicit `output`. This contradicts the "nothing
   can overwrite an existing file" premise of the Yes-default item above. Decide: ask before replacing,
   or suffix like documents does. 1.3.0; the 1.2.1 terminal view only warns.
-- [ ] **A prompt line vanishes in VS Code's PowerShell terminal** — found in the owner's 1.2.1 test
+- [x] **Move the download page's wording out of `contracts/`** — DONE 2026-10-05 on `feat/1.3.0`: wording is in `site/data/download-copy.yaml`, `site-data.json` is byte-identical. Was: — owner, 2026-10-03: chosen for
+  1.3.0. The `warnings` (and other display text) in `contracts/release/platforms.yaml` are read only
+  by knaif.org's download page (`scripts/site_data.py` → `site/data/site-data.json` →
+  `download.astro`), yet the gate fingerprints all of `contracts/`, so one sentence of site copy
+  marked every L1–L4 record stale (the "signed" fix, 2026-10-03). Give the site its own file for it;
+  do it before 1.3.0's evidence runs, since the move itself changes the fingerprint once. Add it to
+  the 1.3.0 index on `release/1.3.0`.
+- [ ] **A prompt line vanishes in VS Code's PowerShell terminal** — PARKED 2026-10-06 (owner): not reproducible; reopen when seen again, with a screenshot and the terminal width. Found in the owner's 1.2.1 test
   round 2 (2026-10-01), shipped open in 1.2.1. After answering `y` at a step that prints a warning
   before `Proceed? [y/N]` (`reverse_video`), the warning and the prompt line disappear and the typed
   `y` lands after the command line. Not reproduced in a ConPTY at 120 or 160 columns nor in a Linux
   pty. Needs a screenshot and the terminal width. Details: cli-terminal-output T7.
-- [ ] **Daemon mode** — keep the model resident in VRAM between `knaif run` invocations (owner,
+- [x] **Daemon mode** — BUILT 2026-10-06 on `feat/1.3.0` (`knaif daemon start|stop|status`, `run --daemon`; gates open, see its plan) — — keep the model resident in VRAM between `knaif run` invocations (owner,
   2026-10-01). Not present today: every run loads the GGUF (~1 s on CUDA, more on CPU). New surface
   (a background process, a socket, lifecycle and install/uninstall interplay), so 1.3.0 at the earliest.
   **Plan: [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md)** (proposed for 1.3.0,
@@ -976,7 +996,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
     ~120 ms warm for all four CUDA libs, so it buys no startup time. Weigh against the
     `90-virtual` forward-compat PTX rationale in NATIVE.md §10.
 
-- [ ] **Warn on ARM64 Windows before installing the x64 build** *(blocked on hardware — moved out of
+- [ ] **Warn on ARM64 Windows before installing the x64 build** *(out of 1.3.0, owner 2026-10-06: not a priority; blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
   2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
   is what it means, as opposed to `x64os`. So an ARM64 box installs the x64 build and runs llama.cpp
@@ -1101,7 +1121,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **A `destructive` SDK example** — `clock` is read-only, so the gate has no example
     coverage (ffmpeg/io tests cover the machinery). ~30 lines: saved-zones `save`/`forget`.
     Trigger: wanted for docs; otherwise leave it.
-- [ ] **Windows installer polish — two P0s found in a live 1.0.1 install session (2026-07-25).**
+- [x] **Windows installer polish — two P0s found in a live 1.0.1 install session (2026-07-25).** *DONE 2026-07-27: the plan shipped W0–W6 and is Done; this entry was left open by mistake (closed 2026-10-07).*
   Plan: [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md).
   **(a)** The `deps\*` winget tasks name a parent task `deps` that is never declared, so they render
   as children of the checked "Add to PATH" task — which **defeats their `Flags: unchecked`**:

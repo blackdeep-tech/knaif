@@ -33,6 +33,8 @@ export default defineConfig({
         ThemeProvider: "./src/components/ThemeProvider.astro",
         // Adds the webfont preloads to upstream's head, nothing else. See the file.
         Head: "./src/components/Head.astro",
+        // Appends the privacy policy link to upstream's footer. See the file.
+        Footer: "./src/components/Footer.astro",
       },
       social: [
         {

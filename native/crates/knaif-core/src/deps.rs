@@ -55,6 +55,11 @@ pub struct WindowsInstall {
     /// matches within one path component, and several matches are tried newest version first.
     #[serde(default)]
     pub dirs: Vec<String>,
+    /// `blocked` when Windows' Smart App Control was seen to block the tool or its installer
+    /// (not validly signed by its maker). Only a fact about the tool: whether Smart App Control
+    /// is on is the machine's, and the caller reads it.
+    #[serde(default)]
+    pub smart_app_control: Option<String>,
 }
 
 /// Per-OS install channel hint (`install: {windows, macos, linux}` in skill.yaml).
@@ -94,9 +99,16 @@ pub struct ToolStatus {
     pub missing: Vec<String>,
     /// Install hint for the current OS, if declared.
     pub install_hint: Option<String>,
+    /// The tool declares that Smart App Control blocks it (see `WindowsInstall`).
+    pub smart_app_control_blocks: bool,
 }
 
 impl ExternalTool {
+    /// Does Smart App Control block this tool or its installer, where it is on?
+    pub fn blocked_by_smart_app_control(&self) -> bool {
+        self.windows.smart_app_control.as_deref() == Some("blocked")
+    }
+
     /// The declared install folders that exist on this machine, or none off Windows.
     fn known_dirs(&self) -> Vec<PathBuf> {
         if cfg!(windows) {
@@ -151,6 +163,7 @@ impl ExternalTool {
                 cfg!(windows),
                 cfg!(windows) && winget_available(),
             ),
+            smart_app_control_blocks: self.blocked_by_smart_app_control(),
         }
     }
 }
@@ -621,6 +634,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["x".into()],
                 install_hint: None,
+                smart_app_control_blocks: false,
             },
             ToolStatus {
                 name: "req-ok".into(),
@@ -629,6 +643,7 @@ dependencies:
                 found: vec![],
                 missing: vec![],
                 install_hint: None,
+                smart_app_control_blocks: false,
             },
             ToolStatus {
                 name: "opt-missing".into(),
@@ -637,6 +652,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["y".into()],
                 install_hint: None,
+                smart_app_control_blocks: false,
             },
         ];
         let unmet = unmet_required(&statuses);
@@ -653,6 +669,7 @@ dependencies:
             found: vec![],
             missing: vec![],
             install_hint: Some("winget".into()),
+            smart_app_control_blocks: false,
         }];
         assert!(missing_required_message("ffmpeg", &statuses).is_none());
         // No declared tools at all (e.g. documents) is also unblocked.
@@ -669,6 +686,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["ffmpeg".into(), "ffprobe".into()],
                 install_hint: Some("winget".into()),
+                smart_app_control_blocks: false,
             },
             // An unmet OPTIONAL tool must not appear in the blocking message.
             ToolStatus {
@@ -678,6 +696,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["tesseract".into()],
                 install_hint: Some("winget".into()),
+                smart_app_control_blocks: false,
             },
         ];
         let msg = missing_required_message("ffmpeg", &statuses).expect("required tool is missing");
@@ -712,6 +731,25 @@ dependencies:
         assert_eq!(t.windows.dirs, vec![r"%ProgramFiles%\gs\gs*\bin"]);
         // Absent block: nothing extra, and the entry still parses.
         assert!(parse_external_tools(FFMPEG_YAML)[0].windows.dirs.is_empty());
+    }
+
+    #[test]
+    fn a_tool_smart_app_control_blocks_says_so_and_its_status_carries_it() {
+        let yaml = "\
+dependencies:
+  external_tools:
+    - name: tesseract
+      commands: [knaif-no-such-tesseract]
+      windows:
+        smart_app_control: blocked
+    - name: libreoffice
+      commands: [knaif-no-such-soffice]
+";
+        let tools = parse_external_tools(yaml);
+        assert!(tools[0].blocked_by_smart_app_control());
+        assert!(!tools[1].blocked_by_smart_app_control());
+        assert!(tools[0].detect().smart_app_control_blocks);
+        assert!(!tools[1].detect().smart_app_control_blocks);
     }
 
     /// A fake executable named `cmd` in `dir`, spelled the way this platform's lookup finds it.
@@ -849,6 +887,7 @@ dependencies:
             winget: Some("Gyan.FFmpeg".into()),
             download: Some("https://ffmpeg.org/download.html".into()),
             dirs: vec![],
+            smart_app_control: None,
         };
         assert_eq!(
             hint_for(&install, &win, true, true).as_deref(),
@@ -857,6 +896,17 @@ dependencies:
         assert_eq!(
             hint_for(&install, &win, true, false).as_deref(),
             Some("download from https://ffmpeg.org/download.html")
+        );
+        // No winget package (Ghostscript since 2026-10): the download page even with winget here.
+        let download_only = WindowsInstall {
+            winget: None,
+            download: Some("https://ghostscript.com/releases/gsdnld.html".into()),
+            dirs: vec![],
+            smart_app_control: None,
+        };
+        assert_eq!(
+            hint_for(&install, &download_only, true, true).as_deref(),
+            Some("download from https://ghostscript.com/releases/gsdnld.html")
         );
         // Nothing Windows-specific declared: the plain channel hint, as before.
         if cfg!(windows) {

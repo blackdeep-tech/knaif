@@ -141,8 +141,10 @@ $ knaif plan --skill ffmpeg "..."            # the validated plan envelope, as J
 $ knaif skills deps                          # which external tools are missing
 ```
 
-`run` executes for real behind a confirmation prompt; `--yes` skips it. The native `run`
-covers `ffmpeg` and `documents`.
+`run` executes for real and acts straight away; `--confirm` asks `Proceed? [Y/n]` first. It asks
+`Replace <file>? [y/N]` before replacing a file that already exists (Enter keeps it; `--overwrite`
+approves up front), checked just before each step runs — not a lock against another process
+creating the file in between. The native `run` covers `ffmpeg` and `documents`.
 
 **As a library or SDK** — put a natural-language front end on your own CLI:
 
@@ -261,6 +263,13 @@ The list below is generated from each skill's `skill.yaml` by
 Security issues go through [`SECURITY.md`](SECURITY.md), never a public issue.
 Found a case where it plans the wrong thing? That's the
 [most useful issue you can file](https://github.com/blackdeep-tech/knaif/issues/new/choose).
+
+## Disclaimer
+
+knaif's plans come from a small AI model and can be wrong: read the plan and the command before you
+confirm, and keep backups, because knaif writes files and can replace existing ones. Supporting
+tools (FFmpeg, LibreOffice, Ghostscript, Tesseract) are third-party software under their own
+licenses. knaif and its models are provided "as is", without warranty, under the license below.
 
 ## License
 

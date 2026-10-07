@@ -249,3 +249,82 @@ def test_model_urls_and_hashes_are_not_copied_into_the_site():
     that can rot. They stay in contracts/models/model-manifest.yaml."""
     for model in json.loads(DATA.read_text(encoding="utf-8"))["models"]:
         assert "url" not in model and "sha256" not in model
+
+
+# --------------------------------------------------------------------------------------
+# Download-page wording lives outside contracts/
+# --------------------------------------------------------------------------------------
+
+COPY = ROOT / "site" / "data" / "download-copy.yaml"
+PLATFORMS = ROOT / "contracts" / "release" / "platforms.yaml"
+#: Keys whose values are sentences for the download page, not support facts.
+DISPLAY_KEYS = {"warnings", "notes", "text", "reason"}
+
+
+def _display_keys(node, path=""):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in DISPLAY_KEYS:
+                yield f"{path}/{key}"
+            yield from _display_keys(value, f"{path}/{key}")
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            yield from _display_keys(value, f"{path}[{i}]")
+
+
+def test_the_contract_carries_no_download_page_wording():
+    """The gate fingerprints all of contracts/, so one sentence of site copy marked every
+    L1-L4 record stale (the "signed" fix, 2026-10-03). Wording lives in site/data/."""
+    found = list(_display_keys(yaml.safe_load(PLATFORMS.read_text(encoding="utf-8"))))
+    assert found == [], f"display text still in contracts/release/platforms.yaml: {found}"
+
+
+def test_the_wording_file_is_published_to_the_site_data():
+    copy = yaml.safe_load(COPY.read_text(encoding="utf-8"))
+    published = json.loads(DATA.read_text(encoding="utf-8"))["platforms"]
+    windows = next(p for p in published["platforms"] if p["id"] == "windows-x64")
+    assert windows["warnings"] == copy["platforms"]["windows-x64"]["warnings"]
+    assert published["gpu"]["default"]["text"] == copy["gpu"]["default"]["text"]
+    assert published["external_tools"]["text"] == copy["external_tools"]["text"]
+    assert published["model"]["text"] == copy["model"]["text"]
+
+
+def test_wording_for_an_unknown_platform_fails_the_build(tmp_path):
+    bad = tmp_path / "copy.yaml"
+    bad.write_text("platforms:\n  amiga:\n    notes: hi\n", encoding="utf-8")
+    with pytest.raises(sd.ExtractError, match="amiga"):
+        sd._apply_download_copy({"platforms": [{"id": "windows-x64"}]}, bad)
+
+
+_ZIP = "knaif-<ver>-windows-x64.zip"
+
+
+@pytest.mark.parametrize(
+    "doc, needle",
+    [
+        ({"platforms": {"windows-x64": {"artifacts": {"nope": {"notes": "x"}}}}}, "nope"),
+        ({"platforms": {"windows-x64": {"artifacts": {_ZIP: {"noets": "x"}}}}}, "noets"),
+        ({"platforms": {"windows-x64": {"artifacts": {_ZIP: {"kind": "installer"}}}}}, "kind"),
+        ({"platforms": {"windows-x64": {"requires": "hi"}}}, "requires"),
+        ({"platforms": {"windows-x64": {"warnings": [{"id": "a"}]}}}, "warnings"),
+        ({"gpu": {"optional": {"nope": {"text": "x"}}}}, "nope"),
+        ({"gpu": {"default": {"backends": ["cpu"]}}}, "backends"),
+        ({"model": {"texxt": "x"}}, "texxt"),
+    ],
+)
+def test_malformed_wording_fails_the_build(tmp_path, doc, needle):
+    contract = {
+        "platforms": [{"id": "windows-x64", "artifacts": [{"artifact": _ZIP, "kind": "portable"}]}],
+        "gpu": {"default": {"backends": ["cpu"]}, "optional": [{"id": "cuda"}]},
+    }
+    bad = tmp_path / "copy.yaml"
+    bad.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    with pytest.raises(sd.ExtractError, match=needle):
+        sd._apply_download_copy(contract, bad)
+
+
+def test_the_python_job_runs_when_only_the_wording_changes():
+    """site/ alone skips the Python job, and test_site_data.py is the drift guard for
+    site/data/site-data.json (Codex audit, 2026-10-05)."""
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "contracts/|site/data/|" in ci

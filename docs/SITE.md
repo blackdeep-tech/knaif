@@ -40,6 +40,7 @@ just site-update --latest     # include major dependency upgrades
 just site-pnpm-update         # update the site's pnpm pin to latest, then install dependencies
 just site-pnpm-update 12.4.1   # select a specific pnpm version
 just site-check               # install and check both sites
+just site-data               # regenerate site/data/site-data.json after editing download-copy.yaml, a skill's display copy or platforms.yaml
 ```
 
 `site-install`, `site-check`, and `site-build` use `--frozen-lockfile`, so routine
