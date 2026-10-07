@@ -363,6 +363,19 @@ token counts ranged 3938–3943), so the prefix is reusable in principle. Nothin
 exploits it today — there is no KV-cache reuse or `state_seq` persistence. Together the two target
 **~5.2 s → ~0.5 s**; the daemon alone stops at ~1.8 s.
 
+**Measured, 2026-10-06 — the daemon as built** ([NATIVE.md](NATIVE.md) §5.7):
+
+| Machine | Backend | Model | In-process | Through a warm daemon |
+|---|---|---|---:|---:|
+| `5080` | CUDA | 4B v2 | 2.64 s | **0.70 s** (same plan) |
+| `5080`, WSL Ubuntu 24.04 | CPU | 1.7B v2 | 7.8 s | 6.2–8.0 s (no gain) |
+
+Request: `convert clip.mov to mp4 --dry-run`, one run each after a warm-up. On the CPU the model
+load is ~0.13 s (an mmap from the page cache, nothing to upload), so there is little for a daemon
+to save: decoding the prompt (5.6 s of 2,445 tokens) dominates both paths. Prefix reuse, the
+part that would cut that, is built but **off**: it changed 65 of 1,025 corpus plans
+(`5080`, CUDA, 4B v2), the parity risk the caveat below describes.
+
 Two caveats on that work:
 
 - **Persisting the prefix KV to disk is not worth it** — ~580 MB f16 for a 3938-token Qwen3-4B
@@ -474,8 +487,9 @@ KNAIF_TIMING=1 KNAIF_BACKENDS_DIR=/tmp/kbench/backends \
 - ⚠️ Vulkan's ~36 s first-run shader compile needs an install-time warm-up (§2).
 - ❓ **Re-measure CUDA context init on bare-metal Linux** (§6). ~1.9 s under WSL, expected 100–300 ms
   bare metal. Free, and it decides the ordering of the two items below.
-- 🚀 **Persistent daemon + prompt-prefix KV reuse** (§6) — the biggest remaining win, ~5.2 s → ~0.5 s.
-  Do them together: the daemon alone stops at ~1.8 s because it still re-decodes the full prompt.
+- ✅ **Persistent daemon** (§6) — built, opt-in: 2.64 s → 0.70 s on CUDA; no gain on CPU.
+- 🚀 **Prompt-prefix KV reuse** (§6) — built but off: it changes 65 of 1,025 plans. Making it
+  plan-preserving is what would help CPU users, whose time is the prompt decode.
 - 💡 Expose the CPU+GPU **hybrid** mode (§4) for models that don't fit in VRAM.
 - 🧹 `models.yaml` `default:` points at a GGUF that isn't on this machine (§8).
 - ❓ Re-measure the `5080` native backends if that box returns (§2).

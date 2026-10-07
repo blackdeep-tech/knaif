@@ -385,6 +385,13 @@ running and otherwise loads the model itself, exactly as before.
   setup cannot see it; the Windows installer runs `knaif daemon stop` before replacing or removing
   files. On Linux (tarball/AppImage) stop it before replacing the folder.
 - Logs go to `~/.knaif/daemon.log`. `KNAIF_DAEMON_DIR` moves the state folder (tests).
+- **What it saves depends on the backend.** On CUDA (`5080`, 4B v2, `convert clip.mov to mp4
+  --dry-run`) a run takes 2.64 s in-process and 0.70 s through a warm daemon, the same plan. On a CPU
+  it saves nothing measurable (7.8 s vs 6.2–8.0 s, WSL, 1.7B v2): the model loads in ~0.13 s there,
+  and decoding the 2,445-token prompt (5.6 s) dominates both paths. [PERFORMANCE.md](PERFORMANCE.md) §6.
+- **Prompt-prefix reuse is built but off**: it changed 65 of 1,025 corpus plans, so it fails the
+  plan-equality gate. With it off, every plan through the daemon is byte-identical to in-process
+  (both corpora, `evals/parity/2026-10-06_daemon-plan-equality`).
 
 ## 6. Model management
 
@@ -638,8 +645,9 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 - **macOS** — no installers/notarization; explicitly out for v1.
 - **Linux CPU floor** — the CPU artifact is glibc-linked; a static-musl floor build is a possible
   fast-follow (CUDA/Vulkan need glibc + the vendor driver regardless).
-- **Persistent daemon** — keep the model resident to make repeat GPU calls near-instant
-  (the July "low value for Vulkan" reasoning assumed Vulkan's slow compute, which no longer holds).
+- **Persistent daemon** — built, opt-in (§5.7): repeat GPU runs drop from ~2.6 s to ~0.7 s on CUDA.
+  It saves nothing on a CPU, where the prompt decode is the cost; prompt-prefix reuse, which would
+  address that, changes plans and stays off.
 - **Vulkan decode speed** — *answered 2026-09-25*: Blackwell Vulkan is ~72% of CUDA on the same
   crate as July, most likely a driver fix. Re-measure when the llama.cpp pin or the driver moves.
 - **Execution breadth** — native `run` supports ffmpeg + documents, including image watermark
