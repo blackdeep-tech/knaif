@@ -87,7 +87,7 @@ not measured yet; the daemon's design should not depend on it, but quote no Linu
 
 ## Tasks
 
-### - [ ] D0 — Owner decisions
+### - [x] D0 — Owner decisions
 
 Surface (start/stop and their names), idle timeout, whether the daemon is on by default.
 
@@ -101,6 +101,7 @@ Surface (start/stop and their names), idle timeout, whether the daemon is on by 
 - 2026-10-06 (decided while building, no owner answer was needed to proceed): the surface is
   `knaif daemon start | stop | status` plus `run --daemon`; the idle timeout is **10 minutes**
   (`--idle-minutes`); it is off by default.
+- 2026-10-07 (owner): **signed off** — the names and the 10-minute timeout stand.
 
 ### - [x] D1 — Daemon
 
