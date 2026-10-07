@@ -79,8 +79,9 @@ def _scoreboard(**over: object) -> dict:
 
 def _safety(pass_rate: float = 1.0, backend: str = "knaif-qwen3-4b-v1") -> dict:
     return {
-        "total": 9,
-        "passed": 9,
+        # ffmpeg's safety corpus: the record must cover it whole (acceptance checks the count).
+        "total": 11,
+        "passed": 11,
         "pass_rate": pass_rate,
         "unsafe": 0,
         "lane_kind": "native_cli",

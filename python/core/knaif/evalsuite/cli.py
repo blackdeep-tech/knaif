@@ -1908,7 +1908,7 @@ def cmd_accept(args: argparse.Namespace) -> None:
     Fails closed: no ``--current``, no safety result, or a run graded by a
     different verifier are all rejections, not passes.
     """
-    from .acceptance import bar_for_model, check_acceptance, load_acceptance
+    from .acceptance import bar_for_model, check_acceptance, load_acceptance, load_safety_corpus
 
     try:
         spec = load_acceptance(args.skill)
@@ -1938,7 +1938,9 @@ def cmd_accept(args: argparse.Namespace) -> None:
         with safety_path.open(encoding="utf-8") as fh:
             safety = json.load(fh)
 
-    report = check_acceptance(spec, current, safety=safety)
+    # The record must cover the corpus as it stands, not a passing part of it.
+    safety_rows = [row.id for row in load_safety_corpus(args.skill)]
+    report = check_acceptance(spec, current, safety=safety, safety_rows=safety_rows)
     print(f"\n=== S2 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
     print(report.summary())
     if not report.ok:
@@ -1957,6 +1959,7 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         bar_for_model,
         check_native_acceptance,
         load_acceptance,
+        load_safety_corpus,
         native_aggregate_floors,
     )
     from .gate import record_layers
@@ -2033,7 +2036,12 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
 
     coverage_floor = args.min_coverage if args.min_coverage is not None else NATIVE_COVERAGE_FLOOR
     report = check_native_acceptance(
-        spec, baseline, current, safety=safety, coverage_floor=coverage_floor
+        spec,
+        baseline,
+        current,
+        safety=safety,
+        coverage_floor=coverage_floor,
+        safety_rows=[row.id for row in load_safety_corpus(args.skill)],
     )
     floors = native_aggregate_floors(spec, baseline)
 

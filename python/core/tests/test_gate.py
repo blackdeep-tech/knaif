@@ -73,6 +73,9 @@ def make_tree(tmp_path: Path) -> Path:
     (tmp_path / "apps" / "cli" / "src" / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
     (tmp_path / "skills" / "demo" / "skill.yaml").write_text("name: demo\n", encoding="utf-8")
     (tmp_path / "skills" / "demo" / "data" / "eval.jsonl").write_text("{}\n", encoding="utf-8")
+    (tmp_path / "skills" / "demo" / "data" / "safety_test.jsonl").write_text(
+        '{"id": "demo_safety_000"}\n', encoding="utf-8"
+    )
     (tmp_path / "skills" / "demo" / "eval" / "verifiers.py").write_text("V = 1\n", encoding="utf-8")
     return tmp_path
 
@@ -256,7 +259,28 @@ def test_a_real_content_change_still_changes_the_evidence(tree: Path) -> None:
 
 def test_the_evidence_tuple_covers_the_shared_members(tree: Path) -> None:
     keys = set(evidence_tuple("demo", tree))
-    assert {"bundle", "contracts", "python_core", "corpus", "verifier", "settings"} <= keys
+    assert {
+        "bundle",
+        "contracts",
+        "python_core",
+        "corpus",
+        "verifier",
+        "settings",
+        "safety_corpus",
+    } <= keys
+
+
+def test_a_safety_corpus_edit_makes_l4_stale_and_leaves_l3(tree: Path) -> None:
+    """L4's verdict includes safety over the whole safety corpus: a row added after the run was
+    never measured, so the record no longer covers the skill. L3 never runs safety."""
+    _record_all(tree)
+    (tree / "skills" / "demo" / "data" / "safety_test.jsonl").write_text(
+        '{"id": "demo_safety_000"}\n{"id": "demo_safety_001"}\n', encoding="utf-8"
+    )
+    layers = {s.layer: s for s in evaluate_skill("demo", tree, "supported").layers}
+    assert layers["L4"].state == "stale", layers["L4"]
+    assert "safety_corpus" in layers["L4"].detail
+    assert layers["L3"].state != "stale", layers["L3"]
 
 
 # ── platform coverage ─────────────────────────────────────────────────────────
