@@ -1033,6 +1033,10 @@ already pass, on a third platform, for the first time.**
       > 25/29. The four `macos|mtl` cells now match the merged tree's fingerprints. Metal p50 rose ~5%
       > on three cells, most likely from the 1.2.1 binary (the 1.2.0 binary on Beta 2 did not).
       > `evals/runs/2026-10-05_mac-l3l4-1.2.1_success/`.
+      > **On the release build, 2026-10-07 (`8cbab23`, `knaif` `3da78a28…`).** The `documents_105`
+      > fix (#14) changed the binary, so documents (with the fix run) and ffmpeg ran again on it: the
+      > same decisions, all 1,952 ffmpeg L4 rows unchanged, ffmpeg L3 both PASS. Every macOS L3/L4 cell
+      > is now on the release binary (`evals/runs/2026-10-07_mac-ffmpeg-docfix_success/`).
 - [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
       > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does

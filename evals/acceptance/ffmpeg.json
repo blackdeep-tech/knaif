@@ -1644,18 +1644,18 @@
         "knaif-qwen3-4b-v2|macos|mtl": {
           "evidence": {
             "bundle": "fbf18f42932cad1eb34d620b31ecfedfb376ab9da62454ed9a27c66435b040cb",
-            "contracts": "24de5c45ae84eab952ad02cb8d0f2a4a86f0b9c35a410f38fd87ece70f062563",
+            "contracts": "63e3eceafeb4af68ccc76dbc24f5bf347d8dd52d717169ef5b60818bca95d956",
             "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
             "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "92047de75060b7278ebe96a6e568f4c316de3b41d09571beeec053725f07bd82",
+            "native": "4c82d1f05b3b56b49db928f15d785e290811646a9640691a21a34689b30aa853",
             "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
             "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-            "native_binary": "c67fcb99c23f2aa0bdca1203921c72d0849609a554827b95402ecef43092b9c9"
+            "native_binary": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
           },
-          "run": "evals/runs/2026-10-05_mac-l3l4-1.2.1_success/4b/metal/ffmpeg_mac-4b_success.json",
+          "run": "evals/runs/2026-10-07_mac-ffmpeg-docfix_success/4b/metal/ffmpeg_mac-4b_success.json",
           "summary": "ACCEPTED - 45 thresholds met.",
           "passed": true,
           "coverage": 1.0,
@@ -1667,18 +1667,18 @@
         "knaif-qwen3-1.7b-v2|macos|mtl": {
           "evidence": {
             "bundle": "fbf18f42932cad1eb34d620b31ecfedfb376ab9da62454ed9a27c66435b040cb",
-            "contracts": "24de5c45ae84eab952ad02cb8d0f2a4a86f0b9c35a410f38fd87ece70f062563",
+            "contracts": "63e3eceafeb4af68ccc76dbc24f5bf347d8dd52d717169ef5b60818bca95d956",
             "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
             "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "92047de75060b7278ebe96a6e568f4c316de3b41d09571beeec053725f07bd82",
+            "native": "4c82d1f05b3b56b49db928f15d785e290811646a9640691a21a34689b30aa853",
             "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
             "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
-            "native_binary": "c67fcb99c23f2aa0bdca1203921c72d0849609a554827b95402ecef43092b9c9"
+            "native_binary": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
           },
-          "run": "evals/runs/2026-10-05_mac-l3l4-1.2.1_success/1.7b/metal/ffmpeg_mac-1.7b_success.json",
+          "run": "evals/runs/2026-10-07_mac-ffmpeg-docfix_success/1.7b/metal/ffmpeg_mac-1.7b_success.json",
           "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
           "passed": false,
           "coverage": 1.0,
