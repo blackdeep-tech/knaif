@@ -49,6 +49,9 @@ dependencies:
           - '%LOCALAPPDATA%\Microsoft\WinGet\Links'
           - '%ProgramFiles%\WinGet\Links'
           - '%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*\ffmpeg-*\bin'
+        # Unsigned: Windows blocks ffmpeg.exe where Smart App Control is on (Windows Sandbox,
+        # enforcement on, 2026-10-02), so `skills deps` and setup say so instead of failing later.
+        smart_app_control: blocked
 
 safety:
   unsafe_phrases:

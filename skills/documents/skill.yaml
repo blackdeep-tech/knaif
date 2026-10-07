@@ -39,11 +39,15 @@ dependencies:
     - name: ghostscript
       required: false
       commands: [gs, gswin64c, gswin32c]
-      install: { windows: winget, macos: brew, linux: package_manager }
+      # Not winget: Artifex's package left the winget catalog (gone by 2026-10-07), so the
+      # installer offers no checkbox and `skills deps` points at the vendor's download page.
+      install: { windows: download, macos: brew, linux: package_manager }
       windows:
-        winget: ArtifexSoftware.GhostScript
         download: https://ghostscript.com/releases/gsdnld.html
         dirs: ['%ProgramFiles%\gs\gs*\bin', '%ProgramFiles(x86)%\gs\gs*\bin']
+        # Its installer was blocked in Windows Sandbox with enforcement on (2026-10-02), and the
+        # installed gswin64c.exe and gsdll64.dll are not signed at all (checked 2026-10-07).
+        smart_app_control: blocked
     - name: libreoffice
       required: false
       commands: [soffice, libreoffice]
@@ -60,6 +64,10 @@ dependencies:
         winget: UB-Mannheim.TesseractOCR
         download: https://github.com/UB-Mannheim/tesseract/wiki
         dirs: ['%ProgramFiles%\Tesseract-OCR', '%LOCALAPPDATA%\Programs\Tesseract-OCR']
+        # Its installer is blocked (2026-10-02): signed with a certificate that expired in 2023,
+        # as are the newer tesseract-ocr.tesseract 5.5.3 package and the installed tesseract.exe;
+        # its DLLs are not signed (checked 2026-10-07).
+        smart_app_control: blocked
 
 data:
   train: data/train.jsonl

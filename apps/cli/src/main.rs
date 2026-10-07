@@ -565,6 +565,8 @@ fn cmd_skills_deps(name: Option<&str>, include_stale: bool) -> anyhow::Result<()
         None => skills,
     };
 
+    let sac_on = smart_app_control_on();
+    let mut all = Vec::new();
     for skill in &selected {
         let statuses = knaif_core::detect_skill_deps(&root.join(&skill.name));
         println!("{}:", skill.name);
@@ -575,27 +577,131 @@ fn cmd_skills_deps(name: Option<&str>, include_stale: bool) -> anyhow::Result<()
         for s in &statuses {
             let mark = if s.satisfied { "OK  " } else { "MISS" };
             let kind = if s.required { "required" } else { "optional" };
-            let detail = if s.satisfied {
-                let paths: Vec<_> = s
-                    .found
-                    .iter()
-                    .map(|(_, p)| p.display().to_string())
-                    .collect();
-                paths.join(", ")
-            } else {
-                match &s.install_hint {
-                    Some(hint) => format!("install: {hint}"),
-                    None => "not found".to_string(),
-                }
-            };
-            println!("  [{mark}] {:<14} ({kind}) {detail}", s.name);
+            println!(
+                "  [{mark}] {:<14} ({kind}) {}",
+                s.name,
+                deps_detail(s, sac_on)
+            );
         }
         // Call out the blocking set explicitly so it's actionable, not just tabular.
-        if let Some(msg) = knaif_core::missing_required_message(&skill.name, &statuses) {
+        if let Some(msg) = required_tools_advice(&skill.name, &statuses, sac_on) {
             println!("{msg}");
         }
+        all.extend(statuses);
+    }
+    if let Some(note) = smart_app_control_note(&all.iter().collect::<Vec<_>>(), sac_on) {
+        println!("\n{note}");
     }
     Ok(())
+}
+
+/// One `skills deps` row's detail: where the tool is, or how to get it — and, where Smart App
+/// Control is on and the tool declares it blocks it, that neither will help.
+fn deps_detail(s: &knaif_core::ToolStatus, sac_on: bool) -> String {
+    let blocked = sac_on && s.smart_app_control_blocks;
+    if s.satisfied {
+        let paths: Vec<_> = s
+            .found
+            .iter()
+            .map(|(_, p)| p.display().to_string())
+            .collect();
+        let paths = paths.join(", ");
+        if blocked {
+            format!("{paths} — but Smart App Control blocks it on this PC")
+        } else {
+            paths
+        }
+    } else if blocked {
+        "not installed — Smart App Control blocks it on this PC".to_string()
+    } else {
+        match &s.install_hint {
+            Some(hint) => format!("install: {hint}"),
+            None => "not found".to_string(),
+        }
+    }
+}
+
+/// What to say about a skill's required tools before it can run: where Smart App Control is on
+/// and blocks one, that (installing would not help, and an installed one would not start);
+/// otherwise the usual missing-tool advice.
+fn required_tools_advice(
+    skill: &str,
+    statuses: &[knaif_core::ToolStatus],
+    sac_on: bool,
+) -> Option<String> {
+    if sac_on {
+        let blocked: Vec<&str> = statuses
+            .iter()
+            .filter(|s| s.required && s.smart_app_control_blocks)
+            .map(|s| s.name.as_str())
+            .collect();
+        if !blocked.is_empty() {
+            return Some(format!(
+                "The `{skill}` skill needs {}, which Smart App Control blocks on this PC: \
+                 Windows runs only programs that are validly signed or that it trusts, and this \
+                 one is not. It works only with Smart App Control off: Windows Security > App & \
+                 browser control > Smart App Control.",
+                blocked.join(", ")
+            ));
+        }
+    }
+    knaif_core::missing_required_message(skill, statuses)
+}
+
+/// Said once under the table when Smart App Control is on and blocks a listed tool: why, and
+/// that it is Windows' decision, not something knaif can work around.
+fn smart_app_control_note(statuses: &[&knaif_core::ToolStatus], sac_on: bool) -> Option<String> {
+    if !sac_on {
+        return None;
+    }
+    let mut names: Vec<&str> = Vec::new();
+    for s in statuses.iter().filter(|s| s.smart_app_control_blocks) {
+        if !names.contains(&s.name.as_str()) {
+            names.push(&s.name);
+        }
+    }
+    if names.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "Smart App Control is on. Windows then runs only programs that are validly signed or that \
+         it trusts, and it blocks {} (knaif itself is signed). They work only with Smart App \
+         Control off: Windows Security > App & browser control > Smart App Control.",
+        names.join(", ")
+    ))
+}
+
+/// Is Windows' Smart App Control enforcing? `VerifiedAndReputablePolicyState` is 0 off, 1 on,
+/// 2 evaluation (which only watches); anything unreadable counts as off.
+#[cfg(windows)]
+fn smart_app_control_on() -> bool {
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD,
+    };
+    let key: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\CI\\Policy\0"
+        .encode_utf16()
+        .collect();
+    let value: Vec<u16> = "VerifiedAndReputablePolicyState\0".encode_utf16().collect();
+    let mut data: u32 = 0;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: both names are NUL-terminated UTF-16, `data` is a u32 and `size` says so.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            key.as_ptr(),
+            value.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            (&mut data as *mut u32).cast(),
+            &mut size,
+        )
+    };
+    status == 0 && data == 1
+}
+
+#[cfg(not(windows))]
+fn smart_app_control_on() -> bool {
+    false
 }
 
 /// A byte-oriented progress bar for a model download (percent, rate, ETA). The length is set
@@ -1046,7 +1152,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // missing and we intend to execute. Dry-run still previews the command without the binary.
     if !args.dry_run {
         let statuses = knaif_core::detect_skill_deps(&bundle);
-        if let Some(msg) = knaif_core::missing_required_message(&args.skill, &statuses) {
+        if let Some(msg) = required_tools_advice(&args.skill, &statuses, smart_app_control_on()) {
             println!("{msg}");
             return Ok(());
         }
@@ -3158,6 +3264,86 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
     use std::collections::VecDeque;
+
+    fn tool_status(satisfied: bool, blocks: bool) -> knaif_core::ToolStatus {
+        knaif_core::ToolStatus {
+            name: "ffmpeg".into(),
+            required: true,
+            satisfied,
+            found: if satisfied {
+                vec![(
+                    "ffmpeg".into(),
+                    std::path::PathBuf::from("C:/tools/ffmpeg.exe"),
+                )]
+            } else {
+                vec![]
+            },
+            missing: if satisfied {
+                vec![]
+            } else {
+                vec!["ffmpeg".into()]
+            },
+            install_hint: Some("winget install -e --id Gyan.FFmpeg".into()),
+            smart_app_control_blocks: blocks,
+        }
+    }
+
+    #[test]
+    fn deps_rows_say_when_smart_app_control_blocks_a_tool() {
+        // Off, or a tool it does not block: the row is unchanged.
+        assert_eq!(
+            deps_detail(&tool_status(true, true), false),
+            "C:/tools/ffmpeg.exe"
+        );
+        assert_eq!(
+            deps_detail(&tool_status(false, false), true),
+            "install: winget install -e --id Gyan.FFmpeg"
+        );
+        // On: a found tool will not start, and installing a missing one will not help.
+        assert_eq!(
+            deps_detail(&tool_status(true, true), true),
+            "C:/tools/ffmpeg.exe — but Smart App Control blocks it on this PC"
+        );
+        assert_eq!(
+            deps_detail(&tool_status(false, true), true),
+            "not installed — Smart App Control blocks it on this PC"
+        );
+    }
+
+    #[test]
+    fn a_required_tool_smart_app_control_blocks_is_named_not_advised() {
+        // Off: the usual missing-tool advice, install hint included.
+        let missing = tool_status(false, true);
+        let advice =
+            required_tools_advice("ffmpeg", std::slice::from_ref(&missing), false).unwrap();
+        assert!(advice.contains("winget install"), "{advice}");
+        // On: installing would not help, and a found ffmpeg would not start either.
+        for s in [missing, tool_status(true, true)] {
+            let advice = required_tools_advice("ffmpeg", &[s], true).unwrap();
+            assert!(advice.contains("Smart App Control"), "{advice}");
+            assert!(!advice.contains("winget install"), "{advice}");
+        }
+        // On, but the tool is not one it blocks: nothing to say when it is installed.
+        assert_eq!(
+            required_tools_advice("ffmpeg", &[tool_status(true, false)], true),
+            None
+        );
+    }
+
+    #[test]
+    fn the_smart_app_control_note_names_the_blocked_tools_once() {
+        let blocked = tool_status(true, true);
+        let fine = knaif_core::ToolStatus {
+            name: "libreoffice".into(),
+            ..tool_status(true, false)
+        };
+        assert_eq!(smart_app_control_note(&[&fine], true), None);
+        assert_eq!(smart_app_control_note(&[&blocked], false), None);
+        let note = smart_app_control_note(&[&blocked, &fine, &blocked], true).unwrap();
+        assert!(note.contains("Smart App Control is on"), "{note}");
+        assert_eq!(note.matches("ffmpeg").count(), 1, "{note}");
+        assert!(!note.contains("libreoffice"), "{note}");
+    }
 
     /// `select_model` reads process-global env, so its tests serialize on this lock rather than
     /// racing each other's `set_var`.

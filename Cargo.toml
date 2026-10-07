@@ -111,7 +111,7 @@ image = "0.25"
 # next reboot. Threading pulls Security + Foundation because CreateMutexW's signature names
 # SECURITY_ATTRIBUTES and HANDLE. Already in the graph transitively; these features add nothing
 # measurable to build time.
-windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_Security", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_System_Registry", "Win32_Security", "Win32_Foundation"] }
 # Embeds VERSIONINFO (and later the icon) into knaif.exe. Declared unconditionally rather than
 # under [target.'cfg(windows)'.build-dependencies]: a build-dependency cfg is evaluated for the
 # HOST, so a Linux->Windows cross build would skip the crate while still targeting Windows, and
