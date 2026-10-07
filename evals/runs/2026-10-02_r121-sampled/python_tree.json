@@ -1,0 +1,8 @@
+{
+  "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+  "contracts": "fba273c58eb07d807d5a0518294cdacc93b8e8fdf184241de4aeb593c6e5e690",
+  "bundle": {
+    "ffmpeg": "5a74d601a29973b535f6eae3400fa4b3acb746e149bbe95be900bbaf3ba7d69f",
+    "documents": "c5b452c4548293950af39ac646591159b87e4ce826bd930591ed12f6d2a92e97"
+  }
+}

@@ -145,14 +145,17 @@ over-provision the quant level.
 
 ## Is a local 4B actually good enough
 
-Measured with v1 (2026-07-02): on eleven real-world ffmpeg requests, `knaif-qwen3-4b-v1` produced a correct,
-`ffprobe`-verified artifact for all nine artifact requests — matching Claude Code
-(`opus-4-8`), GitHub Copilot CLI (`sonnet-5`) and OpenAI Codex CLI (`gpt-5.5`) at 9/9 each,
-at zero marginal cost and roughly a tenth of the latency. The full table is on
-[knaif.org/vs](https://knaif.org/vs/).
+Measured with v2 (2026-10-01): on eleven real-world ffmpeg requests, three runs each,
+`knaif-qwen3-4b-v2` (native, CUDA) produced a correct, `ffprobe`-verified file for all nine
+file requests in every run — 27/27, matching Claude Code (`opus-5.5`, `sonnet-5.5`), OpenAI
+Codex CLI (`gpt-6-astra`, `gpt-6.1-sol`) and GitHub Copilot CLI (`gpt-5.6-terra`) at 27/27
+each — at zero marginal cost and about a tenth of the time. The full table is on
+[knaif.org/vs](https://knaif.org/vs/); the first measurement, with v1 on 2026-07-02, showed
+the same picture.
 
-Across the full 846-utterance corpus the premium arm does lead — **0.989 vs 0.967** success
-— and it is worth knowing exactly where. Decomposed, outcome accuracy is 1.000 vs **0.905**,
+Across the full 846-utterance corpus — measured with v1 against `opus-4-8` in July, and not
+re-measured since — the premium arm does lead — **0.989 vs 0.967** success — and it is worth
+knowing exactly where. Decomposed, outcome accuracy is 1.000 vs **0.905**,
 a 9.5-point gap, against only 2.2 points of success. The local model loses mostly by
 **misrouting** — answering `clarify` or `reject` where a plan was expected, or picking the
 wrong tool — not by generating worse commands. When it routes correctly it generally

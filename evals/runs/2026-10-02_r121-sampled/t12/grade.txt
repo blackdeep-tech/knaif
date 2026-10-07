@@ -1,0 +1,28 @@
+Smart App Control enforcing at start: True
+PASS    cleanroom_binary_is_new: sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172
+PASS    cleanroom_version_is_121: knaif 1.2.1 (inference: llama.cpp)
+PASS    cleanroom_skills_list: exit 0
+PASS    zip_every_binary_signed: not valid: []
+PASS    install_120: exit 0; rows 1; version 1.2.0; at C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+PASS    installed_120_is_published: sha256 454e03488dde282814708d5c1f281a1a4d447d3a288aa3949cecd9b731f61e65
+PASS    cli_running_holds_mutex: alive True; mutex True
+PASS    upgrade_refused_while_running: exit 1; rows 1; version 1.2.0
+PASS    upgrade_installs: exit 0; rows 1; version 1.2.1
+PASS    upgrade_publisher: publisher 'Blackdeep Technologies Ltd'
+PASS    upgrade_same_folder: before C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif; after C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+PASS    upgrade_no_folder_exists_prompt: log mentions 'already exists': False
+PASS    upgraded_binary_is_new: sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172
+PASS    upgraded_version_is_121: knaif 1.2.1 (inference: llama.cpp)
+PASS    upgrade_no_leftover_libraries: not in the 1.2.1 artifact: []; in the artifact but not installed (info): []
+PASS    installed_every_binary_signed: not valid []; Blackdeep 17; Microsoft 4
+PASS    ocr_row_runs: exit 0 in 14s; produced [sample-scanned-ocr.pdf]
+PASS    ocr_no_pdfium_error: log mentions pdfium: False
+PASS    b5_protect_runs: exit 0; produced [sample-protected.pdf]
+PASS    sac_blocks_unsigned_120: result blocked: This command cannot be run due to the error: An Application Control policy has blocked this file.; rows 0
+PASS    sac_blocks_installed_120: blocked: Program 'knaif.exe' failed to run: An Application Control policy has blocked this fileAt C:\t12\in\sandbox.ps1:45 char:14
++   try { $o = & $exe --version 2>&1 | Out-String; return ($LASTEXITCOD ...
++              ~~~~~~~~~~~~~~~~~~~~~.
+PASS    sac_blocks_nothing_of_knaif: 20 CI events; blocked: [libarchive-13.dll, libcurl-4.dll, libleptonica-6.dll, libtiff-6.dll]; ours: []
+PASS    ocr_text: sample-scanned-ocr.pdf contains the expected text
+PASS    b5_password: opens with p\ss: True; with p/ss: False
+PASS (24/24)

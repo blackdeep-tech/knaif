@@ -59,8 +59,17 @@ fn filename_re() -> &'static Regex {
 /// crate's Unicode `\w`, which also admits combining marks and not every numeric: `clip_4k` + a
 /// combining accent is a word end to Python and not to the crate, and a superscript `²` the
 /// reverse (Codex audit, 2026-09-28).
+///
+/// By general category, not `char::is_alphanumeric`: that follows the Alphabetic property, which
+/// includes the Other_Alphabetic combining marks (U+0345, Indic vowel signs). Python counts a
+/// character only if it is a letter or a number, so a mark ends a word there (1.2.1 B7).
 fn py_is_word(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+    use unicode_properties::{GeneralCategoryGroup, UnicodeGeneralCategory};
+    c == '_'
+        || matches!(
+            c.general_category_group(),
+            GeneralCategoryGroup::Letter | GeneralCategoryGroup::Number
+        )
 }
 
 /// Python's `str.isspace` (and `\s` for a `str` pattern): Unicode whitespace plus the four
@@ -289,6 +298,24 @@ fn strip_article(token: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // B7 (1.2.1): Rust's `is_alphanumeric` follows the Unicode Alphabetic property, which takes in
+    // Other_Alphabetic combining marks; Python's `str.isalnum` takes letters and numbers by general
+    // category, so a mark is never a word character there.
+    #[test]
+    fn a_combining_mark_is_never_a_word_character() {
+        for mark in ['\u{0345}', '\u{093E}', '\u{05B0}', '\u{0301}'] {
+            assert!(!py_is_word(mark), "U+{:04X}", mark as u32);
+        }
+        for word in ['a', 'é', 'Ж', '中', '٣', '²', '_'] {
+            assert!(py_is_word(word), "U+{:04X}", word as u32);
+        }
+    }
+
+    #[test]
+    fn a_stem_before_an_other_alphabetic_mark_is_recognized() {
+        assert!(stem_words("trim clip_4k\u{0345} to 5 seconds").contains(&"clip_4k".to_string()));
+    }
 
     #[test]
     fn path_stem_matches_python() {

@@ -44,10 +44,12 @@ platforms:
     warnings:
       # Not a footnote — it is the first thing a Windows user sees, and the checksum
       # (not the absence of a warning) is what proves the download is intact.
-      - id: unsigned
+      - id: smartscreen
         text: >-
-          Binaries are unsigned, so Windows SmartScreen shows "Windows protected your PC".
-          Choose More info → Run anyway. Verify the checksum first.
+          Signed by Blackdeep Technologies Ltd. A new release has no download reputation yet, so
+          Edge may say the file "isn't commonly downloaded": open the download's "…" menu, choose
+          Keep, then Show more → Keep anyway. If Windows then shows "Windows protected your PC",
+          choose More info → Run anyway. Verify the checksum first.
 
   - id: linux-x64
     name: Linux

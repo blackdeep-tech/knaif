@@ -343,7 +343,12 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
 - [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
 - [ ] **Default the CLI confirmations to Yes (`[Y/n]`)** — owner, 2026-09-29, from the RC3 manual
-  tests; next version. Native asks `[y/N]` through `ask_yes_no` (`apps/cli/src/main.rs`: "Proceed?"
+  tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
+  an opt-in flag to ask first; keep `--yes` as an accepted no-op, and keep the first-run model
+  download behind its own consent. **Scope (owner, 2026-10-01, after testing 1.2.1):** the Yes default
+  applies to every approval prompt in knaif, not only ffmpeg's — the documents steps, and the
+  model-download question too once its consent is settled — and the overwrite policy below must be
+  decided first, because with Yes as the default, Enter would approve replacing an existing file. Add it to the 1.3.0 index on `release/1.3.0`. Native asks `[y/N]` through `ask_yes_no` (`apps/cli/src/main.rs`: "Proceed?"
   before running, and the model-download question), so Enter declines; the Python SDK app already
   asks `Proceed? [Y/n]` (`python/core/knaif/app.py`) — the two runtimes disagree today.
   Low risk (owner, 2026-09-29): `safety_category: destructive` means "writes a file" — every
@@ -354,6 +359,28 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   default silently approve — flush the console input buffer there first (`FlushConsoleInputBuffer`).
   A non-tty stdin keeps meaning "no answer". Consider renaming the category (`writes` vs
   `read_only`) so "destructive" stops suggesting deletion; REQUIREMENTS.md §safety uses the term.
+- [ ] **Overwrite policy for outputs** — found 2026-10-01 in the owner's 1.2.1 test: ffmpeg commands
+  carry `-y`, so an existing output (explicit or auto-generated name) is replaced silently; documents
+  adds `-1` to auto-generated names but overwrites an explicit `output`. This contradicts the "nothing
+  can overwrite an existing file" premise of the Yes-default item above. Decide: ask before replacing,
+  or suffix like documents does. 1.3.0; the 1.2.1 terminal view only warns.
+- [ ] **Move the download page's wording out of `contracts/`** — owner, 2026-10-03: chosen for
+  1.3.0. The `warnings` (and other display text) in `contracts/release/platforms.yaml` are read only
+  by knaif.org's download page (`scripts/site_data.py` → `site/data/site-data.json` →
+  `download.astro`), yet the gate fingerprints all of `contracts/`, so one sentence of site copy
+  marked every L1–L4 record stale (the "signed" fix, 2026-10-03). Give the site its own file for it;
+  do it before 1.3.0's evidence runs, since the move itself changes the fingerprint once. Add it to
+  the 1.3.0 index on `release/1.3.0`.
+- [ ] **A prompt line vanishes in VS Code's PowerShell terminal** — found in the owner's 1.2.1 test
+  round 2 (2026-10-01), shipped open in 1.2.1. After answering `y` at a step that prints a warning
+  before `Proceed? [y/N]` (`reverse_video`), the warning and the prompt line disappear and the typed
+  `y` lands after the command line. Not reproduced in a ConPTY at 120 or 160 columns nor in a Linux
+  pty. Needs a screenshot and the terminal width. Details: cli-terminal-output T7.
+- [ ] **Daemon mode** — keep the model resident in VRAM between `knaif run` invocations (owner,
+  2026-10-01). Not present today: every run loads the GGUF (~1 s on CUDA, more on CPU). New surface
+  (a background process, a socket, lifecycle and install/uninstall interplay), so 1.3.0 at the earliest.
+  **Plan: [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md)** (proposed for 1.3.0,
+  with the 2026-10-01 timing breakdown and the entry below folded in).
 - [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
@@ -876,42 +903,20 @@ This **Open / Next** section is the live backlog (originally distilled from the
   - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
     L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
     gate the layers are a checklist nobody must run, which is the failure mode being fixed.
-  - **Blocked on chains** by the native multi-step executor gap (next item). L3 either waits for it
-    or launches with chains explicitly excluded and the hole recorded — not silently skipped.
+  - ~~**Blocked on chains**~~ — cleared 2026-09-10: native executes multi-step plans (next item).
   - **Evidence is committed**, not just described: `evals/parity/2026-09-09_p2b-prefix-baseline/`
     (847 pre-fix envelopes, with git/corpus/model/binary sha256 and the inference backend pinned)
     and `evals/parity/2026-09-09_p3-prompt-factorial/` (3 388 inferences, four prompt shapes).
 
-- [ ] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
-  2026-09-09 while diagnosing the parity plan's P1/P3). `decide_steps` returns
-  `StepDecision::Unsupported` for any plan with more than one step, and `cmd_run` turns that into
-  *"this request needs 3 steps, but the native runtime executes one step at a time (multi-step
-  chains aren't supported yet)"*. That is **by design** (audit F5 made the truncation explicit
-  rather than silent, which was the right call), but it is now the binding limit on native: the
-  planner is not the problem. Measured the same day, `plan --batch` over the full 847-utterance
-  ffmpeg corpus emits multi-step plans on **39/41 chain utterances (95.1%)**, 31 of them 3-step,
-  first tool correct on 39/41 — so every one of those correct chains is refused at execution.
-  **This is very likely what the 2026-08-07 "native won't produce a multi-step plan" observation
-  actually was** — which is why the plan built on that observation was retired (2026-09-10) and
-  replaced by [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
-  Needs an ordered multi-step executor: chain-intermediate binding already exists in
-  `knaif_core::apply_clarify_gate`, but per-step confirmation, variable resolution between steps
-  and partial-failure semantics do not. **Now Workstream E of
-  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md)**
-  (added 2026-09-10) rather than its own plan: both active skills have chain rows, so the
-  lifecycle's `supported` status is unreachable for *every* skill until it lands. It is also
-  smaller than this entry assumed — chains are mediated by explicit output filenames, never
-  `$variable` references (`skills/ffmpeg/prompt.yaml:27-30`), so no variable-binding layer is
-  needed; recovery, rollback and resumption stay deferred.
+- [x] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
+  2026-09-09). **Done 2026-09-10** by Workstream E of
+  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md): the
+  binary executes a plan's steps in order and threads each output into the next (shipped in 1.2.0,
+  CHANGELOG *Native multi-step plans*).
 
-- [ ] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). Running a
-  `--features llama,cuda,pdfium` binary on the RTX 5080 still prints *"the bundled Vulkan backend
-  runs at roughly CPU speed on this GPU generation. Install the CUDA backend for usable
-  performance: knaif backend install cuda"*. The nudge (U3, keyed on compute capability — correct
-  for the payload case) does not check **which backend the running binary actually has**, so a
-  correctly-configured CUDA user is told to go fix something that is not broken, and the advice it
-  gives is already true. Small, self-contained: gate the warning on the active backend as well as
-  the compute capability.
+- [x] **The Vulkan slow-GPU warning fires on CUDA builds** (found 2026-09-09). **Done:** the CUDA
+  offer is gated on the build itself (`cuda_payload_is_worth_offering` in `apps/cli/src/main.rs`):
+  a binary with CUDA compiled in, or one that cannot load payloads, never shows it.
 
 - [ ] **Building for a corpus run: pick the CUDA feature set on Blackwell** (measured 2026-09-09).
   `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only and plans **~1
@@ -954,7 +959,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `release.yml`: that job builds a draft, and the extractor rejects drafts by design, so the
   refresh needs its own `on: release: published` trigger.
 
-- [ ] **Inference latency: daemon + prompt-prefix KV reuse (moved to 1.3.0 on 2026-09-25, [release-1.2](plans/2026-09-25-release-1.2.md) R0: cache reuse between requests is what config parity switched off).** Measured
+- [ ] **Inference latency: daemon + prompt-prefix KV reuse** — now planned in
+  [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md); its first step (the start-up
+  measurement) was taken 2026-10-01 on native Windows. Original entry: **(moved to 1.3.0 on 2026-09-25, [release-1.2](plans/2026-09-25-release-1.2.md) R0: cache reuse between requests is what config parity switched off).** Measured
   2026-08-01 on the shipped Linux CUDA payload; full budget in
   [PERFORMANCE.md §6](PERFORMANCE.md). A CUDA `run` is ~5.2 s wall of which only ~1.6 s is compute:
   ~1.9 s CUDA context init + ~1.3 s model load + ~1.2 s prompt decode + ~0.4 s generation + ~0.24 s

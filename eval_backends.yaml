@@ -168,6 +168,20 @@ lanes:
     model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
     public_name: knaif-qwen3-1.7b-v2
     timeout_s: 900
+  # 1.2.1's sampled check (evals/runs/2026-10-02_r121-sampled): the frozen release artifacts,
+  # unpacked by its run.sh, compared request by request with the r5c-*-4b accepted runs.
+  r121-win-4b:
+    kind: native_cli
+    binary: sandbox/r121/artifact/knaif-1.2.1-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r121-linux-4b:
+    kind: native_cli
+    binary: sandbox/r121/artifact/knaif-1.2.1-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
 
 backends:
   # Built-in. No model, no GPU, no GGUF — a null config means "no orchestrator".

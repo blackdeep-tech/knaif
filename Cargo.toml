@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.96"
@@ -81,6 +81,9 @@ num_cpus = "1.17"
 serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 unicode-normalization = "0.1"
+# General category, for Python's `str.isalnum` in the clarify gate. MIT/Apache-2.0, and already in
+# every build through lopdf → stringprep, so it adds no code and no licence.
+unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 # Blocking HTTP client for model downloads (no tokio; rustls TLS + redirect following by default).
