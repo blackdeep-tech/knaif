@@ -331,15 +331,25 @@ const LOGO: [&[(Tone, &str)]; 6] = [
     &[
         (Tone::Dark, "               "),
         (Tone::Brand, "|___|                 |___| "),
-        (Tone::Dark, "     "),
     ],
 ];
 
+/// The logo, with the release number dim under the `f` on its empty bottom row.
 pub fn render_logo(style: &Style) -> String {
+    let version = format!(
+        " {}",
+        style.paint(Tone::Dim, concat!("v", env!("CARGO_PKG_VERSION")))
+    );
     LOGO.iter()
-        .map(|row| {
+        .enumerate()
+        .map(|(i, row)| {
             let body: String = row.iter().map(|(t, text)| style.paint(*t, text)).collect();
-            format!(" {body}")
+            let tail = if i == LOGO.len() - 1 {
+                version.as_str()
+            } else {
+                ""
+            };
+            format!(" {body}{tail}")
         })
         .collect::<Vec<_>>()
         .join(
@@ -1076,6 +1086,20 @@ mod tests {
             "no coral in the logo"
         );
         assert!(colored.contains("\x1b[1m"), "no dark letters in the logo");
+    }
+
+    #[test]
+    fn the_logo_carries_the_version_under_the_f() {
+        let plain = render_logo(&PLAIN);
+        let last = plain.lines().last().unwrap();
+        let tag = format!("v{}", env!("CARGO_PKG_VERSION"));
+        assert!(last.trim_end().ends_with(&tag), "{last:?}");
+        // Under the `f`: the bottom row's art ends where the letters do, then the version.
+        assert_eq!(last.find(&tag), Some(45), "{last:?}");
+        assert!(
+            render_logo(&COLOR).contains(&format!("\x1b[90m{tag}")),
+            "the version is dim"
+        );
     }
 
     #[test]
