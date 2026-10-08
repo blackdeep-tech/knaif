@@ -1,0 +1,7 @@
+ok  libggml-cuda.so
+ok  libcudart.so.13
+ok  libcublas.so.13
+ok  libcublasLt.so.13
+ok  llama.cpp-LICENSE.txt
+ok  NVIDIA-CUDA-EULA.txt
+payload linux-x64: 6/6 match the manifest

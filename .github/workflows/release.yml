@@ -118,7 +118,11 @@ jobs:
   # and staples the .pkg — installers/macos/release.sh, the same script a hand run uses.
   macos:
     if: startsWith(github.ref, 'refs/tags/v') && vars.MACOS_SIGNING == 'enabled'
-    runs-on: macos-14
+    # macos-15, not macos-14: macos-14's Xcode 15.4 (Apple clang 15) cannot build llama.cpp's
+    # apple_m4 CPU variant. Its -march=armv9.2-a+...+nosve+sme still enters the SVE code paths, then
+    # rejects the intrinsics ("'svmmla_s32' needs target feature sve,i8mm"). The deployment target
+    # stays 12.0 (-mmacosx-version-min), so the newer runner does not raise the floor.
+    runs-on: macos-15
     environment: release
     steps:
       - uses: actions/checkout@v4

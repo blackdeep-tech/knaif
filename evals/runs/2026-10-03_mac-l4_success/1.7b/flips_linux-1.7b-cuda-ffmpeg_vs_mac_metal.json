@@ -1,0 +1,55 @@
+{
+  "reference": "linux/knaif-qwen3-1.7b-v2/cuda/ffmpeg",
+  "shared": 861,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 10,
+    "both_correct": [
+      "ffmpeg_118#0",
+      "ffmpeg_233#4",
+      "ffmpeg_hard_001#3"
+    ],
+    "only_reference": [
+      "ffmpeg_025#0",
+      "ffmpeg_127#4",
+      "ffmpeg_229#4",
+      "ffmpeg_232#1"
+    ],
+    "only_other": [
+      "ffmpeg_117#2",
+      "ffmpeg_258#0"
+    ],
+    "both_wrong": [
+      "ffmpeg_244#1"
+    ]
+  },
+  "canonical": {
+    "flips": 10,
+    "both_correct": [
+      "ffmpeg_118#0",
+      "ffmpeg_233#4",
+      "ffmpeg_hard_001#3"
+    ],
+    "only_reference": [
+      "ffmpeg_025#0",
+      "ffmpeg_127#4",
+      "ffmpeg_229#4",
+      "ffmpeg_232#1"
+    ],
+    "only_other": [
+      "ffmpeg_117#2",
+      "ffmpeg_258#0"
+    ],
+    "both_wrong": [
+      "ffmpeg_244#1"
+    ]
+  },
+  "grades_differ": [
+    "ffmpeg_025#0",
+    "ffmpeg_117#2",
+    "ffmpeg_127#4",
+    "ffmpeg_229#4",
+    "ffmpeg_232#1",
+    "ffmpeg_258#0"
+  ]
+}

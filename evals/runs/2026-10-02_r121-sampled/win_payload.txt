@@ -1,0 +1,11 @@
+ok  ggml-cuda.dll
+ok  cudart64_13.dll
+ok  cublas64_13.dll
+ok  cublasLt64_13.dll
+ok  vcruntime140.dll
+ok  vcruntime140_1.dll
+ok  msvcp140.dll
+ok  vcomp140.dll
+ok  llama.cpp-LICENSE.txt
+ok  NVIDIA-CUDA-EULA.txt
+payload windows-x64: 10/10 match the manifest

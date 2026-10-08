@@ -1,0 +1,98 @@
+{
+  "reference": "windows/knaif-qwen3-4b-v2/cuda/ffmpeg",
+  "shared": 861,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 31,
+    "both_correct": [
+      "ffmpeg_038#0",
+      "ffmpeg_040#0",
+      "ffmpeg_090#1",
+      "ffmpeg_093#4",
+      "ffmpeg_118#2",
+      "ffmpeg_118#3",
+      "ffmpeg_124#1",
+      "ffmpeg_128#0",
+      "ffmpeg_131#0",
+      "ffmpeg_161#0",
+      "ffmpeg_167#1",
+      "ffmpeg_190#1",
+      "ffmpeg_201#0",
+      "ffmpeg_232#1",
+      "ffmpeg_233#0",
+      "ffmpeg_243#2",
+      "ffmpeg_244#0",
+      "ffmpeg_244#2",
+      "ffmpeg_271#3",
+      "ffmpeg_275#0",
+      "ffmpeg_295#2",
+      "ffmpeg_301#4",
+      "ffmpeg_hard_013#1"
+    ],
+    "only_reference": [
+      "ffmpeg_077#1",
+      "ffmpeg_148#0",
+      "ffmpeg_166#0",
+      "ffmpeg_211#3",
+      "ffmpeg_252b#1"
+    ],
+    "only_other": [
+      "ffmpeg_134#2",
+      "ffmpeg_174#1"
+    ],
+    "both_wrong": [
+      "ffmpeg_202#0"
+    ]
+  },
+  "canonical": {
+    "flips": 31,
+    "both_correct": [
+      "ffmpeg_038#0",
+      "ffmpeg_040#0",
+      "ffmpeg_090#1",
+      "ffmpeg_093#4",
+      "ffmpeg_118#2",
+      "ffmpeg_118#3",
+      "ffmpeg_124#1",
+      "ffmpeg_128#0",
+      "ffmpeg_131#0",
+      "ffmpeg_161#0",
+      "ffmpeg_167#1",
+      "ffmpeg_190#1",
+      "ffmpeg_201#0",
+      "ffmpeg_232#1",
+      "ffmpeg_233#0",
+      "ffmpeg_243#2",
+      "ffmpeg_244#0",
+      "ffmpeg_244#2",
+      "ffmpeg_271#3",
+      "ffmpeg_275#0",
+      "ffmpeg_295#2",
+      "ffmpeg_301#4",
+      "ffmpeg_hard_013#1"
+    ],
+    "only_reference": [
+      "ffmpeg_077#1",
+      "ffmpeg_148#0",
+      "ffmpeg_166#0",
+      "ffmpeg_211#3",
+      "ffmpeg_252b#1"
+    ],
+    "only_other": [
+      "ffmpeg_134#2",
+      "ffmpeg_174#1"
+    ],
+    "both_wrong": [
+      "ffmpeg_202#0"
+    ]
+  },
+  "grades_differ": [
+    "ffmpeg_077#1",
+    "ffmpeg_134#2",
+    "ffmpeg_148#0",
+    "ffmpeg_166#0",
+    "ffmpeg_174#1",
+    "ffmpeg_211#3",
+    "ffmpeg_252b#1"
+  ]
+}

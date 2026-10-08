@@ -494,6 +494,17 @@ def load_rows(skill: str, tags_filter: set[str] | None) -> list[Row]:
     return rows
 
 
+def select_rows(rows: list[Row], ids: list[str]) -> list[Row]:
+    """The rows named in *ids*, in corpus order. An id the corpus does not have is an error, not a
+    smaller sample: a pre-registered sample that silently shrank would vouch for fewer requests
+    than it claims."""
+    wanted = set(ids)
+    unknown = sorted(wanted - {r.id for r in rows})
+    if unknown:
+        raise SystemExit(f"--only names ids this corpus does not have: {unknown}")
+    return [r for r in rows if r.id in wanted]
+
+
 # ── invocation ────────────────────────────────────────────────────────────────
 
 
@@ -1142,6 +1153,11 @@ def main() -> int:
         "--limit", type=int, default=0, help="Only the first N matching rows (0 = all)."
     )
     ap.add_argument(
+        "--only",
+        help="JSON file listing the row ids to compare (or [id, idx] pairs); an unknown id is an "
+        "error. For pre-registered sample runs.",
+    )
+    ap.add_argument(
         "--tags", default="", help="Comma-separated tag filter (row kept if any tag matches)."
     )
     ap.add_argument(
@@ -1262,6 +1278,11 @@ def main() -> int:
     cwd_posix = cwd.as_posix()  # for Outcome.key()'s argv path-position resolution (F7)
     tags_filter = {t.strip() for t in args.tags.split(",") if t.strip()} or None
     rows = load_rows(args.skill, tags_filter)
+    if args.only:
+        # A JSON list of ids, or of [id, utterance_idx] pairs (the L4 sample format; parity
+        # compares each row's first utterance, so the index is not used).
+        listed = json.loads(Path(args.only).read_text(encoding="utf-8"))
+        rows = select_rows(rows, [e[0] if isinstance(e, list) else e for e in listed])
     if args.skip_chains:
         rows = [r for r in rows if not r.is_chain]
     if args.limit:

@@ -1,0 +1,90 @@
+﻿{
+    "cleanroom_binary_is_new":  {
+                                    "pass":  true,
+                                    "detail":  "sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172"
+                                },
+    "cleanroom_version_is_121":  {
+                                     "pass":  true,
+                                     "detail":  "knaif 1.2.1 (inference: llama.cpp)"
+                                 },
+    "cleanroom_skills_list":  {
+                                  "pass":  true,
+                                  "detail":  "exit 0"
+                              },
+    "zip_every_binary_signed":  {
+                                    "pass":  true,
+                                    "detail":  "not valid: []"
+                                },
+    "sac_blocks_unsigned_120":  {
+                                    "pass":  true,
+                                    "detail":  "result blocked: This command cannot be run due to the error: An Application Control policy has blocked this file.; rows 0"
+                                },
+    "install_120":  {
+                        "pass":  true,
+                        "detail":  "exit 0; rows 1; version 1.2.0; at C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\Programs\\knaif"
+                    },
+    "installed_120_is_published":  {
+                                       "pass":  true,
+                                       "detail":  "sha256 454e03488dde282814708d5c1f281a1a4d447d3a288aa3949cecd9b731f61e65"
+                                   },
+    "cli_running_holds_mutex":  {
+                                    "pass":  true,
+                                    "detail":  "alive True; mutex True"
+                                },
+    "upgrade_refused_while_running":  {
+                                          "pass":  true,
+                                          "detail":  "exit 1; rows 1; version 1.2.0"
+                                      },
+    "sac_blocks_installed_120":  {
+                                     "pass":  true,
+                                     "detail":  "blocked: Program \u0027knaif.exe\u0027 failed to run: An Application Control policy has blocked this fileAt C:\\t12\\in\\sandbox.ps1:45 char:14\r\n+   try { $o = \u0026 $exe --version 2\u003e\u00261 | Out-String; return ($LASTEXITCOD ...\r\n+              ~~~~~~~~~~~~~~~~~~~~~."
+                                 },
+    "upgrade_installs":  {
+                             "pass":  true,
+                             "detail":  "exit 0; rows 1; version 1.2.1"
+                         },
+    "upgrade_publisher":  {
+                              "pass":  true,
+                              "detail":  "publisher \u0027Blackdeep Technologies Ltd\u0027"
+                          },
+    "upgrade_same_folder":  {
+                                "pass":  true,
+                                "detail":  "before C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\Programs\\knaif; after C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\Programs\\knaif"
+                            },
+    "upgrade_no_folder_exists_prompt":  {
+                                            "pass":  true,
+                                            "detail":  "log mentions \u0027already exists\u0027: False"
+                                        },
+    "upgraded_binary_is_new":  {
+                                   "pass":  true,
+                                   "detail":  "sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172"
+                               },
+    "upgraded_version_is_121":  {
+                                    "pass":  true,
+                                    "detail":  "knaif 1.2.1 (inference: llama.cpp)"
+                                },
+    "upgrade_no_leftover_libraries":  {
+                                          "pass":  true,
+                                          "detail":  "not in the 1.2.1 artifact: []; in the artifact but not installed (info): []"
+                                      },
+    "installed_every_binary_signed":  {
+                                          "pass":  true,
+                                          "detail":  "not valid []; Blackdeep 17; Microsoft 4"
+                                      },
+    "b5_protect_runs":  {
+                            "pass":  true,
+                            "detail":  "exit 0; produced [sample-protected.pdf]"
+                        },
+    "sac_blocks_nothing_of_knaif":  {
+                                        "pass":  true,
+                                        "detail":  "20 CI events; blocked: [libarchive-13.dll, libcurl-4.dll, libleptonica-6.dll, libtiff-6.dll]; ours: []"
+                                    },
+    "ocr_row_runs":  {
+                         "pass":  true,
+                         "detail":  "exit 0 in 14s; produced [sample-scanned-ocr.pdf]"
+                     },
+    "ocr_no_pdfium_error":  {
+                                "pass":  true,
+                                "detail":  "log mentions pdfium: False"
+                            }
+}

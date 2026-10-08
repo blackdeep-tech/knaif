@@ -110,6 +110,17 @@ cargo_args=(build --profile "$PROFILE" -p knaif-cli)
 if [ "$OS" != windows ]; then
   : "${CMAKE_GENERATOR:=Ninja}"
   export CMAKE_GENERATOR
+  # macOS builds on the contributor's own box, so the cargo home and checkout are remapped as on
+  # Windows (scripts/path_hygiene.sh, clang flags). Linux release builds run in a container.
+  if [ "$OS" = macos ]; then
+    # shellcheck source=path_hygiene.sh
+    . "$ROOT/scripts/path_hygiene.sh"
+    hygiene="$(path_hygiene_env "${CARGO_HOME:-$HOME/.cargo}" "$ROOT" clang)"
+    while IFS= read -r line; do
+      export "${line?}"
+    done <<< "$hygiene"
+    echo "  path hygiene: cargo home and checkout remapped (Rust, C/C++)"
+  fi
   exec cargo "${cargo_args[@]}"
 fi
 

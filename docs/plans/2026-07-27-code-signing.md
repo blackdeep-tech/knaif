@@ -1,7 +1,14 @@
 # Code Signing — certificate acquisition and the signing pipeline
 
-**Status:** Planning · **Created:** 2026-07-27 · **Completed:** —
+**Status:** Active · **Created:** 2026-07-27 · **Completed:** —
 **Owner:** packaging · **Ref:** extracted from [windows-installer-polish](2026-07-25-windows-installer-polish.md) (W4, F5) · [`installers/windows/knaif.iss`](../../installers/windows/knaif.iss) · [`installers/package.sh`](../../installers/package.sh)
+**Release:** 1.2.1
+
+> **Status note (2026-10-02):** S1 and S2 shipped in 1.2.1: the installer, `knaif.exe`, every
+> bundled DLL and the CUDA payload's `ggml-cuda.dll` are signed by Blackdeep Technologies Ltd.
+> Open: S0, the Defender submission of each published artifact (a web form on the owner's Microsoft
+> account), and folding it into RELEASE.md as a standing step (S3); the landscape items are
+> research, not release work.
 
 > **Why this is its own plan.** Signing was W4 of the installer-polish plan, but it is the only
 > workstream there gated on an **external party** — every other one is code the owner can write
@@ -22,6 +29,27 @@ providers later changes one environment variable rather than the build.
 ---
 
 ## Decision log
+
+**2026-10-02 — certificate issued; signing runs on the maintainer's box, not in CI.** Blackdeep
+Technologies Ltd (Bulgaria) passed organization validation (valid to 2029-01-03). Account `knaif`
+in **North Europe** (`https://neu.codesigning.azure.net`; West Europe refused the account as "not
+accepting new customers"), certificate profile `knaif-windows`, subject `CN=Blackdeep Technologies
+Ltd, O=Blackdeep Technologies Ltd, L=Varna, S=Varna, C=BG`. Windows artifacts are already built by
+hand on that box (RELEASE.md, *Why Windows artifacts are built by hand*), and signing sits between
+the build and the installer compile, so CI signing would add a round trip and a stored credential
+for nothing. The signing right is the owner's own `az login`. Runbook step 5 and the GitHub secrets
+table are therefore **deferred** until Windows builds move to CI, if ever.
+The upstream-DLL question (S1) is settled as **sign them**: llama/ggml/PDFium DLLs ship unsigned
+from their sources, and leaving them unsigned beside a signed exe gains nothing. Files that already
+carry a vendor signature (Microsoft's VC++ runtime, NVIDIA's CUDA redist) are never re-signed.
+
+**2026-09-30 — the owner will issue the Azure Artifact Signing certificate (~$10/mo) for Windows,
+aiming at 1.2.1.** Signing the installer changes the artifact, not what knaif does, so it is
+proposed for the patch lane; the patch gates (clean room, upgrade over an unsigned install) must
+pass with a signed installer, and if they cannot, this moves to 1.3.0. The Microsoft Store (MSIX)
+and winget are not pursued now: Store distribution is revisited with the UI app, and until then
+the direct download keeps its SmartScreen prompt. The owner-side steps are the runbook at the end
+of this plan. macOS signing is a separate plan on the 1.3.0 branch, `macos-signing-certificates`.
 
 **2026-07-27 — the SignPath Foundation application is deferred, not abandoned.** Their programme
 favours established projects, and knaif is one release old. Revisit when the project has more
@@ -92,35 +120,45 @@ already obsolete.
 
 ---
 
-## - [ ] S1 — Payload signing
+## - [x] S1 — Payload signing
 
 Two layers, and signing only the installer leaves every bundled DLL unsigned.
 
-- [ ] **Sign `knaif.exe` and the shipped `llama.dll` / `ggml-*.dll`** after `cargo build`, before
+- [x] **Sign `knaif.exe` and the shipped `llama.dll` / `ggml-*.dll`** after `cargo build`, before
   `package.sh` stages them. Hook via an env var — **`KNAIF_SIGN_CMD`** — applied per staged binary,
   so unsigned local builds keep working unchanged and no provider is baked into the script.
-- [ ] **Decide the upstream-DLL question before signing them.** `llama.dll` and `ggml-*.dll` are
+  *Done 2026-10-02:* `installers/sign_stage.sh` signs every PE in the staged `bin/` (and the CUDA
+  payload) that lacks a valid embedded signature, in one `$KNAIF_SIGN_CMD` call, then re-reads every
+  signature and fails closed. The Azure signer is `scripts/sign_windows.ps1`, configured by
+  `installers/windows/signing.json`. Tests: `python/core/tests/test_code_signing.py`.
+- [x] **Decide the upstream-DLL question before signing them.** *Signed* — see the 2026-10-02
+  decision. `llama.dll` and `ggml-*.dll` are
   built from llama.cpp via `llama-cpp-sys-2`, not from knaif-authored source. Some programmes —
   SignPath Foundation among them — restrict signing third-party binaries under their certificate,
   though they may travel unsigned inside a signed installer. Confirm the chosen provider's position
   rather than assuming; the answer changes what S1 signs.
 
-## - [ ] S2 — Installer signing
+## - [x] S2 — Installer signing
 
-- [ ] **`SignTool=knaifsign $f`** plus **`SignedUninstaller=yes`** in `[Setup]`, with the tool
+- [x] **`SignTool=knaifsign $f`** plus **`SignedUninstaller=yes`** in `[Setup]`, with the tool
   supplied at compile time (`ISCC /Sknaifsign="…"`). Without `SignedUninstaller`, `unins000.exe` is
   unsigned and carries its own SmartScreen friction — a detail that is easy to miss because the
-  installer itself looks fine.
-- [ ] **Always timestamp** (`/tr` + `/td sha256`). Untimestamped binaries stop validating the day the
+  installer itself looks fine. *Done:* inside `#ifdef Sign`; `just installer` / `installer-test` pass
+  `/DSign` and the tool when `$KNAIF_SIGN_CMD` is set.
+- [x] **Always timestamp** (`/tr` + `/td sha256`). Untimestamped binaries stop validating the day the
   certificate expires, which with a 458-day cap is now a yearly cliff rather than a distant one.
 
 ## - [ ] S3 — Docs
 
 - [ ] Update [`docs/RELEASE.md`](../RELEASE.md): the §6 "ships unsigned" note and the checksum
   guidance both change, and S0's Defender submission becomes a standing release step.
-- [ ] Update [`installers/windows/README.md`](../../installers/windows/README.md) if it describes the
+  *Partly done 2026-10-02:* §2 *Signing* (setup + `KNAIF_SIGN_CMD`) and §6 (signed, SmartScreen
+  still possible, Smart App Control) are written, and README.md's support table no longer says
+  unsigned. **Open:** the Defender submission step (S0).
+- [x] Update [`installers/windows/README.md`](../../installers/windows/README.md) if it describes the
   artifact as unsigned.
-- [ ] **Reconcile `AppPublisher` with the certificate subject** — this is
+- [x] **Reconcile `AppPublisher` with the certificate subject** (now `Blackdeep Technologies Ltd`,
+  no dot, as the issued subject reads; asserted by `test_code_signing.py`) — this is
   [windows-installer-polish](2026-07-25-windows-installer-polish.md) W3's deferred item, and it
   belongs to whoever lands the certificate. The cert subject is **not self-declared**: the CA issues
   it from official registry records, so read the issued certificate rather than assuming it matches.
@@ -130,6 +168,29 @@ Two layers, and signing only the installer leaves every bundled DLL unsigned.
   statements with no matching requirement against a certificate.
 
 ---
+
+## Verification — Windows Sandbox, 2026-10-02
+
+Signed test installer built from `5881e12` plus this work (`/DAppVersion=1.2.1`, production
+AppId). The Sandbox on the owner's Windows build has **Smart App Control enforcing**, which turned
+out to be the decisive condition: the published, unsigned 1.2.0 `setup.exe` is **blocked outright**
+there (CodeIntegrity events 3077/3118, policy `0283ac0f-fff1-49ae-ada1-8a933130cad6`, "we can't
+confirm who published …"), so any user with Smart App Control on cannot install 1.2.0 at all.
+
+- **Fresh install, enforcement on** — installs; `knaif --version`, `skills list`, `skills deps` run
+  (llama.dll loads, so signed DLLs pass too). Report: 21/21 binaries `Valid`, 17 Blackdeep
+  (`knaif.exe`, 15 DLLs, `unins000.exe`), 4 Microsoft; Add/Remove Programs publisher
+  `Blackdeep Technologies Ltd`. Uninstall clean.
+- **Upgrade over unsigned 1.2.0** — Smart App Control turned off via registry
+  (`VerifiedAndReputablePolicyState=0` + `CiTool --refresh`; the Sandbox has no Windows Security
+  app) to install 1.2.0, then **turned back on** — the installed 1.2.0 `knaif.exe` was then
+  blocked, proving enforcement — before running the signed 1.2.1 installer. Upgrade
+  in place, one Add/Remove row, no unsigned file left behind (same 21/21 report), signed uninstaller
+  removes everything. This is the patch-lane gate the 2026-09-30 decision set, so signing stays in
+  1.2.1.
+
+Not exercised: real inference (the ggml-cpu/vulkan backends load only on a `run`; they carry the
+same signature) and the CUDA payload (`ggml-cuda.dll` is signed by the same step).
 
 ## Definition of done
 
@@ -154,3 +215,77 @@ describes the signed cut, including the Defender submission step.
   `release` environment; if this plan ever moves Windows signing into CI too, reuse that pattern
   rather than designing a second one.
 - **Kernel-mode or driver signing** — knaif ships no drivers.
+
+---
+
+## Owner runbook — getting the Windows signing certificate
+
+*Added 2026-09-30.* Everything the owner has to obtain for Windows, in order. Portal labels and
+product names change often (Azure renamed Trusted Signing to Artifact Signing in 2025–26) — where a
+step says *verify*, trust the portal over this text. Nothing here goes into the repository:
+certificates, keys and identities live only in Azure or in GitHub Actions secrets. The macOS
+equivalent is its own plan, `macos-signing-certificates`, on the 1.3.0 release branch.
+
+| Item | From | Cost | Used for |
+|---|---|---|---|
+| Artifact Signing account + certificate profile | Azure | ~$9.99/mo (Basic) | `knaif.exe`, DLLs, `setup.exe`, uninstaller |
+
+**Step 0 — check eligibility before paying for anything.** The two Microsoft statements in the
+landscape section above disagree, so this is the gate. Organisations need a legal entity Microsoft
+can verify, and the published onboarding rules have required a period of verifiable business
+history (3+ years at one point) and a supported country (US, Canada, EU, UK for organisations;
+individuals US/Canada only). Read the current requirements on Microsoft Learn for *Artifact
+Signing* and check Blackdeep's registered country and incorporation date against them. **If it does
+not qualify, stop here** and take the fallback: an OV certificate on a cloud HSM (~$150–300/yr),
+or revisit SignPath Foundation. Do not build the pipeline first.
+
+1. **Azure subscription.** Use a pay-as-you-go subscription owned by the company. A free trial
+   subscription is generally not accepted for this service — *verify*.
+2. **Create the account.** Portal → *Artifact Signing accounts* → Create. The region fixes the
+   signing **endpoint URL** — write it down. Choose the **Basic** tier. *Done:* North Europe,
+   `https://neu.codesigning.azure.net`; West Europe refused new customers on 2026-10-01.
+3. **Identity validation.** In the account, *Identity validation* → New → **Organization**. You
+   enter the legal name, registration number, address and a contact; Microsoft's verification
+   partner checks them against official records. This takes from minutes to several days and may
+   ask for documents. You need the *Artifact Signing Identity Verifier* role on the account
+   (assign it to yourself under *Access control*).
+4. **Certificate profile.** After validation succeeds: *Certificate profiles* → Create → type
+   **Public Trust**, pick the validated identity. Write down the account name and profile name.
+   The certificate subject is taken from the validated identity — **read what it says**; it must
+   match `AppPublisher` in `installers/windows/knaif.iss` (S3 above).
+5. **Deferred — only if Windows builds move to CI** (2026-10-02 decision). **A signing identity for CI.** Entra ID → App registrations → New (for example `knaif-signing`).
+   Grant it the **Artifact Signing Certificate Profile Signer** role on the account. Then add a
+   **federated credential** for GitHub Actions (repository `blackdeep-tech/knaif`, the environment
+   that runs the release job) so CI authenticates by OIDC and **no client secret exists**.
+6. **Hand over** the values in the secrets table below. The certificates Microsoft issues are
+   short-lived and rotate on their own, which is why every signature must carry a timestamp
+   (`http://timestamp.acs.microsoft.com`) — S2 already requires it.
+7. **Local signing** needs `signtool` plus Microsoft's Artifact Signing client
+   (`Azure.CodeSigning.Dlib`), the *Certificate Profile Signer* role for the owner's own account,
+   and `az login`. Setup and the `KNAIF_SIGN_CMD` value: `docs/RELEASE.md` §2, *Signing*. The client
+   installs **per user** (`%LOCALAPPDATA%\Microsoft\MicrosoftArtifactSigningClientTools\`), not
+   under Program Files as Microsoft's docs say.
+
+**Expect:** the first signed installer still gets the SmartScreen prompt. Signing changes the
+publisher from "Unknown" to Blackdeep's name and lets reputation build across releases; it does
+not skip the prompt (see the landscape section). Keep the Defender submission (S0) going.
+
+### GitHub Actions secrets
+
+Create them as **environment secrets** on a protected `release` environment (required reviewer:
+the owner), so only a tag build the owner approves can reach them. Names are suggestions; the
+workflow and this table must agree when it is written.
+
+| Secret | Holds |
+|---|---|
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID` | the Entra app from step 5 (not secret in themselves; no password exists) |
+| `ARTIFACT_SIGNING_ENDPOINT`, `ARTIFACT_SIGNING_ACCOUNT`, `ARTIFACT_SIGNING_PROFILE` | endpoint URL, account name, certificate profile name |
+
+### Housekeeping
+
+- **Renewals.** The profile is continuous and the subscription bills monthly — set a budget alert so
+  a lapsed payment is noticed before a release day.
+- **Revocation.** If the signing identity leaks: remove its Azure role assignment and delete the
+  Entra app. The repository never held any secret.
+- **Public output.** The certificate subject appears inside published binaries. Follow AGENTS.md
+  *Public Output Hygiene*: no personal names or machine paths beyond what the subject itself shows.

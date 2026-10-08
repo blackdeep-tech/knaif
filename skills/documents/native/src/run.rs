@@ -126,7 +126,7 @@ pub fn commit(
                 .ok_or_else(|| anyhow::anyhow!("merge_pdfs requires 'output'"))?;
             let docs = inputs
                 .iter()
-                .map(|p| pdf::load(p))
+                .map(|p| pdf::load_unlocked(p))
                 .collect::<Result<_, _>>()?;
             let mut merged = pdf::merge(docs)?;
             write(&mut merged, &output)?;
@@ -134,7 +134,7 @@ pub fn commit(
         }
         "rotate_pages" => {
             let input = input_path(args, base, sandbox)?;
-            let mut doc = pdf::load(&input)?;
+            let mut doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let selected = pdf::parse_pages(str_arg(args, "pages").as_deref(), total, true)?;
             let degrees = int_arg(args, "degrees")
@@ -150,7 +150,7 @@ pub fn commit(
         }
         "remove_pages" => {
             let input = input_path(args, base, sandbox)?;
-            let mut doc = pdf::load(&input)?;
+            let mut doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let remove = pdf::parse_pages(Some(&require_str(args, "pages")?), total, true)?;
             pdf::remove_pages(&mut doc, &remove)?;
@@ -164,7 +164,7 @@ pub fn commit(
         }
         "reorder_pages" => {
             let input = input_path(args, base, sandbox)?;
-            let mut doc = pdf::load(&input)?;
+            let mut doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let order = reorder_sequence(&require_str(args, "order")?, total)?;
             pdf::reorder_pages(&mut doc, &order)?;
@@ -178,7 +178,7 @@ pub fn commit(
         }
         "split_pdf" => {
             let input = input_path(args, base, sandbox)?;
-            let doc = pdf::load(&input)?;
+            let doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let specs = pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)?;
             let outputs = split_outputs(&input, args, base, sandbox, &specs)?;
@@ -190,7 +190,7 @@ pub fn commit(
         }
         "protect_pdf" => {
             let input = input_path(args, base, sandbox)?;
-            let mut doc = pdf::load(&input)?;
+            let mut doc = pdf::load_unlocked(&input)?;
             pdf::protect(&mut doc, &require_str(args, "password")?)?;
             let out = derive_output(
                 &input,
@@ -213,7 +213,7 @@ pub fn commit(
         }
         "watermark" => {
             let input = input_path(args, base, sandbox)?;
-            let mut doc = pdf::load(&input)?;
+            let mut doc = pdf::load_unlocked(&input)?;
             let position = str_arg(args, "position").unwrap_or_else(|| "center".into());
             let opacity = float_arg(args, "opacity").unwrap_or(0.35);
             if let Some(text) = str_arg(args, "text") {
@@ -235,7 +235,7 @@ pub fn commit(
         }
         "add_page_numbers" => {
             let input = input_path(args, base, sandbox)?;
-            let mut doc = pdf::load(&input)?;
+            let mut doc = pdf::load_unlocked(&input)?;
             let position = str_arg(args, "position").unwrap_or_else(|| "bottom-center".into());
             let start_at = int_arg(args, "start_at").unwrap_or(1);
             overlay::add_page_numbers(&mut doc, start_at, &position, 12.0)?;
@@ -323,7 +323,10 @@ fn write_outputs(
         }
         "reorder_pages" => {
             let input = input_path(args, base, sandbox)?;
-            require_str(args, "order")?;
+            // Validate the order against the page count, as `run` and Python's dry run do: a
+            // preview must not promise an output the real run refuses (documents_105).
+            let doc = pdf::load_unlocked(&input)?;
+            reorder_sequence(&require_str(args, "order")?, pdf::page_count(&doc) as i64)?;
             let out = derive_output(
                 &input,
                 out_arg(args, base, sandbox, "output")?,
@@ -334,7 +337,7 @@ fn write_outputs(
         }
         "split_pdf" => {
             let input = input_path(args, base, sandbox)?;
-            let doc = pdf::load(&input)?;
+            let doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let specs = pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)?;
             let outputs = split_outputs(&input, args, base, sandbox, &specs)?;

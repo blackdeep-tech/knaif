@@ -1129,11 +1129,14 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         artifact_binary,
         binaries_by_os,
         bundle_change_allowed,
+        contracts_change_allowed,
         evidence_tuple,
         load_acceptance_record,
         record_equivalence,
         run_preregistered,
         sample_run_problems,
+        sampled_bundle_file_allowed,
+        sampled_entry_problems,
         text_only_change,
         tree_at_commit,
     )
@@ -1185,11 +1188,13 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
             if not text_only_change(before, after, pairs):
                 refuse(f"{name}: not only the declared replacements inside strings or comments")
 
-    # Every L3/L4 record must differ from the tree in `native` alone — or, sampled, in `native`
-    # and the skill's `bundle` (run-scoped keys aside).
-    carryable = {"native", "bundle"} if sampled else {"native"}
+    # Every L3/L4 record must differ from the tree in `native` alone — or, sampled, in `native`,
+    # the skill's `bundle`, and (with a Python stage in the run) `python_core` and `contracts`
+    # (run-scoped keys aside).
+    carryable = {"native", "bundle", "python_core", "contracts"} if sampled else {"native"}
     natives: set[str] = set()
     bundles: dict[str, set[str]] = {}
+    shared: dict[str, set[str]] = {"python_core": set(), "contracts": set()}
     measured_skills: set[str] = set()
     for skill in sorted(list_skills()):
         record = load_acceptance_record(skill, root) or {}
@@ -1211,6 +1216,9 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
                     natives.add(str(ev["native"]))
                 if "bundle" in moved:
                     bundles.setdefault(skill, set()).add(str(ev["bundle"]))
+                for key in shared:
+                    if key in moved:
+                        shared[key].add(str(ev[key]))
     if len(natives) != 1:
         refuse(f"expected one measured native fingerprint, found {len(natives)}")
     measured = next(iter(natives))
@@ -1221,6 +1229,42 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
     new_native = evidence_tuple(sorted(list_skills())[0], root)["native"]
     if tree_at_commit(root, "HEAD", NATIVE_PATTERNS) != new_native:
         refuse("the native source in the tree is not HEAD's")
+
+    # Did the run also check the Python runtime on the same requests? Only then may Python code
+    # (the core, a skill's Python modules) or a contract ride the sample.
+    python_stage = sampled and not sample_run_problems(
+        root / args.sample_run, set(), measured_skills, python=True
+    )
+    shared_map: dict[str, dict[str, str]] = {}
+    shared_specs = {
+        "python_core": (
+            "python/core/knaif",
+            ("planner.py", "prompt.py", "registry.py", "agent.py"),
+        ),
+        "contracts": ("contracts", ("**/*.yaml", "**/*.json")),
+    }
+    for key, found in shared.items():
+        if not found:
+            continue
+        if not python_stage:
+            refuse(f"`{key}` changed: the sample run needs a `python` stage for every skill")
+        if len(found) != 1:
+            refuse(f"expected one measured {key} fingerprint, found {len(found)}")
+        base, patterns = shared_specs[key]
+        kspecs = [f":(glob){base}/{p}" for p in patterns]
+        if git("status", "--porcelain", "--", *kspecs).strip():
+            refuse(f"{key} has uncommitted changes; commit them first")
+        names = git("diff", "--name-only", "--no-renames", args.from_commit, "HEAD", "--", *kspecs)
+        if key == "contracts" and not contracts_change_allowed(names.split()):
+            refuse(f"contracts changed outside contracts/backends/: {names.split()}")
+        measured_value = next(iter(found))
+        if tree_at_commit(root, args.from_commit, patterns, base=base) != measured_value:
+            refuse(f"{args.from_commit} is not the {key} the records measured")
+        now_value = evidence_tuple(sorted(list_skills())[0], root)[key]
+        if tree_at_commit(root, "HEAD", patterns, base=base) != now_value:
+            refuse(f"the {key} in the tree is not HEAD's")
+        shared_map[key] = {"from": measured_value, "to": str(now_value)}
+        changed_files.extend(n for n in names.split() if n not in changed_files)
 
     bundle_map: dict[str, dict[str, str]] = {}
     for skill, found in sorted(bundles.items()):
@@ -1242,10 +1286,10 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
                     git("show", f"{args.from_commit}:{name}"), git("show", f"HEAD:{name}")
                 ):
                     refuse(f"{name}: changed outside `dependencies`")
-            elif not rel.startswith("native/src/"):
+            elif not sampled_bundle_file_allowed(rel, python_stage):
                 refuse(
-                    f"{name}: a sampled equivalence carries skill.yaml `dependencies` and "
-                    "the skill's native sources only"
+                    f"{name}: a sampled equivalence carries skill.yaml `dependencies`, the "
+                    "skill's native sources and — with a `python` stage — its Python modules only"
                 )
             if name not in changed_files:
                 changed_files.append(name)
@@ -1314,7 +1358,9 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
                 refuse(f"{run / name} is not committed")
         if git("status", "--porcelain", "--", sample_run).strip():
             refuse(f"{sample_run} has uncommitted changes")
-        problems = sample_run_problems(root / run, set(new_bins), measured_skills)
+        problems = sample_run_problems(
+            root / run, set(new_bins), measured_skills, python=bool(shared_map)
+        )
         if problems:
             refuse(f"{sample_run} does not vouch for this: " + "; ".join(problems))
 
@@ -1324,6 +1370,7 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
     fingerprints: dict[str, Any] = {"native": {"from": measured, "to": new_native}}
     if bundle_map:
         fingerprints["bundle"] = bundle_map
+    fingerprints.update(shared_map)
     new_entry: dict[str, Any] = {
         "id": args.id,
         "date": args.date or _date.today().isoformat(),
@@ -1346,6 +1393,12 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
             },
         }
     )
+    # The gate re-derives all of this from git and the run on every read; refuse here what it
+    # would not honour, so a recorded entry is never one the gate silently ignores.
+    if sampled:
+        problems = sampled_entry_problems(root, new_entry)
+        if problems:
+            refuse("the gate would not honour this entry: " + "; ".join(problems))
     try:
         path = record_equivalence(root, new_entry)
     except ValueError as exc:

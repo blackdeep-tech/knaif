@@ -99,9 +99,9 @@ import {
   <section class="verify">
     <p class="eyebrow">verify what you downloaded</p>
     <p>
-      The Windows binaries are unsigned, so the checksum — not the absence of a warning — is
-      what tells you the file is intact. Every artifact is listed in one signed-by-GitHub
-      manifest.
+      The Windows binaries are signed by Blackdeep Technologies Ltd (Properties → Digital
+      Signatures), but a browser or SmartScreen warning says only that a file is new, not whether it
+      is intact: the checksum is what tells you that. Every artifact is listed in one manifest.
     </p>
     <a class="btn ghost" href={rel.checksums_url}>SHA256SUMS for {rel.tag}</a>
     <div class="scroll-x">

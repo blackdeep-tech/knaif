@@ -1,0 +1,26 @@
+{
+  "reference": "linux/knaif-qwen3-1.7b-v2/cpu-sample/documents",
+  "shared": 35,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 2,
+    "both_correct": [
+      "documents_119#0",
+      "documents_129#0"
+    ],
+    "only_reference": [],
+    "only_other": [],
+    "both_wrong": []
+  },
+  "canonical": {
+    "flips": 2,
+    "both_correct": [
+      "documents_119#0",
+      "documents_129#0"
+    ],
+    "only_reference": [],
+    "only_other": [],
+    "both_wrong": []
+  },
+  "grades_differ": []
+}

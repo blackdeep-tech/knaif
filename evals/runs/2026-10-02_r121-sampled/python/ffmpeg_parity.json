@@ -1,0 +1,3586 @@
+{
+  "skill": "ffmpeg",
+  "mode": "command",
+  "model": "<repo>\\models\\knaif-qwen3-4b-v2-q4_k_m.gguf",
+  "counts": {
+    "match": 40,
+    "mismatch": 0,
+    "decline-divergence": 0,
+    "not-comparable": 3,
+    "native-not-implemented": 0,
+    "port-bug": 0
+  },
+  "total": 43,
+  "elapsed_s": 790.7,
+  "rows": [
+    {
+      "id": "ffmpeg_033",
+      "utterance": "join clip.mp4 and clip2.mp4 into one file called merged.mp4",
+      "tags": [
+        "concat"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-i",
+            "clip2.mp4",
+            "-filter_complex",
+            "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]",
+            "-map",
+            "[outv]",
+            "-map",
+            "[outa]",
+            "<repo>/sandbox/fixtures/ffmpeg/merged.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -i clip2.mp4 -filter_complex [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\merged.mp4\"\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"concat_video\",\"args\":{\"inputs\":[\"clip.mp4\",\"clip2.mp4\"],\"output\":\"merged.mp4\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-i\",\"clip2.mp4\",\"-filter_complex\",\"[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]\",\"-map\",\"[outv]\",\"-map\",\"[outa]\",\"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\merged.mp4\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip2.mp4",
+            "-filter_complex",
+            "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]",
+            "-map",
+            "[outv]",
+            "-map",
+            "[outa]",
+            "<repo>/sandbox/fixtures/ffmpeg/merged.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 10.8s\nffmpeg › join clip.mp4 and clip2.mp4 into one file called merged.mp4\n  mode: dry-run (no files will be modified)\n  • concatenate clip.mp4 and clip2.mp4 into merged.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip2.mp4 -filter_complex [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa] -map [outv] -map [outa] <repo>\\sandbox\\fixtures\\ffmpeg\\merged.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"concat_video\", \"args\": {\"inputs\": [\"clip.mp4\", \"clip2.mp4\"], \"output\": \"merged.mp4\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip2.mp4\", \"-filter_complex\", \"[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]\", \"-map\", \"[outv]\", \"-map\", \"[outa]"
+      }
+    },
+    {
+      "id": "ffmpeg_052",
+      "utterance": "mix the audio from clip.mp4 with audio.mp3",
+      "tags": [
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Mixing audio isn't supported - I only extract or strip audio. Is that what you want?",
+        "raw": "clarify: Mixing audio isn't supported - I only extract or strip audio. Is that what you want?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Mixing audio isn't supported - I only extract or strip audio. Is that what you want?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Mixing audio isn't supported - I only extract or strip audio. Is that what you want?",
+        "raw": "intent: 8.9s\nffmpeg › mix the audio from clip.mp4 with audio.mp3\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Mixing audio isn't supported - I only extract or strip audio. Is that what you want?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Mixing audio isn't supported - I only extract or strip audio. Is that what you want?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_063",
+      "utterance": "Ton aus clip.mp4 entfernen",
+      "tags": [
+        "multilingual",
+        "de",
+        "audio"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -an -c:v copy clip_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-an\",\"-c:v\",\"copy\",\"clip_silent.mp4\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 7.9s\nffmpeg › Ton aus clip.mp4 entfernen\n  mode: dry-run (no files will be modified)\n  • strip audio from clip.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_silent.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"clip.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-an\", \"-c:v\", \"copy\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip_silent.mp4\"]\n"
+      }
+    },
+    {
+      "id": "ffmpeg_079",
+      "utterance": "make a boomerang effect on clip.mp4",
+      "tags": [
+        "reverse_video"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "A boomerang effect isn't supported. Is there another operation I can help with?",
+        "raw": "clarify: A boomerang effect isn't supported. Is there another operation I can help with?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"A boomerang effect isn't supported. Is there another operation I can help with?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "A boomerang effect isn't supported. Is there another operation I can help with?",
+        "raw": "intent: 9.3s\nffmpeg › make a boomerang effect on clip.mp4\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: A boomerang effect isn't supported. Is there another operation I can help with?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"A boomerang effect isn't supported. Is there another operation I can help with?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_082b",
+      "utterance": "concatenate two mp4 files",
+      "tags": [
+        "concat_video",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention 'file1.mp4' in your request — which file should I work on?",
+        "raw": "clarify: You didn't mention 'file1.mp4' in your request — which file should I work on?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"You didn't mention 'file1.mp4' in your request — which file should I work on?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention 'file1.mp4' in your request — which file should I work on?",
+        "raw": "intent: 21.2s\nffmpeg › concatenate two mp4 files\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: You didn't mention 'file1.mp4' in your request — which file should I work on?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"You didn't mention 'file1.mp4' in your request — which file should I work on?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_089",
+      "utterance": "make a thumbnail from clip.mp4 at the 2-second mark",
+      "tags": [
+        "create_thumbnail"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-ss",
+            "00:00:02",
+            "-vframes",
+            "1",
+            "clip_thumb.jpg"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -ss 00:00:02 -vframes 1 clip_thumb.jpg\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"create_thumbnail\",\"args\":{\"input\":\"clip.mp4\",\"at_time\":\"00:00:02\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-ss\",\"00:00:02\",\"-vframes\",\"1\",\"clip_thumb.jpg\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-ss",
+            "00:00:02",
+            "-vframes",
+            "1",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_thumb.jpg"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 16.6s\nffmpeg › make a thumbnail from clip.mp4 at the 2-second mark\n  mode: dry-run (no files will be modified)\n  • create a thumbnail from clip.mp4 at 00:00:02\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -ss 00:00:02 -vframes 1 <repo>\\sandbox\\fixtures\\ffmpeg\\clip_thumb.jpg\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"create_thumbnail\", \"args\": {\"input\": \"clip.mp4\", \"at_time\": \"00:00:02\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-ss\", \"00:00:02\", \"-vframes\", \"1\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip_thumb.jpg\"]\n"
+      }
+    },
+    {
+      "id": "ffmpeg_116",
+      "utterance": "trim clip.mp4 to the first 5 seconds, then resize it to 720p",
+      "tags": [
+        "complex",
+        "trim",
+        "resize"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:05",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mp4",
+            "-vf",
+            "scale=-2:720",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed_resized.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -ss 00:00:00 -to 00:00:05 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nstep 2 of 2:\nffmpeg -y -i clip_trimmed.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_trimmed_resized.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:05\",\"output\":\"clip_trimmed.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_trimmed.mp4\"],\"height\":720}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:00\",\"-to\",\"00:00:05\",\"-i\",\"clip.mp"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:05",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+            "-vf",
+            "scale=-2:720",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed_resized.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 13.2s\nffmpeg › trim clip.mp4 to the first 5 seconds, then resize it to 720p\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:05 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:05 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n  • resize clip_trimmed.mp4 → 720p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed_resized.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:"
+      }
+    },
+    {
+      "id": "ffmpeg_117",
+      "utterance": "scale clip.mp4 to 480p and then strip the audio",
+      "tags": [
+        "complex",
+        "resize",
+        "strip_audio"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_480p.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_480p_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_480p.mp4\nstep 2 of 2:\nffmpeg -y -i clip_480p.mp4 -an -c:v copy clip_480p_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"height\":480,\"output\":\"clip_480p.mp4\"}},{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip_480p.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"scale=-2:480\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"copy\",\"-movflags\",\"+faststart\",\"clip_480p.mp4\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"c"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 11.8s\nffmpeg › scale clip.mp4 to 480p and then strip the audio\n  mode: dry-run (no files will be modified)\n  • resize clip.mp4 → 480p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mp4\n    dry-run\n  • strip audio from clip_480p.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p_silent.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"height\": 480, \"output\": \"clip_480p.mp4\"}}, {\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"clip_480p.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmp"
+      }
+    },
+    {
+      "id": "ffmpeg_121",
+      "utterance": "convert clip.mov to mp4 and then trim it to 3 seconds",
+      "tags": [
+        "complex",
+        "convert",
+        "trim"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:03",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mov -c copy -movflags +faststart clip.mp4\nstep 2 of 2:\nffmpeg -y -ss 00:00:00 -to 00:00:03 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip.mov\"],\"container\":\"mp4\",\"output\":\"clip.mp4\"}},{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:03\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mov\",\"-c\",\"copy\",\"-movflags\",\"+faststart\",\"clip.mp4\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:00\",\"-to\",\"00:00:03\",\"-i\",\"clip.mp4\",\"-c:v\","
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:03",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 14.2s\nffmpeg › convert clip.mov to mp4 and then trim it to 3 seconds\n  mode: dry-run (no files will be modified)\n  • convert clip.mov → MP4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -c copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4\n    dry-run\n  • trim from 00:00:00 to 00:00:03 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:03 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mov\"], \"container\": \"mp4\", \"output\": \"clip.mp4\"}}, {\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:03\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_123",
+      "utterance": "speed up clip.mp4 by 2x and strip the audio",
+      "tags": [
+        "complex",
+        "adjust_speed",
+        "strip_audio"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "setpts=0.5*PTS",
+            "-af",
+            "atempo=2.0",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_fast.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_fast.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_fast_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vf setpts=0.5*PTS -af atempo=2.0 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k clip_fast.mp4\nstep 2 of 2:\nffmpeg -y -i clip_fast.mp4 -an -c:v copy clip_fast_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"adjust_speed\",\"args\":{\"inputs\":[\"clip.mp4\"],\"speed\":2.0,\"output\":\"clip_fast.mp4\"}},{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip_fast.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"setpts=0.5*PTS\",\"-af\",\"atempo=2.0\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-c:a\",\"aac\",\"-b:a\",\"128k\",\"clip_fast.mp4\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip_fast.mp4\",\"-an\",\"-c:v"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "setpts=0.5*PTS",
+            "-af",
+            "atempo=2.0",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 10.6s\nffmpeg › speed up clip.mp4 by 2x and strip the audio\n  mode: dry-run (no files will be modified)\n  • adjust the speed of clip.mp4 by 2.0x\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf setpts=0.5*PTS -af atempo=2.0 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast.mp4\n    dry-run\n  • strip audio from clip_fast.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast_silent.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"adjust_speed\", \"args\": {\"inputs\": [\"clip.mp4\"], \"speed\": 2.0, \"output\": \"clip_fast.mp4\"}}, {\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"clip_fast.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\"
+      }
+    },
+    {
+      "id": "ffmpeg_124",
+      "utterance": "extract the audio from clip.mp4 and convert it to flac",
+      "tags": [
+        "complex",
+        "extract_audio"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vn",
+            "-c:a",
+            "flac",
+            "-b:a",
+            "128k",
+            "clip_audio.flac"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -vn -c:a flac -b:a 128k clip_audio.flac\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_audio\",\"args\":{\"inputs\":[\"clip.mp4\"],\"audio_format\":\"flac\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vn\",\"-c:a\",\"flac\",\"-b:a\",\"128k\",\"clip_audio.flac\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vn",
+            "-c:a",
+            "flac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_audio.flac"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 9.0s\nffmpeg › extract the audio from clip.mp4 and convert it to flac\n  mode: dry-run (no files will be modified)\n  • extract audio from clip.mp4 as FLAC\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vn -c:a flac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_audio.flac\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"flac\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-vn\", \"-c:a\", \"flac\", \"-b:a\", \"128k\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip_audio.flac\"]\n"
+      }
+    },
+    {
+      "id": "ffmpeg_127",
+      "utterance": "convert clip.mov to webm and resize it to 720p",
+      "tags": [
+        "complex",
+        "convert",
+        "resize"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mov",
+            "-c:v",
+            "libvpx-vp9",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "128k",
+            "clip.webm"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.webm",
+            "-vf",
+            "scale=-2:720",
+            "-c:v",
+            "libvpx-vp9",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "128k",
+            "clip_resized.webm"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mov -c:v libvpx-vp9 -pix_fmt yuv420p -c:a libopus -b:a 128k clip.webm\nstep 2 of 2:\nffmpeg -y -i clip.webm -vf scale=-2:720 -c:v libvpx-vp9 -crf 23 -preset medium -pix_fmt yuv420p -c:a libopus -b:a 128k clip_resized.webm\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip.mov\"],\"container\":\"webm\",\"output\":\"clip.webm\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip.webm\"],\"height\":720,\"keep_aspect_ratio\":true}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mov\",\"-c:v\",\"libvpx-vp9\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"libopus\",\"-b:a\",\"128k\",\"clip.webm\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-c:v",
+            "libvpx-vp9",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.webm"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.webm",
+            "-vf",
+            "scale=-2:720",
+            "-c:v",
+            "libvpx-vp9",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "libopus",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_resized.webm"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 13.2s\nffmpeg › convert clip.mov to webm and resize it to 720p\n  mode: dry-run (no files will be modified)\n  • convert clip.mov → WEBM\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -c:v libvpx-vp9 -pix_fmt yuv420p -c:a libopus -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip.webm\n    dry-run\n  • resize clip.webm → 720p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.webm -vf scale=-2:720 -c:v libvpx-vp9 -crf 23 -preset medium -pix_fmt yuv420p -c:a libopus -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_resized.webm\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mov\"], \"container\": \"webm\", \"output\": \"clip.webm\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip.webm\"], \"height\": 720, \"keep_aspect_ratio\": true}}]}\n===KNAIF-A"
+      }
+    },
+    {
+      "id": "ffmpeg_129",
+      "utterance": "slow down clip.mp4 to half speed and compress it with CRF 25",
+      "tags": [
+        "complex",
+        "adjust_speed",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "setpts=2.0*PTS",
+            "-af",
+            "atempo=0.5",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_slow.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_slow.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_slow_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vf setpts=2.0*PTS -af atempo=0.5 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k clip_slow.mp4\nstep 2 of 2:\nffmpeg -y -i clip_slow.mp4 -c:v libx264 -crf 25 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_slow_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"adjust_speed\",\"args\":{\"inputs\":[\"clip.mp4\"],\"speed\":0.5,\"output\":\"clip_slow.mp4\"}},{\"tool\":\"compress_video\",\"args\":{\"inputs\":[\"clip_slow.mp4\"],\"crf\":25}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"setpts=2.0*PTS\",\"-af\",\"atempo=0.5\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-c:a\",\"aac\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "setpts=2.0*PTS",
+            "-af",
+            "atempo=0.5",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_slow.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_slow.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_slow_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 17.5s\nffmpeg › slow down clip.mp4 to half speed and compress it with CRF 25\n  mode: dry-run (no files will be modified)\n  • adjust the speed of clip.mp4 by 0.5x\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf setpts=2.0*PTS -af atempo=0.5 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_slow.mp4\n    dry-run\n  • compress clip_slow.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_slow.mp4 -c:v libx264 -crf 25 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_slow_compressed.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"adjust_speed\", \"args\": {\"inputs\": [\"clip.mp4\"], \"speed\": 0.5, \"output\": \"clip_slow.mp4\"}}, {\"tool\": \"compress_video\""
+      }
+    },
+    {
+      "id": "ffmpeg_130",
+      "utterance": "convert clip_no_audio.mp4 to mkv and resize to 1080p",
+      "tags": [
+        "complex",
+        "convert",
+        "resize"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_no_audio.mp4",
+            "-c",
+            "copy",
+            "clip_no_audio.mkv"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_no_audio.mkv",
+            "-vf",
+            "scale=-2:1080",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "clip_no_audio_resized.mkv"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip_no_audio.mp4 -c copy clip_no_audio.mkv\nstep 2 of 2:\nffmpeg -y -i clip_no_audio.mkv -vf scale=-2:1080 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy clip_no_audio_resized.mkv\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip_no_audio.mp4\"],\"container\":\"mkv\",\"output\":\"clip_no_audio.mkv\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_no_audio.mkv\"],\"height\":1080,\"keep_aspect_ratio\":true}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip_no_audio.mp4\",\"-c\",\"copy\",\"clip_no_audio.mkv\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip_no_audio.mkv\",\"-vf\",\"scale=-2:1080\",\"-c:v"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mp4",
+            "-c",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mkv"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio.mkv",
+            "-vf",
+            "scale=-2:1080",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_no_audio_resized.mkv"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 18.8s\nffmpeg › convert clip_no_audio.mp4 to mkv and resize to 1080p\n  mode: dry-run (no files will be modified)\n  • convert clip_no_audio.mp4 → MKV\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_no_audio.mp4 -c copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_no_audio.mkv\n    dry-run\n  • resize clip_no_audio.mkv → 1080p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_no_audio.mkv -vf scale=-2:1080 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_no_audio_resized.mkv\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip_no_audio.mp4\"], \"container\": \"mkv\", \"output\": \"clip_no_audio.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_no_audio.mkv\"], \"height\": 1080, \"keep_aspect_ratio\": t"
+      }
+    },
+    {
+      "id": "ffmpeg_135",
+      "utterance": "trim clip.mov from 0 to 4 seconds and extract audio as aac",
+      "tags": [
+        "complex",
+        "trim",
+        "extract_audio"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:04",
+            "-i",
+            "clip.mov",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_trimmed.mov"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mov",
+            "-vn",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_trimmed_audio.aac"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -ss 00:00:00 -to 00:00:04 -i clip.mov -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k clip_trimmed.mov\nstep 2 of 2:\nffmpeg -y -i clip_trimmed.mov -vn -c:a aac -b:a 128k clip_trimmed_audio.aac\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mov\",\"start\":\"00:00:00\",\"end\":\"00:00:04\",\"output\":\"clip_trimmed.mov\"}},{\"tool\":\"extract_audio\",\"args\":{\"inputs\":[\"clip_trimmed.mov\"],\"audio_format\":\"aac\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:00\",\"-to\",\"00:00:04\",\"-i\",\"clip.mov\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"aac\",\"-b:a\","
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:04",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mov"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mov",
+            "-vn",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed_audio.aac"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 13.0s\nffmpeg › trim clip.mov from 0 to 4 seconds and extract audio as aac\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:04 from clip.mov\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:04 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mov\n    dry-run\n  • extract audio from clip_trimmed.mov as AAC\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mov -vn -c:a aac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed_audio.aac\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mov\", \"start\": \"00:00:00\", \"end\": \"00:00:04\", \"output\": \"clip_trimmed.mov\"}}, {\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip_tr"
+      }
+    },
+    {
+      "id": "ffmpeg_156",
+      "utterance": "convert clip.mp4 to the best format",
+      "tags": [
+        "clarify",
+        "vague"
+      ],
+      "is_chain": false,
+      "status": "not-comparable",
+      "note": "python dry-run emits no command for this intent (compress/platform/thumbnail/batch)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_converted.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -c copy -movflags +faststart clip_converted.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"container\":\"mp4\",\"preview\":true}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-c\",\"copy\",\"-movflags\",\"+faststart\",\"clip_converted.mp4\"]\n"
+      },
+      "python": {
+        "kind": "rendered-none",
+        "commands": [],
+        "plan": [],
+        "text": "planned; dry-run emits no command for this intent",
+        "raw": "intent: 9.2s\nffmpeg › convert clip.mp4 to the best format\n  mode: dry-run (no files will be modified)\n  • convert clip.mp4 → MP4\n    (nothing to execute)\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"mp4\", \"preview\": true}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_171",
+      "utterance": "resize the video but keep the original aspect ratio",
+      "tags": [
+        "edge",
+        "resize",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which video file, and what target width or height should I resize it to?",
+        "raw": "clarify: Which video file, and what target width or height should I resize it to?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which video file, and what target width or height should I resize it to?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which video file, and what target width or height should I resize it to?",
+        "raw": "intent: 10.9s\nffmpeg › resize the video but keep the original aspect ratio\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Which video file, and what target width or height should I resize it to?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which video file, and what target width or height should I resize it to?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_190",
+      "utterance": "направи миниатюра от clip.mp4 на 3 секунди",
+      "tags": [
+        "multilingual",
+        "bg",
+        "create_thumbnail"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-ss",
+            "00:00:03",
+            "-vframes",
+            "1",
+            "clip_thumb.jpg"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -ss 00:00:03 -vframes 1 clip_thumb.jpg\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"create_thumbnail\",\"args\":{\"input\":\"clip.mp4\",\"at_time\":\"00:00:03\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-ss\",\"00:00:03\",\"-vframes\",\"1\",\"clip_thumb.jpg\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-ss",
+            "00:00:03",
+            "-vframes",
+            "1",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_thumb.jpg"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 9.6s\nffmpeg › направи миниатюра от clip.mp4 на 3 секунди\n  mode: dry-run (no files will be modified)\n  • create a thumbnail from clip.mp4 at 00:00:03\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -ss 00:00:03 -vframes 1 <repo>\\sandbox\\fixtures\\ffmpeg\\clip_thumb.jpg\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"create_thumbnail\", \"args\": {\"input\": \"clip.mp4\", \"at_time\": \"00:00:03\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-ss\", \"00:00:03\", \"-vframes\", \"1\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip_thumb.jpg\"]\n"
+      }
+    },
+    {
+      "id": "ffmpeg_203",
+      "utterance": "rotate clip.mp4",
+      "tags": [
+        "rotate_video",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which direction should I rotate it (90, 180, or 270 degrees)?",
+        "raw": "clarify: Which direction should I rotate it (90, 180, or 270 degrees)?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which direction should I rotate it (90, 180, or 270 degrees)?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which direction should I rotate it (90, 180, or 270 degrees)?",
+        "raw": "intent: 10.1s\nffmpeg › rotate clip.mp4\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Which direction should I rotate it (90, 180, or 270 degrees)?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which direction should I rotate it (90, 180, or 270 degrees)?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_220",
+      "utterance": "compress clip.mp4 to low quality for preview",
+      "tags": [
+        "compress",
+        "quality"
+      ],
+      "is_chain": false,
+      "status": "not-comparable",
+      "note": "python dry-run emits no command for this intent (compress/platform/thumbnail/batch)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"quality\":\"small_file\",\"preview\":true}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-c:v\",\"libx264\",\"-crf\",\"28\",\"-preset\",\"slow\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"aac\",\"-b:a\",\"96k\",\"-movflags\",\"+faststart\",\"clip_compressed.mp4\"]\n"
+      },
+      "python": {
+        "kind": "rendered-none",
+        "commands": [],
+        "plan": [],
+        "text": "planned; dry-run emits no command for this intent",
+        "raw": "intent: 9.1s\nffmpeg › compress clip.mp4 to low quality for preview\n  mode: dry-run (no files will be modified)\n  • compress clip.mp4 (CRF 28, slow preset)\n    (nothing to execute)\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"quality\": \"small_file\", \"preview\": true}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_226",
+      "utterance": "pull mp3 from clip.mp4 and apply 0.8x tempo",
+      "tags": [
+        "complex",
+        "extract_audio",
+        "adjust_speed"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "audio.mp3"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "audio.mp3",
+            "-af",
+            "atempo=0.8",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "audio_speed.mp3"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vn -c:a libmp3lame -b:a 128k audio.mp3\nstep 2 of 2:\nffmpeg -y -i audio.mp3 -af atempo=0.8 -c:a libmp3lame -b:a 128k audio_speed.mp3\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_audio\",\"args\":{\"inputs\":[\"clip.mp4\"],\"audio_format\":\"mp3\",\"output\":\"audio.mp3\"}},{\"tool\":\"adjust_speed\",\"args\":{\"inputs\":[\"audio.mp3\"],\"speed\":0.8}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vn\",\"-c:a\",\"libmp3lame\",\"-b:a\",\"128k\",\"audio.mp3\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"audio.mp3\",\"-af\",\"atempo=0.8\",\"-c:a\",\"libmp3lame\",\"-b:a\",\"128k\",\"audio_speed.mp3\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/audio.mp3"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/audio.mp3",
+            "-af",
+            "atempo=0.8",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/audio_speed.mp3"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 12.2s\nffmpeg › pull mp3 from clip.mp4 and apply 0.8x tempo\n  mode: dry-run (no files will be modified)\n  • extract audio from clip.mp4 as MP3\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vn -c:a libmp3lame -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\audio.mp3\n    dry-run\n  • adjust the speed of audio.mp3 by 0.8x\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\audio.mp3 -af atempo=0.8 -c:a libmp3lame -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\audio_speed.mp3\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\", \"output\": \"audio.mp3\"}}, {\"tool\": \"adjust_speed\", \"args\": {\"inputs\": [\"audio.mp3\"], \"speed\": 0.8}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-vn\", \"-c:"
+      }
+    },
+    {
+      "id": "ffmpeg_227",
+      "utterance": "resize clip.mov to 480p and strip audio",
+      "tags": [
+        "complex",
+        "resize",
+        "strip_audio"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mov",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "clip_480p.mov"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_480p.mov",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_480p_silent.mov"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mov -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy clip_480p.mov\nstep 2 of 2:\nffmpeg -y -i clip_480p.mov -an -c:v copy clip_480p_silent.mov\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip.mov\"],\"height\":480,\"keep_aspect_ratio\":true,\"output\":\"clip_480p.mov\"}},{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip_480p.mov\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mov\",\"-vf\",\"scale=-2:480\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"copy\",\"clip_480p.mov\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip_480p.mov\",\"-an\",\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mov"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mov",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p_silent.mov"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 12.8s\nffmpeg › resize clip.mov to 480p and strip audio\n  mode: dry-run (no files will be modified)\n  • resize clip.mov → 480p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mov\n    dry-run\n  • strip audio from clip_480p.mov\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mov -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p_silent.mov\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip.mov\"], \"height\": 480, \"keep_aspect_ratio\": true, \"output\": \"clip_480p.mov\"}}, {\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"clip_480p.mov\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg"
+      }
+    },
+    {
+      "id": "ffmpeg_246",
+      "utterance": "rotate clip.mp4 180 degrees",
+      "tags": [
+        "rotate_video"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "hflip,vflip",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "clip_rotated.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "ffmpeg -y -i clip.mp4 -vf hflip,vflip -c:v libx264 -crf 25 -preset medium -c:a aac clip_rotated.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"angle\":180}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"hflip,vflip\",\"-c:v\",\"libx264\",\"-crf\",\"25\",\"-preset\",\"medium\",\"-c:a\",\"aac\",\"clip_rotated.mp4\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "hflip,vflip",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_rotated.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 9.2s\nffmpeg › rotate clip.mp4 180 degrees\n  mode: dry-run (no files will be modified)\n  • rotate clip.mp4 (180°)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf hflip,vflip -c:v libx264 -crf 25 -preset medium -c:a aac <repo>\\sandbox\\fixtures\\ffmpeg\\clip_rotated.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"angle\": 180}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp4\", \"-vf\", \"hflip,vflip\", \"-c:v\", \"libx264\", \"-crf\", \"25\", \"-preset\", \"medium\", \"-c:a\", \"aac\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip_rotated.mp4\"]\n"
+      }
+    },
+    {
+      "id": "ffmpeg_257",
+      "utterance": "reverse the mov file",
+      "tags": [
+        "clarify",
+        "reverse_video"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which mov did you mean?",
+        "raw": "clarify: Which mov did you mean?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reverse_video\",\"args\":{\"inputs\":[\"mov\"]}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which mov did you mean?",
+        "raw": "intent: 8.4s\nffmpeg › reverse the mov file\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: Which mov did you mean?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reverse_video\", \"args\": {\"inputs\": [\"mov\"]}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_265",
+      "utterance": "reverse the 4K clip",
+      "tags": [
+        "clarify",
+        "reverse_video"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention '4K_clip.mp4' in your request — which file should I work on?",
+        "raw": "clarify: You didn't mention '4K_clip.mp4' in your request — which file should I work on?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"You didn't mention '4K_clip.mp4' in your request — which file should I work on?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention '4K_clip.mp4' in your request — which file should I work on?",
+        "raw": "intent: 9.6s\nffmpeg › reverse the 4K clip\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: You didn't mention '4K_clip.mp4' in your request — which file should I work on?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"You didn't mention '4K_clip.mp4' in your request — which file should I work on?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_267",
+      "utterance": "trim clip.mp4 to 3-5 seconds, save it, then extract the audio as mp3",
+      "tags": [
+        "complex",
+        "trim",
+        "extract_audio",
+        "multi_output"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:03",
+            "-to",
+            "00:00:05",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mp4",
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "clip_trimmed_audio.mp3"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -ss 00:00:03 -to 00:00:05 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nstep 2 of 2:\nffmpeg -y -i clip_trimmed.mp4 -vn -c:a libmp3lame -b:a 128k clip_trimmed_audio.mp3\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:03\",\"end\":\"00:00:05\",\"output\":\"clip_trimmed.mp4\"}},{\"tool\":\"extract_audio\",\"args\":{\"inputs\":[\"clip_trimmed.mp4\"],\"audio_format\":\"mp3\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:03\",\"-to\",\"00:00:05\",\"-i\",\"clip.mp4\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-pix_fmt\",\"y"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:03",
+            "-to",
+            "00:00:05",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed_audio.mp3"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 14.8s\nffmpeg › trim clip.mp4 to 3-5 seconds, save it, then extract the audio as mp3\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:03 to 00:00:05 from clip.mp4\n    $ ffmpeg -y -ss 00:00:03 -to 00:00:05 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n  • extract audio from clip_trimmed.mp4 as MP3\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4 -vn -c:a libmp3lame -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed_audio.mp3\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:03\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"extrac"
+      }
+    },
+    {
+      "id": "ffmpeg_268",
+      "utterance": "make a new video from the first 3 seconds of clip.mp4 and also save the audio",
+      "tags": [
+        "complex",
+        "trim",
+        "extract_audio",
+        "multi_output"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:03",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_00_03.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_00_03.mp4",
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "clip_00_03_audio.mp3"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -ss 00:00:00 -to 00:00:03 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_00_03.mp4\nstep 2 of 2:\nffmpeg -y -i clip_00_03.mp4 -vn -c:a libmp3lame -b:a 128k clip_00_03_audio.mp3\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:03\",\"output\":\"clip_00_03.mp4\"}},{\"tool\":\"extract_audio\",\"args\":{\"inputs\":[\"clip_00_03.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:00\",\"-to\",\"00:00:03\",\"-i\",\"clip.mp4\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"aac\",\"-b:a\",\"12"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:03",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_00_03.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_00_03.mp4",
+            "-vn",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_00_03_audio.mp3"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 15.9s\nffmpeg › make a new video from the first 3 seconds of clip.mp4 and also save the audio\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:03 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:03 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_00_03.mp4\n    dry-run\n  • extract audio from clip_00_03.mp4 as MP3\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_00_03.mp4 -vn -c:a libmp3lame -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_00_03_audio.mp3\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:03\", \"output\": \"clip_00_03.mp4\"}}, {\"tool\": \"extract"
+      }
+    },
+    {
+      "id": "ffmpeg_274",
+      "utterance": "trim clip.mp4 to 5 seconds and flip it horizontally",
+      "tags": [
+        "complex",
+        "trim",
+        "rotate_video"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:05",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mp4",
+            "-vf",
+            "hflip",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "clip_trimmed_rotated.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -ss 00:00:00 -to 00:00:05 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nstep 2 of 2:\nffmpeg -y -i clip_trimmed.mp4 -vf hflip -c:v libx264 -crf 25 -preset medium -c:a aac clip_trimmed_rotated.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:05\",\"output\":\"clip_trimmed.mp4\"}},{\"tool\":\"rotate_video\",\"args\":{\"inputs\":[\"clip_trimmed.mp4\"],\"flip\":\"horizontal\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:00\",\"-to\",\"00:00:05\",\"-i\",\"clip.mp4\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-prese"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:05",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+            "-vf",
+            "hflip",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed_rotated.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 15.0s\nffmpeg › trim clip.mp4 to 5 seconds and flip it horizontally\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:05 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:05 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n  • rotate clip_trimmed.mp4 (flip horizontal)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4 -vf hflip -c:v libx264 -crf 25 -preset medium -c:a aac <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed_rotated.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\""
+      }
+    },
+    {
+      "id": "ffmpeg_291",
+      "utterance": "change the silent clip to mkv and scale to 1080p",
+      "tags": [
+        "convert_video",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention 'clip.mp4' in your request — which file should I work on?",
+        "raw": "clarify: You didn't mention 'clip.mp4' in your request — which file should I work on?\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"You didn't mention 'clip.mp4' in your request — which file should I work on?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "You didn't mention 'clip.mp4' in your request — which file should I work on?",
+        "raw": "intent: 12.6s\nffmpeg › change the silent clip to mkv and scale to 1080p\n  mode: dry-run (no files will be modified)\n\n❓ CLARIFY: You didn't mention 'clip.mp4' in your request — which file should I work on?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"You didn't mention 'clip.mp4' in your request — which file should I work on?\"}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_001",
+      "utterance": "convert clip.mov to mp4, scale it down to 480p, and remove the audio track",
+      "tags": [
+        "hard",
+        "chain3",
+        "convert",
+        "resize",
+        "strip"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_480p.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_480p_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -i clip.mov -c copy -movflags +faststart clip.mp4\nstep 2 of 3:\nffmpeg -y -i clip.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_480p.mp4\nstep 3 of 3:\nffmpeg -y -i clip_480p.mp4 -an -c:v copy clip_480p_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip.mov\"],\"container\":\"mp4\",\"output\":\"clip.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"height\":480,\"keep_aspect_ratio\":true,\"output\":\"clip_480p.mp4\"}},{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip_480p.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"cl"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 15.0s\nffmpeg › convert clip.mov to mp4, scale it down to 480p, and remove the audio track\n  mode: dry-run (no files will be modified)\n  • convert clip.mov → MP4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -c copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4\n    dry-run\n  • resize clip.mp4 → 480p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mp4\n    dry-run\n  • strip audio from clip_480p.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p_silent.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\":"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_002",
+      "utterance": "trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress it",
+      "tags": [
+        "hard",
+        "chain3",
+        "trim",
+        "resize",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:05",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mp4",
+            "-vf",
+            "scale=-2:720",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_720p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_720p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_720p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -ss 00:00:00 -to 00:00:05 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nstep 2 of 3:\nffmpeg -y -i clip_trimmed.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_720p.mp4\nstep 3 of 3:\nffmpeg -y -i clip_720p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_720p_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:05\",\"output\":\"clip_trimmed.mp4\"}},{\"tool\":\"res"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:05",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+            "-vf",
+            "scale=-2:720",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_720p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_720p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_720p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 17.2s\nffmpeg › trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress it\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:05 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:05 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n  • resize clip_trimmed.mp4 → 720p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_720p.mp4\n    dry-run\n  • compress clip_720p.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_720p.mp4"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_003",
+      "utterance": "rotate clip.mp4 90 degrees clockwise, resize it to 480p, then compress it",
+      "tags": [
+        "hard",
+        "chain3",
+        "rotate",
+        "resize",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "transpose=1",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "clip_rotated.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_rotated.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_480p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_480p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -i clip.mp4 -vf transpose=1 -c:v libx264 -crf 25 -preset medium -c:a aac clip_rotated.mp4\nstep 2 of 3:\nffmpeg -y -i clip_rotated.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_480p.mp4\nstep 3 of 3:\nffmpeg -y -i clip_480p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_480p_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"angle\":90,\"output\":\"clip_rotated.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_rotated.mp4\"],\"height\":480,\"keep_aspect_rat"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "transpose=1",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_rotated.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_rotated.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_480p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 14.5s\nffmpeg › rotate clip.mp4 90 degrees clockwise, resize it to 480p, then compress it\n  mode: dry-run (no files will be modified)\n  • rotate clip.mp4 (90°)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf transpose=1 -c:v libx264 -crf 25 -preset medium -c:a aac <repo>\\sandbox\\fixtures\\ffmpeg\\clip_rotated.mp4\n    dry-run\n  • resize clip_rotated.mp4 → 480p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_rotated.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mp4\n    dry-run\n  • compress clip_480p.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_480p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_004",
+      "utterance": "trim clip.mp4 to the first 4 seconds, compress it, and remove the audio",
+      "tags": [
+        "hard",
+        "chain3",
+        "trim",
+        "compress",
+        "strip"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:04",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_small.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_small.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_small_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -ss 00:00:00 -to 00:00:04 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nstep 2 of 3:\nffmpeg -y -i clip_trimmed.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_small.mp4\nstep 3 of 3:\nffmpeg -y -i clip_small.mp4 -an -c:v copy clip_small_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:04\",\"output\":\"clip_trimmed.mp4\"}},{\"tool\":\"compress_video\",\"args\":{\"inputs\":[\"clip_trimmed.mp4\"],\"output\":\"clip_small.mp4\"}},{\"tool\":\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:04",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_small.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_small.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_small_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 14.3s\nffmpeg › trim clip.mp4 to the first 4 seconds, compress it, and remove the audio\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:04 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:04 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n  • compress clip_trimmed.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_small.mp4\n    dry-run\n  • strip audio from clip_small.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_small.mp4 -an -c"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_005",
+      "utterance": "downscale clip_4k.mp4 to 1080p, compress it, then mute it",
+      "tags": [
+        "hard",
+        "chain3",
+        "resize",
+        "compress",
+        "strip"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_4k.mp4",
+            "-vf",
+            "scale=-2:1080",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_1080p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_1080p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_1080p_small.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_1080p_small.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_1080p_small_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -i clip_4k.mp4 -vf scale=-2:1080 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_1080p.mp4\nstep 2 of 3:\nffmpeg -y -i clip_1080p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_1080p_small.mp4\nstep 3 of 3:\nffmpeg -y -i clip_1080p_small.mp4 -an -c:v copy clip_1080p_small_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_4k.mp4\"],\"height\":1080,\"output\":\"clip_1080p.mp4\"}},{\"tool\":\"compress_video\",\"args\":{\"inputs\":[\"clip_1080p.mp4\"],\"output\":\"clip_1080p_small.mp4\"}},{\"tool\":\"strip_audio\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_4k.mp4",
+            "-vf",
+            "scale=-2:1080",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_1080p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_1080p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_1080p_small.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_1080p_small.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_1080p_small_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 15.9s\nffmpeg › downscale clip_4k.mp4 to 1080p, compress it, then mute it\n  mode: dry-run (no files will be modified)\n  • resize clip_4k.mp4 → 1080p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_4k.mp4 -vf scale=-2:1080 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_1080p.mp4\n    dry-run\n  • compress clip_1080p.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_1080p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_1080p_small.mp4\n    dry-run\n  • strip audio from clip_1080p_small.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_1080p_small.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ff"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_006",
+      "utterance": "speed up clip.mp4 to 2x, resize it to 480p, and compress it",
+      "tags": [
+        "hard",
+        "chain3",
+        "speed",
+        "resize",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "setpts=0.5*PTS",
+            "-af",
+            "atempo=2.0",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_fast.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_fast.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_fast_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_fast_480p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_fast_480p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -i clip.mp4 -vf setpts=0.5*PTS -af atempo=2.0 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k clip_fast.mp4\nstep 2 of 3:\nffmpeg -y -i clip_fast.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_fast_480p.mp4\nstep 3 of 3:\nffmpeg -y -i clip_fast_480p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_fast_480p_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"adjust_speed\",\"args\":{\"inputs\":[\"clip.mp4\"],\"speed\":2.0,\"output\":\"clip_fast.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_fast.mp4"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "setpts=0.5*PTS",
+            "-af",
+            "atempo=2.0",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast_480p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast_480p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast_480p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 14.8s\nffmpeg › speed up clip.mp4 to 2x, resize it to 480p, and compress it\n  mode: dry-run (no files will be modified)\n  • adjust the speed of clip.mp4 by 2.0x\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf setpts=0.5*PTS -af atempo=2.0 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast.mp4\n    dry-run\n  • resize clip_fast.mp4 → 480p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast_480p.mp4\n    dry-run\n  • compress clip_fast_480p.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast_480p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yu"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_007",
+      "utterance": "convert clip.mov to mp4, scale it to 360p, then compress it",
+      "tags": [
+        "hard",
+        "chain3",
+        "convert",
+        "resize",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "scale=-2:360",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_360p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_360p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_360p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -i clip.mov -c copy -movflags +faststart clip.mp4\nstep 2 of 3:\nffmpeg -y -i clip.mp4 -vf scale=-2:360 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_360p.mp4\nstep 3 of 3:\nffmpeg -y -i clip_360p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_360p_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip.mov\"],\"container\":\"mp4\",\"output\":\"clip.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"height\":360,\"keep_aspect_ratio\":true,\"output\":\"clip_360p.mp4\"}},{\"tool\":\"compress_vi"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "scale=-2:360",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_360p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_360p.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_360p_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 16.1s\nffmpeg › convert clip.mov to mp4, scale it to 360p, then compress it\n  mode: dry-run (no files will be modified)\n  • convert clip.mov → MP4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -c copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4\n    dry-run\n  • resize clip.mp4 → 360p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf scale=-2:360 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_360p.mp4\n    dry-run\n  • compress clip_360p.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_360p.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_360p_compressed.mp4\n   "
+      }
+    },
+    {
+      "id": "ffmpeg_hard_008",
+      "utterance": "trim clip.mp4 to the first 6 seconds, resize it to 540p, and drop the audio",
+      "tags": [
+        "hard",
+        "chain3",
+        "trim",
+        "resize",
+        "strip"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:06",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_trimmed.mp4",
+            "-vf",
+            "scale=-2:540",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_540p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_540p.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_540p_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nffmpeg -y -ss 00:00:00 -to 00:00:06 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart clip_trimmed.mp4\nstep 2 of 3:\nffmpeg -y -i clip_trimmed.mp4 -vf scale=-2:540 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_540p.mp4\nstep 3 of 3:\nffmpeg -y -i clip_540p.mp4 -an -c:v copy clip_540p_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:06\",\"output\":\"clip_trimmed.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_trimmed.mp4\"],\"height\":540,\"keep_aspect_ratio"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:06",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_trimmed.mp4",
+            "-vf",
+            "scale=-2:540",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_540p.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_540p.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_540p_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 17.6s\nffmpeg › trim clip.mp4 to the first 6 seconds, resize it to 540p, and drop the audio\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:06 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:06 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4\n    dry-run\n  • resize clip_trimmed.mp4 → 540p\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_trimmed.mp4 -vf scale=-2:540 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_540p.mp4\n    dry-run\n  • strip audio from clip_540p.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_540p.mp4 -an -c:v co"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_014",
+      "utterance": "convert clip.mov to mp4 and remove its audio",
+      "tags": [
+        "hard",
+        "chain2",
+        "convert",
+        "strip",
+        "terse_no_audio"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mov -c copy -movflags +faststart clip.mp4\nstep 2 of 2:\nffmpeg -y -i clip.mp4 -an -c:v copy clip_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_video\",\"args\":{\"inputs\":[\"clip.mov\"],\"container\":\"mp4\",\"output\":\"clip.mp4\"}},{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mov\",\"-c\",\"copy\",\"-movflags\",\"+faststart\",\"clip.mp4\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-an\",\"-c:v\",\"copy\",\"clip_silent.mp4\"]\n"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mov",
+            "-c",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 13.4s\nffmpeg › convert clip.mov to mp4 and remove its audio\n  mode: dry-run (no files will be modified)\n  • convert clip.mov → MP4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mov -c copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4\n    dry-run\n  • strip audio from clip.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_silent.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mov\"], \"container\": \"mp4\", \"output\": \"clip.mp4\"}}, {\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"clip.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mov\", \"-c\", \"copy\", \"-movflags\", \"+faststart\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_015",
+      "utterance": "rotate clip.mp4 90 degrees clockwise then compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "rotate",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "transpose=1",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "clip_rotated.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_rotated.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_rotated_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vf transpose=1 -c:v libx264 -crf 25 -preset medium -c:a aac clip_rotated.mp4\nstep 2 of 2:\nffmpeg -y -i clip_rotated.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_rotated_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"angle\":90,\"output\":\"clip_rotated.mp4\"}},{\"tool\":\"compress_video\",\"args\":{\"inputs\":[\"clip_rotated.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"transpose=1\",\"-c:v\",\"libx264\",\"-crf\",\"25\",\"-preset\",\"medium\",\"-c:a\",\"aac\",\"clip_rotated.mp4\"]\n===KNAIF-ARGV===[\"ffmpeg\",\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "transpose=1",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "25",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_rotated.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_rotated.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_rotated_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 11.6s\nffmpeg › rotate clip.mp4 90 degrees clockwise then compress it\n  mode: dry-run (no files will be modified)\n  • rotate clip.mp4 (90°)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf transpose=1 -c:v libx264 -crf 25 -preset medium -c:a aac <repo>\\sandbox\\fixtures\\ffmpeg\\clip_rotated.mp4\n    dry-run\n  • compress clip_rotated.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_rotated.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_rotated_compressed.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"angle\": 90, \"output\": \"clip_rotated.mp4\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"clip_rotated.mp4"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_016",
+      "utterance": "reverse clip.mp4 and resize it to 480p",
+      "tags": [
+        "hard",
+        "chain2",
+        "reverse",
+        "resize"
+      ],
+      "is_chain": true,
+      "status": "not-comparable",
+      "note": "python dry-run emits no command for this intent (compress/platform/thumbnail/batch)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "reverse",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-af",
+            "areverse",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_rev.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_rev.mp4",
+            "-vf",
+            "scale=-2:480",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "clip_rev_resized.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vf reverse -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -af areverse -c:a aac -b:a 128k clip_rev.mp4\nstep 2 of 2:\nffmpeg -y -i clip_rev.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_rev_resized.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reverse_video\",\"args\":{\"inputs\":[\"clip.mp4\"],\"output\":\"clip_rev.mp4\"}},{\"tool\":\"resize_video\",\"args\":{\"inputs\":[\"clip_rev.mp4\"],\"height\":480,\"keep_aspect_ratio\":true}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"reverse\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-pix_fmt\",\"yu"
+      },
+      "python": {
+        "kind": "rendered-none",
+        "commands": [],
+        "plan": [],
+        "text": "planned; dry-run emits no command for this intent",
+        "raw": "intent: 13.3s\nffmpeg › reverse clip.mp4 and resize it to 480p\n  mode: dry-run (no files will be modified)\n  • reverse clip.mp4\n    (nothing to execute)\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reverse_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"output\": \"clip_rev.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_rev.mp4\"], \"height\": 480, \"keep_aspect_ratio\": true}}]}\n"
+      }
+    },
+    {
+      "id": "ffmpeg_hard_017",
+      "utterance": "speed up clip.mp4 by 2x and mute it",
+      "tags": [
+        "hard",
+        "chain2",
+        "speed",
+        "strip"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-vf",
+            "setpts=0.5*PTS",
+            "-af",
+            "atempo=2.0",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "clip_fast.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip_fast.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "clip_fast_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -vf setpts=0.5*PTS -af atempo=2.0 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k clip_fast.mp4\nstep 2 of 2:\nffmpeg -y -i clip_fast.mp4 -an -c:v copy clip_fast_silent.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"adjust_speed\",\"args\":{\"inputs\":[\"clip.mp4\"],\"speed\":2.0,\"output\":\"clip_fast.mp4\"}},{\"tool\":\"strip_audio\",\"args\":{\"inputs\":[\"clip_fast.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-vf\",\"setpts=0.5*PTS\",\"-af\",\"atempo=2.0\",\"-c:v\",\"libx264\",\"-crf\",\"23\",\"-preset\",\"medium\",\"-c:a\",\"aac\",\"-b:a\",\"128k\",\"clip_fast.mp4\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip_fast.mp4\",\"-an\",\"-c:v"
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-vf",
+            "setpts=0.5*PTS",
+            "-af",
+            "atempo=2.0",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast.mp4",
+            "-an",
+            "-c:v",
+            "copy",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_fast_silent.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 12.4s\nffmpeg › speed up clip.mp4 by 2x and mute it\n  mode: dry-run (no files will be modified)\n  • adjust the speed of clip.mp4 by 2.0x\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf setpts=0.5*PTS -af atempo=2.0 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast.mp4\n    dry-run\n  • strip audio from clip_fast.mp4\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast.mp4 -an -c:v copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_fast_silent.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"adjust_speed\", \"args\": {\"inputs\": [\"clip.mp4\"], \"speed\": 2.0, \"output\": \"clip_fast.mp4\"}}, {\"tool\": \"strip_audio\", \"args\": {\"inputs\": [\"clip_fast.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\fixtures\\\\ffmpeg\\\\clip.mp"
+      }
+    },
+    {
+      "id": "ffmpeg_301",
+      "utterance": "make a thumbnail of clip.mp4 and compress clip.mp4",
+      "tags": [
+        "complex",
+        "fan_out",
+        "thumbnail",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-ss",
+            "00:00:01",
+            "-vframes",
+            "1",
+            "clip_thumb.jpg"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "clip_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -i clip.mp4 -ss 00:00:01 -vframes 1 clip_thumb.jpg\nstep 2 of 2:\nffmpeg -y -i clip.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart clip_compressed.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"create_thumbnail\",\"args\":{\"input\":\"clip.mp4\",\"output\":\"clip_thumb.jpg\"}},{\"tool\":\"compress_video\",\"args\":{\"inputs\":[\"clip.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-ss\",\"00:00:01\",\"-vframes\",\"1\",\"clip_thumb.jpg\"]\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-i\",\"clip.mp4\",\"-c:v\",\"libx264\",\"-crf\",\"28\",\"-preset\",\"slow\",\"-pix_fmt\",\"yuv420p\",\"-c:a\",\"aac\",\"-b:a\",\"96k\",\"-movflags\",\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-ss",
+            "00:00:01",
+            "-vframes",
+            "1",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_thumb.jpg"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "28",
+            "-preset",
+            "slow",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/clip_compressed.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 11.9s\nffmpeg › make a thumbnail of clip.mp4 and compress clip.mp4\n  mode: dry-run (no files will be modified)\n  • create a thumbnail from clip.mp4 at 00:00:01\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -ss 00:00:01 -vframes 1 <repo>\\sandbox\\fixtures\\ffmpeg\\clip_thumb.jpg\n    dry-run\n  • compress clip.mp4 (CRF 28, slow preset)\n    $ ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"create_thumbnail\", \"args\": {\"input\": \"clip.mp4\", \"output\": \"clip_thumb.jpg\"}}, {\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"clip.mp4\"]}}]}\n===KNAIF-ARGV===[\"ffmpeg\", \"-y\", \"-i\", \"<repo>\\\\sandbox\\\\f"
+      }
+    },
+    {
+      "id": "ffmpeg_302",
+      "utterance": "trim clip.mp4 from 0 to 2 seconds as part1.mp4 and trim clip.mp4 from 4 to 7 seconds as part2.mp4",
+      "tags": [
+        "complex",
+        "fan_out",
+        "trim"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "equivalent (paths differ: native relative, python absolute)",
+      "native": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:02",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "part1.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:04",
+            "-to",
+            "00:00:07",
+            "-i",
+            "clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "part2.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nffmpeg -y -ss 00:00:00 -to 00:00:02 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart part1.mp4\nstep 2 of 2:\nffmpeg -y -ss 00:00:04 -to 00:00:07 -i clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart part2.mp4\nℹ  NVIDIA GeForce RTX 5080: CUDA offload is available and faster than the bundled Vulkan backend, which\n   already works here. Optional:  knaif backend install cuda\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:00\",\"end\":\"00:00:02\",\"output\":\"part1.mp4\"}},{\"tool\":\"trim_video\",\"args\":{\"input\":\"clip.mp4\",\"start\":\"00:00:04\",\"end\":\"00:00:07\",\"output\":\"part2.mp4\"}}]}\n===KNAIF-ARGV===[\"ffmpeg\",\"-y\",\"-ss\",\"00:00:00\",\"-to\",\"00:00:02\",\""
+      },
+      "python": {
+        "kind": "commands",
+        "commands": [
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:00",
+            "-to",
+            "00:00:02",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/part1.mp4"
+          ],
+          [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            "00:00:04",
+            "-to",
+            "00:00:07",
+            "-i",
+            "<repo>/sandbox/fixtures/ffmpeg/clip.mp4",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "medium",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "<repo>/sandbox/fixtures/ffmpeg/part2.mp4"
+          ]
+        ],
+        "plan": [],
+        "text": "",
+        "raw": "intent: 16.9s\nffmpeg › trim clip.mp4 from 0 to 2 seconds as part1.mp4 and trim clip.mp4 from 4 to 7 seconds as part2.mp4\n  mode: dry-run (no files will be modified)\n  • trim from 00:00:00 to 00:00:02 from clip.mp4\n    $ ffmpeg -y -ss 00:00:00 -to 00:00:02 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\part1.mp4\n    dry-run\n  • trim from 00:00:04 to 00:00:07 from clip.mp4\n    $ ffmpeg -y -ss 00:00:04 -to 00:00:07 -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\part2.mp4\n    dry-run\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp"
+      }
+    }
+  ]
+}

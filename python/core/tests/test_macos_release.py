@@ -207,6 +207,27 @@ def test_release_runs_f2_in_order(apple) -> None:
 
 
 @execs_fakes_from_python
+def test_release_refuses_a_tree_that_carries_the_builders_home(apple) -> None:
+    """Nothing is signed or sent to Apple when the staged tree names the person who built it.
+
+    2026-10-06: `package.sh`'s guard stopped a build made under the builder's home directory, but
+    only after staging; `release.sh` then signed and notarized `dist/staging` as it was, and the
+    signed `knaif` and `libggml` each carried one home path (llama.cpp's backend folder).
+    """
+    stage, env, log = apple
+    home = "/Users/alice"  # never a runner account, so the checker forbids it on CI too
+    exe = stage / "bin" / "knaif"
+    exe.write_bytes(exe.read_bytes() + f"{home}/src/knaif/target/release-metal/backends".encode())
+    proc = _run("release.sh", ["--stage", stage.as_posix()], {**env, "HOME": home})
+    assert proc.returncode != 0, proc.stdout + proc.stderr
+    assert "home directory" in proc.stdout + proc.stderr
+    lines = log.read_text().splitlines() if log.exists() else []
+    assert not [
+        line for line in lines if line.startswith(("codesign sign", "notarytool"))
+    ], "the tree was signed or submitted before the path check"
+
+
+@execs_fakes_from_python
 def test_a_rejected_notarization_stops_before_stapling(apple) -> None:
     stage, env, log = apple
     env = {**env, "FAKE_STATUS": "Invalid"}
@@ -352,6 +373,9 @@ def room(tmp_path: Path):
         z.writestr("knaif-9.9.9-macos-arm64/contracts/x.yaml", "x")
     (tmp_path / "home").mkdir()
     (tmp_path / "scratch").mkdir()
+    # Where the room looks for brew. The real /opt/homebrew can't be faked through PATH, and the Mac
+    # running these tests usually has one, so the room is pointed at an empty stand-in.
+    (tmp_path / "brew-bin").mkdir()
     room_dir = tmp_path / "room"
     room_dir.mkdir()
 
@@ -372,6 +396,7 @@ def room(tmp_path: Path):
             "FAKE_MACOS": "12.7.6",
             "FAKE_XATTRS": tmp_path.joinpath("xattrs").as_posix(),
             "FAKE_PY": _posix(Path(sys.executable)),
+            "KNAIF_ROOM_BREW_DIRS": tmp_path.joinpath("brew-bin").as_posix(),
             **extra,
         }
         args = ["--zip", zpath.as_posix(), "--fixtures", fixtures.as_posix(), "--model", "m.gguf"]
@@ -410,6 +435,18 @@ def test_the_clean_room_fails_off_the_floor(room) -> None:
     proc, results, _ = room(FAKE_MACOS="14.5")
     assert proc.returncode == 1
     assert "FAIL room_floor" in results
+
+
+def test_the_clean_room_fails_where_homebrew_is_installed(room, tmp_path: Path) -> None:
+    _exe(tmp_path / "brew-bin" / "brew", "exit 0\n")
+    proc, results, _ = room()
+    assert proc.returncode == 1
+    assert "FAIL room_no_brew" in results
+
+
+def test_the_clean_room_looks_for_brew_where_homebrew_installs_it() -> None:
+    text = (MACOS / "clean-room.sh").read_text(encoding="utf-8")
+    assert "KNAIF_ROOM_BREW_DIRS:-/opt/homebrew/bin /usr/local/bin" in text
 
 
 def test_the_clean_room_fails_when_the_real_run_fails(room) -> None:

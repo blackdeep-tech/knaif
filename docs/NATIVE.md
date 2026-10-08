@@ -100,6 +100,31 @@ domain (accepted by ffmpeg and `std::path` on Windows). Root cause is the traini
 skills train only on bare filenames, never a slashed path, so the model has no learned
 escaping behavior and copies the utterance substring verbatim.
 
+### 4.1 Output: the terminal view and the plain view
+
+`run` has two renderings, chosen once per process (`apps/cli/src/ui.rs`):
+
+- **Terminal view**, when stdout *and* stderr are terminals: the run is drawn as a tree — header,
+  `Planning` (model load and inference timed separately), the plan, then each step with the command
+  it runs, its result and its time, and a closing `Done · … · total x.xxx s`. Time spent at a
+  confirmation prompt is not counted in the total. Colors are used when the terminal takes them;
+  `NO_COLOR` turns them off. A question or refusal closes the tree itself (`? I need more detail:`,
+  `⊘ I won't do that:`). In this view llama.cpp's own output is discarded (the process's stderr is
+  pointed at the null device while the model loads and runs, and the spinner draws on a private copy
+  of it); `--verbose` leaves it all on, and also shows the full error chain and ffmpeg's whole stderr.
+- **Plain view**, in every other case (a pipe, a redirect, the L4 eval lane): the lines 1.2.0
+  printed — `step N of M:`, `running: <argv>`, `✓ <file>`, `✗ <file> (ffmpeg exited …)`,
+  `clarify: …`, `reject: …`. `apps/cli/tests/plain_output_golden.rs` pins them, because
+  `python/core/knaif/evalsuite/native_lane.py` and users' scripts read them.
+
+While ffmpeg runs, the terminal view draws a live progress line (media time done of the total, a bar,
+speed, wall time) fed by ffmpeg's `-progress` stream, and warns before a step replaces a file that
+already exists. Hardware advisories (no GPU backend, the CUDA offer) are framed and colored.
+
+`KNAIF_VIEW=rich|plain` overrides the detection (`plain` inside a terminal, `rich` through a pipe
+to test or demonstrate the tree). The debug dumps (`KNAIF_DUMP_PLAN`, `KNAIF_DEBUG`, the prompt
+dump) switch the stderr silencing off, since they are stderr by contract.
+
 ## 5. Inference
 
 ### 5.1 Backend abstraction
@@ -163,6 +188,10 @@ payload in enables GPU offload next run, and a CUDA-present-but-no-usable-GPU bo
   the loader skips the whole directory with a message naming the fix when the stamp does not match
   the running binary, or when a previous install did not finish. Install-time pinning alone cannot
   cover this: the mismatch exists *before* any `backend install` could run.
+  Everything compares against the **running binary's** version, never the manifest's: the manifest
+  is found by walking up from the current directory, so inside a checkout of another release it is
+  that release's. `backend list` and the CUDA notice once judged by it and called a current payload
+  stale; `backend install` now refuses a manifest whose `knaif_version` is not the binary's.
   A directory with **no receipt** still loads — that is the documented manual route (build a payload
   and drop it in), which is how `backend install` itself gets debugged.
 
@@ -560,6 +589,8 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 | `KNAIF_MAX_TOKENS` | Generation cap | `512` |
 | `KNAIF_TIMING` | Print `[knaif-timing]` per-phase inference timing to stderr | off |
 | `KNAIF_DEBUG` | Dump raw model output on a parse/validate failure | off |
+| `KNAIF_VIEW` | `rich` or `plain`: force the terminal view or the plain lines (§4.1) | detected |
+| `NO_COLOR` | Any non-empty value turns colors off in the terminal view | unset |
 
 ## 12. Known limitations & roadmap
 

@@ -1,0 +1,18 @@
+== win ffmpeg
+sample 47: 47 identical, 0 different
+VERDICT: equivalent on the sample
+== win documents
+sample 31: 31 identical, 0 different
+VERDICT: equivalent on the sample
+== python ffmpeg
+sample 43: 43 identical, 0 different
+VERDICT: equivalent on the sample
+== python documents
+sample 31: 31 identical, 0 different
+VERDICT: equivalent on the sample
+== linux ffmpeg
+sample 47: 47 identical, 0 different
+VERDICT: equivalent on the sample
+== linux documents
+sample 31: 31 identical, 0 different
+VERDICT: equivalent on the sample

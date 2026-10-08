@@ -1,0 +1,23 @@
+tools-online run 2026-10-02T17:03:33
+17:03:33 Smart App Control: 1 (1 = enforcing)
+17:03:34 network: HTTP 200
+17:03:40 FFmpeg
+17:03:48   ffmpeg signatures: NotSigned=3
+17:03:57   ffmpeg -version : BLOCKED Program 'ffmpeg.exe' failed to run: An Application Control policy has blocked this fileAt C:\t\in\test.ps1:45 char:26
++ Try1 'ffmpeg -version' { & "$bin\ffmpeg.exe" -version }
++                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~.
+17:04:19   knaif ffmpeg run: exit 1; mkv exists False
+17:04:21   ffmpeg CI blocked: [ffmpeg.exe, ffprobe.exe]
+17:04:21 Ghostscript
+17:04:25   installer: exit 2
+17:04:25   installed: False
+17:04:28   ghostscript CI blocked: [System.dll]
+17:04:28 LibreOffice
+17:07:36   msiexec: exit 0
+17:07:36   installed: True
+17:07:41   libreoffice signatures: NotSigned=15 Valid=175
+17:07:41   soffice --version : exit 0 :: LibreOffice 26.8.0.3 bce0998afefdbc355585ca324285661a2170ba77
+17:08:00   knaif convert run: exit 0; made [sample-1.pdf]
+17:08:02   libreoffice CI blocked: []
+17:08:02 Smart App Control at end: 1
+17:08:02 DONE

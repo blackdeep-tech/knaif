@@ -119,7 +119,7 @@ backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on 
 | **macOS** | not yet — core is cross-platform, packaging is a fast-follow |
 | **GPU** | CPU and Vulkan in every artifact; NVIDIA cards add CUDA with `knaif backend install cuda` |
 | **Skills** | `ffmpeg` and `documents` are production; `io` is stale and under rebuild |
-| **Windows binaries** | unsigned — SmartScreen will warn (More info → Run anyway; verify the checksum first) |
+| **Windows binaries** | signed by Blackdeep Technologies Ltd — SmartScreen may still warn on a new release until it builds download reputation (More info → Run anyway; verify the checksum first) |
 | **Python package** | on PyPI as [`knaif`](https://pypi.org/project/knaif/) — `pip install knaif` |
 
 External tools are **not bundled**. Skills that shell out to FFmpeg need FFmpeg installed.
@@ -261,6 +261,13 @@ The list below is generated from each skill's `skill.yaml` by
 Security issues go through [`SECURITY.md`](SECURITY.md), never a public issue.
 Found a case where it plans the wrong thing? That's the
 [most useful issue you can file](https://github.com/blackdeep-tech/knaif/issues/new/choose).
+
+## Disclaimer
+
+knaif's plans come from a small AI model and can be wrong: read the plan and the command before you
+confirm, and keep backups, because knaif writes files and can replace existing ones. Supporting
+tools (FFmpeg, LibreOffice, Ghostscript, Tesseract) are third-party software under their own
+licenses. knaif and its models are provided "as is", without warranty, under the license below.
 
 ## License
 

@@ -72,3 +72,43 @@ def api_equiv_usd(
         + (output or 0) * r["output"]
     )
     return round(total / 1_000_000, 4)
+
+
+# ── 2026-10-01 rerun (docs/plans/2026-10-01-llm-comparison-rerun.md) ─────────────────────
+#
+# Official API rates per 1M tokens, captured 2026-10-01 from
+#   https://platform.claude.com/docs/en/about-claude/pricing      (Anthropic)
+#   https://developers.openai.com/api/docs/pricing                 (OpenAI, standard tier)
+#
+# Unlike the 2026-07-02 method above, every arm is priced at the rate its provider actually
+# charges for what its CLI did. Claude Code writes to the 1-HOUR prompt cache: only the 1h
+# write rate (2x input) reproduces the CLI's own `total_cost_usd` (smoke rows, 2026-10-01:
+# Opus $0.3948, Sonnet $0.0747), and every Claude row of the run is checked against it.
+# OpenAI has no cache-write charge. Its rates are the short-context tier (<=272K input tokens
+# per API call; an agent session is several calls, each far below that). Codex's
+# `output_tokens` already includes reasoning tokens, so reasoning is not added again.
+# Copilot reports GitHub credits, not dollars: its tokens are priced at OpenAI's API rate for
+# the model it ran.
+RATES_2026_10: dict[str, dict[str, float]] = {
+    "claude-opus-5-5": {"input": 4.00, "cache_read": 0.20, "cache_write": 8.00, "output": 20.00},
+    "claude-sonnet-5-5": {"input": 2.00, "cache_read": 0.20, "cache_write": 4.00, "output": 10.00},
+    "gpt-6-astra": {"input": 10.00, "cache_read": 1.00, "cache_write": 10.00, "output": 50.00},
+    "gpt-6.1-sol": {"input": 2.00, "cache_read": 0.10, "cache_write": 2.00, "output": 10.00},
+    "gpt-5.6-terra": {"input": 2.00, "cache_read": 0.20, "cache_write": 2.00, "output": 12.00},
+}
+
+
+def api_cost_2026_10(
+    model: str, uncached_in: int, cache_read: int, cache_write: int, output: int
+) -> float | None:
+    """API-equivalent USD at the 2026-10-01 rates; None for a model with no published price."""
+    r = RATES_2026_10.get(model)
+    if r is None:
+        return None
+    total = (
+        (uncached_in or 0) * r["input"]
+        + (cache_read or 0) * r["cache_read"]
+        + (cache_write or 0) * r["cache_write"]
+        + (output or 0) * r["output"]
+    )
+    return total / 1_000_000
