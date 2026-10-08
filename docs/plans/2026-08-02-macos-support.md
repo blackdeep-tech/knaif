@@ -175,6 +175,75 @@ history. The files are unchanged: `8cbab23` is `8f09735` (2026-10-07 runs), `bdd
 re-run it names was superseded by the 2026-10-05 and 2026-10-07 runs. The run records keep the IDs
 the tools wrote.
 
+**Next round for the Mac (from 2026-10-08).** `release/1.3.0` (1.3.0's daemon, run prompting and
+Windows fixes) is merged into `feat/macos-support`. Both branches must be in `release/1.3.0` before
+the freeze, so the owner opens the PR `feat/macos-support` → `release/1.3.0` now, not at §13.
+Two rounds remain: a rehearsal now, and the evidence on the frozen 1.3.0.
+
+*The rule for every change.* Change only the macOS implementation: `installers/macos/**`,
+`scripts/check_macos_signing.py`, `scripts/check_macho_deps.py`, the `Darwin`/`macos` branches of
+shared build scripts, the `macos:` blocks in `skill.yaml`, the `mac-*` lanes in `eval_backends.yaml`,
+macOS docs, and your own `evals/` records. Anything else (native crates, skill code, Python,
+contracts, the gate, shared scripts, CI for other platforms) you **report, not fix**, as a block at
+the end of this section, and keep working around it:
+
+```markdown
+**Finding <YYYY-MM-DD>: <one line>**
+- Where: <file:line, or the command>
+- Seen: <exact output, or row id and verdict>
+- Expected: <what should happen, and why: Python's result, a doc, a rule>
+- Platforms: macOS only | probably every platform (why)
+- Evidence: <evals/... path, or a log excerpt>
+- Suggested fix (not applied): <optional>
+```
+
+*Before any work.*
+1. Sync your fork's mirror once the owner says it is pushed: `git fetch upstream && git checkout
+   feat/macos-support && git merge --ff-only upstream/feat/macos-support && git push origin
+   feat/macos-support`. It fast-forwards: #82 is already inside it.
+2. Work and build from a checkout **outside your home folder** (`/Users/Shared/knaif`, E5).
+3. Before every push, both addresses must be your GitHub noreply address: `git log --format='%ae
+   %ce' upstream/feat/macos-support..HEAD` prints nothing else.
+
+*Round 1, now — rehearsal (version still 1.2.1, nothing here is release evidence).*
+1. Step 1's checks on the merged tree (`just check-native`, `just test-native`, the installer tests
+   under bash 3.2). New since your last build: `knaif daemon start | stop | status` and
+   `run --daemon` (loopback TCP, its token in `~/.knaif/daemon.json`, a 10-minute idle timeout).
+2. `just release-macos` from `/Users/Shared`. Its home-path guard must pass; keep `dist/notary/`.
+3. **Step 10, the clean room**, on those files: the three tart runs (`installers/macos/README.md`),
+   then Metal from a fresh user account. Add one case 1.3.0 brings: with a daemon started from the
+   installed knaif, reinstall the `.pkg` over it and uninstall; each must stop the daemon and
+   leave no `knaif` process running. **The `.pkg` does not do this yet**: the Windows installer
+   runs `knaif daemon stop` first (`StopDaemon` in `installers/windows/knaif.iss`); the core
+   preinstall and `uninstall.sh` need the same, run as the console user, since the daemon and its
+   `~/.knaif` belong to that user. A macOS-implementation change, so it is yours if the Windows
+   box has not landed it before this round.
+4. Record under E3, E4, E6, PR into `feat/macos-support`, and hand back. Do not re-run L3/L4 now:
+   the freeze changes the binary again, and only the frozen build counts.
+
+*Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
+Work from that commit, not from `feat/macos-support`. The rules are the release plan's
+[pre-registered gate rules](2026-09-30-release-1.3.0.md#gate-decision-rules-pre-registered-2026-10-07-before-any-130-evidence-run):
+copy them verbatim into your `run_all.sh`, as the Windows and Linux scripts do, and change none of
+them after a result. Launch each stage only after the owner approves it with its time budget.
+1. `just release-macos` from `/Users/Shared` at the freeze commit; record the sha256 of the signed
+   `.zip` and `.pkg`. Everything below runs on that `.zip`.
+2. **L4 Metal**, both models × both skills, with `KNAIF_NO_DAEMON=1` (step 5's commands). The
+   1.7B ffmpeg `batch` miss is waived by the rule; any other miss goes to the owner.
+3. **The macOS CPU cell is composed, as 1.2.0 did it** (owner, 2026-10-07): run the `t15_sample`
+   rows on `mac-cpu-<model>` and both safety sets on that binary. The Windows box composes them
+   into your Metal board and grades the cell; flips are reported, not a verdict.
+4. **Daemon plan equality**, both models: `knaif plan --skill <skill> --batch <utterances> --json`
+   over each skill's whole `eval.jsonl`, once with `KNAIF_NO_DAEMON=1` and once through
+   `knaif daemon start`. The outputs must be byte-identical; the method is in
+   `evals/parity/2026-10-06_daemon-plan-equality/README.md`. A difference goes to the owner.
+5. **L3 on Metal** (step 7), recorded, not gated: the gate's L3 is the CUDA run on Windows.
+6. **Step 10 again** on the frozen files, the rehearsal's cases included.
+7. Commit the boards, safety files and verdicts under `evals/runs/<date>_r130-macos_success/`
+   (the parity ones under `evals/parity/`), one row per run in `evals/INDEX.md`, and PR them into
+   **`release/1.3.0`**. Evidence and macOS notes only. Code changes go to the owner first, by the
+   rule above.
+
 **Needs the owner:**
 1. **1.7B ffmpeg misses `batch`** by one row (25/29 against 0.896, the 1.7B's own Python score). The
    same rows fail in both Mac runs; three fail on every 1.2.0 platform, and 1.2.0 recorded the same
@@ -197,13 +266,15 @@ the tools wrote.
    `<model>|macos|mtl` (C4). *(Corrected 2026-10-06: this item first said `platforms.yaml` had no
    macOS entry, which was wrong.)*
 5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
+   **Decided 2026-10-07 (owner): composed, as 1.2.0 did it**; flips are reported, not a verdict.
 6. **Certificates and notary credentials**: received and working (F1, 2026-10-06).
 
 **Stale since the 1.2.1 merge (#10).** 1.2.1 changed native code, so `just check-gate` reads L3/L4
 stale for the Windows and Linux cells; L1/L2 were re-recorded on the merged tree. **The macOS L3/L4
 were re-run on that tree on 2026-10-05** with the same decisions as before (C4, C5); its four
 `macos|mtl` cells are current. They need re-running again only if the native code changes once more
-(for example a `documents_105` fix).
+(for example a `documents_105` fix). **Stale again since 2026-10-08**: the merge of `release/1.3.0`
+changed native code. They are re-run once, on the frozen 1.3.0 (*Next round*, round 2), not before.
 
 **Still needs a person:** the installer's screens judged by whoever installs (E6); the first-run
 shader tax from a fresh user account (D3); D4 on an 8 GB Mac; D5's OpenMP comparison; and step 10's
