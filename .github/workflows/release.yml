@@ -42,7 +42,13 @@ name: Package
 on:
   pull_request:
     # Not every PR — a docs or site change cannot break packaging, and this job is measured
-    # in tens of minutes. These are the paths that can.
+    # in tens of minutes. Only PRs into a release line: a feature branch merging into another
+    # (a contributor's fork into feat/macos-support) is packaged when its own PR into
+    # release/* or main opens, rather than on every push (owner, 2026-10-08).
+    branches:
+      - main
+      - "release/**"
+    # These are the paths that can.
     paths:
       - "installers/**"
       - "apps/**"
@@ -56,6 +62,8 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # By hand on any branch: Actions → Package → Run workflow.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

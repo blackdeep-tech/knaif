@@ -2,7 +2,8 @@
 
 How releases are developed on branches, then how to build, package, verify, and publish one. CI
 (`ci.yml`) runs on every PR, including PRs into `release/*`, and `main` requires its `ci` check.
-`release.yml` packages Linux on PRs that touch packaging paths and uploads to a **draft** Release on
+`release.yml` packages Linux on PRs into `main` or `release/*` that touch packaging paths (and by hand,
+from the Actions tab, on any branch) and uploads to a **draft** Release on
 a `v*.*.*` tag. It never publishes: the tag, the public Release and the PyPI upload stay manual,
 because none of them can be undone. Windows artifacts are built by hand (§2).
 
@@ -213,7 +214,8 @@ from a 9p mount, and `.gitattributes` line endings are correct. `--dev` mounts t
 for iterating on packaging; never publish what it produces.
 
 **CI builds this half too** — [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-runs the same script on every PR that touches packaging, and on a `v*.*.*` tag attaches the result
+runs the same script on every PR into `main` or `release/*` that touches packaging (a PR between
+feature branches waits for its branch's own PR, or a manual run), and on a `v*.*.*` tag attaches the result
 to a **draft** release. It is a packaging *check* that happens to upload: the value is catching
 breakage on the PR that caused it rather than on release day. It never publishes, and it never
 generates `SHA256SUMS` — see §5.
