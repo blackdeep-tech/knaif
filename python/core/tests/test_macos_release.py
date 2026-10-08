@@ -342,6 +342,12 @@ FAKE_KNAIF = r"""
 case "$1" in
   --version) echo "knaif 9.9.9" ;;
   run)
+    # As knaif does: a --model that is not a file from here is a name, and m.gguf is no name.
+    prev=""
+    for a in "$@"; do
+      [ "$prev" = --model ] && { [ -f "$a" ] || { echo "model $a not found" >&2; exit 9; }; }
+      prev="$a"
+    done
     [ -e "$(dirname "$0")/libggml-metal.so" ] && echo "offloaded 37/37 layers to MTL" >&2
     [ "${FAKE_RUN_EXIT:-0}" = 0 ] || exit "$FAKE_RUN_EXIT"
     printf '%%PDF-1.7' > rotated.pdf
@@ -378,6 +384,8 @@ def room(tmp_path: Path):
     (tmp_path / "brew-bin").mkdir()
     room_dir = tmp_path / "room"
     room_dir.mkdir()
+    # Copied in beside the script, as the README does, and named relative to it.
+    (room_dir / "m.gguf").write_bytes(b"GGUF")
 
     def run(**extra: str):
         env = {

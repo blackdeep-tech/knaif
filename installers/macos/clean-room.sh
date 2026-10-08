@@ -51,6 +51,9 @@ if [ -z "$ZIP$PKG" ] || { [ -n "$ZIP" ] && [ -n "$PKG" ]; }; then
   exit 2
 fi
 [ -f "$FIXTURES/sample.pdf" ] || { echo "--fixtures DIR must hold sample.pdf" >&2; exit 2; }
+# The runs below work in a scratch folder, and knaif reads a --model that is not a file from there as
+# a model name: give a file path absolutely.
+[ -f "$MODEL" ] && MODEL="$(cd "$(dirname "$MODEL")" && pwd)/$(basename "$MODEL")"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SMOKE="$HERE/smoke.sh"
 [ -f "$SMOKE" ] || { echo "copy installers/smoke.sh next to this script" >&2; exit 2; }
