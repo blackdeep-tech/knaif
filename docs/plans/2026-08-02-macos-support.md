@@ -209,17 +209,48 @@ the end of this section, and keep working around it:
 1. Step 1's checks on the merged tree (`just check-native`, `just test-native`, the installer tests
    under bash 3.2). New since your last build: `knaif daemon start | stop | status` and
    `run --daemon` (loopback TCP, its token in `~/.knaif/daemon.json`, a 10-minute idle timeout).
-2. `just release-macos` from `/Users/Shared`. Its home-path guard must pass; keep `dist/notary/`.
-3. **Step 10, the clean room**, on those files: the three tart runs (`installers/macos/README.md`),
-   then Metal from a fresh user account. Add one case 1.3.0 brings: with a daemon started from the
-   installed knaif, reinstall the `.pkg` over it and uninstall; each must stop the daemon and
-   leave no `knaif` process running. Written on Windows 2026-10-08 and tested there against
-   faked `sudo` and `stat` only: the core preinstall runs the old binary's `knaif daemon stop` as
-   the console user, and `uninstall.sh` as the user who ran sudo (`StopDaemon` in `knaif.iss` is the
-   Windows side). This run is its first on a Mac. Check `ps -ax | grep knaif` after each step, and
-   `/var/log/install.log` for the preinstall's line.
-4. Record under E3, E4, E6, PR into `feat/macos-support`, and hand back. Do not re-run L3/L4 now:
-   the freeze changes the binary again, and only the frozen build counts.
+2. **The signed build.** First move the 2026-10-06 signed files out of `dist/` and rename that
+   `.pkg` `old-1.2.1.pkg`: the new build has the same file names, and run 3 below upgrades from
+   it. (It carries the old home path, but it is only ever installed inside the VM.) Then, from
+   `/Users/Shared/knaif`, with the four `KNAIF_*` variables set as in `installers/macos/README.md`
+   (*Sign, notarize, staple*): `just release-macos`. Its home-path check must pass. Keep `dist/notary/`.
+3. **Step 10, the clean room**, on those files: the three tart runs in `installers/macos/README.md`
+   (*The clean room*), each on a fresh clone, each ending `CLEAN ROOM PASS`:
+   run 1 `--zip`; run 2 `--pkg --offline`, in the VM's own Terminal with networking off; run 3
+   `--pkg --upgrade-from old-1.2.1.pkg`. Keep each run's `clean-room-results.txt` and logs. Both
+   builds say 1.2.1, so run 3's `upgrade_receipt` passes trivially here; it means something at
+   the freeze. (Fixed on Windows 2026-10-08, untested on a Mac: `clean-room.sh` now passes
+   `--model` as an absolute path. Before, its runs looked for the GGUF from a scratch folder, did
+   not find it, and `cpu_run` would have failed.)
+4. **The daemon**, in run 3's VM after it finishes (its uninstall keeps `~/.knaif`). Written on
+   Windows 2026-10-08 and tested only against a faked `sudo` and `stat`; this is its first run on
+   a Mac. The `.pkg`'s preinstall runs the old binary's `knaif daemon stop` as the console user;
+   `uninstall.sh` runs it as the user who ran sudo.
+
+   ```bash
+   cd ~/room
+   sudo installer -pkg knaif-1.2.1-macos-arm64.pkg -target /
+   knaif daemon start --model "$PWD/knaif-qwen3-4b-v2-q4_k_m.gguf"
+   knaif daemon status                                 # running (pid N)
+   sudo installer -pkg knaif-1.2.1-macos-arm64.pkg -target /
+   pgrep -fl 'knaif daemon serve' || echo DAEMON-GONE  # must print DAEMON-GONE
+   grep 'knaif' /var/log/install.log | tail -5         # "knaif daemon stopped.", no "could not stop"
+   knaif daemon start --model "$PWD/knaif-qwen3-4b-v2-q4_k_m.gguf"
+   sudo /usr/local/knaif/uninstall.sh
+   pgrep -fl 'knaif daemon serve' || echo DAEMON-GONE  # must print DAEMON-GONE
+   ```
+
+5. **Metal on the physical Mac, from a fresh user account** (E3's split, D16; D3's first-run
+   cost). Make a standard user in System Settings and log in as them. Bring the `.zip` in the way
+   a browser does (Safari, or `xattr -w com.apple.quarantine` as `clean-room.sh` does) and extract
+   it with Finder. Copy `/Users/Shared/knaif/sandbox/fixtures/documents/sample.pdf` into a work
+   folder and, from there, run twice:
+   `<extracted>/bin/knaif run documents --yes --verbose --model
+   /Users/Shared/knaif/models/knaif-qwen3-4b-v2-q4_k_m.gguf "rotate sample.pdf 90 degrees"`.
+   The first run's time is D3's cold number, the second its warm one; both must show `offloaded
+   N/N layers` on `MTL`.
+6. Record under E3, E4, E6 (and D3 for the times), PR into `feat/macos-support`, and hand back. Do
+   not re-run L3/L4 now: the freeze changes the binary again, and only the frozen build counts.
 
 *Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
 Work from that commit, not from `feat/macos-support`. The rules are the release plan's
