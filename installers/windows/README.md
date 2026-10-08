@@ -82,11 +82,13 @@ dies at process start with `STATUS_DLL_NOT_FOUND`, `0xC0000135`, printing nothin
 
 Per-user install to `%LOCALAPPDATA%\Programs\knaif` (no admin). `core` is mandatory; each skill is
 an optional component. Optional tasks: add to PATH, download the recommended GGUF model, and install
-supporting third-party tools (ffmpeg, Ghostscript, LibreOffice, Tesseract) **via winget** — these are
-never bundled, and each is skipped when already present or when winget is unavailable.
+supporting third-party tools (ffmpeg, LibreOffice, Tesseract) **via winget** — these are
+never bundled, and each is skipped when already present or when winget is unavailable. Ghostscript
+has no checkbox since its package left the winget catalog (2026-10): the finish page reports it and
+`knaif skills deps` names Artifex's download page.
 
 **The task defaults are load-bearing.** ffmpeg defaults *checked* (the ffmpeg skill requires it);
-Ghostscript (AGPL), LibreOffice (~350 MB) and Tesseract default *unchecked*. Through 1.0.1 all four
+LibreOffice (~350 MB) and Tesseract default *unchecked*, as Ghostscript (AGPL) did. Through 1.0.1 all four
 shipped **pre-checked** against that stated intent: the entries used dotted `deps\*` names, which
 declare a parent task that was never defined, and Inno rendered them as children of the preceding
 checked task — discarding both their `unchecked` flag and their group heading. Task names must stay

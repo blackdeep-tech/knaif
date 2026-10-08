@@ -76,10 +76,12 @@ request
 ```
 
 - `--dry-run` previews commands/output paths with no side effects (stubs missing
-  inputs) — **every step of a chain, not just the first**. Execution requires explicit consent
-  (`--yes`, or an interactive `y`); non-interactive execution without `--yes` errors with the
-  preview. Consent is **per step**: a destructive step in the middle of a chain is confirmed as
-  one, so an N-step chain asks N times without `--yes`.
+  inputs) — **every step of a chain, not just the first**. Since 1.3.0 execution **acts without
+  asking**: `--confirm` opts into `Proceed? [Y/n]` (Enter approves; per step, so an N-step chain
+  asks N times); `--yes` is accepted and skips that question. **Replacing an existing file is the one
+  thing that always asks**, whatever `--yes` says: `Replace <file>? [y/N]` (Enter keeps the file),
+  and with no terminal the step stops naming `--overwrite`, the only way to approve it up front.
+  The gate runs before the command, because every rendered ffmpeg command still carries `-y`.
 - **Chains are mediated by files, not variables.** `skills/<name>/prompt.yaml` instructs the model
   to give an earlier step an explicit `output` filename and reuse that same name as the later
   step's input, and never to chain with `$variable` references; `apply_clarify_gate` binds
@@ -336,7 +338,7 @@ was going to work.
 
 **Consent / download.** `run` asks `Download recommended model <name> (~2.5 GB)? [y/N]` (size read
 from the manifest's `size_bytes`) and pulls it with a progress bar on `y`. `--yes` skips the
-question and downloads. When stdin is not a tty and `--yes` was not passed, the run falls back to
+question and downloads (the model download keeps its own `[y/N]` consent). When stdin is not a tty and `--yes` was not passed, the run falls back to
 the mock with first-run guidance — a multi-GB download **never** happens without consent, so CI and
 piped runs never block. Prompts and the progress bar go to **stderr**; stdout stays clean.
 
@@ -349,6 +351,47 @@ so selecting a model could only turn a working mock run into a load error.
 
 Model selection happens **after** request parsing, the safety gate, and dependency preflight, so a
 rejected request never triggers a 2.5 GB download.
+
+### 5.7 Daemon mode
+
+`knaif daemon start | stop | status`, and `knaif run <skill> "..." --daemon`, keep the model loaded in
+a background process between runs. It is **opt-in** and off by default; a run uses a daemon that is
+running and otherwise loads the model itself, exactly as before.
+
+- **What crosses the process boundary is inference only.** The CLI still builds the prompt and
+  validates, repairs, gates and executes the plan; the daemon answers `(system, user) -> raw text`.
+  A plan through the daemon is therefore the plan the same model produces in-process.
+- **One resident model.** `daemon start --model X` loads it; `status` shows model, request count and
+  idle time. Starting for a different model, or from a different build, replaces the running one.
+  `run` borrows the daemon only when the model, the build (version + executable size and mtime) and the
+  generation settings all match; any `KNAIF_MAX_TOKENS` / `KNAIF_N_CTX` / `KNAIF_N_GPU_LAYERS` /
+  `KNAIF_N_THREADS*` override, or `KNAIF_NO_DAEMON=1`, loads in-process instead.
+- **Idle shutdown.** 10 minutes by default (`--idle-minutes`), because a loaded 4B model holds ~3 GB
+  of GPU memory.
+- **Who may talk to it, and to whom.** It listens on `127.0.0.1` on an OS-chosen port, which any local
+  user can reach, so both ends prove they hold a random secret kept in `~/.knaif/daemon.json`
+  (owner-only: mode 0600 on Unix, the user profile's ACL on Windows) **without sending it**: a nonce
+  exchange where the server proves itself first, so a process that grabs the port after a crash learns
+  neither the secret nor the prompt. The folder is always the user's profile (or `KNAIF_DAEMON_DIR`),
+  never derived from a shared override. Unauthenticated connections have a 5 s deadline and a size cap,
+  and do not count as activity.
+- **Failure is a fallback.** No record, a dead process (its record is removed), a mismatch, an I/O
+  error, or a daemon that dies mid-request all mean the CLI loads the model itself. A daemon that
+  answers that the *model* failed is reported, not retried. A daemon is borrowed only when model,
+  build, and a settings fingerprint (model file size/mtime, the loadable-backend folder, prefix reuse)
+  all match. One request is served at a time; a second client waits. Starts are serialised by a lock
+  file, and `daemon stop` returns only when the process has exited.
+- **Installers stop it.** The daemon deliberately does not hold the `knaif-cli-running` mutex, so
+  setup cannot see it; the Windows installer runs `knaif daemon stop` before replacing or removing
+  files. On Linux (tarball/AppImage) stop it before replacing the folder.
+- Logs go to `~/.knaif/daemon.log`. `KNAIF_DAEMON_DIR` moves the state folder (tests).
+- **What it saves depends on the backend.** On CUDA (`5080`, 4B v2, `convert clip.mov to mp4
+  --dry-run`) a run takes 2.64 s in-process and 0.70 s through a warm daemon, the same plan. On a CPU
+  it saves nothing measurable (7.8 s vs 6.2–8.0 s, WSL, 1.7B v2): the model loads in ~0.13 s there,
+  and decoding the 2,445-token prompt (5.6 s) dominates both paths. [PERFORMANCE.md](PERFORMANCE.md) §6.
+- **Prompt-prefix reuse is built but off**: it changed 65 of 1,025 corpus plans, so it fails the
+  plan-equality gate. With it off, every plan through the daemon is byte-identical to in-process
+  (both corpora, `evals/parity/2026-10-06_daemon-plan-equality`).
 
 ## 6. Model management
 
@@ -587,6 +630,9 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 | `KNAIF_N_GPU_LAYERS` | GPU offload layer count (`0` = CPU) | `999` |
 | `KNAIF_N_CTX` | Context / batch size | `8192` |
 | `KNAIF_MAX_TOKENS` | Generation cap | `512` |
+| `KNAIF_NO_DAEMON` | Never use a running model daemon (§5.7) | off |
+| `KNAIF_DAEMON_DIR` | Where the daemon keeps `daemon.json` / `daemon.log` | `~/.knaif` |
+| `KNAIF_PREFIX_REUSE` | `1` keeps the processed start of the previous prompt between requests (§5.7) | off |
 | `KNAIF_TIMING` | Print `[knaif-timing]` per-phase inference timing to stderr | off |
 | `KNAIF_DEBUG` | Dump raw model output on a parse/validate failure | off |
 | `KNAIF_VIEW` | `rich` or `plain`: force the terminal view or the plain lines (§4.1) | detected |
@@ -608,8 +654,9 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 - **macOS** — no installers/notarization; explicitly out for v1.
 - **Linux CPU floor** — the CPU artifact is glibc-linked; a static-musl floor build is a possible
   fast-follow (CUDA/Vulkan need glibc + the vendor driver regardless).
-- **Persistent daemon** — keep the model resident to make repeat GPU calls near-instant
-  (the July "low value for Vulkan" reasoning assumed Vulkan's slow compute, which no longer holds).
+- **Persistent daemon** — built, opt-in (§5.7): repeat GPU runs drop from ~2.6 s to ~0.7 s on CUDA.
+  It saves nothing on a CPU, where the prompt decode is the cost; prompt-prefix reuse, which would
+  address that, changes plans and stays off.
 - **Vulkan decode speed** — *answered 2026-09-25*: Blackwell Vulkan is ~72% of CUDA on the same
   crate as July, most likely a driver fix. Re-measure when the llama.cpp pin or the driver moves.
 - **Execution breadth** — native `run` supports ffmpeg + documents, including image watermark

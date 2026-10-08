@@ -102,6 +102,7 @@ indicatif = "0.17"
 # Terminal input-buffer flush (tcflush) so keystrokes typed during a long silent inference wait
 # don't leak into a later confirm prompt or the shell. Unix only; permissive (MIT/Apache).
 libc = "0.2"
+getrandom = "0.3"
 # Pure-Rust PDF document model (MIT) for the documents skill's structural ops
 # (merge/split/rotate/remove/reorder/inspect) + encryption (encrypt/decrypt, added post-0.34).
 # Permissive per the dependency-license policy.
@@ -123,7 +124,7 @@ image = "0.25"
 # next reboot. Threading pulls Security + Foundation because CreateMutexW's signature names
 # SECURITY_ATTRIBUTES and HANDLE. Already in the graph transitively; these features add nothing
 # measurable to build time.
-windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_Security", "Win32_Foundation"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_System_Registry", "Win32_Security", "Win32_Foundation"] }
 # Embeds VERSIONINFO (and later the icon) into knaif.exe. Declared unconditionally rather than
 # under [target.'cfg(windows)'.build-dependencies]: a build-dependency cfg is evaluated for the
 # HOST, so a Linux->Windows cross build would skip the crate while still targeting Windows, and

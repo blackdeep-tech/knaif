@@ -45,7 +45,7 @@ statuses:
 # the evidence tuple a layer depends on: change one and that layer's record goes stale.
 #
 # Two kinds of member. TREE-SCOPED ones (`contracts`, `python_core`, `bundle`, `corpus`,
-# `verifier`, `settings`, `native`, `grading`) are computed from the working tree by
+# `safety_corpus`, `verifier`, `settings`, `native`, `grading`) are computed from the working tree by
 # `evidence_tuple`. RUN-SCOPED ones (`model`, `native_binary`, `policy`) are facts of a run: L4
 # (`accept-native`) and L3 (`gate --record-parity`) record the GGUF sha256, the binary sha256 and
 # the scoring policy the run actually used, which is why a layer that brings its own `evidence`
@@ -75,8 +75,8 @@ layers:
     what: "The shipped path: `knaif run` executing for real, graded on produced files."
     evidence: "An acceptance record under evals/acceptance/<skill>.json."
     invalidated_by:
-      [contracts, python_core, bundle, corpus, model, native_binary, settings, verifier, policy,
-       native, grading]
+      [contracts, python_core, bundle, corpus, safety_corpus, model, native_binary, settings,
+       verifier, policy, native, grading]
 
 # L3's bar, settled by the owner 2026-09-25 (docs/plans/2026-09-25-release-1.2.md, R0). A rate
 # of 1.0 is unreachable by construction: the two runtimes link different llama.cpp builds

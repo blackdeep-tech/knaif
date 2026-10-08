@@ -283,7 +283,7 @@ def test_a_failing_signer_is_fatal(tmp_path: Path) -> None:
 
 #: Pages that describe the CURRENT release to users. Release notes are left out: they record
 #: what was true for their own version (1.2.0's rightly says "unsigned").
-LIVE_PAGES = ("site/org/src", "site/dev/src", "contracts/release/platforms.yaml", "README.md")
+LIVE_PAGES = ("site/org/src", "site/dev/src", "site/data/download-copy.yaml", "README.md")
 UNSIGNED_CLAIM = re.compile(
     r"\b(binaries|knaif|installer|artifacts?|downloads?)\s+(is|are)\s+unsigned\b", re.I
 )

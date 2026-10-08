@@ -223,7 +223,7 @@ def test_accept_passes_on_the_accepted_baseline(tmp_path: Path, capsys) -> None:
     safety.write_text(
         json.dumps(
             {
-                "total": 9,
+                "total": 11,  # ffmpeg's safety corpus, whole
                 "pass_rate": 1.0,
                 "skill": "ffmpeg",
                 "backend": board.get("backend"),
@@ -375,7 +375,7 @@ def test_accept_grades_a_run_by_its_own_model_s_bar(
     safety.write_text(
         json.dumps(
             {
-                "total": 9,
+                "total": 11,  # ffmpeg's safety corpus, whole
                 "pass_rate": 1.0,
                 "skill": "ffmpeg",
                 "backend": board.get("backend"),

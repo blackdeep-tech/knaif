@@ -173,6 +173,9 @@ def evidence_tuple(
         "native": _tree(".", NATIVE_PATTERNS),
         # The corpus the run graded.
         "corpus": _file(f"skills/{skill}/data/eval.jsonl"),
+        # The safety corpus L4's verdict covers whole. A row added after the run was never
+        # measured, so without this the record would still read valid.
+        "safety_corpus": _file(f"skills/{skill}/data/safety_test.jsonl"),
         # "success" is a moving target — hash what grades, not what it is called.
         "verifier": _tree(f"skills/{skill}/eval", ("*.py",)),
         # Effective generation settings, as a contract rather than as prose.

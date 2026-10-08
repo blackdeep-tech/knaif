@@ -20,7 +20,9 @@ Sources:
     skills/*/tools.yaml          tool registry (via the loader)
     skills/*/prompt.yaml         curated example utterances (already model-facing)
     contracts/models/model-manifest.yaml
-    contracts/release/platforms.yaml
+    contracts/release/platforms.yaml     the support facts
+    site/data/download-copy.yaml         the download page's sentences (not under contracts/, so
+                                         rewording them does not stale the eval gate)
 
 Deliberately NOT a source: `models.yaml`, which is a *runtime backend config* (paths,
 n_ctx, n_gpu_layers) and omits the released 1.7B entirely.
@@ -259,6 +261,86 @@ def _models_json() -> dict[str, Any]:
     return {"models": models, "recommendations": recommendations}
 
 
+DOWNLOAD_COPY = REPO / "site" / "data" / "download-copy.yaml"
+
+#: The only fields the wording file may set, per place. Anything else is a typo (it would show
+#: nowhere) or an attempt to override a support fact that belongs to the contract.
+_COPY_FIELDS = {
+    "platform": {"warnings", "notes", "known_bad", "artifacts"},
+    "artifact": {"notes"},
+    "known_bad": {"reason"},
+    "gpu_default": {"text"},
+    "gpu_option": {"text"},
+    "section": {"text"},
+}
+
+
+def _copy_fields(where: str, got: Any, label: str, path: Path) -> dict[str, Any]:
+    if not isinstance(got, dict):
+        raise ExtractError(f"{path.name}: {label} must be a mapping")
+    extra = set(got) - _COPY_FIELDS[where]
+    if extra:
+        raise ExtractError(
+            f"{path.name}: {label} has unknown field(s) {sorted(extra)}; "
+            f"allowed: {sorted(_COPY_FIELDS[where])}"
+        )
+    for key, value in got.items():
+        if key == "warnings":
+            ok = isinstance(value, list) and all(
+                isinstance(w, dict) and set(w) == {"id", "text"} for w in value
+            )
+        elif key in ("artifacts", "known_bad"):
+            ok = isinstance(value, dict)
+        else:
+            ok = isinstance(value, str)
+        if not ok:
+            raise ExtractError(f"{path.name}: {label}.{key} has the wrong shape")
+    return got
+
+
+def _apply_download_copy(platforms: dict[str, Any], path: Path = DOWNLOAD_COPY) -> dict[str, Any]:
+    """Overlay the download page's sentences on the support matrix, in the shape the page
+    has always read. Wording for an id the contract does not declare, or for a field the
+    wording file may not set, fails the build."""
+    copy = _load_yaml(path)
+    by_id = {p["id"]: p for p in platforms.get("platforms", [])}
+    for pid, extra in (copy.get("platforms") or {}).items():
+        if pid not in by_id:
+            raise ExtractError(f"{path.name}: wording for unknown platform {pid!r}")
+        entry = by_id[pid]
+        extra = _copy_fields("platform", extra, pid, path)
+        for template, notes in (extra.get("artifacts") or {}).items():
+            artifact = next(
+                (a for a in entry.get("artifacts", []) if a.get("artifact") == template), None
+            )
+            if artifact is None:
+                raise ExtractError(f"{path.name}: {pid} has no artifact {template!r}")
+            artifact.update(_copy_fields("artifact", notes, f"{pid}/{template}", path))
+        bad = {b["distro"]: b for b in entry.get("known_bad", [])}
+        for distro, reason in (extra.get("known_bad") or {}).items():
+            if distro not in bad:
+                raise ExtractError(f"{path.name}: {pid} has no known_bad {distro!r}")
+            bad[distro].update(_copy_fields("known_bad", reason, f"{pid}/{distro}", path))
+        for key in ("warnings", "notes"):
+            if key in extra:
+                entry[key] = extra[key]
+    gpu = platforms.get("gpu", {})
+    copy_gpu = copy.get("gpu") or {}
+    if "default" in copy_gpu:
+        gpu.setdefault("default", {}).update(
+            _copy_fields("gpu_default", copy_gpu["default"], "gpu/default", path)
+        )
+    options = {o["id"]: o for o in gpu.get("optional", [])}
+    for oid, extra in (copy_gpu.get("optional") or {}).items():
+        if oid not in options:
+            raise ExtractError(f"{path.name}: wording for unknown GPU option {oid!r}")
+        options[oid].update(_copy_fields("gpu_option", extra, f"gpu/{oid}", path))
+    for key in ("external_tools", "model"):
+        if key in copy:
+            platforms.setdefault(key, {}).update(_copy_fields("section", copy[key], key, path))
+    return platforms
+
+
 def build() -> dict[str, Any]:
     names = list_skills()  # already excludes `status: stale` — io stays off the catalog
     skills = [entry for entry in (_skill_json(n) for n in names) if entry is not None]
@@ -269,7 +351,9 @@ def build() -> dict[str, Any]:
         "generated_by": "scripts/site_data.py",
         "skills": skills,
         **_models_json(),
-        "platforms": _load_yaml(REPO / "contracts" / "release" / "platforms.yaml"),
+        "platforms": _apply_download_copy(
+            _load_yaml(REPO / "contracts" / "release" / "platforms.yaml")
+        ),
     }
 
 

@@ -5,15 +5,18 @@
 //! `n_gpu_layers`; which GPU backend is compiled in is a build-time cargo-feature choice
 //! (`cuda`, …) — the generate loop is backend-agnostic.
 
+use std::cell::RefCell;
 use std::num::NonZeroU32;
 use std::path::Path;
 
 use anyhow::{Context, Result};
 use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaChatTemplate, LlamaModel};
+use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::LlamaBackendDeviceType;
 
 use crate::LlmBackend;
@@ -161,9 +164,36 @@ fn backend_dirs(verbose: bool) -> Vec<std::path::PathBuf> {
     dirs
 }
 
+/// A context kept between requests, with the prompt tokens whose keys/values it still holds.
+struct Resident {
+    // Declared first so it is dropped before `LlamaCppBackend::model`, which it borrows.
+    ctx: LlamaContext<'static>,
+    prompt: Vec<LlamaToken>,
+}
+
+/// How many leading tokens two prompts share.
+fn common_prefix_len<T: PartialEq>(a: &[T], b: &[T]) -> usize {
+    a.iter().zip(b).take_while(|(x, y)| x == y).count()
+}
+
+/// How much of the cached prompt the next one may reuse. At least one token is always decoded
+/// afresh — the logits that pick the first generated token come from the last prompt token — so a
+/// prompt identical to the cached one reuses one token fewer than its length.
+fn reusable_prefix(cached: &[LlamaToken], next: &[LlamaToken]) -> usize {
+    common_prefix_len(cached, next).min(next.len().saturating_sub(1))
+}
+
 pub struct LlamaCppBackend {
+    // Field order is drop order: the context that borrows `model` goes first (see `Resident`).
+    resident: RefCell<Option<Resident>>,
     backend: LlamaBackend,
-    model: LlamaModel,
+    // Shared and heap-allocated so the `'static` borrow `resident` holds stays valid when the
+    // backend is moved (a `Box` would assert unique access on every move; an `Arc` does not).
+    model: std::sync::Arc<LlamaModel>,
+    /// Keep the context and its processed prompt between requests, decoding only the tokens after
+    /// the prefix two prompts share. Off by default: it changes how a prompt is split into
+    /// batches, so it is switched on only where it has been measured to leave every plan alone.
+    reuse_prefix: bool,
     /// The GGUF's built-in chat template, applied per request so a fine-tuned model sees the exact
     /// framing it was trained on. `None` for a model without one (falls back to plain ChatML).
     chat_template: Option<LlamaChatTemplate>,
@@ -243,8 +273,10 @@ impl LlamaCppBackend {
             .and_then(|v| v.parse().ok())
             .unwrap_or(crate::N_CTX);
         Ok(Self {
+            resident: RefCell::new(None),
             backend,
-            model,
+            model: std::sync::Arc::new(model),
+            reuse_prefix: false,
             chat_template,
             n_ctx,
             n_threads: resolve_n_threads(),
@@ -284,6 +316,48 @@ impl LlamaCppBackend {
         self.max_tokens = max_tokens;
         self
     }
+
+    /// Reuse the already-processed start of the previous prompt (see [`Self::reuse_prefix`]).
+    #[must_use]
+    pub fn with_prefix_reuse(mut self, on: bool) -> Self {
+        self.reuse_prefix = on;
+        self
+    }
+
+    fn context_params(&self) -> LlamaContextParams {
+        // `n_batch = n_ctx` so a large prompt is processed in a single decode (see `load`).
+        // `n_threads_batch` drives prompt decode (the batched path) and `n_threads` generation;
+        // both must be set explicitly — llama.cpp defaults each to 4 (see `resolve_n_threads`).
+        LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(self.n_ctx))
+            .with_n_batch(self.n_ctx)
+            .with_n_ubatch(crate::N_UBATCH)
+            .with_flash_attention_policy(crate::FLASH_ATTN_AUTO)
+            .with_n_threads(self.n_threads.0)
+            .with_n_threads_batch(self.n_threads.1)
+    }
+
+    /// A context for one request: the kept one when reuse is on (made on first use), else a fresh
+    /// one the caller owns.
+    fn context_for_request(&self) -> Result<Resident> {
+        if self.reuse_prefix {
+            if let Some(kept) = self.resident.borrow_mut().take() {
+                return Ok(kept);
+            }
+        }
+        let ctx = self
+            .model
+            .new_context(&self.backend, self.context_params())
+            .context("creating llama context")?;
+        // SAFETY: `model` is an `Arc` (stable address, never uniquely re-borrowed) and outlives every `Resident`: `resident` is
+        // declared before `model`, so it drops first, and a `Resident` handed out here is either
+        // returned to that slot or dropped by the caller before the backend can be.
+        let ctx = unsafe { std::mem::transmute::<LlamaContext<'_>, LlamaContext<'static>>(ctx) };
+        Ok(Resident {
+            ctx,
+            prompt: Vec::new(),
+        })
+    }
 }
 
 impl LlmBackend for LlamaCppBackend {
@@ -293,21 +367,8 @@ impl LlmBackend for LlamaCppBackend {
             .unwrap_or(false);
         let t_start = std::time::Instant::now();
         let prompt = self.format_prompt(system, user)?;
-        // `n_batch = n_ctx` so a large prompt is processed in a single decode (see `load`).
-        // `n_threads_batch` drives prompt decode (the batched path) and `n_threads` generation;
-        // both must be set explicitly — llama.cpp defaults each to 4 (see `resolve_n_threads`).
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(self.n_ctx))
-            .with_n_batch(self.n_ctx)
-            .with_n_ubatch(crate::N_UBATCH)
-            .with_flash_attention_policy(crate::FLASH_ATTN_AUTO)
-            .with_n_threads(self.n_threads.0)
-            .with_n_threads_batch(self.n_threads.1);
         let t_ctx0 = std::time::Instant::now();
-        let mut ctx = self
-            .model
-            .new_context(&self.backend, ctx_params)
-            .context("creating llama context")?;
+        let mut resident = self.context_for_request()?;
         if timing {
             eprintln!(
                 "[knaif-timing] new_context = {} ms",
@@ -315,31 +376,52 @@ impl LlmBackend for LlamaCppBackend {
             );
         }
 
-        // The chat template already emits the model's start tokens (`<|im_start|>…`), so don't add
+        // The chat template already emits the model's start tokens (`<|im_start|>...`), so don't add
         // a BOS on top — Qwen3 has no BOS in its trained framing.
         let tokens = self
             .model
             .str_to_token(&prompt, AddBos::Never)
             .context("tokenizing prompt")?;
 
-        let mut batch = LlamaBatch::new(tokens.len().max(1), 1);
-        let last = tokens.len().saturating_sub(1);
-        for (i, token) in tokens.iter().enumerate() {
-            batch.add(*token, i as i32, &[0], i == last)?;
+        // Keep the keys/values of the shared start of the previous prompt; drop everything after
+        // it (the rest of that prompt and what it generated). A context that cannot drop a tail
+        // (some recurrent or sliding-window models) is emptied instead and the prompt decoded whole.
+        let mut reused = if self.reuse_prefix {
+            reusable_prefix(&resident.prompt, &tokens)
+        } else {
+            0
+        };
+        let kept = reused > 0
+            && resident
+                .ctx
+                .clear_kv_cache_seq(Some(0), u32::try_from(reused).ok(), None)
+                .unwrap_or(false);
+        if !kept {
+            resident.ctx.clear_kv_cache();
+            reused = 0;
         }
+
+        let to_decode = &tokens[reused..];
+        let mut batch = LlamaBatch::new(to_decode.len().max(1), 1);
+        let last = to_decode.len().saturating_sub(1);
+        for (i, token) in to_decode.iter().enumerate() {
+            batch.add(*token, (reused + i) as i32, &[0], i == last)?;
+        }
+        let ctx = &mut resident.ctx;
         let t_dec0 = std::time::Instant::now();
         ctx.decode(&mut batch).context("decoding prompt")?;
         if timing {
             eprintln!(
-                "[knaif-timing] prompt_decode ({} tokens) = {} ms",
-                tokens.len(),
+                "[knaif-timing] prompt_decode ({} tokens, {} reused) = {} ms",
+                to_decode.len(),
+                reused,
                 t_dec0.elapsed().as_millis()
             );
         }
 
         let t_gen0 = std::time::Instant::now();
         let mut out_bytes: Vec<u8> = Vec::new();
-        let mut n_cur = batch.n_tokens();
+        let mut n_cur = (reused + to_decode.len()) as i32;
         let mut produced = 0;
         while produced < self.max_tokens {
             let next = ctx
@@ -370,6 +452,10 @@ impl LlmBackend for LlamaCppBackend {
                 "[knaif-timing] generate_plan TOTAL = {} ms",
                 t_start.elapsed().as_millis()
             );
+        }
+        if self.reuse_prefix {
+            resident.prompt = tokens;
+            *self.resident.borrow_mut() = Some(resident);
         }
         // Decode the full accumulated byte stream once so multi-byte UTF-8 sequences split
         // across tokens are handled correctly.
@@ -440,6 +526,29 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn tok(ids: &[i32]) -> Vec<LlamaToken> {
+        ids.iter().map(|i| LlamaToken(*i)).collect()
+    }
+
+    #[test]
+    fn the_shared_start_of_two_prompts_is_reused() {
+        let cached = tok(&[1, 2, 3, 4, 5]);
+        assert_eq!(reusable_prefix(&cached, &tok(&[1, 2, 3, 9, 9, 9])), 3);
+        assert_eq!(reusable_prefix(&cached, &tok(&[7, 2, 3])), 0);
+        assert_eq!(reusable_prefix(&[], &tok(&[1, 2])), 0);
+    }
+
+    #[test]
+    fn at_least_one_token_is_always_decoded_afresh() {
+        let cached = tok(&[1, 2, 3]);
+        // Identical prompt: reuse all but the last token, whose logits start the answer.
+        assert_eq!(reusable_prefix(&cached, &tok(&[1, 2, 3])), 2);
+        // Next prompt is a strict prefix of the cached one.
+        assert_eq!(reusable_prefix(&cached, &tok(&[1, 2])), 1);
+        assert_eq!(reusable_prefix(&cached, &tok(&[1])), 0);
+        assert_eq!(reusable_prefix(&cached, &[]), 0);
     }
 
     /// Inference proof: gated on `$KNAIF_TEST_GGUF` (a path to any local GGUF) so the suite

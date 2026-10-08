@@ -4,9 +4,17 @@ No-code contracts describing the **shape** of a knaif release, as opposed to any
 particular one.
 
 - **`platforms.yaml`** — the platform support matrix: which OSes are supported, the
-  measured runtime floors, artifact name templates, GPU backends, and the external-tool
-  and first-run-model caveats. Read by the knaif.org `/download` page; referenced (not
-  restated) by [`docs/RELEASE.md`](../../docs/RELEASE.md).
+  measured runtime floors, artifact name templates and GPU backends. Read by the knaif.org
+  `/download` page; referenced (not restated) by [`docs/RELEASE.md`](../../docs/RELEASE.md).
+
+## This directory holds no download-page wording
+
+The sentences the page shows (warnings, artifact notes, the GPU, external-tool and first-run-model
+paragraphs) live in [`site/data/download-copy.yaml`](../../site/data/download-copy.yaml).
+The eval gate fingerprints every YAML and JSON file under `contracts/`, so a reworded sentence here marks all
+L1–L4 evidence stale without changing anything the runtimes read.
+`scripts/site_data.py` overlays that file on `platforms.yaml`; a test fails if a `warnings`,
+`notes`, `text` or `reason` key returns here.
 
 ## This directory holds no version numbers
 

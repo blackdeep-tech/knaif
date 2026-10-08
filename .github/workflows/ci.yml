@@ -85,8 +85,10 @@ jobs:
           # workspace members. Splitting them by subpath is the kind of clever rule that
           # ends with a job silently not running on the change that needed it; running both
           # costs a cached cargo build and cannot be wrong.
+          # `site/data/` is generated from Python: test_site_data.py is its drift guard, so an edit
+          # to download-copy.yaml (site/ only) must still run the python job.
           {
-            echo "python=$(match "$common|^(python/|skills/|scripts/|contracts/|pyproject\.toml|uv\.lock)")"
+            echo "python=$(match "$common|^(python/|skills/|scripts/|contracts/|site/data/|pyproject\.toml|uv\.lock)")"
             echo "native=$(match "$common|^(native/|apps/|skills/|contracts/|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
             echo "site=$(match "$common|^site/")"
             echo "packaging=$(match "$common|^installers/")"

@@ -12,14 +12,14 @@
       "gate": "unsupported",
       "registry": "volume",
       "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"], "target_sample_rate": 22050}}]},
-      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't adjust volume with target_sample_rate — that isn't supported. Could you rephrase?"}}]}
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't adjust volume that way — that isn't supported. Could you rephrase?"}}]}
     },
     {
-      "name": "unsupported_args_are_all_named",
+      "name": "unsupported_args_are_not_named",
       "gate": "unsupported",
       "registry": "volume",
       "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"], "bitrate": "128k", "target_sr": 1}}]},
-      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't adjust volume with bitrate and target_sr — that isn't supported. Could you rephrase?"}}]}
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't adjust volume that way — that isn't supported. Could you rephrase?"}}]}
     },
     {
       "name": "supported_args_pass_through",

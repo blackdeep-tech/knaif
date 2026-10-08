@@ -365,8 +365,8 @@ def test_unsupported_arg_clarifies():
     assert result is not None
     assert result[0]["tool"] == "clarify"
     q = _question(result)
-    assert "target_sample_rate" in q
-    assert "support" in q.lower()
+    assert "target_sample_rate" not in q
+    assert "adjust volume" in q and "support" in q.lower()
 
 
 def test_supported_args_pass_through():
@@ -385,10 +385,10 @@ def test_unsupported_args_ignores_terminal_tools():
     assert unsupported_args_clarify(plan, _volume_registry()) is None
 
 
-def test_unsupported_args_lists_every_offending_key():
+def test_unsupported_args_never_names_the_offending_keys():
     plan = _plan("adjust_volume", inputs=["a.wav"], bitrate="128k", target_sr=22050)
     q = _question(unsupported_args_clarify(plan, _volume_registry()))
-    assert "bitrate" in q and "target_sr" in q
+    assert "bitrate" not in q and "target_sr" not in q
 
 
 def test_unsupported_args_no_registry_is_noop():

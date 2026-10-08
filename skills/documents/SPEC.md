@@ -36,6 +36,21 @@ for PDF page operations.`).
 | `soffice` / `libreoffice` | `apt install libreoffice` / `brew install --cask libreoffice` | Office→PDF in `convert_document` | error: `Install LibreOffice for Office-to-PDF conversion.` |
 | `gs` (Ghostscript) | `apt install ghostscript` / `brew install ghostscript` | best-quality `compress_pdf` | falls back to a Pillow rasterize or lossless-optimize path |
 
+Both runtimes look for each binary the same way: its `$KNAIF_<CMD>_BIN` override, then `PATH`,
+then the install folders `skill.yaml` declares for the OS (so a LibreOffice that is installed but
+not on `PATH` is still found).
+
+**Tested versions.** knaif is tested with the versions below; older ones may work but are not
+tested and may not. knaif does not check versions at run time.
+
+| Tool | Windows | Linux (Ubuntu 24.04) | Lowest tested |
+|---|---|---|---|
+| Ghostscript | 10.07.1 | 10.02.1 | 10.02 |
+| LibreOffice | 26.2.4 (clean room: 26.8.0) | 24.2.7 | 24.2 |
+| Tesseract | 5.5.0 | 5.3.4 | 5.3 |
+
+(Recorded 2026-10-06 from the Windows dev box, the 1.2.1 clean room and the Linux L4 lane.)
+
 Dry-run (`dry_run=True`) and the `cheap` eval verifier are text-only and do **not**
 require the binaries; real execution and the `honest` verifier do.
 

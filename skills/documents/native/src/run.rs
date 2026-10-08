@@ -312,7 +312,15 @@ fn write_outputs(
         }
         "remove_pages" => {
             let input = input_path(args, base, sandbox)?;
-            require_str(args, "pages")?;
+            // Check the pages as `run` and Python's dry run do: a preview must not promise an
+            // output the real run refuses (out of range, or every page). A chain's input that
+            // an earlier step has yet to write has no pages to count, so it is checked when run.
+            let pages = require_str(args, "pages")?;
+            if input.exists() {
+                let doc = pdf::load_unlocked(&input)?;
+                let total = pdf::page_count(&doc) as i64;
+                pdf::check_removal(total, &pdf::parse_pages(Some(&pages), total, true)?)?;
+            }
             let out = derive_output(
                 &input,
                 out_arg(args, base, sandbox, "output")?,
@@ -673,6 +681,34 @@ mod tests {
         let written = commit("rotate_pages", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
         assert_eq!(written, vec![dir.join("a-rotated.pdf")]);
         assert!(dir.join("a-rotated.pdf").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A preview must not promise an output the run refuses (as documents_105 found for
+    // reorder_pages): remove_pages checks its page list in the preview, as Python does.
+    #[test]
+    fn remove_pages_preview_refuses_what_the_run_refuses() {
+        let dir = tmpdir();
+        std::fs::write(dir.join("a.pdf"), make_pdf(3)).unwrap();
+        for (pages, why) in [("7", "out of range"), ("1-3", "every page")] {
+            let a = args(serde_json::json!({"input": "a.pdf", "pages": pages}));
+            let err = preview("remove_pages", &a, &dir, Some(&dir), &docs_bundle())
+                .err()
+                .unwrap_or_else(|| panic!("preview accepted pages {pages:?}"));
+            assert!(err.to_string().contains(why), "{pages:?}: {err}");
+            assert!(commit("remove_pages", &a, &dir, Some(&dir), &docs_bundle()).is_err());
+        }
+        assert!(!dir.join("a-removed.pdf").exists());
+        // A repeated page is one page: "1,1,2" leaves page 3, in both.
+        let a = args(serde_json::json!({"input": "a.pdf", "pages": "1,1,2"}));
+        assert!(preview("remove_pages", &a, &dir, Some(&dir), &docs_bundle()).is_ok());
+        let written = commit("remove_pages", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
+        let doc = crate::pdf::load_unlocked(&written[0]).unwrap();
+        assert_eq!(crate::pdf::page_count(&doc), 1);
+        // A chain's later step previews against a file an earlier step will create: nothing to
+        // count yet, so the preview still names its output, as it did before the check.
+        let a = args(serde_json::json!({"input": "merged.pdf", "pages": "2"}));
+        assert!(preview("remove_pages", &a, &dir, Some(&dir), &docs_bundle()).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
