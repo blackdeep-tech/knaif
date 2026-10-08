@@ -413,7 +413,11 @@ eval runs committed absolute checkout paths into ~27 files; both went public unn
    `general.*` metadata.
 5. **The guards are not optional.** The `no-local-paths` pre-commit hook and
    `test_no_local_paths.py` (in `just check`) enforce rule 1; never bypass them with `--no-verify`.
-   If one fires, remove the path; don't widen the check.
+   If one fires, remove the path; don't widen the check. The one exception, approved by the owner
+   (2026-10-08): under GitHub Actions the runner's own account (`/Users/runner`, `/home/runner`,
+   `C:\Users\runneradmin`) is exempt like a container's `/root`, because it names nobody and the
+   prebuilt PDFium carries it (RELEASE.md, *Windows and macOS binaries must not carry the builder's
+   home directory*). Any other exemption needs the owner.
 6. **A leak in something already public goes to the owner first.** Report what leaked, where,
    and since when. Do not rewrite shared history or replace published assets on your own:
    replacing a release asset changes a sha256 that installed manifests pin.

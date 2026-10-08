@@ -74,7 +74,7 @@ the detailed record; this section is the map.
    with a merge commit. `release/1.3.0` only ever receives finished macOS work.
 
 Why a fork: fork PRs never see repository secrets, which keeps the signing identities (F, and
-the owner's [certificate steps]([macos-signing-certificates](2026-09-30-macos-signing-certificates.md))) away from branch work by construction.
+the owner's [certificate steps](2026-09-30-macos-signing-certificates.md)) away from branch work by construction.
 
 **Who does what.**
 
@@ -168,14 +168,25 @@ flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tre
 | 9 Signing | **done 2026-10-06** with the owner's certificates: both notarizations Accepted, `.pkg` stapled, no entitlements needed; that build carries a home path and must be rebuilt outside `~` before release | F1, F4 |
 | 10 Clean room | **next**: the three tart runs on a release build signed from a checkout outside `~` | E3, E4, E6 |
 
+**Commit IDs in the Mac's records, 2026-10-08.** The fork's branch was rewritten before
+`blackdeep-tech/knaif#82` (committer address), so three IDs its records cite are not in this
+history. The files are unchanged: `8cbab23` is `8f09735` (2026-10-07 runs), `bdd01b5` is `23015d8`
+(2026-10-05 runs). `af05956` was a merge on the fork with no counterpart here; the 2026-10-04 L4
+re-run it names was superseded by the 2026-10-05 and 2026-10-07 runs. The run records keep the IDs
+the tools wrote.
+
 **Needs the owner:**
 1. **1.7B ffmpeg misses `batch`** by one row (25/29 against 0.896, the 1.7B's own Python score). The
    same rows fail in both Mac runs; three fail on every 1.2.0 platform, and 1.2.0 recorded the same
    miss for Windows Vulkan 1.7B. Waive, retrain, or keep the 4B as the macOS recommendation (C4).
+   **Decided 2026-10-07 (owner): waived as on Windows** — the 1.3.0 release plan's waiver rule.
 2. **`documents_105`: native's dry run accepts a `reorder_pages` order its execution rejects**;
    Python rejects it in both. Platform-independent. **A fix with its L2 case is prepared and
    measured on the Mac (L3 now passes), and merged in #14**; documents L3/L4 still to
-   re-run on Windows and Linux (C5).
+   re-run on Windows and Linux (C5). **Decided 2026-10-07 (owner): in 1.3.0**, merged upstream in
+   `blackdeep-tech/knaif#82`. On Windows, 2026-10-08: a chain's input that an earlier step has yet
+   to write is checked when the step runs, as `remove_pages` does, so `knaif run` still previews
+   "merge, then reverse the pages".
 3. **`.pkg` findings** (E6): `._*` AppleDouble entries in the payload from `com.apple.provenance`
    (harmless on install; on this Mac neither `xattr -cr` nor `COPYFILE_DISABLE=1` removes them,
    because macOS re-adds the attribute to every file written, see E6), and the script-only choices
