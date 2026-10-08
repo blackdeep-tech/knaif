@@ -332,9 +332,14 @@ fn write_outputs(
         "reorder_pages" => {
             let input = input_path(args, base, sandbox)?;
             // Validate the order against the page count, as `run` and Python's dry run do: a
-            // preview must not promise an output the real run refuses (documents_105).
-            let doc = pdf::load_unlocked(&input)?;
-            reorder_sequence(&require_str(args, "order")?, pdf::page_count(&doc) as i64)?;
+            // preview must not promise an output the real run refuses (documents_105). A chain's
+            // input that an earlier step has yet to write has no pages to count, so it is checked
+            // when run, as remove_pages does.
+            let order = require_str(args, "order")?;
+            if input.exists() {
+                let doc = pdf::load_unlocked(&input)?;
+                reorder_sequence(&order, pdf::page_count(&doc) as i64)?;
+            }
             let out = derive_output(
                 &input,
                 out_arg(args, base, sandbox, "output")?,
@@ -709,6 +714,24 @@ mod tests {
         // count yet, so the preview still names its output, as it did before the check.
         let a = args(serde_json::json!({"input": "merged.pdf", "pages": "2"}));
         assert!(preview("remove_pages", &a, &dir, Some(&dir), &docs_bundle()).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // documents_105 made reorder_pages check its order in the preview; like remove_pages, a
+    // chain's input that an earlier step has yet to write is checked when the step runs.
+    #[test]
+    fn reorder_pages_preview_waits_for_a_file_an_earlier_step_creates() {
+        let dir = tmpdir();
+        std::fs::write(dir.join("a.pdf"), make_pdf(3)).unwrap();
+        let a = args(serde_json::json!({"input": "a.pdf", "order": "original"}));
+        assert!(preview("reorder_pages", &a, &dir, Some(&dir), &docs_bundle()).is_err());
+        let a = args(serde_json::json!({"input": "merged.pdf", "order": "reverse"}));
+        match preview("reorder_pages", &a, &dir, Some(&dir), &docs_bundle()).unwrap() {
+            Preview::Write { outputs, .. } => {
+                assert_eq!(outputs, vec![dir.join("merged-reordered.pdf")]);
+            }
+            Preview::Read(_) => panic!("reorder is a write op"),
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

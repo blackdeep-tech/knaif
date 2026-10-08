@@ -4,11 +4,11 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "aacfb59e2553950e96afa10212db9431cb28afe3e86ede0ee1fa6051e501dbff",
+        "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
         "contracts": "5720eaf6465b7391a3806ff3711688e5d9b9718696484ca35975aaa86d8eba9d",
         "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
-        "native": "6dd8ea0e53eca8e199d7e14cb792e00ee4c6f67ff2b832b2130ef22fb40b360c",
+        "native": "1355df4d98ad0dbee920462419c11bd013d8ca92b7cf2e22ce9f541da71fcaf2",
         "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
         "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
         "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
@@ -20,11 +20,11 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "aacfb59e2553950e96afa10212db9431cb28afe3e86ede0ee1fa6051e501dbff",
+        "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
         "contracts": "5720eaf6465b7391a3806ff3711688e5d9b9718696484ca35975aaa86d8eba9d",
         "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
-        "native": "6dd8ea0e53eca8e199d7e14cb792e00ee4c6f67ff2b832b2130ef22fb40b360c",
+        "native": "1355df4d98ad0dbee920462419c11bd013d8ca92b7cf2e22ce9f541da71fcaf2",
         "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
         "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
         "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
