@@ -381,6 +381,11 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   (a background process, a socket, lifecycle and install/uninstall interplay), so 1.3.0 at the earliest.
   **Plan: [plans/2026-10-01-daemon-mode.md](plans/2026-10-01-daemon-mode.md)** (proposed for 1.3.0,
   with the 2026-10-01 timing breakdown and the entry below folded in).
+- [ ] **Media runtime and mobile** — owner, 2026-10-03: parked, "we will get back to it". How desktop
+  users get a signed ffmpeg (a separately published GPL runtime pack, run as a separate program, so
+  knaif stays Apache), and a separate mobile media skill on AVFoundation / Media3 that shares the
+  ffmpeg skill's deterministic engine. **Plan: [plans/2026-10-03-media-runtime-and-mobile.md](plans/2026-10-03-media-runtime-and-mobile.md)**
+  (Draft; first step is a Smart App Control experiment with winget's ffmpeg).
 - [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
