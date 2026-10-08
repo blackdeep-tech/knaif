@@ -39,6 +39,22 @@ if [ -z "$VOL" ] && [ "$(id -u)" != 0 ]; then
   exit 1
 fi
 
+# Stop the model daemon (`knaif daemon start`, `knaif run --daemon`) before its program goes, or it
+# keeps running the removed build until its idle timeout. It belongs to the user who ran sudo (else
+# the console user): only they hold its token, in their ~/.knaif. Best effort, as in the .pkg.
+knaif="$ROOT/bin/knaif"
+owner="${SUDO_USER:-}"
+case "$owner" in "" | root) owner="$(stat -f%Su /dev/console 2>/dev/null || true)" ;; esac
+case "$owner" in
+  "" | root | loginwindow | _mbsetupuser) ;;
+  *)
+    if [ -x "$knaif" ]; then
+      sudo -u "$owner" -H "$knaif" daemon stop ||
+        echo "could not stop knaif's model daemon for $owner; it exits on its own when idle"
+    fi
+    ;;
+esac
+
 if [ -L "$LINK" ] && [ "$(readlink "$LINK")" = "/usr/local/knaif/bin/knaif" ]; then
   rm -f "$LINK"
   echo "removed /usr/local/bin/knaif"

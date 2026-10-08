@@ -213,11 +213,11 @@ the end of this section, and keep working around it:
 3. **Step 10, the clean room**, on those files: the three tart runs (`installers/macos/README.md`),
    then Metal from a fresh user account. Add one case 1.3.0 brings: with a daemon started from the
    installed knaif, reinstall the `.pkg` over it and uninstall; each must stop the daemon and
-   leave no `knaif` process running. **The `.pkg` does not do this yet**: the Windows installer
-   runs `knaif daemon stop` first (`StopDaemon` in `installers/windows/knaif.iss`); the core
-   preinstall and `uninstall.sh` need the same, run as the console user, since the daemon and its
-   `~/.knaif` belong to that user. A macOS-implementation change, so it is yours if the Windows
-   box has not landed it before this round.
+   leave no `knaif` process running. Written on Windows 2026-10-08 and tested there against
+   faked `sudo` and `stat` only: the core preinstall runs the old binary's `knaif daemon stop` as
+   the console user, and `uninstall.sh` as the user who ran sudo (`StopDaemon` in `knaif.iss` is the
+   Windows side). This run is its first on a Mac. Check `ps -ax | grep knaif` after each step, and
+   `/var/log/install.log` for the preinstall's line.
 4. Record under E3, E4, E6, PR into `feat/macos-support`, and hand back. Do not re-run L3/L4 now:
    the freeze changes the binary again, and only the frozen build counts.
 

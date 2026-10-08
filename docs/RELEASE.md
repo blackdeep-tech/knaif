@@ -1006,6 +1006,9 @@ delete the unpacked folder (or the `.AppImage`) and, to reclaim the model, `rm -
 **macOS packages have no uninstall action of their own**, so the `.pkg` ships one:
 `sudo /usr/local/knaif/uninstall.sh` (add `--purge` to remove `~/.knaif` too); Homebrew tools stay
 with Homebrew. The `.zip`: delete the folder. On macOS the model store is kept out of Time Machine.
+An upgrade or uninstall first stops a running model daemon (`knaif daemon start`): the Windows
+installer refuses to go on while it cannot, and the `.pkg` and `uninstall.sh` stop it as the user it
+belongs to and carry on regardless, since macOS can replace files a process holds open.
 
 **Unattended install — pass `/TYPE=full`.** The interactive installer defaults to the `full` type
 (all skills), but a `/VERYSILENT` install *without* `/TYPE` or `/COMPONENTS` reuses whatever component

@@ -332,6 +332,55 @@ def test_upgrade_clears_only_the_program_folders(tmp_path: Path, volume) -> None
     assert sorted(p.name for p in root.iterdir()) == ["keep.txt"]
 
 
+def _fake_daemon_knaif(vol: Path, stop_exit: int = 0) -> None:
+    """An installed knaif whose `daemon stop` is logged and exits `stop_exit`."""
+    _write_exe(
+        vol / "usr/local/knaif/bin/knaif",
+        f'echo "knaif $*" >> "$FAKE_LOG"\n[ "$1 $2" = "daemon stop" ] && exit {stop_exit}\nexit 0\n',
+    )
+
+
+def test_upgrade_stops_the_daemon_as_the_console_user_first(tmp_path: Path, volume) -> None:
+    # The daemon outlives every run and would keep serving the old build (knaif.iss: StopDaemon).
+    vol, env, log = volume
+    _fake_daemon_knaif(vol)
+    script = _install_script(tmp_path, "core-preinstall.sh", "preinstall")
+    proc = _run_installer_script(script, vol, env)
+    assert proc.returncode == 0, proc.stderr
+    assert "knaif daemon stop" in log.read_text()
+    assert Path(f"{log}.sudo").read_text().split() == ["alice"]
+    assert not (vol / "usr/local/knaif/bin").exists(), "the old program is still cleared"
+
+
+@pytest.mark.parametrize(
+    "stop_exit, console_user",
+    [(2, "alice"), (1, "alice"), (0, "")],
+    ids=["release-without-daemon", "daemon-would-not-stop", "nobody-logged-in"],
+)
+def test_a_daemon_that_cannot_be_stopped_never_fails_the_upgrade(
+    tmp_path: Path, volume, stop_exit: int, console_user: str
+) -> None:
+    vol, env, log = volume
+    _fake_daemon_knaif(vol, stop_exit)
+    script = _install_script(tmp_path, "core-preinstall.sh", "preinstall")
+    proc = _run_installer_script(script, vol, {**env, "FAKE_CONSOLE_USER": console_user})
+    assert proc.returncode == 0, proc.stderr
+    assert not (vol / "usr/local/knaif/bin").exists()
+    if not console_user:
+        assert not log.exists() or "daemon stop" not in log.read_text()
+
+
+def test_uninstall_stops_the_invoking_users_daemon(tmp_path: Path, volume) -> None:
+    vol, env, log = volume
+    _fake_daemon_knaif(vol, stop_exit=1)
+    env = {**env, "KNAIF_PKG_VOLUME": vol.as_posix(), "SUDO_USER": "bob"}
+    proc = subprocess.run([_bash(), UNINSTALL.as_posix()], capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    assert "knaif daemon stop" in log.read_text()
+    assert Path(f"{log}.sudo").read_text().split() == ["bob"]
+    assert not (vol / "usr/local/knaif").exists(), "a daemon that will not stop never blocks it"
+
+
 needs_symlinks = pytest.mark.skipif(os.name == "nt", reason="Git Bash cannot make real symlinks")
 
 
