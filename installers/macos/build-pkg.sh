@@ -53,8 +53,14 @@ for f in bin/knaif contracts LICENSE NOTICE README.txt licenses; do
 done
 MODEL="$(awk '/^recommendations:/{r=1; next} r && /^[^ #]/{r=0} r && $1=="desktop:"{print $2; exit}' \
   "$ROOT/contracts/models/model-manifest.yaml")"
+# The model package has no payload (its postinstall downloads the GGUF), so Installer would size it
+# "Zero KB" and leave it out of "Space Required". Its real size comes from the same manifest entry.
+MODEL_BYTES="$(awk -v m="  $MODEL:" 'index($0, m) == 1 { b = 1; next } b && /^  [^ ]/ { b = 0 }
+  b && $1 == "size_bytes:" { print $2; exit }' "$ROOT/contracts/models/model-manifest.yaml")"
 MIN_OS="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
-[ -n "$VER" ] && [ -n "$MODEL" ] || { echo "ERROR: could not read the version or the model" >&2; exit 1; }
+[ -n "$VER" ] && [ -n "$MODEL" ] && [ -n "$MODEL_BYTES" ] ||
+  { echo "ERROR: could not read the version, the model or its size" >&2; exit 1; }
+MODEL_KBYTES=$(((MODEL_BYTES + 1023) / 1024))
 OUT="${OUT:-$ROOT/dist/knaif-$VER-macos-arm64.pkg}"
 
 WORK="$(mktemp -d)"
@@ -84,9 +90,10 @@ payload_pkg() { # <name> <payload root> [scripts dir]
   pkgbuild "${args[@]}" "$PKGS/$1.pkg"
 }
 
-script_pkg() { # <name> <scripts dir>
-  pkgbuild --nopayload --scripts "$2" --identifier "$PREFIX.${1//-/.}" --version "$VER" \
-    "$PKGS/$1.pkg"
+script_pkg() { # <name> <scripts dir> [PackageInfo template]
+  local args=(--nopayload --scripts "$2" --identifier "$PREFIX.${1//-/.}" --version "$VER")
+  [ -n "${3:-}" ] && args+=(--info "$3")
+  pkgbuild "${args[@]}" "$PKGS/$1.pkg"
 }
 
 # core: everything but the skills, plus the uninstaller.
@@ -108,6 +115,29 @@ done
 
 script_pkg path "$(scripts_dir path path-postinstall.sh postinstall)"
 
+# The size a script-only choice shows. productbuild sizes each choice from its component's
+# PackageInfo and overwrites any size the Distribution states, so it goes into the component:
+# pkgbuild keeps a templated <payload installKBytes> on a --nopayload package. Prints the template.
+size_info() { # <name> <kbytes>
+  printf '<pkg-info><payload installKBytes="%s" numberOfFiles="0"/></pkg-info>\n' "$2" \
+    > "$WORK/$1-info.xml"
+  echo "$WORK/$1-info.xml"
+}
+
+# ESTIMATES of what Homebrew downloads for each tool, dependencies included, so the options page
+# does not show "Zero KB". Measured once with Homebrew on Apple Silicon (2026-10-09): ffmpeg 51 MB,
+# ghostscript 128 MB, tesseract 33 MB, the LibreOffice app 800 MB, rounded up. The real figure
+# depends on the Homebrew version and on what is already installed; the options page says so.
+tool_kbytes() {
+  case "$1" in
+    ffmpeg) echo $((60 * 1024)) ;;
+    ghostscript) echo $((130 * 1024)) ;;
+    libreoffice) echo $((800 * 1024)) ;;
+    tesseract) echo $((40 * 1024)) ;;
+    *) echo 0 ;;
+  esac
+}
+
 while IFS='|' read -r id display brew cask skill; do
   dir="$(scripts_dir "tool-$id" tool-postinstall.sh postinstall)"
   {
@@ -116,12 +146,12 @@ while IFS='|' read -r id display brew cask skill; do
     printf 'BREW_CASK=%q\n' "$cask"
     printf 'SKILL=%q\n' "$skill"
   } > "$dir/tool.env"
-  script_pkg "tool-$id" "$dir"
+  script_pkg "tool-$id" "$dir" "$(size_info "tool-$id" "$(tool_kbytes "$id")")"
 done <<< "$TOOLS"
 
 dir="$(scripts_dir model model-postinstall.sh postinstall)"
 printf 'MODEL=%q\n' "$MODEL" > "$dir/model.env"
-script_pkg model "$dir"
+script_pkg model "$dir" "$(size_info model "$MODEL_KBYTES")"
 
 # Installed last (its line ends the Distribution's choices-outline): opens the one Terminal window
 # that runs what the model and tool scripts queued.

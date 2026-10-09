@@ -75,7 +75,7 @@
   </choice>
 
   <choice id="tools" title="Supporting tools (installed with Homebrew)"
-          description="Installed with Homebrew as the logged-in user, in a Terminal window that opens at the end of setup, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing."/>
+          description="Installed with Homebrew as the logged-in user, in a Terminal window that opens at the end of setup, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing. The sizes shown are estimates, not exact: what Homebrew downloads depends on its version and on what you already have installed."/>
   <choice id="tool_ffmpeg" title="FFmpeg — required for the ffmpeg skill"
           start_selected="brewPresent()" enabled="toolOffered('skill_ffmpeg')">
     <pkg-ref id="tech.blackdeep.knaif.tool.ffmpeg"/>

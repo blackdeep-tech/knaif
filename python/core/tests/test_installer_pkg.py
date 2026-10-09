@@ -534,6 +534,7 @@ while [ $# -gt 1 ]; do
   case "$1" in
     --scripts) cp -R "$2" "$out.scripts"; shift 2 ;;
     --root) cp -R "$2" "$out.root"; shift 2 ;;
+    --info) cp "$2" "$out.info"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -596,6 +597,30 @@ def test_build_pkg_fills_the_distribution_from_cargo_and_the_manifest(built: Pat
     )
     assert manifest["recommendations"]["desktop"] in text
     ET.fromstring(text)
+
+
+def _templated_kbytes(pkgs: Path, name: str) -> int:
+    payload = ET.fromstring(Path(f"{pkgs}/{name}.pkg.info").read_text()).find("payload")
+    assert payload is not None, name
+    return int(payload.get("installKBytes", "0"))
+
+
+def test_build_pkg_sizes_the_script_only_choices(built: Path) -> None:
+    # These packages have no payload, so their size is templated into their PackageInfo (what
+    # productbuild reads); without it Installer shows "Zero KB" for a 2.5 GB model download.
+    manifest = yaml.safe_load(
+        (REPO / "contracts/models/model-manifest.yaml").read_text(encoding="utf-8")
+    )
+    size = manifest["models"][manifest["recommendations"]["desktop"]]["size_bytes"]
+    pkgs = Path(f"{built}.pkgs")
+    assert _templated_kbytes(pkgs, "model") == -(-size // 1024)
+    # The Homebrew tools carry estimates (the options page says so); every one has one.
+    tools = [f"tool-{row[0]}" for row in _tools_table()]
+    assert all(_templated_kbytes(pkgs, t) > 0 for t in tools)
+    # Payload packages are sized by pkgbuild itself, and the PATH link is only a symlink.
+    assert sorted(p.name for p in pkgs.glob("*.info")) == sorted(
+        f"{n}.pkg.info" for n in ["model", *tools]
+    )
 
 
 def test_build_pkg_wires_each_tool_script_to_its_table_row(built: Path) -> None:
