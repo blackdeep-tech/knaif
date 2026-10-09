@@ -1,0 +1,9 @@
+PASS room_floor: macOS 12.6
+PASS room_no_clt
+PASS room_no_brew
+PASS quarantined
+PASS quarantine_propagated: 0 file(s) without it
+PASS launch: knaif 1.2.1 (inference: llama.cpp)
+PASS smoke: see smoke.log
+PASS cpu_run: sample-rotated.pdf
+INFO metal_in_vm: exit 1; offloaded 37/37 layers
