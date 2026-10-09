@@ -50,13 +50,18 @@ const DEFAULT_PARALLELISM: usize = 8;
 /// Read buffer for streaming a chunk body to disk (matches the old single-stream buffer).
 const READ_BUF: usize = 64 * 1024;
 
+/// How long a connection may stay silent before the request fails and is retried. A slow line still
+/// delivers bytes well within this; a stalled one would otherwise wait until the server hangs up.
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Magic prefix of the resume sidecar, so a stale/foreign file is never mistaken for resume state.
 const SIDECAR_MAGIC: &[u8; 4] = b"KDL1";
 
 /// Downloads model bytes over HTTP(S) with `ureq`, in parallel byte-range chunks when the server
 /// supports it, retrying transient rate-limit / unavailable responses with backoff. HF's CDN can
 /// emit 429 under shared-IP load, so a bare fetch is fragile at scale; retrying here (rather than
-/// asking users for a token) is the plan's chosen fix.
+/// asking users for a token) is the plan's chosen fix. A dropped or stalled connection is retried
+/// the same way: on a slow line the CDN closes sockets, and one reset used to end the pull.
 #[derive(Debug, Clone)]
 pub struct HttpFetcher {
     /// Retries **after** the first attempt (so total attempts = `max_retries + 1`).
@@ -67,6 +72,9 @@ pub struct HttpFetcher {
     parallelism: usize,
     /// Bytes per ranged chunk (overridable so tests can exercise the grid without multi-MB files).
     chunk_size: u64,
+    /// Carries the read timeout: the longest wait for the next bytes of a response before the
+    /// request fails (and is retried).
+    agent: ureq::Agent,
 }
 
 impl Default for HttpFetcher {
@@ -76,6 +84,7 @@ impl Default for HttpFetcher {
             base_delay: Duration::from_secs(1),
             parallelism: DEFAULT_PARALLELISM,
             chunk_size: CHUNK_SIZE,
+            agent: agent(READ_TIMEOUT),
         }
     }
 }
@@ -105,14 +114,20 @@ impl HttpFetcher {
         self
     }
 
-    /// GET `url` (optionally a byte `range`), retrying a 429/503 up to `max_retries` times with
-    /// backoff (honoring the server's `Retry-After` when present). ureq treats a non-2xx status as
-    /// `Err`, so retryable statuses surface as `Error::Status` here; any other error (or an
-    /// exhausted budget) is returned.
+    /// Override how long a silent connection is waited on before it fails and is retried.
+    pub fn with_read_timeout(mut self, read_timeout: Duration) -> Self {
+        self.agent = agent(read_timeout);
+        self
+    }
+
+    /// GET `url` (optionally a byte `range`), retrying a 429/503 or a transport failure (reset,
+    /// timeout, refused) up to `max_retries` times with backoff (honoring the server's
+    /// `Retry-After` when present). ureq treats a non-2xx status as `Err`, so retryable statuses
+    /// surface as `Error::Status` here; any other status (or an exhausted budget) is returned.
     fn get(&self, url: &str, range: Option<(u64, u64)>) -> anyhow::Result<ureq::Response> {
         let mut attempt = 0u32;
         loop {
-            let mut req = ureq::get(url);
+            let mut req = self.agent.get(url);
             if let Some((start, end)) = range {
                 req = req.set("Range", &format!("bytes={start}-{end}"));
             }
@@ -125,6 +140,10 @@ impl HttpFetcher {
                         .header("Retry-After")
                         .and_then(|v| v.trim().parse::<u64>().ok());
                     std::thread::sleep(backoff_delay(attempt, retry_after, self.base_delay));
+                    attempt += 1;
+                }
+                Err(ureq::Error::Transport(_)) if attempt < self.max_retries => {
+                    std::thread::sleep(backoff_delay(attempt, None, self.base_delay));
                     attempt += 1;
                 }
                 Err(e) => return Err(anyhow::anyhow!("fetch {url:?}: {e}")),
@@ -299,7 +318,22 @@ impl HttpFetcher {
             let idx = missing[k];
             let start = idx * chunk_size;
             let end = ((idx + 1) * chunk_size).min(total) - 1; // inclusive
-            match self.fetch_chunk(url, start, end, &mut file, downloaded, abort) {
+            let mut attempt = 0u32;
+            let fetched = loop {
+                match self.fetch_chunk(url, start, end, &mut file, downloaded, abort) {
+                    // A body that stopped short is asked for again, from the chunk's start.
+                    Err(e)
+                        if e.is::<Interrupted>()
+                            && attempt < self.max_retries
+                            && !abort.load(Ordering::SeqCst) =>
+                    {
+                        std::thread::sleep(backoff_delay(attempt, None, self.base_delay));
+                        attempt += 1;
+                    }
+                    other => break other,
+                }
+            };
+            match fetched {
                 Ok(()) => {
                     let mut r = resume.lock().unwrap();
                     r.mark(idx as usize);
@@ -343,9 +377,15 @@ impl HttpFetcher {
             if abort.load(Ordering::SeqCst) {
                 break; // a sibling failed — stop and let the length check below unwind us
             }
-            let n = reader
-                .read(&mut buf)
-                .map_err(|e| anyhow::anyhow!("read range {start}-{end} of {url:?}: {e}"))?;
+            let n = match reader.read(&mut buf) {
+                Ok(n) => n,
+                Err(e) => {
+                    downloaded.fetch_sub(got, Ordering::Relaxed);
+                    return Err(
+                        Interrupted(format!("read range {start}-{end} of {url:?}: {e}")).into(),
+                    );
+                }
+            };
             if n == 0 {
                 break;
             }
@@ -358,10 +398,32 @@ impl HttpFetcher {
             if abort.load(Ordering::SeqCst) {
                 anyhow::bail!("download aborted");
             }
-            anyhow::bail!("short read for bytes {start}-{end} of {url:?}: got {got} of {expected}");
+            return Err(Interrupted(format!(
+                "short read for bytes {start}-{end} of {url:?}: got {got} of {expected}"
+            ))
+            .into());
         }
         Ok(())
     }
+}
+
+/// A chunk's body that stopped before its end (a reset, a read timeout, a short read). Its bytes
+/// are not kept, and the chunk is requested again.
+#[derive(Debug)]
+struct Interrupted(String);
+
+impl std::fmt::Display for Interrupted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Interrupted {}
+
+/// The HTTP agent every request goes through: ureq's defaults plus a read timeout, without which a
+/// silent connection is waited on until the far end hangs up.
+fn agent(read_timeout: Duration) -> ureq::Agent {
+    ureq::AgentBuilder::new().timeout_read(read_timeout).build()
 }
 
 /// Record `err` as the download's cause only if we are the first worker to fail; later failures
@@ -775,6 +837,64 @@ mod tests {
         )
     }
 
+    /// Drops the first connection after reading its request (no response at all, as a reset or a
+    /// CDN closing an idle socket looks to the client), then answers the second with a 200 `body`.
+    fn serve_drop_then(body: Vec<u8>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = read_request(&mut stream);
+            } // dropped: closed without a byte of response
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = read_request(&mut stream);
+                let header = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(header.as_bytes());
+                let _ = stream.write_all(&body);
+            }
+        });
+        format!("http://127.0.0.1:{port}/model.gguf")
+    }
+
+    /// [`serve_ranges`], except that the first request for the range starting at `cut_at` gets its
+    /// full headers and only half its body before the connection closes: a transfer cut off midway.
+    fn serve_ranges_cutting_once(body: Vec<u8>, cut_at: u64) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = Arc::new(body);
+        let cut = Arc::new(AtomicBool::new(false));
+        std::thread::spawn(move || {
+            for conn in listener.incoming() {
+                let Ok(mut stream) = conn else { break };
+                let body = Arc::clone(&body);
+                let cut = Arc::clone(&cut);
+                std::thread::spawn(move || {
+                    let req = read_request(&mut stream);
+                    let text = String::from_utf8_lossy(&req);
+                    let Some((s, e)) = text.lines().find_map(parse_range_header) else {
+                        return;
+                    };
+                    let total = body.len() as u64;
+                    let slice = &body[s as usize..=e as usize];
+                    let header = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {s}-{e}/{total}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        slice.len()
+                    );
+                    let _ = stream.write_all(header.as_bytes());
+                    if s == cut_at && !cut.swap(true, Ordering::SeqCst) {
+                        let _ = stream.write_all(&slice[..slice.len() / 2]);
+                        return;
+                    }
+                    let _ = stream.write_all(slice);
+                });
+            }
+        });
+        format!("http://127.0.0.1:{port}/model.gguf")
+    }
+
     fn parse_range_header(line: &str) -> Option<(u64, u64)> {
         let rest = line
             .strip_prefix("Range:")
@@ -871,6 +991,73 @@ mod tests {
         assert!(
             err.to_string().contains("429"),
             "exhausted-retry error should name the status: {err}"
+        );
+    }
+
+    #[test]
+    fn retries_a_dropped_connection_then_succeeds() {
+        // A slow line to Hugging Face: the connection is closed with no response. That is a
+        // transport error, not a status, and it used to end the pull on the first try.
+        let body = b"gguf-after-a-reset".to_vec();
+        let url = serve_drop_then(body.clone());
+        let dest = tmp_path("dropped");
+        HttpFetcher::new()
+            .with_backoff(2, Duration::from_millis(1))
+            .fetch_to_file(&url, &dest, &mut |_, _| {})
+            .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), body);
+        let _ = std::fs::remove_file(&dest);
+    }
+
+    #[test]
+    fn a_chunk_cut_off_midway_is_fetched_again() {
+        // 40 bytes over an 8-byte grid; the chunk at offset 16 is cut off once after 4 bytes.
+        let body: Vec<u8> = (0..40u8).collect();
+        let url = serve_ranges_cutting_once(body.clone(), 16);
+        let dest = tmp_path("cut_chunk");
+        let mut last = (0u64, None);
+        HttpFetcher::new()
+            .with_backoff(2, Duration::from_millis(1))
+            .with_chunk_size(8)
+            .with_parallelism(2)
+            .fetch_to_file(&url, &dest, &mut |d, t| last = (d, t))
+            .unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), body);
+        assert_eq!(
+            last,
+            (40, Some(40)),
+            "the cut-off bytes must not be counted twice"
+        );
+        let _ = std::fs::remove_file(&dest);
+        let _ = std::fs::remove_file(resume_sidecar_path(&dest));
+    }
+
+    #[test]
+    fn a_stalled_connection_fails_instead_of_waiting_forever() {
+        // The server takes the request and never answers. Without a read timeout the pull waits
+        // until the far end gives up, showing nothing; with one it fails and can be retried.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            for conn in listener.incoming() {
+                let Ok(mut stream) = conn else { break };
+                let _ = read_request(&mut stream);
+                held.push(stream); // keep it open and silent
+            }
+        });
+        let url = format!("http://127.0.0.1:{port}/model.gguf");
+        let dest = tmp_path("stalled");
+        let started = std::time::Instant::now();
+        let err = HttpFetcher::new()
+            .with_backoff(1, Duration::from_millis(1))
+            .with_read_timeout(Duration::from_millis(200))
+            .fetch_to_file(&url, &dest, &mut |_, _| {})
+            .unwrap_err();
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "took {:?}: {err}",
+            started.elapsed()
         );
     }
 
