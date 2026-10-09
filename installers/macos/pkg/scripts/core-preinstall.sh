@@ -19,6 +19,8 @@ user="$(console_user)"
 if [ -x "$knaif" ] && [ -n "$user" ]; then
   as_user "$user" "$knaif" daemon stop ||
     log "could not stop knaif's model daemon for $user; it exits on its own when idle"
+elif [ -x "$knaif" ]; then
+  log "not stopping a model daemon: nobody is logged in to ask; one left running exits on its own when idle"
 fi
 
 for dir in bin skills contracts licenses; do

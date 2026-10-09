@@ -1,0 +1,26 @@
+ggml_metal_device_init: GPU name:   MTL0 (Apple M1 Pro)
+ggml_metal_device_init: GPU family: MTLGPUFamilyApple7  (1007)
+ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+ggml_metal_device_init: GPU family: MTLGPUFamilyMetal4  (5002)
+load_backend: loaded MTL backend from ~/Downloads/knaif-1.2.1-macos-arm64/bin/libggml-metal.so
+llama_prepare_model_devices: using device MTL0 (Apple M1 Pro) (unknown id) - 12123 MiB free
+load_tensors: offloaded 37/37 layers to GPU
+load_tensors:  MTL0_Mapped model buffer size =  2375.91 MiB
+llama_kv_cache:       MTL0 KV buffer size =  1152.00 MiB
+sched_reserve:       MTL0 compute buffer size =   301.75 MiB
+~llama_context:       MTL0 compute buffer size is 301.7500 MiB, matches expectation of 301.7500 MiB
+real 18.93
+exit 0
+ggml_metal_device_init: GPU name:   MTL0 (Apple M1 Pro)
+ggml_metal_device_init: GPU family: MTLGPUFamilyApple7  (1007)
+ggml_metal_device_init: GPU family: MTLGPUFamilyCommon3 (3003)
+ggml_metal_device_init: GPU family: MTLGPUFamilyMetal4  (5002)
+load_backend: loaded MTL backend from ~/Downloads/knaif-1.2.1-macos-arm64/bin/libggml-metal.so
+llama_prepare_model_devices: using device MTL0 (Apple M1 Pro) (unknown id) - 12123 MiB free
+load_tensors: offloaded 37/37 layers to GPU
+load_tensors:  MTL0_Mapped model buffer size =  2375.91 MiB
+llama_kv_cache:       MTL0 KV buffer size =  1152.00 MiB
+sched_reserve:       MTL0 compute buffer size =   301.75 MiB
+~llama_context:       MTL0 compute buffer size is 301.7500 MiB, matches expectation of 301.7500 MiB
+real 3.40
+exit 0

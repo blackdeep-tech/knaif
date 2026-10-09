@@ -252,6 +252,15 @@ the end of this section, and keep working around it:
 6. Record under E3, E4, E6 (and D3 for the times), PR into `feat/macos-support`, and hand back. Do
    not re-run L3/L4 now: the freeze changes the binary again, and only the frozen build counts.
 
+**Round 1 handback, 2026-10-09: every step passes**, on the signed 1.2.1 build of `49b4e95`
+(record: `evals/runs/2026-10-09_mac-rehearsal-1.3.0_cleanroom/`). Steps 1–2 clean, both
+notarizations Accepted; step 3's three runs pass in a macOS 12.6 VM; step 4's daemon is stopped on
+reinstall and uninstall; step 5 offloads 37/37 from a fresh account, cold 18.93 s / warm 3.40 s.
+Three changes, macOS files only: the clean room's VM is built from Apple's IPSW (Cirrus' vanilla
+image ships the Command Line Tools), `clean-room.sh` gives `smoke.sh` the `Cargo.toml` it reads,
+and the preinstall logs when nobody is logged in. Round 2 copies `Cargo.toml` into the room
+(README). Details under E3, E4, E6, D3.
+
 *Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
 Work from that commit, not from `feat/macos-support`. The rules are the release plan's
 [pre-registered gate rules](2026-09-30-release-1.3.0.md#gate-decision-rules-pre-registered-2026-10-07-before-any-130-evidence-run):
@@ -1364,6 +1373,13 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
         an extra signed file, and possibly a **full-Xcode** build prerequisite (the `else` branch of
         `ggml-metal/CMakeLists.txt` invokes `xcrun -sdk macosx metal`), which would change M3's
         answer. Measure the tax before paying either price.
+
+      > **Measured 2026-10-09 (M1 Pro, macOS 27.2, the signed 1.2.1 `.zip`, 4B v2):** a new
+      > standard user, the `.zip` quarantined and extracted by Finder, `knaif run documents --yes
+      > "rotate sample.pdf 90 degrees"` twice. **Cold 18.93 s, warm 3.40 s** wall time, 37/37 on
+      > `MTL0` both times — a ~15.5 s first-run tax, against Vulkan's 38.3 s. It bundles the Metal
+      > shader compile with the first quarantined launch's online notarization check; the model was
+      > most likely already in the file cache. One machine, one account: no remedy chosen yet.
 - [ ] **D4. Unified-memory behaviour.** Apple Silicon shares one memory pool, so "VRAM" is a
       soft, OS-capped fraction (`iogpu.wired_limit_pct`). Test the recommended 4B model on the
       lowest memory configuration reachable and note where it stops fitting. If 8 GB Macs cannot
@@ -1510,6 +1526,16 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > yet run on a Mac.** `installers/macos/clean-room.sh` runs inside the VM and asserts the
       > room, quarantines the artifact, runs `smoke.sh`, and gates on a real request from a copy
       > with the Metal backend removed (D16). Host steps (tart): `installers/macos/README.md`.
+      >
+      > **Rehearsed 2026-10-09 (round 1, 1.2.1 — not release evidence): all three runs pass** on
+      > the signed build of `49b4e95`, in a macOS 12.6 VM. Run 1 `--zip` CLEAN ROOM PASS (8), run 2
+      > `--pkg --offline` 13/13, run 3 `--upgrade-from` the 2026-10-06 build CLEAN ROOM PASS (13).
+      > Real CPU inference in each; Metal in the VM offloads 37/37 then exits 1 (`Unknown Token
+      > Type`), INFO only. **The VM is not Cirrus' `macos-monterey-vanilla`: it ships the Command
+      > Line Tools** (`room_no_clt` fails); the base is built from Apple's 12.6 IPSW instead (README).
+      > `clean-room.sh` could never pass `smoke` (`smoke.sh` reads `../Cargo.toml`); fixed in
+      > `clean-room.sh` and the README. Metal on hardware from a fresh account: 37/37 on `MTL0`
+      > (D3 has the times). Record: `evals/runs/2026-10-09_mac-rehearsal-1.3.0_cleanroom/`.
 
 - [ ] **E4. Gatekeeper behaviour, simulated honestly — including extraction semantics.** `curl` does
       **not** set the quarantine attribute; Safari and Finder do, and they **propagate** it to
@@ -1525,6 +1551,12 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > yet run on a Mac.** `clean-room.sh` applies a browser's quarantine to the download, extracts
       > the `.zip` the way Finder does and checks every file inherited it, and `--offline` asserts
       > the network is really down for the stapled `.pkg` run.
+      >
+      > **Rehearsed 2026-10-09 (round 1): the signed half passes.** Quarantine propagated to every
+      > extracted file; the quarantined `knaif` launched with no Gatekeeper block, in the VM and from
+      > a fresh account on the physical Mac (a Safari-quarantined `.zip` extracted by Finder); the
+      > stapled `.pkg` passed `spctl` with the network down. No entitlements were needed under
+      > quarantine (F4). **Not yet run: the unsigned "expect a block" half.**
 
 - [ ] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
       *Added 2026-08-02 after audit.*
@@ -1580,6 +1612,16 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > **Still open:** the installer's own screens (the options page, greying of tool choices
       > without Homebrew, the conclusion page) as judged by the person installing, and the
       > disposable-VM half on the final stapled package (steps 9–10).
+      >
+      > **Disposable-VM half rehearsed 2026-10-09 (round 1, the stapled 1.2.1 `.pkg`): passes.**
+      > Install, receipt version, PATH link, offline install, upgrade over the 2026-10-06 `.pkg`
+      > (a real "Upgrading at base path"), `uninstall.sh` clean. The model choice: skipped and logged
+      > with nobody logged in; offline, "could not download …; knaif is installed anyway"; online
+      > with a console user, downloaded, and `~/.knaif/models` `[Excluded]` from Time Machine on a VM
+      > where nothing else could set it (F5b). The daemon: stopped by the preinstall on reinstall
+      > (`knaif daemon stopped.`) and by `uninstall.sh`, with a console user. With nobody at the
+      > console the preinstall does not stop it (by design: it exits when idle) and logged nothing,
+      > against its own comment; it now logs that (`core-preinstall.sh`).
 
 - [x] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
