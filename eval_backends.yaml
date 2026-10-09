@@ -139,6 +139,35 @@ lanes:
     model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
     public_name: knaif-qwen3-1.7b-v2
     timeout_s: 600
+  # macOS (the 2026-08-02 macOS support plan, D14): the UNPACKED metal .zip, one lane per model, and
+  # the same tree copied with libggml-metal.so removed for the CPU sample (D2's procedure — never
+  # KNAIF_N_GPU_LAYERS=0). The version-free folders keep these lanes valid across versions:
+  #   ditto -x -k dist/knaif-<ver>-macos-arm64.zip sandbox/macos && mv sandbox/macos/knaif-* sandbox/macos/knaif
+  #   cp -R sandbox/macos/knaif sandbox/macos/knaif-cpu && rm sandbox/macos/knaif-cpu/bin/libggml-metal.*
+  mac-4b:
+    kind: native_cli
+    binary: sandbox/macos/knaif/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  mac-1.7b:
+    kind: native_cli
+    binary: sandbox/macos/knaif/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
+  mac-cpu-4b:
+    kind: native_cli
+    binary: sandbox/macos/knaif-cpu/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 900
+  mac-cpu-1.7b:
+    kind: native_cli
+    binary: sandbox/macos/knaif-cpu/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 900
   # 1.2.1's sampled check (evals/runs/2026-10-02_r121-sampled): the frozen release artifacts,
   # unpacked by its run.sh, compared request by request with the r5c-*-4b accepted runs.
   r121-win-4b:

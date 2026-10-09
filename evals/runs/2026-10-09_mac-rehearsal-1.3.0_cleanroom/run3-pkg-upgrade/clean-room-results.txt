@@ -1,0 +1,14 @@
+PASS room_floor: macOS 12.6
+PASS room_no_clt
+PASS room_no_brew
+PASS quarantined
+PASS pkg_gatekeeper: origin=Developer ID Installer: Blackdeep Technologies Ltd OOD (8YJ4KKV9SJ)
+PASS pkg_install: see install.log
+PASS pkg_receipt: receipt 1.2.1, file 1.2.1
+PASS upgrade_receipt: after old-1.2.1.pkg
+PASS pkg_path_link
+PASS launch: knaif 1.2.1 (inference: llama.cpp)
+PASS smoke: see smoke.log
+PASS cpu_run: sample-rotated.pdf
+INFO metal_in_vm: exit 1; offloaded 37/37 layers
+PASS uninstall: clean

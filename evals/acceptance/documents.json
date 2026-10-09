@@ -4,11 +4,11 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "a37cbc73bb844b4ee073f8185f000ff24709020409d52fdbd09c4df9da3fbf4d",
-        "contracts": "41ffe7f7e1ff75adf2567c20ed59ce5e707664a4fccd0086ab35aced455356f2",
+        "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+        "contracts": "5720eaf6465b7391a3806ff3711688e5d9b9718696484ca35975aaa86d8eba9d",
         "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
-        "native": "ab90fad52e85fcab5f10bc23f366c94b4f99cedb8cffd2fdedec6d3b65da6487",
+        "native": "1355df4d98ad0dbee920462419c11bd013d8ca92b7cf2e22ce9f541da71fcaf2",
         "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
         "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
         "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
@@ -20,11 +20,11 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "a37cbc73bb844b4ee073f8185f000ff24709020409d52fdbd09c4df9da3fbf4d",
-        "contracts": "41ffe7f7e1ff75adf2567c20ed59ce5e707664a4fccd0086ab35aced455356f2",
+        "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+        "contracts": "5720eaf6465b7391a3806ff3711688e5d9b9718696484ca35975aaa86d8eba9d",
         "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
-        "native": "ab90fad52e85fcab5f10bc23f366c94b4f99cedb8cffd2fdedec6d3b65da6487",
+        "native": "1355df4d98ad0dbee920462419c11bd013d8ca92b7cf2e22ce9f541da71fcaf2",
         "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
         "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
         "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
@@ -662,6 +662,52 @@
               ]
             ]
           }
+        },
+        "knaif-qwen3-4b-v2|macos|mtl": {
+          "evidence": {
+            "bundle": "7f4084e890a81b2fa644c7818e16c21410cb3b74e70fd4062f6f2742dd753ce6",
+            "contracts": "63e3eceafeb4af68ccc76dbc24f5bf347d8dd52d717169ef5b60818bca95d956",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "4c82d1f05b3b56b49db928f15d785e290811646a9640691a21a34689b30aa853",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
+          },
+          "run": "evals/runs/2026-10-06_mac-documents-105-fix_success/4b/metal/documents_mac-4b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.975609756097561,
+          "avg_knaif_score": 0.9850762527233116,
+          "lane": "mac-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|macos|mtl": {
+          "evidence": {
+            "bundle": "7f4084e890a81b2fa644c7818e16c21410cb3b74e70fd4062f6f2742dd753ce6",
+            "contracts": "63e3eceafeb4af68ccc76dbc24f5bf347d8dd52d717169ef5b60818bca95d956",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "4c82d1f05b3b56b49db928f15d785e290811646a9640691a21a34689b30aa853",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
+          },
+          "run": "evals/runs/2026-10-06_mac-documents-105-fix_success/1.7b/metal/documents_mac-1.7b_success.json",
+          "summary": "ACCEPTED - 42 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9944812362030905,
+          "lane": "mac-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
         }
       }
     },

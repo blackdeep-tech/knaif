@@ -198,6 +198,26 @@ def _snapshot_path(skill: str, model: str | None = None) -> Path:
     return snapshot_path(skill, model)
 
 
+def _assert_skill_owns_verifier(skill: str, verifier: str, verifiers: dict[str, Any]) -> None:
+    """Refuse to write a snapshot scored by a verifier the skill does not define.
+
+    `score_corpus` does `verifiers.get(name)` and carries on with `None` when it misses,
+    degrading to outcome/tool accuracy only — so the bar would look normal and execute nothing.
+    Observed 2026-08-04 (C0 in the 2026-08-02 macOS support plan): `documents` has no
+    `output_diff`, and a snapshot run with it scored every Knaif column `n/a`. A verifier that
+    does not execute at all (`cheap`) is refused separately, by `save_snapshot`.
+    """
+    if verifier not in verifiers:
+        owned = ", ".join(sorted(k for k in verifiers if k != "grade_outputs")) or "(none)"
+        sys.exit(
+            f"refusing to snapshot '{skill}' with --verifier {verifier}: this skill does not "
+            f"define it (it owns: {owned}).\n"
+            f"  Scoring falls back to outcome/tool accuracy only when a verifier is missing, so "
+            f"the bar would look normal and execute nothing.\n"
+            f"  Re-run with a verifier {skill} owns, e.g. --verifier success."
+        )
+
+
 def _default_fixture_dir(sandbox: Path | str, skill: str) -> Path:
     """Return the default generated fixture directory for *skill*."""
     return Path(sandbox) / "fixtures" / skill
@@ -903,6 +923,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
             print(f"  Saved to {out_path}")
 
         if args.snapshot:
+            _assert_skill_owns_verifier(args.skill, args.verifier, verifiers)
             snap_path = _snapshot_path(args.skill, scoreboard.get("backend_public_name"))
             save_snapshot(scoreboard, snap_path)
             print(f"  Snapshot saved to {snap_path}")

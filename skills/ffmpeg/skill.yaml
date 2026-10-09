@@ -52,6 +52,9 @@ dependencies:
         # Unsigned: Windows blocks ffmpeg.exe where Smart App Control is on (Windows Sandbox,
         # enforcement on, 2026-10-02), so `skills deps` and setup say so instead of failing later.
         smart_app_control: blocked
+      macos:                      # what the .pkg installs, and Homebrew's bin for a non-login shell
+        brew: ffmpeg
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
 
 safety:
   unsafe_phrases:

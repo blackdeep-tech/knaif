@@ -1,0 +1,38 @@
+{
+  "reference": "linux/knaif-qwen3-1.7b-v2/cpu-sample/ffmpeg",
+  "shared": 115,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 5,
+    "both_correct": [
+      "ffmpeg_099#1",
+      "ffmpeg_138#0"
+    ],
+    "only_reference": [
+      "ffmpeg_295#1"
+    ],
+    "only_other": [],
+    "both_wrong": [
+      "ffmpeg_129#0",
+      "ffmpeg_136#0"
+    ]
+  },
+  "canonical": {
+    "flips": 5,
+    "both_correct": [
+      "ffmpeg_099#1",
+      "ffmpeg_138#0"
+    ],
+    "only_reference": [
+      "ffmpeg_295#1"
+    ],
+    "only_other": [],
+    "both_wrong": [
+      "ffmpeg_129#0",
+      "ffmpeg_136#0"
+    ]
+  },
+  "grades_differ": [
+    "ffmpeg_295#1"
+  ]
+}

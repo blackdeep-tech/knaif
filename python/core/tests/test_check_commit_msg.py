@@ -92,6 +92,39 @@ def test_merge_commits_in_the_range_are_skipped(repo: Path) -> None:
     assert ccm.main(["--range", f"{base}..{head}"]) == 0
 
 
+def test_an_exempt_commit_in_the_range_is_skipped_and_named(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A published commit that predates the range check passes by its full ID, nothing else."""
+    base = _git(repo, "rev-parse", "HEAD")
+    old = _commit(repo, "an old message from before the check")
+    head = _commit(repo, "feat: fine")
+    monkeypatch.setattr(ccm, "EXEMPT_COMMITS", {old: "published before the range check"})
+
+    assert ccm.main(["--range", f"{base}..{head}"]) == 0
+    assert old[:12] in capsys.readouterr().out
+
+
+def test_an_exempt_id_does_not_cover_another_commit(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, "wip stuff")
+    head = _commit(repo, "feat: fine")
+    monkeypatch.setattr(ccm, "EXEMPT_COMMITS", {"0" * 40: "some other commit"})
+    assert ccm.main(["--range", f"{base}..{head}"]) == 1
+
+
+def test_the_exemptions_are_the_three_august_macos_commits() -> None:
+    """Owner, 2026-10-09: only these; rewriting the published branch was the alternative."""
+    assert set(ccm.EXEMPT_COMMITS) == {
+        "e687fe191231a7680e9d5b31f980089e7580b69f",
+        "0a3c1fcae5520ac1a4db254a2efb40def931d7cf",
+        "fa12542ec65f2b455308dcf31ce03f123c24e4c1",
+    }
+    assert all(reason.strip() for reason in ccm.EXEMPT_COMMITS.values())
+
+
 def test_an_unknown_revision_is_an_error_not_a_pass(repo: Path) -> None:
     """A shallow checkout that lacks the base must fail loudly, never lint zero commits."""
     assert ccm.main(["--range", "deadbeefdeadbeef..HEAD"]) == 1

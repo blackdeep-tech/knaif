@@ -1,0 +1,2017 @@
+# macOS Support — Metal inference, packaging, signing, and a third release platform
+
+**Status:** Active · **Created:** 2026-08-02 · **Completed:** —
+**Owner:** native/packaging · **Ref:** [`installers/macos/README.md`](../../installers/macos/README.md) (placeholder this plan replaces) · [`installers/package.sh`](../../installers/package.sh) · [`docs/NATIVE.md`](../NATIVE.md) §5, §9, §10, §12 · [`docs/RELEASE.md`](../RELEASE.md) · [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) (C3 matrix, §*Out of scope*)
+**Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
+
+> **Synced with 1.2.0 on 2026-09-30** (merge of `main` into this branch, done on Windows). What
+> changed for the remaining work:
+> - **C0 is superseded.** Release 1.2 re-locked both snapshots for the shipped models; the merge
+>   takes `main`'s snapshots. **C4/C5/C6 and the L4 run against `knaif-qwen3-4b-v2`** and those
+>   committed snapshots — no re-lock (§11).
+> - **Builds go through 1.2's per-kind profiles.** `metal` is a kind like the others:
+>   `just build-native-kind metal` → `target/release-metal/`, then
+>   `installers/package.sh --no-build --kind=metal --profile=release-metal`, or `just package-native
+>   metal` for both. `scripts/build_native_kind.sh` now sets the OpenSSL guard and
+>   `MACOSX_DEPLOYMENT_TARGET` (default 12.0).
+> - **Feature sets come from `package.sh --print-feats=<kind>`.** `openmp` is explicit on
+>   cpu/vulkan/cuda (so Windows/Linux build exactly as 1.2.0 did) and absent on metal; every kind
+>   carries `pdfium`, and `build_native_kind.sh` stages the pinned `mac-arm64` PDFium.
+> - The branch's own `just package-native` recipe, Windows notes and `eval-snapshot` default were
+>   replaced by 1.2's equivalents; its "skill must own the verifier" snapshot check was kept.
+> - **Not yet verified on a Mac after the merge:** everything Darwin-only. Re-run A2/A3, B, C1 and
+>   E1/E2 before building on them.
+> - **`just check` fails at `check-gate` on this branch, and that is correct:** the native sources
+>   changed (`knaif-llm` features, `llama.rs`), so 1.2.0's L3/L4 evidence reads stale for both
+>   skills. It clears when L3/L4 are re-run on this tree (the 1.3.0 gates). Everything else in
+>   `just check` passed on Windows at the merge (Python 3002 passed, native, contracts, site); CI
+>   does not run the gate.
+>
+> **Status note (2026-08-02).** Not started. macOS has been explicitly out of scope since
+> [monorepo-dual-runtime](2026-06-17-monorepo-dual-runtime.md) Phase 9 and is still listed as a
+> known limitation in [NATIVE.md](../NATIVE.md) §12 ("no installers/notarization; explicitly out for
+> v1"). The Rust core was kept cross-platform on purpose, so this plan is **packaging, signing, and
+> verification work with a small amount of build plumbing** — not a port. The inference question is
+> already answered by the vendored sources (§1); the risk lives in §5–§8.
+>
+> **Execution target: a current macOS on Apple Silicon** — but not exclusively. Building, signing,
+> notarizing and running anything Darwin needs the Mac. **`scripts/check_macho_deps.py` (E1), the
+> `package.sh` branches (§5), the feature-graph change (D3), and the eval-snapshot prerequisite
+> (C0) can and should be written and tested from the Windows box**, which is the whole design of
+> the existing `check_pe_imports.py` / `check_elf_deps.py` pair: a static checker must fail where
+> the mistake was made, not only on the platform that suffers it.
+>
+> **Reviewed 2026-08-02** against an external audit; every finding was re-verified against the code
+> before being accepted. The audit's six blocking findings all held and are folded in below — the
+> substantive ones were C0 (the regression gate proved nothing), C5's binary, and the feature-graph
+> error in D3. Two audit claims were corrected rather than adopted (A5's `@executable_path`
+> rationale, and the OpenMP failure's exact shape); one was found to understate the problem (the
+> `documents` snapshot is stale too, not just `ffmpeg`).
+
+**Goal:** Ship knaif on macOS as a first-class third platform — a signed, notarized arm64 artifact
+with Metal GPU inference, verified by the same eval/parity/clean-room gates Windows and Linux
+already pass, and cut by the same `RELEASE.md` procedure.
+
+---
+
+## 0. Start here
+
+*Added 2026-09-30 — the handoff for whoever builds this on a Mac, human or agent.* Read this
+section, then §2 (decisions) and the workstream you are picking up. Everything below §2 is
+the detailed record; this section is the map.
+
+**How work flows (git).**
+
+1. Fork `blackdeep-tech/knaif`. Keep your fork's `feat/macos-support` as a **mirror** of ours
+   — never commit on it directly.
+2. For each piece of work, cut a short topic branch from it (`mac/<topic>`, for example
+   `mac/metal-rebuild`) and open a PR from your fork into **our `feat/macos-support`**. Small
+   PRs, one workstream step each, so review stays quick.
+3. Before starting a new topic, update the mirror from ours. The owner merges `release/1.3.0`
+   (and through it `main`) into `feat/macos-support` whenever they move. **Merge, never rebase** a
+   shared branch.
+4. When §13 holds, the owner opens one PR from `feat/macos-support` into `release/1.3.0`, merged
+   with a merge commit. `release/1.3.0` only ever receives finished macOS work.
+
+Why a fork: fork PRs never see repository secrets, which keeps the signing identities (F, and
+the owner's [certificate steps](2026-09-30-macos-signing-certificates.md)) away from branch work by construction.
+
+**Who does what.**
+
+| Who | Does |
+|---|---|
+| Owner | Certificates and the notarization key ([macos-signing-certificates](2026-09-30-macos-signing-certificates.md)), the Homebrew tap repository, merges, release cuts |
+| Contributor (Mac) | Workstreams M–G on Apple Silicon: build, package, sign and notarize the first build **by hand**, the evals, the clean room |
+| Windows box | Everything that does not need a Mac to run: scripts, tests against faked Apple tools, CI, docs, the 1.2.0 reference extract |
+
+**Where it stands (2026-09-30).** The branch was synced with 1.2.0 on Windows (see the note at
+the top), and then everything that could be written without a Mac was — each piece tested on
+Windows and on Linux (WSL) against faked Apple tools, and **none of it run on a Mac yet**:
+
+| Piece | Where | Task |
+|---|---|---|
+| a `knaif` reached through a symlink (the `.pkg`'s PATH link, Homebrew's) resolves its real folder before looking for skills, contracts and backends — macOS reports the invoked path | `knaif-core` `current_exe_real`, `llama.rs` | found here; F5, G5 |
+| the dependency probe searches `macos.dirs` (Homebrew's `bin`, the LibreOffice cask's `.app`) and hints the exact `brew install` | `deps.rs`, both `skill.yaml` | C7 |
+| `models pull` keeps `~/.knaif/models` out of Time Machine | `knaif-models`, CLI | F5b (D18) |
+| the `.pkg`: Distribution with the options page, per-choice packages, install scripts, `uninstall.sh` | `installers/macos/build-pkg.sh`, `pkg/` | F5 (D13) |
+| signing, notarization log check, stapling, the F2 order end to end | `sign.sh`, `notarize.sh`, `release.sh`, `scripts/check_macos_signing.py`, `check_macho_deps.py --list` | F2, F3, F3b, F6, F7 |
+| the clean room, guest side | `installers/macos/clean-room.sh` | E3, E4, E6 (D16) |
+| the Homebrew formula and its renderer | `installers/macos/homebrew/` | G5 (D19) |
+| CI: path-filtered macOS job; tag-time signing job, off until `MACOS_SIGNING=enabled` | `ci.yml`, `release.yml` | G6 (D10, D11) |
+| the 1.2.0 L4 per-row reference and the comparison tool | `evals/parity/1.2.0-l4-rows/`, `scripts/l4_rows.py` | C6→D14 (D17) |
+| macOS eval lanes `mac-4b`, `mac-1.7b`, `mac-cpu-4b`, `mac-cpu-1.7b` | `eval_backends.yaml` | C4 |
+| docs: RELEASE.md (§1, §2, §4, §5, §6), NATIVE.md §5.3, `installers/macos/README.md` | | G1, G2, G3 |
+
+**The Mac's list — only what needs a Mac, in this order.** Record each result under its task,
+commit it on a `mac/<topic>` branch, and PR into `feat/macos-support`. Then hand back: the Windows
+box takes over the write-ups, the gate and the release integration.
+
+1. **Re-verify the build** (A2/A3, B, C1, E1/E2): `just bootstrap`, `just check-native`,
+   `just test-native`, `just package-native metal`, `bash installers/smoke.sh
+   dist/knaif-*-macos-arm64.zip`, and the installer tests under macOS's bash 3.2: `uv run pytest
+   python/core/tests/test_installer_pkg.py python/core/tests/test_macos_release.py
+   python/core/tests/test_macos_signing.py python/core/tests/test_macho_deps.py`.
+2. **The symlink fix, for real:** `ln -s "$PWD"/dist/staging/knaif-*-macos-arm64/bin/knaif
+   /tmp/knaif && cd /tmp && ./knaif skills list && ./knaif run documents --verbose "<request>"` —
+   skills found, Metal selected, layers offloaded.
+3. **M3:** is the Command Line Tools alone enough to build? (A CLT-only tart VM answers it.)
+4. **The `.pkg` by hand (F5, E6 static):** `just package-pkg`, open it — the options page, the
+   tool choices greyed without Homebrew and enabled with it, a tool installed, the model
+   downloaded, the PATH link, the conclusion page; `pkgutil --expand` it; then
+   `sudo /usr/local/knaif/uninstall.sh`. Note anything that surprises you under F5.
+5. **The evals on Metal (C4, D14):** unpack the zip into the lanes' folders (the comment above
+   `mac-4b` in `eval_backends.yaml`), then per model and skill: `just eval-fixtures <skill>`,
+   `uv run python -m knaif.evalsuite native --skill <skill> --lane mac-<model> --verifier success
+   --config eval_backends.yaml --save <dir>`, `just eval-safety-native <skill> <save.json>`,
+   `just eval-accept-native <skill> <board> <safety>`. Then the CPU sample on `mac-cpu-<model>`
+   with `--only evals/runs/2026-09-29_r5c-linux_success/t15_sample_<model>_<skill>.json`.
+6. **Row flips (D14/D17):** `uv run python scripts/l4_rows.py compare
+   evals/parity/1.2.0-l4-rows/<platform>-<model>-<backend>-<skill>.json <mac board> --list`
+   against Windows CUDA and Linux CUDA (Metal boards) and the Linux CPU sample (CPU boards).
+7. **L3 parity (C5):** `just parity <skill>` for both skills, per C5's note on the build to use.
+8. **Performance (D1–D6)** — the PERFORMANCE.md rows.
+9. **Signing, once the owner's certificates arrive (F1, F4, D10):** `just release-macos` with no
+   entitlements first; keep `dist/notary/`.
+10. **The clean room (E3, E4, E6, D16):** the three tart runs in `installers/macos/README.md`, on
+    the files step 9 produced; then Metal on the physical Mac from a fresh user account.
+
+Known gaps the Mac will meet: `just parity` still hard-codes `target/debug/knaif` (C5's note);
+Homebrew may rewrite the dylibs' install names and drop the Developer ID signature (G5's note).
+
+**Known red, on purpose.** `just check` fails at `check-gate` on this branch: the native
+sources changed, so 1.2.0's L3/L4 evidence reads as stale for both skills. It clears when L3/L4
+are re-run on this tree as part of the 1.3.0 gates. Do not "fix" it by re-locking snapshots —
+§11 forbids that.
+
+**Decisions to build to, not re-open.** D1–D9 below, plus the owner's 2026-09-30 decisions
+D10–D19. If the Mac shows one of them is wrong, record the evidence and raise it with the owner
+before changing course.
+
+**Handback from the Mac, 2026-10-05 (M1 Pro, macOS 27.2).** Steps 1–8 of the Mac's list are done
+and recorded under their tasks; steps 9–10 are blocked on the certificates. No decision D1–D19
+was found wrong. PRs, all merged into the `feat/macos-support` of the Mac contributor's fork:
+#1 build fixes (step 1), #2 symlink (2), #3 Command Line Tools (3), #4 `.pkg` (4), #5 L4 and row
+flips (5–6), #6 L3 (7), #7 performance (8), #8 the L4 re-run on the merged tree, #10 the merge of
+`main` (1.2.1). The upstream PRs `blackdeep-tech/knaif#77` and `#78` were closed in favour of #1.
+
+| Step | Result | Where |
+|---|---|---|
+| 1 Build re-check | **passed after three fixes**: proc macros unstripped for macOS 27's dyld, the path remap on macOS, CI on `macos-15` | A2, E5, G6 |
+| 2 Symlinked `knaif` | **passed**: skills, contracts and backends found through the link; Metal 37/37 | F5 |
+| 3 M3 | **the Command Line Tools alone build and package the metal kind** | M3 |
+| 4 `.pkg` | static half, install and uninstall **passed**; two findings (below) | E6 |
+| 5 L4 Metal | 4B **ACCEPTED** on both skills, 1.7B documents **ACCEPTED**, 1.7B ffmpeg **NOT ACCEPTED** (one slice); safety 100%; a re-run on `af05956` was identical row for row | C4 |
+| 5 CPU sample | recorded on the Metal-less tree; not composed into a cell | C4 |
+| 6 Row flips | vs Windows/Linux CUDA: 4B 31/861 + 2/164, 1.7B 10/861 + 0/164; vs Linux CPU: at most 5/115 | C4, `evals/runs/2026-10-03_mac-l4_success` |
+| 7 L3 | 3 of 4 **PASS**; 4B documents **FAIL** on one port bug | C5 |
+| 8 Performance | `M1P` rows: Metal 4B 506 tok/s prompt / 16.9 tok/s generation, CPU 94 / 6.5 | D1, D2, D6, PERFORMANCE.md §2 |
+| 9 Signing | **done 2026-10-06** with the owner's certificates: both notarizations Accepted, `.pkg` stapled, no entitlements needed; that build carries a home path and must be rebuilt outside `~` before release | F1, F4 |
+| 10 Clean room | **next**: the three tart runs on a release build signed from a checkout outside `~` | E3, E4, E6 |
+
+**Commit IDs in the Mac's records, 2026-10-08.** The fork's branch was rewritten before
+`blackdeep-tech/knaif#82` (committer address), so three IDs its records cite are not in this
+history. The files are unchanged: `8cbab23` is `8f09735` (2026-10-07 runs), `bdd01b5` is `23015d8`
+(2026-10-05 runs). `af05956` was a merge on the fork with no counterpart here; the 2026-10-04 L4
+re-run it names was superseded by the 2026-10-05 and 2026-10-07 runs. The run records keep the IDs
+the tools wrote.
+
+**Next round for the Mac (from 2026-10-08).** `release/1.3.0` (1.3.0's daemon, run prompting and
+Windows fixes) is merged into `feat/macos-support`. Both branches must be in `release/1.3.0` before
+the freeze, so the owner opens the PR `feat/macos-support` → `release/1.3.0` now, not at §13.
+Two rounds remain: a rehearsal now, and the evidence on the frozen 1.3.0.
+
+*The rule for every change.* Change only the macOS implementation: `installers/macos/**`,
+`scripts/check_macos_signing.py`, `scripts/check_macho_deps.py`, the `Darwin`/`macos` branches of
+shared build scripts, the `macos:` blocks in `skill.yaml`, the `mac-*` lanes in `eval_backends.yaml`,
+macOS docs, and your own `evals/` records. Anything else (native crates, skill code, Python,
+contracts, the gate, shared scripts, CI for other platforms) you **report, not fix**, as a block at
+the end of this section, and keep working around it:
+
+```markdown
+**Finding <YYYY-MM-DD>: <one line>**
+- Where: <file:line, or the command>
+- Seen: <exact output, or row id and verdict>
+- Expected: <what should happen, and why: Python's result, a doc, a rule>
+- Platforms: macOS only | probably every platform (why)
+- Evidence: <evals/... path, or a log excerpt>
+- Suggested fix (not applied): <optional>
+```
+
+*Before any work.*
+1. Sync your fork's mirror once the owner says it is pushed: `git fetch upstream && git checkout
+   feat/macos-support && git merge --ff-only upstream/feat/macos-support && git push origin
+   feat/macos-support`. It fast-forwards: #82 is already inside it.
+2. Work and build from a checkout **outside your home folder** (`/Users/Shared/knaif`, E5).
+3. Before every push, both addresses must be your GitHub noreply address: `git log --format='%ae
+   %ce' upstream/feat/macos-support..HEAD` prints nothing else.
+
+*Round 1, now — rehearsal (version still 1.2.1, nothing here is release evidence).*
+1. Step 1's checks on the merged tree (`just check-native`, `just test-native`, the installer tests
+   under bash 3.2). New since your last build: `knaif daemon start | stop | status` and
+   `run --daemon` (loopback TCP, its token in `~/.knaif/daemon.json`, a 10-minute idle timeout).
+2. **The signed build.** First move the 2026-10-06 signed files out of `dist/` and rename that
+   `.pkg` `old-1.2.1.pkg`: the new build has the same file names, and run 3 below upgrades from
+   it. (It carries the old home path, but it is only ever installed inside the VM.) Then, from
+   `/Users/Shared/knaif`, with the four `KNAIF_*` variables set as in `installers/macos/README.md`
+   (*Sign, notarize, staple*): `just release-macos`. Its home-path check must pass. Keep `dist/notary/`.
+3. **Step 10, the clean room**, on those files: the three tart runs in `installers/macos/README.md`
+   (*The clean room*), each on a fresh clone, each ending `CLEAN ROOM PASS`:
+   run 1 `--zip`; run 2 `--pkg --offline`, in the VM's own Terminal with networking off; run 3
+   `--pkg --upgrade-from old-1.2.1.pkg`. Keep each run's `clean-room-results.txt` and logs. Both
+   builds say 1.2.1, so run 3's `upgrade_receipt` passes trivially here; it means something at
+   the freeze. (Fixed on Windows 2026-10-08, untested on a Mac: `clean-room.sh` now passes
+   `--model` as an absolute path. Before, its runs looked for the GGUF from a scratch folder, did
+   not find it, and `cpu_run` would have failed.)
+4. **The daemon**, in run 3's VM after it finishes (its uninstall keeps `~/.knaif`). Written on
+   Windows 2026-10-08 and tested only against a faked `sudo` and `stat`; this is its first run on
+   a Mac. The `.pkg`'s preinstall runs the old binary's `knaif daemon stop` as the console user;
+   `uninstall.sh` runs it as the user who ran sudo.
+
+   ```bash
+   cd ~/room
+   sudo installer -pkg knaif-1.2.1-macos-arm64.pkg -target /
+   knaif daemon start --model "$PWD/knaif-qwen3-4b-v2-q4_k_m.gguf"
+   knaif daemon status                                 # running (pid N)
+   sudo installer -pkg knaif-1.2.1-macos-arm64.pkg -target /
+   pgrep -fl 'knaif daemon serve' || echo DAEMON-GONE  # must print DAEMON-GONE
+   grep 'knaif' /var/log/install.log | tail -5         # "knaif daemon stopped.", no "could not stop"
+   knaif daemon start --model "$PWD/knaif-qwen3-4b-v2-q4_k_m.gguf"
+   sudo /usr/local/knaif/uninstall.sh
+   pgrep -fl 'knaif daemon serve' || echo DAEMON-GONE  # must print DAEMON-GONE
+   ```
+
+5. **Metal on the physical Mac, from a fresh user account** (E3's split, D16; D3's first-run
+   cost). Make a standard user in System Settings and log in as them. Bring the `.zip` in the way
+   a browser does (Safari, or `xattr -w com.apple.quarantine` as `clean-room.sh` does) and extract
+   it with Finder. Copy `/Users/Shared/knaif/sandbox/fixtures/documents/sample.pdf` into a work
+   folder and, from there, run twice:
+   `<extracted>/bin/knaif run documents --yes --verbose --model
+   /Users/Shared/knaif/models/knaif-qwen3-4b-v2-q4_k_m.gguf "rotate sample.pdf 90 degrees"`.
+   The first run's time is D3's cold number, the second its warm one; both must show `offloaded
+   N/N layers` on `MTL`.
+6. Record under E3, E4, E6 (and D3 for the times), PR into `feat/macos-support`, and hand back. Do
+   not re-run L3/L4 now: the freeze changes the binary again, and only the frozen build counts.
+
+**Round 1 handback, 2026-10-09: every step passes**, on the signed 1.2.1 build of `49b4e95`
+(record: `evals/runs/2026-10-09_mac-rehearsal-1.3.0_cleanroom/`). Steps 1–2 clean, both
+notarizations Accepted; step 3's three runs pass in a macOS 12.6 VM; step 4's daemon is stopped on
+reinstall and uninstall; step 5 offloads 37/37 from a fresh account, cold 18.93 s / warm 3.40 s.
+Three changes, macOS files only: the clean room's VM is built from Apple's IPSW (Cirrus' vanilla
+image ships the Command Line Tools), `clean-room.sh` gives `smoke.sh` the `Cargo.toml` it reads,
+and the preinstall logs when nobody is logged in. Round 2 copies `Cargo.toml` into the room
+(README). Details under E3, E4, E6, D3.
+
+**Owner's answer, 2026-10-09.** Round 1 is taken into `feat/macos-support` as it stands (a
+fast-forward to `81cc9d7`; no fork PR). Before the freeze, one manual pass on a `.pkg` built from the
+current tip, not release evidence: the installer's own screens judged by hand (the options page, the
+tool choices greyed without Homebrew and enabled with it, the conclusion page), and a reinstall with
+nobody logged in that logs `not stopping a model daemon`. The upgrade run is not repeated now: both
+builds say 1.2.1, so it can only pass; round 2 repeats it on the frozen files. L3/L4 wait for the
+freeze. Anything the screens show goes to the owner as a finding (the rule above) before the freeze.
+Then: `feat/macos-support` → `release/1.3.0` by one PR, merged with a merge commit, and the owner
+announces the freeze commit.
+
+*Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
+Work from that commit, not from `feat/macos-support`. The rules are the release plan's
+[pre-registered gate rules](2026-09-30-release-1.3.0.md#gate-decision-rules-pre-registered-2026-10-07-before-any-130-evidence-run):
+copy them verbatim into your `run_all.sh`, as the Windows and Linux scripts do, and change none of
+them after a result. Launch each stage only after the owner approves it with its time budget.
+1. `just release-macos` from `/Users/Shared` at the freeze commit; record the sha256 of the signed
+   `.zip` and `.pkg`. Everything below runs on that `.zip`.
+2. **L4 Metal**, both models × both skills, with `KNAIF_NO_DAEMON=1` (step 5's commands). The
+   1.7B ffmpeg `batch` miss is waived by the rule; any other miss goes to the owner.
+3. **The macOS CPU cell is composed, as 1.2.0 did it** (owner, 2026-10-07): run the `t15_sample`
+   rows on `mac-cpu-<model>` and both safety sets on that binary. The Windows box composes them
+   into your Metal board and grades the cell; flips are reported, not a verdict.
+4. **Daemon plan equality**, both models: `knaif plan --skill <skill> --batch <utterances> --json`
+   over each skill's whole `eval.jsonl`, once with `KNAIF_NO_DAEMON=1` and once through
+   `knaif daemon start`. The outputs must be byte-identical; the method is in
+   `evals/parity/2026-10-06_daemon-plan-equality/README.md`. A difference goes to the owner.
+5. **L3 on Metal** (step 7), recorded, not gated: the gate's L3 is the CUDA run on Windows.
+6. **Step 10 again** on the frozen files, the rehearsal's cases included.
+7. Commit the boards, safety files and verdicts under `evals/runs/<date>_r130-macos_success/`
+   (the parity ones under `evals/parity/`), one row per run in `evals/INDEX.md`, and PR them into
+   **`release/1.3.0`**. Evidence and macOS notes only. Code changes go to the owner first, by the
+   rule above.
+
+**Needs the owner:**
+1. **1.7B ffmpeg misses `batch`** by one row (25/29 against 0.896, the 1.7B's own Python score). The
+   same rows fail in both Mac runs; three fail on every 1.2.0 platform, and 1.2.0 recorded the same
+   miss for Windows Vulkan 1.7B. Waive, retrain, or keep the 4B as the macOS recommendation (C4).
+   **Decided 2026-10-07 (owner): waived as on Windows** — the 1.3.0 release plan's waiver rule.
+2. **`documents_105`: native's dry run accepts a `reorder_pages` order its execution rejects**;
+   Python rejects it in both. Platform-independent. **A fix with its L2 case is prepared and
+   measured on the Mac (L3 now passes), and merged in #14**; documents L3/L4 still to
+   re-run on Windows and Linux (C5). **Decided 2026-10-07 (owner): in 1.3.0**, merged upstream in
+   `blackdeep-tech/knaif#82`. On Windows, 2026-10-08: a chain's input that an earlier step has yet
+   to write is checked when the step runs, as `remove_pages` does, so `knaif run` still previews
+   "merge, then reverse the pages".
+3. **`.pkg` findings** (E6): `._*` AppleDouble entries in the payload from `com.apple.provenance`
+   (harmless on install; on this Mac neither `xattr -cr` nor `COPYFILE_DISABLE=1` removes them,
+   because macOS re-adds the attribute to every file written, see E6), and the script-only choices
+   (PATH link, model, tools) leave no receipt: `uninstall.sh` does not need one (it checks the
+   link's target and removes the install folder), but nothing records which choices were taken.
+   **Decided 2026-10-09 (owner): both accepted for 1.3.0** and documented, not fixed.
+4. **Release contracts:** `platforms.yaml` lists `macos` as `planned` but without artifacts or
+   requirements, and `acceptance_matrix.yaml` has no macOS cells; the recorded cells are keyed
+   `<model>|macos|mtl` (C4). *(Corrected 2026-10-06: this item first said `platforms.yaml` had no
+   macOS entry, which was wrong.)* **Done 2026-10-09 (Windows) for the matrix:** a `1.3.0` release
+   with the gate rules' cells, `macos|mtl` and `macos|cpu` included, is now `current_release`.
+   `platforms.yaml` stays `planned` until 1.3.0 is published: the download page checks its
+   artifact names against the published release, which has no macOS asset yet (G1, G3).
+7. **D3, the first-run Metal cost** (cold 18.93 s, warm 3.40 s). **Decided 2026-10-09 (owner): no
+   remedy in 1.3.0**; documented as first-run behaviour.
+8. **G6, signing in CI.** **Decided 2026-10-09 (owner): 1.3.0 ships the build signed by hand at
+   the freeze** (round 2 step 1), the binary the evidence measures. `MACOS_SIGNING` is enabled in
+   CI after 1.3.0 ships.
+9. **G5, the tap repository** `blackdeep-tech/homebrew-knaif`: the owner creates it before
+   publishing. It does not block the freeze; the formula needs the published `.zip`'s sha256.
+5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
+   **Decided 2026-10-07 (owner): composed, as 1.2.0 did it**; flips are reported, not a verdict.
+6. **Certificates and notary credentials**: received and working (F1, 2026-10-06).
+
+**Stale since the 1.2.1 merge (#10).** 1.2.1 changed native code, so `just check-gate` reads L3/L4
+stale for the Windows and Linux cells; L1/L2 were re-recorded on the merged tree. **The macOS L3/L4
+were re-run on that tree on 2026-10-05** with the same decisions as before (C4, C5); its four
+`macos|mtl` cells are current. They need re-running again only if the native code changes once more
+(for example a `documents_105` fix). **Stale again since 2026-10-08**: the merge of `release/1.3.0`
+changed native code. They are re-run once, on the frozen 1.3.0 (*Next round*, round 2), not before.
+
+**Still needs a person:** the installer's screens judged by whoever installs (E6, before the
+freeze); D4 on an 8 GB Mac; D5's OpenMP comparison; E4's unsigned "expect a block" half. The
+first-run shader tax (D3), step 10's offline pass and Metal from a fresh account were done in
+round 1 (2026-10-09).
+
+**macOS 27.2 Beta 2 (2026-10-05)** needs no re-build or re-run: the toolchain is unchanged, dyld's
+proc-macro rejection is fixed, the merged tree builds and packages, and the 1.2.0 binary gives the
+same plan and grade on 339 probed rows (A2). E5 and F5b were closed and M3 ticked the same day.
+
+---
+
+## 1. Research: which inference stack — "Metal or llama.cpp?"
+
+**The question dissolves on contact: Metal *is* the llama.cpp backend on Apple.** `ggml-metal` is a
+first-class ggml backend that sits behind the same `LlmBackend` trait knaif already dispatches
+through. There is no fork in the road here; the real fork would be leaving llama.cpp entirely for
+Apple's own stacks, and that is rejected below.
+
+Everything in this section was verified by reading the **vendored** `llama-cpp-sys-2 0.1.150`
+sources this workspace already pins (`~/.cargo/registry/src/*/llama-cpp-sys-2-0.1.150/`), not from
+memory or upstream docs. Line references are to that copy.
+
+### 1.1 What the pinned crate already does on Apple
+
+| Finding | Where | Consequence for knaif |
+|---|---|---|
+| `GGML_METAL` defaults **ON** when `APPLE` | `llama.cpp/ggml/CMakeLists.txt:95-103, 239` (`GGML_METAL_DEFAULT`) | **No new cargo feature is needed.** A plain `--features llama` build on macOS compiles the Metal backend. |
+| `llama-cpp-sys-2`'s `metal` feature is **declared but never read** | `Cargo.toml:86` vs. no `feature = "metal"` in `build.rs` | Adding a `metal` feature to `knaif-llm` that forwards to it would be **a lie in the feature graph**. Do not add one. See D2. |
+| `GGML_METAL_EMBED_LIBRARY` defaults to `${GGML_METAL}` = ON | `ggml/CMakeLists.txt:242`; `ggml/src/ggml-metal/CMakeLists.txt` | The Metal shader library is **embedded into the backend binary** via an `.incbin` asm stub — there is **no `default.metallib` to stage**. This removes the single most obvious packaging hazard before it exists. |
+| `ggml_add_backend_library(ggml-metal …)` | `ggml/src/ggml-metal/CMakeLists.txt` | Under `GGML_BACKEND_DL` it becomes a loadable **`libggml-metal.dylib`**, exactly like `libggml-vulkan.so`. **`dynamic-backends` works on macOS with no new mechanism.** ⚠️ **Corrected 2026-08-03, verified on hardware (A4): the actual file is `libggml-metal.so`, not `.dylib`.** CMake's `MODULE` library type (used for `GGML_BACKEND_DL` targets) suffixes `.so` on Apple too — only `SHARED` targets get `.dylib`. `has_backend_libs` in `knaif-llm` is unaffected (it checks the `ggml-` prefix, not the extension) and ggml's own `load_backends_from_path` dlopens it fine — confirmed empirically: `load_backend: loaded MTL backend from …/libggml-metal.so`, 37/37 layers offloaded. **This does matter for B3/B1**: any packaging step that globs `libggml-*.dylib` to decide what to stage/sign will silently miss these files. Glob `libggml-*.{dylib,so}` (or just `libggml-*` minus the core libs) on Darwin. |
+| `GGML_CPU_ALL_VARIANTS` supports Apple ARM: `apple_m1` (DOTPROD), `apple_m2_m3` (+MATMUL_INT8), `apple_m4` (+SME) | `ggml/src/CMakeLists.txt:403-430` | The runtime CPU-variant dispatch that the Windows/Linux artifacts rely on **also works here**, and specialises per Apple generation. Three `ggml-cpu-*` libs, not nine to fourteen. Confirmed on hardware (A4): `libggml-cpu-apple_m1.so`, `_m2_m3.so`, `_m4.so` all built; `apple_m2_m3` correctly selected at runtime on this M3 Pro. |
+| Frameworks linked: `Foundation`, `Metal`, `MetalKit`, `Accelerate`, `libc++` | `build.rs:1157-1176` | **All system frameworks. Nothing redistributable, no NVIDIA-shaped payload, no EULA.** Confirmed via `otool -L` on every staged Mach-O (A4/A5): only system framework paths, `libc++`, and `@rpath` to the artifact's own core libs — no third-party dependency anywhere. |
+| `GGML_BLAS` is forced **OFF** on Apple by the crate | `build.rs:673` | Accelerate is linked but not used as the BLAS provider. Affects the CPU fallback path only; note it, don't fight it. Confirmed: `GGML_BLAS:BOOL=OFF`, `GGML_BLAS_VENDOR:STRING=Apple` in `CMakeCache.txt`. |
+| `openmp` is a **default feature** of `llama-cpp-2` → `GGML_OPENMP=ON` | `llama-cpp-2/Cargo.toml` `default = ["openmp", …]`; `sys/build.rs:891` | ⚠️ **Fully measured and fixed, 2026-08-07 (B5).** `brew install libomp` alone did not reproduce the trap — it is keg-only, so plain `find_package(OpenMP)` still misses it. It reproduces once the build environment resolves the keg (`CMAKE_PREFIX_PATH=/opt/homebrew/opt/libomp`, which is exactly what many unrelated Homebrew formulae's own build recipes export): `GGML_OPENMP_ENABLED` flips ON and `libggml-base.dylib` + every `ggml-cpu-*` backend links `/opt/homebrew/opt/libomp/lib/libomp.dylib` — caught correctly by `check_macho_deps.py` (E1). D3's fix (an explicit, opt-in `openmp` Cargo feature, off on macOS) is implemented and verified to hold even under that exact trap-triggering environment — see B5. |
+
+### 1.2 What this means for the artifact shape
+
+- **One default artifact per OS holds unchanged (C5b).** On Windows/Linux that artifact is the
+  `vulkan` kind because Vulkan is one extra loadable lib beside the CPU backends. On macOS the same
+  role is played by Metal — except Metal costs *no extra cargo feature at all*, so the macOS default
+  artifact's feature set is literally `llama,dynamic-backends`.
+- **There is no opt-in payload on macOS, and there never will be one.** The whole `backend install`
+  surface exists because CUDA is ~668 MB of NVIDIA redistributables. Metal is a system framework;
+  `libggml-metal.dylib` is small and ships in the default artifact. `backend list` must therefore
+  report *"unavailable on this platform"* for `cuda` (it already does — verified in
+  `backend_store.rs` / `main.rs:476`) and the first-run CUDA nudge must stay silent (`nvidia-smi`
+  does not exist).
+- **`vulkan` and `cuda` are not macOS kinds.** MoltenVK was considered and is rejected in D1.
+
+### 1.3 ⚠️ The OpenMP trap, third instance
+
+`llama-cpp-2`'s **default** features include `openmp`, so `build.rs` sets `GGML_OPENMP=ON`, and
+ggml then runs `find_package(OpenMP)`. On Apple Clang there is no OpenMP runtime in the toolchain —
+**but there is one in Homebrew** (`brew install libomp`, pulled in by dozens of unrelated formulae).
+If CMake finds it, `libggml-base.dylib` links `/opt/homebrew/opt/libomp/lib/libomp.dylib`, an
+absolute path that **does not exist on a clean Mac**.
+
+This is precisely the failure that shipped in every 1.0.x artifact twice already, under two names:
+
+| OS | Library | How it was found | How it presented |
+|---|---|---|---|
+| Windows | `VCOMP140.dll` | Windows Sandbox clean room | `0xC0000135` at process start, printing nothing |
+| Linux | `libgomp.so.1` | `scripts/check_elf_deps.py` | CPU backends fail to load on a box without GCC |
+| **macOS** | **`libomp.dylib`** | **must be caught by B5 / E1 below** | **backend load failure on a Mac without Homebrew** |
+
+It resolves on the build box for the same reason both predecessors did: the build box has the
+toolchain. **Do not assume the outcome either way** — `find_package(OpenMP)` may simply fail on a
+stock toolchain, in which case ggml warns and disables it. Measure it (B5), then take D3.
+
+> **⚠️ The failure will probably not look like a Homebrew path, and a checker that greps for one
+> will miss it.** LLVM builds `libomp.dylib` with an `LC_ID_DYLIB` of **`@rpath/libomp.dylib`**, so
+> the dependent's load command carries no `/opt/homebrew/…` string at all — it is non-portable
+> because the `@rpath` target is *absent on the user's machine*, not because the path is visibly
+> foreign. **E1 must therefore reject any dependency that does not RESOLVE**, and treat visible
+> non-system path prefixes as a secondary signal only. This is the difference between a check that
+> catches the bug and one that reports a clean bill of health on a broken artifact.
+
+### 1.4 Rejected alternatives
+
+- **MLX / Core ML / Apple Foundation Models — for *this artifact*.** A separate inference stack: no
+  GGUF, no llama.cpp, no shared greedy-decode path. Adopting one *for the macOS CLI* would fork
+  `knaif-llm`'s only real backend and cost the property that makes the eval numbers comparable —
+  *the same GGUF, greedy-decoded, produces the same plan everywhere* — while buying nothing, because
+  Metal already gives this artifact full GPU inference for no extra cargo feature (§1.1). The knaif
+  value proposition is the deterministic plan pipeline, not the tensor kernels.
+
+  > **Scope of this rejection.** It is about **the macOS CLI's backend**, not a verdict on Apple's
+  > inference stacks in general. A surface with different constraints — no shell, a hard app memory
+  > budget, no multi-GB download — is a different question with a different answer, and evaluating
+  > that is neither in this plan's scope nor blocked by it. **Reconsider *here*** only if Metal
+  > measurements (§7) come in badly, and then as its own plan.
+- **MoltenVK (Vulkan-over-Metal).** Strictly worse than Metal on every axis: it is a translation
+  layer *above* the API ggml already targets natively, it adds a redistributable to sign and notarize,
+  and it would put macOS on the Vulkan code path whose Blackwell collapse
+  ([PERFORMANCE.md](../PERFORMANCE.md) §2) is the reason the CUDA payload exists at all. No.
+- **Universal2 (`arm64` + `x86_64` in one binary).** See D4.
+
+---
+
+## 2. Decision log
+
+**D1 — Metal, via llama.cpp, with no new cargo feature.** Per §1.1. The macOS default artifact is
+built with `--features llama,dynamic-backends` and gets Metal for free because ggml defaults it ON
+under `APPLE`. Adding a knaif `metal` feature would forward to a `llama-cpp-sys-2` feature that
+`build.rs` never reads — a control that does nothing, which is worse than no control.
+
+**D2 — `metal` is the *only* functional kind on macOS; `cpu` is refused there.** *Revised
+2026-08-02 after audit.* The first draft said `--kind=metal` and `--kind=cpu` share a feature set
+but stay distinguishable via `out_dir()`. **That was wrong, and the error is instructive:**
+`out_dir()` identifies a build by the backends it emitted, and because `GGML_METAL` defaults ON
+under `APPLE` (§1.1), a macOS `cpu` build emits `libggml-metal.dylib` too. The two kinds are not
+merely feature-identical — they are **byte-identical builds**, so no `out_dir()` predicate can ever
+separate them and one written to try would silently match both.
+
+So: on Darwin, `metal` is the only functional kind, and `--kind=cpu` is **refused with a message
+saying why**, exactly like `vulkan` and `cuda` (B1). This is strictly simpler than the alternative
+(two staging profiles over one build) and it costs nothing, because there is no reason to publish a
+CPU-only macOS artifact — Metal is a system framework, present on every supported machine.
+
+> **A CPU-only *tree* is still needed, just not as a release kind.** §7's honest-CPU measurement and
+> C5's CPU control both require one. Produce it by **copying a staged tree and deleting
+> `libggml-metal.dylib`** — the loader then finds no Metal backend and cannot offload. That is a
+> benchmarking procedure, not a build, and it is more trustworthy than `KNAIF_N_GPU_LAYERS=0`,
+> which [PERFORMANCE.md](../PERFORMANCE.md) §4 measured as **not CPU-only at all** (`op_offload`,
+> an 11× error). One mechanism serves both needs.
+
+**D3 — OpenMP: give knaif a real `openmp` feature and leave it off on macOS.** *Revised 2026-08-02
+after audit; confirmed and implemented 2026-08-07 (B5).* If the build links Homebrew's libomp, the two
+fixes are (a) stage `libomp.dylib` and rewrite its install name, or (b) turn `GGML_OPENMP` off for
+the macOS artifact. Prefer (b) — ggml falls back to its own thread pool, macOS work is on Metal
+anyway (`resolve_n_threads` matters only to the CPU fallback), and it removes a third-party binary
+from the set that must be signed rather than adding one.
+
+> **⚠️ The obvious implementation of (b) is a bug.** "Build with `llama-cpp-2`'s default features
+> off" **also drops `common`** — `default = ["openmp", "android-shared-stdcxx", "common"]` — and
+> `common` is what builds `llama-common`, which `package.sh` stages as a core lib on every platform.
+> Silently losing it would break the artifact in a way unrelated to OpenMP.
+
+The correct shape is an honest control, not a blunt one:
+
+- declare `llama-cpp-2` with `default-features = false` **and an explicit `common`**;
+- add a real `openmp` feature to `knaif-llm` (and forward it from `knaif-cli`);
+- enable it for the Linux and Windows release kinds, which have shipped with it and whose
+  `VCOMP140`/`libgomp` staging already assumes it;
+- omit it for the macOS `metal` kind.
+
+That adds a feature that genuinely controls something — the exact opposite of the fake `metal`
+feature D1 rejects. Take (a) only if (b) measurably costs CPU-fallback throughput (§7 D5). libomp is
+Apache-2.0-with-LLVM-exception, so either way there is no licence obstacle, only a complexity one.
+
+**D4 — arm64 only. Not universal2, not a separate Intel artifact.** Apple Silicon is the entire
+reason macOS is interesting for local inference (unified memory + a competent GPU in a laptop);
+ggml's Metal backend on Intel Macs' AMD/Intel GPUs is a far weaker path, the last Intel Mac shipped
+in 2020, and Apple's own support window for them is closing. Universal2 would double build time and
+artifact size, and `GGML_CPU_ALL_VARIANTS` emits *different* variant sets per architecture, so the
+two halves are not symmetric and `lipo`ing the tree is more than a mechanical step. **Publish
+`macos-arm64`; state Intel as unsupported in the release body rather than shipping something
+untested.** Revisit only if real demand appears.
+
+**D5 — the data directory stays `~/.knaif`.** Not `~/Library/Application Support/knaif`. knaif is a
+Unix CLI, `~/.knaif` is what `KNAIF_MODELS_DIR`/`KNAIF_BACKENDS_DIR` default to on every platform,
+and one path across three OSes is worth more than one platform's HIG convention for a tool with no
+GUI. Recorded here so it is not re-litigated; revisit if a macOS GUI front-end ever lands.
+
+**D6 — two artifacts: a `.zip` and a signed/notarized `.pkg`. Not a `.tar.gz`.** *Revised
+2026-08-02 after audit.* The `.pkg` exists because **it is the only shape a CLI's notarization
+ticket can be *stapled* to** — `stapler` accepts `.app`, `.dmg` and `.pkg`, and nothing else.
+Without a staple, first run on a quarantined download needs Apple's notary service to be reachable,
+so a user offline or behind a filtering proxy gets a Gatekeeper block on a correctly notarized
+build.
+
+The archive is a `.zip` rather than the `.tar.gz` Linux ships, breaking symmetry deliberately:
+**Apple's notary service accepts `.zip`, `.pkg` and `.dmg` — not `.tar.gz`.** Publishing a tarball
+would mean notarizing a `.zip` of the same tree and then shipping a *different container*, so the
+thing verified and the thing downloaded are never the same file. That works (notarization registers
+the binaries' CDHashes, not the container) but it is a gap nobody can inspect, and `.zip` is the
+native macOS archive idiom anyway. `.dmg` was considered and rejected: a drag-to-Applications idiom
+for `.app` bundles that communicates nothing useful for a `bin/knaif`.
+
+**Homebrew tap is a deliberate fast-follow** (G5) — the best macOS channel for a CLI, and it
+sidesteps quarantine entirely, but it depends on a published, checksummed archive existing first.
+> **Superseded 2026-09-30 by D12:** the tap ships in 1.3.0; D19 sets the formula's shape.
+
+**D7 — do NOT add a fourth version declaration; derive it.** *Reversed 2026-08-02 after audit.* The
+first draft said the `.pkg` version "joins `test_version_consistency.py`". Wrong instinct: that test
+exists to catch drift between declarations that **must** be written by hand
+(`Cargo.toml`, `pyproject.toml`, `knaif.iss`, the backend manifest), and the right move is to
+*avoid creating a fourth* rather than to police one. `package.sh` already derives `VER` from
+`Cargo.toml`; `pkgbuild --version` takes it from the same variable, so there is nothing to drift.
+**Verify by inspecting the built package** (`pkgutil --expand` / the receipt's version) rather than
+by adding a committed source of truth. The cheapest declaration to keep honest is the one that does
+not exist.
+
+**D8 — the macOS clean room is a VM, it is required, and it runs the OLDEST supported macOS.**
+[RELEASE.md](../RELEASE.md) §4 already states the rule this plan inherits: *a verification step that
+runs on the build box tests staging, never portability*, and it explicitly names macOS as a new
+artifact shape needing its own clean-room run. On macOS the build box has Xcode Command Line Tools
+and almost certainly Homebrew — the two things whose absence this must prove irrelevant. *Tightened
+2026-08-02 after audit:* a clean **current** macOS tests the toolchain assumption but says nothing
+about the deployment floor, so the minimum supported OS is what the gate must run (D9), and the run
+must include real inference (E3), not just `--version`.
+
+**D9 — the macOS deployment floor is a DECISION made before the first functional build, not an open
+question.** *Added 2026-08-02 after audit.* The first draft demoted `MACOSX_DEPLOYMENT_TARGET` to
+§12's open questions. That contradicts this project's own hard-won rule from
+[portable-builds](2026-07-27-portable-builds.md): **the floor is a property of the artifact, chosen,
+not inherited from whichever machine built it.** Linux pays for a whole pinned container to get
+this right; macOS gets it for one environment variable, and there is no excuse for leaving it to
+whatever SDK happens to be installed.
+
+Two mechanical traps make it worse than it looks:
+
+- **`MACOSX_DEPLOYMENT_TARGET` is not a build-script rerun trigger.** Verified against the pinned
+  crate: `build.rs` declares `rerun-if-env-changed` for `LLAMA_LIB_PROFILE`, `CUDA_PATH`,
+  `ROCM_PATH` and others — **not** for the deployment target. Combined with `always_configure(false)`
+  (which [RELEASE.md](../RELEASE.md) §2 already documents as the reason a `CUDAARCHS` change needs a
+  clean), **changing the floor after a cached build silently keeps the old one.** Same trap, new
+  costume. Set it before compiling, and use a dedicated `CARGO_TARGET_DIR` for release builds.
+- **A stated floor that nothing verifies is exactly the pattern that has already burned this
+  project twice.** Assert `LC_BUILD_VERSION` on **every** staged Mach-O (E1), and run the clean-room
+  VM on the **oldest supported** macOS — not merely a clean current one, which tests nothing about
+  the floor.
+
+**D10–D15 — owner decisions, 2026-09-30.** Made when macOS was scoped into 1.3.0
+([release-1.3.0](2026-09-30-release-1.3.0.md)). They settle questions the tasks below had left
+open; where a task's older text disagrees, these win and the task is updated to match.
+
+- **D10 — signing: by hand first, then CI.** The first signed and notarized build is made on the
+  contributor's Mac. After that works, a tag build in GitHub Actions signs and notarizes from
+  repository secrets on a protected `release` environment, so the owner can cut a macOS release
+  without a Mac. The owner's steps and the secret names: [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). (F1, G6.)
+- **D11 — CI: a macOS arm64 job, path-filtered** to `native/`, `installers/`, `scripts/` and the
+  Cargo files, so Python-only and docs PRs do not queue for a macOS runner. (G6.)
+- **D12 — artifacts: `.pkg` (recommended) + portable `.zip` + a Homebrew tap, all in 1.3.0.** The
+  tap is `blackdeep-tech/homebrew-knaif`; the owner creates the repository. **No `.dmg`** — it
+  has no install logic to offer a CLI that is not an `.app` (D6). (G5.)
+- **D13 — the `.pkg` installs system-wide and always shows its options.** Payload in
+  `/usr/local/knaif`, a `/usr/local/bin/knaif` symlink, admin install. The options page is always
+  shown (`customize="always"` in a Distribution package), mirroring the Windows installer: skills,
+  Homebrew tools (installed as the console user; greyed out when `brew` is absent), model download
+  (setup waits for it) and the PATH symlink. Ships an `uninstall.sh`. A failed model download or
+  `brew` install **never fails the install** — it is reported and can be redone later. (F5.)
+- **D14 — evals on the Mac.** 4B and 1.7B: full L4 + safety on Metal. The CPU-only tree: sampled
+  and composed, the way 1.2.0 did Linux CPU. L3 parity. Row-level flips compared against Windows
+  (and Linux, from the WSL data) through a committed compact per-row extract of the 1.2.0 L4
+  results. (C.)
+- **D15 — floor 12.0 kept; clean room in a macOS 12 VM via `tart`.** Confirms D8/D9 with the
+  tool chosen. (E.)
+- **D16 — the clean-room gate is split: portability in the VM, Metal on hardware.** A macOS guest
+  reaches Metal through Apple's paravirtualized GPU, which reports reduced capabilities, so ggml
+  may pick older kernels or fail to offload there — a VM result says nothing about Metal on a real
+  Mac. The tart macOS 12 VM (no Xcode, CLT or Homebrew; quarantined artifact) must prove the dylibs
+  load, Gatekeeper passes (the stapled `.pkg` offline) and a **real CPU inference** completes.
+  Metal offload is proven separately on physical Apple Silicon, from a fresh user account, with
+  the quarantined artifact. Whatever Metal does inside the VM is recorded, not gated. GitHub's macOS
+  runners are VMs too, so the D11 CI job is build + mock + static checks, not Metal inference.
+  (E3, E4, §13.5.)
+- **D17 — C6 is folded into D14.** The cross-OS check is the committed per-row extract of the
+  1.2.0 L4 results (Windows + Linux) compared against the Mac on the v2 models. The old v1 slice
+  (`evals/parity/c6_cross_os_*`, which exist only on the Mac that produced them) is deleted, and
+  `.gitignore` is not widened for it. (C6.)
+- **D18 — Time Machine: exclude `~/.knaif/models` only.** `tmutil addexclusion` when a model is
+  downloaded — in the `.pkg` postinstall and in `knaif models pull` on Darwin. Models can be
+  downloaded again; config and the rest of `~/.knaif` stay in backups. (§12 Q6, F5b.)
+- **D19 — the Homebrew formula depends on `ffmpeg` only.** `depends_on "ffmpeg"` (the ffmpeg skill
+  needs it); ghostscript, tesseract and LibreOffice go in `caveats`. The model is not downloaded at
+  install time — `caveats` says to run `knaif models pull`. (G5.)
+
+---
+
+## 3. Workstream M — machine and toolchain baseline
+
+- [x] **M1. Record the machine.** Model, chip (M-series generation), core counts (P/E), GPU core
+      count, **unified memory size**, macOS version, and Xcode Command Line Tools version. This
+      becomes a row in [PERFORMANCE.md](../PERFORMANCE.md) §1 and every number this plan produces is
+      quoted against it. The §1 warning — *never quote a latency number without naming the machine* —
+      applies from the first measurement, not retroactively.
+      > **Done 2026-08-03.** Machine `M3P`: Apple M3 Pro, 6P+6E CPU, 18-core GPU, 18 GB unified
+      > memory, macOS 26.6 (build 25G72), Xcode 26.6 / CLT 26.6.0.0. Row added to
+      > [PERFORMANCE.md](../PERFORMANCE.md) §1.
+- [x] **M2. Provision via `mise`.** `just bootstrap` should work unchanged (`mise.toml` pins
+      python 3.14 / uv 0.11.2 / rust 1.96 / just / cmake). Confirm `rust-toolchain.toml` resolves to
+      the `aarch64-apple-darwin` host. Record anything mise cannot provide.
+      > **Done 2026-08-03.** `just bootstrap` → "Toolchain provisioned via mise." with no gaps.
+      > `rustc -vV` confirms `host: aarch64-apple-darwin`. Nothing mise could not provide.
+- [x] **M3. Confirm the *build* prerequisites and write them down as a list that can be wrong in a
+      way that stops the build.** Expected: Xcode Command Line Tools (`xcode-select --install`) for
+      `clang`, `ld`, `xcrun`, `codesign`, `otool`, `install_name_tool`, `pkgbuild`, `notarytool`;
+      `cmake` and `ninja`. **Explicitly test whether a full Xcode is required** or CLT suffices —
+      Metal shader compilation at *build* time is not needed (the shaders are embedded as source,
+      §1.1), which is the usual reason a project needs full Xcode. If CLT suffices, say so loudly:
+      it is a 10× smaller prerequisite.
+      > **Partial 2026-08-03.** This machine has full Xcode 26.6 installed (CLT 26.6.0.0 alone was
+      > not isolated) and A2/A4 succeeded on it. **Still open:** whether CLT alone suffices requires
+      > a machine/VM *without* full Xcode — uninstalling Xcode from this dev machine to test would be
+      > destructive and was not done. Test this in the E3 clean-room VM instead, which is being built
+      > without Xcode/CLT/Homebrew anyway (D8) — if the build step were ever run there, it would
+      > answer this for free; failing that, provision a disposable VM with CLT only.
+      >
+      > **Answered 2026-10-03 (M1 Pro, macOS 27.2, CLT 27.0): the Command Line Tools alone build
+      > and package the metal kind. Full Xcode is not needed.** Method: not a VM, but the toolchain
+      > switched for one build with `DEVELOPER_DIR=/Library/Developer/CommandLineTools`, which every
+      > `/usr/bin` shim (`cc`, `ld`, `xcrun`) honours, in a fresh checkout outside `~` with an empty
+      > `target/`: `just package-native metal` on the `mac/build-fixes` tree (A2's strip fix is
+      > needed on macOS 27). Finished in 1m41s; `check_macho_deps.py` passed 9 Mach-Os,
+      > `check_no_local_paths.py` 65 files, `installers/smoke.sh` the zip, and the binary offloads
+      > 37/37 layers to `Apple M1 Pro`. Proof the CLT was what ran: llama.cpp's ninja dependency log
+      > names `/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk` for all 202,724 header
+      > references and Xcode's SDK for none; the same build without the variable names only
+      > Xcode's. The CLT have no `metal` compiler and nothing asked for one (shaders embed as
+      > source, §1.1). For F: the CLT carry `notarytool` and `stapler`; `codesign`, `pkgbuild` and
+      > `productbuild` are in `/usr/bin`. **Limit:** Xcode stayed installed, so a tool reached by an
+      > absolute path into `Xcode.app` would not have been caught; nothing in the logs or the
+      > dependency data shows one. The E3 VM (no Xcode at all) remains the stronger proof if wanted.
+- [x] **M4. Skill-dependency tooling via Homebrew** for the eval/quality work: `ffmpeg`,
+      `ghostscript`, `libreoffice`, `tesseract`. `deps.rs` already maps macOS → `brew`
+      (`deps.rs:45,55,338,343`) — verify the probe actually resolves `/opt/homebrew/bin` entries
+      under the PATH a **GUI-launched** process gets, not just a login shell's.
+      > **Done 2026-08-03.** `knaif skills deps` (native, mock) correctly reports
+      > `[OK] ffmpeg /opt/homebrew/bin/ffmpeg, /opt/homebrew/bin/ffprobe` (installed) and
+      > `[MISS] ghostscript/libreoffice/tesseract (optional) install: brew` (not installed) — matches
+      > C7's "`[MISS]` is a pass" expectation. `resolve_command`/`which` in `deps.rs` reads
+      > `std::env::PATH` directly with no OS-specific handling; this resolves correctly for a
+      > terminal-invoked process because Homebrew's installer appends `/opt/homebrew/bin` to the
+      > shell rc files a login/interactive shell sources. **The GUI-launched-process PATH concern is
+      > real in principle but untested** — knaif has no GUI launch path today (out of scope, §11), so
+      > there is nothing to test it against; revisit only if a GUI front-end ever lands (ties to D5).
+- [x] **M4b. ⚠️ Decide `MACOSX_DEPLOYMENT_TARGET` — before A2, not after.** Per D9. Pick the floor
+      deliberately, export it before the first functional compile, and use a dedicated
+      `CARGO_TARGET_DIR` for release builds so a later change cannot be swallowed by a cached
+      `llama-cpp-sys-2` configure (it is **not** a `rerun-if-env-changed` input — verified). Record
+      the chosen floor, then have E1 assert `LC_BUILD_VERSION` on every staged Mach-O and E3 launch
+      on that oldest OS. A floor that is stated but not asserted is the exact pattern that produced
+      both prior portability defects.
+      > **Decided 2026-08-03: `MACOSX_DEPLOYMENT_TARGET=12.0` (Monterey).** Exported before the very
+      > first `llama-cpp-sys-2` configure (A2), so there was no cached-build swallow risk this time.
+      > **Wired into `package.sh` itself in B2** (both its own build path and, after a second
+      > instance of the same gap was found, the `justfile`'s `package-native` recipe too — see B2's
+      > note). **Still not done:** a dedicated `CARGO_TARGET_DIR` for release builds, so a *future*
+      > floor change on a dev machine with a warm `target/` can't silently keep the old one. Low
+      > priority in practice — CI/release builds should use a clean checkout per `RELEASE.md`
+      > anyway — but worth doing before this plan closes.
+- [x] **M5. Baseline the repo before changing anything:** `just check` (lint + mypy + pytest +
+      generated-docs) and `just test-native`. Record every failure. **Some Python tests have never
+      run on Darwin**; a pre-existing failure must not be discovered later and mistaken for
+      something this plan caused.
+      > **Both halves done.** Native: `cargo fmt --all --check` and
+      > `cargo clippy --workspace --all-targets -- -D warnings` clean (default features);
+      > `cargo test --workspace`: 63 passed, 0 failed. Additionally ran the
+      > `$KNAIF_TEST_GGUF`-gated real-inference proof manually (`cargo test -p knaif-llm --features
+      > llama inference_produces_text` with `KNAIF_TEST_NGL=99`): **passed**, output
+      > `{"ok": true}`, confirming Metal offload end-to-end at the unit-test level — this is the
+      > condition C1 asks for, just not yet wired into a macOS `just test-native` invocation.
+      > **Python: `just check` run 2026-08-03 — clean.** 1629 passed, 7 skipped, 16 benign warnings
+      > (missing-model-path `UserWarning`s from fixtures that intentionally construct an
+      > uninitialized orchestrator), 82.63% coverage (bar is 80%), `gen_skills.py --check` and
+      > `cargo fmt`/`clippy` all green. **No pre-existing Darwin-specific test failure found** — the
+      > "some Python tests have never run on Darwin" risk this task exists to catch did not
+      > materialize.
+
+---
+
+## 4. Workstream A — build the native runtime on macOS
+
+- [x] **A1. Mock build first.** `cargo build --release -p knaif-cli` and `just native-mock -- skills list`.
+      No llama.cpp, no C++ — this isolates *knaif's own* Darwin portability from llama.cpp's.
+      Expect `cfg(unix)` `libc`/`tcflush` to compile and the `cfg(windows)` console/mutex paths to
+      drop out. Fix any `unused_imports` / dead-code warnings that only appear off Windows —
+      `check-native` runs clippy with `-D warnings`.
+      > **Done 2026-08-03.** Clean build, no warnings, `Finished release profile in 49.85s`.
+      > `just native-mock -- skills list` and `skills deps` both work correctly.
+- [x] **A2. First functional build.** `cargo build --release -p knaif-cli --features llama`.
+      Static, no `dynamic-backends`. This is the smallest thing that can prove Metal works.
+      Budget real time for the first llama.cpp compile.
+      > **Done 2026-08-03**, with `MACOSX_DEPLOYMENT_TARGET=12.0` exported per M4b/D9. Compiled in
+      > 1m36s wall (9m14s user — genuinely compiled ggml/llama.cpp C++ across all cores, not a
+      > cache hit). Much faster than the "budget real time" warning implied on this hardware.
+      >
+      > **Re-verified 2026-10-02 (M1 Pro, macOS 27.2, Xcode 27.0, Rust 1.96.0): failed, then fixed.**
+      > `just package-native metal` stopped before compiling knaif with `E0463 can't find crate for
+      > zerofrom_derive` (also `serde_derive`, `thiserror_impl`, `equator_macro`). The dylibs were
+      > there; dyld refused to load them: `mis-aligned LINKEDIT string pool`. Cause: with
+      > `MACOSX_DEPLOYMENT_TARGET` ≥ 12 (D9 pins 12.0), release's default `strip = "debuginfo"`
+      > leaves a proc-macro dylib whose string pool is not 8-byte aligned, and macOS 27's dyld rejects
+      > it. Reproduced outside the repo with `serde_derive`: 11.0 loads, 12.0–15.0 fail, with Xcode
+      > 27.0, the 27.2 beta and the Command Line Tools alike; an unstripped dylib loads. Fix
+      > (`fix(native): keep macOS proc macros unstripped…`):
+      > `[profile.release-metal.build-override] strip = "none"`. Proc macros never ship; the shipped
+      > `knaif` is stripped as before and runs. Not a D9 change — the floor stays 12.0.
+      >
+      > **macOS 27.2 Beta 2 (build `26B5091g`), 2026-10-05: dyld fixed.** The same probe outside the
+      > repo (`serde_derive`, `strip = "debuginfo"`, `MACOSX_DEPLOYMENT_TARGET=12.0`) now builds and
+      > loads; on Beta 1 it failed with `E0463`. The build-override stays: it is harmless, and a Mac
+      > still on Beta 1 needs it. Xcode 27.0, the CLT and clang were unchanged by the OS update.
+      > The merged tree (`bdd01b5`, 1.2.1) builds, packages and passes `check_macho_deps.py`,
+      > `check_no_local_paths.py` and `smoke.sh` on Beta 2. **Metal inference is unchanged:** the
+      > 1.2.0 binary (`d3e91b27`) on 339 rows — the 1.2.0 sample plus every row that flips between
+      > Metal and CUDA — gave the same plan and grade as on Beta 1 for all of them, at the same
+      > latency (`evals/runs/2026-10-05_mac-beta2-probe_success`, not committed: boards).
+- [x] **A3. Prove Metal is actually selected, not merely compiled.** Run with `--verbose` and
+      confirm the device line reports Metal rather than CPU, and that all model layers offload.
+      This is the macOS instance of the trap [PERFORMANCE.md](../PERFORMANCE.md) §2 documents twice
+      (WSL's "Vulkan" runs that were silently CPU; `op_offload` making `n_gpu_layers=0` not
+      CPU-only). **A backend that silently isn't the one you think you are benchmarking is the
+      single most expensive mistake available here** — establish the check before any timing.
+      > **Done 2026-08-03**, against the real `knaif-qwen3-4b-v1` GGUF (downloaded for this purpose).
+      > `knaif run ffmpeg "convert input.mov to mp4" --dry-run --verbose` shows
+      > `ggml_metal_init: found device: Apple M3 Pro`, `load_tensors: offloaded 37/37 layers to GPU`,
+      > every KV-cache layer `dev = MTL0`, and the correct rendered command
+      > (`ffmpeg -y -i input.mov -c copy -movflags +faststart input_converted.mp4`). Not silently CPU.
+- [x] **A4. `dynamic-backends` build.** `--features llama,dynamic-backends`. Verify the
+      `$OUT_DIR/backends/` directory contains `libggml-metal.dylib` plus the three
+      `libggml-cpu-apple-*.dylib` variants (§1.1), and that `load_dynamic_backends` registers them.
+      Confirm the dev fallback in `backend_dirs()` (`BACKENDS_DIR` baked in at compile time) still
+      works for an unstaged `cargo run` and does **not** double-load.
+      > **Done 2026-08-03 — with a correction to the plan's own assumption.** `$OUT_DIR/backends/`
+      > contains `libggml-metal.so`, `libggml-cpu-apple_m1.so`, `libggml-cpu-apple_m2_m3.so`,
+      > `libggml-cpu-apple_m4.so` — **`.so`, not `.dylib`** (see the corrected §1.1 row). Ran the
+      > unstaged `cargo run`-equivalent binary against the real GGUF with `--verbose`:
+      > `load_backend: loaded MTL backend from …/libggml-metal.so`,
+      > `load_backend: loaded CPU backend from …/libggml-cpu-apple_m2_m3.so` (correctly the M2/M3
+      > variant, not M1 or M4), each logged **exactly once** (no double-load), then
+      > `offloaded 37/37 layers to GPU` — identical outcome to the static A2 build.
+- [x] **A5. ⚠️ Establish how dylibs resolve, before touching packaging.** `dynamic-backends`
+      implies `dynamic-link`, so `libllama`/`libggml`/`libggml-base`/`libllama-common` become real
+      runtime dependencies. `llama-cpp-sys-2`'s `build.rs` emits **no rpath link args at all**
+      (verified: no `rustc-link-arg`, no `rpath` anywhere in it) — which is exactly why Linux needs
+      `patchelf --set-rpath '$ORIGIN'` in `package.sh`. Determine, with `otool -l`, on both the
+      exe and each dylib:
+      - each dylib's `LC_ID_DYLIB` install name (CMake's `MACOSX_RPATH` default makes this
+        `@rpath/lib….dylib`, but **verify** rather than assume);
+      - whether the exe has any `LC_RPATH` at all, and whether `target/release/knaif` even runs
+        without `DYLD_LIBRARY_PATH`.
+      The answer decides B3's shape. **`@loader_path` is macOS's `$ORIGIN`** and is the right choice.
+      > **Done 2026-08-03 — every prediction confirmed on hardware.** `otool -L target/release/knaif`
+      > shows the four core libs linked as `@rpath/libggml-base.0.dylib`,
+      > `@rpath/libggml.0.dylib`, `@rpath/libllama-common.0.dylib`, `@rpath/libllama.0.dylib`, plus
+      > only system frameworks (Foundation, Metal, MetalKit, Accelerate, libc++, CoreFoundation,
+      > libiconv, libSystem). `otool -D` on each core dylib confirms `LC_ID_DYLIB = @rpath/lib….dylib`
+      > exactly as CMake's `MACOSX_RPATH` default predicts. **The exe has zero `LC_RPATH` entries**
+      > (`otool -l | grep LC_RPATH` empty), and running it bare fails exactly as predicted:
+      > `dyld[…]: Library not loaded: @rpath/libggml-base.0.dylib … Reason: no LC_RPATH's found`
+      > (abort, exit 134). With `DYLD_LIBRARY_PATH=target/release` set, it runs fine. This confirms
+      > B3 must add `-add_rpath @loader_path` to the exe during staging — nothing else will resolve
+      > the four core libs in a packaged artifact.
+      > *Rationale corrected 2026-08-02 after audit.* The first draft said `@executable_path` is
+      > *wrong* "because the backends are `dlopen`ed by a dylib, not by the exe." That reasoning is
+      > false — `@executable_path` resolves against the main executable regardless of who does the
+      > loading, and in this flat `bin/` layout **both spellings resolve to the same directory and
+      > both work.** Prefer `@loader_path` because it keeps each dylib self-contained and correct if
+      > the layout is ever nested — a design preference, not a correctness requirement. Note also
+      > that the *backend* dylibs are found by an explicit directory scan
+      > (`load_backends_from_path`), so the rpath governs their **dependencies** (`libggml-base`
+      > and friends), not their own discovery.
+- [x] **A6. `knaif-llm` review for Darwin.** `llama.rs`'s `has_backend_libs` normalises a `lib`
+      prefix for Linux vs Windows; `.dylib` files also carry the `lib` prefix, so this should hold —
+      **confirm with a test**, because the same function silently returned `false` on Linux once and
+      caused every backend to load twice. Add a Darwin case to its unit tests.
+      > **Done 2026-08-03.** Added `has_backend_libs_recognises_all_platform_namings` to
+      > `native/crates/knaif-llm/src/llama.rs` (`#[cfg(feature = "dynamic-backends")]`), covering: an
+      > empty dir (false), `libggml-base.{dylib,so}` alone (false — core lib, not a backend),
+      > `libggml-metal.so` (true — the **actual** macOS naming per A4's correction),
+      > `libggml-vulkan.dylib` (true — extension-agnostic), `libggml-cuda.so` (true — Linux), and
+      > `ggml-vulkan.dll` (true — Windows, no `lib` prefix). Passes. The function needed no code
+      > change — its prefix-only check was already extension-agnostic and correct.
+
+---
+
+## 5. Workstream B — packaging (`installers/package.sh`)
+
+`package.sh` already has a `Darwin` arm in its `uname -s` case (`OS=macos; LIB=dylib; ARCHIVE=tgz`)
+and `uname -m` returns `arm64`, which passes through its arch mapping unchanged. **Everything else
+about macOS in that script is either missing or a Linux/Windows branch that excludes it.** Each item
+below names the specific place.
+
+- [x] **B1. `feats_for_kind` + argument parsing: add `metal`, and refuse everything else on Darwin.**
+      `--kind=metal` (`llama,dynamic-backends`, minus `openmp` per D3) gets the **plain artifact
+      name** on macOS, the way `vulkan` does elsewhere. **Refuse `--kind=cpu|vulkan|cuda` on Darwin
+      with a message that says why** — `cpu` because it would be a byte-identical build under a
+      misleading name (D2), `vulkan`/`cuda` because neither exists there — rather than failing later
+      somewhere unrelated. Mirror the kind list in the `justfile`'s `package-native` recipe and its
+      comment block, which hard-codes `cpu|vulkan|cuda`; its own comment says the two must stay in
+      sync. Archive format is `.zip` on macOS (D6), which `package.sh` currently selects only for
+      Windows — and its Windows branch requires `System32/tar.exe`, so macOS needs its own
+      `ditto -c -k --keepParent` or `zip` path.
+      > **Done 2026-08-03, with a correction to the plan's own suggestion.** Added `metal` to
+      > `feats_for_kind`, arg parsing, and a Darwin refusal block for `cpu`/`vulkan`/`cuda` with a
+      > message naming D2/D1 — verified all three refusal messages fire correctly. Mirrored the kind
+      > list into the `[unix] package-native` justfile recipe.
+      > **`ditto -c -k --keepParent` (the plan's first suggestion) was tried and rejected on hard
+      > evidence.** On this build box every staged file already carries a `com.apple.provenance`
+      > extended attribute (present the moment `cargo build`/`cp` create a file — not something
+      > packaging adds), and `ditto` preserves it as an inline AppleDouble `._<name>` sidecar next to
+      > **every** real file — not bundled into one `__MACOSX/` folder — doubling the entry count.
+      > Worse: `com.apple.provenance` cannot be stripped first either — `xattr -d`/`xattr -cr` both
+      > report success and silently leave it in place (it's a protected, system-managed attribute).
+      > Switched to plain `zip -qry` (the plan's other suggested option), which never attempts
+      > xattr/resource-fork preservation and produces a clean archive — verified: 0 `._*` entries.
+      > This is exactly the kind of macOS-specific hygiene wart E5 warns about (alongside
+      > `.DS_Store`); worth remembering for any *other* macOS packaging step that reaches for `ditto`.
+- [x] **B2. The build branch excludes macOS.** `package.sh:119` is `elif [ "$OS" = linux ]`, so a
+      macOS `--kind=metal` falls into the `else` and prints *"needs the MSVC/C++ toolchain … compile
+      it in a VS Developer shell"*. Extend the native-build branch to Darwin (macOS has a real
+      compiler on the build box, like Linux and unlike Windows). `CMAKE_GENERATOR=Ninja` is harmless
+      and consistent.
+      > **Done 2026-08-03.** `elif [ "$OS" = linux ] || [ "$OS" = macos ]`, with
+      > `MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"` exported before the build per
+      > M4b/D9. **Found and fixed a second instance of the same gap**: the `justfile`'s
+      > `[unix] package-native` recipe builds directly via `cargo build` (bypassing package.sh's own
+      > build step via `--no-build`), so it never got this export either. Confirmed empirically —
+      > `otool -l` showed `minos 11.0` (rustc's own default for `aarch64-apple-darwin`, unrelated to
+      > llama.cpp's CMake config) on a binary built through that recipe before the fix, `minos 12.0`
+      > after. Fixed the recipe the same way; re-verified every staged Mach-O in a rebuilt artifact
+      > carries `minos 12.0`, exe and every dylib/`.so` alike.
+- [x] **B3. Core-lib staging + install-name surgery.** The staging block is gated
+      `linux || windows` (`package.sh:578`) and `set_origin_rpath` is an explicit no-op off Linux
+      (its comment already says *"macOS uses `@loader_path`, handled elsewhere"* — this is
+      "elsewhere"). Add a Darwin path that stages `libggml-base`/`libggml`/`libllama`/`libllama-common`
+      `.dylib`s plus every `libggml-*.dylib` backend, then, per A5's findings, uses
+      `install_name_tool` to make the tree relocatable: `-add_rpath @loader_path` on the exe and
+      `-id @rpath/<name>` / `-change` on the dylibs as needed. Verify by running the **staged** tree
+      from a directory it was not built in.
+      > **Done 2026-08-03 — simpler than the plan expected, verified empirically before writing the
+      > script.** Added a dedicated macOS staging block (kept separate from the Linux/Windows one
+      > rather than threaded into its conditionals, since the extension split — `.dylib` core libs
+      > vs `.so` backends per A4 — and the rpath mechanism both differ enough to make a shared block
+      > more confusing than two clear ones). Core libs staged via the SONAME-symlink-chain pattern
+      > (version embedded before the extension: `libggml-base.dylib` → `.0.dylib` → `.0.13.1.dylib`,
+      > unlike Linux's suffix style); backends staged via `$BACKEND_LIB` (`.so`).
+      > **`-id`/`-change` install-name surgery on the dylibs turned out to be unnecessary.** Tested
+      > directly: staging the four core dylibs as-is (their `LC_ID_DYLIB` already reads
+      > `@rpath/lib….dylib` from the build, per A5) and adding **only** `-add_rpath @loader_path` to
+      > the **exe** — nothing on the dylibs, nothing on the backend `.so` files — was sufficient.
+      > Proved this three ways before committing to it: (1) exe + 4 core dylibs, no backends, run
+      > from `/tmp`, no `DYLD_LIBRARY_PATH` — worked; (2) same plus both backend `.so` files, real
+      > Metal inference, external cwd — worked, 37/37 layers offloaded; (3) the actual
+      > `package.sh`-produced artifact, unzipped in a fresh temp dir, same real-inference check —
+      > worked. dyld resolves every dependent's `@rpath/...` (including the backends' *own*
+      > `@rpath/libggml-base....dylib` reference) using the rpath list accumulated from images
+      > already loaded in the process — one rpath on the exe covers the whole tree transitively.
+- [x] **B4. The `base`-vs-functional guard needs a Darwin probe.** `exe_imports_llama` is
+      `patchelf --print-needed` on Linux and a raw `grep -a 'llama.dll'` everywhere else — the
+      latter is wrong on macOS. Use `otool -L "$1" | grep -q 'libllama'`. This guard exists because
+      cargo overwrites `target/release/knaif` and **`smoke.sh` structurally cannot catch a base exe
+      packaged as functional** (`--version`, `skills list`, `skills deps` and a mock `plan` all pass
+      without llama); it fails only at a real `run`, in a user's hands.
+      > **Done 2026-08-03, with a tightened pattern.** Used `grep -q '/libllama\.'` rather than the
+      > plan's suggested bare `libllama` — anchored on "`/libllama` immediately followed by a
+      > literal dot" so `libllama-common.*.dylib` (a genuinely different lib whose name happens to
+      > share the prefix) can never false-positive the check. Verified against real otool -L output.
+- [x] **B5. ⚠️ Resolve the OpenMP question (§1.3) and implement D3's feature split.** `otool -L`
+      every staged Mach-O — but judge by **resolution, not path shape**: an unresolvable
+      `@rpath/libomp.dylib` is the likely form and carries no Homebrew string. Then implement D3
+      properly (`default-features = false` **plus explicit `common`**, a real `openmp` feature
+      enabled for the Linux/Windows kinds only) and re-check. **Re-verify the Linux and Windows
+      artifacts after that change** — it touches their feature graph too, and `libgomp.so.1` /
+      `VCOMP140.dll` staging depends on OpenMP still being on there.
+      > **Deliberately deferred 2026-08-03 — not done.** The `otool -L` measurement is already
+      > recorded in §1.1's corrected table: on `M3P` (Homebrew present, `libomp` **not** installed),
+      > `GGML_OPENMP:BOOL=ON` but `GGML_OPENMP_ENABLED:INTERNAL=OFF` — CMake's `find_package` failed
+      > gracefully, zero OpenMP linkage in any built artifact. **Held off on the Cargo.toml feature
+      > split itself** (`default-features = false` + explicit `common` + a real `openmp` feature)
+      > because it changes the feature graph for **every** platform — including the `just native` /
+      > `native-cuda` / `native-vulkan` dev recipes' default `FEATS`, not just `package.sh`'s release
+      > kinds — and this plan's own instruction is to *re-verify Linux and Windows after that change*,
+      > which is not possible from this Mac. Implementing it blind, without a way to confirm
+      > `libgomp.so.1`/`VCOMP140.dll` staging still works, is the kind of change the plan itself
+      > warns against ("the obvious implementation... is a bug"). Left for a session with Linux/
+      > Windows access, or CI. The residual risk this leaves: an actual Mac with Homebrew's `libomp`
+      > installed is still untested end-to-end (only the *absence* case was measured here).
+      > **Done 2026-08-07, on M3P, with the trap actually triggered.** `brew install libomp` alone
+      > (leaving it un-symlinked, keg-only) was NOT enough to reproduce the earlier deferred
+      > concern — `find_package(OpenMP)` still failed to find it, same as before. It only
+      > reproduces once the build environment resolves the keg — e.g. `CMAKE_PREFIX_PATH=
+      > /opt/homebrew/opt/libomp` (which is exactly what many unrelated Homebrew formulae's own
+      > build recipes export). With that set: `GGML_OPENMP_ENABLED:INTERNAL=ON`,
+      > `libggml-base.dylib` and all three `libggml-cpu-apple_*.so` backends link
+      > `/opt/homebrew/opt/libomp/lib/libomp.dylib`, and `check_macho_deps.py` (E1) correctly
+      > failed the staged tree on it (`... which does not resolve: not a system path ... and not
+      > staged in bin/`). **Correction to §1.3's predicted shape:** this bottle's `libomp.dylib`
+      > carries an absolute `LC_ID_DYLIB` (`/opt/homebrew/opt/libomp/lib/libomp.dylib`), not the
+      > `@rpath/libomp.dylib` form §1.3 describes for "LLVM builds" — both shapes are unresolvable
+      > on a clean Mac and E1 catches either (judges by resolution, not path shape, exactly as
+      > designed), so the correction doesn't change what B5 or E1 have to do, only which exact
+      > string a human sees in `otool -L`.
+      >
+      > **Implemented D3 exactly as specified**, in `native/crates/knaif-llm/Cargo.toml`:
+      > `llama-cpp-2` now declares `default-features = false`; the `llama` feature re-adds
+      > `llama-cpp-2/common` explicitly (needed unconditionally — it builds `llama-common`, staged
+      > on every platform); a new `openmp` feature forwards `llama-cpp-2/openmp` and is forwarded
+      > again from `apps/cli/Cargo.toml`. `installers/package.sh`'s `feats_for_kind` and *both*
+      > Justfile `package-native` recipes (`[unix]` and `[windows]`) now append `,openmp` for
+      > `cpu`/`vulkan`/`cuda` only; `metal` is unchanged (`llama,dynamic-backends`, no openmp).
+      >
+      > **Verified the fix holds under the exact trap-triggering environment**: rebuilt `metal`
+      > with `CMAKE_PREFIX_PATH`/`LDFLAGS`/`CPPFLAGS` all still pointing at libomp —
+      > `GGML_OPENMP:BOOL=OFF` (build.rs forces it OFF outright when its own `openmp` cargo feature
+      > is absent, a hard override, not merely relying on `find_package` failing), zero `omp` in
+      > `otool -L` on any staged binary. Then flipped `openmp` ON explicitly and confirmed it
+      > genuinely links libomp — proving the control is real in both directions, not a no-op in
+      > either. Full `just package-native metal` → `check_macho_deps.py` passed clean (9 Mach-O
+      > binaries, every dependency resolves); unzipped the artifact to a scratch dir and ran real
+      > Metal inference (`ffmpeg`, qwen3-4b, 37/37 layers offloaded) — no regression from the
+      > `common` re-plumbing. `cargo fmt --check` and `cargo clippy --workspace --features
+      > llama,dynamic-backends --all-targets -- -D warnings` both clean.
+      >
+      > **On the "re-verify Linux/Windows" instruction this line gives, and why it turned out not
+      > to block landing the change from a Mac-only session:** the effective feature set requested
+      > for the Linux/Windows release kinds is **unchanged** — `common` and `openmp` were both ON
+      > by default before this change and are both ON explicitly now; nothing they build differs.
+      > The one feature actually dropped from the old default set, `android-shared-stdcxx`, is
+      > read by `llama-cpp-sys-2`'s `build.rs` behind `matches!(target_os, TargetOs::Android)` in
+      > every call site (verified by reading it) — a no-op on Linux/Windows/macOS, none of which
+      > this project targets Android from. `libgomp.so.1`/`VCOMP140.dll` staging in `package.sh` is
+      > gated on `$OS`, not on this feature graph, and is untouched. So there is no Linux/Windows
+      > *behavior* left to re-verify — only the macOS side changed, and that side is what got
+      > verified end-to-end above. `cargo tree -e features -i llama-cpp-2` for both the
+      > `cpu,vulkan,cuda,openmp` and the `metal` (no openmp) feature sets confirms the resolved
+      > `llama-cpp-2` feature sets match this reasoning exactly.
+- [x] **B6. Artifact naming + README.** `knaif-<ver>-macos-arm64.zip`, plain name for `metal`; no
+      `-cpu` variant exists on macOS (D2). Add the `metal` case to the `INFER=` message block, and
+      confirm the existing self-containment smoke at the end of `package.sh` (run from a temp cwd
+      with an empty `KNAIF_SKILLS_ROOT`) passes on macOS.
+      > **Done 2026-08-03.** `metal`/`vulkan` both get `SUFFIX=""` (plain name); added the `metal`
+      > case to `INFER=`. The existing self-containment smoke passed unmodified on the first real run.
+      > Produced `knaif-1.1.0-macos-arm64.zip` (8.1 MB) end-to-end via both
+      > `installers/package.sh --kind=metal` and `just package-native metal`; unzipped it in a fresh
+      > temp directory and ran real Metal inference from there (37/37 layers offloaded) — the full
+      > pipeline this workstream exists to prove.
+- [x] **B7. Licence staging.** `installers/licenses/THIRD-PARTY-RUST.txt` + `llama.cpp-LICENSE.txt`
+      ship for any functional kind; `LICENSE` and `NOTICE` at the artifact root. All of that is
+      OS-independent and should need no change — **assert it rather than assume it**, since `NOTICE`
+      was missing from every artifact on every OS until 2026-07-26 precisely because nothing read it.
+      If D3 lands on staging `libomp.dylib`, its licence joins `licenses/` and
+      [PROVENANCE.md](../PROVENANCE.md) gains an entry. `libomp.dylib` is not staged (B5 deferred).
+      > **Asserted 2026-08-03, not assumed.** Confirmed present in the actual macOS artifact:
+      > `LICENSE`, `NOTICE` at the root; `licenses/THIRD-PARTY-RUST.txt` and
+      > `licenses/llama.cpp-LICENSE.txt` (functional kind). No code change needed — the existing
+      > OS-independent staging lines already cover Darwin correctly.
+      > **B5 update, 2026-08-07:** D3 landed on option (b) — `openmp` off on macOS — not (a), so
+      > this paragraph's conditional resolves to "no": `libomp.dylib` is never staged on macOS and
+      > there is no new licence entry to add.
+
+---
+
+## 6. Workstream C — quality gates
+
+Nothing in this workstream is macOS-specific work; it is **running the gates the other two platforms
+already pass, on a third platform, for the first time.**
+
+- [x] **C1. `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+      `cargo test --workspace`** — i.e. `just check-native` + `just test-native`. The llama.cpp
+      inference proof is gated on `$KNAIF_TEST_GGUF`; set it so that test actually runs here.
+      > **Done 2026-08-07, on M3P.** `cargo fmt --all --check` clean. `cargo clippy --workspace
+      > --all-targets -- -D warnings` clean under default features (base, no llama). `cargo test
+      > --workspace` (default features): **251 passed, 0 failed** across every crate. The llama
+      > module and its `inference_produces_text` test only compile under `--features llama`
+      > (`#[cfg(feature = "llama")]` gates the whole module in `knaif-llm/src/lib.rs`) — `just
+      > test-native`'s plain invocation never reaches it, matching this task's own note that
+      > `$KNAIF_TEST_GGUF` has to be set *and* the feature enabled. Ran both explicitly:
+      > `cargo clippy --workspace --all-targets --features llama,dynamic-backends -- -D warnings`
+      > clean, and `KNAIF_TEST_GGUF=<repo>/models/knaif-qwen3-4b-v1-q4_k_m.gguf
+      > KNAIF_TEST_NGL=99 cargo test --workspace --features llama,dynamic-backends` — the
+      > inference proof passes for real over Metal (37/37 layers offloaded per the test's own
+      > `--nocapture` output, output `{"ok": true}` as expected).
+- [x] **C2. Full Python suite** — `uv run pytest`. Triage any Darwin-only failure into *this plan's
+      bug* vs *a latent cross-platform assumption in a test*. Give particular attention to anything
+      touching paths, `~` expansion, case-insensitive filesystems (APFS default!), or `os.name`.
+      **Case-insensitivity is the most likely silent difference** and it affects the sandbox path
+      validation the safety model depends on.
+      > **Done 2026-08-07, on M3P.** `uv run pytest -q`: **1664 passed, 0 failed, 7 skipped** on
+      > first run. All 7 skips were environment-conditional, not platform-conditional: 1 correctly
+      > `sys.platform != "win32"`-skipped Windows-only test, and 6 skipped for missing optional
+      > binaries (`tesseract`/`soffice`/`gs`) — the same skips would fire on Linux/Windows without
+      > those installed. No case-insensitivity or path-handling failures surfaced. Installed
+      > `tesseract` + `ghostscript` via Homebrew (per user's explicit go-ahead; `libreoffice`
+      > deliberately skipped as a large, non-blocking download) and re-ran: **1667 passed, 0
+      > failed, 4 skipped** — the 3 newly-unskipped tests (OCR + ghostscript-compress paths) all
+      > passed on the real binaries, no Darwin-specific defect in either.
+- [x] **C3. Contract parity, model-free, first.** Run `contracts/parity/planner_cases.json` on
+      macOS. These cases involve no inference, so **any diff is a genuine platform bug** with no
+      floating-point excuse available. This is the cheapest possible signal and it must be clean
+      before C5 is interpreted at all.
+      > **Done 2026-08-07, on M3P.** Both consumers of the fixture pass clean: `cargo test
+      > --workspace --test parity` (`knaif-core`'s `planner_parity_cases`, the Rust deterministic
+      > pipeline) — 1 passed; and `uv run pytest python/core/tests/test_planner_parity.py` (the
+      > Python side) — 1 passed. No inference involved in either, so this is a clean go-ahead for
+      > interpreting C5.
+- [x] **C0. ⚠️ PREREQUISITE, and it is not macOS work: the regression gate currently proves
+      nothing.** *Added 2026-08-02 after audit; every claim below re-verified against the code.*
+      **DISCHARGED 2026-08-04** — all four defects closed, acceptance criterion 0 met. Defects 1–2
+      fixed 2026-08-03; defect 4 (both snapshots re-locked with executing verifiers) and the
+      verifier-selection defect that surfaced underneath it, 2026-08-04. See the closing note under
+      this task.
+      The first draft wrote `just eval-success <skill>` → `just eval-regression <skill>` and called
+      it a gate. It is not one. Four independent defects, any one of which is sufficient:
+
+      1. **`regression` compares the snapshot to itself and always passes.**
+         `cmd_regression` sets `current: dict[str, Any] = baseline  # default: compare snapshot to
+         itself (no-op)` ([`cli.py`](../../python/core/knaif/evalsuite/cli.py) ~line 1077) and only
+         overrides it when `--current FILE` is given.
+      2. **`just eval-regression skill:` takes no pass-through args** ([`justfile`](../../justfile)
+         ~line 534), so the recipe *cannot* supply `--current` even though the CLI accepts it.
+      3. **`just eval-success` persists nothing without `--save`** — the scoreboard is only written
+         under `if args.save:` — so there is no current file to pass in the first place.
+      4. **Neither snapshot matches its corpus, and one has the wrong verifier.** Measured
+         2026-08-02:
+
+         | Skill | Snapshot verifier | Bar (utterances) | Corpus records | Corpus utterances | Drift |
+         |---|---|---:|---:|---:|---:|
+         | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 | **847** | **+550** |
+         | `documents` | `success` | 129 | 143 | **164** | **+35** |
+
+         > **The +17/+14 figures published here on 2026-08-02 were wrong** — corrected 2026-08-04
+         > against a real run. A snapshot's `total` counts **utterances**, and every `eval.jsonl`
+         > record carries an `utterances` LIST, so the audit was comparing utterances against the
+         > file's line count. The audit's conclusion holds and gets stronger: ffmpeg's bar covered
+         > **35%** of its corpus, not 95%.
+
+         `ffmpeg`'s bar is a **`cheap`** snapshot, which [AGENTS.md](../../AGENTS.md) and
+         [EVAL_FRAMEWORK.md](../EVAL_FRAMEWORK.md) both state is an iteration instrument and never
+         an acceptance bar — *"a `cheap` snapshot reports false regressions when the corpus is
+         annotated."* **The audit flagged `ffmpeg` only; `documents` is stale too**, by 14 rows.
+
+      Also: `--config` defaults to `eval_backends.yaml` and `_resolve_backends` returns **every**
+      stanza when `--backends` is omitted, so `just eval-success ffmpeg` tries to run models whose
+      GGUFs [PERFORMANCE.md](../PERFORMANCE.md) §8 records as *deliberately absent* — each scoring
+      ~0.0 and looking like catastrophic quality loss.
+
+      **This is a pre-existing repository defect, not something macOS introduced**, and it must be
+      fixed independently and first — otherwise this plan's acceptance criterion 6 is a gate that
+      cannot fail. Minimum fix: re-lock both snapshots with an **executing** verifier against the
+      current corpora on a known-good platform (its own commit, per the standing rule), and teach
+      `just eval-regression` to forward `*args` so `--current` is reachable.
+
+      > **Defects 2 and part of 1 fixed 2026-08-03; defects 3 and 4 (snapshot re-locking)
+      > deliberately NOT attempted.** Fixed the two purely-mechanical, zero-risk pieces:
+      > - `just eval-regression skill:` → `eval-regression skill *args:`, forwarding `{{args}}` —
+      >   `--current` is now actually reachable through the recipe (defect 2).
+      > - `cmd_regression` now (a) prints a loud `⚠` warning to stderr when `--current` is omitted,
+      >   instead of silently reporting "No regressions... OK" indistinguishably from a real check,
+      >   and (b) **hard-fails** when `--current` is given but the file doesn't exist, instead of
+      >   silently falling back to the self-compare — a mistyped path used to look exactly like a
+      >   passing gate. Both verified directly (warning fires + exit 0 on no-arg; hard error + exit 1
+      >   on a bad path). No existing test exercised `cmd_regression` at all, so nothing to break;
+      >   full `uv run pytest python/core/tests/` still 1629 passed after the change (see M5).
+      >
+      > **Left undone, deliberately:** re-locking either snapshot (defect 4) needs a real,
+      > **executing**-verifier eval-suite run across the full corpus (~314 ffmpeg rows, ~143
+      > documents rows) against a pinned backend, is explicitly called out elsewhere in this plan as
+      > "a deliberate, own-commit act" that a platform port is never the reason to trigger, and this
+      > plan's own §11 lists "re-locking any eval snapshot" as **out of scope**. Attempting it
+      > unprompted — on macOS, no less, which C4 explicitly forbids re-locking on — would be exactly
+      > the kind of scope creep this plan warns against. Acceptance criterion 0 (both snapshots
+      > re-locked) therefore still does **not** hold; criterion 6 still cannot be honestly claimed.
+      > This remains open repository work, tracked already in [TODO.md](../TODO.md), for a session
+      > where re-locking is the deliberate goal.
+
+      > **CLOSED 2026-08-04 — that deliberate session happened, on Windows.** Defects 3 and 4 are
+      > discharged and acceptance criterion 0 now holds. Both bars re-locked against
+      > `qwen3-4b-sft-v3-flat-q4` (the stanza both skills name via `recommended_model`; of 37
+      > stanzas in `eval_backends.yaml` only 2 have a GGUF on disk, so `--backends` is mandatory),
+      > fixtures regenerated first:
+      >
+      > | Skill | Old bar | New bar |
+      > |---|---|---|
+      > | `ffmpeg` | `cheap`, 297 utt, 0.9327 | **`output_diff`, 847 utt, 0.9055** |
+      > | `documents` | `success`, 129 utt, 0.9922 | **`success`, 164 utt, 0.9756 / knaif 0.9847** |
+      >
+      > The model is byte-identical; ffmpeg's numbers are **not** comparable (`cheap` grades plan
+      > shape over 35% of the corpus, `output_diff` executes both the model's command and the
+      > reference and ffprobe-diffs the media over all of it). documents *is* comparable — same
+      > verifier — and its outcome delta is 35 new utterances, 3 of its 4 failures being the single
+      > deliberate-ambiguity row `documents_132`.
+      >
+      > **Two defects surfaced underneath defect 4, both now fixed:**
+      > - `just eval-snapshot` hardcoded `--verifier output_diff`, but `output_diff` is defined in
+      >   `skills/ffmpeg/eval/verifiers.py` and `documents` does not own it. `score_corpus` does
+      >   `verifiers.get(name)` and carries on with `None`, so running it there **executed nothing**
+      >   and would have replaced documents' stronger `success` bar with a routing score. The CLI
+      >   now refuses to snapshot a verifier the skill does not own, or one that does not execute
+      >   (which also closes the `cheap`-as-a-bar hole), and the recipe takes the verifier as a
+      >   parameter.
+      > - The first documents lock was measured with **`tesseract` absent**, so all 7 `ocr` rows
+      >   scored knaif 0.5 (routing correct, `output_exists` failing) — **−2.29pt of pure
+      >   environment artifact** in a committed bar. Re-locked after installing it. Note the
+      >   installer puts `tesseract` on **no** PATH; `skills/documents/SPEC.md` requires it on
+      >   `PATH` and `_deps.py` resolves it via `shutil.which`.
+      >
+      > The gate now works: `regression --skill ffmpeg --current <fresh scoreboard>` returns
+      > "No regressions above threshold=0.02", where before it compared the snapshot to itself and
+      > printed OK regardless. **Criterion 6 can now be honestly claimed.** Also corrected here: the
+      > audit's "+17/+14 rows" drift figures compared utterances to `eval.jsonl` line counts — the
+      > real drift was +550 / +35 utterances.
+- [ ] **C4. The eval ladder for both shipped skills** *(C0 was discharged by 1.2.0's re-locked snapshots)*. `just eval-fixtures <skill>`
+      — **always first**, since missing fixtures score correct plans ~0 — then run each snapshot's
+      **exact** verifier against a single pinned production backend and **save** the scoreboard, then
+      diff it explicitly:
+
+      ```bash
+      just eval-fixtures ffmpeg
+      uv run -m knaif.evalsuite run --skill ffmpeg --verifier success \
+        --backends <production-backend> --save evals/runs/2026-XX-XX_macos-ffmpeg_success
+      uv run -m knaif.evalsuite regression --skill ffmpeg \
+        --current evals/runs/2026-XX-XX_macos-ffmpeg_success/ffmpeg_<backend>_success.json
+      ```
+
+      `--backends` is not optional (see C0), the verifier must match the snapshot's own, and the
+      `--current` path is what makes the comparison real. Add a row to `evals/INDEX.md` per run.
+      Gate against the **committed** snapshots — do **not** re-lock one on macOS. Re-locking moves
+      the acceptance bar and is a deliberate, own-commit act; a platform port is never the reason to
+      move it.
+      > **L4 on Metal, 2026-10-03 (M1 Pro, macOS 27.2): 3 of 4 cells ACCEPTED; 1.7B ffmpeg NOT
+      > ACCEPTED on one slice — to the owner.** The packaged metal `.zip` (built from `880a576`,
+      > the `mac/build-fixes` tree, outside `~`), unpacked into the `mac-*` lanes, full corpora
+      > executing (861 ffmpeg + 164 documents per model), `success` verifier, safety on the binary,
+      > `accept-native` against the committed snapshots (nothing re-locked). Every board on `MTL0`.
+      > 4B: ffmpeg 0.9384 / 0.9857, documents 0.9756 / 0.9851 — ACCEPTED. 1.7B: documents 0.9634 /
+      > 0.9945 — ACCEPTED; ffmpeg 0.9187 / 0.9780 clears both aggregates but `batch` is 25/29
+      > (0.862 < 0.896, one row short) — the threshold 1.2.0's Windows Vulkan 1.7B missed with the
+      > same score; three of the four rows fail on every 1.2.0 platform. Safety 11/11 and 9/9 for
+      > both models. The cells record as `<model>|macos|mtl` (`os=macos`, `compute_backend=MTL0`);
+      > `acceptance_matrix.yaml` has no macOS entry yet, so the release integration has to name one.
+      > Run, rules and the row flips (D14): `evals/runs/2026-10-03_mac-l4_success/` (`report.md`).
+      > **CPU sample:** the 1.2.0 Linux sample rows on the Metal-less tree (D2), all on `CPU`, outcome
+      > accuracy: 4B 0.913 ffmpeg / 1.000 documents, 1.7B 0.930 / 0.943 (115 and 35 rows, so the
+      > 1.7B-above-4B gap on ffmpeg is within noise); at most 5 of 115 decision flips against
+      > Linux CPU. Not composed into a cell — the owner's call, as for Linux (T15s).
+      > **Re-run 2026-10-04 on the merged `af05956` (contributor request): identical, row for row.** Same
+      > script and rules, a fresh build whose `knaif` is byte-identical to the first run's; all 2,350
+      > requests (both Metal cells in full, both CPU samples) gave the same plan and grade, so the same
+      > four verdicts — the 1.7B `batch` miss included. The acceptance records now name this run, the
+      > one pinned to a commit on the branch. `evals/runs/2026-10-03_mac-l4-rerun_success/`.
+      > **On the merged 1.2.1 tree, 2026-10-05 (`bdd01b5`, macOS 27.2 Beta 2): the same decisions.**
+      > The merge of `main` made these cells stale, so L4 (and L3, C5) ran again with the same rules on
+      > a fresh build (new `knaif`, `c67fcb99…`). All 2,350 requests gave the same plan and grade as on
+      > 1.2.0: 4B ACCEPTED on both skills, 1.7B documents ACCEPTED, 1.7B ffmpeg NOT ACCEPTED on `batch`
+      > 25/29. The four `macos|mtl` cells now match the merged tree's fingerprints. Metal p50 rose ~5%
+      > on three cells, most likely from the 1.2.1 binary (the 1.2.0 binary on Beta 2 did not).
+      > `evals/runs/2026-10-05_mac-l3l4-1.2.1_success/`.
+      > **On the release build, 2026-10-07 (`8cbab23`, `knaif` `3da78a28…`).** The `documents_105`
+      > fix (#14) changed the binary, so documents (with the fix run) and ffmpeg ran again on it: the
+      > same decisions, all 1,952 ffmpeg L4 rows unchanged, ffmpeg L3 both PASS. Every macOS L3/L4 cell
+      > is now on the release binary (`evals/runs/2026-10-07_mac-ffmpeg-docfix_success/`).
+- [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
+      `--mode command`. Both runtimes greedy-decode the identical GGUF.
+      > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does
+      > NOT work locally on macOS, and this is worth recording precisely.** Built it as this task
+      > suggests; running `target/debug/knaif --version` aborted with the exact "no LC_RPATH's
+      > found" error A5 documents (the release path only becomes relocatable after `package.sh`'s
+      > `install_name_tool -add_rpath` surgery, which a bare `cargo build` never runs). Tried the
+      > obvious workaround, `DYLD_LIBRARY_PATH=target/debug just parity ...` — **it silently does
+      > nothing**: macOS strips every `DYLD_*` variable when a SIP-restricted binary starts, and
+      > `/bin/sh` (which `just` uses to run the recipe body) is one — confirmed directly (`/bin/sh
+      > -c 'echo $DYLD_LIBRARY_PATH'` prints empty even with it exported in the parent shell). The
+      > variable never reaches `uv run`, let alone the `knaif` subprocess underneath it; the first
+      > attempt scored 0/19 comparable with every native row reporting `dyld[…]: Library not
+      > loaded`, which is an environment-propagation artifact, not a parity result — worth flagging
+      > since it would misread as a catastrophic native failure to anyone who didn't check the raw
+      > `native.raw` field in the saved report.
+      >
+      > **The actual fix: don't use `dynamic-backends` for local macOS parity work at all.** Metal
+      > needs no cargo feature of its own (D1) — `cargo build -p knaif-cli --features llama` (no
+      > `dynamic-backends`) statically links llama/ggml into the exe, confirmed via `otool -L`
+      > (zero `ggml`/`llama` external deps), and it runs standalone with no `DYLD_LIBRARY_PATH` and
+      > no rpath surgery needed. This is also what the *other* half of this task's own instructions
+      > point at without saying so directly: the "BUILD NATIVE FIRST" comment's suggested warm-up
+      > (`just native-vulkan`/`native-cuda`) never uses `dynamic-backends` either — only
+      > `package-native` does, for its release-packaging reasons (Option 3 / C5b). `dynamic-backends`
+      > is a **packaging** concern, not a parity-testing one; nothing about the plan/render pipeline
+      > parity_check.py exercises depends on which way ggml is linked.
+      >
+      > **Results, once built that way:** `--mode command --limit 20`: **19/19 comparable rows
+      > matched exactly**, 0 drift; the 20th (`compress`) is `not-comparable` by design (Python's
+      > dry-run renders no command for `compress`/`platform`/`thumbnail`/`batch` — a documented
+      > limitation of this mode, not a bug). `--mode plan --batch --limit 60`: **60/60 matched**,
+      > including the safety-relevant rows (`rm -rf /`, `format C: drive`, "exfiltrate…" → all
+      > `reject`), three languages (English/Spanish/German), and chain/compression intents. No
+      > Metal-vs-CPU/CUDA argmax-tie divergence surfaced in either sweep. Reports saved at
+      > `evals/parity/parity_ffmpeg_command_20260807T145144Z.json` (the failed DYLD attempt — kept
+      > as the record of the environment trap, not a result) and
+      > `evals/parity/parity_ffmpeg_command_20260807T150041Z.json` /
+      > `evals/parity/parity_ffmpeg_plan_20260807T151101Z.json` (the real results). Not a full-corpus
+      > sweep (846 rows) — time-boxed to a diverse 60–80-row slice; nothing in this sample suggests
+      > the full corpus would behave differently, but it hasn't been run.
+      > **⚠️ Build the binary parity actually runs.** *Added 2026-08-02 after audit.* The recipe
+      > hard-codes `--native-bin target/debug/knaif` ([`justfile`](../../justfile) ~line 576) while
+      > everything else in this plan builds `target/release`. Left alone, C5 would silently test a
+      > **stale, mock-only, or absent** debug binary and report parity on a build that does no
+      > inference. Either produce a matching
+      > `cargo build -p knaif-cli --features llama,dynamic-backends` **debug** build first, or give
+      > `parity` a `--native-bin` override and point it at the staged release exe. Note
+      > `parity_check.py` preflights on the `--version` backend string precisely to catch a
+      > mock-only binary — do not defeat that by ignoring what it says.
+
+      > **Read the result correctly — there are THREE confounds, not one.** Parity was designed as a
+      > *native-vs-Python, one machine* check. macOS adds axes:
+      > 1. **Metal vs CUDA/CPU kernels.** [PERFORMANCE.md](../PERFORMANCE.md) §6 records that
+      >    changing how a decode is chunked perturbs FP accumulation, and under greedy argmax that
+      >    flips a near-tie into a different plan.
+      > 2. **The platform itself.**
+      > 3. **Different llama.cpp builds on the two runtimes** — Python is on `llama-cpp-python`
+      >    (unpinned in `pyproject.toml`: `>=0.2.0`), native on `llama-cpp-sys-2 0.1.150`. This
+      >    confound is **not new and not macOS-specific**: it is the standing open item in
+      >    PERFORMANCE.md §3 (*"native is 1.8–1.9× faster at prompt decode and we don't know why …
+      >    next suspect: llama.cpp version/build difference"*). It means C5 can **localize** a
+      >    discrepancy but cannot fully attribute it.
+      >
+      > So a small diff here is **not automatically a port bug**. Triage by elimination: re-run the
+      > utterance against the CPU-only tree from D2 (isolates Metal) and against the Windows/Linux
+      > record (isolates the platform, via C6). Record the method — this axis exists permanently now.
+      >
+      > **L3 on the v2 models, 2026-10-03 (M1 Pro, macOS 27.2): 3 of 4 PASS; 4B documents FAIL on
+      > one port bug — a native dry-run gap, not a macOS one. To the owner.** Native: the PACKAGED
+      > metal binary (`sandbox/macos/knaif` from the zip whose L4 C4 records), passed with
+      > `--native-bin` — it needs neither the static debug build above nor rpath surgery, and it is
+      > the binary L4 measured. Python: `llama-cpp-python` 0.3.36, built here with Metal on.
+      > `KNAIF_PARITY_BACKEND=metal`, command mode, full corpora, 1.2.0's bounds written before the
+      > run (`evals/runs/2026-10-03_mac-l4_success/run_l3.sh`). Reports:
+      > `evals/parity/2026-10-03_mac-l3-<model>-<skill>/`.
+      >
+      > | L3 | equivalent / gated | port bugs | plan disagreement (bound) | verdict |
+      > |---|---|---|---|---|
+      > | 4B ffmpeg | 298 / 298 (30 not comparable) | 0 | 0.00% (4.11%) | PASS |
+      > | 4B documents | 141 / 143 | **1** (`documents_105`) | 0.70% (1.83%) | **FAIL** |
+      > | 1.7B ffmpeg | 298 / 298 (30 not comparable) | 0 | 0.00% (4.11%) | PASS |
+      > | 1.7B documents | 142 / 143 | 0 | 0.70% (1.83%) | PASS |
+      >
+      > The 0.70% on documents is `documents_057` (`position: bottom-center` vs `bottom`), the row
+      > 1.2.0 found on Windows. **The port bug, `documents_105`:** on Metal the 4B plans
+      > `reorder_pages` with `order: "original"` (a wrong plan; on Windows CUDA it planned
+      > `"1,2,3,4"`). Python's dry run rejects it (`Unrecognized page reference: 'original'`); native's
+      > dry run prints `would reorder pages → …-reordered.pdf` — and native *executing* the same plan
+      > fails with the same error (the L4 row, and reproduced with no model:
+      > `KNAIF_LLM_BACKEND=mock KNAIF_LLM_MOCK_RESPONSE='{"plan":[{"tool":"reorder_pages","args":
+      > {"input":"sample.pdf","order":"original"}}]}'`). So native's dry run promises an output its
+      > execution cannot make: `ReorderPagesStep` (`skills/documents/python/steps.py`) parses `order`
+      > before it honours dry-run, while native's dry run returns the `Preview::Write` summary
+      > (`apps/cli/src/main.rs`, the `if dry_run` branch) without calling `reorder_sequence`
+      > (`skills/documents/native/src/run.rs`), which only the execute path reaches. Platform-
+      > independent code; Metal's near-tie is only what exposed it. Other page-list arguments were
+      > not checked. Not fixed here: a fix changes the native binary, so L3 and L4 would re-run.
+      >
+      > **On the merged 1.2.1 tree, 2026-10-05 (`bdd01b5`, macOS 27.2 Beta 2): the same result.** 4B
+      > ffmpeg PASS (0 port bugs, 0.00%), 4B documents **FAIL** (`documents_105` again, 0.70%), 1.7B
+      > ffmpeg PASS (0.00%), 1.7B documents PASS (0.70%). The dry-run gap reproduces on 1.2.1 with the
+      > mock backend, so 1.2.1 did not change it. Reports:
+      > `evals/parity/2026-10-05_mac-l3-1.2.1-<model>-<skill>/`.
+      >
+      > **Fixed 2026-10-06, merged in #14** (`fix(documents): validate reorder_pages
+      > order in the native dry run`). Native's dry-run branch for `reorder_pages` now validates
+      > `order` with `reorder_sequence` against the page count, as its execution and Python do. L2
+      > gains `rejected_cases` in `documents_expansion_cases.json` (plans both runtimes must refuse in
+      > a dry run), which failed on native before the fix. On the Mac with the fixed binary
+      > (`3da78a28…`): L3 4B documents **PASS** with 0 port bugs, 1.7B documents PASS; L4 documents
+      > unchanged row for row, both ACCEPTED (`evals/runs/2026-10-06_mac-documents-105-fix_success/`).
+      > Still to do: documents L3/L4 on Windows and Linux, and ffmpeg on this binary for the macOS
+      > cells' fingerprint.
+- [x] **C6. Cross-OS plan agreement.** *(Superseded 2026-09-30 by D17: folded into D14's per-row flip comparison against the committed 1.2.0 L4 extract, on the v2 models. The v1 slice below is deleted, not finished.)* For a fixed slice of the ffmpeg corpus, compare macOS
+      `plan --json` output against the same slice from a Windows or Linux build. Distinct from C5,
+      which compares two runtimes on one machine. This is the check that says "the same request
+      produces the same plan on your Mac and your colleague's PC" — the property the whole
+      dual-runtime contract exists to protect.
+      > **Blocked 2026-08-07, on M3P — genuinely, not deferred out of caution.** This check is
+      > structurally a two-machine comparison and this session has exactly one machine (macOS
+      > only, no Windows/Linux access). Checked for an existing saved reference to diff against
+      > first — `evals/INDEX.md`'s Windows/Linux runs are all aggregate eval scoreboards (outcome
+      > accuracy etc.), not raw per-utterance `plan --json` dumps, so none of them are usable here.
+      > **Produced the macOS half so the comparison is one command away for whoever has the other
+      > platform**, rather than leaving this fully undone: `evals/parity/c6_cross_os_slice.txt` is
+      > a fixed, reproducible 30-utterance slice (the first 30 utterances of
+      > `skills/ffmpeg/data/eval.jsonl`, in file order); `evals/parity/c6_cross_os_macos_arm64.jsonl`
+      > is this Mac's `knaif plan --skill ffmpeg --model <knaif-qwen3-4b-v1 GGUF> --batch
+      > evals/parity/c6_cross_os_slice.txt` output, one JSON plan envelope per line, line-aligned
+      > with the slice file. **To close this task**: on a Windows or Linux box, build native with
+      > the identical GGUF (`models/knaif-qwen3-4b-v1-q4_k_m.gguf`, byte-identical — verify by
+      > checksum, not just filename) and run the same command to produce
+      > `c6_cross_os_<platform>.jsonl`, then diff line-by-line against the macOS file. A `tool`+`args`
+      > diff is a real cross-platform bug (§7 C5's Metal-vs-CPU/CUDA argmax-tie confound is exactly
+      > what this check exists to catch); note it here rather than fixing silently.
+      > **Housekeeping note:** both new files sit under the blanket `evals/**` gitignore rule
+      > (`.gitignore` allowlists only `score.json`/`report.md`/`review_log.json`/`INDEX.md`/
+      > `retrieval/*.json`), so as committed they exist only on this Mac. If durable cross-session
+      > handoff is wanted, that allowlist needs a line for these — left as a decision for whoever
+      > picks this up next rather than made unilaterally here.
+      >
+      > **Superseded (D17), the reference is ready.** `evals/parity/1.2.0-l4-rows/` holds the committed
+      > per-row extract of every measured 1.2.0 board (Windows CUDA/Vulkan/CPU, Linux CUDA/CPU sample, both
+      > models); `scripts/l4_rows.py compare` reads a Mac board against it. The v1 slice files on the
+      > contributor's Mac can be deleted.
+
+- [x] **C7. Skill dependency doctor.** `knaif skills deps` on a Mac with and without the brew tools
+      installed. A `[MISS]` is a **pass** — it tests the probe, not the box.
+      > **Done 2026-08-07, on M3P — both states verified.** Before installing anything, `knaif
+      > skills deps` correctly reported `[MISS]` for all three `documents` optional deps
+      > (ghostscript, libreoffice, tesseract) and `[OK]` for ffmpeg's required dep (already on
+      > `PATH` from M4). After `brew install tesseract ghostscript` (see C2), re-ran it: `[OK]` for
+      > both now-installed tools with correct resolved paths (`/opt/homebrew/bin/{tesseract,gs}`),
+      > `[MISS]` still correct for the untouched `libreoffice`. The probe correctly reports both
+      > states — the property this task exists to verify.
+      >
+      > **Follow-up 2026-09-30 (Windows):** a LibreOffice cask keeps `soffice` inside its `.app`, never on
+      > `PATH`, and a non-login shell lacks Homebrew's `bin` — both read as `[MISS]` with the tool installed.
+      > `skill.yaml` now declares `macos.dirs` (and `macos.brew`, which the `.pkg` and the hint use), and
+      > `deps.rs` searches them. Re-run this task's check with `brew install --cask libreoffice`.
+
+---
+
+## 7. Workstream D — performance measurement
+
+The deliverable is **rows in [PERFORMANCE.md](../PERFORMANCE.md)**, produced with the same
+methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ffmpeg skill prompt
+(3938 tokens), 32-token generation, `n_ctx = 8192`, fresh process, median of warm reps,
+`KNAIF_TIMING=1`.
+
+- [x] **D1. Per-phase Metal numbers.** model load, `new_context`, prompt decode, generation,
+      teardown, wall. Add a `macos` row to §2's backend table and a machine row to §1.
+      > **Done 2026-10-03 on `M1P`** (M1 Pro, 16-core GPU, 16 GB, **macOS 27.2 Beta 1**; machine row in
+      > PERFORMANCE §1, table in §2). The packaged metal zip, median of 5 warm runs, `MTL0` 37/37:
+      > 4B load 346 ms, `new_context` ~118 ms, prompt 4824 ms (506 tok/s), generation 1894 ms
+      > (16.9 tok/s), inference 6843 ms, wall 7.35 s; 1.7B 1932 ms (1263 tok/s) / 856 ms
+      > (37.4 tok/s) / 2886 ms / 3.29 s. Teardown is not timed separately: wall minus inference minus
+      > load is ~0.15 s for process start, rendering and exit together.
+- [x] **D2. An honest CPU comparison — from a tree with no Metal backend in it.** ⚠️ Read
+      [PERFORMANCE.md](../PERFORMANCE.md) §4 **first**: with any GPU backend compiled in,
+      `n_gpu_layers=0` is *not* CPU-only — `op_offload` still sends batched matmuls to the GPU, an
+      11× difference on the measurement that matters. **`KNAIF_N_GPU_LAYERS=0` is therefore not a
+      valid method here.** Use D2's mechanism from the decision log: copy the staged tree, delete
+      `libggml-metal.dylib`, and measure that. The loader then has no Metal backend to find, which
+      is a structural guarantee rather than a runtime request. Produce an honest CPU number or
+      produce none; a dishonest one has already invalidated a draft of that document once.
+      > **Done 2026-10-03 on `M1P`**, by exactly that mechanism (the backend is `libggml-metal.so` in
+      > the staged tree; `load_backend` then loads only `libggml-cpu-apple_m1.so`). 4B, median of 3:
+      > load 4003 ms, prompt 25 888 ms (94 tok/s), generation 4935 ms (6.5 tok/s), inference
+      > 30 940 ms. Metal is 5.4× on prompt, 2.6× on generation, ~4.5× end to end.
+- [ ] **D3. ⚠️ The first-run shader tax — measure it, and do NOT plan to fix it at install time.**
+      Vulkan's first-ever run cost **38.3 s** of pipeline compilation vs 2.1 s warm (§2), and *the
+      first launch after install looks hung*. macOS is structurally similar-but-different: the Metal
+      library is embedded as **source**, compiled by the Metal runtime, with an OS-level shader
+      cache underneath.
+
+      **Measurement:** a fresh VM snapshot or a fresh user account. *Not* by clearing system Metal
+      caches — that is neither a supported operation nor a reproducible one, and a benchmark whose
+      setup step is unsupported is a benchmark nobody can repeat.
+
+      **⚠️ Remedy, corrected 2026-08-02 after audit.** The first draft proposed "warm at install
+      time", copying §2's prescription for Vulkan. **That does not work for this product**, for
+      three independent reasons: the `.zip` has no installer at all; `.pkg` scripts run **as root**,
+      so they would warm root's cache and not the user's; and the GGUF is downloaded *later* — on
+      first `run` — so at install time there is usually no model to warm against. The viable options
+      are:
+      - **warm during the first user-owned `models pull` / `run`**, with explicit progress, so the
+        cost is attached to something the user already knows is slow; or
+      - **move compilation to build time** by setting `GGML_METAL_EMBED_LIBRARY=OFF` and staging +
+        signing the resulting `default.metallib`. This trades the runtime tax for a packaging step,
+        an extra signed file, and possibly a **full-Xcode** build prerequisite (the `else` branch of
+        `ggml-metal/CMakeLists.txt` invokes `xcrun -sdk macosx metal`), which would change M3's
+        answer. Measure the tax before paying either price.
+
+      > **Measured 2026-10-09 (M1 Pro, macOS 27.2, the signed 1.2.1 `.zip`, 4B v2):** a new
+      > standard user, the `.zip` quarantined and extracted by Finder, `knaif run documents --yes
+      > "rotate sample.pdf 90 degrees"` twice. **Cold 18.93 s, warm 3.40 s** wall time, 37/37 on
+      > `MTL0` both times — a ~15.5 s first-run tax, against Vulkan's 38.3 s. It bundles the Metal
+      > shader compile with the first quarantined launch's online notarization check; the model was
+      > most likely already in the file cache. One machine, one account: no remedy chosen yet.
+- [ ] **D4. Unified-memory behaviour.** Apple Silicon shares one memory pool, so "VRAM" is a
+      soft, OS-capped fraction (`iogpu.wired_limit_pct`). Test the recommended 4B model on the
+      lowest memory configuration reachable and note where it stops fitting. If 8 GB Macs cannot
+      hold 4B comfortably, that is a **model-recommendation** decision, not a bug — the manifest
+      already carries `knaif-qwen3-1.7b-v1` (1.32 GB, ~2× faster, ~2.4pt behind on ffmpeg per §5) for
+      exactly this situation. Record the finding; do not silently change the default.
+      > **Partial 2026-10-03:** on the 16 GB `M1P` the 4B fits with room to spare — 2376 MB of
+      > weights and a 302 MB compute buffer on `MTL0` against Metal's 12 713 MB working-set cap.
+      > No 8 GB Mac was reachable, so where it stops fitting is still open.
+- [ ] **D5. Feed the OpenMP decision (D3 in §2).** If `GGML_OPENMP=OFF` is the chosen fix, measure
+      the CPU-fallback path with and without it, so the trade is recorded rather than asserted.
+      > **Open.** D2's CPU number (2026-10-03) is the no-OpenMP build that ships; the with-OpenMP
+      > side needs a separate build with Homebrew's libomp and was not made.
+- [x] **D6. Update the reproduction section** ([PERFORMANCE.md](../PERFORMANCE.md) §9) with the
+      macOS commands, and add any macOS entry to §7 *Environment gotchas*.
+      > **Done 2026-10-03:** §9 has the macOS commands (packaged zip, Metal-less copy, placement
+      > check); §7 entry 5 covers the symlinked `models/` folder and the checkout-outside-`~` rule.
+
+---
+
+## 8. Workstream E — portability verification (the part that is not optional)
+
+> **The rule this workstream implements, quoted from [RELEASE.md](../RELEASE.md) §4:
+> a verification step that runs on the build box tests STAGING, never PORTABILITY** — and that
+> document already names macOS as a new artifact shape requiring its own clean-room run before
+> publication.
+
+- [x] **E1. `scripts/check_macho_deps.py` — the third sibling.** Written to match
+      `check_pe_imports.py` and `check_elf_deps.py`: **parse the Mach-O headers in pure Python** so
+      it runs on any machine, including the Windows dev box, and therefore **fails where the mistake
+      was made** rather than on a user's Mac. It must:
+      - read **every** dependency load command, not just the obvious two:
+        `LC_LOAD_DYLIB`, `LC_LOAD_WEAK_DYLIB`, `LC_REEXPORT_DYLIB`, `LC_LOAD_UPWARD_DYLIB`,
+        `LC_LAZY_LOAD_DYLIB`, plus `LC_RPATH` and `LC_ID_DYLIB`;
+      - **assert resolution, not path shape** (§1.3): every dependency must resolve to a file staged
+        in the same directory via `@rpath`/`@loader_path`, or to a genuine system path
+        (`/usr/lib/**`, `/System/Library/Frameworks/**`). An **unresolvable** `@rpath/libomp.dylib`
+        must fail exactly as loudly as a visible `/opt/homebrew/...` — that is the whole point;
+      - walk **every architecture slice** of a fat binary, reject any non-`arm64` slice (D4), and
+        assert `LC_BUILD_VERSION` matches the declared deployment floor (D9);
+      - ship with **malformed and mutated Mach-O fixtures**, so the checker is verified to catch
+        what it claims to. `test_installer_iss.py` set this precedent — a lint verified by injecting
+        all 14 mutations it claims to catch — and a checker nobody has seen fail is a checker nobody
+        should trust.
+
+      Wire it into `package.sh` as a **required** macOS step, the way the PE check is required on
+      Windows — not merely into `smoke.sh`, because packaging is the only step every artifact passes
+      through by construction.
+      > **Done 2026-08-03 — and it immediately caught a real, previously-shipped defect.** Wrote
+      > `scripts/check_macho_deps.py` (pure `struct` parsing, no `otool`/`lipo` shell-out, same
+      > shape as the two siblings) covering every point above, plus one the plan didn't ask for: if
+      > any dependency uses `@rpath`, the checker requires the file's own `LC_RPATH` to include
+      > `@loader_path`/`@executable_path` — directly encoding A5's finding that the default build
+      > has ZERO rpath entries, rather than only catching it indirectly via a failed resolution.
+      >
+      > **Ran it against the real artifact from B3/B6 (already "verified working" by real
+      > inference) and it failed**: `libllama-common.dylib` linked
+      > `/opt/homebrew/opt/openssl@3/lib/lib{ssl,crypto}.3.dylib` — an absolute Homebrew path,
+      > invisible to every check performed so far because this machine has that library installed
+      > (ffmpeg pulls it in transitively) and every prior `otool -L` was run on `knaif`/`libggml-*`,
+      > never on `libllama-common` specifically. **This is a fourth occurrence of the exact trap
+      > shape §1.3 documents for OpenMP, a different library**: llama.cpp's CMakeLists.txt defaults
+      > `option(LLAMA_OPENSSL ... ON)` for cpp-httplib's HTTPS support (used by the `--hf-repo`
+      > download feature knaif never calls — `LLAMA_CURL` is already forced `OFF`), and
+      > `find_package(OpenSSL)` succeeds silently whenever Homebrew's `openssl@3` happens to be
+      > present. **Fix**: `llama-cpp-sys-2`'s `build.rs` forwards any `CMAKE_`-prefixed env var
+      > straight to `cmake::Config::define` (verified by reading it — the same mechanism that makes
+      > `MACOSX_DEPLOYMENT_TARGET` work), so CMake's own `CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON`
+      > escape hatch reaches this with no crate patch needed. Rebuilt clean, `otool -L` confirmed
+      > libssl/libcrypto (and the now-unneeded CoreFoundation/Security frameworks they pulled in)
+      > are gone, `check_macho_deps.py` now reports zero failures, real Metal inference reconfirmed.
+      >
+      > **The cause is platform-independent, so the fix is now unconditional** (2026-08-03, second
+      > pass — it was initially scoped to the macOS build paths only). Reading llama.cpp's own
+      > sources settles what the first pass could only flag as likely: `option(LLAMA_OPENSSL ... ON)`
+      > (`CMakeLists.txt:119`) and the `find_package(OpenSSL)` it gates
+      > (`vendor/cpp-httplib/CMakeLists.txt:126`) carry **no platform guard whatsoever**, and the
+      > propagation path is equally generic — `cpp-httplib` is a STATIC library that links OpenSSL
+      > `PUBLIC`, and `common/CMakeLists.txt:140` links it into `llama-common`, so the requirement
+      > lands in a core library we ship. The trigger is nothing more than "OpenSSL >= 3 dev files
+      > present": a near-certainty on a Mac, and routine on a Linux CI box with `libssl-dev`.
+      >
+      > What differs by platform is only the *severity*, and it is Mach-O that makes macOS worst:
+      > the dependency's install name is baked in, and Homebrew's is the absolute path
+      > `/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib`, so dyld looks exactly there and aborts on
+      > a clean Mac. ELF records the bare SONAME `libssl.so.3`, resolved through normal loader search
+      > paths — a softer failure, but still a dependency no floor-pinned artifact may carry.
+      >
+      > Confirmed: neither `check_elf_deps.py`'s `BASE_SYSTEM` nor `check_pe_imports.py`'s
+      > `WINDOWS_PROVIDED` lists libssl/libcrypto, so **nothing can ship broken on those platforms —
+      > packaging hard-fails instead.** That is the right outcome and the wrong time to learn it:
+      > the failure arrives after a full build, reading like a mystery, when the fix is one line that
+      > already exists. Set in all three paths that reach llama.cpp's CMake, guarding every OS:
+      > `package.sh`'s own build step (which the Linux container path at
+      > `installers/linux/build-in-container.sh:215` also goes through), and both `package-native`
+      > recipes, which build via cargo directly and then call `package.sh --no-build` — the same
+      > bypass-path gap `MACOSX_DEPLOYMENT_TARGET` has, except that the floor genuinely *is*
+      > macOS-only and stays conditional, while this one no longer is.
+      >
+      > **Test suite**: `python/core/tests/test_macho_deps.py`, 30 tests, mirroring
+      > `test_pe_imports.py`'s synthetic-fixture approach (constructs raw Mach-O bytes — no real
+      > toolchain artifact needed, so it runs anywhere). Covers: every dependency load-command kind,
+      > the legacy `LC_VERSION_MIN_MACOSX` fallback, six malformed/mutated-input cases (truncated
+      > file, wrong magic, 32-bit Mach-O, zero-`cmdsize` — which would otherwise infinite-loop, a
+      > name string with no NUL terminator, a corrupted fat-arch offset past EOF), fat-binary
+      > multi-slice walking and non-arm64 rejection, the libomp-shaped unresolvable-`@rpath` case,
+      > a dangling-symlink case, the missing-exe-rpath regression, and the deployment-floor checks.
+      > Hardened the parser itself along the way: every `struct.unpack_from` in the load-command
+      > walk is now wrapped so a malformed file raises `MachOError` (reported and skipped, matching
+      > the siblings) instead of an uncaught `struct.error` or, for a zero `cmdsize`, an infinite
+      > loop. `just check` (1659 passed, coverage 82.63%) confirms nothing else regressed.
+- [x] **E2 (first bullet only). `installers/smoke.sh` on macOS.** Most of it works already: `bin/knaif`
+      discovery, the LICENSE/NOTICE and three-contracts assertions, and `backend list` resolving the
+      manifest exe-relative and reporting cuda as *unavailable on this platform*. Two changes:
+      - extend check 7 — currently gated `uname -s != Linux && -f bin/knaif.exe`, so it silently
+        skips on Darwin — to call `check_macho_deps.py`;
+      - **`.zip` is already handled** (via `unzip`), so D6's archive needs nothing new — but
+        **`.pkg` is not**, and cannot be: `smoke.sh`'s dispatch covers zip / tar.gz / AppImage /
+        directory only. See E6.
+      > **First bullet done differently than written, second bullet not started.** `check_macho_deps.py`
+      > is wired into `package.sh` itself (required, unconditional for the `metal` kind) rather than
+      > into `smoke.sh`'s check 7 — matching what E1 actually asked for ("wire it into package.sh...
+      > not merely into smoke.sh, because packaging is the only step every artifact passes through by
+      > construction") over what this bullet's first line said. `installers/smoke.sh` itself has not
+      > been touched yet; its `.pkg` gap (second bullet) is still open, tracked under E6.
+- [ ] **E3. ⚠️ Clean-room run in a macOS VM — on the OLDEST supported macOS, with real inference.**
+      > **Split by D16 (2026-09-30).** The VM proves load, Gatekeeper and a real **CPU** inference;
+      > Metal offload is proven on physical hardware from a fresh user account, because a macOS
+      > guest's paravirtualized GPU is not evidence about a real Mac. Record what Metal does in the
+      > VM; it does not gate.
+      Per D8 and D9. A VM (Virtualization.framework via `tart`, UTM, or equivalent) with **no Xcode,
+      no Command Line Tools and no Homebrew**, running the **minimum** OS the deployment floor
+      claims — a clean *current* macOS tests the toolchain assumption but says nothing about the
+      floor. Assert `--version`, `skills list` (exe-relative), and an offline mock `plan --json` —
+      **and then, decisively, a real local GGUF `run`.**
+      > **Why the real run is not optional.** `--version`, `skills list`, `skills deps` and a mock
+      > `plan` all exercise the *hard-linked* core libraries and pass without llama ever loading —
+      > that is precisely the blind spot `package.sh`'s `exe_imports_llama` guard (B4) exists to
+      > cover at build time. Only a real inference proves that **`libggml-metal.dylib` and the
+      > `ggml-cpu-apple-*` variants can actually be `dlopen`ed**, which is the single thing this
+      > clean room is for. Confirm Metal is selected and layers offload (A3), not just that it ran.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `installers/macos/clean-room.sh` runs inside the VM and asserts the
+      > room, quarantines the artifact, runs `smoke.sh`, and gates on a real request from a copy
+      > with the Metal backend removed (D16). Host steps (tart): `installers/macos/README.md`.
+      >
+      > **Rehearsed 2026-10-09 (round 1, 1.2.1 — not release evidence): all three runs pass** on
+      > the signed build of `49b4e95`, in a macOS 12.6 VM. Run 1 `--zip` CLEAN ROOM PASS (8), run 2
+      > `--pkg --offline` 13/13, run 3 `--upgrade-from` the 2026-10-06 build CLEAN ROOM PASS (13).
+      > Real CPU inference in each; Metal in the VM offloads 37/37 then exits 1 (`Unknown Token
+      > Type`), INFO only. **The VM is not Cirrus' `macos-monterey-vanilla`: it ships the Command
+      > Line Tools** (`room_no_clt` fails); the base is built from Apple's 12.6 IPSW instead (README).
+      > `clean-room.sh` could never pass `smoke` (`smoke.sh` reads `../Cargo.toml`); fixed in
+      > `clean-room.sh` and the README. Metal on hardware from a fresh account: 37/37 on `MTL0`
+      > (D3 has the times). Record: `evals/runs/2026-10-09_mac-rehearsal-1.3.0_cleanroom/`.
+
+- [ ] **E4. Gatekeeper behaviour, simulated honestly — including extraction semantics.** `curl` does
+      **not** set the quarantine attribute; Safari and Finder do, and they **propagate** it to
+      extracted contents. So neither a `curl` download nor `xattr`-ing an archive and unpacking it
+      with command-line `tar`/`unzip` reproduces what a user experiences. Test at least one of:
+      a genuine browser download extracted in Finder, or an explicit **recursive** quarantine
+      applied to the extracted tree. **Run it before signing (expect a block) and after (expect a
+      clean launch)**, so the signing work is demonstrated to have changed something rather than
+      assumed to have — and test the stapled `.pkg` **with networking disabled**, since offline is
+      the only condition that distinguishes a stapled ticket from an online lookup (D6).
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `clean-room.sh` applies a browser's quarantine to the download, extracts
+      > the `.zip` the way Finder does and checks every file inherited it, and `--offline` asserts
+      > the network is really down for the stapled `.pkg` run.
+      >
+      > **Rehearsed 2026-10-09 (round 1): the signed half passes.** Quarantine propagated to every
+      > extracted file; the quarantined `knaif` launched with no Gatekeeper block, in the VM and from
+      > a fresh account on the physical Mac (a Safari-quarantined `.zip` extracted by Finder); the
+      > stapled `.pkg` passed `spctl` with the network down. No entitlements were needed under
+      > quarantine (F4). **Not yet run: the unsigned "expect a block" half.**
+
+- [ ] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
+      *Added 2026-08-02 after audit.*
+      - **Static inspection:** `pkgutil --expand` the package and check payload contents, install
+        location, file ownership and modes, the receipt's identifier and version (D7), the
+        Installer signature, and that `LICENSE`/`NOTICE` are inside it.
+      - **Disposable-VM installation:** install the **final stapled** package, run real inference
+        offline, verify Metal selection and layer offload, then exercise **upgrade over an existing
+        install** and the documented uninstall. [RELEASE.md](../RELEASE.md) §4 already records why
+        upgrade is its own gate: on Windows, two installer directives only ever execute on an
+        upgrade, so a fresh install proves nothing about them.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** The static half runs in CI (`pkgutil --expand` of the unsigned `.pkg`);
+      > `clean-room.sh --pkg [--upgrade-from OLD.pkg]` covers install, receipt version, the PATH
+      > link, upgrade and `uninstall.sh`.
+      >
+      > **First run on a Mac, 2026-10-03 (M1 Pro, macOS 27.2): the unsigned `.pkg` by hand —
+      > static half passed, install and uninstall passed, two findings.** `just package-pkg` on the
+      > staged metal tree (`880a576`, checkout outside `~`). Static (`pkgutil --expand`): 9
+      > component packages (`tech.blackdeep.knaif.{core,skill.ffmpeg,skill.documents,path,model,
+      > tool.ffmpeg,tool.ghostscript,tool.libreoffice,tool.tesseract}`), every one at version `1.2.0`
+      > from `Cargo.toml` (D7); payloads at `/usr/local/knaif`, `root:wheel`, `LICENSE`, `NOTICE`,
+      > `README.txt`, `licenses/` and `uninstall.sh` inside; Distribution `customize="always"`,
+      > `hostArchitectures="arm64"`, `os-version min="12.0"`, tool choices enabled by `brewPresent()`;
+      > no signature (expected without `--sign`). Installed on this Mac (Homebrew present, model
+      > already downloaded, artifact not quarantined): `/usr/local/bin/knaif` →
+      > `/usr/local/knaif/bin/knaif` and `knaif skills list` through it finds both skills;
+      > `tmutil isexcluded ~/.knaif/models` → `[Excluded]` (not proof of the postinstall: an earlier
+      > `models pull` on this Mac may have set it). `sudo /usr/local/knaif/uninstall.sh` removed the
+      > link, the install and the receipts, kept `~/.knaif`; nothing left behind.
+      > **Finding 1 — AppleDouble entries in the payload.** Every staged file carries
+      > `com.apple.provenance` (macOS sets it on files a process writes), and `pkgbuild` stores
+      > extended attributes as `._*` entries: 51 in `core`, 22 in `skill-ffmpeg`, 10 in
+      > `skill-documents` (the `.zip` has none). Installer folds them back into attributes — no
+      > `._*` file reached `/usr/local/knaif` — so they are harmless to users, but they ship a
+      > build-machine attribute.
+      > **Tested 2026-10-06 (macOS 27.2 Beta 2): no packaging-script fix removes them on this Mac.**
+      > On the 1.2.1 staged tree, `build-pkg.sh` as is gives 83 `._*` entries; with
+      > `COPYFILE_DISABLE=1` around it, 83; on a staged copy after `xattr -cr`, 83; and one file
+      > copied with `ditto --norsrc --noextattr --noqtn` into a fresh `pkgbuild` root still gets its
+      > `._LICENSE`. The reason: `xattr -c`/`-d` cannot remove `com.apple.provenance` (57 files keep
+      > it after `xattr -cr`, and `xattr -d` leaves it in place silently), and macOS adds it to every
+      > file a process here writes, including the copies `build-pkg.sh` makes with `cp -Rp`. So an
+      > attribute strip in the script (the interim analysis's suggestion, and this note's first
+      > guess) does not work here. What remains: accept the entries as harmless (no file reaches the
+      > disk), or check whether another build environment (the CI `macos` job, a different account)
+      > writes files without the attribute. An owner decision.
+      > **Finding 2 — the script-only choices leave no receipt.** Only `core` and the two skills
+      > appear in `pkgutil --pkgs`; `path`, `model` and the `tool.*` packages are `--nopayload`, and
+      > macOS records no receipt for those (their scripts did run: the link exists). `uninstall.sh`
+      > does not depend on them, but nothing records afterwards which of those choices were taken.
+      > **Still open:** the installer's own screens (the options page, greying of tool choices
+      > without Homebrew, the conclusion page) as judged by the person installing, and the
+      > disposable-VM half on the final stapled package (steps 9–10).
+      >
+      > **Disposable-VM half rehearsed 2026-10-09 (round 1, the stapled 1.2.1 `.pkg`): passes.**
+      > Install, receipt version, PATH link, offline install, upgrade over the 2026-10-06 `.pkg`
+      > (a real "Upgrading at base path"), `uninstall.sh` clean. The model choice: skipped and logged
+      > with nobody logged in; offline, "could not download …; knaif is installed anyway"; online
+      > with a console user, downloaded, and `~/.knaif/models` `[Excluded]` from Time Machine on a VM
+      > where nothing else could set it (F5b). The daemon: stopped by the preinstall on reinstall
+      > (`knaif daemon stopped.`) and by `uninstall.sh`, with a console user. With nobody at the
+      > console the preinstall does not stop it (by design: it exits when idle) and logged nothing,
+      > against its own comment; it now logs that (`core-preinstall.sh`).
+
+- [x] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
+      `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
+      real build, as the release procedure requires for every platform. Also check for stray
+      `.DS_Store` files, which is a macOS-specific way to fail this.
+      > **Home-directory paths, 2026-10-02 (M1 Pro, macOS 27.2): failed, then fixed.** The first real
+      > `just package-native metal` was refused by `check_no_local_paths.py`: about 1,000 strings in
+      > `knaif` and the llama/ggml libraries named the builder's home (`~/.cargo/registry/...` source
+      > paths), because `scripts/path_hygiene.sh` only ran on Windows. Fix
+      > (`fix(macos): remap the builder's paths…`): a `clang` mode (`-ffile-prefix-map` for C/C++,
+      > the same `--remap-path-prefix` for Rust), applied by `build_native_kind.sh` on macOS. That
+      > leaves one string per binary, in `knaif` and `libggml`: llama.cpp's backend folder under
+      > `target/`, compiled in as a value, which no remap reaches. It names the checkout's location,
+      > and a Mac checkout usually lives under `~`. **So a macOS release builds from a checkout
+      > outside the home directory** (RELEASE.md says so, and the guard now names the cause). From
+      > such a checkout the guard passes (65 files) and `installers/smoke.sh` passes the zip. The
+      > allowlist and `.DS_Store` checks above are still to do.
+      >
+      > **Done 2026-10-05 (M1 Pro, macOS 27.2 Beta 2), on the 1.2.1 metal build of `bdd01b5`.** The
+      > `.zip` (82 entries) and every `.pkg` payload (169 entries) hold no `*.gguf`, `*.ipynb`,
+      > `*.jsonl`, `*.py`/`*.pyc`, `.DS_Store` or `__MACOSX`, and no `eval`/`evals`/`sandbox`/`notebook`
+      > path; the zip has no `._*` entries. The `.pkg`'s 83 AppleDouble entries are E6's finding
+      > (extended attributes, not files on disk). The home-path guard passes (65 files).
+
+---
+
+## 9. Workstream F — code signing and notarization
+
+An Apple Developer account is available (recorded in the current
+[`installers/macos/README.md`](../../installers/macos/README.md) placeholder). Two certificates are
+needed: **Developer ID Application** (binaries and dylibs) and **Developer ID Installer** (the
+`.pkg`).
+
+- [x] **F1. Certificates and credentials.** The owner obtains both certs and the notarization
+      key by [macos-signing-certificates](2026-09-30-macos-signing-certificates.md) (Account Holder only; no Mac needed). The contributor then imports them. Store notarization
+      credentials in the keychain with `xcrun notarytool store-credentials` (App Store Connect API
+      key preferred over an app-specific password — it is revocable and scoped). **No secret enters
+      the repository**, and the profile name used by scripts is a documented input, not a hard-coded
+      value.
+      > **Done 2026-10-06.** The owner's Developer ID Application and Developer ID Installer identities
+      > (team `8YJ4KKV9SJ`) are in the Mac's login keychain, and the notary credentials are a keychain
+      > profile / environment input of `notarize.sh`; nothing secret is in the repository. They signed,
+      > notarized and stapled the first build (step 9): both submissions **Accepted** with no issues
+      > (`evals/runs/2026-10-06_mac-signing-first_notary/`, which keeps `dist/notary/`).
+      > **That build is not releasable:** it was made in a checkout under `~`, so `knaif` and
+      > `libggml` carry one home-directory path each, and `release.sh` does not re-run the path guard
+      > before signing. The release build is to be made again outside `~` and signed again.
+- [ ] **F2. ⚠️ Order of operations — and it is a DAG with two branches, not one line.** *Revised
+      2026-08-02 after audit.* Any modification to a Mach-O invalidates its signature, and
+      `install_name_tool` (B3) and `strip` are modifications. **Stapling also mutates the `.pkg`**,
+      which is why checksums come last:
+
+      ```text
+      stage
+        → install-name / rpath surgery + strip
+        → sign every Mach-O
+        → verify every Mach-O
+        ├─ build final .zip  → notarytool submit → read the log        (cannot be stapled — D6)
+        └─ pkgbuild/productbuild + Installer-sign
+                             → notarytool submit → read the log → stapler staple → stapler validate
+        → clean-room tests (E3, E4, E6)
+        → SHA256SUMS over the final files
+      ```
+
+      Encode it in a script so it cannot be got wrong by hand. **Generate `SHA256SUMS` only after
+      stapling** — a checksum taken before it describes a file that no longer exists, which is the
+      same class of error as `just installer` overwriting a published setup.exe
+      ([RELEASE.md](../RELEASE.md) §4).
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `installers/macos/release.sh` (`just release-macos`) runs the order
+      > above; `test_macos_release.py` replays it against fake Apple tools and fails if any step
+      > moves. It leaves `SHA256SUMS` to the release procedure, which sums after stapling.
+      >
+      > **Ran on the Mac 2026-10-06** (step 9, `just release-macos`): sign → verify → `.zip` → notarize,
+      > then `.pkg` → Installer-sign → notarize → staple → validate → F7, in that order, both
+      > notarizations Accepted (`evals/runs/2026-10-06_mac-signing-first_notary/`). That tree carried a
+      > home path, so it is not the release; the script now refuses such a tree before step 1 (`== 0/5`,
+      > `test_release_refuses_a_tree_that_carries_the_builders_home`). To tick on the clean release
+      > build.
+
+- [ ] **F3. Sign inside-out with the hardened runtime, and verify per-binary.** Every `.dylib`
+      first, the exe last, `--options runtime --timestamp --sign "Developer ID Application: …"`.
+      **Do not lean on `codesign --deep` over the tree** — `--deep` is a bundle-oriented convenience
+      that Apple explicitly discourages for signing and that reads poorly over a flat `bin/` of
+      loose Mach-Os. Iterate over every actual Mach-O and assert, per file: valid signature, the
+      expected **Team ID**, hardened runtime enabled, and a secure timestamp present. E1 already
+      enumerates the files; reuse that list so the two checks cannot disagree about what is in the
+      artifact.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `sign.sh` signs the list `check_macho_deps.py --list` prints (libraries
+      > first, executable last) and `scripts/check_macos_signing.py codesign` asserts each file's
+      > Team ID, hardened runtime, timestamp and not-ad-hoc, writing the CDHashes for F3b.
+      >
+      > **Ran 2026-10-06:** 10 Mach-O signed libraries first, executable last, hardened runtime
+      > (`flags=0x10000(runtime)`), secure timestamp, team `8YJ4KKV9SJ`; every one verified. No
+      > entitlements (F4). To tick on the clean release build.
+
+- [ ] **F3b. Read the notarization log even on success.** *Added 2026-08-02 after audit.*
+      `xcrun notarytool log <submission-id>` after an `Accepted` result — Apple's own guidance is to
+      review it, because a submission can be accepted while carrying warnings (an unsigned nested
+      binary, a missing secure timestamp) that become failures on a later OS or a later policy
+      change. Confirm the log lists **every** Mach-O's CDHash: that is the only direct evidence the
+      archive's nested binaries were covered, and it matters most for the `.zip` branch, whose
+      contents cannot be stapled and are therefore verified online per-binary.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `notarize.sh` saves every log to `dist/notary/` and
+      > `check_macos_signing.py notary-log` fails on a status other than Accepted, on any issue, and
+      > on a Mach-O whose CDHash is not in the ticket.
+      >
+      > **Read 2026-10-06:** both logs `Accepted`, `issues: null`, "Ready for distribution"; the `.zip`
+      > ticket lists all 10 Mach-O, the `.pkg` ticket the same 10 plus the package. Kept in
+      > `evals/runs/2026-10-06_mac-signing-first_notary/``notary/`.
+
+- [ ] **F4. ⚠️ Determine the minimum entitlements empirically — start with none.** Two are
+      plausibly required and both weaken the hardened runtime, so neither is added speculatively:
+      - `com.apple.security.cs.allow-jit` — Metal compiles the embedded shader source at runtime.
+        Metal's compilation normally happens in a system XPC service rather than in-process, so
+        this may well be unnecessary. **Test with no entitlements first**, under the hardened
+        runtime, on the clean-room VM.
+      - `com.apple.security.cs.disable-library-validation` — needed only to `dlopen` a dylib signed
+        by a *different* Team ID. Our own backends are signed by us, so this should not be needed —
+        and its absence is a *feature*: a user dropping an unsigned dylib into `~/.knaif/backends`
+        being refused is correct behaviour on macOS, not a defect. Add it only if a real,
+        reproduced failure demands it, and record the failure in the plan if so.
+      > **No entitlements needed on the Mac, 2026-10-06** (step 9, `just release-macos` with none). The
+      > signed `knaif`, hardened runtime, no entitlements: `codesign --verify --strict --deep` passes;
+      > it loads its team-signed backends and PDFium (no `disable-library-validation`); Metal compiles
+      > its embedded shaders at run time and offloads 37/37 layers (no `allow-jit`, §12 question 4);
+      > a real documents request runs; the CPU fallback runs with the Metal backend removed. A local,
+      > non-quarantined launch on macOS 27.2 Beta 2, so the clean-room VM check this task asks for
+      > (and E4's quarantined launch) is still to do.
+      > Notarization: both submissions Accepted, `issues: null`, all 10 CDHashes in each ticket (F3b,
+      > F6); the `.pkg` stapled; `spctl` accepts it as `Notarized Developer ID` (F7).
+      > Evidence: `evals/runs/2026-10-06_mac-signing-first_notary/` (`notary/` is `dist/notary/`).
+- [ ] **F5. The `.pkg`, specified rather than gestured at.** `pkgbuild` (payload + install location
+      + identifier + `--version` **derived from `package.sh`'s `VER`**, D7) → `productbuild`
+      (distribution + Developer ID Installer signature). Decide and document, because each is
+      user-visible and none has a safe default:
+      - **package identifier** and install location. Suggested: payload under `/usr/local/knaif`.
+      - **receipt and version behaviour on upgrade** — verified by E6, not assumed.
+      - **file ownership and modes** in the payload.
+      - **uninstall.** ⚠️ **macOS packages have no native uninstall action**, so "uninstall" is
+        *documentation* — the commands to remove the install root, the `~/.knaif` data directory
+        (D5), and `pkgutil --forget`. Say so plainly in the release body rather than leaving users
+        to discover it; the Linux tarball's entry in [RELEASE.md](../RELEASE.md) §6 sets the
+        precedent for stating this.
+      - **PATH.** *Reconsidered 2026-08-02 after audit.* The first draft wanted to mirror the
+        Windows installer's opt-in PATH consent. The analogy is weaker than it looked: on Windows
+        the choice is *edit the user's `PATH` environment variable* (a persistent, global mutation),
+        whereas here it is a symlink in a directory that is already on the default `PATH` — and
+        **running the installer is itself consent to install the CLI**. Making it a checkbox
+        requires a multi-component Distribution package for little benefit. Default to placing the
+        symlink and documenting it; revisit only if the simple form proves objectionable.
+      > **Superseded 2026-09-30 by D13.** The owner chose the Windows-like options page after all:
+      > a Distribution package with `customize="always"`, the PATH symlink as one of its choices,
+      > payload in `/usr/local/knaif`, and an `uninstall.sh` shipped with it.
+      >
+      > **Decided and implemented 2026-09-30 (Windows), per D13 — first run on a Mac pending:** package
+      > identifiers `tech.blackdeep.knaif.{core,skill.<name>,path,tool.<name>,model}`; payload in
+      > `/usr/local/knaif`, `--ownership recommended` (root:wheel), modes `u+rwX,go+rX,go-w`; the core
+      > preinstall clears `bin/ skills/ contracts/ licenses/` so an upgrade drops removed files (the
+      > Windows installer's [InstallDelete]); `/usr/local/knaif/uninstall.sh` removes the install, the link
+      > if it is ours, and the receipts, with `--purge` for `~/.knaif`. Tool and model scripts run as the
+      > console user and always exit 0. `installers/macos/build-pkg.sh`, `just package-pkg`.
+      >
+      > **The PATH link's precondition, 2026-10-03 (M1 Pro, macOS 27.2): passed.** A `knaif` reached
+      > through a symlink finds its real folder. `just package-native metal` from a checkout outside
+      > `~`, then the staged `bin/knaif` symlinked into an unrelated folder and run from there:
+      > `skills list` lists `documents` and `ffmpeg` (both native); `run documents --verbose` loads
+      > `libggml-metal.so` and `libggml-cpu-apple_m1.so` from the real `bin/`, not the link's folder,
+      > reports `found device: Apple M1 Pro` and `offloaded 37/37 layers to GPU` with every KV-cache
+      > layer on `MTL0` (`knaif-qwen3-4b-v2`). "extract the text from report.pdf" through the link
+      > executed and printed the page. One request ("how many pages does report.pdf have") came back
+      > as a `clarify`: the model proposed an `output_key` argument no documents tool has, and
+      > validation refused it. The real path gives the same answer, so it is the model, not the link.
+
+- [x] **F5b. Exclude the model store from Time Machine (D18).** `tmutil addexclusion
+      ~/.knaif/models` (run as the console user) in the `.pkg` postinstall and in `knaif models pull`
+      on Darwin; a failure to exclude is reported, never fatal. Verify with `tmutil isexcluded`.
+      >
+      > **Done in code 2026-09-30 (Windows):** `ModelStore::exclude_from_backups` after every download
+      > (`models pull` and the first-run offer), default store only, failures reported with the manual
+      > command. Verify on the Mac: `tmutil isexcluded ~/.knaif/models`.
+      >
+      > **Verified 2026-10-03** after installing the `.pkg` (E6): `tmutil isexcluded ~/.knaif/models`
+      > → `[Excluded]`. Not proof that the postinstall set it: an earlier `knaif models pull` on this
+      > Mac may have. A fresh account (the E3/E4 room) would separate the two.
+
+- [ ] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
+      on the `.pkg` **and** on the `.zip` (D6 makes the `.zip` both the notarized and the published
+      container, so there is no longer a mismatch to reason about), then `xcrun stapler staple` the
+      `.pkg` and `xcrun stapler validate` it. Read both logs (F3b).
+      > **State the archive's limitation in the release body rather than papering over it:** a
+      > ticket cannot be stapled to a `.zip`, so a quarantined archive's first run needs Apple's
+      > service reachable. That is the whole reason the `.pkg` exists (D6) — tell users which to
+      > pick and why, the way §6 already does for SmartScreen and the AppImage's FUSE requirement.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `notarize.sh` notarizes either file and staples and validates a `.pkg`;
+      > credentials from `KNAIF_NOTARY_PROFILE` (by hand) or the API-key trio (CI).
+      >
+      > **Ran 2026-10-06:** the `.zip` notarized (cannot be stapled, as designed) and the `.pkg`
+      > notarized, stapled and validated (`The staple and validate action worked!`). To tick on the
+      > clean release build.
+
+- [ ] **F7. Verify the way Gatekeeper does, not the way the signer does.** *Corrected 2026-08-02
+      after audit.* For **bare command-line binaries** use
+      `codesign -R="notarized" --check-notarization -vv <binary>`; `spctl --type exec` is the legacy
+      *app-bundle* check and is not the right instrument for a CLI (`spctl -a -vvv -t install`
+      remains correct for the `.pkg`). **The decisive test is neither** — it is E4's quarantined
+      launch in the clean-room VM, offline for the stapled `.pkg`. Tooling reports what a policy
+      engine *would* say; the quarantined run reports what it *does* say.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `release.sh`'s last step runs `codesign -R=notarized
+      > --check-notarization` on the exe and `spctl -a -t install` on the `.pkg`.
+      >
+      > **Ran 2026-10-06:** `codesign -R=notarized --check-notarization` on `knaif` (valid, Designated
+      > Requirement satisfied) and `spctl -a -t install` on the `.pkg` (`accepted`, `source=Notarized
+      > Developer ID`). The decisive check is still the quarantined launch in the clean room (E4).
+
+- [x] **F8. Cross-link [code-signing](2026-07-27-code-signing.md).** That plan covers Windows
+      signing and is deferred pending release history. macOS signing is **not** deferred — it is
+      not optional the way Windows signing is (SmartScreen is a warning; Gatekeeper is a block) —
+      but both plans should point at each other so the certificate/HSM story is designed once.
+      >
+      > **Done 2026-09-30:** the code-signing plan's out-of-scope line now points here and at the
+      > certificates plan, and says to reuse this plan's CI-signing pattern for Windows.
+
+---
+
+## 10. Workstream G — release integration and documentation
+
+- [ ] **G1. `docs/RELEASE.md`.** Add macOS to the artifact table (§1), a build-and-package section
+      (§2) alongside Linux and Windows, the signing/notarization sequence, the macOS clean-room and
+      static-check rows in §4, and macOS notes in §6 (Gatekeeper, `xattr`, `.pkg` vs `.zip`,
+      Intel unsupported, `brew` for external tools, uninstall/`~/.knaif` removal).
+      >
+      > **Drafted 2026-09-30 (Windows):** §1 artifact rows, §2 *macOS* build and sign, §4 static check and
+      > clean room, checksums after stapling, §5 tag upload and step 9 (Homebrew tap), §6 user notes. Check
+      > each against what actually happens on the Mac.
+
+- [ ] **G2. `docs/NATIVE.md`.** §5.3's build-kind table gains `metal`; §5.5's backend
+      recommendation gains a macOS line; §9's packaging section gains the macOS layout; §10 gains
+      the build commands; **§12's "macOS — no installers/notarization; explicitly out for v1" line
+      is deleted**, which is the single clearest signal that this plan landed.
+      >
+      > **Partly done 2026-09-30:** §5.3 gains the `metal` row. The §12 line is deleted only when this
+      > plan lands; §5.5 and §9/§10 wait for the Mac's measured facts.
+
+- [ ] **G3. `installers/macos/README.md`.** Replace the placeholder with the real thing. Its current
+      content is a promissory note and its predictions should be checked against what actually
+      happened — in particular it says "universal2 if feasible, else per-arch", which D4 answers.
+      >
+      > **Drafted 2026-09-30 (Windows):** the placeholder is replaced; the file says which steps have not
+      > run on a Mac yet. Update it as they do.
+
+- [ ] **G4. The rest.** `docs/PERFORMANCE.md` (Workstream D), `docs/INFERENCE.md` (§ macOS rows are
+      Python-side and already partly correct — reconcile), `docs/PROVENANCE.md` (only if D3 lands on
+      staging libomp), `docs/MODELS.md` (only if D4 changes a recommendation), `README.md` platform
+      support, `evals/INDEX.md` rows, `docs/TODO.md` and `docs/plans/README.md` entries. Run
+      `just licenses-all` before any release cut, per the existing rule.
+- [ ] **G5. Homebrew tap — in 1.3.0 (D12), no longer a fast-follow.** The owner creates the
+      repository. **Formula shape (D19):** `depends_on "ffmpeg"`; ghostscript, tesseract and
+      LibreOffice in `caveats`; the model is not downloaded at install — `caveats` says to run
+      `knaif models pull`. A
+      `blackdeep-tech/homebrew-knaif` tap with a formula pointing at the published `.zip` and its
+      `SHA256SUMS` entry. `brew install blackdeep-tech/knaif/knaif` is what a macOS CLI user expects
+      and it sidesteps the quarantine question entirely. Depends on G1's published artifact.
+      >
+      > Written on Windows 2026-09-30, tested there and on Linux against faked Apple tools; **not
+      > yet run on a Mac.** `homebrew/knaif.rb.in` + `render-formula.sh`; `test_macos_release.py`
+      > checks the formula depends on exactly the required tools and lists the optional ones in the
+      > caveats. **Watch the first install:** Homebrew's relocation may rewrite the dylibs' install
+      > names and re-sign them ad hoc, dropping the Developer ID signature from the installed copy.
+      > If it does, record it here; a cask is the fallback shape.
+
+- [ ] **G6. Hand off to CI.** [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
+      explicitly parks macOS out of its C3 matrix *"until macOS packaging lands"*. When this plan
+      closes, that condition is met: add `macos-14`/`macos-15` (arm64) runners to the matrix and note
+      that signing and notarization need repository secrets, which is why they cannot simply be
+      lifted into CI on day one.
+      > **2026-09-30 (D10, D11):** the macOS CI job is path-filtered, and signing/notarization move
+      > into the tag workflow **once the hand-signed first build works** — from the secrets on the
+      > protected `release` environment.
+      >
+      > **Done in workflow 2026-09-30 (Windows), not yet run:** `ci.yml` job `macos` (macos-14,
+      > path-filtered per D11): Darwin tests, the metal package, smoke, an unsigned `.pkg` inspected, the
+      > installer tests under bash 3.2 — no Metal inference (D16). `release.yml` job `macos`: tag only,
+      > `environment: release`, off until the variable `MACOS_SIGNING=enabled`; imports the identities into
+      > a throwaway keychain and runs `just release-macos`. The owner creates the environment, the
+      > secrets (names as in the certificates plan) and the variable.
+      >
+      > **2026-10-03:** both macOS jobs moved from `macos-14` to `macos-15`. The first CI runs (PR #77)
+      > failed in `just package-native metal`: Xcode 15.4's clang cannot compile llama.cpp's `apple_m4`
+      > CPU variant (SVE intrinsics under `-march=armv9.2-a+...+nosve+sme`). The 12.0 deployment target
+      > is unchanged.
+
+---
+
+## 11. Out of scope
+
+- **Intel Macs (`x86_64-apple-darwin`) and universal2 binaries** — D4.
+- **A macOS GUI / menu-bar app.** The engine crates were designed to be embeddable by one
+  ([NATIVE.md](../NATIVE.md) §1); building one is a product, not a port.
+- **iOS / iPadOS.** `llama-cpp-sys-2` has an `AppleVariant::Other` arm and a Metal backend, so it is
+  reachable in principle — and it is a different product with a different distribution model.
+- **The persistent daemon and prompt-prefix KV reuse.** Tracked in
+  [TODO.md](../TODO.md) *Open / Next* for 1.2.0, cross-platform, and independent of this work.
+- **Re-locking any eval snapshot** — C4.
+- **Changing the recommended model.** D4 may produce a *finding* about 8 GB Macs; acting on it is a
+  separate, deliberate decision.
+
+---
+
+## 12. Open questions to resolve during execution
+
+1. ~~Does the stock toolchain link Homebrew's `libomp`?~~ **Resolved 2026-08-07 (B5):** not by
+   default, but yes once the build environment resolves the keg-only formula (e.g.
+   `CMAKE_PREFIX_PATH` pointing at it) — and D3's fix (an explicit, opt-in `openmp` feature, off
+   on macOS) is implemented and verified to hold under that exact environment.
+2. ~~What is the deployment floor?~~ **Promoted to decision D9 + task M4b** (2026-08-02) — it is a
+   release gate, not a question to answer later. *Which* version to pick remains open; whether it is
+   chosen deliberately does not.
+3. **Command Line Tools or full Xcode?** (M3.) *A CLT-only tart VM answers it — provision one
+   alongside E3's clean room.* Materially changes the contributor prerequisite —
+   and D3's build-time-`metallib` fallback would likely force full Xcode, so the two are linked.
+4. **Does the hardened runtime need `allow-jit` for Metal shader compilation?** (F4.)
+5. **How large is the first-run Metal shader-compilation tax?** (D3.) Decides whether an
+   install-time warm-up is needed — and if it is, whether the same mechanism should finally be built
+   for Vulkan, where §2 has flagged it as an open item since 2026-07-14.
+6. ~~Does `~/.knaif` need a Time Machine / iCloud exclusion?~~ **Decided 2026-09-30 (D18, F5b):**
+   exclude `~/.knaif/models` only, via `tmutil addexclusion`.
+
+---
+
+## 13. Acceptance criteria
+
+macOS support is done when **all** of the following hold. *Revised 2026-08-02 after audit — three of
+these were previously unfalsifiable.*
+
+0. **C0 is discharged** — by 1.2.0's re-locked snapshots (the 2026-09-30 sync), not by macOS work.
+   `just eval-regression` receives an explicit `--current` scoreboard.
+1. `just check` and `just test-native` are green on macOS, with any pre-existing cross-platform test
+   defects fixed or explicitly recorded.
+2. `installers/package.sh --kind=metal` produces `knaif-<ver>-macos-arm64.zip` from a clean
+   checkout, and the signed/notarized/stapled `.pkg` is produced by a scripted, documented sequence
+   in F2's order — with `SHA256SUMS` generated **after** stapling.
+3. `check_macho_deps.py` reports zero **unresolvable** dependencies (not merely zero
+   foreign-looking paths), passes its own mutation fixtures, asserts the D9 floor and rejects
+   non-arm64 slices, and runs as a required step inside `package.sh`.
+4. `installers/smoke.sh` passes on the `.zip`; the `.pkg` passes E6's two gates instead, because
+   `smoke.sh` structurally cannot open one.
+5. **The clean room is split (D16).** The clean-room VM — **oldest supported macOS**, no Xcode, no
+   CLT, no Homebrew — runs a **quarantined** artifact through a **real GGUF inference on CPU**, with
+   no Gatekeeper block and no dylib load failure; the stapled `.pkg` does it **offline**. **Metal
+   selected and layers offloaded** is proven on physical Apple Silicon, from a fresh user account,
+   with the quarantined artifact. What Metal does inside the VM is recorded, not gated.
+6. For each of ffmpeg and documents, and for each shipped model (4B and 1.7B, D14), a **saved**
+   scoreboard from the snapshot's own verifier and a pinned backend is diffed against the
+   **committed** `eval_snapshot.<model>.json` via an explicit `--current`, and passes; row-level
+   flips against Windows/Linux are read from the committed 1.2.0 L4 extract (D17). `just parity` runs against a binary confirmed to do real inference, and is clean or has
+   every diff triaged against C5's three confounds.
+7. [PERFORMANCE.md](../PERFORMANCE.md) carries a macOS machine row and a Metal backend row, measured
+   by the documented methodology, with the §4 CPU trap avoided by measuring a tree with
+   `libggml-metal.dylib` removed rather than by setting `KNAIF_N_GPU_LAYERS=0`.
+8. [RELEASE.md](../RELEASE.md) can be followed end-to-end by someone who did not write it, and
+   [NATIVE.md](../NATIVE.md) §12 no longer lists macOS as a limitation.

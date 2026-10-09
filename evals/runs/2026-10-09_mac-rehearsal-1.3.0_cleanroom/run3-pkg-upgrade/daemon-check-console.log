@@ -1,0 +1,49 @@
+== install
+installer: The install was successful.
+== daemon start
+exit 0
+Starting the model daemon (knaif-qwen3-4b-v2-q4_k_m)...
+knaif daemon is running with knaif-qwen3-4b-v2-q4_k_m.
+Later runs use it automatically; stop it with `knaif daemon stop`.
+== daemon status
+knaif daemon is running (pid 636).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     0 s (stops after 10 min)
+== reinstall over a running daemon
+installer: The upgrade was successful.
+== after reinstall
+DAEMON-GONE
+== install.log
+2026-10-08 21:46:32-07 Admins-Virtual-Machine package_script_service[568]: ./postinstall: knaif: knaif-qwen3-4b-v2 is already installed for admin
+2026-10-08 21:46:32-07 Admins-Virtual-Machine installd[566]: PackageKit: Writing receipt for tech.blackdeep.knaif.core to /
+2026-10-08 21:46:32-07 Admins-Virtual-Machine installd[566]: PackageKit: Writing receipt for tech.blackdeep.knaif.skill.ffmpeg to /
+2026-10-08 21:46:32-07 Admins-Virtual-Machine installd[566]: PackageKit: Writing receipt for tech.blackdeep.knaif.skill.documents to /
+2026-10-08 21:46:32-07 Admins-Virtual-Machine installd[566]: Installed "knaif 1.2.1" ()
+== daemon start again
+exit 0
+knaif daemon is running (pid 674).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     0 s (stops after 10 min)
+== uninstall
+forgot receipt tech.blackdeep.knaif.core
+forgot receipt tech.blackdeep.knaif.skill.documents
+forgot receipt tech.blackdeep.knaif.skill.ffmpeg
+kept ~/.knaif (downloaded models): remove it with --purge, or by hand
+knaif is uninstalled. Homebrew tools stay installed: brew uninstall <name> to remove one.
+== after uninstall
+DAEMON-GONE
+2431:2026-10-08 21:25:15-07 Admins-Virtual-Machine package_script_service[393]: ./postinstall: knaif: skipping the model download: nobody is logged in to download it for. Later: knaif models pull knaif-qwen3-4b-v2
+2515:2026-10-08 21:26:54-07 Admins-Virtual-Machine package_script_service[393]: ./postinstall: knaif: skipping the model download: nobody is logged in to download it for. Later: knaif models pull knaif-qwen3-4b-v2
+2601:2026-10-08 21:27:11-07 Admins-Virtual-Machine package_script_service[393]: ./postinstall: knaif: skipping the model download: nobody is logged in to download it for. Later: knaif models pull knaif-qwen3-4b-v2
+3059:2026-10-08 21:41:08-07 Admins-Virtual-Machine package_script_service[568]: ./postinstall: knaif: downloading knaif-qwen3-4b-v2 for admin
+3068:2026-10-08 21:46:12-07 Admins-Virtual-Machine package_script_service[568]: ./postinstall: Installed knaif-qwen3-4b-v2 -> ~/.knaif/models/knaif-qwen3-4b-v2-q4_k_m.gguf
+3069:2026-10-08 21:46:12-07 Admins-Virtual-Machine package_script_service[568]: ./postinstall: knaif: knaif-qwen3-4b-v2 is installed
+3145:2026-10-08 21:46:30-07 Admins-Virtual-Machine package_script_service[568]: ./preinstall: knaif daemon stopped.
+3157:2026-10-08 21:46:32-07 Admins-Virtual-Machine package_script_service[568]: ./postinstall: knaif: knaif-qwen3-4b-v2 is already installed for admin
+total 4877504
+drwxr-xr-x@ 3 admin  staff          96 Oct  8 21:46 .
+drwx------  4 admin  staff         128 Oct  8 21:46 ..
+-rw-r--r--  1 admin  staff  2497280960 Oct  8 21:46 knaif-qwen3-4b-v2-q4_k_m.gguf
+[Excluded]    ~/.knaif/models

@@ -46,6 +46,7 @@ jobs:
       native: ${{ steps.filter.outputs.native }}
       site: ${{ steps.filter.outputs.site }}
       packaging: ${{ steps.filter.outputs.packaging }}
+      macos: ${{ steps.filter.outputs.macos }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,6 +92,9 @@ jobs:
             echo "native=$(match "$common|^(native/|apps/|skills/|contracts/|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
             echo "site=$(match "$common|^site/")"
             echo "packaging=$(match "$common|^installers/")"
+            # D11 (macOS support plan): only what can change the macOS build or its packaging —
+            # a Python-only or docs PR must not queue for a macOS runner.
+            echo "macos=$(match "$common|^(native/|apps/|installers/|scripts/|skills/[^/]+/native/|skills/[^/]+/skill\.yaml|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
           } >> "$GITHUB_OUTPUT"
 
   # MATRIX over both ends of requires-python (">=3.10,<3.15"), added 2026-08-08.
@@ -364,6 +368,76 @@ jobs:
           printf '  %s\n' "${scripts[@]}"
           shellcheck --severity=error "${scripts[@]}"
 
+  # macOS arm64 — D11 of the 2026-08-02 macOS support plan. Builds and stages the `metal` kind the
+  # way a release does (`just package-native metal`, which also runs check_macho_deps.py and the
+  # self-containment smoke), smoke-tests the .zip, builds the .pkg UNSIGNED and inspects it, and
+  # runs the installer tests under macOS's own bash 3.2 — the shell every .pkg script runs in.
+  #
+  # NO METAL INFERENCE HERE (D16). GitHub's macOS runners are virtual machines, and a macOS
+  # guest reaches Metal through Apple's paravirtualized GPU, so a model run here says nothing
+  # about a real Mac. Real inference, Metal offload and the evals stay on hardware.
+  #
+  # NO SIGNING HERE EITHER. Pull requests never see the signing secrets; the tag build in
+  # release.yml signs, behind the protected `release` environment (D10).
+  macos:
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
+    # macos-15, not macos-14: macos-14's Xcode 15.4 (Apple clang 15) cannot build llama.cpp's
+    # apple_m4 CPU variant. Its -march=armv9.2-a+...+nosve+sme still enters the SVE code paths, then
+    # rejects the intrinsics ("'svmmla_s32' needs target feature sve,i8mm"). The deployment target
+    # stays 12.0 (-mmacosx-version-min), so the newer runner does not raise the floor.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Ensure the toolchain has the components the workspace checks with
+        run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-metal
+
+      # Darwin-only test failures (C1 in the plan) show up here and nowhere else.
+      - name: just test-native
+        run: just test-native
+
+      - name: just package-native metal
+        run: just package-native metal
+
+      - name: installers/smoke.sh on the .zip
+        run: bash installers/smoke.sh dist/knaif-*-macos-arm64.zip
+
+      # E6's static half: the package's shape, not its signature.
+      - name: Build the .pkg unsigned and look inside it
+        run: |
+          set -euo pipefail
+          just package-pkg
+          pkg="$(ls dist/knaif-*-macos-arm64.pkg)"
+          pkgutil --check-signature "$pkg" || true
+          pkgutil --expand "$pkg" "$RUNNER_TEMP/pkg"
+          ls "$RUNNER_TEMP/pkg"
+          grep -q 'customize="always"' "$RUNNER_TEMP/pkg/Distribution"
+          test -f "$RUNNER_TEMP/pkg/core.pkg/Payload"
+          test -x "$RUNNER_TEMP/pkg/tool-ffmpeg.pkg/Scripts/postinstall"
+
+      - name: uv venv
+        run: uv venv
+      - name: just install
+        run: just install
+      - name: The installer tests, under macOS's bash 3.2
+        run: >-
+          uv run pytest -q python/core/tests/test_installer_pkg.py
+          python/core/tests/test_macos_release.py python/core/tests/test_macos_signing.py
+          python/core/tests/test_macho_deps.py python/core/tests/test_l4_rows.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: knaif-macos-${{ github.sha }}
+          path: |
+            dist/knaif-*-macos-arm64.zip
+            dist/knaif-*-macos-arm64.pkg
+          if-no-files-found: error
+          retention-days: 14
+
   # THE required check. Everything above is conditional, and a required check that never
   # runs blocks a PR forever — so branch protection points here and nowhere else.
   #
@@ -373,7 +447,7 @@ jobs:
   ci:
     if: always()
     needs:
-      [changes, python, native, native-llama, loader-compat, site, packaging, hooks, pr-title]
+      [changes, python, native, native-llama, loader-compat, site, packaging, macos, hooks, pr-title]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job that ran did not succeed

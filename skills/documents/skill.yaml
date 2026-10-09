@@ -32,8 +32,9 @@ runtimes:
 
 # Optional external tools. documents degrades gracefully without them (the affected
 # operations report a missing-dependency error); the installer offers them per-feature.
-# PATH is never modified. Detection: $KNAIF_<CMD>_BIN, then PATH, then (Windows) the
-# `windows.dirs` each tool's own installer uses — none of these three put themselves on PATH.
+# PATH is never modified. Detection: $KNAIF_<CMD>_BIN, then PATH, then the folders declared for
+# this OS — `windows.dirs` each tool's own installer uses (none of these three put themselves on
+# PATH), `macos.dirs` for Homebrew's bin and the LibreOffice cask's .app.
 dependencies:
   external_tools:
     - name: ghostscript
@@ -48,6 +49,9 @@ dependencies:
         # Its installer was blocked in Windows Sandbox with enforcement on (2026-10-02), and the
         # installed gswin64c.exe and gsdll64.dll are not signed at all (checked 2026-10-07).
         smart_app_control: blocked
+      macos:
+        brew: ghostscript
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
     - name: libreoffice
       required: false
       commands: [soffice, libreoffice]
@@ -56,6 +60,10 @@ dependencies:
         winget: TheDocumentFoundation.LibreOffice
         download: https://www.libreoffice.org/download/download-libreoffice/
         dirs: ['%ProgramFiles%\LibreOffice\program']
+      macos:                      # a cask: soffice lives inside the .app, never on PATH
+        brew: libreoffice
+        cask: true
+        dirs: [/Applications/LibreOffice.app/Contents/MacOS, /opt/homebrew/bin, /usr/local/bin]
     - name: tesseract
       required: false
       commands: [tesseract]
@@ -68,6 +76,9 @@ dependencies:
         # as are the newer tesseract-ocr.tesseract 5.5.3 package and the installed tesseract.exe;
         # its DLLs are not signed (checked 2026-10-07).
         smart_app_control: blocked
+      macos:
+        brew: tesseract
+        dirs: [/opt/homebrew/bin, /usr/local/bin]
 
 data:
   train: data/train.jsonl

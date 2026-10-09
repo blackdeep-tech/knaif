@@ -453,7 +453,7 @@ LICENSE, README.txt, licenses/      license notices (Rust deps always; llama.cpp
 new contract reaches the installed tree only when it is added there — `installers/smoke.sh` asserts
 all three are present, and that `backend list` can actually read the last one from an unrelated cwd.
 
-`package.sh --kind=base|cpu|vulkan|cuda`:
+`package.sh --kind=base|cpu|vulkan|cuda|metal`:
 
 | Kind | Produces |
 |---|---|
@@ -461,6 +461,7 @@ all three are present, and that `backend list` can actually read the last one fr
 | `vulkan` | **THE RELEASE ARTIFACT** — CPU **and** Vulkan backends in one tree. Gets the plain name. |
 | `cpu` | build kind only (a box with no Vulkan SDK): core libs + `ggml-cpu-*` variants, `-cpu` suffix. |
 | `cuda` | **Both OSes:** opt-in payload, not an app — `ggml-cuda` + NVIDIA redist for `~/.knaif/backends` (plus the MSVC runtime on Windows). The pre-Option-3 static-with-redist app survives only behind `--legacy-windows-cuda-app`, and is not publishable. |
+| `metal` | **macOS only, and the only functional kind there** (`cpu`/`vulkan`/`cuda` are refused on Darwin): CPU **and** Metal backends in one arm64 tree, no OpenMP. Gets the plain name. Signing, the `.pkg` and notarization: `installers/macos/README.md`. |
 
 **The CUDA payload needs an R580+ driver (CUDA 13).** This is a hard floor, and the failure it
 produces is misleading: on an older driver the payload copies in cleanly, the loader finds it,
@@ -553,7 +554,8 @@ installers/linux/build-appimage.sh dist/knaif-<ver>-linux-x64-vulkan.tar.gz
 ```
 
 **Windows — compile first, then package `--no-build`.** `just package-native <kind>` does both;
-these are the same steps by hand. No Developer PowerShell is needed for the `just` form.
+these are the same steps by hand. No Developer PowerShell is needed for the `just` form, and
+`scripts/build_native_kind.sh` sets the build environment (OpenSSL guard, generator, CUDA archs).
 
 ```bash
 just build-native-kind cpu      # or: vulkan, cuda
@@ -561,16 +563,23 @@ installers/package.sh --no-build --kind=cpu --profile=release-cpu
 ```
 
 Driving cargo directly instead — **from a "Developer PowerShell for VS"**, since nothing then sets
-up MSVC for you:
+up MSVC for you. Read the feature set from `package.sh` rather than typing it: `openmp` is an
+explicit feature since the macOS work, so a hand-typed list that drops it builds a different binary.
 
 ```bash
-cargo build --profile release-cpu -p knaif-cli --features llama,dynamic-backends
-CMAKE_GENERATOR=Ninja \
-  cargo build --profile release-vulkan -p knaif-cli --features llama,dynamic-backends,vulkan
-CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real" \
-  cargo build --profile release-cuda -p knaif-cli --features llama,dynamic-backends,cuda
+export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON   # every kind — see the note under this block
+cargo build --profile release-cpu -p knaif-cli --features "$(installers/package.sh --print-feats=cpu)"
+CMAKE_GENERATOR=Ninja   cargo build --profile release-vulkan -p knaif-cli --features "$(installers/package.sh --print-feats=vulkan)"
+CUDAARCHS="75-real;80-real;86-real;89-real;90-real;90-virtual;120-real"   cargo build --profile release-cuda -p knaif-cli --features "$(installers/package.sh --print-feats=cuda)"
 installers/package.sh --no-build --kind=<cpu|vulkan|cuda> --profile=release-<kind>
 ```
+
+**`CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON` is not Windows-specific** — `package.sh` and
+`scripts/build_native_kind.sh` export it wherever they build, so only a by-hand cargo build has to
+repeat it. llama.cpp defaults `LLAMA_OPENSSL=ON` behind an unguarded `find_package(OpenSSL)`, and its
+vendored `cpp-httplib` links OpenSSL `PUBLIC` into `llama-common` — so a build box that merely *has*
+OpenSSL >= 3 installed produces an artifact depending on it. The dependency checkers reject that at
+packaging time on all three platforms, i.e. after the whole build.
 
 Release artifacts use **`dynamic-backends`** (§5.3). Drop it for a static single-exe dev build
 (`--features llama[,vulkan|,cuda]`); `package.sh` will then have no backend libs to stage.

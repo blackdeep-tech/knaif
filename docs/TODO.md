@@ -996,6 +996,118 @@ This **Open / Next** section is the live backlog (originally distilled from the
     ~120 ms warm for all four CUDA libs, so it buys no startup time. Weigh against the
     `90-virtual` forward-compat PTX rationale in NATIVE.md §10.
 
+- [ ] **macOS support — now planned, not deferred.**
+  [plans/2026-08-02-macos-support.md](plans/2026-08-02-macos-support.md) (Planning, not started).
+  macOS has been out of scope since the dual-runtime plan's Phase 9 and is still listed as a
+  limitation in [NATIVE.md](NATIVE.md) §12. **The inference question is settled by reading the
+  pinned `llama-cpp-sys-2 0.1.150` sources:** `GGML_METAL` defaults **ON** under `APPLE`, the Metal
+  shader library is **embedded** in the backend binary (no `default.metallib` to stage),
+  `ggml-metal` is a loadable backend under `dynamic-backends` exactly like `ggml-vulkan`, and
+  `GGML_CPU_ALL_VARIANTS` covers Apple ARM (`apple_m1`/`m2_m3`/`m4`) — so **the macOS artifact
+  needs no new cargo feature**, and MLX/Core ML and MoltenVK are both rejected in the plan.
+  The work is packaging, signing and verification:
+  - `installers/package.sh` has a `Darwin` arm but its build branch, core-lib staging and
+    `exe_imports_llama` guard are all `linux`/`windows` only, and `set_origin_rpath` is a
+    documented no-op off Linux — macOS needs `install_name_tool` / `@loader_path` surgery instead.
+  - ⚠️ **`openmp` is a *default* feature of `llama-cpp-2`**, so `GGML_OPENMP=ON` and ggml runs
+    `find_package(OpenMP)`. If Homebrew's `libomp` is found, the artifact links an absolute
+    `/opt/homebrew` path that does not exist on a clean Mac — **the third instance of the
+    `VCOMP140.dll` / `libgomp.so.1` trap**, both of which shipped in every 1.0.x artifact for the
+    same reason: the check ran on the box that could not fail it. Needs
+    `scripts/check_macho_deps.py`, the pure-Python sibling of `check_pe_imports.py` /
+    `check_elf_deps.py`.
+  - Signing is **not** optional the way Windows signing is (SmartScreen warns; Gatekeeper blocks),
+    and any `install_name_tool` edit invalidates a signature — so the order
+    stage → rpath surgery → sign → archive → notarize → staple is load-bearing.
+  - **All three dependency checkers skip a file they cannot parse** (`audit()` catches the parse
+    error, prints only under `--verbose`, and continues), so a binary that IS one of ours but is
+    truncated, 32-bit, or otherwise malformed passes the gate silently rather than failing it — and
+    the closing `ok N files/binaries: ...` line counts files that were never parsed at all. Noticed
+    2026-08-03 while reviewing `check_macho_deps.py`; **deliberately not fixed there alone**, since
+    a one-checker fix creates the inconsistency it removes, and the other two currently gate
+    shipping Linux and Windows releases. The principled version distinguishes "not a Mach-O/PE/ELF
+    at all" (skip — correct, `bin/` holds non-binaries) from "claims to be one and will not parse"
+    (fail), and reports the parsed count rather than the file count. Low impact in practice: a
+    real `bin/` is all well-formed binaries. Pick it up whenever those files are next touched.
+  - Closing this plan is what unparks macOS in
+    [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s
+    C3 runner matrix.
+
+- [ ] **⚠️ The eval regression gate currently proves nothing — and this is NOT macOS work.**
+  Surfaced 2026-08-02 by an audit of the macOS plan (its task C0), verified against the code, and
+  listed separately because it invalidates a gate every skill depends on:
+  1. ~~`cmd_regression` sets `current = baseline` by default — *"compare snapshot to itself
+     (no-op)"* — so without `--current FILE` it **always passes**.~~ **Fixed 2026-08-03**: it still
+     defaults to the self-compare (that mode has a legitimate use — see EVAL_VERIFICATION_SOP.md —
+     and `regression --all-skills` already existed as the version that requires a real current run),
+     but it now prints a loud `⚠` warning when it does, instead of reading identically to a real
+     check, and hard-fails if `--current` points at a file that doesn't exist (previously a typo
+     silently fell back to the self-compare too — same false-green shape, worse, since it *looked*
+     deliberate).
+  2. ~~`just eval-regression skill:` takes no `*args`, so the recipe cannot supply `--current` even
+     though the CLI accepts it.~~ **Fixed 2026-08-03**: `eval-regression skill *args:`, forwarding.
+  3. `just eval-success` persists no scoreboard without `--save`, so there is nothing to pass.
+  4. **Both committed snapshots are stale**, and one uses a verifier the docs forbid as a bar.
+     **Corrected 2026-08-04 — the original figures compared two different units.** A snapshot's
+     `total` counts **utterances**; each `eval.jsonl` record holds an `utterances` LIST, so
+     comparing it against the file's line count understates the drift badly. ffmpeg's bar covered
+     **35% of its corpus**, not the 95% "+17 rows" implied:
+
+     | Skill | Snapshot verifier | Bar (utterances) | Corpus records | Corpus utterances | Real drift |
+     |---|---|---:|---:|---:|---:|
+     | `ffmpeg` | **`cheap`** ⚠️ | 297 | 314 | **847** | **+550** |
+     | `documents` | `success` | 129 | 143 | **164** | +35 |
+
+  Also, `--config` defaults to `eval_backends.yaml` and omitting `--backends` runs **every** stanza,
+  including models whose GGUFs [PERFORMANCE.md](PERFORMANCE.md) §8 records as deliberately absent —
+  each scoring ~0.0 and reading as catastrophic quality loss.
+  **✅ DISCHARGED 2026-08-04.** Both bars re-locked with executing verifiers against their current
+  corpora, on Windows, pinned to `qwen3-4b-sft-v3-flat-q4`: **ffmpeg** `cheap`/297/0.9327 →
+  `output_diff`/847/**0.9055**; **documents** `success`/129/0.9922 → `success`/164/**0.9756**
+  (knaif **0.9847**). The model is unchanged — ffmpeg's figures are not comparable across a
+  verifier change, documents' are. `regression --current <scoreboard>` is now a real gate. Two
+  further defects surfaced and were fixed: `eval-snapshot` hardcoded a verifier `documents` does
+  not own (executing nothing — the CLI now refuses that, and refuses `cheap` as a bar), and the
+  first documents lock was measured with `tesseract` absent, costing 2.29pt of pure environment
+  artifact. Details in the C0 closing note of
+  [plans/2026-08-02-macos-support.md](plans/2026-08-02-macos-support.md).
+
+  **Reference — resolved prerequisites**, kept so a future re-lock does not re-derive them:
+
+  - **Which backend is canonical is not a judgment call.** Both shipped skills declare
+    `recommended_model: knaif-qwen3-4b-v1` (`skills/{ffmpeg,documents}/skill.yaml:9`), which is the
+    `qwen3-4b-sft-v3-flat-q4` stanza in `eval_backends.yaml`. Lock the bar against **that**, passed
+    explicitly as `--backends qwen3-4b-sft-v3-flat-q4`.
+  - **How bad the omitted-`--backends` trap actually is: 37 stanzas, 2 with a GGUF on disk.** Only
+    `qwen3-4b-sft-v3-flat-q4` and `qwen3-1.7b-sft-v3-flat-q6` resolve; the other 35 would score ~0.0
+    and read as catastrophic quality loss. `--backends` is not optional advice.
+  - **The local backend works — nothing is blocking the run.** Verified 2026-08-03 end-to-end on
+    the Windows box: `--skill ffmpeg --backends qwen3-4b-sft-v3-flat-q4 --limit 3` completed on GPU
+    at ~800 ms per plan row. `ffmpeg`/`ffprobe` 8.0 are on PATH, so the executing verifiers are
+    ready too. What remains is the run itself plus the deliberate decision to move the bar.
+  - ⚠️ **A bare `import llama_cpp` FAILS on this box, and that is expected — do not read it as a
+    broken install.** `llama.dll` links the CUDA runtime shipped as `nvidia/*` site-packages, which
+    are not on the default DLL search path, so the import raises `Could not find module ...
+    llama.dll (or one of its dependencies)`. `InferenceOrchestrator._prepare_llama_cpp_dlls()`
+    exists precisely to preload those in dependency order (cudart → cublas → `ggml-*` → `llama`),
+    and every real code path calls it. Diagnose through the orchestrator, never through a bare
+    import.
+  - ⚠️ **Do not `uv sync` this venv casually.** The lockfile pins `llama-cpp-python` **0.3.34** from
+    PyPI, where the project publishes an **sdist only** (71 MB, no wheel) — a sync would compile
+    from source and default to a **CPU** build, silently discarding the working CUDA install
+    (0.3.23, with its 810 MB `ggml-cuda.dll`) and making `n_gpu_layers: 99` a no-op. Prebuilt CUDA
+    wheels live at `abetlen.github.io/llama-cpp-python/whl/<cuda-tag>`, not on PyPI.
+  - Ollama is running but carries only stock `qwen3:4b` — the **untuned** model, which would measure
+    something other than what ships and must not be used to set the bar.
+  - ⚠️ **`tesseract` must be on `PATH` before locking a documents bar, and the installer does not
+    put it there.** `winget install UB-Mannheim.TesseractOCR` drops it in
+    `C:\Program Files\Tesseract-OCR` and adds it to **neither** machine nor user PATH, while
+    `skills/documents/python/_deps.py` resolves it with `shutil.which`. Without it the 7 `ocr` rows
+    route correctly (so **outcome accuracy looks untouched**) but score knaif **0.5**, failing
+    `output_exists` — worth **−2.29pt** on the committed bar, which is exactly how the first
+    2026-08-04 documents lock went out wrong. `outcome_correct` measures routing, not execution:
+    check `knaif_score` before declaring an executing run healthy.
+
 - [ ] **Warn on ARM64 Windows before installing the x64 build** *(out of 1.3.0, owner 2026-10-06: not a priority; blocked on hardware — moved out of
   [plans/2026-07-25-windows-installer-polish.md](plans/2026-07-25-windows-installer-polish.md)
   2026-07-27)*. `ArchitecturesAllowed=x64compatible` matches **ARM64 Windows as well as x64** — that
@@ -1214,9 +1326,10 @@ This **Open / Next** section is the live backlog (originally distilled from the
   ladder* in `docs/EVAL_FRAMEWORK.md`. `cheap` never runs the command, so it cannot see a wrong
   artifact, and it reports **false** regressions when the corpus is annotated (the 0.973→0.928
   chain-row artifact, `docs/audits/2026-06-26-ffmpeg-cheap-knaif-chain-artifact.md`).
-  **(b) Stale row set:** locked at 297 against a 314-row corpus — the pre-existing half of this,
-  noted under *Qwen3 fine-tuning pass 3* below. Fix both at once: `just eval-snapshot ffmpeg`
-  (runs `output_diff`), in its own commit, with an `evals/INDEX.md` row.
+  **(b) Stale row set:** locked at 297 utterances against a corpus that now expands to **847**
+  (314 records × their `utterances` lists) — the pre-existing half of this, noted under *Qwen3
+  fine-tuning pass 3* below. Fix both at once: `just eval-snapshot ffmpeg` (runs `output_diff`,
+  which ffmpeg owns), in its own commit, with an `evals/INDEX.md` row.
   **Why `output_diff` and not `success`:** 74 of 219 ffmpeg plan rows carry no `success_criteria`,
   and `success` returns **score 1.0 when criteria are empty** (`skills/ffmpeg/eval/verifiers.py`)
   — ~119 scored rows are free passes that can never fail, so `success` cannot hold a bar today.
@@ -1265,8 +1378,10 @@ This **Open / Next** section is the live backlog (originally distilled from the
   old enum-bleed contamination), applied retrieval keyword fixes (non-CJK misses 70→46,
   full +0.48pt), and closed the planner-diversity experiment (io transfers nothing to ffmpeg —
   hypothesis not supported). **Still open:** Task 6 preference tuning (only if data levers
-  plateau); re-lock stale per-skill regression snapshots against `knaif-qwen3-4b-v1` — **ffmpeg's is
-  17 rows behind** (corpus 314, snapshot locked at 297), so `eval-regression` is comparing
+  plateau); re-lock stale per-skill regression snapshots against `knaif-qwen3-4b-v1` — **ffmpeg's
+  bar covers 297 of the corpus's 847 utterances** (314 records, each with an `utterances` list;
+  the "17 rows behind" written here originally compared utterances to line count), so
+  `eval-regression` is comparing
   across a changed row set and its aggregate verdict is not trustworthy until the re-lock
   (see *The gate is only valid when the corpus row set is unchanged* in
   `docs/EVAL_VERIFICATION_SOP.md`). **The ffmpeg half of this is now owned by the dedicated
@@ -1280,4 +1395,5 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `evals/INDEX.md` and the snapshot was re-locked. This entry, the plan's status note, and the
   `docs/plans/README.md` row all still said "deferred" while the plan body had 3.1–3.6 checked
   with results. Separately live and **not** what this entry meant: the ffmpeg corpus has since
-  grown to 314 rows against a snapshot locked at 297 — see the snapshot re-lock item above.
+  grown to 314 records / **847 utterances** against a snapshot locked at 297 utterances — see the
+  snapshot re-lock item above.

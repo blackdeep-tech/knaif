@@ -1,0 +1,12 @@
+{
+  "knaif": "d3cb51d974dc345154a3e50a9788c1be72c3f680",
+  "libggml-base.0.13.1.dylib": "82893ad419cd753e3c4118e415884335184eda1c",
+  "libggml-cpu-apple_m1.so": "583237b8edc9da4d348177d7d6ea324470272fbd",
+  "libggml-cpu-apple_m2_m3.so": "db7cc8291ea2a3471067310b5bb4bb79d9e76239",
+  "libggml-cpu-apple_m4.so": "f1581e1251327df47b804d5efc4e723734138b80",
+  "libggml-metal.so": "bb51264e07c494c3abe5b670beb8480a9e3fb703",
+  "libggml.0.13.1.dylib": "03fce09ced8d1da6a621eec07d4d79ce848af61f",
+  "libllama-common.0.0.0.dylib": "ac8ffe99d865f5938d97e273328dc5c46a666244",
+  "libllama.0.0.0.dylib": "93bdb83307720c2cb9905dcaed427776f2c289df",
+  "libpdfium.dylib": "19b3e171f366e0ff6551f43de80f966fa9bf51a9"
+}

@@ -50,6 +50,19 @@ inherits = "release"
 [profile.release-cuda]
 inherits = "release"
 
+# macOS only (D2 in the 2026-08-02 macOS support plan).
+[profile.release-metal]
+inherits = "release"
+
+# Proc macros and build scripts only — never shipped, so nothing is lost by not stripping them.
+# With MACOSX_DEPLOYMENT_TARGET >= 12 (build_native_kind.sh pins 12.0, D9), release's default
+# `strip = "debuginfo"` leaves a proc-macro .dylib whose LINKEDIT string pool is not 8-byte
+# aligned; macOS 27's dyld refuses to load it ("mis-aligned LINKEDIT string pool") and rustc
+# reports `E0463 can't find crate for serde_derive`. Seen on macOS 27.2 with both Xcode 27.0 and
+# the 27.2 beta; 11.0 (Rust's default target) or an unstripped dylib loads fine.
+[profile.release-metal.build-override]
+strip = "none"
+
 [workspace.dependencies]
 # Internal crates (path deps; the whole graph builds from the workspace).
 knaif-core = { path = "native/crates/knaif-core" }

@@ -1,5 +1,5 @@
 {
-  "_comment": "Golden parity fixtures for the documents skill's expansion layer — the analogue of expansion_cases.json, where the rendered artefact is the set of OUTPUT PATHS a plan produces rather than an ffmpeg argv (documents' preview returns paths). Fixed plans in, output basenames out, no model involved. Consumed by python/core/tests/test_documents_expansion_parity.py. WHY: `run` dispatches documents steps through the same loop as ffmpeg, which until 2026-08-10 executed only the first step of a plan (steps.first()). The corpus has seven multi-step documents rows, so the skill was exposed to exactly the same defect; the multi-step cases here are the regression.",
+  "_comment": "Golden parity fixtures for the documents skill's expansion layer — the analogue of expansion_cases.json, where the rendered artefact is the set of OUTPUT PATHS a plan produces rather than an ffmpeg argv (documents' preview returns paths). Fixed plans in, output basenames out, no model involved. Consumed by python/core/tests/test_documents_expansion_parity.py. WHY: `run` dispatches documents steps through the same loop as ffmpeg, which until 2026-08-10 executed only the first step of a plan (steps.first()). The corpus has seven multi-step documents rows, so the skill was exposed to exactly the same defect; the multi-step cases here are the regression. `rejected_cases` are plans both runtimes must refuse in a dry run, with an error containing `expected_error`, before producing any output: a dry run must not promise an output that execution would refuse (documents_105, 2026-10-03: native's dry run accepted a reorder_pages order that its execution rejected).",
   "sandbox": "contracts/parity/fixtures/documents",
   "cases": [
     {
@@ -97,6 +97,55 @@
         "sample_trimmed.pdf",
         "sample_trimmed-numbered.pdf"
       ]
+    },
+    {
+      "name": "single_step_reorder_reverse",
+      "plan": {
+        "plan": [
+          {
+            "tool": "reorder_pages",
+            "args": {
+              "input": "sample.pdf",
+              "order": "reverse"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample-reordered.pdf"
+      ]
+    }
+  ],
+  "rejected_cases": [
+    {
+      "name": "reorder_unparseable_order",
+      "plan": {
+        "plan": [
+          {
+            "tool": "reorder_pages",
+            "args": {
+              "input": "sample.pdf",
+              "order": "original"
+            }
+          }
+        ]
+      },
+      "expected_error": "Unrecognized page reference"
+    },
+    {
+      "name": "reorder_no_valid_pages",
+      "plan": {
+        "plan": [
+          {
+            "tool": "reorder_pages",
+            "args": {
+              "input": "sample.pdf",
+              "order": "9,10"
+            }
+          }
+        ]
+      },
+      "expected_error": "has no valid pages"
     }
   ]
 }

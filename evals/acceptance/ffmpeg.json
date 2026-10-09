@@ -4,11 +4,11 @@
     "L1": {
       "summary": "contracts/parity/* green on both runtimes",
       "evidence": {
-        "bundle": "6b4701f1fe51273df50a47f1d15050bf9da6495fbbf9a6c74c9705cf0534513a",
-        "contracts": "41ffe7f7e1ff75adf2567c20ed59ce5e707664a4fccd0086ab35aced455356f2",
+        "bundle": "631e9490b585da4cfc61951b0e2435198692ce981a1e1e6874723fe0d262adc1",
+        "contracts": "5720eaf6465b7391a3806ff3711688e5d9b9718696484ca35975aaa86d8eba9d",
         "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
-        "native": "ab90fad52e85fcab5f10bc23f366c94b4f99cedb8cffd2fdedec6d3b65da6487",
+        "native": "1355df4d98ad0dbee920462419c11bd013d8ca92b7cf2e22ce9f541da71fcaf2",
         "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
         "safety_corpus": "ae62d294ec37ae91d877aeccb718b0de2c99c2ab571235935f796bb9723a9cc3",
         "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
@@ -20,11 +20,11 @@
     "L2": {
       "summary": "deterministic pipeline + ordered execution green",
       "evidence": {
-        "bundle": "6b4701f1fe51273df50a47f1d15050bf9da6495fbbf9a6c74c9705cf0534513a",
-        "contracts": "41ffe7f7e1ff75adf2567c20ed59ce5e707664a4fccd0086ab35aced455356f2",
+        "bundle": "631e9490b585da4cfc61951b0e2435198692ce981a1e1e6874723fe0d262adc1",
+        "contracts": "5720eaf6465b7391a3806ff3711688e5d9b9718696484ca35975aaa86d8eba9d",
         "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
         "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
-        "native": "ab90fad52e85fcab5f10bc23f366c94b4f99cedb8cffd2fdedec6d3b65da6487",
+        "native": "1355df4d98ad0dbee920462419c11bd013d8ca92b7cf2e22ce9f541da71fcaf2",
         "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
         "safety_corpus": "ae62d294ec37ae91d877aeccb718b0de2c99c2ab571235935f796bb9723a9cc3",
         "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
@@ -1642,6 +1642,52 @@
               "native_binary": "ef22c66fe5ef616ec635104e62d0f5fad7b8e37281fdf29c7c254b7af32d2925"
             }
           }
+        },
+        "knaif-qwen3-4b-v2|macos|mtl": {
+          "evidence": {
+            "bundle": "fbf18f42932cad1eb34d620b31ecfedfb376ab9da62454ed9a27c66435b040cb",
+            "contracts": "63e3eceafeb4af68ccc76dbc24f5bf347d8dd52d717169ef5b60818bca95d956",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "4c82d1f05b3b56b49db928f15d785e290811646a9640691a21a34689b30aa853",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
+          },
+          "run": "evals/runs/2026-10-07_mac-ffmpeg-docfix_success/4b/metal/ffmpeg_mac-4b_success.json",
+          "summary": "ACCEPTED - 45 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9384436701509872,
+          "avg_knaif_score": 0.9857422969187675,
+          "lane": "mac-4b",
+          "model": "knaif-qwen3-4b-v2"
+        },
+        "knaif-qwen3-1.7b-v2|macos|mtl": {
+          "evidence": {
+            "bundle": "fbf18f42932cad1eb34d620b31ecfedfb376ab9da62454ed9a27c66435b040cb",
+            "contracts": "63e3eceafeb4af68ccc76dbc24f5bf347d8dd52d717169ef5b60818bca95d956",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
+            "native": "4c82d1f05b3b56b49db928f15d785e290811646a9640691a21a34689b30aa853",
+            "corpus": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96",
+            "verifier": "ce4098806fdb377f1c57121ddce2d477209df10a0ec5767ca1537c3345a1d9ad",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
+          },
+          "run": "evals/runs/2026-10-07_mac-ffmpeg-docfix_success/1.7b/metal/ffmpeg_mac-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 45 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9186991869918699,
+          "avg_knaif_score": 0.9779994340690435,
+          "lane": "mac-1.7b",
+          "model": "knaif-qwen3-1.7b-v2"
         }
       }
     }

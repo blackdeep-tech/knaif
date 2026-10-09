@@ -211,7 +211,12 @@ describes the signed cut, including the Defender submission step.
   optimisation of this plan, **not a dependency of it** — a hand-cut signed release is a complete
   outcome. If SignPath Foundation is ever adopted, this becomes a hard dependency, since it signs
   only CI-built artifacts; revisit the ordering at that point and not before.
-- **macOS notarization** — no macOS installer exists yet.
+- **macOS signing and notarization** — its own plans: the pipeline in
+  [macos-support](2026-08-02-macos-support.md) §9 (Workstream F) and the owner's certificate steps
+  in [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). Unlike here it is not
+  optional (Gatekeeper blocks, SmartScreen only warns), and it signs in CI from a protected
+  `release` environment; if this plan ever moves Windows signing into CI too, reuse that pattern
+  rather than designing a second one.
 - **Kernel-mode or driver signing** — knaif ships no drivers.
 
 ---

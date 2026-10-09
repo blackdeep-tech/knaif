@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The knaif .pkg — a Distribution package so the options page can mirror the Windows installer
+  (D13 in the 2026-08-02 macOS support plan). build-pkg.sh fills @VERSION@, @MODEL@ and @MIN_OS@
+  and builds one component package per pkg-ref below.
+
+  The supporting-tool choices mirror skill.yaml's macos.brew and build-pkg.sh's TOOLS table;
+  python/core/tests/test_installer_pkg.py fails when the three drift apart.
+-->
+<installer-gui-script minSpecVersion="2">
+  <title>knaif @VERSION@</title>
+  <organization>tech.blackdeep</organization>
+  <license file="LICENSE.txt"/>
+  <conclusion file="conclusion.html" mime-type="text/html"/>
+
+  <!-- System-wide admin install (D13); arm64 only (D4); the deployment floor (D9, D15). -->
+  <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+  <options customize="always" rootVolumeOnly="true" hostArchitectures="arm64"/>
+  <volume-check>
+    <allowed-os-versions>
+      <os-version min="@MIN_OS@"/>
+    </allowed-os-versions>
+  </volume-check>
+
+  <script><![CDATA[
+    // Homebrew installs tools as the logged-in user; without it the tool choices are greyed out,
+    // like the Windows installer's without winget.
+    function brewPresent() {
+      return system.files.fileExistsAtPath('/opt/homebrew/bin/brew') ||
+             system.files.fileExistsAtPath('/usr/local/bin/brew');
+    }
+    function toolOffered(skill) {
+      return brewPresent() && choices[skill].selected;
+    }
+  ]]></script>
+
+  <choices-outline>
+    <line choice="core"/>
+    <line choice="skills">
+      <line choice="skill_ffmpeg"/>
+      <line choice="skill_documents"/>
+    </line>
+    <line choice="path"/>
+    <line choice="tools">
+      <line choice="tool_ffmpeg"/>
+      <line choice="tool_ghostscript"/>
+      <line choice="tool_libreoffice"/>
+      <line choice="tool_tesseract"/>
+    </line>
+    <line choice="model"/>
+  </choices-outline>
+
+  <choice id="core" title="knaif core runtime (required)" enabled="false" selected="true"
+          description="The knaif program in /usr/local/knaif.">
+    <pkg-ref id="tech.blackdeep.knaif.core"/>
+  </choice>
+
+  <choice id="skills" title="Skills" description="Each skill is optional."/>
+  <choice id="skill_ffmpeg" title="ffmpeg — convert / compress / resize video &amp; audio"
+          start_selected="true">
+    <pkg-ref id="tech.blackdeep.knaif.skill.ffmpeg"/>
+  </choice>
+  <choice id="skill_documents" title="documents — PDF &amp; Office toolkit" start_selected="true">
+    <pkg-ref id="tech.blackdeep.knaif.skill.documents"/>
+  </choice>
+
+  <choice id="path" title="Add knaif to my PATH" start_selected="true"
+          description="Links /usr/local/bin/knaif to the installed program, so &quot;knaif&quot; works in any terminal.">
+    <pkg-ref id="tech.blackdeep.knaif.path"/>
+  </choice>
+
+  <choice id="tools" title="Supporting tools (installed with Homebrew)"
+          description="Installed with Homebrew as the logged-in user, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing."/>
+  <choice id="tool_ffmpeg" title="FFmpeg — required for the ffmpeg skill"
+          start_selected="brewPresent()" enabled="toolOffered('skill_ffmpeg')">
+    <pkg-ref id="tech.blackdeep.knaif.tool.ffmpeg"/>
+  </choice>
+  <choice id="tool_ghostscript" title="Ghostscript — aggressive PDF compression (optional, AGPL)"
+          start_selected="false" enabled="toolOffered('skill_documents')">
+    <pkg-ref id="tech.blackdeep.knaif.tool.ghostscript"/>
+  </choice>
+  <choice id="tool_libreoffice" title="LibreOffice — Office &lt;-&gt; PDF conversion (optional)"
+          start_selected="false" enabled="toolOffered('skill_documents')">
+    <pkg-ref id="tech.blackdeep.knaif.tool.libreoffice"/>
+  </choice>
+  <choice id="tool_tesseract" title="Tesseract OCR — scanned-PDF / image text (optional)"
+          start_selected="false" enabled="toolOffered('skill_documents')">
+    <pkg-ref id="tech.blackdeep.knaif.tool.tesseract"/>
+  </choice>
+
+  <choice id="model" title="Download the knaif AI model now — @MODEL@ (~2.5 GB; setup will wait)"
+          start_selected="true"
+          description="Needed for &quot;knaif run&quot;. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
+    <pkg-ref id="tech.blackdeep.knaif.model"/>
+  </choice>
+
+  <pkg-ref id="tech.blackdeep.knaif.core" version="@VERSION@">core.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.skill.ffmpeg" version="@VERSION@">skill-ffmpeg.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.skill.documents" version="@VERSION@">skill-documents.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.path" version="@VERSION@">path.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.tool.ffmpeg" version="@VERSION@">tool-ffmpeg.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.tool.ghostscript" version="@VERSION@">tool-ghostscript.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.tool.libreoffice" version="@VERSION@">tool-libreoffice.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.tool.tesseract" version="@VERSION@">tool-tesseract.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.model" version="@VERSION@">model.pkg</pkg-ref>
+</installer-gui-script>
