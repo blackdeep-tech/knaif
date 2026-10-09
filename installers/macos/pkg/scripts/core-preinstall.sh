@@ -26,4 +26,6 @@ fi
 for dir in bin skills contracts licenses; do
   rm -rf "${KNAIF_ROOT:?}/$dir"
 done
+# Steps an aborted install queued for its Terminal window must not run in this one's.
+rm -f "$QUEUE" "$QUEUE.retry"
 exit 0

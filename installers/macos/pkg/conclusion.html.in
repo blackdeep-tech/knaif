@@ -9,8 +9,9 @@ unticked, type <code>/usr/local/knaif/bin/knaif</code> instead of <code>knaif</c
 knaif skills deps
 knaif run ffmpeg "compress clip.mp4 for email"</pre>
 <p><code>knaif skills deps</code> shows any supporting tool still missing, with the
-<code>brew install</code> command for it. If you skipped the model download, run
-<code>knaif models pull @MODEL@</code>. Setup's own log is in
+<code>brew install</code> command for it. The model download and the tools you chose run in a
+Terminal window that opens now, and it may take a while. If no window opened, or you skipped
+the model, run <code>knaif models pull @MODEL@</code>. Setup's own log is in
 <code>/var/log/install.log</code>.</p>
 <p>To uninstall: <code>sudo /usr/local/knaif/uninstall.sh</code> (add <code>--purge</code> to
 also remove downloaded models in ~/.knaif).</p>

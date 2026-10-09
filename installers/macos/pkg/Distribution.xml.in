@@ -6,6 +6,10 @@
 
   The supporting-tool choices mirror skill.yaml's macos.brew and build-pkg.sh's TOOLS table;
   python/core/tests/test_installer_pkg.py fails when the three drift apart.
+
+  Installer installs the packages in choices-outline order. The model and tool packages only queue
+  their step; the hidden finish package, whose line must stay LAST, opens one Terminal window that
+  runs them (pkg/scripts/finish-postinstall.sh).
 -->
 <installer-gui-script minSpecVersion="2">
   <title>knaif @VERSION@</title>
@@ -48,6 +52,7 @@
       <line choice="tool_tesseract"/>
     </line>
     <line choice="model"/>
+    <line choice="finish"/>
   </choices-outline>
 
   <choice id="core" title="knaif core runtime (required)" enabled="false" selected="true"
@@ -70,7 +75,7 @@
   </choice>
 
   <choice id="tools" title="Supporting tools (installed with Homebrew)"
-          description="Installed with Homebrew as the logged-in user, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing."/>
+          description="Installed with Homebrew as the logged-in user, in a Terminal window that opens at the end of setup, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing."/>
   <choice id="tool_ffmpeg" title="FFmpeg — required for the ffmpeg skill"
           start_selected="brewPresent()" enabled="toolOffered('skill_ffmpeg')">
     <pkg-ref id="tech.blackdeep.knaif.tool.ffmpeg"/>
@@ -88,10 +93,15 @@
     <pkg-ref id="tech.blackdeep.knaif.tool.tesseract"/>
   </choice>
 
-  <choice id="model" title="Download the knaif AI model now — @MODEL@ (~2.5 GB; setup will wait)"
+  <choice id="model" title="Download the knaif AI model now — @MODEL@ (~2.5 GB; in a Terminal window you can watch)"
           start_selected="true"
-          description="Needed for &quot;knaif run&quot;. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
+          description="Needed for &quot;knaif run&quot;. It runs in a Terminal window that opens at the end of setup and shows the download; setup does not wait for it. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
     <pkg-ref id="tech.blackdeep.knaif.model"/>
+  </choice>
+
+  <choice id="finish" title="Finish setup" visible="false" enabled="false" selected="true"
+          description="Opens one Terminal window for the model download and the tool installs chosen above.">
+    <pkg-ref id="tech.blackdeep.knaif.finish"/>
   </choice>
 
   <pkg-ref id="tech.blackdeep.knaif.core" version="@VERSION@">core.pkg</pkg-ref>
@@ -103,4 +113,5 @@
   <pkg-ref id="tech.blackdeep.knaif.tool.libreoffice" version="@VERSION@">tool-libreoffice.pkg</pkg-ref>
   <pkg-ref id="tech.blackdeep.knaif.tool.tesseract" version="@VERSION@">tool-tesseract.pkg</pkg-ref>
   <pkg-ref id="tech.blackdeep.knaif.model" version="@VERSION@">model.pkg</pkg-ref>
+  <pkg-ref id="tech.blackdeep.knaif.finish" version="@VERSION@">finish.pkg</pkg-ref>
 </installer-gui-script>

@@ -2,9 +2,12 @@
 # postinstall of tech.blackdeep.knaif.model — "download the AI model now" (D13).
 #
 # build-pkg.sh installs this as `postinstall` beside a generated model.env naming MODEL, read from
-# the model manifest the payload ships (never typed by hand). Runs `knaif models pull` as the
-# console user so the model lands in their ~/.knaif/models — which `models pull` also keeps out of
-# Time Machine (D18). Setup waits for it; a failure is reported, never fatal.
+# the model manifest the payload ships (never typed by hand). The model lands in the console user's
+# ~/.knaif/models, which `models pull` also keeps out of Time Machine (D18).
+#
+# The download is queued, not run: it runs in the Terminal window the finish package opens at the
+# end of setup, where `models pull` draws its progress bar (common.sh, QUEUE). Skipped, never
+# failed, when it is already there or nobody is logged in.
 
 here="$(dirname "$0")"
 # shellcheck source=common.sh
@@ -26,10 +29,6 @@ if as_user "$user" "$knaif" models list 2>/dev/null |
   exit 0
 fi
 
-log "downloading $MODEL for $user"
-if as_user "$user" "$knaif" models pull "$MODEL"; then
-  log "$MODEL is installed"
-else
-  log "could not download $MODEL; knaif is installed anyway. Retry: $retry"
-fi
+queue_step "The knaif AI model, $MODEL (~2.5 GB, one time)" "$retry" "$knaif" models pull "$MODEL"
+log "the $MODEL download runs in a Terminal window at the end of setup"
 exit 0

@@ -37,6 +37,27 @@ as_user() {
   sudo -u "$user" -H "$@"
 }
 
+# STEPS FOR THE TERMINAL WINDOW. The model download and the Homebrew installs never run in setup
+# itself: Installer.app shows nothing a package script prints, and pkgbuild gives every package
+# script a 600 s timeout, so on a slow line they ran for minutes with no sign of life and could be
+# killed (2026-10-09). Their scripts queue the step here instead, and the hidden finish package,
+# installed last, runs the queue in one Terminal window in the user's session
+# (finish-postinstall.sh). Root-owned, under the install folder, so no other user can add a step.
+QUEUE="$KNAIF_ROOT/.setup-steps"
+
+# queue_step <what> <retry> <command...>: the window shows <what>, runs the command as the user,
+# and names <retry> if it fails. Each step is one `step ...` line, every argument quoted.
+queue_step() {
+  local what="$1" retry="$2"
+  shift 2
+  {
+    printf 'step'
+    printf ' %q' "$what" "$retry" "$@"
+    printf '\n'
+  } >> "$QUEUE"
+  printf '%s\n' "$retry" >> "$QUEUE.retry"
+}
+
 # Homebrew's own location: /opt/homebrew on Apple Silicon, /usr/local for a Rosetta install.
 find_brew() {
   local brew

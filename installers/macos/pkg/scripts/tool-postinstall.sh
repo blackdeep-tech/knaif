@@ -7,9 +7,11 @@
 #   BREW_CASK   1 for a cask (brew install --cask), else 0
 #   SKILL       the skill that uses it; skipped when that skill was not installed
 #
-# Runs as the console user, because Homebrew refuses root. Skipped, never failed, when the skill
-# was deselected, Homebrew is absent (the options page greys the choice out then; this guards a
-# headless install), or nobody is logged in.
+# The install is queued, not run: it runs in the Terminal window the finish package opens at the
+# end of setup, as the console user (Homebrew refuses root), where brew shows its progress and can
+# ask for a password (common.sh, QUEUE). Skipped, never failed, when the skill was deselected,
+# Homebrew is absent (the options page greys the choice out then; this guards a headless
+# install), or nobody is logged in.
 
 here="$(dirname "$0")"
 # shellcheck source=common.sh
@@ -36,11 +38,7 @@ if [ -z "$user" ]; then
 fi
 
 # NO_INSTALL_UPGRADE: an installed but outdated tool is the user's to upgrade, not setup's.
-log "installing $TOOL_NAME with Homebrew as $user"
-if as_user "$user" env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 NONINTERACTIVE=1 \
-  "$brew" install "${cask[@]}" "$BREW_NAME"; then
-  log "$TOOL_NAME is installed"
-else
-  log "could not install $TOOL_NAME with Homebrew; knaif is installed anyway. Retry: $retry"
-fi
+queue_step "$TOOL_NAME, with Homebrew" "$retry" \
+  env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 "$brew" install "${cask[@]}" "$BREW_NAME"
+log "installing $TOOL_NAME with Homebrew runs in a Terminal window at the end of setup"
 exit 0

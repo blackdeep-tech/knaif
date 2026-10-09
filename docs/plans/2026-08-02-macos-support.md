@@ -269,7 +269,30 @@ nobody logged in that logs `not stopping a model daemon`. The upgrade run is not
 builds say 1.2.1, so it can only pass; round 2 repeats it on the frozen files. L3/L4 wait for the
 freeze. Anything the screens show goes to the owner as a finding (the rule above) before the freeze.
 Then: `feat/macos-support` → `release/1.3.0` by one PR, merged with a merge commit, and the owner
-announces the freeze commit.
+announces the freeze commit. *(Merged 2026-10-09: #84, `ce6e593`.)*
+
+**Finding 2026-10-09 (the Mac contributor, manual pass): the `.pkg`'s model download is silent.**
+On a slow line the pull sat behind Installer.app's "Running package scripts" for many minutes with
+no progress (Installer.app shows nothing a package script prints), until Hugging Face closed the
+connection and the pull ended, reported only in `/var/log/install.log`. The contributor adds that
+`pkgbuild` gives every package script `timeout="600"`, which the Distribution cannot cleanly
+override, so the end may have been Installer killing the script at 10 minutes; a slow `brew
+install` (the LibreOffice cask) meets the same limit. **Fixed on Windows the same day, before the
+freeze (owner: one Terminal window, #85):** the model and tool scripts no longer run anything; each
+queues its step in the root-owned `/usr/local/knaif/.setup-steps`, and a hidden `finish` package,
+last in the choices-outline, opens **one** Terminal window in the console user's session
+(`launchctl asuser` + `open -a Terminal` on a `.command` in `/tmp`) that runs the steps in the
+options page's order, where `brew` and `models pull` show their progress and `brew` can ask for a
+password. Setup no longer waits; the window ends naming any step that failed with its command; with
+nobody logged in, or no window, nothing runs and every command is logged. The core preinstall
+clears a stale queue. And, on every platform, `models pull` now retries a dropped or refused
+connection and a chunk cut off midway, with a 60 s read timeout so a stalled connection is retried
+instead of waited on (`knaif-models` `fetcher.rs`; the 8-connection ranged download is unchanged).
+Tested against faked Apple tools and a local HTTP server; **untested on a Mac:** whether Installer
+really installs in outline order (the window must open last) and the window itself. The manual
+pass checks both: one window opens near the end of setup, shows the tools then the model with
+progress, and ends with "Done." or the commands to re-run; with nobody logged in, nothing opens and
+`install.log` lists the commands.
 
 *Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
 Work from that commit, not from `feat/macos-support`. The rules are the release plan's

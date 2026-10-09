@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of promising an output the run then refuses.
 - **Removing every page of a PDF is refused** in both runtimes; the Python runtime wrote an empty
   document.
+- **`knaif models pull` survives a dropped connection.** A reset, a refused connection or a
+  download cut off midway is retried, picking up from the parts already downloaded, and a
+  connection that goes silent for a minute is retried instead of waited on.
 
 ### Known issues
 
