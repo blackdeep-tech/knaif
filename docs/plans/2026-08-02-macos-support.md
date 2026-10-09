@@ -261,6 +261,16 @@ image ships the Command Line Tools), `clean-room.sh` gives `smoke.sh` the `Cargo
 and the preinstall logs when nobody is logged in. Round 2 copies `Cargo.toml` into the room
 (README). Details under E3, E4, E6, D3.
 
+**Owner's answer, 2026-10-09.** Round 1 is taken into `feat/macos-support` as it stands (a
+fast-forward to `81cc9d7`; no fork PR). Before the freeze, one manual pass on a `.pkg` built from the
+current tip, not release evidence: the installer's own screens judged by hand (the options page, the
+tool choices greyed without Homebrew and enabled with it, the conclusion page), and a reinstall with
+nobody logged in that logs `not stopping a model daemon`. The upgrade run is not repeated now: both
+builds say 1.2.1, so it can only pass; round 2 repeats it on the frozen files. L3/L4 wait for the
+freeze. Anything the screens show goes to the owner as a finding (the rule above) before the freeze.
+Then: `feat/macos-support` → `release/1.3.0` by one PR, merged with a merge commit, and the owner
+announces the freeze commit.
+
 *Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
 Work from that commit, not from `feat/macos-support`. The rules are the release plan's
 [pre-registered gate rules](2026-09-30-release-1.3.0.md#gate-decision-rules-pre-registered-2026-10-07-before-any-130-evidence-run):
@@ -301,10 +311,21 @@ them after a result. Launch each stage only after the owner approves it with its
    because macOS re-adds the attribute to every file written, see E6), and the script-only choices
    (PATH link, model, tools) leave no receipt: `uninstall.sh` does not need one (it checks the
    link's target and removes the install folder), but nothing records which choices were taken.
+   **Decided 2026-10-09 (owner): both accepted for 1.3.0** and documented, not fixed.
 4. **Release contracts:** `platforms.yaml` lists `macos` as `planned` but without artifacts or
    requirements, and `acceptance_matrix.yaml` has no macOS cells; the recorded cells are keyed
    `<model>|macos|mtl` (C4). *(Corrected 2026-10-06: this item first said `platforms.yaml` had no
-   macOS entry, which was wrong.)*
+   macOS entry, which was wrong.)* **Done 2026-10-09 (Windows) for the matrix:** a `1.3.0` release
+   with the gate rules' cells, `macos|mtl` and `macos|cpu` included, is now `current_release`.
+   `platforms.yaml` stays `planned` until 1.3.0 is published: the download page checks its
+   artifact names against the published release, which has no macOS asset yet (G1, G3).
+7. **D3, the first-run Metal cost** (cold 18.93 s, warm 3.40 s). **Decided 2026-10-09 (owner): no
+   remedy in 1.3.0**; documented as first-run behaviour.
+8. **G6, signing in CI.** **Decided 2026-10-09 (owner): 1.3.0 ships the build signed by hand at
+   the freeze** (round 2 step 1), the binary the evidence measures. `MACOS_SIGNING` is enabled in
+   CI after 1.3.0 ships.
+9. **G5, the tap repository** `blackdeep-tech/homebrew-knaif`: the owner creates it before
+   publishing. It does not block the freeze; the formula needs the published `.zip`'s sha256.
 5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
    **Decided 2026-10-07 (owner): composed, as 1.2.0 did it**; flips are reported, not a verdict.
 6. **Certificates and notary credentials**: received and working (F1, 2026-10-06).
@@ -316,9 +337,10 @@ were re-run on that tree on 2026-10-05** with the same decisions as before (C4, 
 (for example a `documents_105` fix). **Stale again since 2026-10-08**: the merge of `release/1.3.0`
 changed native code. They are re-run once, on the frozen 1.3.0 (*Next round*, round 2), not before.
 
-**Still needs a person:** the installer's screens judged by whoever installs (E6); the first-run
-shader tax from a fresh user account (D3); D4 on an 8 GB Mac; D5's OpenMP comparison; and step 10's
-offline pass and Metal check from a fresh account.
+**Still needs a person:** the installer's screens judged by whoever installs (E6, before the
+freeze); D4 on an 8 GB Mac; D5's OpenMP comparison; E4's unsigned "expect a block" half. The
+first-run shader tax (D3), step 10's offline pass and Metal from a fresh account were done in
+round 1 (2026-10-09).
 
 **macOS 27.2 Beta 2 (2026-10-05)** needs no re-build or re-run: the toolchain is unchanged, dyld's
 proc-macro rejection is fixed, the merged tree builds and packages, and the 1.2.0 binary gives the
