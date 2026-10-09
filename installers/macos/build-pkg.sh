@@ -123,6 +123,10 @@ dir="$(scripts_dir model model-postinstall.sh postinstall)"
 printf 'MODEL=%q\n' "$MODEL" > "$dir/model.env"
 script_pkg model "$dir"
 
+# Installed last (its line ends the Distribution's choices-outline): opens the one Terminal window
+# that runs what the model and tool scripts queued.
+script_pkg finish "$(scripts_dir finish finish-postinstall.sh postinstall)"
+
 # The product: Distribution + resources, Installer-signed when an identity is given.
 res="$WORK/resources"
 mkdir -p "$res"
