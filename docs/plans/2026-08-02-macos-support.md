@@ -1644,6 +1644,13 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > a fresh account on the physical Mac (a Safari-quarantined `.zip` extracted by Finder); the
       > stapled `.pkg` passed `spctl` with the network down. No entitlements were needed under
       > quarantine (F4). **Not yet run: the unsigned "expect a block" half.**
+      >
+      > **Unsigned half done 2026-10-09 (pre-freeze, 1.2.1): blocked, as it must be.** An ad-hoc
+      > signed copy of the tree (what `cargo` produces), quarantined as Safari leaves it: with a
+      > user logged in, *"“knaif” cannot be opened because the developer cannot be verified"*;
+      > with nobody logged in, killed (exit 137, `syspolicyd` "Denying"); its unsigned `.pkg`
+      > rejected by `spctl` (`no usable signature`). The signed files, side by side in the same
+      > VM, run and are accepted. Record: `evals/runs/2026-10-09_mac-prefreeze-pkg-tests/`.
 
 - [ ] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
       *Added 2026-08-02 after audit.*
@@ -1709,6 +1716,18 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > (`knaif daemon stopped.`) and by `uninstall.sh`, with a console user. With nobody at the
       > console the preinstall does not stop it (by design: it exits when idle) and logged nothing,
       > against its own comment; it now logs that (`core-preinstall.sh`).
+      >
+      > **Pre-freeze, 2026-10-09 (the re-signed 1.2.1 `.pkg`, which has that log line):** the
+      > installer's screens judged by the person installing, in the VM — options page, install,
+      > conclusion page, `knaif` through the PATH link, `uninstall.sh` clean. The new preinstall line
+      > is logged with nobody at the console, and the upgrade run passes again (13 checks). **Two
+      > findings:** the model choice's title was cut off before its size, and Installer shows only
+      > "Running package scripts…" while the model downloads, so the tester took it for a hang;
+      > and the download itself failed at ~93% on one dropped connection, because the shared
+      > fetcher retried a chunk only on 429/503. Both addressed by #85 (one Terminal window shows
+      > the downloads, setup does not wait; transport failures retried). Installer did **not**
+      > enforce `pkgbuild`'s `timeout="600"`: a 12-minute test script ran to the end (722 s) on
+      > macOS 12.6. Record: `evals/runs/2026-10-09_mac-prefreeze-pkg-tests/`.
 
 - [x] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the

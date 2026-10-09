@@ -1,0 +1,6 @@
+2026-10-09 06:43:36-07 Admins-Virtual-Machine Installer[642]: Starting installation:
+2026-10-09 06:43:38-07 Admins-Virtual-Machine package_script_service[777]: ./postinstall: knaif: linked /usr/local/bin/knaif -> /usr/local/knaif/bin/knaif
+2026-10-09 06:43:40-07 Admins-Virtual-Machine package_script_service[777]: ./postinstall: knaif: downloading knaif-qwen3-4b-v2 for admin
+2026-10-09 06:53:18-07 Admins-Virtual-Machine package_script_service[777]: ./postinstall: Error: read range 2315255808-2332033023 of "https://huggingface.co/blackdeep/knaif/resolve/107611504850e6d334034ab0898de23527c6ec32/knaif-qwen3-4b-v2-q4_k_m.gguf": respon
+2026-10-09 06:53:18-07 Admins-Virtual-Machine package_script_service[777]: ./postinstall: knaif: could not download knaif-qwen3-4b-v2; knaif is installed anyway. Retry: knaif models pull knaif-qwen3-4b-v2
+2026-10-09 06:53:18-07 Admins-Virtual-Machine installd[649]: Installed "knaif 1.2.1" ()
