@@ -60,17 +60,33 @@ CI does the same on a tag (`release.yml`, job `macos`) once the owner sets the r
 
 ## The clean room (tart)
 
-A disposable macOS 12 VM with no Xcode, Command Line Tools or Homebrew (D8, D15). Cirrus Labs'
-*vanilla* images are exactly that; their login is `admin` / `admin`.
+A disposable macOS 12 VM with no Xcode, Command Line Tools or Homebrew (D8, D15). **Not Cirrus
+Labs' `macos-monterey-vanilla` image**: it ships the Command Line Tools
+(`/Library/Developer/CommandLineTools`, six `CLTools_*` receipts — seen 2026-10-09), so
+`room_no_clt` fails. Build a base from Apple's own restore image instead, once:
 
 ```bash
 brew install cirruslabs/cli/tart
-tart clone ghcr.io/cirruslabs/macos-monterey-vanilla:latest knaif-room   # fresh for every run
+# UniversalMac_12.6_21G115_Restore.ipsw, 14.1 GB, from updates.cdn-apple.com — the newest macOS 12
+# restore image for VMs; its URL and sha256 are listed at api.ipsw.me/v4/device/VirtualMac2,1
+tart create --from-ipsw UniversalMac_12.6_21G115_Restore.ipsw --disk-size 40 knaif-room-base
+tart run knaif-room-base &
+```
+
+In the VM window: Setup Assistant with account `admin` / `admin`, nothing else installed and no
+software update; Sharing → Remote Login on; Energy Saver → display never sleeps; then in its
+Terminal `echo 'admin ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/admin` and
+`sudo pmset -a sleep 0`. From the host, `ssh-copy-id admin@"$(tart ip knaif-room-base)"`, then
+`sudo shutdown -h now` in the VM. Every run below starts from a fresh clone of that base:
+
+```bash
+tart clone knaif-room-base knaif-room                                   # fresh for every run
 tart run knaif-room &                                                    # opens the VM window
 ip="$(tart ip knaif-room)"
 ssh admin@"$ip" mkdir room
 scp dist/knaif-<ver>-macos-arm64.{zip,pkg} installers/macos/clean-room.sh installers/smoke.sh \
-    sandbox/fixtures/documents/sample.pdf models/knaif-qwen3-4b-v2-q4_k_m.gguf admin@"$ip":room/
+    Cargo.toml sandbox/fixtures/documents/sample.pdf models/knaif-qwen3-4b-v2-q4_k_m.gguf \
+    admin@"$ip":room/        # Cargo.toml: smoke.sh reads the release's version from it
 ssh admin@"$ip" 'cd room && bash clean-room.sh --zip knaif-<ver>-macos-arm64.zip --fixtures . \
     --model knaif-qwen3-4b-v2-q4_k_m.gguf'
 ```

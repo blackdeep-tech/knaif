@@ -57,6 +57,7 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SMOKE="$HERE/smoke.sh"
 [ -f "$SMOKE" ] || { echo "copy installers/smoke.sh next to this script" >&2; exit 2; }
+[ -f "$HERE/Cargo.toml" ] || echo "WARNING: no Cargo.toml next to this script; smoke.sh will fail to read the version" >&2
 
 SCRATCH="${TMPDIR:-/tmp}"
 SCRATCH="${SCRATCH%/}"
@@ -139,6 +140,14 @@ fi
 out="$(cd "$SCRATCH" && "$K" --version 2>&1)"
 case "$out" in "knaif "*) check launch 0 "$out" ;; *) check launch 1 "$out" ;; esac
 
+# smoke.sh reads the version the release claims from ../Cargo.toml, its place in a checkout. The
+# room is not a checkout, so give it that layout from the Cargo.toml copied in beside this script.
+if [ -f "$HERE/Cargo.toml" ]; then
+  kit="$SCRATCH/knaif-smoke-kit"
+  rm -rf "$kit" && mkdir -p "$kit/installers"
+  cp "$HERE/Cargo.toml" "$kit/" && cp "$SMOKE" "$kit/installers/"
+  SMOKE="$kit/installers/smoke.sh"
+fi
 bash "$SMOKE" "$TREE" > smoke.log 2>&1
 check smoke $? "see smoke.log"
 
