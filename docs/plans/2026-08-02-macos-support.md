@@ -269,7 +269,22 @@ nobody logged in that logs `not stopping a model daemon`. The upgrade run is not
 builds say 1.2.1, so it can only pass; round 2 repeats it on the frozen files. L3/L4 wait for the
 freeze. Anything the screens show goes to the owner as a finding (the rule above) before the freeze.
 Then: `feat/macos-support` → `release/1.3.0` by one PR, merged with a merge commit, and the owner
-announces the freeze commit.
+announces the freeze commit. *(Merged 2026-10-09: #84, `ce6e593`.)*
+
+**Finding 2026-10-09 (the Mac contributor, manual pass): the `.pkg`'s model download is silent.**
+On a slow line the pull sat behind Installer.app's "Running package scripts" for many minutes with
+no progress (Installer.app shows nothing a package script prints), until Hugging Face closed the
+connection and the pull ended, reported only in `/var/log/install.log`. **Fixed on Windows the same
+day, before the freeze (owner):** the model choice now opens a Terminal window in the console user's
+session (`launchctl asuser` + `open -a Terminal` on a `.command` written to `/tmp`), where `models
+pull` draws its progress bar, as the Windows installer's console does; setup no longer waits for it,
+the options page and conclusion page say so, and a window that cannot open logs the command. And,
+on every platform, `models pull` now retries a dropped or refused connection and a chunk cut off
+midway, with a 60 s read timeout so a stalled connection is retried instead of waited on
+(`knaif-models` `fetcher.rs`). Tested against faked Apple tools and a local HTTP server; **the
+Terminal window is untested on a Mac**: the manual pass checks it (a window opens on the options
+page's model choice, shows progress, and says what to do on failure; with nobody logged in, nothing
+opens and the command is logged).
 
 *Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
 Work from that commit, not from `feat/macos-support`. The rules are the release plan's

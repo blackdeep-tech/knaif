@@ -88,9 +88,9 @@
     <pkg-ref id="tech.blackdeep.knaif.tool.tesseract"/>
   </choice>
 
-  <choice id="model" title="Download the knaif AI model now — @MODEL@ (~2.5 GB; setup will wait)"
+  <choice id="model" title="Download the knaif AI model now — @MODEL@ (~2.5 GB; in a Terminal window you can watch)"
           start_selected="true"
-          description="Needed for &quot;knaif run&quot;. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
+          description="Needed for &quot;knaif run&quot;. A Terminal window opens and shows the download; setup does not wait for it. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
     <pkg-ref id="tech.blackdeep.knaif.model"/>
   </choice>
 

@@ -175,6 +175,15 @@ FAKES = {
     "stat": '[ -n "${FAKE_CONSOLE_USER:-}" ] && echo "$FAKE_CONSOLE_USER" || exit 1\n',
     # `sudo -u <user> -H cmd...`: record who, then run cmd as ourselves.
     "sudo": 'echo "$2" >> "$FAKE_LOG.sudo"\nshift 3\nexec "$@"\n',
+    # `id -u <user>`: a fixed uid, so `launchctl asuser` has one to record.
+    "id": "echo 501\n",
+    # `launchctl asuser <uid> cmd...`: record the uid, then run cmd.
+    "launchctl": 'echo "launchctl $1 $2" >> "$FAKE_LOG"\nshift 2\nexec "$@"\n',
+    # `open -a Terminal <file>`: keep what Terminal was given, then run it as Terminal would.
+    # FAKE_OPEN_EXIT makes it fail instead, as `open` does with no GUI session to open in.
+    "open": 'echo "open $1 $2" >> "$FAKE_LOG"\n'
+    '[ "${FAKE_OPEN_EXIT:-0}" = 0 ] || exit "$FAKE_OPEN_EXIT"\n'
+    'cp "$3" "$FAKE_LOG.command"\nexec bash "$3"\n',
     "pkgutil": 'echo "pkgutil $*" >> "$FAKE_LOG"\n'
     '[ "$1" = --pkgs ] && printf "%s\\n" tech.blackdeep.knaif.core com.other.thing\nexit 0\n',
 }
@@ -290,14 +299,45 @@ def _fake_knaif(vol: Path, listing: str, pull_exit: int = 0) -> None:
     )
 
 
-def test_the_model_is_pulled_as_the_console_user(tmp_path: Path, volume) -> None:
+def test_the_model_downloads_in_a_terminal_window_as_the_console_user(
+    tmp_path: Path, volume
+) -> None:
+    """Installer.app shows nothing a script prints, so the pull runs where its progress shows."""
     vol, env, log = volume
     _fake_knaif(vol, "  knaif-test-v9    available\\n")
     script = _install_script(tmp_path, "model-postinstall.sh", "postinstall", MODEL_ENV)
     proc = _run_installer_script(script, vol, env)
     assert proc.returncode == 0, proc.stderr
-    assert "knaif models pull knaif-test-v9" in log.read_text()
+    calls = log.read_text()
+    assert "launchctl asuser 501" in calls, "Terminal must open in the user's own session"
+    assert "open -a Terminal" in calls
+    assert "knaif models pull knaif-test-v9" in calls
     assert set(Path(f"{log}.sudo").read_text().split()) == {"alice"}
+    assert "Terminal window" in proc.stdout
+
+
+def test_setup_itself_never_runs_the_download(tmp_path: Path, volume) -> None:
+    """The pull is in the window's script, not in the postinstall Installer.app waits on."""
+    vol, env, log = volume
+    _fake_knaif(vol, "  knaif-test-v9    available\\n")
+    script = _install_script(tmp_path, "model-postinstall.sh", "postinstall", MODEL_ENV)
+    env = {**env, "FAKE_OPEN_EXIT": "1"}
+    proc = _run_installer_script(script, vol, env)
+    assert proc.returncode == 0
+    assert "models pull" not in log.read_text()
+    assert "could not open a Terminal window" in proc.stdout
+    assert "knaif models pull knaif-test-v9" in proc.stdout
+
+
+def test_the_window_s_script_pulls_the_model_and_removes_itself(tmp_path: Path, volume) -> None:
+    vol, env, log = volume
+    _fake_knaif(vol, "  knaif-test-v9    available\\n")
+    script = _install_script(tmp_path, "model-postinstall.sh", "postinstall", MODEL_ENV)
+    _run_installer_script(script, vol, env)
+    command = Path(f"{log}.command").read_text()
+    assert command.startswith("#!/bin/bash\n")
+    assert "models pull knaif-test-v9" in command
+    assert 'rm -rf "$here"' in command
 
 
 def test_an_installed_model_is_not_downloaded_again(tmp_path: Path, volume) -> None:
@@ -316,7 +356,15 @@ def test_a_failed_model_download_never_fails_setup(tmp_path: Path, volume) -> No
     script = _install_script(tmp_path, "model-postinstall.sh", "postinstall", MODEL_ENV)
     proc = _run_installer_script(script, vol, env)
     assert proc.returncode == 0
-    assert "Retry: knaif models pull knaif-test-v9" in proc.stdout
+    # What the Terminal window shows (the fake `open` runs its script in this process).
+    assert "Run it again any time: knaif models pull knaif-test-v9" in proc.stdout
+
+
+def test_the_options_page_says_where_the_download_shows() -> None:
+    text = (REPO / "installers/macos/pkg/Distribution.xml.in").read_text(encoding="utf-8")
+    title = text.split('<choice id="model"', 1)[1].split(">", 1)[0]
+    assert "Terminal window" in title
+    assert "setup will wait" not in title
 
 
 def test_upgrade_clears_only_the_program_folders(tmp_path: Path, volume) -> None:

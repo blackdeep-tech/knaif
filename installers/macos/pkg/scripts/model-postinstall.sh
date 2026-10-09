@@ -2,9 +2,16 @@
 # postinstall of tech.blackdeep.knaif.model — "download the AI model now" (D13).
 #
 # build-pkg.sh installs this as `postinstall` beside a generated model.env naming MODEL, read from
-# the model manifest the payload ships (never typed by hand). Runs `knaif models pull` as the
-# console user so the model lands in their ~/.knaif/models — which `models pull` also keeps out of
-# Time Machine (D18). Setup waits for it; a failure is reported, never fatal.
+# the model manifest the payload ships (never typed by hand). The model lands in the console user's
+# ~/.knaif/models, which `models pull` also keeps out of Time Machine (D18).
+#
+# THE DOWNLOAD RUNS IN A TERMINAL WINDOW, NOT HERE. Installer.app shows nothing a package script
+# prints: run inline, a 2.5 GB pull on a slow line sat behind "Running package scripts" for many
+# minutes with no progress, and a failure was visible only in /var/log/install.log (2026-10-09).
+# So this script writes a small .command and opens it in Terminal in the user's own session, where
+# `models pull` draws its progress bar, as the Windows installer's console does. Setup does not
+# wait for it. If the window cannot be opened, the command to run is logged and the conclusion
+# page names it. A failure is reported, never fatal.
 
 here="$(dirname "$0")"
 # shellcheck source=common.sh
@@ -26,10 +33,31 @@ if as_user "$user" "$knaif" models list 2>/dev/null |
   exit 0
 fi
 
-log "downloading $MODEL for $user"
-if as_user "$user" "$knaif" models pull "$MODEL"; then
-  log "$MODEL is installed"
-else
-  log "could not download $MODEL; knaif is installed anyway. Retry: $retry"
+# The window's script. Written as the user into a folder of their own under /tmp, and removed by
+# itself when the download ends; the window stays open on its last message.
+window_script() {
+  printf '#!/bin/bash\n'
+  printf '# Written by the knaif installer, which cannot show a download'"'"'s progress itself.\n'
+  printf 'here="$(cd "$(dirname "$0")" && pwd)"\n'
+  # Model names are manifest keys ([a-z0-9.-]), so single quotes hold them; the path gets %q.
+  printf "echo 'Downloading the knaif AI model, %s (~2.5 GB, one time).'\necho\n" "$MODEL"
+  printf 'if %q models pull %s; then\n' "$knaif" "$MODEL"
+  printf "  echo\n  echo 'Done. Open a new Terminal window and try: knaif skills list'\n"
+  printf 'else\n'
+  printf "  echo\n  echo 'The download did not finish. Run it again any time: %s'\n" "$retry"
+  printf 'fi\n'
+  printf 'rm -rf "$here"\n'
+}
+
+log "opening a Terminal window to download $MODEL for $user"
+dir="$(as_user "$user" mktemp -d /tmp/knaif-model.XXXXXX)" || dir=""
+cmd="$dir/download-model.command"
+if [ -n "$dir" ] &&
+  window_script | as_user "$user" tee "$cmd" >/dev/null &&
+  as_user "$user" chmod +x "$cmd" &&
+  launchctl asuser "$(id -u "$user")" sudo -u "$user" -H open -a Terminal "$cmd"; then
+  exit 0
 fi
+[ -n "$dir" ] && rm -rf "$dir"
+log "could not open a Terminal window to download $MODEL; knaif is installed anyway. Run: $retry"
 exit 0
