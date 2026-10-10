@@ -24,13 +24,17 @@
 # is the documented worst case (a fork's PR executing on the maintainer's machine), it needs
 # that machine online at tag time, and it buys nothing `just package-*` does not already give.
 #
-# MACOS SIGNS HERE, ON THE TAG ONLY (D10 in the 2026-08-02 macOS support plan). A macOS release
-# must be signed and notarized, and doing it here lets the owner cut one without a Mac. The job
-# reads the Developer ID certificates and the notarization key from the protected `release`
-# environment, which pull requests never reach, and stays OFF until the repository variable
-# MACOS_SIGNING is `enabled` — set only after the first build signed by hand on a Mac has passed
-# the clean room. It attaches the notarized .zip and the stapled .pkg to the same draft; the
-# clean-room runs (E3/E4/E6) and SHA256SUMS stay human steps, exactly as for the other platforms.
+# MACOS SIGNS HERE, BY HAND, AT THE FREEZE — NEVER AT THE TAG (D10 and G6 in the 2026-08-02 macOS
+# support plan; owner, 2026-10-10). A macOS release must be signed and notarized, and doing it here
+# needs no Mac and no beta toolchain. But a signed file is never byte-identical twice (every
+# signature carries a timestamp), so the files the evidence, the clean room and the testers check
+# must be the very files published. The owner runs this workflow by hand (Actions → Package → Run
+# workflow) on the release branch at the freeze commit; the macOS job keeps the notarized .zip and
+# the stapled .pkg for 90 days, everything is checked on them, and at publish the owner attaches
+# those same files to the draft by hand, as the Windows half is. The tag builds no macOS files. The
+# job reads the Developer ID certificates and the notarization key from the protected `release`
+# environment, which pull requests never reach, and stays off until the repository variable
+# MACOS_SIGNING is `enabled`. The clean-room runs (E3/E4/E6) and SHA256SUMS stay human steps.
 #
 # TWO CHECKS CANNOT MOVE HERE, and saying so prevents a false sense of coverage: the Windows
 # clean room needs Windows Sandbox, which exists on no runner, and the installer upgrade path
@@ -121,11 +125,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # Tag only, and only once MACOS_SIGNING is enabled (see the header). Builds from the tag's clean
-  # checkout with no cache, signs every Mach-O, notarizes the .zip and the .pkg, reads both logs
-  # and staples the .pkg — installers/macos/release.sh, the same script a hand run uses.
+  # By hand on a release branch only, and only once MACOS_SIGNING is enabled (see the header).
+  # Builds from a clean checkout with no cache, signs every Mach-O, notarizes the .zip and the
+  # .pkg, reads both logs and staples the .pkg — installers/macos/release.sh, the same script a
+  # run on a Mac uses. The run's summary records both files' sha256.
   macos:
-    if: startsWith(github.ref, 'refs/tags/v') && vars.MACOS_SIGNING == 'enabled'
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      startsWith(github.ref, 'refs/heads/release/') && vars.MACOS_SIGNING == 'enabled'
     # macos-15, not macos-14: macos-14's Xcode 15.4 (Apple clang 15) cannot build llama.cpp's
     # apple_m4 CPU variant. Its -march=armv9.2-a+...+nosve+sme still enters the SVE code paths, then
     # rejects the intrinsics ("'svmmla_s32' needs target feature sve,i8mm"). The deployment target
@@ -198,6 +205,20 @@ jobs:
           security delete-keychain "$RUNNER_TEMP/knaif-signing.keychain-db" || true
           rm -f "$RUNNER_TEMP/notary.p8"
 
+      # The release files' identity, after stapling (stapling rewrites the .pkg): the record and
+      # the testers compare against these, and so does the upload to the draft at publish.
+      - name: Record the sha256 of the release files
+        run: |
+          set -euo pipefail
+          {
+            echo '### macOS release files'
+            echo '```'
+            (cd dist && shasum -a 256 knaif-*-macos-arm64.zip knaif-*-macos-arm64.pkg)
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # These ARE the release files: Round 2, the clean room and the testers check them before
+      # the tag, and the owner attaches them to the draft at publish, so they outlive the cycle.
       - uses: actions/upload-artifact@v4
         with:
           name: knaif-macos-${{ github.sha }}
@@ -205,7 +226,7 @@ jobs:
             dist/knaif-*-macos-arm64.zip
             dist/knaif-*-macos-arm64.pkg
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
 
       # The notarization logs are evidence, not release assets: kept with the run, never attached.
       - uses: actions/upload-artifact@v4
@@ -214,15 +235,12 @@ jobs:
           path: dist/notary/
           retention-days: 90
 
-  # Tag only. Attaches what the jobs above already built and smoke-tested to a DRAFT release,
-  # for the maintainer to add the Windows half to by hand before generating SHA256SUMS over
-  # the complete set and publishing. Runs when Linux succeeded and macOS either succeeded or was
-  # switched off; a FAILED macOS job holds the draft back rather than letting it go out half-made.
+  # Tag only. Attaches the Linux artifacts the job above built and smoke-tested to a DRAFT
+  # release, for the maintainer to add the Windows half and the macOS files signed at the freeze
+  # to by hand (see the header) before generating SHA256SUMS over the complete set and publishing.
   draft:
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') && !cancelled() &&
-      needs.linux.result == 'success' && needs.macos.result != 'failure'
-    needs: [linux, macos]
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.linux.result == 'success'
+    needs: [linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -230,12 +248,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: knaif-linux-${{ github.sha }}
-          path: dist
-
-      - if: needs.macos.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: knaif-macos-${{ github.sha }}
           path: dist
 
       - name: Attach the Linux artifacts to a draft release
@@ -256,11 +268,11 @@ jobs:
             echo "release $TAG already exists - uploading assets to it"
           else
             gh release create "$TAG" --draft --title "$TAG" \
-              --notes "Draft. Linux (and, once enabled, macOS) artifacts attached by CI; Windows artifacts are added by hand, then SHA256SUMS is generated over the complete set. See RELEASE.md."
+              --notes "Draft. Linux artifacts attached by CI; the Windows artifacts and the macOS files signed at the freeze are added by hand, then SHA256SUMS is generated over the complete set. See RELEASE.md."
           fi
 
-          # --clobber so a re-run replaces its own uploads rather than erroring. nullglob so a
-          # tag without the macOS job uploads the Linux files rather than a literal pattern.
+          # --clobber so a re-run replaces its own uploads rather than erroring. Linux only: the
+          # macOS files come from the freeze-time run, never from a re-signed copy.
           shopt -s nullglob
-          files=(dist/knaif-*-linux-* dist/knaif-*-macos-*)
+          files=(dist/knaif-*-linux-*)
           gh release upload "$TAG" "${files[@]}" --clobber
