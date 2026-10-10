@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] — 2026-10-10
 
 ### Added
 
@@ -37,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A `--dry-run` of `remove_pages` checks the pages** against the document, as the real run does,
-  instead of promising an output the run then refuses.
+- **A `--dry-run` of `remove_pages` or `reorder_pages` checks the pages** against the document, as
+  the real run does, instead of promising an output the run then refuses.
 - **Removing every page of a PDF is refused** in both runtimes; the Python runtime wrote an empty
   document.
 - **`knaif models pull` survives a dropped connection.** A reset, a refused connection or a
