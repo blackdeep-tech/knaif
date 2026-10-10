@@ -9,7 +9,9 @@
 
   Installer installs the packages in choices-outline order. The model and tool packages only queue
   their step; the hidden finish package, whose line must stay LAST, opens one Terminal window that
-  runs them (pkg/scripts/finish-postinstall.sh).
+  runs them in that order (pkg/scripts/finish-postinstall.sh). The model comes before the tools: a
+  Homebrew tool can build from source for hours, or stop on a [y/n] question, and must not hold the
+  model up.
 -->
 <installer-gui-script minSpecVersion="2">
   <title>knaif @VERSION@</title>
@@ -45,13 +47,13 @@
       <line choice="skill_documents"/>
     </line>
     <line choice="path"/>
+    <line choice="model"/>
     <line choice="tools">
       <line choice="tool_ffmpeg"/>
       <line choice="tool_ghostscript"/>
       <line choice="tool_libreoffice"/>
       <line choice="tool_tesseract"/>
     </line>
-    <line choice="model"/>
     <line choice="finish"/>
   </choices-outline>
 
@@ -74,10 +76,11 @@
     <pkg-ref id="tech.blackdeep.knaif.path"/>
   </choice>
 
-  <choice id="tools" title="Supporting tools (installed with Homebrew)"
-          description="Installed with Homebrew as the logged-in user, in a Terminal window that opens at the end of setup, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing."/>
+  <choice id="tools" title="Supporting tools (installed with Homebrew)" enabled="brewPresent()"
+          description="Installed with Homebrew as the logged-in user, in a Terminal window that opens at the end of setup, after the model download, and skipped if Homebrew is not installed (https://brew.sh). A tool that fails to install never fails setup; run &quot;knaif skills deps&quot; afterwards to see what is missing. The sizes shown are estimates, not exact: what Homebrew downloads depends on its version and on what you already have installed."/>
   <choice id="tool_ffmpeg" title="FFmpeg — required for the ffmpeg skill"
-          start_selected="brewPresent()" enabled="toolOffered('skill_ffmpeg')">
+          start_selected="brewPresent()" enabled="toolOffered('skill_ffmpeg')"
+          description="On a macOS version Homebrew no longer builds packages for (macOS 12, for example), Homebrew compiles FFmpeg and its dependencies from source, which can take hours. If it asks whether to proceed, answer n to skip it and install FFmpeg another way.">
     <pkg-ref id="tech.blackdeep.knaif.tool.ffmpeg"/>
   </choice>
   <choice id="tool_ghostscript" title="Ghostscript — aggressive PDF compression (optional, AGPL)"
@@ -93,9 +96,9 @@
     <pkg-ref id="tech.blackdeep.knaif.tool.tesseract"/>
   </choice>
 
-  <choice id="model" title="Download the knaif AI model now — @MODEL@ (~2.5 GB; in a Terminal window you can watch)"
+  <choice id="model" title="AI model — in a Terminal window"
           start_selected="true"
-          description="Needed for &quot;knaif run&quot;. It runs in a Terminal window that opens at the end of setup and shows the download; setup does not wait for it. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
+          description="The knaif AI model, @MODEL@ (~2.5 GB), needed for &quot;knaif run&quot;. It downloads in a Terminal window that opens at the end of setup, before any supporting tool, and shows its progress; setup does not wait for it. Downloads into your ~/.knaif/models, which is kept out of Time Machine. Skipped if it is already there; if it fails, run &quot;knaif models pull @MODEL@&quot; later.">
     <pkg-ref id="tech.blackdeep.knaif.model"/>
   </choice>
 

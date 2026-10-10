@@ -15,6 +15,10 @@ brew install ffmpeg         # macOS
 winget install Gyan.FFmpeg  # Windows
 ```
 
+On a macOS version Homebrew no longer builds packages for (macOS 12 with Homebrew 7, for
+example), `brew install ffmpeg` compiles FFmpeg and about 25 dependencies from source, which can
+take hours.
+
 **Tested versions.** knaif is tested with the versions below; older ones may work but are not
 tested and may not. knaif does not check versions at run time.
 
