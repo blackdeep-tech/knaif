@@ -53,7 +53,7 @@
 # different one. Installed/stale is always judged against the running binary, never this field. An
 # upgraded binary must not load the previous release's ggml lib out of ~/.knaif/backends, which
 # survives the upgrade and is scanned first. Kept in step with Cargo.toml by python/core/tests/test_version_consistency.py.
-knaif_version: "1.2.1"
+knaif_version: "1.3.0"
 
 backends:
   cuda:
