@@ -55,8 +55,11 @@ just release-macos
 per-binary CDHashes land in `dist/notary/` (evidence, never a release asset). No entitlements are
 passed: F4 starts with none, and one is added only for a reproduced failure, recorded in the plan.
 
-CI does the same on a tag (`release.yml`, job `macos`) once the owner sets the repository variable
-`MACOS_SIGNING=enabled` — only after this hand-run build has passed the clean room.
+**The release files are not signed on a Mac.** CI signs them, once, at the freeze: the owner runs
+`release.yml` by hand on the release branch (job `macos`, on while the repository variable
+`MACOS_SIGNING` is `enabled`), and the evidence, the clean room and the testers use that run's
+`knaif-macos-<sha>` artifact, the same files that are published (RELEASE.md §2, *macOS*). The
+commands above are for development and for diagnosing a signing failure.
 
 ## The clean room (tart)
 

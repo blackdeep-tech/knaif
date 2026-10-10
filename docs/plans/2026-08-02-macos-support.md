@@ -97,7 +97,7 @@ Windows and on Linux (WSL) against faked Apple tools, and **none of it run on a 
 | signing, notarization log check, stapling, the F2 order end to end | `sign.sh`, `notarize.sh`, `release.sh`, `scripts/check_macos_signing.py`, `check_macho_deps.py --list` | F2, F3, F3b, F6, F7 |
 | the clean room, guest side | `installers/macos/clean-room.sh` | E3, E4, E6 (D16) |
 | the Homebrew formula and its renderer | `installers/macos/homebrew/` | G5 (D19) |
-| CI: path-filtered macOS job; tag-time signing job, off until `MACOS_SIGNING=enabled` | `ci.yml`, `release.yml` | G6 (D10, D11) |
+| CI: path-filtered macOS job; signing job run by hand at the freeze, off until `MACOS_SIGNING=enabled` | `ci.yml`, `release.yml` | G6 (D10, D11) |
 | the 1.2.0 L4 per-row reference and the comparison tool | `evals/parity/1.2.0-l4-rows/`, `scripts/l4_rows.py` | C6→D14 (D17) |
 | macOS eval lanes `mac-4b`, `mac-1.7b`, `mac-cpu-4b`, `mac-cpu-1.7b` | `eval_backends.yaml` | C4 |
 | docs: RELEASE.md (§1, §2, §4, §5, §6), NATIVE.md §5.3, `installers/macos/README.md` | | G1, G2, G3 |
@@ -330,8 +330,11 @@ Work from that commit, not from `feat/macos-support`. The rules are the release 
 [pre-registered gate rules](2026-09-30-release-1.3.0.md#gate-decision-rules-pre-registered-2026-10-07-before-any-130-evidence-run):
 copy them verbatim into your `run_all.sh`, as the Windows and Linux scripts do, and change none of
 them after a result. Launch each stage only after the owner approves it with its time budget.
-1. `just release-macos` from `/Users/Shared` at the freeze commit; record the sha256 of the signed
-   `.zip` and `.pkg`. Everything below runs on that `.zip`.
+1. **The owner signs in CI** (G6, reversed 2026-10-10): Actions → Package → Run workflow on
+   `release/1.3.0` at the freeze commit. Download its `knaif-macos-<sha>` artifact (`gh run
+   download <run-id> -n knaif-macos-<sha>`) and check both files' sha256 against the run's
+   summary; record them. Everything below runs on that `.zip`, and step 6 on that `.pkg`. Nothing
+   is built or signed on the Mac.
 2. **L4 Metal**, both models × both skills, with `KNAIF_NO_DAEMON=1` (step 5's commands). The
    1.7B ffmpeg `batch` miss is waived by the rule; any other miss goes to the owner.
 3. **The macOS CPU cell is composed, as 1.2.0 did it** (owner, 2026-10-07): run the `t15_sample`
@@ -375,9 +378,16 @@ them after a result. Launch each stage only after the owner approves it with its
    artifact names against the published release, which has no macOS asset yet (G1, G3).
 7. **D3, the first-run Metal cost** (cold 18.93 s, warm 3.40 s). **Decided 2026-10-09 (owner): no
    remedy in 1.3.0**; documented as first-run behaviour.
-8. **G6, signing in CI.** **Decided 2026-10-09 (owner): 1.3.0 ships the build signed by hand at
-   the freeze** (round 2 step 1), the binary the evidence measures. `MACOS_SIGNING` is enabled in
-   CI after 1.3.0 ships.
+8. **G6, signing in CI.** *Decided 2026-10-09 (owner): 1.3.0 ships the build signed by hand at
+   the freeze.* **Reversed 2026-10-10 (owner): CI signs 1.3.0.** The contributor's Mac runs beta
+   macOS and Xcode, which should not build a release. A signed file is never byte-identical twice,
+   so CI signs **once, at the freeze**: the owner runs `release.yml` by hand on `release/1.3.0`,
+   and the evidence, the clean room and the testers all use that run's `knaif-macos-<sha>`
+   artifact, the files then attached to the draft at publish; the tag builds no macOS files
+   (RELEASE.md §2, *macOS*). Before publishing, two testers install the `.pkg`: one on an M4 Mac
+   (a physical Mac, so Metal too) and the contributor in the macOS 12 VM. The owner sets up the
+   `release` environment, its secrets and `MACOS_SIGNING` first
+   ([macos-signing-certificates](2026-09-30-macos-signing-certificates.md) M6).
 9. **G5, the tap repository** `blackdeep-tech/homebrew-knaif`: the owner creates it before
    publishing. It does not block the freeze; the formula needs the published `.zip`'s sha256.
 5. **The macOS CPU cell**: compose it from the sample, as Linux was (T15s), or run it in full (C4).
@@ -619,9 +629,10 @@ Two mechanical traps make it worse than it looks:
 open; where a task's older text disagrees, these win and the task is updated to match.
 
 - **D10 — signing: by hand first, then CI.** The first signed and notarized build is made on the
-  contributor's Mac. After that works, a tag build in GitHub Actions signs and notarizes from
+  contributor's Mac. After that works, GitHub Actions signs and notarizes from
   repository secrets on a protected `release` environment, so the owner can cut a macOS release
-  without a Mac. The owner's steps and the secret names: [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). (F1, G6.)
+  without a Mac. *(2026-10-10: not at the tag. CI signs once, run by hand at the freeze, and those
+  files are the ones tested and published; G6.)* The owner's steps and the secret names: [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). (F1, G6.)
 - **D11 — CI: a macOS arm64 job, path-filtered** to `native/`, `installers/`, `scripts/` and the
   Cargo files, so Python-only and docs PRs do not queue for a macOS runner. (G6.)
 - **D12 — artifacts: `.pkg` (recommended) + portable `.zip` + a Homebrew tap, all in 1.3.0.** The
@@ -1993,6 +2004,10 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > `environment: release`, off until the variable `MACOS_SIGNING=enabled`; imports the identities into
       > a throwaway keychain and runs `just release-macos`. The owner creates the environment, the
       > secrets (names as in the certificates plan) and the variable.
+      >
+      > **2026-10-10 (owner):** CI signs 1.3.0 (decision 8 in §0). `release.yml` job `macos` now runs
+      > only by hand on a `release/*` branch, keeps the signed files 90 days and prints their
+      > sha256; the tag's draft job attaches Linux only, and the macOS files are added by hand.
       >
       > **2026-10-03:** both macOS jobs moved from `macos-14` to `macos-15`. The first CI runs (PR #77)
       > failed in `just package-native metal`: Xcode 15.4's clang cannot compile llama.cpp's `apple_m4`

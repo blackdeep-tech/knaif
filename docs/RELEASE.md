@@ -5,7 +5,9 @@ How releases are developed on branches, then how to build, package, verify, and 
 `release.yml` packages Linux on PRs into `main` or `release/*` that touch packaging paths (and by hand,
 from the Actions tab, on any branch) and uploads to a **draft** Release on
 a `v*.*.*` tag. It never publishes: the tag, the public Release and the PyPI upload stay manual,
-because none of them can be undone. Windows artifacts are built by hand (§2).
+because none of them can be undone. Windows artifacts are built by hand (§2). The macOS files are
+signed and notarized by `release.yml` too, but only when it is run by hand on the release branch at
+the freeze, never at the tag (§2, *macOS*).
 
 Background: [NATIVE.md](NATIVE.md) §5.3 (loadable backends), §9 (packaging), §10 (building).
 Decision record for the branch workflow:
@@ -395,9 +397,25 @@ just release-macos            # sign every Mach-O → .zip → notarize → .pkg
 environment — `KNAIF_SIGN_IDENTITY`, `KNAIF_INSTALLER_IDENTITY`, `KNAIF_TEAM_ID`, and
 `KNAIF_NOTARY_PROFILE` (or the API-key trio `KNAIF_NOTARY_KEY`/`_KEY_ID`/`_ISSUER`); the
 certificates come from the macOS signing-certificates plan. It reads every notarization log, not
-just the status, and fails on any issue or on a binary missing from the ticket. On a tag, CI does
-the same from the protected `release` environment once the repository variable `MACOS_SIGNING` is
-`enabled` (`release.yml`). Details, including the clean-room VM: `installers/macos/README.md`.
+just the status, and fails on any issue or on a binary missing from the ticket. Details, including
+the clean-room VM: `installers/macos/README.md`.
+
+**The release files are signed in CI, once, at the freeze** (owner, 2026-10-10). A signed file is
+never byte-identical twice (every signature carries a timestamp), so the files that are tested must
+be the very files published:
+
+1. At the freeze commit, run **Actions → Package → Run workflow** on the `release/X.Y.Z` branch.
+   Its `macos` job (protected `release` environment, on only while the repository variable
+   `MACOS_SIGNING` is `enabled`) runs the two commands above on a `macos-15` runner and keeps the
+   notarized `.zip` and the stapled `.pkg` as the artifact `knaif-macos-<sha>` for 90 days. The
+   run's summary lists their sha256; record it.
+2. The macOS evidence (L4 Metal on a physical Mac), the clean room (§4) and the testers all use
+   those two files: `gh run download <run-id> -n knaif-macos-<sha>`, then check the sha256.
+3. At publish (§5), attach those same two files to the draft. The tag builds no macOS files: a
+   re-signed copy would be a file nobody tested.
+
+A signing fix found in step 2 means a new commit, another run, and steps 2–3 again on the new
+files.
 
 `just package-pkg` builds the `.pkg` **unsigned**, for inspecting it — never publish that one.
 
@@ -794,7 +812,8 @@ cd dist && sha256sum knaif-<ver>-* > SHA256SUMS      # Linux
 ```
 
 The macOS files are summed **after** `just release-macos` has stapled the `.pkg`: stapling rewrites
-it, so an earlier checksum describes a file that no longer exists.
+it, so an earlier checksum describes a file that no longer exists. The freeze-time CI run's summary
+gives the right sums (§2, *macOS*).
 
 ---
 
@@ -848,9 +867,9 @@ that path once against throwaway outputs:
    future version.
 4. **Tag and push `vX.Y.Z` on the tested commit** — the one the evidence names, now in `main`'s
    history. The `release-tags` ruleset means the tag cannot be moved afterwards. Pushing it starts
-   `release.yml`, which uploads the Linux artifacts — and, once `MACOS_SIGNING` is enabled, the
-   signed and notarized macOS `.zip` and stapled `.pkg` — to a draft Release. The macOS files it
-   attaches still go through the clean room (§4) before publishing.
+   `release.yml`, which uploads the Linux artifacts to a draft Release. Add the Windows artifacts,
+   and the macOS `.zip` and `.pkg` from the freeze-time run (§2, *macOS*) after checking their
+   sha256 against that run's summary: `gh release upload vX.Y.Z <files>`.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
    public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
    chance to catch a stale artifact.

@@ -81,8 +81,16 @@ email, and delete the copies afterwards.
 ### - [ ] M6 — CI secrets
 
 Once the manual run works, add these as **environment secrets** on a protected `release`
-environment (required reviewer: the owner), so only a tag build the owner approves can reach
-them. Names are suggestions; the workflow and this table must agree when it is written.
+environment, so only a run the owner starts and approves can reach them. The workflow reads
+exactly these names (`release.yml`, job `macos`).
+
+1. GitHub → the repository → Settings → Environments → **New environment** `release`.
+2. *Required reviewers*: the owner. *Deployment branches and tags*: **Selected branches and
+   tags**, add the branch rule `release/*`. Since 2026-10-10 the job signs only when run by hand
+   on a release branch at the freeze, never at the tag (RELEASE.md §2, *macOS*).
+3. Add the seven secrets below to that environment, not to the repository.
+4. Settings → Secrets and variables → Actions → *Variables* → **New repository variable**
+   `MACOS_SIGNING` = `enabled`. Without it the job is skipped.
 
 | Secret | Holds |
 |---|---|
@@ -91,6 +99,10 @@ them. Names are suggestions; the workflow and this table must agree when it is w
 | `MACOS_CERT_PASSWORD` | the `.p12` export password |
 | `NOTARY_KEY_P8_BASE64`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | the App Store Connect API key |
 | `APPLE_TEAM_ID` | the 10-character Team ID |
+
+Make each base64 value as one line with no line breaks: `base64 -i developer_id_app.p12 | tr -d
+'\n'` on a Mac or Linux, `[Convert]::ToBase64String([IO.File]::ReadAllBytes("developer_id_app.p12"))`
+in PowerShell.
 
 ## What to expect
 
