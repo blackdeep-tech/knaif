@@ -294,6 +294,37 @@ pass checks both: one window opens near the end of setup, shows the tools then t
 progress, and ends with "Done." or the commands to re-run; with nobody logged in, nothing opens and
 `install.log` lists the commands.
 
+**Pre-freeze manual pass, 2026-10-10 (the Mac contributor, on `3b440ae`, unsigned, macOS 12.6
+VMs): every check passes**, #85's window included: one window, opened as the last install step;
+the tools then the model, each with progress; setup finishes without waiting; "Done." and "Not
+everything finished…" with the right commands; the model's sha256 and Time Machine exclusion; a
+network cut retried, given up on with the right command, and resumed on the rerun; headless, no
+window and every command in `install.log`, and `not stopping a model daemon` on reinstall; the
+screens. Not release evidence; the record goes under E6 in round 2's PR. Six findings, decided by
+the owner the same day (*all of them, as they are macOS-only*):
+1. **The model's title was cut off** in the options list (at about 35 characters, hiding the size
+   and the Terminal note). Now *"AI model — in a Terminal window"*; the size shows in the Size
+   column (2).
+2. **The download-only choices showed "Zero KB"**, and Space Required left out the 2.5 GB model.
+   The contributor's fix (fork PR #3, `1f57b8c`) is taken as it is: `build-pkg.sh` templates each
+   script-only package's `<payload installKBytes>` via `pkgbuild --info`, the model's exact
+   `size_bytes` from the manifest and the tools as labelled estimates.
+3. **The Supporting tools group could be ticked without Homebrew**, selecting its four disabled
+   tools. The group is now `enabled="brewPresent()"`; at install time a tool already skips without
+   Homebrew (`tool-postinstall.sh`).
+4. **On macOS 12, Homebrew builds FFmpeg from source** (Tier 3: hours, 25 dependencies), and the
+   model, queued after the tools, waited for it; and 5. **Homebrew's `[y/n]` question stopped the
+   window**, the model included. The model's line now comes before the tools in the
+   choices-outline, so the window downloads it first. Brew stays interactive (owner): the window is
+   there for brew's questions, and `n` is the user's way out of a source build. FFmpeg stays ticked
+   and the formula keeps `depends_on "ffmpeg"` (D19); the FFmpeg choice, `skills/ffmpeg/SPEC.md` and
+   RELEASE.md say that macOS 12 builds it from source. 13+ not checked.
+6. **The clean-room base VM needs automatic updates turned off** (a clone downloaded 2.8 GB of
+   update assets and hung). The contributor adds the README line in round 2's PR.
+
+Untested on a Mac: 1–5 change the options page and the window's order; round 2's step 10 sees
+them on the frozen files.
+
 *Round 2, at the freeze.* The owner announces the freeze commit on `release/1.3.0` (version 1.3.0).
 Work from that commit, not from `feat/macos-support`. The rules are the release plan's
 [pre-registered gate rules](2026-09-30-release-1.3.0.md#gate-decision-rules-pre-registered-2026-10-07-before-any-130-evidence-run):
@@ -360,10 +391,10 @@ were re-run on that tree on 2026-10-05** with the same decisions as before (C4, 
 (for example a `documents_105` fix). **Stale again since 2026-10-08**: the merge of `release/1.3.0`
 changed native code. They are re-run once, on the frozen 1.3.0 (*Next round*, round 2), not before.
 
-**Still needs a person:** the installer's screens judged by whoever installs (E6, before the
-freeze); D4 on an 8 GB Mac; D5's OpenMP comparison; E4's unsigned "expect a block" half. The
-first-run shader tax (D3), step 10's offline pass and Metal from a fresh account were done in
-round 1 (2026-10-09).
+**Still needs a person:** D4 on an 8 GB Mac; D5's OpenMP comparison. The first-run shader tax
+(D3), step 10's offline pass and Metal from a fresh account were done in round 1 (2026-10-09); the
+installer's screens (E6) in the pre-freeze pass (2026-10-10). E4's unsigned "expect a block" half
+is done too, on the contributor's branch with the pre-freeze record, and lands with round 2's PR.
 
 **macOS 27.2 Beta 2 (2026-10-05)** needs no re-build or re-run: the toolchain is unchanged, dyld's
 proc-macro rejection is fixed, the merged tree builds and packages, and the 1.2.0 binary gives the

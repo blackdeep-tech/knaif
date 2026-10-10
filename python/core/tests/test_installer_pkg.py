@@ -319,6 +319,21 @@ def test_an_installed_model_is_not_downloaded_again(tmp_path: Path, volume) -> N
     assert not _queue(vol).exists()
 
 
+def _outline() -> list[str]:
+    outline = _distribution().find("choices-outline")
+    assert outline is not None
+    return [line.get("choice") or "" for line in outline.iter("line")]
+
+
+def _queueing_scripts_in_outline_order() -> list[tuple[str, str]]:
+    """The tool and model scripts in the order Installer runs them: the choices-outline's."""
+    scripts = {
+        "tools": ("tool-postinstall.sh", TOOL_ENV),
+        "model": ("model-postinstall.sh", MODEL_ENV),
+    }
+    return [scripts[c] for c in _outline() if c in scripts]
+
+
 def _setup_with_a_tool_and_the_model(
     tmp_path: Path, vol: Path, env: dict, brew_exit: int = 0, pull_exit: int = 0
 ) -> subprocess.CompletedProcess:
@@ -326,10 +341,7 @@ def _setup_with_a_tool_and_the_model(
     (vol / "usr/local/knaif/skills/documents").mkdir(parents=True)
     _write_exe(vol / "opt/homebrew/bin/brew", f'echo "brew $*" >> "$FAKE_LOG"\nexit {brew_exit}\n')
     _fake_knaif(vol, "  knaif-test-v9    available\\n", pull_exit=pull_exit)
-    for source, env_file in (
-        ("tool-postinstall.sh", TOOL_ENV),
-        ("model-postinstall.sh", MODEL_ENV),
-    ):
+    for source, env_file in _queueing_scripts_in_outline_order():
         script = _install_script(tmp_path, source, "postinstall", env_file)
         assert _run_installer_script(script, vol, env).returncode == 0
     finish = _install_script(tmp_path, "finish-postinstall.sh", "postinstall")
@@ -344,8 +356,8 @@ def test_one_terminal_window_runs_every_queued_step_in_order(tmp_path: Path, vol
     calls = log.read_text()
     assert calls.count("open -a Terminal") == 1
     assert "launchctl asuser 501" in calls, "Terminal must open in the user's own session"
-    brew = calls.index("brew install --cask libreoffice")
-    assert brew < calls.index("knaif models pull knaif-test-v9"), "the options page's order"
+    pull = calls.index("knaif models pull knaif-test-v9")
+    assert pull < calls.index("brew install --cask libreoffice"), "the options page's order"
     assert set(Path(f"{log}.sudo").read_text().split()) == {"alice"}
     assert not _queue(vol).exists(), "the queue is used once"
     assert "Done." in proc.stdout  # what the window shows; the fake `open` runs it here
@@ -414,6 +426,32 @@ def test_the_options_page_says_where_downloads_and_installs_show() -> None:
     assert "Terminal window" in choice["model"].get("title", "")
     assert "setup will wait" not in choice["model"].get("title", "")
     assert "Terminal window" in choice["tools"].get("description", "")
+
+
+def test_the_model_title_shows_whole_in_the_options_list() -> None:
+    # The list cut the old title at about 35 characters (2026-10-09), hiding the size and the
+    # Terminal note; the size now shows in the Size column (build-pkg.sh, size_info).
+    title = next(c for c in _distribution().iter("choice") if c.get("id") == "model").get("title")
+    assert title and len(title) <= 34, title
+
+
+def test_the_model_downloads_before_the_tools() -> None:
+    # The window runs steps in install order, the outline's. On a macOS Homebrew no longer bottles
+    # for, a tool builds from source for hours, or brew stops on a [y/n]; neither may hold the
+    # model up (2026-10-09, macOS 12).
+    outline = _outline()
+    assert outline.index("model") < outline.index("tools")
+
+
+def test_the_tools_group_cannot_be_ticked_without_homebrew() -> None:
+    # Ticking a group with no `enabled` selects its disabled children (seen 2026-10-09).
+    tools = next(c for c in _distribution().iter("choice") if c.get("id") == "tools")
+    assert tools.get("enabled") == "brewPresent()"
+
+
+def test_the_ffmpeg_choice_warns_of_a_source_build() -> None:
+    ffmpeg = next(c for c in _distribution().iter("choice") if c.get("id") == "tool_ffmpeg")
+    assert "from source" in ffmpeg.get("description", "")
 
 
 def test_the_finish_package_is_hidden_always_installed_and_last() -> None:

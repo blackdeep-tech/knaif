@@ -991,6 +991,9 @@ tools through Homebrew, and the model download. The **`.zip`** is the portable t
 but its first run needs the network for Gatekeeper to look the ticket up. With Homebrew:
 `brew install blackdeep-tech/knaif/knaif` (installs ffmpeg with it; `knaif models pull` afterwards).
 Supporting tools come from Homebrew — `knaif skills deps` prints the exact `brew install` for each.
+On a macOS version Homebrew no longer builds packages for (macOS 12, for example), Homebrew
+compiles ffmpeg from source, which can take hours; the `.pkg` downloads the model before any tool,
+so the model never waits for it.
 
 **First run.** No `--model` needed — knaif offers to download the recommended GGUF (~2.5 GB) into
 `~/.knaif/models`. Upgrading knaif re-downloads nothing while the recommendation is unchanged.
