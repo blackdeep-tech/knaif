@@ -100,10 +100,6 @@ exactly these names (`release.yml`, job `macos`).
 | `NOTARY_KEY_P8_BASE64`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | the App Store Connect API key |
 | `APPLE_TEAM_ID` | the 10-character Team ID |
 
-Make each base64 value as one line with no line breaks: `base64 -i developer_id_app.p12 | tr -d
-'\n'` on a Mac or Linux, `[Convert]::ToBase64String([IO.File]::ReadAllBytes("developer_id_app.p12"))`
-in PowerShell.
-
 ## What to expect
 
 A notarized, stapled `.pkg` opens with no Gatekeeper warning at all. Unlike Windows SmartScreen
