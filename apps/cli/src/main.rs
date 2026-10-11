@@ -1271,6 +1271,23 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
+    // This run's scratch folder (knaif_core::scratch). The path is fixed now so the plan can name
+    // it; the folder is created only when execution starts, never in a dry run, and removed when
+    // `scratch` drops at the end of this function, on success and on failure.
+    let mut scratch = knaif_core::scratch::RunScratch::new(args.dry_run);
+    // Chain intermediates go to the scratch, so only the outputs the user asked for reach their
+    // folder. Before the naming repairs below, as Python routes before its collision hook: the
+    // repairs must not see a chain's final name on its own intermediate.
+    if knaif_core::scratch::load_scratch_intermediates(&bundle.join("skill.yaml"))? {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        steps = knaif_core::scratch::route_intermediates_to_scratch(
+            &steps,
+            scratch.path(),
+            Some(&normalize_path_separators(&request)),
+            &base,
+            &knaif_core::scratch::joining_tools(&registry),
+        );
+    }
     // Two plan-level naming repairs, in one pass and in this order: a name the filesystem would
     // reject is not a path at all, so it is rewritten before anything resolves one, and only then
     // is an output that would truncate its own input moved aside. Every later step referencing a
@@ -1317,9 +1334,14 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if let Some(style) = ui::view() {
         // A control step ends the plan by itself, so there is no plan to summarize.
         if !steps.iter().any(is_control_step) {
-            println!("{}", ui::render_plan(&style, &plan_rows(&steps)));
+            let shown: Vec<serde_json::Value> = steps
+                .iter()
+                .map(|s| display_value(s, Some(scratch.path())))
+                .collect();
+            println!("{}", ui::render_plan(&style, &plan_rows(&shown)));
         }
     }
+    scratch.enter()?;
     let ctx = StepContext {
         skill: &args.skill,
         bundle: &bundle,
@@ -1328,6 +1350,7 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         dry_run: args.dry_run,
         yes: approves_without_asking(args.yes, args.confirm),
         overwrite: args.overwrite,
+        work_dir: Some(scratch.path()),
     };
     execute_plan(&steps, total, &ctx)
 }
@@ -1549,6 +1572,9 @@ struct StepContext<'a> {
     yes: bool,
     /// `--overwrite`: replacing an existing file needs no question.
     overwrite: bool,
+    /// This run's scratch folder (`knaif_core::scratch`): routed intermediates, preview clips and
+    /// outputs awaiting verification. A name only, in a dry run.
+    work_dir: Option<&'a Path>,
 }
 
 /// What one step means for the steps after it.
@@ -1617,15 +1643,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
     }
 
     match ctx.skill {
-        "ffmpeg" => run_ffmpeg_step(
-            ctx.bundle,
-            tool,
-            step_args,
-            ctx.sandbox,
-            ctx.dry_run,
-            ctx.yes,
-            ctx.overwrite,
-        ),
+        "ffmpeg" => run_ffmpeg_step(ctx, tool, step_args),
         "documents" => run_documents_step(
             ctx.bundle,
             tool,
@@ -1635,6 +1653,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.dry_run,
             ctx.yes,
             ctx.overwrite,
+            ctx.work_dir,
         ),
         _ => unreachable!("skill guarded above"),
     }
@@ -1646,21 +1665,32 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
 /// does: Python's executor stops at the first clarify leaf. Native used to print the question
 /// and run on, so a later step acted on a file this one never produced (R5c L3, `ffmpeg_136`).
 fn run_ffmpeg_step(
-    bundle: &Path,
+    ctx: &StepContext,
     tool: &str,
     step_args: &serde_json::Map<String, serde_json::Value>,
-    sandbox: Option<&Path>,
-    dry_run: bool,
-    yes: bool,
-    overwrite: bool,
 ) -> anyhow::Result<StepOutcome> {
-    let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
+    let (sandbox, dry_run, yes, overwrite) = (ctx.sandbox, ctx.dry_run, ctx.yes, ctx.overwrite);
+    let data = knaif_skill_ffmpeg::FfmpegData::load(ctx.bundle)?;
+    // The folder the user sees, for an output named after a routed intermediate. Open mode keeps
+    // paths relative to cwd (an empty home), as every other relative output already is.
+    let home = sandbox.unwrap_or(Path::new(""));
+    let scratch = ctx
+        .work_dir
+        .map(|work_dir| knaif_skill_ffmpeg::run::ScratchCtx { work_dir, home });
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
-    let expansion = if dry_run {
-        knaif_skill_ffmpeg::run::expand_dry_run(tool, step_args, &data, sandbox)?
+    let mode = if dry_run {
+        knaif_skill_ffmpeg::run::ProbeMode::DryRun
     } else {
-        knaif_skill_ffmpeg::run::expand_execute(tool, step_args, &data, sandbox)?
+        knaif_skill_ffmpeg::run::ProbeMode::Execute
     };
+    let expansion = knaif_skill_ffmpeg::run::expand_in(
+        tool,
+        step_args,
+        &data,
+        sandbox,
+        mode,
+        scratch.as_ref(),
+    )?;
     let commands = match expansion {
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
@@ -1682,12 +1712,17 @@ fn run_ffmpeg_step(
         }
     }
 
+    // What a person reads: the run scratch shows as `<work>/…`. Its real path names the temp
+    // folder (and so the user), and nothing in it outlives the run. `KNAIF_DUMP_PLAN` above keeps
+    // the real argv for machines.
+    let show = |cmd: &[String]| shell_join(&display_argv(cmd, ctx.work_dir));
+
     // Dry-run: print the copy-pasteable command line(s) and stop — no side effects.
     if dry_run {
         for cmd in &commands {
             match ui::view() {
-                Some(style) => println!("{}", ui::render_command(&style, &shell_join(cmd))),
-                None => println!("{}", shell_join(cmd)),
+                Some(style) => println!("{}", ui::render_command(&style, &show(cmd))),
+                None => println!("{}", show(cmd)),
             }
         }
         return Ok(StepOutcome::Continue);
@@ -1695,7 +1730,7 @@ fn run_ffmpeg_step(
 
     // Execution: every ffmpeg intent is `safety_category: destructive`, so it needs explicit
     // consent (the native equivalent of `ctx.confirmed`). `--yes`, an interactive yes, or nothing.
-    let previews: Vec<String> = commands.iter().map(|c| shell_join(c)).collect();
+    let previews: Vec<String> = commands.iter().map(|c| show(c)).collect();
     // Python asks before reversing and says why; native used to list the command and nothing else.
     // Said only when a person is about to answer: `--yes` has already decided.
     // Terminal view: the commands are the step's content, shown before the question. (The plain
@@ -1706,7 +1741,10 @@ fn run_ffmpeg_step(
         }
         // Say it in the tree too, before the question below asks.
         for cmd in &commands {
-            if let Some(out) = cmd.last().filter(|o| std::path::Path::new(o).exists()) {
+            if let Some(out) = cmd
+                .last()
+                .filter(|o| !in_scratch(o, ctx.work_dir) && std::path::Path::new(o).exists())
+            {
                 println!(
                     "{}",
                     ui::render_detail(
@@ -1720,8 +1758,13 @@ fn run_ffmpeg_step(
     // Every command carries `-y` (the rendered command is part of the parity contract), so a
     // file that is already there would be replaced without a word: ask first, whatever `--yes`
     // says. The chain's own intermediate files are not "existing" until an earlier step wrote
-    // them, so only what is on disk now is asked about.
-    let outputs: Vec<String> = commands.iter().filter_map(|c| c.last().cloned()).collect();
+    // them, so only what is on disk now is asked about. A routed intermediate is in the run
+    // scratch, never in the user's folder, so it is never asked about.
+    let outputs: Vec<String> = commands
+        .iter()
+        .filter_map(|c| c.last().cloned())
+        .filter(|o| !in_scratch(o, ctx.work_dir))
+        .collect();
     if !overwrite_gate(
         &existing_outputs(&outputs),
         overwrite,
@@ -1735,45 +1778,89 @@ fn run_ffmpeg_step(
             note(&warning);
         }
     }
-    if !confirm_action(yes, &previews, "ffmpeg command")? {
-        print_declined();
-        return Ok(StepOutcome::Declined);
+    // A preview clip only when someone is asked (owner, 2026-10-10): render the first input's
+    // sample into the scratch, show its path (the one scratch path shown on purpose), and let the
+    // answer be the consent. Acting without asking renders nothing, as native always did.
+    let interactive = {
+        use std::io::IsTerminal;
+        std::io::stdin().is_terminal()
+    };
+    let previewed = match (yes, scratch.as_ref()) {
+        (false, Some(sc)) if interactive => {
+            match knaif_skill_ffmpeg::run::preview_command(
+                tool, step_args, &data, sandbox, mode, sc,
+            )? {
+                Some(clip) => Some(show_preview(&clip, commands.len())?),
+                None => None,
+            }
+        }
+        _ => None,
+    };
+    match previewed {
+        Some(true) => {}
+        Some(false) => {
+            print_declined();
+            return Ok(StepOutcome::Declined);
+        }
+        None => {
+            if !confirm_action(yes, &previews, "ffmpeg command")? {
+                print_declined();
+                return Ok(StepOutcome::Declined);
+            }
+        }
     }
 
     let mut failures = 0;
     for cmd in &commands {
         let output = cmd.last().cloned().unwrap_or_default();
-        // An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a parent
-        // that need not exist yet; ffmpeg does not create one and fails on open. The path is
-        // already sandbox-checked by the engine.
-        // Create the RESOLVED parent: the stored path keeps the spelling the plan supplied,
-        // so `../escaped/../sb/out.mp4` passes containment while creating its unnormalised
-        // parent walks through `../escaped` and creates it on POSIX.
-        if let Some(parent) = std::path::Path::new(&output).parent() {
-            if !parent.as_os_str().is_empty() {
-                let target = std::fs::canonicalize(parent)
-                    .unwrap_or_else(|_| knaif_skill_ffmpeg::engine::lexically_normalize(parent));
-                std::fs::create_dir_all(target).ok();
+        // Nothing reaches the user's folder until it is known to be good: the command writes to a
+        // staged path in the run scratch (same name, so ffmpeg still reads the format from the
+        // extension), is checked, and only then moved into place (`knaif-toolkit-fs`). A failure
+        // leaves the folder as it was. An output already in the scratch (a routed intermediate)
+        // is written directly. The rendered command keeps the final path: it is what the plan
+        // shows, the parity contract compares and the eval replays.
+        let (run_cmd, staged) = match ctx.work_dir {
+            Some(work) if !output.is_empty() && !in_scratch(&output, Some(work)) => {
+                let staged = knaif_toolkit_fs::stage_output(work, Path::new(&output))?;
+                let mut c = cmd.clone();
+                if let Some(last) = c.last_mut() {
+                    *last = staged.to_string_lossy().into_owned();
+                }
+                (c, Some(staged))
             }
-        }
+            _ => {
+                // An `output` naming a destination directory (`videos_hevc/clip.mkv`) has a parent
+                // that need not exist yet, and ffmpeg does not create one. `ensure_parent` makes
+                // the RESOLVED parent: `../escaped/../sb/out.mp4` passes containment, but walking
+                // its spelling would create `../escaped` on POSIX.
+                if !output.is_empty() {
+                    knaif_toolkit_fs::ensure_parent(Path::new(&output), sandbox, ctx.work_dir)?;
+                }
+                (cmd.clone(), None)
+            }
+        };
+        let shown = display_path(&output, ctx.work_dir);
         if ui::view().is_none() {
-            eprintln!("running: {}", shell_join(cmd));
+            eprintln!("running: {}", show(cmd));
         }
         let started = std::time::Instant::now();
         let result = match ui::view() {
-            Some(style) => run_ffmpeg_live(&style, cmd, started)?,
-            None => knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?,
+            Some(style) => run_ffmpeg_live(&style, &run_cmd, started)?,
+            None => knaif_skill_ffmpeg::exec::run_ffmpeg(&run_cmd)?,
         };
         if result.status.success() {
             // Exit 0 is not evidence of output: a trim past the end writes an empty container.
-            knaif_skill_ffmpeg::exec::require_streams(std::path::Path::new(&output))?;
+            let written = staged.clone().unwrap_or_else(|| PathBuf::from(&output));
+            knaif_skill_ffmpeg::exec::require_streams(&written)?;
+            if let (Some(staged), Some(work)) = (&staged, ctx.work_dir) {
+                knaif_toolkit_fs::commit_output(staged, Path::new(&output), sandbox, work)?;
+            }
             ui::note_written(1);
             match ui::view() {
-                Some(style) => println!(
-                    "{}",
-                    ui::render_ok(&style, &output, Some(started.elapsed()))
-                ),
-                None => println!("✓ {output}"),
+                Some(style) => {
+                    println!("{}", ui::render_ok(&style, &shown, Some(started.elapsed())))
+                }
+                None => println!("✓ {shown}"),
             }
         } else if let Some(style) = ui::view() {
             failures += 1;
@@ -1787,7 +1874,7 @@ fn run_ffmpeg_step(
                         .map(|l| l.trim().to_string())
                 })
                 .unwrap_or_else(|| format!("ffmpeg exited {}", result.status));
-            println!("{}", ui::render_fail(&style, &output, Some(&cause)));
+            println!("{}", ui::render_fail(&style, &shown, Some(&cause)));
             if ui::verbose() {
                 println!(
                     "{}",
@@ -1814,16 +1901,88 @@ fn run_ffmpeg_step(
             let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
                 .map(|c| format!("\n  cause: {c}"))
                 .unwrap_or_default();
-            println!(
-                "✗ {output} (ffmpeg exited {}){cause}\n{tail}",
-                result.status
-            );
+            println!("✗ {shown} (ffmpeg exited {}){cause}\n{tail}", result.status);
         }
     }
     if failures > 0 {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
     Ok(StepOutcome::Continue)
+}
+
+/// Is `path` inside this run's scratch folder?
+fn in_scratch(path: &str, work_dir: Option<&Path>) -> bool {
+    knaif_toolkit_fs::within(Path::new(path), work_dir)
+}
+
+/// `path` as a person should read it: a scratch path becomes `<work>/…` (`/`-separated).
+fn display_path(path: &str, work_dir: Option<&Path>) -> String {
+    let Some(work) = work_dir.filter(|w| in_scratch(path, Some(w))) else {
+        return path.to_string();
+    };
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let real = knaif_core::sandbox::resolve_real(Path::new(path), &cwd);
+    let real_work = knaif_core::sandbox::resolve_real(work, &cwd);
+    match real.strip_prefix(&real_work) {
+        Ok(rel) => format!("<work>/{}", rel.to_string_lossy().replace('\\', "/")),
+        Err(_) => path.to_string(),
+    }
+}
+
+/// A plan step (any JSON) with every scratch path shown as `<work>/…`, for printing.
+fn display_value(value: &serde_json::Value, work_dir: Option<&Path>) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => Value::String(display_path(s, work_dir)),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| display_value(v, work_dir)).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), display_value(v, work_dir)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// An argv with every scratch path shown as `<work>/…`, for printing.
+fn display_argv(argv: &[String], work_dir: Option<&Path>) -> Vec<String> {
+    argv.iter().map(|a| display_path(a, work_dir)).collect()
+}
+
+/// Render the preview clip, show where it is, and ask whether to apply the settings to all
+/// `inputs`. The clip is in the run scratch and goes with it when the run ends, whatever the
+/// answer. Port of the Python preview block (`render_preview_command` → `run_preview` →
+/// `verify_preview` → `wait_for_confirmation`).
+fn show_preview(clip: &[String], inputs: usize) -> anyhow::Result<bool> {
+    let out = PathBuf::from(clip.last().cloned().unwrap_or_default());
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let result = knaif_skill_ffmpeg::exec::run_ffmpeg(clip)?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
+            .unwrap_or_else(|| format!("ffmpeg exited {}", result.status));
+        anyhow::bail!("the preview clip could not be made: {cause}");
+    }
+    knaif_skill_ffmpeg::exec::require_streams(&out)?;
+    // The one scratch path shown on purpose: the user is meant to open this file.
+    let question = format!("Apply these settings to all {inputs} input(s)?");
+    match ui::view() {
+        Some(style) => {
+            println!(
+                "{}",
+                ui::render_detail(&style, &format!("Preview: {}", out.display()))
+            );
+            Ok(ask_yes_no_default(&format!(" │   {question}"), true)?.unwrap_or(false))
+        }
+        None => {
+            eprintln!("Preview: {}", out.display());
+            Ok(ask_yes_no_default(&question, true)?.unwrap_or(false))
+        }
+    }
 }
 
 /// The caution shown before a step's confirmation, for the tools whose cost is not obvious from
@@ -1850,8 +2009,15 @@ fn run_documents_step(
     dry_run: bool,
     yes: bool,
     overwrite: bool,
+    work_dir: Option<&Path>,
 ) -> anyhow::Result<StepOutcome> {
-    use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
+    use knaif_skill_documents::run::{commit_in, is_supported, preview_in, Preview, ReadResult};
+
+    // A routed intermediate's real path names the temp folder (and so the user): `<work>/…`.
+    let shown = |path: &Path| match display_path(&path.to_string_lossy(), work_dir) {
+        d if d.starts_with("<work>/") => d,
+        _ => ui::display_rel(path, base),
+    };
 
     if !is_supported(tool) {
         // The `not_implemented:` prefix, not a bare error: this is a capability the native
@@ -1865,7 +2031,7 @@ fn run_documents_step(
         )));
     }
 
-    match preview(tool, step_args, base, sandbox, bundle)? {
+    match preview_in(tool, step_args, base, sandbox, bundle, work_dir)? {
         Preview::Read(result) => {
             // Stderr, beside the plan dump, so stdout stays the human answer.
             if let Some(line) = result_dump(plan_dump_enabled(), tool, &read_result_json(&result)) {
@@ -1909,10 +2075,7 @@ fn run_documents_step(
                 let verb = if dry_run { "would " } else { "" };
                 println!("{}", ui::render_detail(&style, &format!("{verb}{summary}")));
                 for o in &outputs {
-                    println!(
-                        "{}",
-                        ui::render_detail(&style, &format!("→ {}", ui::display_rel(o, base)))
-                    );
+                    println!("{}", ui::render_detail(&style, &format!("→ {}", shown(o))));
                     if o.exists() {
                         println!(
                             "{}",
@@ -1928,7 +2091,7 @@ fn run_documents_step(
                 if ui::view().is_none() {
                     println!("would {summary} →");
                     for o in &outputs {
-                        println!("  {}", o.display());
+                        println!("  {}", display_path(&o.to_string_lossy(), work_dir));
                     }
                 }
                 return Ok(StepOutcome::Continue);
@@ -1938,28 +2101,35 @@ fn run_documents_step(
                 println!("{summary}");
             }
             let previews: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
+            // A routed intermediate is in the scratch: it never replaces a file of the user's.
+            let finals: Vec<String> = previews
+                .iter()
+                .filter(|o| !in_scratch(o, work_dir))
+                .cloned()
+                .collect();
             if !overwrite_gate(
-                &existing_outputs(&previews),
+                &existing_outputs(&finals),
                 overwrite,
                 &mut ask_yes_no_default,
             )? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
             }
-            if !confirm_action(yes, &previews, "output file")? {
+            let asked: Vec<String> = previews.iter().map(|o| display_path(o, work_dir)).collect();
+            if !confirm_action(yes, &asked, "output file")? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
             }
             let started = std::time::Instant::now();
-            let written = commit(tool, step_args, base, sandbox, bundle)?;
+            let written = commit_in(tool, step_args, base, sandbox, bundle, work_dir)?;
             ui::note_written(written.len());
             for w in &written {
                 match ui::view() {
                     Some(style) => println!(
                         "{}",
-                        ui::render_ok(&style, &ui::display_rel(w, base), Some(started.elapsed()))
+                        ui::render_ok(&style, &shown(w), Some(started.elapsed()))
                     ),
-                    None => println!("✓ wrote {}", w.display()),
+                    None => println!("✓ wrote {}", display_path(&w.to_string_lossy(), work_dir)),
                 }
             }
             Ok(StepOutcome::Continue)
@@ -2294,7 +2464,8 @@ struct PlanSession {
 impl PlanSession {
     fn new(root: &Path, skill: &str, model: Option<&Path>, verbose: bool) -> anyhow::Result<Self> {
         let bundle = root.join(skill);
-        let mut registry = knaif_core::load_registry(&bundle.join("tools.yaml"))?;
+        // The skill's own tools, each with its declared effects (refused otherwise).
+        let mut registry = knaif_core::load_skill_registry(&bundle)?;
         // The control tools (`clarify`/`reject`/`done`) are how the model says "no" or "which
         // file?". Without them every such answer fails as `Unknown tool`, so a missing file is a
         // broken install, not something to plan around.

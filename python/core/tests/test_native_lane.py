@@ -401,3 +401,33 @@ def test_the_lane_approves_replacing_files_so_a_corpus_run_stays_non_interactive
     producing the plan the lane is measuring."""
     argv = build_argv(_lane(), "ffmpeg", "convert a.mov to mp4")
     assert "--overwrite" in argv[: argv.index("--")]
+
+
+# ── the run scratch: chain intermediates are still graded ──────────────────────────────────
+
+
+def test_a_routed_intermediate_in_the_kept_scratch_counts_as_produced(tmp_path: Path) -> None:
+    """Native routes a chain's intermediate into its run scratch and deletes it at the end. The
+    lane keeps the scratch (`KNAIF_KEEP_SCRATCH`, root `<row>.work`) because chain rows grade
+    their intermediates too; staging leftovers and preview clips are not deliverables."""
+    import os
+    import time
+
+    from knaif.evalsuite.native_lane import _produced_files, _snapshot_files, lane_scratch_env
+
+    work = tmp_path / "row"
+    work.mkdir()
+    (work / "clip.mp4").write_bytes(b"in")
+    before = _snapshot_files(work)
+    env = lane_scratch_env(work)
+    assert env["KNAIF_KEEP_SCRATCH"] == "1"
+    run = Path(env["KNAIF_SCRATCH_ROOT"]) / "run-1-ab"
+    for rel in ("clip_trimmed.mp4", "stage/0/x.mp4", "preview/clip_preview.mp4"):
+        (run / rel).parent.mkdir(parents=True, exist_ok=True)
+        (run / rel).write_bytes(b"x")
+    later = time.time() + 5
+    (work / "clip_trimmed_resized.mp4").write_bytes(b"out")
+    os.utime(work / "clip_trimmed_resized.mp4", (later, later))
+    produced = _produced_files(work, before, scratch_root=Path(env["KNAIF_SCRATCH_ROOT"]))
+    assert [p.name for p in produced] == ["clip_trimmed.mp4", "clip_trimmed_resized.mp4"]
+    assert Path(env["KNAIF_SCRATCH_ROOT"]).parent == tmp_path, "beside the row, never inside it"

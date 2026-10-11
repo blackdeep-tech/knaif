@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from knaif.skill_base import Skill
-from knaif.steps import ResolveInputs
 
 from . import _deps, _engine
 from ._deps import (
@@ -85,28 +84,6 @@ from .steps import (
 
 
 class DocumentsSkill(Skill):
-    tools = [
-        ResolveInputs,
-        InspectDocumentStep,
-        ExtractTextStep,
-        FindInDocumentStep,
-        MergePdfsStep,
-        SplitPdfStep,
-        RotatePagesStep,
-        RemovePagesStep,
-        ReorderPagesStep,
-        WatermarkStep,
-        AddPageNumbersStep,
-        ProtectPdfStep,
-        UnlockPdfStep,
-        ConvertDocumentStep,
-        CompressPdfIntent,
-        OcrDocumentIntent,
-        RunCompressStep,
-        RunOcrStep,
-        VerifyOutputStep,
-    ]
-
     def format_results(
         self, results: list[dict[str, Any]], *, dry_run: bool
     ) -> list[dict[str, str]]:

@@ -464,3 +464,35 @@ def test_only_keeps_the_named_rows_in_corpus_order_and_refuses_unknown_ids() -> 
     assert [r.id for r in pc.select_rows(rows, ["c", "a"])] == ["a", "c"]
     with pytest.raises(SystemExit):
         pc.select_rows(rows, ["a", "zzz"])
+
+
+def test_scratch_paths_of_two_runs_compare_equal(tmp_path: Path, monkeypatch) -> None:
+    """A routed intermediate lives in each process's own `<scratch>/run-<pid>-<hex>/`, so the two
+    runtimes can never print the same folder. Same plan, same file under the run folder: a match,
+    not the 13 "port bugs" the 2026-10-11 chain run reported."""
+    root = tmp_path / "knaif"
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(root))
+    a, b = (root / "run-111-aaaa1111").as_posix(), (root / "run-222-bbbb2222").as_posix()
+    nat = ["ffmpeg", "-y", "-i", "clip.mp4", "-an", f"{a}/clip_fast.mp4"]
+    nat2 = ["ffmpeg", "-y", "-i", f"{a}/clip_fast.mp4", "-c", "copy", "clip_fast_silent.mp4"]
+    py = ["ffmpeg", "-y", "-i", "/w/clip.mp4", "-an", f"{b}/clip_fast.mp4"]
+    py2 = ["ffmpeg", "-y", "-i", f"{b}/clip_fast.mp4", "-c", "copy", "/w/clip_fast_silent.mp4"]
+    n = pc.parse_native("", _dump(PLAN) + _argv_dump(nat) + _argv_dump(nat2))
+    p = pc.parse_python("", _dump(PLAN) + _argv_dump(py) + _argv_dump(py2))
+    status, _ = pc.compare(_row(), n, p, strict=False, cwd="/w")
+    assert status == "match"
+
+
+def test_a_scratch_path_is_not_the_same_file_in_the_users_folder(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Routing is ported to native: one runtime writing the intermediate into the user's folder
+    while the other routes it to scratch is a real port bug, and must stay one."""
+    root = tmp_path / "knaif"
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(root))
+    routed = ["ffmpeg", "-y", "-i", "clip.mp4", "-an", f"{(root / 'run-1-a').as_posix()}/x.mp4"]
+    in_folder = ["ffmpeg", "-y", "-i", "clip.mp4", "-an", "x.mp4"]
+    n = pc.parse_native("", _dump(PLAN) + _argv_dump(routed))
+    p = pc.parse_python("", _dump(PLAN) + _argv_dump(in_folder))
+    status, _ = pc.compare(_row(), n, p, strict=False, cwd="/w")
+    assert status == "port-bug"

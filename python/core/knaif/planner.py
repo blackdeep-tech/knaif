@@ -110,12 +110,17 @@ _OUTPUT_RE = re.compile(r"^\$[a-zA-Z_][a-zA-Z0-9_]*$")
 _VAR_REF_RE = re.compile(r"^\$[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
 
 
-def _resolve_path(raw_path: str, root: Path, sandbox: Path | None) -> Path:
+def _resolve_path(
+    raw_path: str, root: Path, sandbox: Path | None, scratch: Path | None = None
+) -> Path:
     """Resolve *raw_path*, optionally enforcing a sandbox boundary.
 
     When *sandbox* is provided:
     - Relative paths are resolved against the sandbox root.
-    - Absolute paths must still fall inside the sandbox.
+    - Absolute paths must still fall inside the sandbox, or inside *scratch* (this run's
+      ``work_dir``) when given. Only trusted callers pass *scratch*: an expanded plan, or args
+      after ``$var`` resolution. A plan taken from the model is checked against the sandbox
+      alone, so the model can never name the scratch folder.
 
     When *sandbox* is ``None`` (open / CLI mode):
     - Relative paths are resolved against *root* (cwd).
@@ -127,6 +132,8 @@ def _resolve_path(raw_path: str, root: Path, sandbox: Path | None) -> Path:
             path = (sandbox / path).resolve()
         else:
             path = path.resolve()
+        if scratch is not None and path.is_relative_to(scratch.resolve()):
+            return path
         try:
             path.relative_to(sandbox.resolve())
         except ValueError as exc:
@@ -431,6 +438,7 @@ def validate_step(
     sandbox: Path | None = None,
     *,
     allow_internal: bool = False,
+    scratch: Path | None = None,
 ) -> None:
     """Raise ValueError if *step* is structurally invalid.
 
@@ -496,7 +504,7 @@ def validate_step(
         else:
             if not isinstance(val, str):
                 raise ValueError("'path' must be a string.")
-            _resolve_path(val, root, sandbox)
+            _resolve_path(val, root, sandbox, scratch)
 
     for path_key in ("src", "dst"):
         if path_key in args:
@@ -506,7 +514,7 @@ def validate_step(
             else:
                 if not isinstance(val, str):
                     raise ValueError(f"'{path_key}' must be a string.")
-                _resolve_path(val, root, sandbox)
+                _resolve_path(val, root, sandbox, scratch)
 
     if "pattern" in args:
         val = args["pattern"]
@@ -565,11 +573,13 @@ def validate_plan(
     sandbox: Path | None = None,
     *,
     allow_internal: bool = False,
+    scratch: Path | None = None,
 ) -> None:
     """Validate every step in *payload['plan']*; raises ValueError on first failure.
 
     *allow_internal*: see ``validate_step`` — pass True only for an already-expanded
-    sub-plan, never for a plan taken directly from the model or an outside caller.
+    sub-plan, never for a plan taken directly from the model or an outside caller. The same
+    holds for *scratch* (see ``_resolve_path``).
     """
     plan = payload["plan"]
     multi_step = len(plan) > 1
@@ -577,7 +587,9 @@ def validate_plan(
 
     for i, step in enumerate(plan, start=1):
         try:
-            validate_step(step, registry, root, sandbox, allow_internal=allow_internal)
+            validate_step(
+                step, registry, root, sandbox, allow_internal=allow_internal, scratch=scratch
+            )
         except ValueError as exc:
             raise ValueError(f"Plan step {i} invalid: {exc}") from exc
 

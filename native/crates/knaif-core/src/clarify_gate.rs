@@ -67,7 +67,7 @@ fn is_stem_candidate(stem: &str) -> bool {
 }
 
 /// Terminal control tools carry no file inputs (mirrors Python `_TERMINAL_TOOLS`).
-const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
+pub(crate) const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
 
 /// Tools whose schema accepts an `output` arg — eligible chain-intermediate producers.
 /// Tools that can be handed an `output` filename.
@@ -382,7 +382,7 @@ fn is_word(c: char) -> bool {
 /// inside `myclip.mp4` or `clip.mp4.bak` is not a mention, while `./clip.mp4` or `clip.mp4,`
 /// is. Scanned like a regex: on a match the search resumes after it, otherwise one character
 /// on, so the count agrees with `re.findall` for any name.
-fn mention_count(utterance: &str, name: &str) -> usize {
+pub(crate) fn mention_count(utterance: &str, name: &str) -> usize {
     let u = utterance.to_lowercase();
     let n = name.to_lowercase();
     if n.is_empty() {
@@ -694,7 +694,7 @@ fn string_values(value: &Value) -> Vec<&str> {
 /// True if `value` ends with a file extension: `.` then a letter then 1–4 alphanumerics
 /// (mirrors Python `_FILENAME_RE = \.[a-z][a-z0-9]{1,4}$`, case-insensitive). Anchored at the
 /// end, so `H.264` (digit-led) and bare stems (`clip`) don't match.
-fn looks_like_filename(value: &str) -> bool {
+pub(crate) fn looks_like_filename(value: &str) -> bool {
     let Some(dot) = value.rfind('.') else {
         return false;
     };

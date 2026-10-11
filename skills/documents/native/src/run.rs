@@ -78,20 +78,38 @@ pub fn preview(
     sandbox: Option<&Path>,
     bundle: &Path,
 ) -> anyhow::Result<Preview> {
+    preview_in(tool, args, base, sandbox, bundle, None)
+}
+
+/// [`preview`] in a run with a scratch folder (`work_dir`): a routed chain intermediate is read
+/// from there, and a default output derived from it is named in the user's folder.
+pub fn preview_in(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    base: &Path,
+    sandbox: Option<&Path>,
+    bundle: &Path,
+    work_dir: Option<&Path>,
+) -> anyhow::Result<Preview> {
+    let p = Paths {
+        base,
+        sandbox,
+        work: work_dir,
+    };
     match tool {
         "inspect_document" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             Ok(Preview::Read(ReadResult::Inspection(text::inspect(
                 &input,
             )?)))
         }
         "extract_text" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let records = text::extract_text(&input, str_arg(args, "pages").as_deref())?;
             Ok(Preview::Read(ReadResult::Text(records)))
         }
         "find_in_document" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let query = str_arg(args, "query")
                 .ok_or_else(|| anyhow::anyhow!("find_in_document requires 'query'"))?;
             let records = text::extract_text(&input, str_arg(args, "pages").as_deref())?;
@@ -104,7 +122,7 @@ pub fn preview(
             Ok(Preview::Read(ReadResult::Matches(matches)))
         }
         _ => {
-            let (outputs, summary) = write_outputs(tool, args, base, sandbox, bundle)?;
+            let (outputs, summary) = write_outputs(tool, args, &p, bundle)?;
             Ok(Preview::Write { outputs, summary })
         }
     }
@@ -119,166 +137,166 @@ pub fn commit(
     sandbox: Option<&Path>,
     bundle: &Path,
 ) -> anyhow::Result<Vec<PathBuf>> {
+    commit_in(tool, args, base, sandbox, bundle, None)
+}
+
+/// [`commit`] in a run with a scratch folder (`work_dir`). Each output is written to a staged path
+/// in the scratch and moved into place only once it is good (`knaif_toolkit_fs`), so a failure
+/// leaves the user's folder as it was; a routed intermediate is written in the scratch itself.
+pub fn commit_in(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    base: &Path,
+    sandbox: Option<&Path>,
+    bundle: &Path,
+    work_dir: Option<&Path>,
+) -> anyhow::Result<Vec<PathBuf>> {
+    let p = Paths {
+        base,
+        sandbox,
+        work: work_dir,
+    };
     match tool {
         "merge_pdfs" => {
-            let inputs = input_paths(args, base, sandbox)?;
-            let output = out_arg(args, base, sandbox, "output")?
+            let inputs = input_paths(args, &p)?;
+            let output = out_arg(args, &p, "output")?
                 .ok_or_else(|| anyhow::anyhow!("merge_pdfs requires 'output'"))?;
             let docs = inputs
                 .iter()
                 .map(|p| pdf::load_unlocked(p))
                 .collect::<Result<_, _>>()?;
             let mut merged = pdf::merge(docs)?;
-            write(&mut merged, &output)?;
+            write(&p, &mut merged, &output)?;
             Ok(vec![output])
         }
         "rotate_pages" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let selected = pdf::parse_pages(str_arg(args, "pages").as_deref(), total, true)?;
             let degrees = int_arg(args, "degrees")
                 .ok_or_else(|| anyhow::anyhow!("rotate_pages requires integer 'degrees'"))?;
             pdf::rotate_pages(&mut doc, &selected, degrees)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-rotated.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-rotated.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "remove_pages" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let remove = pdf::parse_pages(Some(&require_str(args, "pages")?), total, true)?;
             pdf::remove_pages(&mut doc, &remove)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-removed.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-removed.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "reorder_pages" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let order = reorder_sequence(&require_str(args, "order")?, total)?;
             pdf::reorder_pages(&mut doc, &order)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-reordered.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-reordered.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "split_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let specs = pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)?;
-            let outputs = split_outputs(&input, args, base, sandbox, &specs)?;
+            let outputs = split_outputs(&p, &input, args, &specs)?;
             let mut parts = pdf::split(&doc, &specs)?;
             for (part, out) in parts.iter_mut().zip(&outputs) {
-                write(part, out)?;
+                write(&p, part, out)?;
             }
             Ok(outputs)
         }
         "protect_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::load_unlocked(&input)?;
             pdf::protect(&mut doc, &require_str(args, "password")?)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-protected.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-protected.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "unlock_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::unlock(&input, &require_str(args, "password")?)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-unlocked.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-unlocked.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "watermark" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::load_unlocked(&input)?;
             let position = str_arg(args, "position").unwrap_or_else(|| "center".into());
             let opacity = float_arg(args, "opacity").unwrap_or(0.35);
             if let Some(text) = str_arg(args, "text") {
                 overlay::watermark_text(&mut doc, &text, &position, opacity, 42.0)?;
             } else if let Some(image) = str_arg(args, "image") {
-                let image_path = resolve_path(&image, base);
-                assert_in_sandbox(&image_path, sandbox)?;
+                let image_path = p.resolve(&image)?;
                 overlay::add_image_overlay(&mut doc, &image_path, &position, opacity)?;
             } else {
                 anyhow::bail!("watermark requires 'text' or 'image'");
             }
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-watermarked.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-watermarked.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "add_page_numbers" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let mut doc = pdf::load_unlocked(&input)?;
             let position = str_arg(args, "position").unwrap_or_else(|| "bottom-center".into());
             let start_at = int_arg(args, "start_at").unwrap_or(1);
             overlay::add_page_numbers(&mut doc, start_at, &position, 12.0)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-numbered.pdf",
-            );
-            write(&mut doc, &out)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-numbered.pdf");
+            write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
         "convert_document" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let to_format = require_str(args, "to_format")?;
             let out = derive_output(
+                &p,
                 &input,
-                out_arg(args, base, sandbox, "output")?,
+                out_arg(args, &p, "output")?,
                 &convert::output_suffix(&to_format),
             );
-            assert_in_sandbox(&out, sandbox)?;
-            convert::convert(&input, &to_format, &out)?;
+            p.check(&out)?;
+            write_with(&p, &out, |target| {
+                convert::convert(&input, &to_format, target)
+            })?;
             Ok(vec![out])
         }
         "compress_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let quality = str_arg(args, "compress_quality").unwrap_or_else(|| "balanced".into());
             let (profile, gs) = compress_setup(bundle, &quality)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-compressed.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-compressed.pdf");
+            p.check(&out)?;
             // Never a larger file: see `compress_no_larger`.
-            crate::compress::compress_no_larger(&input, &out, &quality, &profile, gs.as_deref())?;
+            write_with(&p, &out, |target| {
+                crate::compress::compress_no_larger(
+                    &input,
+                    target,
+                    &quality,
+                    &profile,
+                    gs.as_deref(),
+                )
+                .map(|_| ())
+            })?;
             Ok(vec![out])
         }
         "ocr_document" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, &p)?;
             let language = str_arg(args, "language").unwrap_or_else(|| "eng".into());
-            let out = derive_output(&input, out_arg(args, base, sandbox, "output")?, "-ocr.pdf");
-            assert_in_sandbox(&out, sandbox)?;
-            crate::ocr::ocr_document(&input, &out, &language)?;
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-ocr.pdf");
+            p.check(&out)?;
+            write_with(&p, &out, |target| {
+                crate::ocr::ocr_document(&input, target, &language).map(|_| ())
+            })?;
             Ok(vec![out])
         }
         other => anyhow::bail!("documents tool {other:?} is not implemented natively yet"),
@@ -289,29 +307,24 @@ pub fn commit(
 fn write_outputs(
     tool: &str,
     args: &serde_json::Map<String, Value>,
-    base: &Path,
-    sandbox: Option<&Path>,
+    p: &Paths,
     bundle: &Path,
 ) -> anyhow::Result<(Vec<PathBuf>, String)> {
     match tool {
         "merge_pdfs" => {
-            let inputs = input_paths(args, base, sandbox)?;
-            let output = out_arg(args, base, sandbox, "output")?
+            let inputs = input_paths(args, p)?;
+            let output = out_arg(args, p, "output")?
                 .ok_or_else(|| anyhow::anyhow!("merge_pdfs requires 'output'"))?;
             Ok((vec![output], format!("merge {} file(s)", inputs.len())))
         }
         "rotate_pages" => {
-            let input = input_path(args, base, sandbox)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-rotated.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let input = input_path(args, p)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-rotated.pdf");
+            p.check(&out)?;
             Ok((vec![out], "rotate pages".into()))
         }
         "remove_pages" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             // Check the pages as `run` and Python's dry run do: a preview must not promise an
             // output the real run refuses (out of range, or every page). A chain's input that
             // an earlier step has yet to write has no pages to count, so it is checked when run.
@@ -321,16 +334,12 @@ fn write_outputs(
                 let total = pdf::page_count(&doc) as i64;
                 pdf::check_removal(total, &pdf::parse_pages(Some(&pages), total, true)?)?;
             }
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-removed.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-removed.pdf");
+            p.check(&out)?;
             Ok((vec![out], "remove pages".into()))
         }
         "reorder_pages" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             // Validate the order against the page count, as `run` and Python's dry run do: a
             // preview must not promise an output the real run refuses (documents_105). A chain's
             // input that an earlier step has yet to write has no pages to count, so it is checked
@@ -340,92 +349,69 @@ fn write_outputs(
                 let doc = pdf::load_unlocked(&input)?;
                 reorder_sequence(&order, pdf::page_count(&doc) as i64)?;
             }
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-reordered.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-reordered.pdf");
+            p.check(&out)?;
             Ok((vec![out], "reorder pages".into()))
         }
         "split_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             let doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
             let specs = pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)?;
-            let outputs = split_outputs(&input, args, base, sandbox, &specs)?;
+            let outputs = split_outputs(p, &input, args, &specs)?;
             Ok((outputs, format!("split into {} file(s)", specs.len())))
         }
         "protect_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             require_str(args, "password")?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-protected.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-protected.pdf");
+            p.check(&out)?;
             Ok((vec![out], "password-protect".into()))
         }
         "unlock_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             require_str(args, "password")?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-unlocked.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-unlocked.pdf");
+            p.check(&out)?;
             Ok((vec![out], "unlock".into()))
         }
         "watermark" => {
-            let input = input_path(args, base, sandbox)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-watermarked.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let input = input_path(args, p)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-watermarked.pdf");
+            p.check(&out)?;
             Ok((vec![out], "watermark".into()))
         }
         "add_page_numbers" => {
-            let input = input_path(args, base, sandbox)?;
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-numbered.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let input = input_path(args, p)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-numbered.pdf");
+            p.check(&out)?;
             Ok((vec![out], "add page numbers".into()))
         }
         "convert_document" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             let to_format = require_str(args, "to_format")?;
             let out = derive_output(
+                p,
                 &input,
-                out_arg(args, base, sandbox, "output")?,
+                out_arg(args, p, "output")?,
                 &convert::output_suffix(&to_format),
             );
-            assert_in_sandbox(&out, sandbox)?;
+            p.check(&out)?;
             Ok((vec![out], format!("convert to {to_format}")))
         }
         "compress_pdf" => {
-            let input = input_path(args, base, sandbox)?;
+            let input = input_path(args, p)?;
             let quality = str_arg(args, "compress_quality").unwrap_or_else(|| "balanced".into());
             let (_profile, gs) = compress_setup(bundle, &quality)?;
             let method = crate::compress::compress_method_label(&quality, gs.is_some());
-            let out = derive_output(
-                &input,
-                out_arg(args, base, sandbox, "output")?,
-                "-compressed.pdf",
-            );
-            assert_in_sandbox(&out, sandbox)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-compressed.pdf");
+            p.check(&out)?;
             Ok((vec![out], format!("compress ({method})")))
         }
         "ocr_document" => {
-            let input = input_path(args, base, sandbox)?;
-            let out = derive_output(&input, out_arg(args, base, sandbox, "output")?, "-ocr.pdf");
-            assert_in_sandbox(&out, sandbox)?;
+            let input = input_path(args, p)?;
+            let out = derive_output(p, &input, out_arg(args, p, "output")?, "-ocr.pdf");
+            p.check(&out)?;
             Ok((vec![out], "OCR → searchable PDF".into()))
         }
         other => anyhow::bail!("documents tool {other:?} is not implemented natively yet"),
@@ -451,36 +437,42 @@ fn reorder_sequence(raw: &str, total: i64) -> anyhow::Result<Vec<i64>> {
 /// Compute split output paths (port of `SplitPdfStep`): a single explicit `output` only when one
 /// spec; else `<stem>-pages-<label>.pdf` in `output_dir` (default: the input's directory).
 fn split_outputs(
+    p: &Paths,
     input: &Path,
     args: &serde_json::Map<String, Value>,
-    base: &Path,
-    sandbox: Option<&Path>,
     specs: &[(String, Vec<i64>)],
 ) -> anyhow::Result<Vec<PathBuf>> {
     let outputs = if specs.len() == 1 {
-        if let Some(out) = out_arg(args, base, sandbox, "output")? {
+        if let Some(out) = out_arg(args, p, "output")? {
             vec![out]
         } else {
-            split_dir_outputs(input, args, base, specs)
+            split_dir_outputs(p, input, args, specs)
         }
     } else {
-        split_dir_outputs(input, args, base, specs)
+        split_dir_outputs(p, input, args, specs)
     };
     for out in &outputs {
-        assert_in_sandbox(out, sandbox)?;
+        p.check(out)?;
     }
     Ok(outputs)
 }
 
 fn split_dir_outputs(
+    p: &Paths,
     input: &Path,
     args: &serde_json::Map<String, Value>,
-    base: &Path,
     specs: &[(String, Vec<i64>)],
 ) -> Vec<PathBuf> {
+    // Default: beside the input in the user's folder (a routed input counts as where it would
+    // have been, so no split part lands in the scratch).
     let out_dir = str_arg(args, "output_dir")
-        .map(|d| resolve_path(&d, base))
-        .unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).to_path_buf());
+        .map(|d| resolve_path(&d, p.base))
+        .unwrap_or_else(|| {
+            p.user_side(input)
+                .parent()
+                .unwrap_or(Path::new("."))
+                .to_path_buf()
+        });
     let stem = input
         .file_stem()
         .and_then(|s| s.to_str())
@@ -488,7 +480,7 @@ fn split_dir_outputs(
     specs
         .iter()
         .map(|(label, _)| {
-            next_free(out_dir.join(format!("{stem}-pages-{}.pdf", label.replace('-', "_"))))
+            free_name(&out_dir.join(format!("{stem}-pages-{}.pdf", label.replace('-', "_"))))
         })
         .collect()
 }
@@ -526,24 +518,43 @@ fn require_str(args: &serde_json::Map<String, Value>, key: &str) -> anyhow::Resu
     str_arg(args, key).ok_or_else(|| anyhow::anyhow!("missing required arg {key:?}"))
 }
 
+/// Where a step's paths resolve and what they may touch: relative paths against `base`, inside
+/// `sandbox` or this run's scratch (`work`, a routed chain intermediate).
+#[derive(Clone, Copy)]
+struct Paths<'a> {
+    base: &'a Path,
+    sandbox: Option<&'a Path>,
+    work: Option<&'a Path>,
+}
+
+impl Paths<'_> {
+    /// Raise if `path` is outside the sandbox, unless it is in this run's scratch.
+    fn check(&self, path: &Path) -> anyhow::Result<()> {
+        if knaif_toolkit_fs::within(path, self.work) {
+            return Ok(());
+        }
+        assert_in_sandbox(path, self.sandbox)
+    }
+
+    fn resolve(&self, raw: &str) -> anyhow::Result<PathBuf> {
+        let path = resolve_path(raw, self.base);
+        self.check(&path)?;
+        Ok(path)
+    }
+
+    /// `path`, or where it would sit in the user's folder if it is a routed intermediate.
+    fn user_side(&self, path: &Path) -> PathBuf {
+        knaif_toolkit_fs::user_side_path(path, self.work, Some(self.base))
+    }
+}
+
 /// Resolve + sandbox-check the `input` path arg.
-fn input_path(
-    args: &serde_json::Map<String, Value>,
-    base: &Path,
-    sandbox: Option<&Path>,
-) -> anyhow::Result<PathBuf> {
-    let raw = require_str(args, "input")?;
-    let p = resolve_path(&raw, base);
-    assert_in_sandbox(&p, sandbox)?;
-    Ok(p)
+fn input_path(args: &serde_json::Map<String, Value>, p: &Paths) -> anyhow::Result<PathBuf> {
+    p.resolve(&require_str(args, "input")?)
 }
 
 /// Resolve + sandbox-check the `inputs` list arg.
-fn input_paths(
-    args: &serde_json::Map<String, Value>,
-    base: &Path,
-    sandbox: Option<&Path>,
-) -> anyhow::Result<Vec<PathBuf>> {
+fn input_paths(args: &serde_json::Map<String, Value>, p: &Paths) -> anyhow::Result<Vec<PathBuf>> {
     let items = args
         .get("inputs")
         .and_then(Value::as_array)
@@ -553,9 +564,7 @@ fn input_paths(
         let raw = item
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("each of 'inputs' must be a string"))?;
-        let p = resolve_path(raw, base);
-        assert_in_sandbox(&p, sandbox)?;
-        out.push(p);
+        out.push(p.resolve(raw)?);
     }
     Ok(out)
 }
@@ -563,60 +572,45 @@ fn input_paths(
 /// Resolve + sandbox-check an explicit output-path arg (e.g. `output`), if present.
 fn out_arg(
     args: &serde_json::Map<String, Value>,
-    base: &Path,
-    sandbox: Option<&Path>,
+    p: &Paths,
     key: &str,
 ) -> anyhow::Result<Option<PathBuf>> {
-    match str_arg(args, key) {
-        Some(raw) => {
-            let p = resolve_path(&raw, base);
-            assert_in_sandbox(&p, sandbox)?;
-            Ok(Some(p))
-        }
-        None => Ok(None),
-    }
+    str_arg(args, key).map(|raw| p.resolve(&raw)).transpose()
 }
 
 /// `<parent>/<stem><suffix>` unless an explicit output is given. Port of `_output_path` for the
 /// suffix-based outputs (`-rotated.pdf`, …). An explicit output is a request and is honoured even
-/// over an existing file; a derived default that already exists moves to [`next_free`].
-fn derive_output(input: &Path, output: Option<PathBuf>, suffix: &str) -> PathBuf {
-    if let Some(p) = output {
-        return p;
+/// over an existing file; a derived default that already exists moves to [`free_name`]. The
+/// default sits beside the input in the user's folder, a routed input counting as where it would
+/// have been, so nothing derived lands in the scratch.
+fn derive_output(p: &Paths, input: &Path, output: Option<PathBuf>, suffix: &str) -> PathBuf {
+    if let Some(out) = output {
+        return out;
     }
-    let stem = input
+    let anchor = p.user_side(input);
+    let stem = anchor
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("output");
     let name = format!("{stem}{suffix}");
-    next_free(match input.parent() {
-        Some(p) => p.join(name),
+    free_name(&match anchor.parent() {
+        Some(parent) => parent.join(name),
         None => PathBuf::from(name),
     })
 }
 
-/// `path` if nothing is there, else `<stem>-1<ext>`, `-2`, … — the first free one. Port of
-/// `_engine._next_free`. For a name the plan did not choose: a derived default that already
-/// exists is someone's file (`convert notes.txt to markdown` wrote over an existing `notes.md`,
-/// 2026-09-24 L4). Preview and commit both derive through here, so they agree.
-fn next_free(path: PathBuf) -> PathBuf {
-    if !path.exists() {
-        return path;
-    }
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("output")
-        .to_string();
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| format!(".{e}"))
-        .unwrap_or_default();
-    (1..)
-        .map(|n| path.with_file_name(format!("{stem}-{n}{ext}")))
-        .find(|candidate| !candidate.exists())
-        .expect("an unbounded counter always finds a free name")
+/// `path` if nothing is there, else `<stem>-1<ext>`, `-2`, … — the first free one (the fs
+/// toolkit's rule, as Python's `_free_name`). For a name the plan did not choose: a derived default
+/// that already exists is someone's file (`convert notes.txt to markdown` wrote over an existing
+/// `notes.md`, 2026-09-24 L4). Preview and commit both derive through here, so they agree.
+fn free_name(path: &Path) -> PathBuf {
+    let rule = knaif_toolkit_fs::FreeName {
+        separator: "-",
+        first_number: 1,
+        keep_requested: true,
+        ..Default::default()
+    };
+    knaif_toolkit_fs::free_output_path(path, &[], &rule)
 }
 
 fn resolve_path(raw: &str, base: &Path) -> PathBuf {
@@ -628,11 +622,31 @@ fn resolve_path(raw: &str, base: &Path) -> PathBuf {
     }
 }
 
-fn write(doc: &mut lopdf::Document, path: &Path) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).ok();
+fn write(p: &Paths, doc: &mut lopdf::Document, path: &Path) -> anyhow::Result<()> {
+    write_with(p, path, |target| pdf::save(doc, target))
+}
+
+/// Write `out` through `produce`, so only a good file reaches the user's folder: with a scratch,
+/// `produce` writes a staged path and `commit_output` checks it (it exists and is not empty) and
+/// moves it into place. An output already in the scratch (a routed intermediate), or any output
+/// in a run without one, is written where it is, its folder made first.
+fn write_with(
+    p: &Paths,
+    out: &Path,
+    produce: impl FnOnce(&Path) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    match p.work {
+        Some(work) if !knaif_toolkit_fs::within(out, Some(work)) => {
+            let staged = knaif_toolkit_fs::stage_output(work, out)?;
+            produce(&staged)?;
+            knaif_toolkit_fs::commit_output(&staged, out, p.sandbox, work)?;
+            Ok(())
+        }
+        _ => {
+            knaif_toolkit_fs::ensure_parent(out, p.sandbox, p.work)?;
+            produce(out)
+        }
     }
-    pdf::save(doc, path)
 }
 
 /// Raise if `p` is outside `sandbox`. No-op when `sandbox` is `None`. Delegates to the
@@ -929,5 +943,133 @@ mod tests {
         assert!(err.to_string().contains("outside the sandbox"), "{err}");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── run scratch ─────────────────────────────────────────────────────────────────────────
+    // Mirrors skills/documents/python/tests/test_scratch.py: a routed intermediate is read and
+    // written inside this run's scratch, a default output derived from it lands in the user's
+    // folder, and every output is staged and moved into place only once it is good.
+
+    fn files(dir: &Path) -> Vec<String> {
+        let mut out: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_routed_chain_leaves_only_its_deliverable() {
+        let dir = tmpdir();
+        let work = tmpdir();
+        std::fs::write(dir.join("sample.pdf"), make_pdf(3)).unwrap();
+        let trimmed = work.join("sample_trimmed.pdf");
+        let step1 = args(serde_json::json!({
+            "input": "sample.pdf", "pages": "-1", "output": trimmed.to_string_lossy()
+        }));
+        let w1 = commit_in(
+            "remove_pages",
+            &step1,
+            &dir,
+            Some(&dir),
+            &docs_bundle(),
+            Some(&work),
+        )
+        .unwrap();
+        assert_eq!(w1, vec![trimmed.clone()]);
+        let step2 = args(serde_json::json!({"input": trimmed.to_string_lossy()}));
+        let w2 = commit_in(
+            "add_page_numbers",
+            &step2,
+            &dir,
+            Some(&dir),
+            &docs_bundle(),
+            Some(&work),
+        )
+        .unwrap();
+        assert_eq!(w2, vec![dir.join("sample_trimmed-numbered.pdf")]);
+        assert_eq!(
+            files(&dir),
+            vec!["sample.pdf", "sample_trimmed-numbered.pdf"]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&work);
+    }
+
+    #[test]
+    fn a_preview_of_a_routed_input_names_the_users_folder() {
+        let dir = tmpdir();
+        let work = tmpdir();
+        std::fs::write(work.join("sample_rotated.pdf"), make_pdf(2)).unwrap();
+        let a = args(serde_json::json!({
+            "input": work.join("sample_rotated.pdf").to_string_lossy()
+        }));
+        match preview_in(
+            "compress_pdf",
+            &a,
+            &dir,
+            Some(&dir),
+            &docs_bundle(),
+            Some(&work),
+        )
+        .unwrap()
+        {
+            Preview::Write { outputs, .. } => {
+                assert_eq!(outputs, vec![dir.join("sample_rotated-compressed.pdf")])
+            }
+            Preview::Read(_) => panic!("compress is a write"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&work);
+    }
+
+    #[test]
+    fn an_output_is_staged_then_moved_into_place() {
+        let dir = tmpdir();
+        let work = tmpdir();
+        std::fs::write(dir.join("a.pdf"), make_pdf(2)).unwrap();
+        let a = args(serde_json::json!({"input": "a.pdf", "degrees": 90}));
+        let written = commit_in(
+            "rotate_pages",
+            &a,
+            &dir,
+            Some(&dir),
+            &docs_bundle(),
+            Some(&work),
+        )
+        .unwrap();
+        assert_eq!(written, vec![dir.join("a-rotated.pdf")]);
+        assert!(dir.join("a-rotated.pdf").is_file());
+        // The staged copy was moved, not left behind in the scratch.
+        assert!(!work.join("stage").join("0").join("a-rotated.pdf").exists());
+        assert!(
+            work.join("stage").join("0").is_dir(),
+            "the write went through the stage"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&work);
+    }
+
+    #[test]
+    fn a_scratch_path_is_refused_when_the_run_has_no_scratch() {
+        let dir = tmpdir();
+        let elsewhere = tmpdir();
+        std::fs::write(elsewhere.join("x.pdf"), make_pdf(1)).unwrap();
+        let a = args(serde_json::json!({"input": elsewhere.join("x.pdf").to_string_lossy()}));
+        let err = commit_in(
+            "add_page_numbers",
+            &a,
+            &dir,
+            Some(&dir),
+            &docs_bundle(),
+            None,
+        )
+        .expect_err("outside the sandbox and no scratch");
+        assert!(err.to_string().contains("outside the sandbox"), "{err}");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&elsewhere);
     }
 }

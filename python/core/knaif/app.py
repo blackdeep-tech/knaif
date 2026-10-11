@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from .models import build_orchestrator, load_models_registry
 # prompt nobody measured (L3 2026-09-27: 11.9% disagreement with native, where the lanes differ
 # by 1.97%).
 from .registry import retrieve_tools
+from .scratch import display
 
 #: Prefixes the plan dump under $KNAIF_DUMP_PLAN. The same string as native `run`
 #: (apps/cli/src/main.rs) and scripts/parity_check.py; a test holds them together.
@@ -89,9 +91,48 @@ def _echo_step(step: dict[str, Any]) -> None:
     if isinstance(result, dict):
         for k, v in result.items():
             if v is not None:
-                click.echo(f"    {k}: {v}")
+                click.echo(display(f"    {k}: {v}"))
     elif result is not None:
         click.echo(f"    {result}")
+
+
+def make_preview_confirmer(
+    *,
+    echo: Callable[..., None] = click.echo,
+    getchar: Callable[[], str] = click.getchar,
+    launch: Callable[[str], Any] = click.launch,
+) -> Callable[[str, dict[str, Any] | None], bool]:
+    """The interactive answer to a mid-workflow gate (``wait_for_confirmation``).
+
+    When the gate carries a preview clip, its path is shown first and ``o`` opens it in the
+    default player before asking again. This is the one scratch path knaif prints on purpose:
+    the clip lives in the run scratch and is deleted when the run ends, whatever the answer.
+    """
+
+    def confirm(prompt: str, preview: dict[str, Any] | None) -> bool:
+        clip = (preview or {}).get("preview_output")
+        has_clip = isinstance(clip, str) and Path(clip).is_file()
+        if has_clip:
+            echo("    " + click.style("Preview: ", fg="cyan") + str(clip))
+        choices = "[Y/n/o=open]" if has_clip else "[Y/n]"
+        while True:
+            echo("    " + click.style(f"{prompt} {choices}: ", fg="yellow"), nl=False)
+            try:
+                c = getchar()
+            except (KeyboardInterrupt, EOFError):
+                echo()
+                return False
+            if has_clip and c in ("o", "O"):
+                echo("o")
+                launch(str(clip))
+                continue
+            if c in ("\r", "\n", "y", "Y"):
+                echo("Y")
+                return True
+            echo("n")
+            return False
+
+    return confirm
 
 
 def _render_items(items: list[dict[str, Any]]) -> int:
@@ -106,7 +147,7 @@ def _render_items(items: list[dict[str, Any]]) -> int:
     exit_code = 0
     for item in items:
         kind = item.get("kind", "info")
-        message = item.get("message", "")
+        message = display(item.get("message", ""))
         if kind == "error":
             click.echo(click.style(f"  ✗ {message}", fg="red"), err=True)
             exit_code = 1
@@ -529,7 +570,7 @@ def run_cmd(
         timing_label = "dry-run" if dry_run else f"{total_s:.1f}s"
         for item in items:
             kind = item.get("kind", "info")
-            message = item.get("message", "")
+            message = display(item.get("message", ""))
             prefix = "    "
             if kind == "error":
                 click.echo(prefix + click.style(f"✗ {message}", fg="red"), err=True)
@@ -551,6 +592,9 @@ def run_cmd(
             require_approval=effective_require_approval,
             plan_display=_plan_display,
             plan_confirmer=_plan_confirmer,
+            # Ask at a preview gate only when a person is answering; otherwise the gate
+            # takes `confirmed`, as it always has.
+            confirmer=make_preview_confirmer() if effective_require_approval else None,
         )
     except ValueError as exc:
         click.echo(click.style(f"Error: {exc}", fg="red"), err=True)

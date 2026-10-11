@@ -1,0 +1,12 @@
+[package]
+name = "knaif-toolkit-fs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "The fs toolkit for native skills: stage an output in the run scratch, check it, move it into place."
+
+[dependencies]
+knaif-core = { workspace = true }
+anyhow = { workspace = true }

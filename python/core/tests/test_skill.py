@@ -13,12 +13,12 @@ def _write_minimal_skill(skill_dir, *, with_intent: bool = False) -> None:
         textwrap.dedent("""\
             name: test_skill
             description: "test"
-            skill_class: handlers.TestSkill
             """),
         encoding="utf-8",
     )
     tools = textwrap.dedent("""\
         do_thing:
+          effects: []
           description: "Do a thing."
           required_args: []
           safety_category: safe
@@ -26,6 +26,7 @@ def _write_minimal_skill(skill_dir, *, with_intent: bool = False) -> None:
     if with_intent:
         tools += textwrap.dedent("""\
             make_thing:
+              effects: []
               description: "Make a thing."
               required_args: []
               safety_category: safe
@@ -44,9 +45,9 @@ def _write_minimal_skill(skill_dir, *, with_intent: bool = False) -> None:
     (skill_dir / "handlers.py").write_text(
         textwrap.dedent("""\
             from knaif.skill_base import Skill
-            from knaif.tool import Intent, Step
+            from knaif.tool import Intent, Handler
 
-            class DoThingStep(Step):
+            class DoThingStep(Handler):
                 name = "do_thing"
                 def handle(self, args, ctx):
                     return {"ok": True}

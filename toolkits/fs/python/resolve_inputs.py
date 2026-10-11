@@ -1,4 +1,4 @@
-"""ResolveInputs shared step — resolves paths/dirs/globs inside the sandbox."""
+"""resolve_inputs — resolves paths, folders and globs inside the sandbox (fs toolkit)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from knaif.handler_api import HandlerContext
-from knaif.tool import Step
+from knaif.tool import Handler
 
 
 def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
@@ -24,7 +24,19 @@ def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
         ) from None
 
 
-class ResolveInputs(Step):
+def _in_run_scratch(p: Path, ctx: HandlerContext) -> bool:
+    """True when *p* is in this run's scratch, where a routed chain intermediate lives.
+
+    Only a path core or an earlier step put there can name it: the model's own paths were
+    checked against the sandbox before routing, and the run id is fresh every run.
+    """
+    work = getattr(ctx, "work_dir", None)
+    if not isinstance(work, (str, Path)):
+        return False
+    return p.resolve().is_relative_to(Path(work).resolve())
+
+
+class ResolveInputs(Handler):
     """Resolve a list of input paths (files, dirs, globs) inside the sandbox.
 
     Returns ``{"count": N, "files": [...]}``. Consumers that receive the result
@@ -49,7 +61,8 @@ class ResolveInputs(Step):
             if not p.is_absolute():
                 base = ctx.sandbox if ctx.sandbox is not None else ctx.root
                 p = (base / p).resolve()
-            _assert_in_sandbox(p, ctx.sandbox)
+            if not _in_run_scratch(p, ctx):
+                _assert_in_sandbox(p, ctx.sandbox)
             if p.is_dir():
                 iterable = p.rglob("*") if recursive else p.glob("*")
                 for child in iterable:

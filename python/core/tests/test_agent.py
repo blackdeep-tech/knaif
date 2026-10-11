@@ -992,7 +992,7 @@ def test_post_resolution_schema_validation_rejects_wrong_type():
     later step references it via $var, the post-resolution validation in
     _execute_steps must catch the mismatch before dispatching to handle().
     """
-    from knaif.cli.function_step import FunctionStep
+    from knaif.cli.function_handler import FunctionHandler
     from knaif.registry import ArgSchema, ToolDef
 
     # Step 1: returns a string value for "value" (wrong type for an integer schema).
@@ -1021,8 +1021,8 @@ def test_post_resolution_schema_validation_rejects_wrong_type():
     agent_under_test = CommandAgent.from_registry(
         {"source": td_source, "consumer": td_consumer},
         tool_map={
-            "source": FunctionStep("source", source_fn, td_source),
-            "consumer": FunctionStep("consumer", consumer_fn, td_consumer),
+            "source": FunctionHandler("source", source_fn, td_source),
+            "consumer": FunctionHandler("consumer", consumer_fn, td_consumer),
         },
     )
 
@@ -1434,7 +1434,7 @@ def test_nl_gate_no_utterance_skips_gate(tmp_path):
 
 
 def test_from_registry_builds_agent(tmp_path):
-    from knaif.cli.function_step import FunctionStep
+    from knaif.cli.function_handler import FunctionHandler
     from knaif.registry import ArgSchema, ToolDef
 
     td = ToolDef(
@@ -1444,7 +1444,7 @@ def test_from_registry_builds_agent(tmp_path):
         arg_schemas={"name": ArgSchema(type="string")},
     )
 
-    class GreetStep(FunctionStep):
+    class GreetStep(FunctionHandler):
         pass
 
     step = GreetStep("greet", lambda name: {"greeting": f"hello {name}"}, td)
@@ -1455,7 +1455,7 @@ def test_from_registry_builds_agent(tmp_path):
 
 
 def test_from_registry_executes_via_tool_map(tmp_path):
-    from knaif.cli.function_step import FunctionStep
+    from knaif.cli.function_handler import FunctionHandler
     from knaif.registry import ToolDef
 
     called = {}
@@ -1465,7 +1465,7 @@ def test_from_registry_executes_via_tool_map(tmp_path):
         return {"value": a + b}
 
     td = ToolDef(name="add", description="concat", required_args=("a", "b"))
-    step = FunctionStep("add", _add, td)
+    step = FunctionHandler("add", _add, td)
     registry = {"add": td}
     agent = CommandAgent.from_registry(registry, tool_map={"add": step}, root=tmp_path)
     payload = {"plan": [{"tool": "add", "args": {"a": "foo", "b": "bar"}}]}

@@ -69,9 +69,6 @@ fn image_to_pdf(input: &Path, output: &Path) -> anyhow::Result<()> {
         "Pages" => pages_id,
     });
     doc.trailer.set("Root", catalog_id);
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     doc.save(output)
         .map(|_| ())
         .map_err(|e| anyhow::anyhow!("could not write {}: {e}", output.display()))
@@ -137,9 +134,6 @@ fn office_to_pdf(input: &Path, output: &Path) -> anyhow::Result<()> {
 /// `sample.docx -> conv.pdf` (found 2026-09-26, both runtimes). It converts into a private
 /// directory instead, and only the requested output is written where the user's files are.
 fn office_to_pdf_with(soffice: &Path, input: &Path, output: &Path) -> anyhow::Result<()> {
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     let private = private_dir()?;
     let result = std::process::Command::new(soffice)
         .args(["--headless", "--convert-to", "pdf", "--outdir"])

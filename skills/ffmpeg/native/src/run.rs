@@ -118,6 +118,94 @@ pub fn expand_execute(
     expand(tool, args, data, sandbox, ProbeMode::Execute)
 }
 
+/// This run's scratch, for an expansion that may read or write in it (`knaif_core::scratch`).
+#[derive(Debug, Clone, Copy)]
+pub struct ScratchCtx<'a> {
+    /// The run's scratch folder: a routed chain intermediate lives here.
+    pub work_dir: &'a Path,
+    /// The folder the user sees (the sandbox, else cwd).
+    pub home: &'a Path,
+}
+
+/// [`expand`] with the run's scratch: an input in `work_dir` (a routed chain intermediate) is
+/// accepted, an output named after it lands in `home`, and a routed output may be in `work_dir`.
+pub fn expand_in(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
+) -> anyhow::Result<Expansion> {
+    // concat_video joins N inputs into ONE command — it doesn't fit the per-input recipe shape.
+    if tool == "concat_video" {
+        return expand_concat(args, data, sandbox, mode, scratch);
+    }
+    let rendered = match recipes(tool, args, data, sandbox, mode, scratch)? {
+        Ok(r) => r,
+        Err(clarify) => return Ok(Expansion::Clarify(clarify)),
+    };
+    Ok(Expansion::Commands(
+        rendered
+            .iter()
+            .map(|(recipe, pre, post)| render_command(recipe, pre, post, None))
+            .collect(),
+    ))
+}
+
+/// Whether `tool` previews for these args: `reverse_video` always, `prepare_for_platform` unless
+/// told not to, the batch tools with a preview block only on `preview: true`. Port of the
+/// `_build_preview_block` call sites in `skills/ffmpeg/python/intents.py`.
+pub fn previews(tool: &str, args: &serde_json::Map<String, Value>) -> bool {
+    let asked = args.get("preview").and_then(Value::as_bool);
+    match tool {
+        "reverse_video" => true,
+        "prepare_for_platform" => asked.unwrap_or(true),
+        "compress_video" | "convert_video" | "resize_video" | "trim_video" => asked == Some(true),
+        _ => false,
+    }
+}
+
+/// The preview clip's command, when `tool` previews: the first input, 10 s from the start,
+/// rendered into `<work>/preview/<stem>_preview.<container>`. Port of `render_preview_command`,
+/// with `_preview_output_for` moved into the scratch. `None` when the tool does not preview.
+pub fn preview_command(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: &ScratchCtx,
+) -> anyhow::Result<Option<Vec<String>>> {
+    if !previews(tool, args) {
+        return Ok(None);
+    }
+    let Ok(rendered) = recipes(tool, args, data, sandbox, mode, Some(scratch))? else {
+        return Ok(None);
+    };
+    let Some((recipe, pre, post)) = rendered.first() else {
+        return Ok(None);
+    };
+    let stem = Path::new(&recipe.input)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let container = recipe
+        .container
+        .clone()
+        .unwrap_or_else(|| "mp4".to_string());
+    let out = scratch
+        .work_dir
+        .join("preview")
+        .join(format!("{stem}_preview.{container}"));
+    let preview = crate::engine::Preview {
+        start: Some("0".to_string()),
+        duration: Some("10".to_string()),
+        output_override: Some(out.to_string_lossy().into_owned()),
+    };
+    Ok(Some(render_command(recipe, pre, post, Some(&preview))))
+}
+
 /// Expand a validated ffmpeg intent step into the `ffmpeg` command(s) it would run.
 ///
 /// `tool` is the intent name (`compress_video`, …); `args` is the step's already-validated arg
@@ -131,14 +219,30 @@ pub fn expand(
     sandbox: Option<&Path>,
     mode: ProbeMode,
 ) -> anyhow::Result<Expansion> {
-    // concat_video joins N inputs into ONE command — it doesn't fit the per-input recipe shape.
-    if tool == "concat_video" {
-        return expand_concat(args, data, sandbox, mode);
-    }
-    let resolved = match resolve_intent(tool, args, data)? {
+    expand_in(tool, args, data, sandbox, mode, None)
+}
+
+/// One rendered recipe: the recipe (its output final) and its pre/post-input flags.
+type Rendered = (crate::engine::Recipe, Vec<String>, Vec<String>);
+
+/// The per-input recipes for a (non-concat) intent, or the clarify it needs.
+fn recipes(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
+) -> anyhow::Result<Result<Vec<Rendered>, String>> {
+    let mut resolved = match resolve_intent(tool, args, data)? {
         Ok(r) => r,
-        Err(clarify) => return Ok(Expansion::Clarify(clarify)),
+        Err(clarify) => return Ok(Err(clarify)),
     };
+    if let Some(sc) = scratch {
+        resolved.options.work_dir = Some(sc.work_dir.to_path_buf());
+        resolved.options.home = Some(sc.home.to_path_buf());
+    }
+    let work_dir = scratch.map(|sc| sc.work_dir);
     // Globs become one input per matching file BEFORE the render loop, so each match gets its own
     // command and its own derived output name (N1).
     let inputs = expand_input_globs(&resolved.inputs, sandbox, &data.vocab.media_extensions)?;
@@ -151,7 +255,7 @@ pub fn expand(
     for input in &inputs {
         // Probe and render the RESOLVED path — checking one representation and reading another
         // is not a boundary (see resolve_input_in_sandbox; fix review R1).
-        let input_path = resolve_input_in_sandbox(input, sandbox)?;
+        let input_path = resolve_input_in_sandbox(input, sandbox, work_dir)?;
         let probe = probe_input(&input_path, data, mode)?;
         // ffmpeg cannot extract audio from a file that has none: it exits with "Output file does
         // not contain any stream", and one silent video in a folder of ten takes the whole batch
@@ -205,13 +309,13 @@ pub fn expand(
         eprintln!("note: skipped {} (no audio track)", skipped.join(", "));
     }
     crate::engine::disambiguate_outputs(&mut outs);
-    let mut commands = Vec::with_capacity(recipes.len());
+    let mut rendered = Vec::with_capacity(recipes.len());
     for (mut recipe, (_, out)) in recipes.into_iter().zip(outs) {
         recipe.output = out.to_string_lossy().into_owned();
         let (pre, post) = build_flags(&recipe, &data.vocab)?;
-        commands.push(render_command(&recipe, &pre, &post, None));
+        rendered.push((recipe, pre, post));
     }
-    Ok(Expansion::Commands(commands))
+    Ok(Ok(rendered))
 }
 
 /// Expand `concat_video`: assemble the ordered input list (`inputs`, or `base` + `append`), probe
@@ -222,21 +326,25 @@ fn expand_concat(
     data: &FfmpegData,
     sandbox: Option<&Path>,
     mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
 ) -> anyhow::Result<Expansion> {
+    let work_dir = scratch.map(|sc| sc.work_dir);
     let inputs = assemble_concat_inputs(args)?;
     if inputs.is_empty() {
         anyhow::bail!("concat_video requires either 'inputs' or 'base'/'append' args.");
     }
     let output = str_arg(args, "output").unwrap_or_else(|| "combined.mp4".to_string());
     let out_path = resolve_output(&output, sandbox)?;
-    crate::engine::assert_in_sandbox(&out_path, sandbox)?;
+    if !crate::engine::within(&out_path, work_dir) {
+        crate::engine::assert_in_sandbox(&out_path, sandbox)?;
+    }
 
     // Resolve + boundary-check every concat input, then probe AND render the resolved paths —
     // the raw list must not reach the rendered command (see resolve_input_in_sandbox; R1).
     let mut infos = Vec::with_capacity(inputs.len());
     let mut resolved_inputs = Vec::with_capacity(inputs.len());
     for input in &inputs {
-        let input_path = resolve_input_in_sandbox(input, sandbox)?;
+        let input_path = resolve_input_in_sandbox(input, sandbox, work_dir)?;
         let probe = probe_input(&input_path, data, mode)?;
         infos.push(crate::concat::ConcatInfo::from_probe(&probe));
         resolved_inputs.push(input_path.to_string_lossy().into_owned());
@@ -391,7 +499,7 @@ fn expand_input_globs(
         };
         // The directory is resolved and boundary-checked like any other input, so a pattern
         // cannot read outside the sandbox.
-        let dir = resolve_input_in_sandbox(&parent.to_string_lossy(), sandbox)?;
+        let dir = resolve_input_in_sandbox(&parent.to_string_lossy(), sandbox, None)?;
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue; // No such directory: the pattern matches nothing, exactly as Python's does.
         };
@@ -436,6 +544,7 @@ fn expand_input_globs(
 fn resolve_input_in_sandbox(
     raw: &str,
     sandbox: Option<&Path>,
+    work_dir: Option<&Path>,
 ) -> anyhow::Result<std::path::PathBuf> {
     let Some(sb) = sandbox else {
         // Open/CLI mode: no boundary to enforce and nothing to re-base — keep the raw string so
@@ -443,7 +552,11 @@ fn resolve_input_in_sandbox(
         return Ok(std::path::PathBuf::from(raw));
     };
     let resolved = knaif_skill_api::sandbox::resolve_real(Path::new(raw), sb);
-    knaif_skill_api::sandbox::assert_in_sandbox(&resolved, sb)?;
+    // A routed chain intermediate lives in this run's scratch. Only core routing or an earlier
+    // step can name it: the model's own paths were checked against the sandbox before routing.
+    if !crate::engine::within(&resolved, work_dir) {
+        knaif_skill_api::sandbox::assert_in_sandbox(&resolved, sb)?;
+    }
     Ok(resolved)
 }
 

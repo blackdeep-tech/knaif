@@ -55,3 +55,26 @@ def test_the_committed_evidence_writers_redact() -> None:
     assert parity.count("redact_local_paths(") >= 2  # report.json and meta.json
     for rel in ("python/core/knaif/evalsuite/gate.py", "python/core/knaif/evalsuite/cli.py"):
         assert "redact_local_paths(" in (ROOT / rel).read_text(encoding="utf-8"), rel
+
+
+def test_a_run_scratch_folder_becomes_work_with_its_run_id_dropped() -> None:
+    """Scratch lives in the OS temp dir, under the home directory on Windows. The run id is
+    random per run, so keeping it would also make two identical runs' evidence differ."""
+    cmd = (
+        "ffmpeg -i C:\\Users\\alice\\AppData\\Local\\Temp\\knaif\\run-812-a1b2c3d4\\mid.mp4 "
+        "C:\\src\\knaif\\sandbox\\out.mp4"
+    )
+    out = redact_local_paths(
+        cmd,
+        root="C:\\src\\knaif",
+        home="C:\\Users\\alice",
+        scratch="C:\\Users\\alice\\AppData\\Local\\Temp\\knaif",
+    )
+    assert out == "ffmpeg -i <work>\\mid.mp4 <repo>\\sandbox\\out.mp4"
+
+
+def test_posix_scratch_is_redacted_too() -> None:
+    out = redact_local_paths(
+        "/tmp/knaif/run-1-ff/a/x.mp4", root="/src", home="/home/alice", scratch="/tmp/knaif"
+    )
+    assert out == "<work>/a/x.mp4"

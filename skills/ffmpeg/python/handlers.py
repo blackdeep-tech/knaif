@@ -19,7 +19,6 @@ from __future__ import annotations
 from typing import Any
 
 from knaif.skill_base import Skill
-from knaif.steps import ResolveInputs
 
 from . import _deps
 from ._deps import FFmpegNotAvailable, run_ffmpeg, run_ffprobe
@@ -118,35 +117,6 @@ from .steps import (
 
 
 class FFmpegSkill(Skill):
-    tools = [
-        ResolveInputs,
-        InspectMediaStep,
-        LoadPlatformProfileStep,
-        LoadQualityProfileStep,
-        BuildRecipesStep,
-        RenderPreviewCommandStep,
-        RunPreviewStep,
-        VerifyPreviewStep,
-        RenderBatchCommandsStep,
-        RunBatchStep,
-        RunConcatStep,
-        VerifyOutputsStep,
-        GenerateReportStep,
-        PrepareForPlatformIntent,
-        CompressVideoIntent,
-        ConvertVideoIntent,
-        ResizeVideoIntent,
-        TrimVideoIntent,
-        ExtractAudioIntent,
-        CreateThumbnailIntent,
-        StripAudioIntent,
-        AdjustSpeedIntent,
-        AdjustVolumeIntent,
-        RotateVideoIntent,
-        ConcatVideoIntent,
-        ReverseVideoIntent,
-    ]
-
     def preflight(self, tool: str, args: dict[str, Any], **kw: Any) -> list[str]:
         return _preflight_trim_frames(args) + _preflight_inputs(args, **kw)
 

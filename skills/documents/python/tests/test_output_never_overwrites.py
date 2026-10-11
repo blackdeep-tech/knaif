@@ -114,7 +114,6 @@ def fake_soffice(monkeypatch: pytest.MonkeyPatch):
 
     Skill.load(DOCUMENTS_SKILL_DIR)
     pkg = sys.modules["_skill_oop_documents_handlers"].__package__
-    steps = sys.modules[pkg + ".steps"]
     deps = sys.modules[pkg + "._deps"]
     monkeypatch.setattr(deps, "detect_external_tools", lambda: {"soffice": "soffice"})
 
@@ -124,7 +123,7 @@ def fake_soffice(monkeypatch: pytest.MonkeyPatch):
         (outdir / f"{source.stem}.pdf").write_bytes(b"%PDF-converted")
         return subprocess.CompletedProcess(argv, 0, "", "")
 
-    monkeypatch.setattr(steps.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)  # ctx.exec runs programs through it
 
 
 @pytest.mark.parametrize("output", ["conv.pdf", None])

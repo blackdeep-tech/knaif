@@ -13,16 +13,20 @@ User request
   -> normalize_plan() -> apply_defaults()
   -> validate_plan()
   -> resolve_stems() -> nl_clarify_gate()
+  -> route chain intermediates into the run scratch          (opt-in per skill)
+  -> Skill.resolve_output_collisions()
   -> Intent.expand()                                        (per intent tool)
   -> validate expanded plan
   -> optimize_plan()
-  -> Step/Intent.preflight() or Skill.preflight()          (skipped if dry_run)
+  -> Handler/Intent.preflight() or Skill.preflight()       (skipped if dry_run)
   -> [optional] summarize_plan() → plan_display callback    (StepA)
   -> [optional] plan_confirmer approval gate                (StepB)
+  -> run scratch created (work_dir; never in a dry run)
   -> resolve_args()
   -> HandlerContext
-  -> Step.handle()                                          (via tool_map)
+  -> Handler.handle()                                       (via tool_map)
   -> result history
+  -> run scratch deleted                                    (success or failure)
   -> [CLI] Skill.format_results() renders for display
 ```
 
@@ -46,12 +50,11 @@ The model never executes commands, never emits raw shell commands, and never own
 | `planner.py` | JSON parsing, step validation, variable binding, optimizer |
 | `nl_clarify_gate.py` | deterministic pre-expansion clarify gate (see [The clarify gate](#the-clarify-gate)) |
 | `registry.py` | `ToolDef`, flat YAML registry loading, retrieval, unsafe phrase loading |
-| `tool.py` | `Step` / `Intent` ABCs — the two tool interface kinds |
+| `tool.py` | `Handler` / `Intent` ABCs — the two kinds of tool implementation |
 | `skill_base.py` | `Skill` base class authors subclass (`tools`, `preflight`, `format_results`, `run_artifact`) |
-| `core_tools.py` (+ `contracts/runtime/core_tools.yaml`) | built-in core control Steps (`clarify`/`reject`/`done`/`wait_for_confirmation`) and their metadata; the canonical YAML lives in `contracts/runtime/` with a synced wheel copy (`just sync-runtime`), loaded via the shared `load_registry` |
-| `steps/` | shared Step library (`ResolveInputs`); `steps.yaml` metadata lives in `contracts/runtime/` |
+| `core_tools.py` (+ `contracts/runtime/core_tools.yaml`) | built-in core control tools (`clarify`/`reject`/`done`/`wait_for_confirmation`) and their metadata; the canonical YAML lives in `contracts/runtime/` with a synced wheel copy (`just sync-runtime`), loaded via the shared `load_registry` |
 | `skill.py` | `Skill.load()` — builds the `name → Tool` map, prompt loading, fail-fast validation |
-| `handler_api.py` | `HandlerContext` shared by all Steps |
+| `handler_api.py` | `HandlerContext` shared by all Handlers |
 | `prompt.py` | model-facing prompt construction |
 | `orchestrator.py` | local inference backends (behind the `InferenceBackend` protocol) |
 | `evaluator.py` | evaluation helper functions |
@@ -80,7 +83,7 @@ skills/my_skill/
     tests/
 ```
 
-`Skill.load()` reads `skill.yaml`, instantiates the `Skill` subclass named by `skill_class:`, builds a `name → Tool` map from its `tools` list (merging the core control Steps and any shared `knaif.steps`), validates each class against its `tools.yaml` entry, renders prompt examples, and passes everything into `CommandAgent.from_skill()`.
+`Skill.load()` reads `skill.yaml` and `tools.yaml`, discovers the `Handler`/`Intent` classes defined in the bundle's `python/` modules and matches them to their `tools.yaml` entries by `name` (strictly 1:1), merges the tools of every declared toolkit (`toolkits: [fs]`, internal unless listed under `expose:`) and the core control tools, picks up the optional `Skill` subclass for hooks, renders prompt examples, and passes the merged registry and tool map into `CommandAgent.from_skill()`.
 
 Public entry points:
 
@@ -102,7 +105,7 @@ pending a rebuild, but still loadable explicitly):
 
 ## Tool Registry Format
 
-The current registry format is a flat YAML mapping loaded into `ToolDef`. Behavior lives in `Step` / `Intent` classes linked to their YAML entry by `name`. The core does not currently execute subprocess or HTTP handlers from declarative schema definitions.
+The current registry format is a flat YAML mapping loaded into `ToolDef`. Behavior lives in `Handler` / `Intent` classes linked to their YAML entry by `name`. The core does not currently execute subprocess or HTTP handlers from declarative schema definitions.
 
 Example:
 
@@ -120,27 +123,28 @@ list_files:
 
 Internal workflow tools use `internal: true` so they are valid during execution but hidden from model prompts.
 
-## Steps And Intents
+## Handlers And Intents
 
-A tool is a class implementing one of two interfaces ([`tool.py`](../python/core/knaif/tool.py)):
+A tool's code is a class implementing one of two interfaces ([`tool.py`](../python/core/knaif/tool.py)). A **plan step** is one entry in a plan; the word "step" means only that.
 
 ```python
-class MyStep(Step):       # leaf: executes, returns a result
+class MyTool(Handler):    # executes, returns a result
     name = "my_tool"
     def handle(self, args: dict, ctx: HandlerContext) -> dict: ...
 
-class MyIntent(Intent):   # macro: expands into a sub-plan of Steps
+class MyIntent(Intent):   # expands into a sub-plan of plan steps
     name = "high_level_tool"
     def expand(self, args: dict) -> list[dict]: ...
 ```
 
-`Skill.load()` instantiates these into a `name → Tool` map; `CommandAgent` dispatches a
-leaf step through `tool_map[name].handle()` and compiles an intent away via
+`Skill.load()` instantiates these into a `name → tool` map; `CommandAgent` dispatches a
+handler through `tool_map[name].handle()` and compiles an intent away via
 `tool_map[name].expand()` before execution. The FFmpeg skill uses Intents to turn
 model-visible operations such as `prepare_for_platform` into internal workflows such as
 `resolve_inputs`, `inspect_media`, `build_recipes`, `run_preview`,
-`wait_for_confirmation`, and `run_batch` — all of which are Steps. Intents compile away
-at expansion; the executor only ever runs Steps.
+`wait_for_confirmation`, and `run_batch` — all of which are Handlers (`resolve_inputs`
+comes from the shared `fs` toolkit). Intents compile away at expansion; the executor only ever
+runs Handlers.
 
 ## Variable Binding
 
@@ -304,7 +308,7 @@ Safety is driven by `ToolDef.safety_category`.
 - Handlers must respect `ctx.dry_run`.
 - Skill authors should use core path-resolution helpers for sandbox-sensitive file operations.
 
-`HandlerContext` carries `root`, `sandbox`, `dry_run`, `confirmed`, `skill_dir`, `confirmer`, and `confirm(prompt, preview=None)`.
+`HandlerContext` carries `root`, `sandbox`, `dry_run`, `confirmed`, `skill_dir`, `confirmer`, `confirm(prompt, preview=None)`, `work_dir` (the run scratch, see [TOOL_SCHEMA.md](TOOL_SCHEMA.md#the-run-scratch)) and `call_tool(name, args)`.
 
 **Why this is a rule and not a prompt.** In [the 2026-07-02 agent comparison](experiments/2026-07-02-agent-vs-knaif-realworld.md), the same destructive request ("delete the original clip.mp4") was put to three premium coding agents with full tool permissions: one refused, and two deleted the file. Whether a model-mediated agent blocks a destructive request depends on the CLI/scaffold/model combination on the day. Because knaif's gate is `safety_category`-driven code, the outcome is a property of the registry, not of the model — which is also why skill authors must classify tools honestly.
 
@@ -389,15 +393,15 @@ handler code may be split across modules via relative imports. See
 
 | Hook | Where | Required | Purpose |
 |---|---|---|---|
-| `handle` | `Step` method | yes (per Step) | Execute a leaf tool; return a result dict. |
-| `expand` | `Intent` method | yes (per Intent) | Expand an intent tool into a sub-plan of Steps. |
+| `handle` | `Handler` method | yes (per Handler) | Execute a tool; return a result dict. |
+| `expand` | `Intent` method | yes (per Intent) | Expand an intent tool into a sub-plan of plan steps. |
 | `summarize` | `Intent` method | no | One-sentence plan-preview clause for the intent. |
-| `preflight` | `Step`/`Intent` or `Skill` method | no | Validate args before the approval gate; per-tool override wins, else `Skill.preflight`. |
+| `preflight` | `Handler`/`Intent` or `Skill` method | no | Validate args before the approval gate; per-tool override wins, else `Skill.preflight`. |
 | `format_results` | `Skill` method | no | Convert raw execution results into structured CLI items. |
 | `run_artifact` | `Skill` method | no | Re-execute a rendered artifact against a fixture (eval suite only). |
 
 Because the core is shaped as data structures + pure functions + a few interfaces
-(`Step`/`Intent`/`Skill`, the `InferenceBackend` protocol), it ported to the native
+(`Handler`/`Intent`/`Skill`, the `InferenceBackend` protocol), it ported to the native
 runtime (Rust `trait` + `impl`) as a near-mechanical translation — see
 [Dual-Runtime](#dual-runtime).
 

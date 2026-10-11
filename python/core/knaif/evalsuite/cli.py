@@ -8,6 +8,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, NoReturn
@@ -2416,6 +2417,75 @@ def _reclaim_row_dirs(outputs: list, corpus: list, sandbox: Path, scoreboard: di
         cleanup_row_dir(sandbox / f"{out.id}__{out.utterance_idx}", keep=not passed)
 
 
+def cmd_exact_files(args: argparse.Namespace) -> None:
+    """Replay a saved scoreboard's plans for real and report files left in the user's folder.
+
+    No model: each selected row's recorded plan is executed with `dry_run=False` in a fresh
+    copy of the fixtures (see `exact_files.py` for why the scored run cannot see this).
+    Exits 1 when any row left a file that is neither an input nor a deliverable.
+    """
+    from knaif import create_agent
+
+    from .exact_files import replay_row, replay_row_native, select_rows
+
+    board = json.loads(Path(args.board).read_text(encoding="utf-8"))
+    sandbox = Path(args.sandbox) if args.sandbox else Path("sandbox")
+    fixture_dir = (
+        Path(args.fixture_dir) if args.fixture_dir else _default_fixture_dir(sandbox, args.skill)
+    )
+    if not fixture_dir.is_dir():
+        sys.exit(f"ERROR: no fixtures in {fixture_dir}. Run `just eval-fixtures {args.skill}`.")
+    if args.runtime == "native" and not (args.binary and Path(args.binary).is_file()):
+        sys.exit("ERROR: --runtime native needs --binary <path to the knaif executable>")
+    preview_tools = {t for t in (args.preview_tools or "").split(",") if t}
+    rows = select_rows(board["rows"], preview_tools=preview_tools, everything=args.all)
+    if args.ids:
+        wanted = set(args.ids.split(","))
+        rows = [r for r in rows if r["id"] in wanted]
+    work = sandbox / "exact_files" / args.runtime / args.skill
+    print(f"exact-files: {len(rows)} row(s) from {args.board}", flush=True)
+
+    reports: list[dict[str, Any]] = []
+    for row in rows:
+        row_dir = work / f"{row['id']}__{row.get('utterance_idx') or 0}"
+        if args.runtime == "native":
+            report = replay_row_native(
+                Path(args.binary), args.skill, row["plan"], row["utterance"], fixture_dir, row_dir
+            )
+        else:
+            report = replay_row(
+                lambda folder: create_agent(args.skill, sandbox=folder),
+                row["plan"],
+                row["utterance"],
+                fixture_dir,
+                row_dir,
+            )
+        report.update(
+            id=row["id"], utterance_idx=row.get("utterance_idx") or 0, utterance=row["utterance"]
+        )
+        reports.append(report)
+        status = "LEFT " + ", ".join(report["leftovers"]) if report["leftovers"] else "clean"
+        print(f"  [{row['id']}#{report['utterance_idx']}]  {status}", flush=True)
+        if not (args.keep and report["leftovers"]):
+            shutil.rmtree(row_dir, ignore_errors=True)
+
+    dirty = [r for r in reports if r["leftovers"]]
+    print(f"\n{len(dirty)} of {len(reports)} row(s) left files behind", flush=True)
+    if args.save:
+        out = {
+            "skill": args.skill,
+            "board": args.board,
+            "rows": len(reports),
+            "dirty": len(dirty),
+            "reports": reports,
+        }
+        Path(args.save).write_text(
+            json.dumps(redact_local_paths(out), indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    sys.exit(1 if dirty else 0)
+
+
 def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     import hashlib
     import subprocess
@@ -2916,6 +2986,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_sb.add_argument("--skill", required=True)
     p_sb.add_argument("--id", required=True)
 
+    # exact-files
+    p_ex = sub.add_parser(
+        "exact-files",
+        help="Replay a scoreboard's plans for real; report files left beside the outputs",
+    )
+    p_ex.add_argument("--skill", required=True)
+    p_ex.add_argument("--board", required=True, metavar="FILE", help="Saved scoreboard JSON")
+    p_ex.add_argument("--sandbox", default=None)
+    p_ex.add_argument("--fixture-dir", default=None, metavar="DIR")
+    p_ex.add_argument(
+        "--preview-tools",
+        default=None,
+        help="Comma-separated tools that preview unless told not to (selection only)",
+    )
+    p_ex.add_argument(
+        "--runtime",
+        choices=("python", "native"),
+        default="python",
+        help="python: execute_plan in-process; native: the binary, with the mock backend "
+        "replaying the recorded plan (no model)",
+    )
+    p_ex.add_argument("--binary", default=None, metavar="PATH", help="knaif executable (native)")
+    p_ex.add_argument(
+        "--all", action="store_true", help="Every executed row, not only chains/previews"
+    )
+    p_ex.add_argument("--ids", default=None, help="Comma-separated row ids to restrict to")
+    p_ex.add_argument(
+        "--keep", action="store_true", help="Keep the folders of rows that left files"
+    )
+    p_ex.add_argument("--save", default=None, metavar="FILE", help="Write the report JSON here")
+
     # fixtures
     p_fix = sub.add_parser("fixtures", help="Manage evaluation fixtures")
     fix_sub = p_fix.add_subparsers(dest="fixtures_command", required=True)
@@ -3017,6 +3118,7 @@ def main() -> None:
         "gate": cmd_gate,
         "waive": cmd_waive,
         "equivalence": cmd_equivalence,
+        "exact-files": cmd_exact_files,
     }
     dispatch[args.command](args)
 

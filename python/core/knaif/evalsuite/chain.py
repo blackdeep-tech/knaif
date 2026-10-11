@@ -39,7 +39,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .provisioning import provision_row_dir
+from .provisioning import provision_row_dir, row_scratch_dir
 
 #: Tokens whose following argument is a path the command reads.
 _INPUT_FLAGS = {"-i"}
@@ -69,6 +69,24 @@ def _relative_part(token: str, anchors: list[Path]) -> tuple[Path, bool]:
     return Path(p.name), True
 
 
+def _scratch_part(token: str) -> Path | None:
+    """The part of *token* below its run folder, when it lies in knaif's run scratch.
+
+    A chain intermediate renders under ``<scratch root>/run-<id>/`` (``knaif.scratch``). The
+    run id differs on every call, so the mapping drops it and keeps the rest.
+    """
+    from knaif.scratch import scratch_root
+
+    p = Path(token)
+    if not p.is_absolute():
+        return None
+    try:
+        rel = p.resolve().relative_to(scratch_root().resolve())
+    except ValueError:
+        return None
+    return Path(*rel.parts[1:]) if len(rel.parts) > 1 else None
+
+
 def resolve_command(
     command: str, row_dir: Path | str, anchors: list[Path] | None = None
 ) -> tuple[str, list[str]]:
@@ -92,6 +110,11 @@ def resolve_command(
     collapsed: list[str] = []
 
     def reroot(tok: str) -> str:
+        # A run-scratch path goes to the row's own scratch BESIDE the row folder: the file
+        # stays gradeable, and the row folder holds only what a user's folder would.
+        scratch = _scratch_part(tok)
+        if scratch is not None:
+            return str(row_scratch_dir(row_dir) / scratch)
         part, lost = _relative_part(tok, anchors)
         if lost:
             collapsed.append(tok)

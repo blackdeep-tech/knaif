@@ -153,6 +153,9 @@ def evidence_tuple(
             f"skills/{skill}",
             ("*.yaml", "python/**/*.py", "native/src/**/*.rs"),
         ),
+        # The toolkits the skill declares (`toolkits: [fs]`): their tools run inside the skill's
+        # plans, so a toolkit edit can change a run without touching the bundle.
+        "toolkits": _toolkits_fingerprint(skill, root),
         # Shared contracts both runtimes read.
         "contracts": _tree("contracts", ("**/*.yaml", "**/*.json")),
         # Shared planning AND execution code: changes plans for every skill, touching no
@@ -194,6 +197,23 @@ def evidence_tuple(
     if native_binary is not None:
         tuple_["native_binary"] = _sha256_file(native_binary)
     return tuple_
+
+
+def _toolkits_fingerprint(skill: str, root: Path) -> str | None:
+    """One hash over every toolkit the skill declares, in declaration order; None if none."""
+    skill_yaml = root / "skills" / skill / "skill.yaml"
+    if not skill_yaml.is_file():
+        return None
+    manifest = yaml.safe_load(skill_yaml.read_text(encoding="utf-8")) or {}
+    kits = [str(k) for k in (manifest.get("toolkits") or [])]
+    if not kits:
+        return None
+    parts = []
+    for kit in kits:
+        path = root / "toolkits" / kit
+        tree = _sha256_tree(path, ("*.yaml", "python/**/*.py", "native/src/**/*.rs"))
+        parts.append(f"{kit}:{tree if path.is_dir() else 'missing'}")
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 def _recommended_model_sha(skill: str, root: Path) -> str | None:

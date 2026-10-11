@@ -62,9 +62,6 @@ pub fn compress(
     profile: &CompressProfile,
     gs: Option<&Path>,
 ) -> anyhow::Result<Method> {
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     let method = choose_method(quality, gs.is_some());
     match method {
         Method::Ghostscript => ghostscript(

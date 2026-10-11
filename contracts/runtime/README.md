@@ -6,9 +6,8 @@ the Python package.
 
 - **`core_tools.yaml`** — metadata for the core control tools (clarify / reject / done /
   wait_for_confirmation), merged into every skill's registry by name.
-- **`steps.yaml`** — metadata for the shared step library (`resolve_inputs`), and the
-  reserved home for the future capability stdlib. Reference-only: not loaded by the Python
-  runtime today (skills carry the `resolve_inputs` entry in their own `tools.yaml`).
+- Shared tool contracts are **not** here: they live with their code in toolkits
+  (`toolkits/<name>/tools.yaml`, e.g. `resolve_inputs` in `toolkits/fs`).
 - **`generation.yaml`** — the generation settings that decide what the model emits
   (`max_tokens`, `n_ctx`, `temperature`, `json_mode`, `thinking_enabled`) for the promoted
   models. Enforced by comparison, not by copying — see below.
@@ -22,7 +21,7 @@ packaged copy first, else walks up to this directory in a checkout.
 
 Edit the canonical file here, then run **`just sync-runtime`** to refresh the packaged
 copy. A drift-guard test (`test_runtime_data.py`) fails if the two diverge, so CI catches
-an unsynced edit. `steps.yaml` is not loaded by Python and is **not** shipped in the wheel.
+an unsynced edit.
 
 ## Two kinds of guard
 

@@ -38,18 +38,18 @@ def _write_demo_skill(skill_dir: Path) -> None:
         textwrap.dedent("""\
             name: demo
             description: "Tiny demo skill exercising the intent/leaf safety boundary."
-            tools: tools.yaml
-            skill_class: handlers.DemoSkill
             """),
         encoding="utf-8",
     )
     (skill_dir / "tools.yaml").write_text(
         textwrap.dedent("""\
             big_op:
+              effects: []
               description: "Destructive high-level intent expanded into one safe leaf."
               required_args: [label]
               safety_category: destructive
             small_op:
+              effects: []
               description: "Internal worker step — safe on its own, but reachable only
                 through big_op's expansion."
               required_args: [token]
@@ -60,9 +60,9 @@ def _write_demo_skill(skill_dir: Path) -> None:
     (skill_dir / "handlers.py").write_text(
         textwrap.dedent("""\
             from knaif.skill_base import Skill
-            from knaif.tool import Intent, Step
+            from knaif.tool import Intent, Handler
 
-            class SmallOpStep(Step):
+            class SmallOpStep(Handler):
                 name = "small_op"
                 def handle(self, args, ctx):
                     return {"echo": args["token"]}
@@ -73,7 +73,7 @@ def _write_demo_skill(skill_dir: Path) -> None:
                     return [{"tool": "small_op", "args": {"token": args["label"]}}]
 
             class DemoSkill(Skill):
-                tools = [SmallOpStep, BigOpIntent]
+                pass
             """),
         encoding="utf-8",
     )
@@ -146,14 +146,13 @@ def test_direct_destructive_leaf_still_blocked(tmp_path):
         textwrap.dedent("""\
             name: direct
             description: "A single directly-destructive tool, no intent wrapper."
-            tools: tools.yaml
-            skill_class: handlers.DirectSkill
             """),
         encoding="utf-8",
     )
     (skill_dir / "tools.yaml").write_text(
         textwrap.dedent("""\
             wipe:
+              effects: []
               description: "Directly destructive, top-level tool."
               required_args: [token]
               safety_category: destructive
@@ -163,15 +162,15 @@ def test_direct_destructive_leaf_still_blocked(tmp_path):
     (skill_dir / "handlers.py").write_text(
         textwrap.dedent("""\
             from knaif.skill_base import Skill
-            from knaif.tool import Step
+            from knaif.tool import Handler
 
-            class WipeStep(Step):
+            class WipeStep(Handler):
                 name = "wipe"
                 def handle(self, args, ctx):
                     return {"echo": args["token"]}
 
             class DirectSkill(Skill):
-                tools = [WipeStep]
+                pass
             """),
         encoding="utf-8",
     )
@@ -193,18 +192,18 @@ def _write_clarifying_skill(skill_dir: Path) -> None:
         textwrap.dedent("""\
             name: asker
             description: "Destructive intent that can expand to a terminal clarify."
-            tools: tools.yaml
-            skill_class: handlers.AskerSkill
             """),
         encoding="utf-8",
     )
     (skill_dir / "tools.yaml").write_text(
         textwrap.dedent("""\
             risky_op:
+              effects: []
               description: "Destructive intent; clarifies when it cannot resolve its target."
               required_args: [target]
               safety_category: destructive
             worker:
+              effects: []
               description: "Internal worker step."
               required_args: [token]
               internal: true
@@ -214,9 +213,9 @@ def _write_clarifying_skill(skill_dir: Path) -> None:
     (skill_dir / "handlers.py").write_text(
         textwrap.dedent("""\
             from knaif.skill_base import Skill
-            from knaif.tool import Intent, Step
+            from knaif.tool import Intent, Handler
 
-            class WorkerStep(Step):
+            class WorkerStep(Handler):
                 name = "worker"
                 def handle(self, args, ctx):
                     return {"echo": args["token"]}
@@ -229,7 +228,7 @@ def _write_clarifying_skill(skill_dir: Path) -> None:
                     return [{"tool": "worker", "args": {"token": args["target"]}}]
 
             class AskerSkill(Skill):
-                tools = [WorkerStep, RiskyOpIntent]
+                pass
             """),
         encoding="utf-8",
     )

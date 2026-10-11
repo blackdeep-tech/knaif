@@ -401,3 +401,50 @@ def test_agent_output_dataclass():
     )
     assert ao.error is None
     assert ao.execution_results == []
+
+
+def test_a_verbose_run_announces_its_total_first(capsys):
+    """Watchers (scripts/watch_run.sh) read the denominator from this line, not by guessing."""
+    rows = [_row(), _row()]
+    rows[1].utterances = ["a", "b", "c"]
+    run_corpus(_agent(), rows, verbose=True, execute=True)
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.strip() == "rows to run: 4"
+
+
+def test_a_non_executing_run_counts_one_utterance_per_row(capsys):
+    rows = [_row(), _row()]
+    rows[1].utterances = ["a", "b", "c"]
+    run_corpus(_agent(), rows, verbose=True)
+    assert capsys.readouterr().out.splitlines()[0].strip() == "rows to run: 2"
+
+
+def test_artifact_runner_rows_start_in_an_empty_folder(tmp_path):
+    """Row folders are deterministic (`<id>__<idx>`) and a failed row's is kept, and so was any
+    folder a killed run never graded. The artifact-runner path wrote into whatever was there, so
+    documents' free-name rule numbered past a stale output (`sample.md` -> `sample-1.md`): 32
+    label moves in a 2026-10-11 full run, and a leftover could satisfy a missing input."""
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.txt").write_text("hi")
+    sandbox = tmp_path / "sb"
+    stale_row = sandbox / "d1__0"
+    stale_row.mkdir(parents=True)
+    (stale_row / "sample.md").write_text("from an earlier run")
+    stale_scratch = sandbox / "d1__0.work"
+    stale_scratch.mkdir()
+    (stale_scratch / "x.pdf").write_text("old")
+
+    seen: list[list[str]] = []
+
+    def runner(artifact, fixture, out_dir):
+        seen.append(sorted(p.name for p in Path(out_dir).iterdir()))
+        assert not stale_scratch.exists()
+        return None
+
+    row = _row(id="d1", fixture="sample.txt")
+    agent = _agent(execute_return=[{"tool": "convert_document", "result": {"output": "x"}}])
+    agent.artifact_runner = MagicMock(side_effect=runner)
+    run_corpus(agent, [row], execute=True, sandbox=sandbox, fixture_dir=fixture_dir)
+    assert agent.artifact_runner.called
+    assert seen == [[]]

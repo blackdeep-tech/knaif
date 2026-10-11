@@ -1,4 +1,4 @@
-"""FunctionStep — a Step that wraps a plain Python callable."""
+"""FunctionHandler — a Handler that wraps a plain Python callable."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 
 from knaif.handler_api import HandlerContext
 from knaif.registry import ArgSchema, ToolDef
-from knaif.tool import Step
+from knaif.tool import Handler
 
 
 def _coerce_value(value: Any, schema: ArgSchema) -> Any:
@@ -38,8 +38,8 @@ def _coerce_value(value: Any, schema: ArgSchema) -> Any:
     return value
 
 
-class FunctionStep(Step):
-    """A Step that dispatches to an ordinary Python callable.
+class FunctionHandler(Handler):
+    """A Handler that dispatches to an ordinary Python callable.
 
     The callable receives keyword arguments matching the tool's arg names.
     If its signature includes a parameter named ``ctx``, a
