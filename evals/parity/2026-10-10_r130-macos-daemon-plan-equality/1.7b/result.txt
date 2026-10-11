@@ -1,0 +1,2 @@
+1.7b ffmpeg: IDENTICAL sha256 1dc863209e40171b2b3335f72341439f96fb7efbbf42d244412cdb3ae9dbcdc3 (861 lines)
+1.7b documents: IDENTICAL sha256 ae3e633f333c3d61c3edee17f9ea2664d0046e2f43f977ac8cdd3cab294044be (164 lines)
