@@ -1,0 +1,55 @@
++ cd /Users/admin/room
++ K=/usr/local/bin/knaif
+++ stat -f %Su /dev/console
+console=root
++ echo console=root
++ sudo installer -pkg knaif-1.3.0-macos-arm64.pkg -target /
+installer: Package name is knaif 1.3.0
+installer: Installing at base path /
+installer: The install was successful.
++ /usr/local/bin/knaif --version
+knaif 1.3.0 (inference: llama.cpp)
++ /usr/local/bin/knaif daemon start --model /Users/admin/room/knaif-qwen3-4b-v2-q4_k_m.gguf
+Starting the model daemon (knaif-qwen3-4b-v2-q4_k_m)...
+knaif daemon is running with knaif-qwen3-4b-v2-q4_k_m.
+Later runs use it automatically; stop it with `knaif daemon stop`.
++ sleep 3
++ /usr/local/bin/knaif daemon status
+knaif daemon is running (pid 776).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     3 s (stops after 10 min)
++ sudo installer -pkg knaif-1.3.0-macos-arm64.pkg -target /
+installer: Package name is knaif 1.3.0
+installer: Upgrading at base path /
+installer: The upgrade was successful.
++ pgrep -fl 'knaif daemon serve'
+776 /usr/local/bin/knaif daemon serve --model /Users/admin/room/knaif-qwen3-4b-v2-q4_k_m.gguf --idle-minutes 10
++ grep -E 'preinstall: knaif' /var/log/install.log
++ tail -1
+2026-10-11 18:23:03-07 Admins-Virtual-Machine package_script_service[402]: ./preinstall: knaif: not stopping a model daemon: nobody is logged in to ask; one left running exits on its own when idle
++ /usr/local/bin/knaif daemon status
+knaif daemon is running (pid 776).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     3 s (stops after 10 min)
++ sudo /usr/local/knaif/uninstall.sh
+knaif daemon stopped.
+removed /usr/local/bin/knaif
+removed /usr/local/knaif
+forgot receipt tech.blackdeep.knaif.core
+forgot receipt tech.blackdeep.knaif.skill.documents
+forgot receipt tech.blackdeep.knaif.skill.ffmpeg
+kept ~/.knaif (downloaded models): remove it with --purge, or by hand
+knaif is uninstalled. Homebrew tools stay installed: brew uninstall <name> to remove one.
++ pgrep -fl 'knaif daemon serve'
+DAEMON-GONE
++ echo DAEMON-GONE
++ ls -d /Users/admin/.knaif
+/Users/admin/.knaif
+~/.knaif kept
++ echo '~/.knaif kept'
++ ls /usr/local/knaif /usr/local/bin/knaif
++ head -2
+ls: /usr/local/bin/knaif: No such file or directory
+ls: /usr/local/knaif: No such file or directory
