@@ -135,28 +135,38 @@ def make_preview_confirmer(
     return confirm
 
 
-def _render_items(items: list[dict[str, Any]]) -> int:
-    """Render structured items uniformly; return an exit code (0 or 1).
+def _echo_item(item: dict[str, Any], indent: str) -> int:
+    """Render one structured item; return 1 for an error, else 0.
 
     Item kinds:
       - "error"   → red ``✗ {message}`` to stderr, sets exit-code to 1
       - "command" → ``$ {message}`` (bright_black ``$`` prefix)
       - "output"  → green ``✓ {message}``
+      - "text"    → the message as is (a read's answer), every line indented, no colour
       - "info"    → yellow ``{message}``
     """
+    kind = item.get("kind", "info")
+    message = display(item.get("message", ""))
+    if kind == "error":
+        click.echo(indent + click.style(f"✗ {message}", fg="red"), err=True)
+        return 1
+    if kind == "command":
+        click.echo(indent + click.style("$", fg="bright_black") + " " + message)
+    elif kind == "output":
+        click.echo(indent + click.style(f"✓ {message}", fg="green"))
+    elif kind == "text":
+        for line in message.splitlines() or [""]:
+            click.echo(indent + line)
+    else:  # "info" or anything unknown
+        click.echo(indent + click.style(message, fg="yellow"))
+    return 0
+
+
+def _render_items(items: list[dict[str, Any]]) -> int:
+    """Render structured items uniformly (see `_echo_item`); return an exit code (0 or 1)."""
     exit_code = 0
     for item in items:
-        kind = item.get("kind", "info")
-        message = display(item.get("message", ""))
-        if kind == "error":
-            click.echo(click.style(f"  ✗ {message}", fg="red"), err=True)
-            exit_code = 1
-        elif kind == "command":
-            click.echo("  " + click.style("$", fg="bright_black") + " " + message)
-        elif kind == "output":
-            click.echo(click.style(f"  ✓ {message}", fg="green"))
-        else:  # "info" or anything unknown
-            click.echo(click.style(f"  {message}", fg="yellow"))
+        exit_code |= _echo_item(item, "  ")
     return exit_code
 
 
@@ -603,18 +613,8 @@ def run_cmd(
         total_s = total_ms / 1000
         timing_label = "dry-run" if dry_run else f"{total_s:.1f}s"
         for item in items:
-            kind = item.get("kind", "info")
-            message = display(item.get("message", ""))
-            prefix = "    "
-            if kind == "error":
-                click.echo(prefix + click.style(f"✗ {message}", fg="red"), err=True)
+            if _echo_item(item, "    "):
                 exit_code_holder[0] = 1
-            elif kind == "command":
-                click.echo(prefix + click.style("$", fg="bright_black") + " " + message)
-            elif kind == "output":
-                click.echo(prefix + click.style(f"✓ {message}", fg="green"))
-            else:
-                click.echo(prefix + click.style(message, fg="yellow"))
         click.echo("    " + click.style(timing_label, fg="bright_black"))
 
     # ── agent ─────────────────────────────────────────────────────────────────

@@ -84,6 +84,36 @@ from .steps import (
 )
 
 
+def _read_answer(tool: Any, result: dict[str, Any]) -> str | None:
+    """What a read found, in the native CLI's formats; None for a write or a dry-run stub."""
+    if result.get("mode") == "dry_run":
+        return None
+    if tool == "inspect_document":
+        line = (
+            f"{result['format']}: {result['pages']} page(s), {result['size_bytes']} bytes, "
+            f"encrypted={result['encrypted']}, text_layer={result['has_text_layer']}"
+        )
+        if result["encrypted"]:
+            # 0 pages reads as an empty file unless it says why.
+            line += (
+                "\nThis file is password-protected, so its pages cannot be counted. "
+                "Unlock it first."
+            )
+        return line
+    if tool == "extract_text":
+        return "\n".join(
+            f"--- page {r['page']} ---\n{str(r['text']).rstrip()}" for r in result["pages"]
+        )
+    if tool == "find_in_document":
+        matches = result["matches"]
+        if not matches:
+            return "No matches."
+        return "\n".join(
+            f"p{m['page']} [{m['span'][0]}..{m['span'][1]}]: {m['snippet']}" for m in matches
+        )
+    return None
+
+
 class DocumentsSkill(Skill):
     def format_results(
         self, results: list[dict[str, Any]], *, dry_run: bool
@@ -91,8 +121,11 @@ class DocumentsSkill(Skill):
         items: list[dict[str, str]] = []
         for item in results:
             result = item.get("result", {})
+            answer = _read_answer(item.get("tool"), result)
             if "error" in result:
                 items.append({"kind": "error", "message": str(result["error"])})
+            elif answer is not None:
+                items.append({"kind": "text", "message": answer})
             elif "output" in result and result["output"]:
                 items.append({"kind": "output", "message": str(result["output"])})
             else:

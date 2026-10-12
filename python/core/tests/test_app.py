@@ -378,3 +378,12 @@ def test_rendered_items_show_scratch_paths_as_work(capsys, monkeypatch, tmp_path
     out = capsys.readouterr().out
     assert "<work>/clip_trimmed.mp4" in out
     assert "run-1-ab" not in out
+
+
+def test_text_items_print_plainly_line_by_line(capsys):
+    """A skill's answer (extracted text, a page count) prints as is, each line indented, with
+    no colour and no marker."""
+    from knaif.app import _render_items
+
+    assert _render_items([{"kind": "text", "message": "--- page 1 ---\nAlpha"}]) == 0
+    assert capsys.readouterr().out == "  --- page 1 ---\n  Alpha\n"

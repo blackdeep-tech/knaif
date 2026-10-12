@@ -997,6 +997,44 @@ def test_format_results_surfaces_warning():
     assert {"kind": "info", "message": "Raster compression removes selectable text."} in formatted
 
 
+def test_format_results_prints_what_a_read_found():
+    """A read's answer is the point of running it: print it, in the native CLI's formats."""
+    skill = Skill.load(DOCUMENTS_SKILL_DIR)
+    inspection = {
+        "format": "pdf",
+        "size_bytes": 1234,
+        "encrypted": False,
+        "has_text_layer": True,
+        "pages": 3,
+    }
+    pages = [{"page": 1, "text": "Alpha\n"}, {"page": 2, "text": "Beta"}]
+    match = {"page": 2, "snippet": "Beta", "span": [0, 4]}
+
+    def fmt(tool: str, result: dict) -> list[dict]:
+        return skill.result_formatter([{"tool": tool, "result": result}], dry_run=False)
+
+    assert fmt("inspect_document", inspection) == [
+        {
+            "kind": "text",
+            "message": "pdf: 3 page(s), 1234 bytes, encrypted=False, text_layer=True",
+        }
+    ]
+    assert fmt("extract_text", {"pages": pages, "text": "Alpha\nBeta"}) == [
+        {"kind": "text", "message": "--- page 1 ---\nAlpha\n--- page 2 ---\nBeta"}
+    ]
+    assert fmt("find_in_document", {"matches": [match], "count": 1}) == [
+        {"kind": "text", "message": "p2 [0..4]: Beta"}
+    ]
+    assert fmt("find_in_document", {"matches": [], "count": 0}) == [
+        {"kind": "text", "message": "No matches."}
+    ]
+    locked = fmt("inspect_document", {**inspection, "encrypted": True, "pages": 0})
+    assert "password-protected" in locked[0]["message"]
+    # A dry-run stub (the input is not there yet) has nothing to show.
+    stub = {"mode": "dry_run", "pages": [], "text": ""}
+    assert fmt("extract_text", stub) == [{"kind": "info", "message": "extract_text"}]
+
+
 def test_run_compress_uses_ghostscript_when_available(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):

@@ -684,7 +684,7 @@ class MySkill(Skill):
     def format_results(self, results: list[dict], *, dry_run: bool) -> list[dict]:
         """Return a list of {kind, message} items.
 
-        kind ∈ {"error", "command", "output", "info"}.
+        kind ∈ {"error", "command", "output", "text", "info"}.
         """
         return [{"kind": "output", "message": "ok"}]
 ```
@@ -696,6 +696,7 @@ The CLI renders each item uniformly:
 | `"error"` | red `✗ {message}` on stderr; sets the CLI exit code to 1 |
 | `"command"` | `$ {message}` with a bright-black `$` prefix |
 | `"output"` | green `✓ {message}` |
+| `"text"` | the message as is, every line indented, no colour: what a read found (extracted text, a page count, matches) |
 | `"info"` | yellow `{message}` |
 
 A skill that does not override `format_results` leaves it returning `None`, and the CLI
