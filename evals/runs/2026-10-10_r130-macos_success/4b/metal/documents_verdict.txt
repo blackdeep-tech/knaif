@@ -1,0 +1,8 @@
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9756  (floor 0.9556, python 0.9756)
+  avg_knaif_score   : 0.9851  (floor 0.9800, python 0.9818)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json

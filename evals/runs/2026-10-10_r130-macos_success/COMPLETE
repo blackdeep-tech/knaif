@@ -58,3 +58,22 @@
 2026-10-11 14:10:31 START check-both-documents
 2026-10-11 14:10:46 END check-both-documents: preflight passed
 2026-10-11 14:10:54 AMENDMENT written into run_all.sh (documents re-run, SKILLS option); invalid documents files moved to <model>/<stage>/invalid-2026-10-11/
+2026-10-12 03:42:41 owner approved documents re-run (l4 + cpu, both models), budget 1h, relayed by Deyan
+2026-10-12 03:42:41 START l4-both-documents
+2026-10-12 03:42:57 l4-both-documents: 4b
+2026-10-12 03:52:48 l4-both-documents documents mac-4b: placement MTL0
+2026-10-12 03:52:58 l4-both-documents documents mac-4b: safety exit 0
+2026-10-12 03:52:58 l4-both-documents 4b documents: ACCEPTED - 43 thresholds met.
+2026-10-12 03:52:58 l4-both-documents: 1.7b
+2026-10-12 03:58:01 l4-both-documents documents mac-1.7b: placement MTL0
+2026-10-12 03:58:06 l4-both-documents documents mac-1.7b: safety exit 0
+2026-10-12 03:58:06 l4-both-documents 1.7b documents: ACCEPTED - 43 thresholds met.
+2026-10-12 03:58:06 END l4-both-documents
+2026-10-12 03:58:06 START cpu-both-documents
+2026-10-12 03:58:21 cpu-both-documents: 4b
+2026-10-12 04:11:06 cpu-both-documents documents mac-cpu-4b: placement CPU
+2026-10-12 04:11:49 cpu-both-documents documents mac-cpu-4b: safety exit 0
+2026-10-12 04:11:49 cpu-both-documents: 1.7b
+2026-10-12 04:17:10 cpu-both-documents documents mac-cpu-1.7b: placement CPU
+2026-10-12 04:17:27 cpu-both-documents documents mac-cpu-1.7b: safety exit 0
+2026-10-12 04:17:27 END cpu-both-documents
