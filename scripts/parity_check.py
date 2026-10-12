@@ -207,8 +207,16 @@ def canon_token(tok: str) -> str:
     and as the ``cwd=None`` fallback for raw argv positions below. NOT used to decide
     whether an arbitrary argv *token* is a path in the first place — ``_canon_argv``
     does that positionally; see its docstring for why (audit F7).
+
+    A URL (`https://h/a.mov`) is not a path and compares whole: a plan on the URL and a plan
+    on a local `a.mov` are different plans.
     """
+    if _URL_TOKEN.match(tok):
+        return tok
     return tok.rsplit("/", 1)[-1] if _is_pathlike(tok) else tok
+
+
+_URL_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 
 
 _DRIVE_ABS = re.compile(r"^[A-Za-z]:/")
@@ -481,8 +489,16 @@ class Row:
     is_chain: bool
 
 
-def load_rows(skill: str, tags_filter: set[str] | None) -> list[Row]:
-    path = REPO_ROOT / "skills" / skill / "data" / "eval.jsonl"
+def corpus_path(skill: str, corpus: Path | str | None = None) -> Path:
+    """The corpus compared: *corpus* when given (URL rows live in `eval_url.jsonl`), else the
+    skill's `eval.jsonl`."""
+    return Path(corpus) if corpus else REPO_ROOT / "skills" / skill / "data" / "eval.jsonl"
+
+
+def load_rows(
+    skill: str, tags_filter: set[str] | None, *, corpus: Path | str | None = None
+) -> list[Row]:
+    path = corpus_path(skill, corpus)
     rows: list[Row] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -978,7 +994,7 @@ def build_meta(
     `entry_points` satisfies rule 2 (L3d): the record states which command was run on each
     side, so a later reader can check the two halves were the same stage.
     """
-    corpus = REPO_ROOT / "skills" / args.skill / "data" / "eval.jsonl"
+    corpus = corpus_path(args.skill, getattr(args, "corpus", None)).resolve()
     return {
         "purpose": args.purpose or f"L3 behavioral parity — {args.skill} ({args.mode} mode)",
         "captured": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -1159,6 +1175,12 @@ def main() -> int:
         "--limit", type=int, default=0, help="Only the first N matching rows (0 = all)."
     )
     ap.add_argument(
+        "--corpus",
+        default=None,
+        help="Corpus file to compare instead of skills/<skill>/data/eval.jsonl (e.g. the URL "
+        "rows in eval_url.jsonl).",
+    )
+    ap.add_argument(
         "--only",
         help="JSON file listing the row ids to compare (or [id, idx] pairs); an unknown id is an "
         "error. For pre-registered sample runs.",
@@ -1283,7 +1305,7 @@ def main() -> int:
     cwd = (args.cwd or REPO_ROOT).resolve()
     cwd_posix = cwd.as_posix()  # for Outcome.key()'s argv path-position resolution (F7)
     tags_filter = {t.strip() for t in args.tags.split(",") if t.strip()} or None
-    rows = load_rows(args.skill, tags_filter)
+    rows = load_rows(args.skill, tags_filter, corpus=args.corpus)
     if args.only:
         # A JSON list of ids, or of [id, utterance_idx] pairs (the L4 sample format; parity
         # compares each row's first utterance, so the index is not used).

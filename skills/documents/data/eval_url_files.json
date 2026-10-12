@@ -1,0 +1,9 @@
+{
+  "_comment": "URL-input evals: what the local eval server (knaif.evalsuite.url_server) answers for https://files.knaif.test/<path>. Each served name is an alias of a fixture, so a download never shares a name with a file already in the row folder. Used by eval_url.jsonl.",
+  "files": {
+    "/documents/report.pdf": "sample.pdf",
+    "/documents/memo.docx": "sample.docx",
+    "/documents/scan.pdf": "sample-scanned.pdf",
+    "/documents/notes.txt": "sample.txt"
+  }
+}

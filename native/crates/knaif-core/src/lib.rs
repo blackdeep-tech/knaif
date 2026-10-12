@@ -18,6 +18,7 @@ pub mod safety;
 pub mod sandbox;
 pub mod scratch;
 pub mod skills;
+pub mod urls;
 
 pub use clarify_gate::{
     apply_clarify_gate, file_kinds_from_groups, hallucinated_filename, load_file_kinds,

@@ -234,6 +234,38 @@ pub fn validate_step(
     validate_step_with(step, registry, root, sandbox, false)
 }
 
+/// A URL may only be an input file, and must be one knaif will download. Port of Python
+/// `planner._validate_url_args` (contracts/parity/url_inputs_cases.json, `validation_cases`).
+fn validate_url_args(tool: &crate::registry::ToolDef, args: &Map<String, Value>) -> Result<()> {
+    use crate::urls::{check_url, is_url, URL_INPUT_KEYS};
+    for (arg_name, value) in args {
+        let items: Vec<&Value> = match value {
+            Value::Array(a) => a.iter().collect(),
+            other => vec![other],
+        };
+        for item in items.into_iter().filter_map(Value::as_str) {
+            if !is_url(item) {
+                continue;
+            }
+            let input_role = tool
+                .arg_schemas
+                .get(arg_name)
+                .and_then(|s| s.path_role.as_deref())
+                == Some("input");
+            if !URL_INPUT_KEYS.contains(&arg_name.as_str()) && !input_role {
+                bail!(
+                    "Tool '{}': a URL can only be an input file, not '{arg_name}' ({item})",
+                    tool.name
+                );
+            }
+            if let Some(error) = check_url(item) {
+                bail!("Tool '{}': {error}", tool.name);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// `validate_step`, with the internal-tool gate made explicit.
 ///
 /// `allow_internal` must be **false** for anything the model produced, and is true only for
@@ -316,6 +348,10 @@ pub fn validate_step_with(
             validate_arg_by_schema(arg_name, value, schema)
                 .map_err(|e| anyhow::anyhow!("Tool '{}' arg validation: {e}", tool.name))?;
         }
+    }
+
+    if !crate::urls::CONTROL_TOOLS.contains(&tool.name.as_str()) {
+        validate_url_args(tool, args)?;
     }
 
     if let Some(output) = obj.get("output") {

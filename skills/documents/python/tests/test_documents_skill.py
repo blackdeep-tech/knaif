@@ -1134,6 +1134,40 @@ def test_run_compress_dry_run_tolerates_missing_chain_intermediate(tmp_path: Pat
     assert result["original_size"] == 0
 
 
+def test_merge_dry_run_tolerates_an_input_not_there_yet(tmp_path: Path):
+    """A URL input is downloaded only in a real run, and a chain intermediate is made only
+    then: a dry-run merge must not open an input that is not there yet."""
+    handlers = _documents_handlers_module()
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
+    result = handlers.MergePdfsStep().handle(
+        {"inputs": ["not-yet-made.pdf", "also-missing.pdf"], "output": "merged.pdf"}, ctx
+    )
+    assert result["mode"] == "dry_run"
+    assert result["output"].endswith("merged.pdf")
+
+
+@pytest.mark.parametrize(
+    ("step", "args", "empty"),
+    [
+        ("ExtractTextStep", {"input": "not-yet-made.pdf"}, {"pages": [], "text": ""}),
+        (
+            "FindInDocumentStep",
+            {"input": "not-yet-made.pdf", "query": "Alpha"},
+            {"matches": [], "count": 0},
+        ),
+    ],
+)
+def test_read_dry_run_tolerates_an_input_not_there_yet(
+    tmp_path: Path, step: str, args: dict, empty: dict
+):
+    """Like inspect_document: a dry run of a read on an input not there yet returns an empty
+    stub instead of raising."""
+    handlers = _documents_handlers_module()
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
+    result = getattr(handlers, step)().handle(args, ctx)
+    assert result == {"mode": "dry_run", **empty}
+
+
 @pytest.mark.parametrize("filename", ["train.jsonl", "safety_test.jsonl"])
 def test_data_jsonl_is_valid(filename: str):
     path = DOCUMENTS_SKILL_DIR / "data" / filename

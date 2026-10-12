@@ -39,6 +39,8 @@ class Skill:
     file_kinds: dict[str, str] = field(default_factory=dict)
     # `scratch_intermediates:` route chain intermediates into the run scratch (both runtimes).
     scratch_intermediates: bool = False
+    # `url_inputs:` the content types and size cap of http(s) URL inputs (needs `net`).
+    url_inputs: Any | None = None
     tool_map: dict[str, Any] | None = None
     skill_instance: Any | None = None
     # The skill's tools plus every declared toolkit's (core control tools are merged by the
@@ -108,6 +110,12 @@ class Skill:
                 f"scratch_intermediates must be true or false, got {scratch_intermediates!r}"
             )
 
+        from .urls import parse_url_inputs
+
+        url_inputs = parse_url_inputs(
+            manifest.get("url_inputs"), list(manifest.get("toolkits") or [])
+        )
+
         # tool_map is the source of truth. The dict views (handlers/expanders/summarizers)
         # and skill-level callables are derived from it, because the agent and evalsuite
         # read them. preflights stays empty: the wildcard preflight runs via
@@ -149,6 +157,7 @@ class Skill:
             runtimes=runtimes,
             file_kinds=file_kinds,
             scratch_intermediates=scratch_intermediates,
+            url_inputs=url_inputs,
             tool_map=tool_map,
             skill_instance=skill_instance,
             registry=registry,

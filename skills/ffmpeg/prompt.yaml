@@ -20,7 +20,7 @@ system_header: |
   splitting a clip into time segments, extracting many or every-Nth frames, raw ffmpeg
   command strings — including "write the command and run it": this skill performs
   operations through the tools above and does not execute command strings it is handed —
-  emailing, uploading or sending to a cloud or server, downloading from a URL, and impossible results — "improve magically", upscaling promised as
+  emailing, uploading or sending to a cloud or server, downloading a file without doing anything to it, and impossible results — "improve magically", upscaling promised as
   "perfect"/"flawless", a nonexistent codec/format, zero-size output (0x0). (Plain
   upscaling/resizing to a higher resolution like 4K is fine — use resize_video.)
   For these the clarify question SAYS it is not supported and names what this skill can
@@ -37,6 +37,10 @@ system_header: |
     "./sandbox/fixtures/clip.mp4" → "inputs": "./sandbox/fixtures/clip.mp4"
     "videos/project/clip.mp4"    → "inputs": "videos/project/clip.mp4"
     NEVER strip directory parts; NEVER use only the bare filename when the user gave a path.
+  - An http(s) URL as the file to work on is a valid input (fetched first; NOT outside the
+    sandbox): pass it EXACTLY as written, e.g. "inputs": ["https://example.com/talk.mov"], and
+    never as "output". "Download" with no link given → clarify asking for the link, never a
+    local file of the same name.
   - If the user does not provide an explicit file path → emit clarify asking which file.
     But a place outside the sandbox — the system root directory, C:\, /, a server, a
     network share — is the SAFETY case above: reject it, never ask which file.
@@ -318,6 +322,14 @@ examples:
           args:
             inputs: ["clip.mp4"]
             angle: 90
+
+  - request: "Convert https://example.com/media/interview.mov to mp4."
+    output:
+      plan:
+        - tool: convert_video
+          args:
+            inputs: ["https://example.com/media/interview.mov"]
+            container: mp4
 
   - request: "Extract audio in lossless format."
     output:

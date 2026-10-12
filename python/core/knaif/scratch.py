@@ -99,11 +99,15 @@ class RunScratch:
         self.dry_run = dry_run
         self.root = root if root is not None else scratch_root()
         self.path = self.root / f"run-{os.getpid()}-{secrets.token_hex(4)}"
+        self._depth = 0
 
     def __enter__(self) -> RunScratch:
-        if not self.dry_run:
+        # Re-entrant: a stage that needs the folder early (URL downloads, before preflight)
+        # enters it first; the folder is created once and removed when the outermost exits.
+        if self._depth == 0 and not self.dry_run:
             sweep_stale(self.root)
             self.path.mkdir(parents=True, exist_ok=False)
+        self._depth += 1
         return self
 
     def __exit__(
@@ -112,7 +116,8 @@ class RunScratch:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        if not self.dry_run and not debug_keep():
+        self._depth -= 1
+        if self._depth == 0 and not self.dry_run and not debug_keep():
             shutil.rmtree(self.path, ignore_errors=True)
 
     def contains(self, path: str | Path) -> bool:

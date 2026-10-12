@@ -366,6 +366,32 @@ def _ask_yes_no(question: str, default_yes: bool) -> bool | None:
     return c in ("y", "Y")
 
 
+def wire_downloads(agent: Any, *, allow_download: bool, interactive: bool, ask: Any) -> None:
+    """URL inputs: --allow-download approves every download up front; otherwise a person at a
+    terminal is asked once per URL (default No), and with nobody to ask the run stops, naming
+    the flag (``CommandAgent._fetch_url_inputs``). --yes never covers network access."""
+    agent.allow_download = allow_download
+    agent.download_confirmer = (
+        (lambda url, cap: bool(ask(f"Download {url} (up to {cap // 1_000_000:,} MB)?", False)))
+        if interactive and not allow_download
+        else None
+    )
+
+
+def download_lines(downloads: list[dict[str, Any]]) -> list[str]:
+    """One line per URL input: what a dry run would fetch, or what a run fetched."""
+    from .scratch import display
+
+    lines = []
+    for d in downloads:
+        where = display(str(d.get("path", "")))
+        if d.get("dry_run"):
+            lines.append(f"would download {d['url']} → {where}")
+        else:
+            lines.append(f"downloaded {d['url']} ({d.get('bytes', 0):,} bytes) → {where}")
+    return lines
+
+
 def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     """Ask before replacing each existing output (default No). --overwrite approves up front;
     with nobody to ask it stops, naming the flag. False means the user said no."""
@@ -418,6 +444,13 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     default=False,
     help="Replace files that already exist. Otherwise an existing output asks "
     "'Replace <file>? [y/N]' (Enter keeps it) and, without a terminal, stops.",
+)
+@click.option(
+    "--allow-download",
+    is_flag=True,
+    default=False,
+    help="Download http(s) URL inputs without asking. Otherwise each URL asks "
+    "'Download <url>? [y/N]' and, without a terminal, stops. --yes does not cover it.",
 )
 @click.option(
     "-v",
@@ -482,6 +515,7 @@ def run_cmd(
     auto_approve: bool | None,
     confirm: bool,
     overwrite: bool,
+    allow_download: bool,
     verbose: bool,
     silent: bool,
     backend: str,
@@ -601,6 +635,12 @@ def run_cmd(
         sys.exit(1)
 
     agent.intent_completed = _on_intent_completed
+    wire_downloads(
+        agent,
+        allow_download=allow_download,
+        interactive=sys.stdin.isatty() and not dry_run,
+        ask=_ask_yes_no,
+    )
 
     # ── infer ─────────────────────────────────────────────────────────────────
     _t_infer = time.perf_counter()
@@ -674,6 +714,13 @@ def run_cmd(
     except ValueError as exc:
         click.echo(click.style(f"\n{exc}", fg="red"), err=True)
         sys.exit(1)
+    if not silent:
+        for line in download_lines(agent.last_downloads):
+            click.echo("  " + click.style(line, fg="bright_black"))
+    if results and (results[0].get("result") or {}).get("status") == "declined":
+        if not silent:
+            click.echo(click.style("\n  (download declined — nothing fetched)", fg="yellow"))
+        sys.exit(0)
     if os.environ.get("KNAIF_DUMP_PLAN"):
         for argv in rendered_argvs(results):
             click.echo(ARGV_DUMP_MARKER + json.dumps(argv, ensure_ascii=False), err=True)

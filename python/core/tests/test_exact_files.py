@@ -258,3 +258,39 @@ def test_a_relative_row_folder_is_not_applied_twice(tmp_path: Path, monkeypatch)
     assert deliverables(results, "shrink clip.mp4", root=row) == {
         (tmp_path / row / "clip_small.mp4").resolve()
     }
+
+
+def test_a_replay_that_stops_before_running_is_an_error_not_clean(tmp_path: Path) -> None:
+    """A replay that ends at a clarify, a reject or a declined step ran nothing, so it cannot
+    vouch for the folder: found 2026-10-12, when URL rows replayed without download approval
+    stopped at the approval question and every one of them reported `clean`."""
+    from knaif.evalsuite.exact_files import replay_row
+
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    (fixtures / "clip.mp4").write_bytes(b"x")
+
+    class _Stops:
+        def execute_plan(self, *_a, **_k):
+            q = "Downloading https://h.test/a.mp4 needs your approval"
+            return [{"tool": "clarify", "args": {"question": q}, "result": {"question": q}}]
+
+    report = replay_row(
+        lambda _folder: _Stops(),
+        {"plan": [{"tool": "convert_video", "args": {"inputs": ["https://h.test/a.mp4"]}}]},
+        "convert https://h.test/a.mp4",
+        fixtures,
+        tmp_path / "row",
+    )
+    assert report["error"] is not None and "needs your approval" in report["error"]
+
+
+def test_only_a_url_row_passes_allow_download_to_the_binary():
+    """An older binary rejects an unknown flag, which would fail every row before inference."""
+    from knaif.evalsuite.native_lane import LaneConfig, build_argv
+
+    lane = LaneConfig.__new__(LaneConfig)
+    object.__setattr__(lane, "binary", Path("knaif"))
+    object.__setattr__(lane, "model_path", Path("m.gguf"))
+    assert "--allow-download" not in build_argv(lane, "ffmpeg", "convert clip.mp4 to mkv")
+    assert "--allow-download" in build_argv(lane, "ffmpeg", "convert https://h.test/a.mov to mp4")

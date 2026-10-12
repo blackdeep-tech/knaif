@@ -134,6 +134,7 @@ def run_command_chain(
     *,
     timeout: int = 120,
     fixture_file: Path | str | None = None,
+    prepare: Any = None,
 ) -> list[dict[str, Any]]:
     """Provision ``fixture_dir`` into ``out_dir``, then run ``commands`` there in sequence.
 
@@ -147,6 +148,10 @@ def run_command_chain(
     outputs. Returns one dict per executed command:
     ``{command, resolved_command, returncode, stderr, output}`` — ``command`` is what the plan
     rendered and ``resolved_command`` is what ran, so a report can show both.
+
+    *prepare* (``prepare(out_dir)``) runs after provisioning and before the first command: the
+    runner downloads a row's URL inputs into its scratch there, since provisioning empties it.
+    A failure stops the chain as a failed step named ``download``.
     """
     fixture_dir = Path(fixture_dir)
     out_dir = Path(out_dir)
@@ -155,6 +160,19 @@ def run_command_chain(
         # Fresh: a row directory is deterministic and a kept failure from an earlier run
         # would otherwise satisfy a later plan's missing input.
         provision_row_dir(fixture_dir, out_dir, fresh=True)
+    if prepare is not None:
+        try:
+            prepare(out_dir)
+        except Exception as exc:  # noqa: BLE001 - a failed download fails the row, by name
+            return [
+                {
+                    "command": "download",
+                    "resolved_command": "download",
+                    "returncode": 1,
+                    "stderr": str(exc),
+                    "output": str(out_dir),
+                }
+            ]
     anchors = [out_dir.resolve(), fixture_dir.resolve()]
     if fixture_file is not None:
         anchors.append(Path(fixture_file).resolve().parent)

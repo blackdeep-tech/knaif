@@ -143,9 +143,14 @@ def _preflight_inputs(
     root: Path,
     sandbox: Path | None = None,
     planned_output_names: set[str] | None = None,
+    work_dir: Path | None = None,
     **kwargs: Any,
 ) -> list[str]:
-    """Return error strings for any input paths that do not exist."""
+    """Return error strings for any input paths that do not exist.
+
+    A file in this run's scratch (*work_dir*: a downloaded URL input) is the run's own, not a
+    place outside the sandbox.
+    """
     raw = args.get("inputs") or args.get("input") or args.get("paths")
     if not raw:
         return []
@@ -176,7 +181,8 @@ def _preflight_inputs(
             p = (base / raw_path).resolve()
         else:
             p = p.resolve()
-            if sandbox is not None:
+            in_scratch = work_dir is not None and p.is_relative_to(Path(work_dir).resolve())
+            if sandbox is not None and not in_scratch:
                 try:
                     p.relative_to(sandbox.resolve())
                 except ValueError:

@@ -21,6 +21,28 @@ _STEM_STRUCTURE_RE = re.compile(r"[_\-]|\d")
 _GLOB_CHARS = frozenset("*?[")
 # Arg keys whose values are file paths (skills may use either singular or plural).
 _PATH_ARG_KEYS = frozenset({"inputs", "input", "files", "src", "dst", "path", "base", "append"})
+# Arg keys that name files a step reads: the only places a URL may stand (contracts/parity/
+# url_inputs_cases.json). An arg whose schema says `path_role: input` counts too.
+_URL_INPUT_KEYS = frozenset({"inputs", "input", "files", "base", "append"})
+_CONTROL_TOOLS = frozenset({"clarify", "reject", "done", "wait_for_confirmation"})
+
+
+def _validate_url_args(tool_name: str, tool_def: ToolDef, args: dict[str, Any]) -> None:
+    """A URL may only be an input file, and must be one knaif will download."""
+    from .urls import check_url, is_url
+
+    for arg_name, value in args.items():
+        for item in value if isinstance(value, list) else [value]:
+            if not is_url(item):
+                continue
+            schema = tool_def.arg_schemas.get(arg_name)
+            if arg_name not in _URL_INPUT_KEYS and getattr(schema, "path_role", None) != "input":
+                raise ValueError(
+                    f"Tool '{tool_name}': a URL can only be an input file, not '{arg_name}' "
+                    f"({item})"
+                )
+            if (error := check_url(item)) is not None:
+                raise ValueError(f"Tool '{tool_name}': {error}")
 
 
 class StemNotFoundError(ValueError):
@@ -491,6 +513,9 @@ def validate_step(
                 validate_arg_by_schema(arg_name, value, schema)
             except ValueError as exc:
                 raise ValueError(f"Tool '{tool_name}' arg validation: {exc}") from exc
+
+    if tool_name not in _CONTROL_TOOLS:
+        _validate_url_args(tool_name, tool_def, args)
 
     output = step.get("output")
     if output is not None:

@@ -128,6 +128,31 @@ pub fn preview_in(
     }
 }
 
+/// A read tool's input when it is not there yet, which a dry run must not read: a URL input is
+/// downloaded, and a chain intermediate made, only in a real run (Python's read steps return a
+/// stub then). `None` for a write tool or an input that exists.
+pub fn read_input_absent(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    base: &Path,
+    sandbox: Option<&Path>,
+    work_dir: Option<&Path>,
+) -> anyhow::Result<Option<PathBuf>> {
+    if !matches!(
+        tool,
+        "inspect_document" | "extract_text" | "find_in_document"
+    ) {
+        return Ok(None);
+    }
+    let p = Paths {
+        base,
+        sandbox,
+        work: work_dir,
+    };
+    let input = input_path(args, &p)?;
+    Ok((!input.exists()).then_some(input))
+}
+
 /// Commit a destructive write step: perform the op and write the file(s). Returns the paths written.
 /// `bundle` is the skill bundle dir (only `compress_pdf` reads it).
 pub fn commit(
@@ -887,6 +912,23 @@ mod tests {
             Preview::Read(ReadResult::Inspection(i)) => assert_eq!(i.pages, 3),
             _ => panic!("inspect should be a read"),
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_read_input_not_there_yet_is_named() {
+        // A dry run skips it (Python's read steps return a stub): a URL input is downloaded,
+        // and a chain intermediate made, only in a real run.
+        let dir = tmpdir();
+        std::fs::write(dir.join("a.pdf"), make_pdf(1)).unwrap();
+        let here = args(serde_json::json!({"input": "a.pdf"}));
+        let gone = args(serde_json::json!({"input": "b.pdf", "query": "x"}));
+        let absent = |tool: &str, a| read_input_absent(tool, a, &dir, Some(&dir), None).unwrap();
+        assert_eq!(absent("inspect_document", &here), None);
+        for tool in ["inspect_document", "extract_text", "find_in_document"] {
+            assert_eq!(absent(tool, &gone), Some(dir.join("b.pdf")), "{tool}");
+        }
+        assert_eq!(absent("rotate_pages", &gone), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

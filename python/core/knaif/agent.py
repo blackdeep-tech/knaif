@@ -207,6 +207,17 @@ class CommandAgent:
         self.file_kinds: dict[str, str] = file_kinds or {}
         # From the skill's `scratch_intermediates:`; see _route_intermediates_to_scratch.
         self.scratch_intermediates = scratch_intermediates
+        # URL inputs (`url_inputs:` in skill.yaml, set by from_skill): None means the skill
+        # works on local files only. Nothing is downloaded unless `allow_download` (the CLI's
+        # --allow-download) or `download_confirmer(url, max_bytes)` says yes, once per URL.
+        self.url_inputs: Any | None = None
+        self.allow_download: bool = False
+        self.download_confirmer: Any | None = None
+        # Only the executing eval sets this: its dry run stands in for a real run (the plan is
+        # replayed for real afterwards), so the preview reads the downloaded bytes. A user's
+        # dry run never makes a request.
+        self.fetch_in_preview: bool = False
+        self.last_downloads: list[dict[str, Any]] = []
         self.sandbox: Path | None = Path(sandbox).resolve() if sandbox else None
         self.root: Path = Path(root).resolve() if root else Path.cwd()
         self.orchestrator = orchestrator
@@ -287,6 +298,7 @@ class CommandAgent:
             intent_completed=intent_completed,
         )
         agent.prompt_examples = skill.prompt_examples
+        agent.url_inputs = skill.url_inputs
 
         if skill.tool_map is not None:
             # OOP path: attach tool_map and skill_instance; build summarizer adapters
@@ -389,6 +401,39 @@ class CommandAgent:
         show_plan: bool | None = None,
         require_approval: bool | None = None,
         skip_execution: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Validate, expand, and execute *payload* (see ``_execute_plan``).
+
+        A stage that needs the run scratch before execution (URL downloads, which must land
+        before preflight) enters it on *early*; closing the stack removes it on every exit.
+        """
+        from contextlib import ExitStack
+
+        with ExitStack() as early:
+            return self._execute_plan(
+                payload,
+                utterance=utterance,
+                injected_files=injected_files,
+                dry_run=dry_run,
+                confirmed=confirmed,
+                show_plan=show_plan,
+                require_approval=require_approval,
+                skip_execution=skip_execution,
+                early=early,
+            )
+
+    def _execute_plan(
+        self,
+        payload: dict[str, Any],
+        *,
+        utterance: str | None = None,
+        injected_files: set[str] | None = None,
+        dry_run: bool = True,
+        confirmed: bool = False,
+        show_plan: bool | None = None,
+        require_approval: bool | None = None,
+        skip_execution: bool = False,
+        early: Any = None,
     ) -> list[dict[str, Any]]:
         """
         Validate, expand, and execute *payload*.
@@ -506,6 +551,15 @@ class CommandAgent:
             # `raw_utterance` is set whenever `utterance` is (same branch above).
             intent_plan = restore_grounded_args(intent_plan, raw_utterance or "", self.registry)
 
+        # URL inputs: downloaded into the run scratch (or, in a dry run, named there), so every
+        # later stage sees a local file and never a URL. Before routing, collision naming and
+        # preflight, which all reason about files.
+        intent_plan, stopped = self._fetch_url_inputs(
+            intent_plan, scratch, early, dry_run=dry_run or skip_execution, confirmed=confirmed
+        )
+        if stopped is not None:
+            return stopped
+
         # Chain intermediates go to the run scratch, so only deliverables reach the user's
         # folder. Opt-in per skill while skills move onto scratch one at a time.
         if self.scratch_intermediates:
@@ -604,6 +658,7 @@ class CommandAgent:
                         "root": self.root,
                         "sandbox": self.sandbox,
                         "planned_output_names": planned_output_names,
+                        "work_dir": scratch.path,
                     }
                     try:
                         tool_obj = self.tool_map.get(tool) if self.tool_map else None
@@ -869,6 +924,138 @@ class CommandAgent:
                 break
 
         return results, should_stop
+
+    def _fetch_url_inputs(
+        self,
+        intent_plan: list[dict[str, Any]],
+        scratch: RunScratch,
+        early: Any,
+        *,
+        dry_run: bool,
+        confirmed: bool,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
+        """Replace every URL input with a file in the run scratch: ``(plan, stopped)``.
+
+        Each distinct URL is approved once (``allow_download``, else ``download_confirmer``),
+        then fetched by the net toolkit's ``download_file`` under the skill's ``url_inputs:``.
+        A dry run requests nothing and names the path the download would take. The file sits
+        at the top of the scratch, so ``user_side_path`` places outputs derived from it in the
+        user's folder. *stopped* is the run's result when it ends here: a skill without URL
+        inputs, approval missing or declined.
+        """
+        from .planner import _CONTROL_TOOLS, _URL_INPUT_KEYS
+        from .urls import is_url, url_file_name
+
+        self.last_downloads = []
+        urls: list[str] = []
+        for step in intent_plan:
+            if step.get("tool") in _CONTROL_TOOLS:
+                continue
+            tool_def = self.registry.get(step.get("tool", ""))
+            schemas = getattr(tool_def, "arg_schemas", {}) or {}
+            for key, value in (step.get("args") or {}).items():
+                if key not in _URL_INPUT_KEYS and getattr(schemas.get(key), "path_role", None) != (
+                    "input"
+                ):
+                    continue
+                for item in value if isinstance(value, list) else [value]:
+                    if is_url(item) and item not in urls:
+                        urls.append(item)
+        if not urls:
+            return intent_plan, None
+
+        def stop(tool: str, result: dict[str, Any], args: dict[str, Any]) -> list[dict[str, Any]]:
+            return [
+                {"tool": tool, "args": args, "result": result, "output": None, "duration_ms": 0.0}
+            ]
+
+        downloader = (self.tool_map or {}).get("download_file")
+        if self.url_inputs is None or downloader is None:
+            q = (
+                f"This skill works on local files and cannot download {urls[0]}. "
+                "Download it first, then name the file."
+            )
+            return intent_plan, stop(
+                "clarify", {"status": "clarification_needed", "question": q}, {"question": q}
+            )
+
+        cap = int(self.url_inputs.max_bytes)
+        local: dict[str, str] = {}
+        if dry_run and not self.fetch_in_preview:
+            taken: set[str] = set()
+            for url in urls:
+                name = url_file_name(url)
+                stem, dot, ext = name.partition(".")
+                n = 0
+                while name.lower() in taken:
+                    n += 1
+                    name = f"{stem}-{n}{dot}{ext}"
+                taken.add(name.lower())
+                local[url] = str(scratch.path / name)
+                self.last_downloads.append({"url": url, "path": local[url], "dry_run": True})
+        else:
+            for url in urls:
+                if self.allow_download:
+                    continue
+                if self.download_confirmer is None:
+                    q = (
+                        f"Downloading {url} needs your approval: run this in a terminal to be "
+                        "asked, or re-run with --allow-download."
+                    )
+                    return intent_plan, stop(
+                        "clarify",
+                        {"status": "clarification_needed", "question": q},
+                        {"question": q},
+                    )
+                if not self.download_confirmer(url, cap):
+                    prompt = f"Download {url}?"
+                    return intent_plan, stop(
+                        "wait_for_confirmation",
+                        {"status": "declined", "prompt": prompt},
+                        {"prompt": prompt},
+                    )
+            if dry_run:
+                # The executing eval's preview (`fetch_in_preview`): a dry-run scratch is never
+                # created or removed by RunScratch, so the folder the download makes is
+                # removed here when the run ends.
+                import shutil
+
+                early.callback(shutil.rmtree, scratch.path, ignore_errors=True)
+            else:
+                early.enter_context(scratch)
+            for url in urls:
+                ctx = self._handler_context(
+                    False, confirmed, False, scratch.path, tool="download_file"
+                )
+                got = downloader.handle(
+                    {
+                        "url": url,
+                        "dest_dir": str(scratch.path),
+                        "accepted": list(self.url_inputs.accepted),
+                        "max_bytes": cap,
+                    },
+                    ctx,
+                )
+                local[url] = got["path"]
+                entry = {k: got.get(k) for k in ("url", "path", "bytes", "content_type")}
+                if dry_run:
+                    entry["dry_run"] = True  # the replay fetches it again into its own scratch
+                self.last_downloads.append(entry)
+
+        def swap(value: Any) -> Any:
+            if isinstance(value, list):
+                return [local.get(v, v) if isinstance(v, str) else v for v in value]
+            return local.get(value, value) if isinstance(value, str) else value
+
+        rewritten = [
+            (
+                {**s, "args": {k: swap(v) for k, v in (s.get("args") or {}).items()}}
+                if s.get("tool") not in _CONTROL_TOOLS
+                else s
+            )
+            for s in intent_plan
+        ]
+        return rewritten, None
 
     def _handler_context(
         self,

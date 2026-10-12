@@ -496,3 +496,25 @@ def test_a_scratch_path_is_not_the_same_file_in_the_users_folder(
     p = pc.parse_python("", _dump(PLAN) + _argv_dump(in_folder))
     status, _ = pc.compare(_row(), n, p, strict=False, cwd="/w")
     assert status == "port-bug"
+
+
+def test_a_url_compares_whole_not_by_its_file_name():
+    """A plan arg `https://h/a.mov` is not the local `a.mov`: two runtimes that disagree on whether
+    the input is the URL or a local file of the same name planned different things."""
+    assert pc.canon_token("https://files.knaif.test/ffmpeg/a.mov") == (
+        "https://files.knaif.test/ffmpeg/a.mov"
+    )
+    assert pc.canon_token("https://files.knaif.test/ffmpeg/a.mov") != pc.canon_token("a.mov")
+    assert pc.canon_token("videos/a.mov") == "a.mov"  # a path still compares by its name
+
+
+def test_a_corpus_other_than_eval_jsonl_can_be_compared(tmp_path):
+    """URL rows live in `eval_url.jsonl`, apart from the snapshot's population."""
+    corpus = tmp_path / "eval_url.jsonl"
+    corpus.write_text(
+        json.dumps({"id": "u1", "utterances": ["convert https://h.test/a.mov to mp4"], "tags": []})
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = pc.load_rows("ffmpeg", None, corpus=corpus)
+    assert [(r.id, r.utterance) for r in rows] == [("u1", "convert https://h.test/a.mov to mp4")]

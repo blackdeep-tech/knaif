@@ -87,6 +87,11 @@ def _is_reject_example(example: dict) -> bool:
     return bool(tools) and "reject" in tools and not _example_tool_set(example)
 
 
+def _carries_url(text: str) -> bool:
+    lower = text.lower()
+    return "http://" in lower or "https://" in lower
+
+
 def select_examples(
     structured_examples: list[dict],
     retrieved_tool_names: frozenset[str],
@@ -99,11 +104,18 @@ def select_examples(
     Fills up to *max_tool_examples* domain examples ranked by:
       1. number of retrieved tools that appear in the example's plan (primary)
       2. Jaccard overlap between query tokens and example request tokens (tiebreaker)
+    An example whose request carries an http(s) URL is eligible only when *query* carries one
+    too, and then ranks first at equal tool overlap, so adding one changes no other prompt.
     Examples are returned in their original order from *structured_examples*.
     """
+    query_url = _carries_url(query)
     clarify_exs = [e for e in structured_examples if _is_clarify_example(e)]
     reject_exs = [e for e in structured_examples if _is_reject_example(e)]
-    domain_exs = [e for e in structured_examples if _example_tool_set(e)]
+    domain_exs = [
+        e
+        for e in structured_examples
+        if _example_tool_set(e) and (query_url or not _carries_url(e.get("request", "")))
+    ]
 
     fixed: list[dict] = []
     if clarify_exs:
@@ -113,10 +125,11 @@ def select_examples(
 
     query_tokens = set(query.lower().split())
 
-    def _score(ex: dict) -> tuple[int, int]:
+    def _score(ex: dict) -> tuple[int, int, int]:
         tool_overlap = len(_example_tool_set(ex) & retrieved_tool_names)
+        url_match = int(query_url and _carries_url(ex.get("request", "")))
         req_tokens = set(ex.get("request", "").lower().split())
-        return (tool_overlap, len(query_tokens & req_tokens))
+        return (tool_overlap, url_match, len(query_tokens & req_tokens))
 
     ranked_domain = sorted(domain_exs, key=_score, reverse=True)
     selected_domain = ranked_domain[:max_tool_examples]

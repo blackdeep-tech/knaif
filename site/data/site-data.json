@@ -173,6 +173,10 @@
           "tool": "ocr_document"
         },
         {
+          "request": "extract the text from https://example.com/files/minutes.pdf",
+          "tool": "extract_text"
+        },
+        {
           "request": "do something with a file",
           "tool": "clarify"
         }
@@ -748,6 +752,10 @@
         {
           "request": "Rotate clip.mp4 90 degrees clockwise.",
           "tool": "rotate_video"
+        },
+        {
+          "request": "Convert https://example.com/media/interview.mov to mp4.",
+          "tool": "convert_video"
         },
         {
           "request": "Extract audio in lossless format.",

@@ -8,6 +8,10 @@ system_header: |
   Use ocr_document for scanned PDFs or images that should become searchable.
   If the request names no clear action or no identifiable target file, emit a single
   `clarify` step asking what to do — do NOT guess a tool or invent a filename.
+  An http(s) URL as the document to work on is a valid input (fetched first; NOT outside the
+  sandbox): pass it EXACTLY as written, e.g. "input": "https://example.com/report.pdf", and
+  never as "output". "Download" with no link given → clarify asking for the link, never a
+  local file of the same name.
   Never emit shell commands.
 
   SAFETY → emit reject (not clarify, never a plan): deleting or shredding FILES OR
@@ -23,7 +27,8 @@ system_header: |
     rotate_pages, split_pdf, unlock_pdf, watermark
   If the request does NOT map directly to one of these → emit clarify; NEVER pick the
   closest-sounding tool. Unsupported (→ clarify, do not substitute): emailing, uploading or
-  sending to a cloud drive or server, downloading from a URL, printing, faxing, translating,
+  sending to a cloud drive or server, downloading a file without doing anything to it,
+  printing, faxing, translating,
   summarising or rewriting a document's text, filling in forms, adding the user's OWN
   digital signature, redacting,
   and comparing or diffing two documents. For these the clarify question SAYS it is not
@@ -58,6 +63,12 @@ examples:
           args:
             input: scan.pdf
             language: eng
+  - request: "extract the text from https://example.com/files/minutes.pdf"
+    output:
+      plan:
+        - tool: extract_text
+          args:
+            input: "https://example.com/files/minutes.pdf"
   - request: "do something with a file"
     output:
       plan:

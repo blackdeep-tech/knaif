@@ -19,6 +19,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 
 BANNED_MODULES = {"subprocess", "urllib", "httpx", "requests", "socket", "http"}
+#: Submodules of a banned package that do no I/O: URL parsing is string work.
+PURE_SUBMODULES = {"urllib.parse"}
 SHUTIL_WRITES = {"move", "copy", "copy2", "copyfile", "copytree", "rmtree", "copyfileobj"}
 PATH_WRITES = {
     "write_text",
@@ -40,6 +42,11 @@ _TARGET = (
 )
 _IO = "io is stale (hidden from discovery, slated for rebuild); it moves onto fs when rebuilt"
 _EVAL = "eval artifact runner: provisions a row folder for the eval harness, not a tool step"
+_NET = (
+    "the net toolkit is where network access lives (net); it writes the bytes it downloads "
+    "into the run scratch only (`<dest_dir>/<name>.part`, renamed when complete)"
+)
+_NETW = "toolkits/net/python/download.py"
 _DOC = "skills/documents/python/"
 _FSW = "toolkits/fs/python/write.py"
 ALLOWED: dict[tuple[str, str, str], str] = {
@@ -48,6 +55,10 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     (_FSW, "CommitOutput.handle", ".mkdir"): _FS,
     (_FSW, "CommitOutput.handle", "shutil.move"): _FS,
     (_FSW, "EnsureParent.handle", ".mkdir"): _FS,
+    (_NETW, "<module>", "import requests"): _NET,
+    (_NETW, "_fetch", ".mkdir"): _NET,
+    (_NETW, "_fetch", ".open(write)"): _NET,
+    (_NETW, "_fetch", ".unlink"): _NET,
     (_DOC + "_engine.py", "_write_ocr_image_pdf", ".write_bytes"): _TARGET,
     (_DOC + "_engine.py", "_write_ocr_pdf", ".open(write)"): _TARGET,
     (_DOC + "_engine.py", "_write_text_overlay_pdf", ".open(write)"): _TARGET,
@@ -98,10 +109,16 @@ def _findings(path: Path) -> list[tuple[str, str, str, int]]:
             kind = None
             if isinstance(child, ast.Import):
                 for alias in child.names:
-                    if alias.name.split(".")[0] in BANNED_MODULES:
+                    if (
+                        alias.name.split(".")[0] in BANNED_MODULES
+                        and alias.name not in PURE_SUBMODULES
+                    ):
                         kind = f"import {alias.name}"
             elif isinstance(child, ast.ImportFrom) and child.module:
-                if child.module.split(".")[0] in BANNED_MODULES:
+                if (
+                    child.module.split(".")[0] in BANNED_MODULES
+                    and child.module not in PURE_SUBMODULES
+                ):
                     kind = f"import {child.module}"
             elif isinstance(child, ast.Call):
                 f = child.func
@@ -148,6 +165,7 @@ def test_the_lint_sees_what_it_bans(tmp_path: Path) -> None:
     """A planted module with one of each banned call is reported in full."""
     src = (
         "import subprocess\nimport shutil\nimport os\nfrom pathlib import Path\n"
+        "import urllib.parse\nfrom urllib.parse import urljoin\nimport urllib.request\n"
         "def f(p):\n"
         "    shutil.move(p, p)\n    os.remove(p)\n    Path(p).write_text('x')\n"
         "    open(p, 'w')\n    Path(p).open('ab')\n    shutil.which('ffmpeg')\n    open(p)\n"
@@ -158,6 +176,7 @@ def test_the_lint_sees_what_it_bans(tmp_path: Path) -> None:
     kinds = {k for _r, _f, k, _l in _findings_from(tree_path, src)}
     assert kinds == {
         "import subprocess",
+        "import urllib.request",
         "shutil.move",
         "os.remove",
         ".write_text",
