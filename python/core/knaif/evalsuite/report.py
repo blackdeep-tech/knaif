@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote as _url_quote
 
+from .redact import redact_local_paths
+
 _WIDTH = 88
 
 
@@ -173,11 +175,12 @@ def print_row_detail(row: dict[str, Any], *, file: Any = None) -> None:
 
 
 def save_scoreboard_json(scoreboard: dict[str, Any], path: Path | str) -> None:
-    """Write scoreboard as JSON to *path*."""
+    """Write scoreboard as JSON to *path*, without local paths: a saved board is committed
+    evidence (AGENTS.md, Public Output Hygiene)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
-        json.dump(scoreboard, fh, indent=2, ensure_ascii=False)
+        json.dump(redact_local_paths(scoreboard), fh, indent=2, ensure_ascii=False)
         fh.write("\n")
 
 

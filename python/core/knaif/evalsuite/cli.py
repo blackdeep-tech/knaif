@@ -2144,7 +2144,7 @@ def cmd_compose(args: argparse.Namespace) -> None:
         replacements,
         sources={"base": base_src, "replacements": repl_src, "note": args.note},
     )
-    save_scoreboard_json(redact_local_paths(board), Path(args.out))
+    save_scoreboard_json(board, Path(args.out))
     print(
         f"composed {board['total']} rows ({len(board['composed_from']['replaced_rows'])} replaced)"
         f" -> {args.out}: outcome {board['outcome_accuracy']:.4f}, knaif "
