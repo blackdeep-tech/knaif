@@ -80,7 +80,9 @@ In the VM window: Setup Assistant with account `admin` / `admin`, nothing else i
 software update; Sharing → Remote Login on; Energy Saver → display never sleeps; then in its
 Terminal `echo 'admin ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/admin` and
 `sudo pmset -a sleep 0`. From the host, `ssh-copy-id admin@"$(tart ip knaif-room-base)"`, then
-`sudo shutdown -h now` in the VM. Every run below starts from a fresh clone of that base:
+`sudo shutdown -h now` in the VM. Turn automatic macOS updates off in the base (System Preferences →
+Software Update → Advanced, every box unticked): a clone otherwise downloads ~2.8 GB of update
+assets and hangs. Every run below starts from a fresh clone of that base:
 
 ```bash
 tart clone knaif-room-base knaif-room                                   # fresh for every run
