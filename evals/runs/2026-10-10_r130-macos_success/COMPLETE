@@ -77,3 +77,10 @@
 2026-10-12 04:17:10 cpu-both-documents documents mac-cpu-1.7b: placement CPU
 2026-10-12 04:17:27 cpu-both-documents documents mac-cpu-1.7b: safety exit 0
 2026-10-12 04:17:27 END cpu-both-documents
+2026-10-13 20:04:00 START cpu-compose (Windows box): the four <model>|macos|cpu cells composed from the boards in boards.sha256 (all eight verified), accept-native on Deyan's CPU safety files
+2026-10-13 20:04:00 cpu-compose 4b ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-13 20:04:00 cpu-compose 4b documents: ACCEPTED - 43 thresholds met.
+2026-10-13 20:04:00 cpu-compose 1.7b ffmpeg: NOT ACCEPTED - 1 of 46 thresholds unmet:
+2026-10-13 20:04:01 cpu-compose 1.7b documents: ACCEPTED - 43 thresholds met.
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|macos|cpu: evals/acceptance/ffmpeg.json
+2026-10-13 20:04:43 END cpu-compose: 4B ffmpeg/documents ACCEPTED; 1.7B documents ACCEPTED; 1.7B ffmpeg misses only batch (25/29), waived by the rule. Decision flips vs Metal (reported, not a verdict): 4B ffmpeg 1, 1.7B ffmpeg 3, all fail->pass; documents 0

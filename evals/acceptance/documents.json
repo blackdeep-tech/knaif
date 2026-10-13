@@ -710,6 +710,402 @@
           "avg_knaif_score": 0.9944812362030905,
           "lane": "mac-1.7b",
           "model": "knaif-qwen3-1.7b-v2"
+        },
+        "knaif-qwen3-4b-v2|macos|cpu": {
+          "evidence": {
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "a835581d2389dbb9f0a48922c48c67f5ddb5b35af7717a872841e04f3a80727c"
+          },
+          "run": "evals\\runs\\2026-10-10_r130-macos_success\\4b\\cpu\\documents_mac-cpu-4b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.975609756097561,
+          "avg_knaif_score": 0.9850762527233116,
+          "lane": "mac-cpu-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "1.3.0 gate rule (CPU cells, owner 2026-10-07): 4b macOS CPU cell = the 4b macOS Metal board with the pre-drawn t15 CPU sample swapped in, run on the frozen CI binary on CPU. Against the Metal plans: 0 decision flips, 0 plan differences. Flips are reported, not a verdict. Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-10-10_r130-macos_success/4b/metal/documents_mac-4b_success.json",
+              "file_sha256": "0913134f5c3a65f85c056355ced62efdd6c5c4e0378a65c0d6b6f1e55ee39c27",
+              "git_sha": "b61c235856ff2dc9883c266962a08c6ffe5412e1",
+              "git_dirty": true,
+              "binary_sha256": "a835581d2389dbb9f0a48922c48c67f5ddb5b35af7717a872841e04f3a80727c",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "MTL0",
+              "os": "macos",
+              "lane": "mac-4b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-10-10_r130-macos_success/4b/cpu/sample/documents_mac-cpu-4b_success.json",
+              "file_sha256": "cbea835819ab30d9f353231f63a28c757251fc2de79c049ad8aaefc4b18633c2",
+              "git_sha": "b61c235856ff2dc9883c266962a08c6ffe5412e1",
+              "git_dirty": true,
+              "binary_sha256": "a835581d2389dbb9f0a48922c48c67f5ddb5b35af7717a872841e04f3a80727c",
+              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "macos",
+              "lane": "mac-cpu-4b",
+              "total": 35
+            },
+            "replaced_rows": [
+              [
+                "documents_011",
+                0
+              ],
+              [
+                "documents_016",
+                0
+              ],
+              [
+                "documents_034",
+                0
+              ],
+              [
+                "documents_035",
+                0
+              ],
+              [
+                "documents_037",
+                0
+              ],
+              [
+                "documents_040",
+                0
+              ],
+              [
+                "documents_043",
+                0
+              ],
+              [
+                "documents_044",
+                0
+              ],
+              [
+                "documents_045",
+                0
+              ],
+              [
+                "documents_069",
+                0
+              ],
+              [
+                "documents_070",
+                0
+              ],
+              [
+                "documents_072",
+                0
+              ],
+              [
+                "documents_076",
+                0
+              ],
+              [
+                "documents_078",
+                0
+              ],
+              [
+                "documents_090",
+                0
+              ],
+              [
+                "documents_092",
+                0
+              ],
+              [
+                "documents_096",
+                0
+              ],
+              [
+                "documents_100",
+                0
+              ],
+              [
+                "documents_106",
+                0
+              ],
+              [
+                "documents_109",
+                0
+              ],
+              [
+                "documents_111",
+                0
+              ],
+              [
+                "documents_115",
+                0
+              ],
+              [
+                "documents_116",
+                0
+              ],
+              [
+                "documents_118",
+                0
+              ],
+              [
+                "documents_120",
+                0
+              ],
+              [
+                "documents_121",
+                0
+              ],
+              [
+                "documents_125",
+                0
+              ],
+              [
+                "documents_129",
+                0
+              ],
+              [
+                "documents_131",
+                0
+              ],
+              [
+                "documents_133",
+                1
+              ],
+              [
+                "documents_133",
+                2
+              ],
+              [
+                "documents_136",
+                0
+              ],
+              [
+                "documents_138",
+                1
+              ],
+              [
+                "documents_140",
+                1
+              ],
+              [
+                "documents_142",
+                0
+              ]
+            ]
+          }
+        },
+        "knaif-qwen3-1.7b-v2|macos|cpu": {
+          "evidence": {
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
+            "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "a835581d2389dbb9f0a48922c48c67f5ddb5b35af7717a872841e04f3a80727c"
+          },
+          "run": "evals\\runs\\2026-10-10_r130-macos_success\\1.7b\\cpu\\documents_mac-cpu-1.7b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9634146341463414,
+          "avg_knaif_score": 0.9944812362030905,
+          "lane": "mac-cpu-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "composed": true,
+          "composed_from": {
+            "note": "1.3.0 gate rule (CPU cells, owner 2026-10-07): 1.7b macOS CPU cell = the 1.7b macOS Metal board with the pre-drawn t15 CPU sample swapped in, run on the frozen CI binary on CPU. Against the Metal plans: 0 decision flips, 1 plan difference. Flips are reported, not a verdict. Sampled, not measured in full.",
+            "base": {
+              "path": "evals/runs/2026-10-10_r130-macos_success/1.7b/metal/documents_mac-1.7b_success.json",
+              "file_sha256": "1fe69491c812bb9159f4cd6db42727d915430091b0ce79515e1e6ff6f5a71fce",
+              "git_sha": "b61c235856ff2dc9883c266962a08c6ffe5412e1",
+              "git_dirty": true,
+              "binary_sha256": "a835581d2389dbb9f0a48922c48c67f5ddb5b35af7717a872841e04f3a80727c",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "MTL0",
+              "os": "macos",
+              "lane": "mac-1.7b",
+              "total": 164
+            },
+            "replacements": {
+              "path": "evals/runs/2026-10-10_r130-macos_success/1.7b/cpu/sample/documents_mac-cpu-1.7b_success.json",
+              "file_sha256": "191d6fa1a2f90a559f3858289196b63ce0aa3b01b5004b3136f530df31ba30d9",
+              "git_sha": "b61c235856ff2dc9883c266962a08c6ffe5412e1",
+              "git_dirty": true,
+              "binary_sha256": "a835581d2389dbb9f0a48922c48c67f5ddb5b35af7717a872841e04f3a80727c",
+              "model_sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "scoring_policy": 3,
+              "verifier": "success",
+              "compute_backend": "CPU",
+              "os": "macos",
+              "lane": "mac-cpu-1.7b",
+              "total": 35
+            },
+            "replaced_rows": [
+              [
+                "documents_005",
+                0
+              ],
+              [
+                "documents_007",
+                0
+              ],
+              [
+                "documents_023",
+                0
+              ],
+              [
+                "documents_026",
+                0
+              ],
+              [
+                "documents_035",
+                0
+              ],
+              [
+                "documents_036",
+                0
+              ],
+              [
+                "documents_037",
+                0
+              ],
+              [
+                "documents_041",
+                0
+              ],
+              [
+                "documents_043",
+                0
+              ],
+              [
+                "documents_047",
+                0
+              ],
+              [
+                "documents_050",
+                0
+              ],
+              [
+                "documents_054",
+                0
+              ],
+              [
+                "documents_060",
+                0
+              ],
+              [
+                "documents_070",
+                0
+              ],
+              [
+                "documents_071",
+                0
+              ],
+              [
+                "documents_073",
+                0
+              ],
+              [
+                "documents_076",
+                0
+              ],
+              [
+                "documents_078",
+                0
+              ],
+              [
+                "documents_082",
+                0
+              ],
+              [
+                "documents_086",
+                0
+              ],
+              [
+                "documents_098",
+                0
+              ],
+              [
+                "documents_105",
+                0
+              ],
+              [
+                "documents_107",
+                0
+              ],
+              [
+                "documents_119",
+                0
+              ],
+              [
+                "documents_123",
+                0
+              ],
+              [
+                "documents_129",
+                0
+              ],
+              [
+                "documents_131",
+                0
+              ],
+              [
+                "documents_132",
+                1
+              ],
+              [
+                "documents_132",
+                2
+              ],
+              [
+                "documents_135",
+                1
+              ],
+              [
+                "documents_135",
+                2
+              ],
+              [
+                "documents_136",
+                1
+              ],
+              [
+                "documents_138",
+                0
+              ],
+              [
+                "documents_142",
+                1
+              ],
+              [
+                "documents_143",
+                1
+              ]
+            ]
+          }
         }
       }
     },
