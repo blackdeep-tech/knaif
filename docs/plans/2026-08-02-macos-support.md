@@ -351,6 +351,29 @@ them after a result. Launch each stage only after the owner approves it with its
    **`release/1.3.0`**. Evidence and macOS notes only. Code changes go to the owner first, by the
    rule above.
 
+**Round 2 handback, 2026-10-13: every gate the Mac runs passes**, on the frozen CI files only
+(freeze `8c94cbe`, CI run `38075857537`: `.zip` `bb042cc4…`, `.pkg` `e9a31768…`, `knaif`
+`a835581d…`); nothing was built or signed on the Mac. Gate rules copied verbatim into
+`evals/runs/2026-10-10_r130-macos_success/run_all.sh`; one amendment, written before the re-run it
+covers. Each stage ran after the owner approved it with a budget, and within it. No code changes.
+One finding during the round, already with the owner: the boards' rows carried the checkout's
+absolute path (`evalsuite`, fixed on the Windows side; the boards sent were redacted). Two
+observations, not findings, under E6.
+
+| Step | Result | Where |
+|---|---|---|
+| 2 L4 Metal | 4B **ACCEPTED** on both skills; 1.7B documents **ACCEPTED**; 1.7B ffmpeg NOT ACCEPTED on `batch` only (25/29), **waived by the gate rule**; safety 100% on the binary; every board on `MTL0` | C4 |
+| 2 documents, re-run | The first documents cells (2026-10-11) were **invalid**, graded without `pypdf` (step 0's `uv sync` removed the `documents` groups); re-run 2026-10-12 under the amendment: both ACCEPTED, 43/43. The invalid files are kept under `invalid-2026-10-11/` | C4 |
+| 3 CPU sample | the t15 rows on `mac-cpu-<model>`, all on `CPU`, both safety sets 100%; the boards went to the owner outside git, redacted, sha256 in `boards.sha256`; the Windows box composes the cells | C4 |
+| 4 Daemon plan equality | **byte-identical**, both models × both corpora | `evals/parity/2026-10-10_r130-macos-daemon-plan-equality/` |
+| 5 L3 on Metal (recorded, not gated) | all four **PASS**: 0 port bugs, 0 not implemented; disagreement ffmpeg 0.0000, documents 0.0070 | C5 |
+| 6 Clean room | three tart runs **CLEAN ROOM PASS** (zip 8, offline `.pkg` 13, upgrade from a signed 1.2.1 `.pkg` 13); the daemon headless and with a console user; Installer.app screens, the Terminal window's order, a refused brew `[y/n]`, all judged by a person: pass | E3, E4, E6 |
+| 6 Metal, fresh account | 37/37 on `MTL0`; cold **18.89 s**, warm **3.46 s** | D3 |
+
+Not done: the optional macOS 13+ check (does `brew install ffmpeg` pour a bottle?). Records:
+`evals/runs/2026-10-10_r130-macos_success/`, `evals/runs/2026-10-12_r130-macos_cleanroom/`
+(`report.md`), `evals/parity/2026-10-10_r130-macos-*`.
+
 **Needs the owner:**
 1. **1.7B ffmpeg misses `batch`** by one row (25/29 against 0.896, the 1.7B's own Python score). The
    same rows fail in both Mac runs; three fail on every 1.2.0 platform, and 1.2.0 recorded the same
@@ -1246,6 +1269,19 @@ already pass, on a third platform, for the first time.**
       > fix (#14) changed the binary, so documents (with the fix run) and ffmpeg ran again on it: the
       > same decisions, all 1,952 ffmpeg L4 rows unchanged, ffmpeg L3 both PASS. Every macOS L3/L4 cell
       > is now on the release binary (`evals/runs/2026-10-07_mac-ffmpeg-docfix_success/`).
+      > **1.3.0 round 2, on the frozen CI build (`8c94cbe`, CI run 38075857537, `knaif`
+      > `a835581d…`), 2026-10-10/12.** The `.zip` unpacked into the lanes, in process
+      > (`KNAIF_NO_DAEMON=1`), the 1.3.0 gate rules copied verbatim into `run_all.sh`. ffmpeg: 4B
+      > ACCEPTED (46/46; 0.9384 / 0.9857); 1.7B NOT ACCEPTED on `batch` only (25/29), waived by the
+      > rule (`evals/acceptance/ffmpeg.json`). documents: the first run's cells were invalid, graded
+      > without `pypdf` (step 0's `uv sync` had removed the `documents` groups; plans and outcomes
+      > unaffected); under the 2026-10-11 amendment they ran again on 2026-10-12: 4B ACCEPTED (43/43;
+      > 0.9756 / 0.9851), 1.7B ACCEPTED (43/43; 0.9634 / 0.9945). Safety 100% on the binary, the
+      > whole corpus; every board on `MTL0`. **CPU sample** (the t15 rows on `mac-cpu-<model>`, all on
+      > `CPU`, both safety sets 100%): ffmpeg as on the dry run; documents knaif 4B 0.9926, 1.7B 0.9905.
+      > The boards stay out of the repo (policy); they went to the owner redacted, for the Windows
+      > box's composition, with their sha256 in `boards.sha256`. Record:
+      > `evals/runs/2026-10-10_r130-macos_success/`.
 - [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
       > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does
@@ -1360,6 +1396,13 @@ already pass, on a third platform, for the first time.**
       > unchanged row for row, both ACCEPTED (`evals/runs/2026-10-06_mac-documents-105-fix_success/`).
       > Still to do: documents L3/L4 on Windows and Linux, and ffmpeg on this binary for the macOS
       > cells' fingerprint.
+      >
+      > **1.3.0 round 2, on the frozen CI build (`knaif` `a835581d…`), 2026-10-11: all four PASS,
+      > recorded, not gated** (the gate's L3 is Windows CUDA). Command mode, full corpora, Python
+      > `llama-cpp-python` 0.3.36 on Metal, 1.2.0's bounds: ffmpeg 0 port bugs, 0 not implemented,
+      > disagreement 0.0000 (≤ 0.0411) for both models; documents 0 port bugs, 0.0070 (≤ 0.0183,
+      > `documents_057`, standing since 2026-10-03) for both. Both documents cells ran with the
+      > `documents` groups restored. Reports: `evals/parity/2026-10-10_r130-macos-l3-<model>-<skill>/`.
 - [x] **C6. Cross-OS plan agreement.** *(Superseded 2026-09-30 by D17: folded into D14's per-row flip comparison against the committed 1.2.0 L4 extract, on the v2 models. The v1 slice below is deleted, not finished.)* For a fixed slice of the ffmpeg corpus, compare macOS
       `plan --json` output against the same slice from a Windows or Linux build. Distinct from C5,
       which compares two runtimes on one machine. This is the check that says "the same request
@@ -1467,6 +1510,9 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > `MTL0` both times — a ~15.5 s first-run tax, against Vulkan's 38.3 s. It bundles the Metal
       > shader compile with the first quarantined launch's online notarization check; the model was
       > most likely already in the file cache. One machine, one account: no remedy chosen yet.
+      > **Again on the frozen 1.3.0 CI `.zip`, 2026-10-13:** another new standard account, the same
+      > request. **Cold 18.89 s, warm 3.46 s**, 37/37 on `MTL0`, exit 0 both times: unchanged.
+      > Record: `evals/runs/2026-10-12_r130-macos_cleanroom/step-d-metal-fresh-account/`.
 - [ ] **D4. Unified-memory behaviour.** Apple Silicon shares one memory pool, so "VRAM" is a
       soft, OS-capped fraction (`iogpu.wired_limit_pct`). Test the recommended 4B model on the
       lowest memory configuration reachable and note where it stops fitting. If 8 GB Macs cannot
@@ -1623,6 +1669,14 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > `clean-room.sh` could never pass `smoke` (`smoke.sh` reads `../Cargo.toml`); fixed in
       > `clean-room.sh` and the README. Metal on hardware from a fresh account: 37/37 on `MTL0`
       > (D3 has the times). Record: `evals/runs/2026-10-09_mac-rehearsal-1.3.0_cleanroom/`.
+      >
+      > **1.3.0 round 2, on the frozen CI files, 2026-10-12: all three runs pass.** Fresh clones of
+      > the same 12.6 base (automatic updates off): run 1 `--zip` CLEAN ROOM PASS (8); run 2 `--pkg
+      > --offline` PASS (13, `room_offline` included; the Ethernet service turned off by a detached
+      > job in the VM rather than from its Terminal); run 3 `--upgrade-from` round 1's signed 1.2.1
+      > `.pkg` PASS (13), a real 1.2.1 → 1.3.0 upgrade. Real CPU inference in each; Metal in the VM
+      > 37/37 then exit 1, INFO only. Metal on hardware from a fresh account: D3. Record:
+      > `evals/runs/2026-10-12_r130-macos_cleanroom/`.
 
 - [ ] **E4. Gatekeeper behaviour, simulated honestly — including extraction semantics.** `curl` does
       **not** set the quarantine attribute; Safari and Finder do, and they **propagate** it to
@@ -1651,6 +1705,14 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > with nobody logged in, killed (exit 137, `syspolicyd` "Denying"); its unsigned `.pkg`
       > rejected by `spctl` (`no usable signature`). The signed files, side by side in the same
       > VM, run and are accepted. Record: `evals/runs/2026-10-09_mac-prefreeze-pkg-tests/`.
+      >
+      > **1.3.0 round 2, on the frozen CI files, 2026-10-12/13: the signed half again, passes.**
+      > `.pkg`: Developer ID Installer, notarized, `stapler validate` worked, `spctl` accepted, also
+      > with the network down (clean room run 2). `.zip`: every Mach-O passes `codesign --verify
+      > --strict`, hardened runtime, secure timestamp; the quarantine propagated to every extracted
+      > file (run 1) and, on the physical Mac, from a Safari-quarantined `.zip` extracted by Finder to
+      > the extracted `knaif`, which ran with no block (D3). Record:
+      > `evals/runs/2026-10-12_r130-macos_cleanroom/` (`host-signature/`).
 
 - [ ] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
       *Added 2026-08-02 after audit.*
@@ -1728,6 +1790,48 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > the downloads, setup does not wait; transport failures retried). Installer did **not**
       > enforce `pkgbuild`'s `timeout="600"`: a 12-minute test script ran to the end (722 s) on
       > macOS 12.6. Record: `evals/runs/2026-10-09_mac-prefreeze-pkg-tests/`.
+      >
+      > **Pre-freeze manual pass, 2026-10-10 (on `3b440ae`, #85's window, built unsigned from a
+      > checkout outside `~`; macOS 12.6 VMs, a second with Homebrew 7.0.9). Not release evidence;
+      > every check passes, six findings.** Logged in, model and tools: **one** Terminal window,
+      > opened 1 s after the core receipt was written, as the last install step; the tools then the
+      > model, in options-page order, each with progress; the installer finished in 3 s, its
+      > conclusion page shown while the downloads ran; "Done." and "Not everything finished…" both
+      > seen with the right commands (a refused `brew install ffmpeg` listed alone, LibreOffice and the
+      > model completed). The model: sha256 matches the manifest, `[Excluded]` from Time Machine (3
+      > runs). A network cut mid-download: stalled, retried, given up about 2 min later naming `knaif
+      > models pull knaif-qwen3-4b-v2`; the rerun resumed from about 240 MiB to the right sha256.
+      > Nobody logged in: no window, and `install.log` lists `Later: brew install ffmpeg`, `Later:
+      > knaif models pull knaif-qwen3-4b-v2`, and on reinstall `not stopping a model daemon: nobody
+      > is logged in to ask…`. The screens: the model and tool wording names the Terminal window;
+      > the tools greyed without Homebrew and enabled with it (FFmpeg ticked); the conclusion page
+      > covers "if no window opened". **Findings** (all decided by the owner the same day, as listed
+      > in §0): the model's title cut off; the download-only choices "Zero KB" and left out of Space
+      > Required; the Supporting tools group tickable without Homebrew; on macOS 12 Homebrew builds
+      > FFmpeg from source (Tier 3) ahead of the model; brew's `[y/n]` stopping the window; the
+      > clean-room base needing automatic updates off. *For information:* Installer does not enforce
+      > `timeout="600"` (above); after a cut the progress counter goes backwards (cut-off chunks are
+      > re-fetched); Terminal also restores the user's earlier windows when the setup window opens.
+      >
+      > **1.3.0 round 2, on the frozen CI `.pkg` (`e9a31768…`), 2026-10-12/13: passes, every
+      > pre-freeze fix seen on the real file.** Static (`installer -showChoicesXML`, `pkgutil
+      > --expand`): the model's line above Supporting tools, title "AI model — in a Terminal window",
+      > installKBytes model 2,438,751 (the manifest's `size_bytes`) and the tools' estimates; without
+      > Homebrew the group and every tool disabled, with it enabled and FFmpeg selected; `finish` last.
+      > Clean room: install, receipt 1.3.0, PATH link, offline install, upgrade over a signed 1.2.1
+      > `.pkg`, `uninstall.sh` clean (E3). The daemon: headless, the reinstall leaves it running and
+      > logs why, `uninstall.sh` stops it; with a console user, the reinstall's preinstall stops it
+      > (`knaif daemon stopped.`) and so does `uninstall.sh`; `~/.knaif` kept. **Installer.app, by a
+      > person:** without Homebrew, the tools greyed, Space Required 2.53 GB, one window downloading
+      > only the model and ending "Done."; with Homebrew (the clone first cleared of the pre-freeze
+      > pass's 1.2.1, its model and the LibreOffice cask), LibreOffice ticked takes Space Required
+      > from 2.6 to 3.44 GB, and the window runs **the model first**, then FFmpeg, then LibreOffice;
+      > FFmpeg's `[y/n]` (a Tier 3 source build) answered `n` held up only the tools, and the summary
+      > names `brew install ffmpeg` alone. Model sha256 and `[Excluded]` right in both. *Observations,
+      > not findings:* the tools' titles are cut off in the list, as the model's was (full text on
+      > selection); and the window printed "Downloading knaif-qwen3-4b-v2" two or three times before
+      > "Installed" (a retry or the progress line redrawn; the sha256 was right). Record:
+      > `evals/runs/2026-10-12_r130-macos_cleanroom/` (`report.md`).
 
 - [x] **E5. Artifact hygiene.** No `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/
       `notebook` paths. Holds by construction (`package.sh` copies an allowlist) — re-check on the
