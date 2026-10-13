@@ -162,6 +162,21 @@ def test_the_waive_command_writes_the_waiver(tree: Path, monkeypatch) -> None:
     assert _cell(tree)["owner_exception"]["reason"] == "not a blocker"
 
 
+def test_the_waive_command_names_the_record_without_the_checkout_path(
+    tree: Path, monkeypatch, capsys
+) -> None:
+    # Its output goes into the run's committed verdicts (AGENTS.md, Public Output Hygiene).
+    from knaif.evalsuite import cli
+
+    _fail(tree)
+    monkeypatch.chdir(tree)
+    args = ["waive", "--skill", "demo", "--cell", CPU, "--reason", "not a blocker"]
+    cli.cmd_waive(cli.build_parser().parse_args([*args, "--date", "2026-09-28"]))
+    out = capsys.readouterr().out
+    assert out.rstrip().endswith(": evals/acceptance/demo.json")
+    assert str(tree.resolve()) not in out
+
+
 def test_the_waive_command_refuses_what_the_gate_would_not_honour(tree: Path, monkeypatch) -> None:
     from knaif.evalsuite import cli
 

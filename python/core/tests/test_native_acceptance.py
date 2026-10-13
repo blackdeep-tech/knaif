@@ -392,6 +392,29 @@ def test_the_command_accepts_a_run_that_clears_the_real_bar(tmp_path, recorded, 
     assert recorded["L4"]["passed"] is True
 
 
+def test_the_verdict_names_the_record_without_the_checkout_path(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    # The verdict output is committed as `<skill>_verdict.txt`; on Windows it named the record
+    # by the checkout's absolute path (AGENTS.md, Public Output Hygiene rule 1).
+    from knaif.evalsuite import cli, gate
+
+    monkeypatch.setattr(
+        gate,
+        "record_layers",
+        lambda skill, root, layers: Path(root).resolve() / "evals" / "acceptance" / f"{skill}.json",
+    )
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(_real_bar_board()), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(json.dumps(_safety_for(_real_bar_board())), encoding="utf-8")
+
+    cli.cmd_accept_native(_cli_args(current, safety))
+    out = capsys.readouterr().out
+    assert "recorded L4 evidence: evals/acceptance/ffmpeg.json" in out
+    assert str(Path.cwd().resolve()) not in out
+
+
 def test_a_python_side_run_can_never_buy_acceptance(tmp_path, recorded) -> None:
     """L4b: executing a plan through Python's pipeline locates a failure; it is not the
     gate, because it grades a pipeline no user runs."""

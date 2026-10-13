@@ -1406,6 +1406,15 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
     print(f"  equivalence {args.id!r} recorded: {path}")
 
 
+def _shown(path: Path | str) -> str:
+    """*path* as printed by commands whose output a run commits: relative to the checkout,
+    never its absolute path (AGENTS.md, Public Output Hygiene)."""
+    try:
+        return Path(path).resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return str(redact_local_paths(str(path)))
+
+
 def cmd_waive(args: argparse.Namespace) -> None:
     """Record the owner's exception for one failing cell (quality thresholds only)."""
     from datetime import date as _date
@@ -1420,7 +1429,7 @@ def cmd_waive(args: argparse.Namespace) -> None:
     except ValueError as exc:
         print(f"refused: {exc}", file=sys.stderr)
         sys.exit(2)
-    print(f"  owner exception recorded for {args.skill} {args.layer} {args.cell}: {path}")
+    print(f"  owner exception recorded for {args.skill} {args.layer} {args.cell}: {_shown(path)}")
 
 
 def cmd_gate(args: argparse.Namespace) -> None:
@@ -2115,7 +2124,7 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
     if entry.get("composed"):
         print(f"  COMPOSED cell (not a full run): {entry['composed_from']}")
     path = record_layers(args.skill, Path.cwd(), {"L4": entry})
-    print(f"  recorded L4 evidence: {path}")
+    print(f"  recorded L4 evidence: {_shown(path)}")
     if not report.ok:
         sys.exit(1)
 
