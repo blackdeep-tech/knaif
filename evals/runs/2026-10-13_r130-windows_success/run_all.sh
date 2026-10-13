@@ -17,7 +17,7 @@
 #   bash evals/runs/<this folder>/run_all.sh setup    install + verify the CUDA payload           ~5 min
 #   bash evals/runs/<this folder>/run_all.sh l3       L3 parity, both models x both skills, CUDA  ~1 h
 #   bash evals/runs/<this folder>/run_all.sh gpu      L4 cells 4B + 1.7B on cuda and vulkan       ~3-3.5 h
-#   bash evals/runs/<this folder>/run_all.sh cpu4b    4B CPU cell, composed (rerun set)           ~30-40 min
+#   bash evals/runs/<this folder>/run_all.sh cpu4b    4B CPU cell in full (amendment 2026-10-13)  ~4.3 h
 #   bash evals/runs/<this folder>/run_all.sh cpu17b   1.7B CPU cell in full                       ~2.5-3 h
 #   bash evals/runs/<this folder>/run_all.sh daemon   plan equality on CUDA, both models x corpora ~1-1.5 h
 #   bash evals/runs/<this folder>/run_all.sh flips    cross-backend flips, reported                minutes
@@ -92,10 +92,8 @@
 #   gpu     cells <model>|windows-x64|{cuda,vulkan}, measured in full, KNAIF_NO_DAEMON=1, success
 #           verifier, safety on the binary over the whole safety corpus; board placement CUDA0 /
 #           Vulkan0, else VOID.
-#   cpu4b   the 4B CPU cell composed as 1.2.0 T9b: `rerun-set --base` the NEW 4B CUDA board
-#           `--plans` the 2026-09-25 CPU plans T9b used (evals/runs/2026-09-25_backend-parity-v2_plans,
-#           confirmed for 1.2.0 by T9a), every listed row re-run on the CPU (`native --only`), both
-#           safety sets on the CPU binary, `compose`, `accept-native` (records it as composed).
+#   cpu4b   the 4B CPU cell IN FULL (amendment 2026-10-13 below), exactly the gpu cell with the
+#           GPU hidden (placement CPU, else VOID).
 #   cpu17b  the 1.7B CPU cell in full (placement CPU, else VOID).
 #   waivers the 1.7B ffmpeg cell whose unmet thresholds are all slices 1.2.0 waived (`batch`; on the
 #           CPU cell also `codec`, `adjust_speed`) is waived with `evalsuite waive`, quoting the exact
@@ -107,9 +105,17 @@
 #           refuses), every pass must return one line per utterance, and the daemon's request counter
 #           must rise by at least the utterance count, or the pass did not go through it.
 #   flips   1.2.0's t11_flips.py, CUDA vs Vulkan and CUDA vs CPU per model and skill; reported, not
-#           a verdict (the 4B CPU flips are among the re-run rows by construction).
+#           a verdict.
 #
-# AMENDMENTS (each with its date and reason, written before the stage it affects runs): none.
+# AMENDMENTS (each with its date and reason, written before the stage it affects runs):
+#   2026-10-13, before any evidence stage ran (owner decision). The 4B Windows CPU cell is MEASURED
+#   IN FULL instead of composed as 1.2.0 T9b. Reason: T9b re-ran only the rows whose 2026-09-25 CPU
+#   plan differed from the CUDA board, which is sound only after T9a has confirmed those old plans on
+#   the binary being measured; the rule names T9b alone, and the 2026-09-25 plans come from 1.2.x,
+#   which the rules say not to reuse. A row whose old CPU plan matched could differ on the 1.3.0 CPU
+#   binary and never be re-run (Codex audit, 2026-10-13). Full measurement removes the reuse and is
+#   stricter than the rule, not looser; same lane, same bar, same verdict rule. The owner launches
+#   it separately (~4.3 h).
 # ---------------------------------------------------------------------------------------------------
 
 set -uo pipefail
@@ -127,7 +133,6 @@ ART=sandbox/r130/artifact
 EXE_REL="$ART/knaif-1.3.0-windows-x64/bin/knaif.exe"
 CUDA_DIR="$(cygpath -aw sandbox/r130/backends-cuda)"
 EMPTY_DIR="$(cygpath -aw sandbox/r130/backends-empty)"
-OLD_CPU=evals/runs/2026-09-25_backend-parity-v2_plans
 FLIPS=evals/runs/2026-09-28_r5c-windows_success/t11_flips.py
 THREADS="${THREADS:-8}"
 export KNAIF_N_THREADS="$THREADS" KNAIF_N_THREADS_BATCH="$THREADS"
@@ -375,26 +380,6 @@ stage_l3() {
   done
 }
 
-stage_cpu4b() {
-  local d="$R/4b/cpu" base skill lane=r130-win-4b
-  rm -rf "$d" && mkdir -p "$d/rows"   # never compose or judge from an earlier attempt's files
-  backend_env cpu
-  for skill in ffmpeg documents; do
-    base="$R/4b/cuda/${skill}_${lane}_success.json"
-    [ "$(placement "$base")" = CUDA0 ] || { failed "no measured 4B CUDA board for $skill (run gpu first)"; continue; }
-    $UV python -m knaif.evalsuite rerun-set --base "$base" --plans "$OLD_CPU/${skill}_cpu.jsonl" \
-      --out "$d/${skill}_rerun.json" > "$d/${skill}_rerun.log" 2>&1 || { failed "rerun-set $skill"; continue; }
-    log "cpu4b $skill: $(rel < "$d/${skill}_rerun.log" | tail -1)"
-    run_lane "$skill" "$lane" "$d/rows" "$d/${skill}_rerun.json" \
-      || { record_failed_cell 4b cpu "$skill" "the CPU re-run rows failed or were VOID"; continue; }
-    $UV python -m knaif.evalsuite compose --base "$base" --replace "$d/rows/${skill}_${lane}_success.json" \
-      --out "$d/${skill}_${lane}_success.json" \
-      --note "1.3.0 gate rule (CPU cells, owner 2026-10-07, as 1.2.0 T9b): 4B Windows CPU cell = the 4B CUDA cell + every row whose 2026-09-25 CPU plan differs in full or is missing, re-run on the CPU" \
-      2>&1 | rel > "$d/${skill}_compose.log" || { failed "compose $skill"; record_failed_cell 4b cpu "$skill" "compose failed"; continue; }
-    accept 4b "$lane" cpu "$d/${skill}_${lane}_success.json" "$skill" "$d"
-  done
-}
-
 daemon_requests() {  # -> the running daemon's request counter, or nothing
   env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon status 2>/dev/null | sed -n 's/^ *requests: *\([0-9]*\).*/\1/p'
 }
@@ -481,7 +466,7 @@ stage_flips() {
 case "$STAGE" in
   l3) stage_l3 ;;
   gpu) for model in 4b 1.7b; do for backend in cuda vulkan; do cell "$model" "$backend"; done; done ;;
-  cpu4b) stage_cpu4b ;;
+  cpu4b) cell 4b cpu ;;               # in full (amendment 2026-10-13)
   cpu17b) cell 1.7b cpu ;;
   daemon) stage_daemon ;;
   flips) stage_flips ;;
