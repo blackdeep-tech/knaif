@@ -10,7 +10,7 @@
 # manifest points at, installed by `knaif backend install cuda` into ~/r130/backends-cuda and checked
 # by `backend verify` every stage; CPU with the GPU hidden. KNAIF_PDFIUM_PATH unset.
 #
-# Runs INSIDE WSL, from the WSL checkout (~/knaif, a clone whose `origin` is the Windows checkout;
+# Runs INSIDE WSL, from the WSL checkout (~/knaif-r130, a clone whose `origin` is the Windows checkout;
 # pull the branch first). ONE STAGE PER INVOCATION, each launched only after the owner has approved
 # it with its time budget (one run at a time, 8 threads):
 #
