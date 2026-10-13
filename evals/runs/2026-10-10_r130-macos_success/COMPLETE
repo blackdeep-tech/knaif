@@ -84,3 +84,9 @@
 2026-10-13 20:04:01 cpu-compose 1.7b documents: ACCEPTED - 43 thresholds met.
   owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|macos|cpu: evals/acceptance/ffmpeg.json
 2026-10-13 20:04:43 END cpu-compose: 4B ffmpeg/documents ACCEPTED; 1.7B documents ACCEPTED; 1.7B ffmpeg misses only batch (25/29), waived by the rule. Decision flips vs Metal (reported, not a verdict): 4B ffmpeg 1, 1.7B ffmpeg 3, all fail->pass; documents 0
+2026-10-13 20:42:41 CORRECTION cpu-compose: the flips in the notes above were outcome changes, not decision flips; re-composed with decision-level flips from 1.2.0's t11_flips.py (Codex audit 2026-10-13). Same boards, same verdicts expected.
+2026-10-13 20:42:42 cpu-compose 4b ffmpeg: ACCEPTED - 46 thresholds met.; flips: decision  flips   2: both-correct 1, only metal correct 0, only cpu correct 1, both-wrong 0
+2026-10-13 20:42:43 cpu-compose 4b documents: ACCEPTED - 43 thresholds met.; flips: decision  flips   0: both-correct 0, only metal correct 0, only cpu correct 0, both-wrong 0
+2026-10-13 20:42:43 cpu-compose 1.7b ffmpeg: NOT ACCEPTED - 1 of 46 thresholds unmet:; flips: decision  flips   4: both-correct 1, only metal correct 0, only cpu correct 0, both-wrong 3
+2026-10-13 20:42:44 cpu-compose 1.7b documents: ACCEPTED - 43 thresholds met.; flips: decision  flips   1: both-correct 1, only metal correct 0, only cpu correct 0, both-wrong 0
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|macos|cpu: evals/acceptance/ffmpeg.json

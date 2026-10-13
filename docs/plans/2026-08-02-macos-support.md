@@ -366,7 +366,7 @@ observations, not findings, under E6.
 |---|---|---|
 | 2 L4 Metal | 4B **ACCEPTED** on both skills; 1.7B documents **ACCEPTED**; 1.7B ffmpeg NOT ACCEPTED on `batch` only (25/29), **waived by the gate rule**; safety 100% on the binary; every board on `MTL0` | C4 |
 | 2 documents, re-run | The first documents cells (2026-10-11) were **invalid**, graded without `pypdf` (step 0's `uv sync` removed the `documents` groups); re-run 2026-10-12 under the amendment: both ACCEPTED, 43/43. The invalid files are kept under `invalid-2026-10-11/` | C4 |
-| 3 CPU sample | the t15 rows on `mac-cpu-<model>`, all on `CPU`, both safety sets 100%; the boards went to the owner outside git, redacted, sha256 in `boards.sha256`. **Composed on the Windows box 2026-10-13:** 4B ffmpeg and documents **ACCEPTED**, 1.7B documents **ACCEPTED**, 1.7B ffmpeg misses `batch` only (25/29), **waived by the rule**; decision flips against Metal (reported, not a verdict) 4B 1, 1.7B 3, all fail → pass | C4 |
+| 3 CPU sample | the t15 rows on `mac-cpu-<model>`, all on `CPU`, both safety sets 100%; the boards went to the owner outside git, redacted, sha256 in `boards.sha256`. **Composed on the Windows box 2026-10-13:** 4B ffmpeg and documents **ACCEPTED**, 1.7B documents **ACCEPTED**, 1.7B ffmpeg misses `batch` only (25/29), **waived by the rule**; decision flips against Metal (reported, not a verdict): 4B ffmpeg 2 (one right only on CPU), 1.7B ffmpeg 4 (three wrong on both), 1.7B documents 1 (right on both) | C4 |
 | 4 Daemon plan equality | **byte-identical**, both models × both corpora | `evals/parity/2026-10-10_r130-macos-daemon-plan-equality/` |
 | 5 L3 on Metal (recorded, not gated) | all four **PASS**: 0 port bugs, 0 not implemented; disagreement ffmpeg 0.0000, documents 0.0070 | C5 |
 | 6 Clean room | three tart runs **CLEAN ROOM PASS** (zip 8, offline `.pkg` 13, upgrade from a signed 1.2.1 `.pkg` 13); the daemon headless and with a console user; Installer.app screens, the Terminal window's order, a refused brew `[y/n]`, all judged by a person: pass | E3, E4, E6 |
@@ -1288,9 +1288,11 @@ already pass, on a third platform, for the first time.**
       > `boards.sha256`): each model's Metal board with its CPU sample swapped in, `accept-native` on
       > the CPU safety files. 4B ffmpeg ACCEPTED (46/46; 0.9396 / 0.9858), 4B documents ACCEPTED
       > (43/43), 1.7B documents ACCEPTED (43/43), 1.7B ffmpeg NOT ACCEPTED on `batch` only (25/29),
-      > waived by the rule. Decision flips against the Metal plans, reported and not a verdict: 4B
-      > ffmpeg 1 (`ffmpeg_202#2`), 1.7B ffmpeg 3 (`ffmpeg_121#2`, `ffmpeg_129#0`, `ffmpeg_136#0`), all
-      > fail → pass on CPU; documents none. Sampled, not measured in full.
+      > waived by the rule. Decision flips against the Metal plans (1.2.0's `t11_flips.py`, split by
+      > the `success` grade), reported and not a verdict: 4B ffmpeg 2 (one right on both, one right
+      > only on CPU), 4B documents 0, 1.7B ffmpeg 4 (one right on both, three wrong on both), 1.7B
+      > documents 1 (right on both). Sampled, not measured in full. (First composed with outcome
+      > changes reported as flips; re-composed the same day with these, same verdicts.)
 - [x] **C5. Native-vs-Python parity on macOS.** `just parity ffmpeg --mode plan --batch` and
       `--mode command`. Both runtimes greedy-decode the identical GGUF.
       > **Done 2026-08-07, on M3P — but the recommended `llama,dynamic-backends` debug build does

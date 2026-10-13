@@ -1737,7 +1737,7 @@
           "model": "knaif-qwen3-4b-v2",
           "composed": true,
           "composed_from": {
-            "note": "1.3.0 gate rule (CPU cells, owner 2026-10-07): 4b macOS CPU cell = the 4b macOS Metal board with the pre-drawn t15 CPU sample swapped in, run on the frozen CI binary on CPU. Against the Metal plans: 1 decision flip (ffmpeg_202#2 fail->pass), 7 plan differences. Flips are reported, not a verdict. Sampled, not measured in full.",
+            "note": "1.3.0 gate rule (CPU cells, owner 2026-10-07): 4b macOS CPU cell = the 4b macOS Metal board with the pre-drawn t15 CPU sample swapped in, run on the frozen CI binary on CPU. Against the Metal plans (t11_flips.py, metal/cpu): decision  flips   2: both-correct 1, only metal correct 0, only cpu correct 1, both-wrong 0. Flips are reported, not a verdict. Sampled, not measured in full.",
             "base": {
               "path": "evals/runs/2026-10-10_r130-macos_success/4b/metal/ffmpeg_mac-4b_success.json",
               "file_sha256": "eae83277ce5c0d350ac6dc226191eb0e4c665e4111066aea029e6248cdd48f60",
@@ -2255,7 +2255,7 @@
           "model": "knaif-qwen3-1.7b-v2",
           "composed": true,
           "composed_from": {
-            "note": "1.3.0 gate rule (CPU cells, owner 2026-10-07): 1.7b macOS CPU cell = the 1.7b macOS Metal board with the pre-drawn t15 CPU sample swapped in, run on the frozen CI binary on CPU. Against the Metal plans: 3 decision flips (ffmpeg_121#2, ffmpeg_129#0, ffmpeg_136#0, all fail->pass), 14 plan differences. Flips are reported, not a verdict. Sampled, not measured in full.",
+            "note": "1.3.0 gate rule (CPU cells, owner 2026-10-07): 1.7b macOS CPU cell = the 1.7b macOS Metal board with the pre-drawn t15 CPU sample swapped in, run on the frozen CI binary on CPU. Against the Metal plans (t11_flips.py, metal/cpu): decision  flips   4: both-correct 1, only metal correct 0, only cpu correct 0, both-wrong 3. Flips are reported, not a verdict. Sampled, not measured in full.",
             "base": {
               "path": "evals/runs/2026-10-10_r130-macos_success/1.7b/metal/ffmpeg_mac-1.7b_success.json",
               "file_sha256": "08df7563d1f16ced79915136532f4ead6139d01b5bdfe21ec71155c8a2ececee",
