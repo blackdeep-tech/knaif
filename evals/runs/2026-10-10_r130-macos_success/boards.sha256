@@ -1,0 +1,8 @@
+1fe69491c812bb9159f4cd6db42727d915430091b0ce79515e1e6ff6f5a71fce  1.7b/metal/documents_mac-1.7b_success.json
+08df7563d1f16ced79915136532f4ead6139d01b5bdfe21ec71155c8a2ececee  1.7b/metal/ffmpeg_mac-1.7b_success.json
+0913134f5c3a65f85c056355ced62efdd6c5c4e0378a65c0d6b6f1e55ee39c27  4b/metal/documents_mac-4b_success.json
+eae83277ce5c0d350ac6dc226191eb0e4c665e4111066aea029e6248cdd48f60  4b/metal/ffmpeg_mac-4b_success.json
+191d6fa1a2f90a559f3858289196b63ce0aa3b01b5004b3136f530df31ba30d9  1.7b/cpu/documents_mac-cpu-1.7b_success.json
+73a77068258b3037ac5dfbae40b6efd416bd1ad9c57c9f061f5f99deff6211ed  1.7b/cpu/ffmpeg_mac-cpu-1.7b_success.json
+cbea835819ab30d9f353231f63a28c757251fc2de79c049ad8aaefc4b18633c2  4b/cpu/documents_mac-cpu-4b_success.json
+34f9f15993eab739905540f773fe3a55db5def2e8fab291b1705b87749f3f5fd  4b/cpu/ffmpeg_mac-cpu-4b_success.json

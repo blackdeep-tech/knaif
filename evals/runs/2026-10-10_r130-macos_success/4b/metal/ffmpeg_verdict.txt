@@ -1,0 +1,8 @@
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9384  (floor 0.9231, python 0.9431)
+  avg_knaif_score   : 0.9857  (floor 0.9641, python 0.9841)
+ACCEPTED - 46 thresholds met.
+  recorded L4 evidence: evals/acceptance/ffmpeg.json

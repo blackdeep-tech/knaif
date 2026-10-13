@@ -1,0 +1,46 @@
++ export PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
++ PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
++ sudo /usr/local/knaif/uninstall.sh --purge
+knaif daemon is not running.
+removed /usr/local/bin/knaif
+removed /usr/local/knaif
+forgot receipt tech.blackdeep.knaif.core
+forgot receipt tech.blackdeep.knaif.skill.documents
+forgot receipt tech.blackdeep.knaif.skill.ffmpeg
+removed /Users/admin/.knaif (models and backends)
+knaif is uninstalled. Homebrew tools stay installed: brew uninstall <name> to remove one.
++ brew uninstall --cask libreoffice
+==> Uninstalling Cask libreoffice
+==> Backing up App 'LibreOffice.app' to '/opt/homebrew/Caskroom/libreoffice/26.8.1/LibreOffice.app'
+==> Removing App '/Applications/LibreOffice.app'
+==> Unlinking Binary '/opt/homebrew/bin/gengal'
+==> Unlinking Binary '/opt/homebrew/bin/regview'
+==> Unlinking Binary '/opt/homebrew/bin/senddoc'
+==> Unlinking Binary '/opt/homebrew/bin/uno'
+==> Unlinking Binary '/opt/homebrew/bin/xpdfimport'
+==> Unlinking Command Wrapper '/opt/homebrew/bin/soffice'
+==> Unlinking Binary '/opt/homebrew/bin/unoinfo'
+==> Unlinking Binary '/opt/homebrew/bin/unopkg'
+==> Unlinking Binary '/opt/homebrew/bin/uri-encode'
+==> Purging files for version 26.8.1 of Cask libreoffice
++ pkgutil --pkgs
++ grep -i knaif
+no knaif receipts
++ echo 'no knaif receipts'
++ ls /usr/local/knaif /usr/local/bin/knaif /Users/admin/.knaif
+ls: /Users/admin/.knaif: No such file or directory
+ls: /usr/local/bin/knaif: No such file or directory
+ls: /usr/local/knaif: No such file or directory
++ ls -d /Applications/LibreOffice.app
+ls: /Applications/LibreOffice.app: No such file or directory
++ brew list --formula
++ tr '\n' ' '
+ca-certificates cmake mpdecimal ninja openssl@4 pkgconf readline sqlite xz 
++ echo
++ brew list --cask
++ tr '\n' ' '
+(casks end)
++ echo '(casks end)'
+++ stat -f %Su /dev/console
+console=admin
++ echo console=admin

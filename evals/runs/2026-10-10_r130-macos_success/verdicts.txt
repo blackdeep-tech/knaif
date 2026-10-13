@@ -1,0 +1,64 @@
+=== l4-both 4b ffmpeg (placement MTL0)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9384  (floor 0.9231, python 0.9431)
+  avg_knaif_score   : 0.9857  (floor 0.9641, python 0.9841)
+ACCEPTED - 46 thresholds met.
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 0
+=== l4-both 4b documents (placement MTL0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9756  (floor 0.9556, python 0.9756)
+  avg_knaif_score   : 0.3333  (floor 0.9800, python 0.9818)
+NOT ACCEPTED - 1 of 43 thresholds unmet:
+  [aggregate] avg_knaif_score 0.333 < 0.980 (S2 floor 0.980; Python 0.982 - 0.02 allowance)
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 1
+=== l4-both 1.7b ffmpeg (placement MTL0)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9187  (floor 0.8999, python 0.9199)
+  avg_knaif_score   : 0.9780  (floor 0.9585, python 0.9785)
+NOT ACCEPTED - 1 of 46 thresholds unmet:
+  [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|macos|mtl: evals/acceptance/ffmpeg.json
+=== l4-both 1.7b documents (placement MTL0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9634  (floor 0.9500, python 0.9634)
+  avg_knaif_score   : 0.3262  (floor 0.9745, python 0.9945)
+NOT ACCEPTED - 1 of 43 thresholds unmet:
+  [aggregate] avg_knaif_score 0.326 < 0.974 (S2 floor 0.969; Python 0.994 - 0.02 allowance)
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 1
+=== l4-both-documents 4b documents (placement MTL0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9756  (floor 0.9556, python 0.9756)
+  avg_knaif_score   : 0.9851  (floor 0.9800, python 0.9818)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== l4-both-documents 1.7b documents (placement MTL0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9634  (floor 0.9500, python 0.9634)
+  avg_knaif_score   : 0.9945  (floor 0.9745, python 0.9945)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0

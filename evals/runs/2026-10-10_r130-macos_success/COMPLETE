@@ -1,0 +1,79 @@
+2026-10-10 23:23:04 START check-both
+2026-10-10 23:23:19 END check-both: preflight passed
+2026-10-10 23:35:18 owner approved all stages together (l4 4h30, cpu 3h15, daemon 7h, l3 3h30), relayed by Deyan; launched in sequence
+2026-10-10 23:35:50 START l4-both
+2026-10-10 23:36:05 l4-both: 4b
+2026-10-11 01:44:03 l4-both ffmpeg mac-4b: placement MTL0
+2026-10-11 01:45:13 l4-both ffmpeg mac-4b: safety exit 0
+2026-10-11 01:45:14 l4-both 4b ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-11 01:55:25 l4-both documents mac-4b: placement MTL0
+2026-10-11 01:55:34 l4-both documents mac-4b: safety exit 0
+2026-10-11 01:55:35 l4-both 4b documents: NOT ACCEPTED - 1 of 43 thresholds unmet:
+2026-10-11 01:55:35 l4-both: 1.7b
+2026-10-11 03:03:32 l4-both ffmpeg mac-1.7b: placement MTL0
+2026-10-11 03:04:05 l4-both ffmpeg mac-1.7b: safety exit 0
+2026-10-11 03:04:05 l4-both 1.7b ffmpeg: NOT ACCEPTED - 1 of 46 thresholds unmet:
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|macos|mtl: evals/acceptance/ffmpeg.json
+2026-10-11 03:09:15 l4-both documents mac-1.7b: placement MTL0
+2026-10-11 03:09:20 l4-both documents mac-1.7b: safety exit 0
+2026-10-11 03:09:20 l4-both 1.7b documents: NOT ACCEPTED - 1 of 43 thresholds unmet:
+2026-10-11 03:09:20 END l4-both
+2026-10-11 03:09:20 START cpu-both
+2026-10-11 03:09:35 cpu-both: 4b
+2026-10-11 04:39:57 cpu-both ffmpeg mac-cpu-4b: placement CPU
+2026-10-11 04:46:13 cpu-both ffmpeg mac-cpu-4b: safety exit 0
+2026-10-11 04:59:39 cpu-both documents mac-cpu-4b: placement CPU
+2026-10-11 05:00:17 cpu-both documents mac-cpu-4b: safety exit 0
+2026-10-11 05:00:17 cpu-both: 1.7b
+2026-10-11 05:45:53 cpu-both ffmpeg mac-cpu-1.7b: placement CPU
+2026-10-11 05:48:46 cpu-both ffmpeg mac-cpu-1.7b: safety exit 0
+2026-10-11 05:54:30 cpu-both documents mac-cpu-1.7b: placement CPU
+2026-10-11 05:54:48 cpu-both documents mac-cpu-1.7b: safety exit 0
+2026-10-11 05:54:48 END cpu-both
+2026-10-11 05:54:48 START daemon-both
+2026-10-11 05:55:03 daemon-both: 4b
+2026-10-11 07:42:49 daemon-both 4b ffmpeg: in process exit 0, 861 lines
+2026-10-11 07:51:45 daemon-both 4b documents: in process exit 0, 164 lines
+2026-10-11 09:42:01 daemon-both 4b ffmpeg: through the daemon exit 0
+2026-10-11 09:42:01 daemon-both 4b ffmpeg: IDENTICAL (00a44bbacaff88e42e53b10d8fab1a8673fb1ee7d7f03b60c46e001dde305e4f)
+2026-10-11 09:51:01 daemon-both 4b documents: through the daemon exit 0
+2026-10-11 09:51:02 daemon-both 4b documents: IDENTICAL (06f23d2cd87435e1a8c4616130238c3f71082e237a058762aef8f2b2d9f083f0)
+2026-10-11 09:51:02 daemon-both: 1.7b
+2026-10-11 10:39:47 daemon-both 1.7b ffmpeg: in process exit 0, 861 lines
+2026-10-11 10:43:48 daemon-both 1.7b documents: in process exit 0, 164 lines
+2026-10-11 11:31:53 daemon-both 1.7b ffmpeg: through the daemon exit 0
+2026-10-11 11:31:53 daemon-both 1.7b ffmpeg: IDENTICAL (1dc863209e40171b2b3335f72341439f96fb7efbbf42d244412cdb3ae9dbcdc3)
+2026-10-11 11:35:50 daemon-both 1.7b documents: through the daemon exit 0
+2026-10-11 11:35:50 daemon-both 1.7b documents: IDENTICAL (ae3e633f333c3d61c3edee17f9ea2664d0046e2f43f977ac8cdd3cab294044be)
+2026-10-11 11:35:50 END daemon-both
+2026-10-11 11:35:50 START l3-both
+2026-10-11 11:36:06 l3-both: 4b
+2026-10-11 11:40:21 ENVIRONMENT: documents dependency groups restored (just install-skills: pypdf, pikepdf, ... added, nothing changed or removed) during l3 4b ffmpeg, before both L3 documents cells. Missing since step 0's uv sync: L4 documents 4b/1.7b and CPU documents 4b/1.7b were graded without pypdf and are invalid; re-run pending owner approval. Amendment text goes into run_all.sh after l3 ends (the running script must not be edited).
+2026-10-11 13:01:37 l3-both 4b ffmpeg: parity_check exit 0 (bound 0.0411);   gate                    : PASS (port bugs 0, not implemented 0, plan disagreement 0.0000 <= 0.0411 required)
+2026-10-11 13:19:08 l3-both 4b documents: parity_check exit 0 (bound 0.0183); [ 59/143] ✓ documents_059    password-protect sample.pdf with secret
+2026-10-11 13:19:08 l3-both: 1.7b
+2026-10-11 14:00:37 l3-both 1.7b ffmpeg: parity_check exit 0 (bound 0.0411);   gate                    : PASS (port bugs 0, not implemented 0, plan disagreement 0.0000 <= 0.0411 required)
+2026-10-11 14:09:56 l3-both 1.7b documents: parity_check exit 0 (bound 0.0183); [ 59/143] ✓ documents_059    password-protect sample.pdf with secret
+2026-10-11 14:09:56 END l3-both
+2026-10-11 14:10:31 START check-both-documents
+2026-10-11 14:10:46 END check-both-documents: preflight passed
+2026-10-11 14:10:54 AMENDMENT written into run_all.sh (documents re-run, SKILLS option); invalid documents files moved to <model>/<stage>/invalid-2026-10-11/
+2026-10-12 03:42:41 owner approved documents re-run (l4 + cpu, both models), budget 1h, relayed by Deyan
+2026-10-12 03:42:41 START l4-both-documents
+2026-10-12 03:42:57 l4-both-documents: 4b
+2026-10-12 03:52:48 l4-both-documents documents mac-4b: placement MTL0
+2026-10-12 03:52:58 l4-both-documents documents mac-4b: safety exit 0
+2026-10-12 03:52:58 l4-both-documents 4b documents: ACCEPTED - 43 thresholds met.
+2026-10-12 03:52:58 l4-both-documents: 1.7b
+2026-10-12 03:58:01 l4-both-documents documents mac-1.7b: placement MTL0
+2026-10-12 03:58:06 l4-both-documents documents mac-1.7b: safety exit 0
+2026-10-12 03:58:06 l4-both-documents 1.7b documents: ACCEPTED - 43 thresholds met.
+2026-10-12 03:58:06 END l4-both-documents
+2026-10-12 03:58:06 START cpu-both-documents
+2026-10-12 03:58:21 cpu-both-documents: 4b
+2026-10-12 04:11:06 cpu-both-documents documents mac-cpu-4b: placement CPU
+2026-10-12 04:11:49 cpu-both-documents documents mac-cpu-4b: safety exit 0
+2026-10-12 04:11:49 cpu-both-documents: 1.7b
+2026-10-12 04:17:10 cpu-both-documents documents mac-cpu-1.7b: placement CPU
+2026-10-12 04:17:27 cpu-both-documents documents mac-cpu-1.7b: safety exit 0
+2026-10-12 04:17:27 END cpu-both-documents

@@ -1,0 +1,16 @@
+console user: root
+== install
+installer: The install was successful.
+== daemon start
+exit 0
+knaif daemon is running (pid 663).
+== reinstall over the running daemon, nobody at the console
+installer: The upgrade was successful.
+== preinstall lines from this reinstall
+2026-10-09 06:33:23-07 Admins-Virtual-Machine package_script_service[397]: ./preinstall: knaif: not stopping a model daemon: nobody is logged in to ask; one left running exits on its own when idle
+== daemon after reinstall (expected: still running, by design)
+663 /usr/local/bin/knaif daemon serve --model ~/room/knaif-qwen3-4b-v2-q4_k_m.gguf --idle-minutes 10
+== cleanup
+knaif daemon stopped.
+knaif is uninstalled. Homebrew tools stay installed: brew uninstall <name> to remove one.
+DAEMON-GONE

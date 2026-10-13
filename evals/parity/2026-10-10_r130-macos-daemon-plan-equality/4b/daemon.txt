@@ -1,0 +1,12 @@
+Starting the model daemon (knaif-qwen3-4b-v2-q4_k_m)...
+knaif daemon is running with knaif-qwen3-4b-v2-q4_k_m.
+Later runs use it automatically; stop it with `knaif daemon stop`.
+knaif daemon is running (pid 12967).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     0 s (stops after 10 min)
+knaif daemon is running (pid 12967).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 1043
+  idle:     0 s (stops after 10 min)
+knaif daemon stopped.
