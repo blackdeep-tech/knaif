@@ -298,7 +298,7 @@ record_layers(sys.argv[3], Path.cwd(), {'L4': {'cell': cell_key(sys.argv[1], 'li
 
 accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
   local model="$1" lane="$2" backend="$3" board="$4" skill="$5" d="$6" rc
-  safety "$skill" "$lane" "$d" || return 1
+  safety "$skill" "$lane" "$d" || { record_failed_cell "$model" "$backend" "$skill" "the safety run failed"; return 1; }
   $UV python -m knaif.evalsuite accept-native --skill "$skill" --current "$board" \
     --safety "$d/${skill}_safety.json" > "$d/${skill}_accept.log" 2>&1
   rc=$?
@@ -306,7 +306,7 @@ accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
   { echo "=== $STAGE $model $backend $skill (placement $(placement "$board"))"; cat "$d/${skill}_verdict.txt"; echo "exit $rc"; } \
     >> "$R/verdicts.txt"
   if ! grep -qE "^(NOT )?ACCEPTED" "$d/${skill}_verdict.txt" || ! grep -q "recorded L4 evidence" "$d/${skill}_verdict.txt"; then
-    failed "accept-native $model $backend $skill: no verdict recorded (exit $rc)"; return 1
+    failed "accept-native $model $backend $skill: no verdict recorded (exit $rc)"; record_failed_cell "$model" "$backend" "$skill" "accept-native recorded no verdict"; return 1
   fi
   log "$STAGE $model $backend $skill: $(grep -m1 -E '^(NOT )?ACCEPTED' "$d/${skill}_verdict.txt")"
   grep -q "^NOT ACCEPTED" "$d/${skill}_verdict.txt" || return 0
@@ -349,7 +349,8 @@ stage_cpu() {
         || { failed "the Windows CPU board for $model $skill is missing or not the frozen binary's (run the Windows cpu stages first)"; record_failed_cell "$model" cpu "$skill" "no valid Windows CPU board to compose into"; continue; }
 import json, sys
 b = json.load(open(sys.argv[1], encoding="utf-8"))
-ok = b.get("compute_backend") == "CPU" and b.get("binary_sha256") == sys.argv[2] and b.get("coverage") == 1.0
+# Both Windows CPU cells are measured in full (Windows amendment 2026-10-13): a composed board is refused.
+ok = b.get("compute_backend") == "CPU" and b.get("binary_sha256") == sys.argv[2] and b.get("coverage") == 1.0 and "composed_from" not in b
 print(f"windows cpu board: compute_backend={b.get('compute_backend')} binary={str(b.get('binary_sha256'))[:12]} coverage={b.get('coverage')} composed={'composed_from' in b}")
 raise SystemExit(0 if ok else 1)
 EOF
@@ -369,11 +370,11 @@ EOF
       # Copied in first: the composed record names its source path, and a /mnt path would name the
       # Windows checkout (public-output hygiene).
       base="$R/base/$model/${skill}_${wlane}_success.json"
-      cp "$wbase" "$base" || { failed "copy base $model $skill"; continue; }
+      cp "$wbase" "$base" || { failed "copy base $model $skill"; record_failed_cell "$model" cpu "$skill" "copying the Windows CPU board failed"; continue; }
       sha256sum "$base" >> "$R/base/SHA256SUMS"
       # Decision flips (scripts/flip_rate.py levels, split by the success grade), reported, not a verdict.
       $UV python "$FLIPS" "$base" "$d/sample/${skill}_${lane}_success.json" --label "windows-cpu/linux-cpu" 2>&1 \
-        | rel > "$d/${skill}_flips.txt" || { failed "flips $model $skill windows-cpu/linux-cpu"; continue; }
+        | rel > "$d/${skill}_flips.txt" || { failed "flips $model $skill windows-cpu/linux-cpu"; record_failed_cell "$model" cpu "$skill" "the flip report failed"; continue; }
       log "cpu $model $skill vs the Windows CPU board: $(sed -n 2p "$d/${skill}_flips.txt" | sed 's/^ *//')"
       $UV python -m knaif.evalsuite compose --base "$base" --replace "$d/sample/${skill}_${lane}_success.json" \
         --out "$d/${skill}_${lane}_success.json" \
@@ -394,7 +395,7 @@ daemon_requests() {  # -> the running daemon's request counter, or nothing
 # overrides exported for L4 would make the "daemon" pass load the model in process (Codex 2026-10-13).
 # The daemon's request counter must rise by at least one per utterance, or the pass did not use it.
 stage_daemon() {
-  local model d="evals/parity/${DATE}_r130-linux-daemon-plan-equality" m skill a b n rc before after
+  local model d="evals/parity/${DATE}_r130-linux-daemon-plan-equality" m skill a b n rc before after errs
   unset KNAIF_N_THREADS KNAIF_N_THREADS_BATCH
   backend_env cpu
   for model in 4b 1.7b; do
@@ -441,6 +442,11 @@ EOF
         || { failed "daemon $model $skill: the daemon pass failed or is incomplete"; continue; }
       [ -n "$after" ] && [ $((after - before)) -ge "$n" ] \
         || { failed "daemon $model $skill: the daemon served $((${after:-0} - before)) requests for $n utterances (not through the daemon)"; continue; }
+      # `plan --batch` turns a row's failure into an {"error": ...} line and still exits 0: report how
+      # many, and never let identical all-error output certify plan equality (Codex 2026-10-13).
+      errs="$(grep -c '"error"' "$d/$model/$skill.inprocess.jsonl")"
+      log "daemon $model $skill: $errs of $n lines are error envelopes (in process)"
+      [ "$errs" -lt "$n" ] || { failed "daemon $model $skill: every line is an error envelope"; continue; }
       a="$(sha256sum < "$d/$model/$skill.inprocess.jsonl" | cut -d' ' -f1)"
       b="$(sha256sum < "$d/$model/$skill.daemon.jsonl" | cut -d' ' -f1)"
       if [ "$a" = "$b" ]; then

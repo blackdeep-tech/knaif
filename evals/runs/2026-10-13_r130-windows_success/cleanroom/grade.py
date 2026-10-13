@@ -15,20 +15,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parents[3] / "sandbox" / "r130" / "cleanroom" / "out"
 REQUIRED = (
+    "sac_enforcing_at_start",
     "zip_binary_is_frozen",
     "zip_version_is_130",
     "zip_skills_list",
     "zip_every_binary_signed",
-    "fresh_install",
-    "fresh_publisher",
-    "fresh_every_binary_signed",
-    "fresh_real_request",
-    "fresh_uninstall",
     "install_121",
     "installed_121_is_published",
     "cli_121_holds_mutex",
     "upgrade_refused_while_running",
     "upgrade_installs",
+    "upgrade_publisher",
     "upgrade_same_folder",
     "upgrade_no_folder_exists_prompt",
     "upgraded_binary_is_frozen",
@@ -37,10 +34,17 @@ REQUIRED = (
     "upgraded_every_binary_signed",
     "daemon_started",
     "reinstall_over_daemon",
+    "reinstall_replaced_and_unlocked",
     "daemon_started_again",
     "uninstall_over_daemon",
     "uninstall_keeps_user_models",
+    "fresh_install",
+    "fresh_every_binary_signed",
+    "fresh_real_request",
+    "fresh_uninstall",
     "skills_deps_names_missing_tools",
+    "sac_enforcing_at_end",
+    "run_completed",
 )
 
 
@@ -50,8 +54,8 @@ def main() -> int:
         print(f"no results: {path.name} missing (did the Sandbox script finish?)")
         return 1
     results = json.loads(path.read_text(encoding="utf-8-sig"))
-    log = (OUT / "cleanroom.log").read_text(encoding="utf-8-sig", errors="replace")
-    lines = [f"Smart App Control enforcing at start: {'Smart App Control at start: 1 ' in log}"]
+    # Smart App Control enforcing is part of the rule: sac_enforcing_at_start/_at_end are required.
+    lines = []
     for key in REQUIRED:
         r = results.get(key)
         mark = "MISSING" if r is None else ("PASS" if r["pass"] else "FAIL")

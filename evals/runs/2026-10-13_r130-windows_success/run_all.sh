@@ -283,10 +283,10 @@ safety() {  # $1 skill, $2 lane, $3 dir: the whole safety corpus on that lane's 
 }
 
 # The 1.7B ffmpeg cell: waived only when every unmet threshold is a slice 1.2.0 waived.
-waive_if_rule_allows() {  # $1 model, $2 skill, $3 backend, $4 verdict file
+waive_if_rule_allows() {  # $1 model, $2 skill, $3 backend, $4 verdict file -> 0 only when waived
   local model="$1" skill="$2" backend="$3" v="$4" unmet allowed="batch" line ok=1
-  [ "$model" = 1.7b ] && [ "$skill" = ffmpeg ] || return 0
-  grep -q "^NOT ACCEPTED" "$v" || return 0
+  [ "$model" = 1.7b ] && [ "$skill" = ffmpeg ] || return 1
+  grep -q "^NOT ACCEPTED" "$v" || return 1
   [ "$backend" = cpu ] && allowed="batch codec adjust_speed"
   unmet="$(grep -E '^ +\[' "$v" | sed 's/^ *//')"
   while IFS= read -r line; do
@@ -324,7 +324,7 @@ record_layers(sys.argv[3], Path.cwd(), {'L4': {'cell': cell_key(sys.argv[1], 'wi
 
 accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
   local model="$1" lane="$2" backend="$3" board="$4" skill="$5" d="$6" rc
-  safety "$skill" "$lane" "$d" || return 1
+  safety "$skill" "$lane" "$d" || { record_failed_cell "$model" "$backend" "$skill" "the safety run failed"; return 1; }
   $UV python -m knaif.evalsuite accept-native --skill "$skill" --current "$board" \
     --safety "$d/${skill}_safety.json" > "$d/${skill}_accept.log" 2>&1
   rc=$?
@@ -332,7 +332,7 @@ accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
   { echo "=== $STAGE $model $backend $skill (placement $(placement "$board"))"; cat "$d/${skill}_verdict.txt"; echo "exit $rc"; } \
     >> "$R/verdicts.txt"
   if ! grep -qE "^(NOT )?ACCEPTED" "$d/${skill}_verdict.txt" || ! grep -q "recorded L4 evidence" "$d/${skill}_verdict.txt"; then
-    failed "accept-native $model $backend $skill: no verdict recorded (exit $rc)"; return 1
+    failed "accept-native $model $backend $skill: no verdict recorded (exit $rc)"; record_failed_cell "$model" "$backend" "$skill" "accept-native recorded no verdict"; return 1
   fi
   log "$STAGE $model $backend $skill: $(grep -m1 -E '^(NOT )?ACCEPTED' "$d/${skill}_verdict.txt")"
   grep -q "^NOT ACCEPTED" "$d/${skill}_verdict.txt" || return 0
@@ -389,7 +389,7 @@ daemon_requests() {  # -> the running daemon's request counter, or nothing
 # overrides exported for L4 would make the "daemon" pass load the model in process (Codex 2026-10-13).
 # The daemon's request counter must rise by at least one per utterance, or the pass did not use it.
 stage_daemon() {
-  local model d="evals/parity/${DATE}_r130-win-daemon-plan-equality" m skill a b fx n rc before after
+  local model d="evals/parity/${DATE}_r130-win-daemon-plan-equality" m skill a b fx n rc before after errs
   unset KNAIF_N_THREADS KNAIF_N_THREADS_BATCH
   backend_env cuda
   for model in 4b 1.7b; do
@@ -435,6 +435,11 @@ for line in open(sys.argv[1], encoding='utf-8'):
         || { failed "daemon $model $skill: the daemon pass failed or is incomplete"; continue; }
       [ -n "$after" ] && [ $((after - before)) -ge "$n" ] \
         || { failed "daemon $model $skill: the daemon served $((${after:-0} - before)) requests for $n utterances (not through the daemon)"; continue; }
+      # `plan --batch` turns a row's failure into an {"error": ...} line and still exits 0: report how
+      # many, and never let identical all-error output certify plan equality (Codex 2026-10-13).
+      errs="$(grep -c '"error"' "$d/$model/$skill.inprocess.jsonl")"
+      log "daemon $model $skill: $errs of $n lines are error envelopes (in process)"
+      [ "$errs" -lt "$n" ] || { failed "daemon $model $skill: every line is an error envelope"; continue; }
       a="$(sha256sum < "$d/$model/$skill.inprocess.jsonl" | cut -d' ' -f1)"
       b="$(sha256sum < "$d/$model/$skill.daemon.jsonl" | cut -d' ' -f1)"
       if [ "$a" = "$b" ]; then
