@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **knaif runs on macOS** (Apple Silicon, macOS 12 or later), with Metal GPU inference. The
+  signed and notarized `.pkg` installs it and offers the model and the supporting tools (through
+  Homebrew, when it is installed); a `.zip` and `brew install blackdeep-tech/knaif/knaif` are the
+  other ways in.
 - **An optional model daemon makes repeat runs faster on a GPU.** `knaif daemon start` keeps the
   model loaded between runs (`status`, `stop`; it shuts down after 10 idle minutes,
   `--idle-minutes`), and `knaif run … --daemon` starts one if none is running. A run uses a
@@ -48,6 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Known issues
 
 - With Smart App Control on, the ffmpeg skill cannot run on Windows: Windows blocks FFmpeg.
+- **On a Mac, the first run takes about 15 s longer** while Metal compiles its shaders; later runs
+  do not pay it again.
+- **The macOS `.pkg` keeps no receipt for the `PATH` link, the model or the tool choices**, so
+  `pkgutil` does not list them. `/usr/local/knaif/uninstall.sh` still removes knaif and its link;
+  the model stays in `~/.knaif`.
 
 ## [1.2.1] — 2026-10-02
 
