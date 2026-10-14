@@ -45,3 +45,6 @@
 2026-10-14 18:20:41 END cpu4b
 2026-10-14 18:20:41 START cpu17b
 2026-10-14 18:42:49 PAUSED by the owner during cpu17b (1.7b cpu ffmpeg, 111/861 rows): stopped; that cell is discarded and re-runs on resume. Done: l3, gpu, cpu4b.
+2026-10-14 22:58:30 RESUMED by the owner: cpu17b (from the start of the cell), daemon, flips
+2026-10-14 22:58:30 START cpu17b
+2026-10-14 23:06:47 PAUSED by the owner during cpu17b (1.7b cpu ffmpeg, 41/861 rows): stopped; that cell re-runs from its start on resume. Left: cpu17b, daemon, flips.
