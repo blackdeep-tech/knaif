@@ -49,11 +49,33 @@ mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
 # rest of the run last changed: stages run one after another, so the newest other file is the
 # previous stage finishing.
 started() {
-  local f=$1 b m
+  local f=$1 b m s
   b=$(stat -c %W "$f" 2>/dev/null); m=$(mtime "$f")
-  if [ -n "$b" ] && [ "$b" != 0 ] && [ "$b" != "-" ] && [ "$b" -le "$m" ]; then echo "$b"; return; fi
-  find "$R" -maxdepth 1 -type f ! -path "$f" ! -name TOTALS ! -name 'run_all.*' \
-    -printf '%T@\n' 2>/dev/null | cut -d. -f1 | awk -v m="$m" '$1 <= m' | sort -n | tail -1
+  if [ -n "$b" ] && [ "$b" != 0 ] && [ "$b" != "-" ] && [ "$b" -le "$m" ]; then s=$b
+  else
+    s=$(find "$R" -maxdepth 1 -type f ! -path "$f" ! -name TOTALS ! -name 'run_all.*' \
+      -printf '%T@\n' 2>/dev/null | cut -d. -f1 | awk -v m="$m" '$1 <= m' | sort -n | tail -1)
+  fi
+  # A stage re-run after a pause rewrites the log the stopped attempt created, so its creation time
+  # is the old attempt's: the stage started again no earlier than the last resume.
+  if [ "${resumed_at:-0}" -gt "${s:-0}" ] && [ "$resumed_at" -le "$m" ]; then s=$resumed_at; fi
+  echo "$s"
+}
+# Pauses, from COMPLETE's `<date> <time> PAUSED ...` / `<date> <time> RESUMED ...` lines: the last
+# resume (epoch, into resumed_at) and the total time paused (into paused_for), which "time passed"
+# leaves out. A pause with no resume yet runs up to now.
+pauses() {
+  local d t kind rest at=0 p
+  resumed_at=0; paused_for=0
+  [ -f "$R/COMPLETE" ] || return
+  while read -r d t kind rest; do
+    p=$(date -d "$d $t" +%s 2>/dev/null) || continue
+    case "$kind" in
+      PAUSED) at=$p ;;
+      RESUMED) [ "$at" -gt 0 ] && paused_for=$((paused_for + p - at)); at=0; resumed_at=$p ;;
+    esac
+  done < <(grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} (PAUSED|RESUMED)' "$R/COMPLETE")
+  [ "$at" -gt 0 ] && paused_for=$((paused_for + $(date +%s) - at))
 }
 rows_in() { if [ -f "$1" ]; then grep -cE "$ROW_RE" "$1" 2>/dev/null; else echo 0; fi; }
 header_total() { [ -f "$1" ] && grep -m1 -oE "$HEADER_RE" "$1" 2>/dev/null | grep -oE '[0-9]+' | head -1; }
@@ -109,7 +131,8 @@ while true; do
   if grep -q "ABORT" "$R/COMPLETE" 2>/dev/null; then state=aborted
   elif grep -q "ALL DONE" "$R/COMPLETE" 2>/dev/null; then state=finished; fi
   if [ "$state" = running ]; then end=$now; else end=$(mtime "$R/COMPLETE"); fi
-  passed=$((end - start))
+  pauses
+  passed=$((end - start - paused_for)); [ "$passed" -lt 0 ] && passed=0
 
   # The active row log: the newest one with rows (or a header).
   f=""
