@@ -1,0 +1,102 @@
+=== gpu 4b cuda ffmpeg (placement CUDA0)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9431  (floor 0.9231, python 0.9431)
+  avg_knaif_score   : 0.9841  (floor 0.9641, python 0.9841)
+ACCEPTED - 46 thresholds met.
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 0
+=== gpu 4b cuda documents (placement CUDA0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9817  (floor 0.9556, python 0.9756)
+  avg_knaif_score   : 0.9803  (floor 0.9800, python 0.9818)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== gpu 4b vulkan ffmpeg (placement Vulkan0)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9408  (floor 0.9231, python 0.9431)
+  avg_knaif_score   : 0.9858  (floor 0.9641, python 0.9841)
+ACCEPTED - 46 thresholds met.
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 0
+=== gpu 4b vulkan documents (placement Vulkan0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9756  (floor 0.9556, python 0.9756)
+  avg_knaif_score   : 0.9873  (floor 0.9800, python 0.9818)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== gpu 1.7b cuda ffmpeg (placement CUDA0)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9210  (floor 0.8999, python 0.9199)
+  avg_knaif_score   : 0.9785  (floor 0.9585, python 0.9785)
+ACCEPTED - 46 thresholds met.
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 0
+=== gpu 1.7b cuda documents (placement CUDA0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9634  (floor 0.9500, python 0.9634)
+  avg_knaif_score   : 0.9945  (floor 0.9745, python 0.9945)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== gpu 1.7b vulkan ffmpeg (placement Vulkan0)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9187  (floor 0.8999, python 0.9199)
+  avg_knaif_score   : 0.9780  (floor 0.9585, python 0.9785)
+NOT ACCEPTED - 1 of 46 thresholds unmet:
+  [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|windows-x64|vulkan: evals/acceptance/ffmpeg.json
+=== gpu 1.7b vulkan documents (placement Vulkan0)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9634  (floor 0.9500, python 0.9634)
+  avg_knaif_score   : 0.9945  (floor 0.9745, python 0.9945)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== cpu4b 4b cpu ffmpeg (placement CPU)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9419  (floor 0.9231, python 0.9431)
+  avg_knaif_score   : 0.9857  (floor 0.9641, python 0.9841)
+ACCEPTED - 46 thresholds met.
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 0
+=== cpu4b 4b cpu documents (placement CPU)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-4b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9756  (floor 0.9556, python 0.9756)
+  avg_knaif_score   : 0.9818  (floor 0.9800, python 0.9818)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0

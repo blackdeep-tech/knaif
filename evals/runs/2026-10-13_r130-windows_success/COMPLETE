@@ -1,0 +1,47 @@
+2026-10-14 09:31:40 START l3
+2026-10-14 09:31:56 l3 4b ffmpeg: placement probe CUDA0
+2026-10-14 09:55:45 l3 4b ffmpeg: parity_check exit 0 (bound 0.0411);   gate                    : PASS (port bugs 0, not implemented 0, plan disagreement 0.0000 <= 0.0411 required)
+2026-10-14 09:55:49 l3 4b documents: placement probe CUDA0
+2026-10-14 10:05:14 l3 4b documents: parity_check exit 0 (bound 0.0183);   gate                    : PASS (port bugs 0, not implemented 0, plan disagreement 0.0070 <= 0.0183 required)
+2026-10-14 10:05:16 l3 1.7b ffmpeg: placement probe CUDA0
+2026-10-14 10:23:00 l3 1.7b ffmpeg: parity_check exit 0 (bound 0.0411);   gate                    : PASS (port bugs 0, not implemented 0, plan disagreement 0.0000 <= 0.0411 required)
+2026-10-14 10:23:02 l3 1.7b documents: placement probe CUDA0
+2026-10-14 10:30:06 l3 1.7b documents: parity_check exit 0 (bound 0.0183);   gate                    : PASS (port bugs 0, not implemented 0, plan disagreement 0.0070 <= 0.0183 required)
+2026-10-14 10:30:06 END l3
+2026-10-14 10:30:07 START gpu
+2026-10-14 11:14:26 gpu ffmpeg r130-win-4b: placement CUDA0
+2026-10-14 11:14:48 gpu ffmpeg r130-win-4b: safety exit 0
+2026-10-14 11:14:48 gpu 4b cuda ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-14 11:20:29 gpu documents r130-win-4b: placement CUDA0
+2026-10-14 11:20:34 gpu documents r130-win-4b: safety exit 0
+2026-10-14 11:20:34 gpu 4b cuda documents: ACCEPTED - 43 thresholds met.
+2026-10-14 12:11:38 gpu ffmpeg r130-win-4b: placement Vulkan0
+2026-10-14 12:12:04 gpu ffmpeg r130-win-4b: safety exit 0
+2026-10-14 12:12:04 gpu 4b vulkan ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-14 12:19:18 gpu documents r130-win-4b: placement Vulkan0
+2026-10-14 12:19:24 gpu documents r130-win-4b: safety exit 0
+2026-10-14 12:19:25 gpu 4b vulkan documents: ACCEPTED - 43 thresholds met.
+2026-10-14 12:55:19 gpu ffmpeg r130-win-1.7b: placement CUDA0
+2026-10-14 12:55:36 gpu ffmpeg r130-win-1.7b: safety exit 0
+2026-10-14 12:55:37 gpu 1.7b cuda ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-14 13:00:02 gpu documents r130-win-1.7b: placement CUDA0
+2026-10-14 13:00:05 gpu documents r130-win-1.7b: safety exit 0
+2026-10-14 13:00:05 gpu 1.7b cuda documents: ACCEPTED - 43 thresholds met.
+2026-10-14 13:41:50 gpu ffmpeg r130-win-1.7b: placement Vulkan0
+2026-10-14 13:42:09 gpu ffmpeg r130-win-1.7b: safety exit 0
+2026-10-14 13:42:10 gpu 1.7b vulkan ffmpeg: NOT ACCEPTED - 1 of 46 thresholds unmet:
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|windows-x64|vulkan: evals/acceptance/ffmpeg.json
+2026-10-14 13:47:32 gpu documents r130-win-1.7b: placement Vulkan0
+2026-10-14 13:47:36 gpu documents r130-win-1.7b: safety exit 0
+2026-10-14 13:47:36 gpu 1.7b vulkan documents: ACCEPTED - 43 thresholds met.
+2026-10-14 13:47:36 END gpu
+2026-10-14 13:47:36 START cpu4b
+2026-10-14 17:55:12 cpu4b ffmpeg r130-win-4b: placement CPU
+2026-10-14 17:57:32 cpu4b ffmpeg r130-win-4b: safety exit 0
+2026-10-14 17:57:33 cpu4b 4b cpu ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-14 18:20:22 cpu4b documents r130-win-4b: placement CPU
+2026-10-14 18:20:40 cpu4b documents r130-win-4b: safety exit 0
+2026-10-14 18:20:41 cpu4b 4b cpu documents: ACCEPTED - 43 thresholds met.
+2026-10-14 18:20:41 END cpu4b
+2026-10-14 18:20:41 START cpu17b
+2026-10-14 18:42:49 PAUSED by the owner during cpu17b (1.7b cpu ffmpeg, 111/861 rows): stopped; that cell is discarded and re-runs on resume. Done: l3, gpu, cpu4b.

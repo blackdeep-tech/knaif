@@ -37,168 +37,123 @@
       "cells": {
         "knaif-qwen3-4b-v2|windows-x64|cuda": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cuda\\documents_r5c-win-4b_success.json",
-          "summary": "ACCEPTED - 42 thresholds met.",
+          "run": "evals\\runs\\2026-10-13_r130-windows_success\\4b\\cuda\\documents_r130-win-4b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
           "passed": true,
           "coverage": 1.0,
           "outcome_accuracy": 0.9817073170731707,
           "avg_knaif_score": 0.9803030303030303,
-          "lane": "r5c-win-4b",
+          "lane": "r130-win-4b",
           "model": "knaif-qwen3-4b-v2"
         },
         "knaif-qwen3-4b-v2|windows-x64|vulkan": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\vulkan\\documents_r5c-win-4b_success.json",
-          "summary": "ACCEPTED - 42 thresholds met.",
+          "run": "evals\\runs\\2026-10-13_r130-windows_success\\4b\\vulkan\\documents_r130-win-4b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
           "passed": true,
           "coverage": 1.0,
           "outcome_accuracy": 0.975609756097561,
           "avg_knaif_score": 0.9872549019607844,
-          "lane": "r5c-win-4b",
+          "lane": "r130-win-4b",
           "model": "knaif-qwen3-4b-v2"
         },
         "knaif-qwen3-1.7b-v2|windows-x64|cuda": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\cuda\\documents_r5c-win-1.7b_success.json",
-          "summary": "ACCEPTED - 42 thresholds met.",
+          "run": "evals\\runs\\2026-10-13_r130-windows_success\\1.7b\\cuda\\documents_r130-win-1.7b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
           "passed": true,
           "coverage": 1.0,
           "outcome_accuracy": 0.9634146341463414,
           "avg_knaif_score": 0.9944812362030905,
-          "lane": "r5c-win-1.7b",
+          "lane": "r130-win-1.7b",
           "model": "knaif-qwen3-1.7b-v2"
         },
         "knaif-qwen3-1.7b-v2|windows-x64|vulkan": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\1.7b\\vulkan\\documents_r5c-win-1.7b_success.json",
-          "summary": "ACCEPTED - 42 thresholds met.",
+          "run": "evals\\runs\\2026-10-13_r130-windows_success\\1.7b\\vulkan\\documents_r130-win-1.7b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
           "passed": true,
           "coverage": 1.0,
           "outcome_accuracy": 0.9634146341463414,
           "avg_knaif_score": 0.9944812362030905,
-          "lane": "r5c-win-1.7b",
+          "lane": "r130-win-1.7b",
           "model": "knaif-qwen3-1.7b-v2"
         },
         "knaif-qwen3-4b-v2|windows-x64|cpu": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\runs\\2026-09-28_r5c-windows_success\\4b\\cpu\\documents_r5c-win-4b_success.json",
-          "summary": "ACCEPTED - 42 thresholds met.",
+          "run": "evals\\runs\\2026-10-13_r130-windows_success\\4b\\cpu\\documents_r130-win-4b_success.json",
+          "summary": "ACCEPTED - 43 thresholds met.",
           "passed": true,
           "coverage": 1.0,
           "outcome_accuracy": 0.975609756097561,
           "avg_knaif_score": 0.9818082788671024,
-          "lane": "r5c-win-4b",
-          "model": "knaif-qwen3-4b-v2",
-          "composed": true,
-          "composed_from": {
-            "note": "R5c T9b: 4B Windows CPU cell = the 4B CUDA cell + every row whose 2026-09-25 CPU plan differs in full or is missing, re-run on the CPU (T9a confirmed those plans)",
-            "base": {
-              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cuda/documents_r5c-win-4b_success.json",
-              "file_sha256": "41e2caacfc0a313d4b7a25060eae065015fc8df7e56ce39ebd44590db9ed5882",
-              "git_sha": "4977b3b4330919c1c0b94f3215a5c8cb417f1ba6",
-              "git_dirty": true,
-              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
-              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-              "scoring_policy": 3,
-              "verifier": "success",
-              "compute_backend": "CUDA0",
-              "os": "windows-x64",
-              "lane": "r5c-win-4b",
-              "total": 164
-            },
-            "replacements": {
-              "path": "evals/runs/2026-09-28_r5c-windows_success/4b/cpu/rows/documents_r5c-win-4b_success.json",
-              "file_sha256": "5e4df3ab96e7b822a62a31925849c494a31d3a4d93d18ce7e45ec2ee4e734e45",
-              "git_sha": "ca5c8f5fe275df33a947f91735c3b5f159758b95",
-              "git_dirty": true,
-              "binary_sha256": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47",
-              "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-              "scoring_policy": 3,
-              "verifier": "success",
-              "compute_backend": "CPU",
-              "os": "windows-x64",
-              "lane": "r5c-win-4b",
-              "total": 4
-            },
-            "replaced_rows": [
-              [
-                "documents_020",
-                0
-              ],
-              [
-                "documents_083",
-                0
-              ],
-              [
-                "documents_084",
-                0
-              ],
-              [
-                "documents_105",
-                0
-              ]
-            ]
-          }
+          "lane": "r130-win-4b",
+          "model": "knaif-qwen3-4b-v2"
         },
         "knaif-qwen3-1.7b-v2|windows-x64|cpu": {
           "evidence": {
@@ -1113,20 +1068,21 @@
       "cells": {
         "knaif-qwen3-4b-v2": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\parity\\2026-09-28_r5c-l3-rc2-4b-documents",
-          "summary": "2026-09-28_r5c-l3-rc2-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
+          "run": "evals\\parity\\2026-10-13_r130-win-l3-4b-documents",
+          "summary": "2026-10-13_r130-win-l3-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
           "equivalence_rate": 0.993007,
           "port_bugs": 0,
           "native_not_implemented": 0,
@@ -1134,25 +1090,26 @@
           "max_plan_disagreement": 0.0183,
           "passed": true,
           "backend": "cuda",
-          "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+          "git_sha": "de2e431b870a9f14cd74b3e139d2efbf04776244",
           "git_dirty": true
         },
         "knaif-qwen3-1.7b-v2": {
           "evidence": {
-            "bundle": "07f043f7f16de2ffa26037e644ad3efa8eca8d71fa7e9e2765ca60757970ec8f",
-            "contracts": "c921de03fdac364731207a122cd1d8be9601834f29d9e8f866c84bbce7c1667c",
-            "python_core": "8bf468c6512b92aae24bdba72cab6bedf44d6a7c932c8b15993f6f5f54d0a7e5",
-            "grading": "3bb8b547aa7e1dc3fbc88e9b2db5c9ac2371e7e527aa55fe6f40bae7b7cef38f",
-            "native": "3f2b1202081e564506e443f1a3392b4ae2019e3e926cb848b4d6d4aba1e34255",
+            "bundle": "be05f99e3037f4181cb22e83beb9fdfdfd6d46d52bcec1abfea7ef67a4dd6692",
+            "contracts": "cda8aa41c3c21e2e69d34c74700a1551b8b0a6098bd70c862c22ded10e027c45",
+            "python_core": "a5fc30e4a37810770321cbf86ffc0e616805715a77f6e56b588b2e8dc7ed8397",
+            "grading": "47234fe4736677901d0ff4cec3040c6269320ff29e6e1b7cbf09d22b74a72bf8",
+            "native": "2589a045d02e62b9a33a683b9cb3c3a5b5beb7286a40f4023cc5d85455c62bd6",
             "corpus": "4bdaebe1046f94dafe1440cd39894aa92b9df985a0aa24ee68df70390770a30d",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
             "verifier": "96d10429eaa6b3f17da7b75826c3e1e0d1e32f3f254702c8d40a108f350fe573",
             "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
             "policy": "3",
             "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
-            "native_binary": "8f1ac7a0ccded55f8e0e353f938fd04723617ea62b188cd0e6415d28bfacfd47"
+            "native_binary": "c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79"
           },
-          "run": "evals\\parity\\2026-09-28_r5c-l3-rc2-1.7b-documents",
-          "summary": "2026-09-28_r5c-l3-rc2-1.7b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
+          "run": "evals\\parity\\2026-10-13_r130-win-l3-1.7b-documents",
+          "summary": "2026-10-13_r130-win-l3-1.7b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.006993 <= 0.0183 passed=True",
           "equivalence_rate": 0.993007,
           "port_bugs": 0,
           "native_not_implemented": 0,
@@ -1160,7 +1117,7 @@
           "max_plan_disagreement": 0.0183,
           "passed": true,
           "backend": "cuda",
-          "git_sha": "c8e041d52ef5f8b37a64ed5d4d540be5c86f98af",
+          "git_sha": "de2e431b870a9f14cd74b3e139d2efbf04776244",
           "git_dirty": true
         }
       }
