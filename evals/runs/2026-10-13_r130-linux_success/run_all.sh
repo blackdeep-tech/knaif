@@ -104,7 +104,14 @@
 #           (no KNAIF_N_THREADS*, which a daemon client refuses), every pass must return one line per
 #           utterance, and the daemon's request counter must rise by at least the utterance count.
 #
-# AMENDMENTS (each with its date and reason, written before the stage it affects runs): none.
+# AMENDMENTS (each with its date and reason, written before the stage it affects runs):
+#   2026-10-15, after the first cpu attempt, before its re-run. Not a rule change: a bug in this
+#   script's sample-completeness check. It left out rows marked `is_warmup`, but that flag only keeps
+#   the first row out of the latency figures; the row is scored and compose swaps it in like any
+#   other. Every sample came back complete and the check reported each one row short (114 of 115,
+#   34 of 35), so the stage stopped before composing. The check now counts every row. The cpu stage
+#   re-runs from the start (it never composes from an earlier attempt's files); its first attempt's
+#   lines stay in COMPLETE.
 # ---------------------------------------------------------------------------------------------------
 
 set -uo pipefail
@@ -362,7 +369,8 @@ EOF
         || { failed "the Linux CPU sample for $model $skill is incomplete"; record_failed_cell "$model" cpu "$skill" "the Linux CPU sample is incomplete"; continue; }
 import json, sys
 want = {(i, int(n)) for i, n in json.load(open(sys.argv[1], encoding="utf-8"))}
-got = {(r["id"], int(r["utterance_idx"])) for r in json.load(open(sys.argv[2], encoding="utf-8"))["rows"] if not r.get("is_warmup")}
+# Warm-up rows count: `is_warmup` only keeps the first row out of the latency figures; it is scored.
+got = {(r["id"], int(r["utterance_idx"])) for r in json.load(open(sys.argv[2], encoding="utf-8"))["rows"]}
 missing = sorted(want - got)
 print(f"sample: {len(want)} requested, {len(got & want)} returned, missing {missing[:10]}")
 raise SystemExit(1 if missing else 0)
