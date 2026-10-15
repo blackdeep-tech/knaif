@@ -1,0 +1,4 @@
+windows-cpu/linux-cpu: 115 shared rows (in one board only: 746)
+  decision  flips   4: both-correct 3, only windows-cpu correct 0, only linux-cpu correct 1, both-wrong 0
+  canonical flips   4: both-correct 3, only windows-cpu correct 0, only linux-cpu correct 1, both-wrong 0
+{"label": "windows-cpu/linux-cpu", "shared": 115, "decision": {"flips": 4, "both_correct": ["ffmpeg_271#3", "ffmpeg_284#0", "ffmpeg_hard_016#1"], "only_a": [], "only_b": ["ffmpeg_246#2"], "both_wrong": []}, "canonical": {"flips": 4, "both_correct": ["ffmpeg_271#3", "ffmpeg_284#0", "ffmpeg_hard_016#1"], "only_a": [], "only_b": ["ffmpeg_246#2"], "both_wrong": []}}

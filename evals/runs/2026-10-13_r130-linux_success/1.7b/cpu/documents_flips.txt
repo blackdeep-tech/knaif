@@ -1,0 +1,4 @@
+windows-cpu/linux-cpu: 35 shared rows (in one board only: 129)
+  decision  flips   3: both-correct 3, only windows-cpu correct 0, only linux-cpu correct 0, both-wrong 0
+  canonical flips   3: both-correct 3, only windows-cpu correct 0, only linux-cpu correct 0, both-wrong 0
+{"label": "windows-cpu/linux-cpu", "shared": 35, "decision": {"flips": 3, "both_correct": ["documents_073#0", "documents_119#0", "documents_129#0"], "only_a": [], "only_b": [], "both_wrong": []}, "canonical": {"flips": 3, "both_correct": ["documents_073#0", "documents_119#0", "documents_129#0"], "only_a": [], "only_b": [], "both_wrong": []}}
