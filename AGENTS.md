@@ -419,7 +419,8 @@ eval runs committed absolute checkout paths into ~27 files; both went public unn
    prebuilt PDFium carries it (RELEASE.md, *Windows and macOS binaries must not carry the builder's
    home directory*). Likewise the macOS clean-room VM's throwaway account (`/Users/admin`, hostname
    `Admins-Virtual-Machine`, set up in `installers/macos/README.md`) in clean-room logs (owner,
-   2026-10-12). Any other exemption needs the owner.
+   2026-10-12), and Windows Sandbox's built-in account (`C:\Users\WDAGUtilityAccount`) in Windows
+   clean-room records and screenshots (owner, 2026-10-15). Any other exemption needs the owner.
 6. **A leak in something already public goes to the owner first.** Report what leaked, where,
    and since when. Do not rewrite shared history or replace published assets on your own:
    replacing a release asset changes a sha256 that installed manifests pin.
