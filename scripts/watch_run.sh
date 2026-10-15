@@ -10,6 +10,8 @@
 # It stops on its own when COMPLETE says `ALL DONE` or `ABORT`. With WATCH_ONCE=1 it draws one
 # screen and exits; WATCH_COLOR=0 turns colour off.
 #
+# A TOTALS line may also name a `.jsonl` output: its lines count as its rows.
+#
 # Totals, per log, first match wins:
 #   1. the log's own header: `rows to run: N` (`evalsuite run --verbose`) or
 #      `exact-files: N row(s)` (`evalsuite exact-files`);
@@ -77,7 +79,12 @@ pauses() {
   done < <(grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} (PAUSED|RESUMED)' "$R/COMPLETE")
   [ "$at" -gt 0 ] && paused_for=$((paused_for + $(date +%s) - at))
 }
-rows_in() { if [ -f "$1" ]; then grep -cE "$ROW_RE" "$1" 2>/dev/null; else echo 0; fi; }
+# A `.jsonl` output (`knaif plan --batch --json`) has one line per row, so its lines are its rows.
+rows_in() {
+  if [ ! -f "$1" ]; then echo 0
+  elif [ "${1%.jsonl}" != "$1" ]; then wc -l < "$1" | tr -d ' '
+  else grep -cE "$ROW_RE" "$1" 2>/dev/null; fi
+}
 header_total() { [ -f "$1" ] && grep -m1 -oE "$HEADER_RE" "$1" 2>/dev/null | grep -oE '[0-9]+' | head -1; }
 bar() { # done total width -> [█████░░░░░]
   local d=$1 t=$2 w=$3 fill i s=""

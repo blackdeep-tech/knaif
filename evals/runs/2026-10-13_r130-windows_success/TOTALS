@@ -14,3 +14,11 @@
 4b/cpu/documents.log 164 15
 1.7b/cpu/ffmpeg.log 861 9.5
 1.7b/cpu/documents.log 164 9.5
+../../parity/2026-10-13_r130-win-daemon-plan-equality/4b/ffmpeg.inprocess.jsonl 861 0.45
+../../parity/2026-10-13_r130-win-daemon-plan-equality/4b/documents.inprocess.jsonl 164 0.45
+../../parity/2026-10-13_r130-win-daemon-plan-equality/4b/ffmpeg.daemon.jsonl 861 0.45
+../../parity/2026-10-13_r130-win-daemon-plan-equality/4b/documents.daemon.jsonl 164 0.45
+../../parity/2026-10-13_r130-win-daemon-plan-equality/1.7b/ffmpeg.inprocess.jsonl 861 0.3
+../../parity/2026-10-13_r130-win-daemon-plan-equality/1.7b/documents.inprocess.jsonl 164 0.3
+../../parity/2026-10-13_r130-win-daemon-plan-equality/1.7b/ffmpeg.daemon.jsonl 861 0.3
+../../parity/2026-10-13_r130-win-daemon-plan-equality/1.7b/documents.daemon.jsonl 164 0.3

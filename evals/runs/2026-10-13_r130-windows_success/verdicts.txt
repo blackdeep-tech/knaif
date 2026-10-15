@@ -100,3 +100,27 @@ exit 0
 ACCEPTED - 43 thresholds met.
   recorded L4 evidence: evals/acceptance/documents.json
 exit 0
+=== cpu17b 1.7b cpu ffmpeg (placement CPU)
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9175  (floor 0.8999, python 0.9199)
+  avg_knaif_score   : 0.9816  (floor 0.9585, python 0.9785)
+NOT ACCEPTED - 3 of 46 thresholds unmet:
+  [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22)
+  [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45)
+  [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|windows-x64|cpu: evals/acceptance/ffmpeg.json
+=== cpu17b 1.7b cpu documents (placement CPU)
+
+=== L4 acceptance: documents (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=164
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9634  (floor 0.9500, python 0.9634)
+  avg_knaif_score   : 0.9961  (floor 0.9745, python 0.9945)
+ACCEPTED - 43 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0

@@ -48,3 +48,34 @@
 2026-10-14 22:58:30 RESUMED by the owner: cpu17b (from the start of the cell), daemon, flips
 2026-10-14 22:58:30 START cpu17b
 2026-10-14 23:06:47 PAUSED by the owner during cpu17b (1.7b cpu ffmpeg, 41/861 rows): stopped; that cell re-runs from its start on resume. Left: cpu17b, daemon, flips.
+2026-10-15 09:27:02 RESUMED by the owner: cpu17b (from the start of the cell), daemon, flips
+2026-10-15 09:27:02 START cpu17b
+2026-10-15 12:24:01 cpu17b ffmpeg r130-win-1.7b: placement CPU
+2026-10-15 12:25:38 cpu17b ffmpeg r130-win-1.7b: safety exit 0
+2026-10-15 12:25:40 cpu17b 1.7b cpu ffmpeg: NOT ACCEPTED - 3 of 46 thresholds unmet:
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|windows-x64|cpu: evals/acceptance/ffmpeg.json
+2026-10-15 12:39:47 cpu17b documents r130-win-1.7b: placement CPU
+2026-10-15 12:39:59 cpu17b documents r130-win-1.7b: safety exit 0
+2026-10-15 12:39:59 cpu17b 1.7b cpu documents: ACCEPTED - 43 thresholds met.
+2026-10-15 12:39:59 END cpu17b
+2026-10-15 12:40:00 START daemon
+2026-10-15 12:46:55 daemon 4b ffmpeg: in process exit 0, 861 of 861 lines
+2026-10-15 12:47:40 daemon 4b documents: in process exit 0, 164 of 164 lines
+2026-10-15 12:55:08 daemon 4b ffmpeg: through the daemon exit 0, 861 of 861 lines, requests 0 -> 874
+2026-10-15 12:55:08 daemon 4b ffmpeg: 1 of 861 lines are error envelopes (in process)
+2026-10-15 12:55:08 daemon 4b ffmpeg: IDENTICAL (a6ae1ef44eb65a82f2884d9d2d55905afd72e5969beaf599679d06d1f0fa8332)
+2026-10-15 12:56:00 daemon 4b documents: through the daemon exit 0, 164 of 164 lines, requests 874 -> 1039
+2026-10-15 12:56:00 daemon 4b documents: 0 of 164 lines are error envelopes (in process)
+2026-10-15 12:56:00 daemon 4b documents: IDENTICAL (ed9ed67596bcc0a4b635bb82a20639140fdb15af17b419336f9e5e659b032a69)
+2026-10-15 13:00:09 daemon 1.7b ffmpeg: in process exit 0, 861 of 861 lines
+2026-10-15 13:00:38 daemon 1.7b documents: in process exit 0, 164 of 164 lines
+2026-10-15 13:05:32 daemon 1.7b ffmpeg: through the daemon exit 0, 861 of 861 lines, requests 0 -> 903
+2026-10-15 13:05:32 daemon 1.7b ffmpeg: 0 of 861 lines are error envelopes (in process)
+2026-10-15 13:05:32 daemon 1.7b ffmpeg: IDENTICAL (ba40d667f051fab7e6fa4da530352fa444936b1af8701d4b569e489cd8615803)
+2026-10-15 13:06:08 daemon 1.7b documents: through the daemon exit 0, 164 of 164 lines, requests 903 -> 1067
+2026-10-15 13:06:08 daemon 1.7b documents: 0 of 164 lines are error envelopes (in process)
+2026-10-15 13:06:08 daemon 1.7b documents: IDENTICAL (ae3e633f333c3d61c3edee17f9ea2664d0046e2f43f977ac8cdd3cab294044be)
+2026-10-15 13:06:08 END daemon
+2026-10-15 13:06:09 START flips
+2026-10-15 13:06:19 END flips
+2026-10-15 13:06:19 ALL DONE (Windows chain)
