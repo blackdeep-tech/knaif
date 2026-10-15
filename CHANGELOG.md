@@ -26,7 +26,7 @@ minus 0.02, on outcome and knaif score, plus every required capability slice).
 | `knaif-qwen3-4b-v2` | Linux · CPU ¹ | 0.943 / 0.985 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | macOS · Metal | 0.938 / 0.986 | 0.976 / 0.985 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | macOS · CPU ¹ | 0.940 / 0.986 | 0.976 / 0.985 | 11/11 · 9/9 | accepted |
-| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 | `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
 | `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
@@ -35,16 +35,17 @@ minus 0.02, on outcome and knaif score, plus every required capability slice).
 | `knaif-qwen3-1.7b-v2` | macOS · CPU ¹ | 0.922 / 0.976 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 
 Measured 2026-10-11/15 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) and an M1 Pro
-(macOS). The native and Python runtimes agree on every corpus request where both planned the same
-thing (0 port bugs; on Windows CUDA 0.00% ffmpeg and 0.70% documents plan disagreement, both
-models; on macOS Metal also 0 port bugs). Plans through
+(macOS). The native and Python runtimes agree wherever both planned the same thing, on the parity
+slice of each corpus (328 ffmpeg and 143 documents requests per model): 0 port bugs, and on Windows
+CUDA 0.00% ffmpeg and 0.70% documents plan disagreement, both models; macOS Metal also 0 port
+bugs. Plans through
 the daemon are byte-identical to plans made without it, on every platform. The installers were
 checked in clean machines: on Windows an upgrade from 1.2.1, a reinstall and an uninstall while
 the daemon runs, with Smart App Control enforcing; on Linux the tarball and the AppImage on the
 oldest supported Ubuntu and on a bare system with no Python; on macOS the `.pkg` on macOS 12.
 ¹ Sampled, not measured in full: a 150-request CPU sample on that OS swapped into the same model's
-Windows CPU (Linux) or Metal (macOS) results. The samples planned at most 6 requests differently,
-none for the worse.
+Windows CPU (Linux) or Metal (macOS) results. The samples planned at most 9 of their 150 requests
+differently, none for the worse.
 ² See *Known issues*.
 
 ### Added

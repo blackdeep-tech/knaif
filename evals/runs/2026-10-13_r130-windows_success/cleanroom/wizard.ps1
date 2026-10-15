@@ -101,9 +101,9 @@ Check 'M0_sac_enforcing_and_frozen_installer' (($sac -eq 1) -and ($sha -eq $Setu
 $probe = "$env:TEMP\sac-probe.exe"
 try {
   Add-Type -OutputType ConsoleApplication -OutputAssembly $probe -TypeDefinition 'public static class P { public static void Main() { System.Console.WriteLine("ran"); } }' -ErrorAction Stop
-  $ran = $false
-  try { $o = & $probe 2>&1 | Out-String; $ran = ($o -match 'ran') } catch { $o = $_.Exception.Message }
-  Check 'M0_sac_blocks_unsigned' (-not $ran) "unsigned probe: $($o.Trim())"
+  try { $o = & $probe 2>&1 | Out-String } catch { $o = $_.Exception.Message }
+  # Fail closed (Codex audit 2026-10-15): only Windows' own Application Control refusal counts.
+  Check 'M0_sac_blocks_unsigned' ($o -match 'Application Control policy has blocked') "unsigned probe: $(($o -split "`n")[0].Trim())"
 } catch { Check 'M0_sac_blocks_unsigned' $false "could not build the probe: $($_.Exception.Message)" }
 
 $models = "$env:USERPROFILE\.knaif\models"

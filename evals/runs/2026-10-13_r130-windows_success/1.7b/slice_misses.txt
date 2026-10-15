@@ -1,0 +1,20 @@
+# 1.7B ffmpeg: the rows behind the missed slices (Windows), generated from the per-arm boards.
+# Every failing row in a missed slice; `cuda` is the same row's outcome on CUDA, where every slice holds.
+
+vulkan (missed: batch)
+  ffmpeg_077#1  [batch]  expected plan, got clarify; cuda also wrong (clarify)  | process every file in the directory and make mp4s
+  ffmpeg_206#1  [batch]  expected plan, got clarify; cuda also wrong (clarify)  | convert all files in directory to vp9 webm
+  ffmpeg_229#0  [batch]  expected plan, got clarify; cuda also wrong (clarify)  | batch convert all files to hevc
+  ffmpeg_229#4  [batch]  expected plan, got clarify; cuda correct (plan)  | 批量将所有视频转换为HEVC
+
+cpu (missed: adjust_speed, batch, codec)
+  ffmpeg_077#1  [batch]  expected plan, got clarify; cuda also wrong (clarify)  | process every file in the directory and make mp4s
+  ffmpeg_123#0  [adjust_speed]  expected plan, got clarify; cuda also wrong (clarify)  | speed up clip.mp4 by 2x and strip the audio
+  ffmpeg_123#2  [adjust_speed]  expected plan, got clarify; cuda also wrong (clarify)  | ускори clip.mp4 двойно и махни звука
+  ffmpeg_129#0  [adjust_speed]  expected plan, got clarify; cuda also wrong (clarify)  | slow down clip.mp4 to half speed and compress it with CRF 25
+  ffmpeg_129#1  [adjust_speed]  expected plan, got clarify; cuda correct (plan)  | clip.mp4 auf halbe Geschwindigkeit verlangsamen und mit CRF 25 komprimieren
+  ffmpeg_137#1  [adjust_speed]  expected clarify, got plan; cuda also wrong (plan)  | make clip_4k play at 0.5x speed and scale to 1080p
+  ffmpeg_206#1  [batch]  expected plan, got clarify; cuda also wrong (clarify)  | convert all files in directory to vp9 webm
+  ffmpeg_229#0  [batch,codec]  expected plan, got clarify; cuda also wrong (clarify)  | batch convert all files to hevc
+  ffmpeg_229#1  [batch,codec]  expected plan, got clarify; cuda correct (plan)  | re-encode all videos with h265
+  ffmpeg_229#4  [batch,codec]  expected plan, got clarify; cuda correct (plan)  | 批量将所有视频转换为HEVC

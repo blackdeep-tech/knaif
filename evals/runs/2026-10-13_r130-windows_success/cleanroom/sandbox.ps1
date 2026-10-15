@@ -114,11 +114,12 @@ Check 'sac_enforcing_at_start' ($sac -eq 1) "VerifiedAndReputablePolicyState $sa
 $probe = "$env:TEMP\sac-probe.exe"
 try {
   Add-Type -OutputType ConsoleApplication -OutputAssembly $probe -TypeDefinition 'public static class P { public static void Main() { System.Console.WriteLine("ran"); } }' -ErrorAction Stop
-  $ran = $false
-  try { $o = & $probe 2>&1 | Out-String; $ran = ($o -match 'ran') } catch { $o = $_.Exception.Message }
-  Log "unsigned probe refused: $(-not $ran) ($(($o -split "`n")[0].Trim()))"
-  if ($ran) { Check 'sac_enforcing_at_start' $false "state $sac, but an unsigned program ran" }
-} catch { Log "could not build the unsigned probe: $($_.Exception.Message)" }
+  try { $o = & $probe 2>&1 | Out-String } catch { $o = $_.Exception.Message }
+  # Fail closed (Codex audit 2026-10-15): only Windows' own Application Control refusal counts.
+  $refused = $o -match 'Application Control policy has blocked'
+  Log "unsigned probe refused by Application Control: $refused ($(($o -split "`n")[0].Trim()))"
+  if (-not $refused) { Check 'sac_enforcing_at_start' $false "state $sac, but an unsigned program was not refused by Application Control" }
+} catch { Check 'sac_enforcing_at_start' $false "state $sac, but the unsigned probe could not be built: $($_.Exception.Message)" }
 New-Item -ItemType Directory -Force C:\r130\work | Out-Null
 
 # 1. The unpacked zip.

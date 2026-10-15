@@ -46,8 +46,9 @@ bash evals/runs/2026-10-13_r130-windows_success/cleanroom/wizard_stage.sh
 `wizard.ps1` runs the staged installer with its wizard, accepts the licence and presses Next /
 Install / Finish (UI Automation; Inno's buttons take `BM_CLICK`), and saves each page as
 `page-NN.png` plus a dump of its controls. Inno's task and component lists are not exposed to UI
-Automation, so the tool-choice items (M1, M2) and the layout (M5) were judged from the screenshots
-on the host; the rest the script checks itself.
+Automation, so the items inside them (M1, M1b, M2) and the layout (M5) were judged from the
+screenshots on the host; the script's own M1b and M2 lines only show that no readable control names
+CUDA or Ghostscript, which cannot see inside those lists. M0, M3 and M4 the script checks itself.
 
 The original instructions, for a person doing it by hand:
 

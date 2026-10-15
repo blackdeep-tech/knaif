@@ -68,7 +68,7 @@ started() {
 # leaves out. A pause with no resume yet runs up to now.
 pauses() {
   local d t kind rest at=0 p
-  resumed_at=0; paused_for=0
+  resumed_at=0; paused_for=0; paused_now=0
   [ -f "$R/COMPLETE" ] || return
   while read -r d t kind rest; do
     p=$(date -d "$d $t" +%s 2>/dev/null) || continue
@@ -77,7 +77,8 @@ pauses() {
       RESUMED) [ "$at" -gt 0 ] && paused_for=$((paused_for + p - at)); at=0; resumed_at=$p ;;
     esac
   done < <(grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:]{8} (PAUSED|RESUMED)' "$R/COMPLETE")
-  [ "$at" -gt 0 ] && paused_for=$((paused_for + $(date +%s) - at))
+  [ "$at" -gt 0 ] && { paused_for=$((paused_for + $(date +%s) - at)); paused_now=1; }
+  return 0
 }
 # A `.jsonl` output (`knaif plan --batch --json`) has one line per row, so its lines are its rows.
 rows_in() {
@@ -139,6 +140,9 @@ while true; do
   elif grep -q "ALL DONE" "$R/COMPLETE" 2>/dev/null; then state=finished; fi
   if [ "$state" = running ]; then end=$now; else end=$(mtime "$R/COMPLETE"); fi
   pauses
+  # An open pause (a PAUSED line with no RESUMED after it): nothing runs, so no stage is active
+  # and no estimate grows while the owner has it stopped.
+  [ "$state" = running ] && [ "$paused_now" = 1 ] && state=paused
   passed=$((end - start - paused_for)); [ "$passed" -lt 0 ] && passed=0
 
   # The active row log: the newest one with rows (or a header).
@@ -186,6 +190,7 @@ while true; do
   case $state in
     finished) status="${GRN}${B}FINISHED${N}" ;;
     aborted) status="${RED}${B}ABORTED${N}" ;;
+    paused) status="${YEL}${B}PAUSED${N} (until a RESUMED line in COMPLETE)" ;;
     *) status="${YEL}running${N}" ;;
   esac
   tline="$(fmt "$passed") passed"
@@ -203,7 +208,9 @@ while true; do
       if [ "$p" = "$f" ]; then
         mark="${YEL}▶${N}"; extra=""; [ -n "$stage_left" ] && extra="   ${DIM}~$(fmt "$stage_left") left${N}"
         seen_active=1
-      elif [ "$state" != running ] || { [ "$seen_active" = 0 ] && [ -n "$f" ] && [ -f "$p" ]; } \
+      # Done: every stage of a finished run; otherwise a stage before the active one, or one whose
+      # rows are all in. An aborted or paused run has no active stage, so only the row count decides.
+      elif [ "$state" = finished ] || { [ "$seen_active" = 0 ] && [ -n "$f" ] && [ -f "$p" ]; } \
         || { [ "$t" != "?" ] && [ "$d" -ge "$t" ]; }; then
         mark="${GRN}✓${N}"; extra=""
       else
@@ -250,6 +257,6 @@ while true; do
   printf '%s' "$out"
   unset want pace
   [ "${WATCH_ONCE:-0}" = 1 ] && break
-  [ "$state" != running ] && break
+  case $state in finished | aborted) break ;; esac
   sleep "$INTERVAL"
 done
