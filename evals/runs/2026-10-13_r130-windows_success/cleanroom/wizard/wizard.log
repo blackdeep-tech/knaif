@@ -1,0 +1,47 @@
+1.3.0 release clean-room wizard run 2026-10-15T23:12:12
+23:12:12 Smart App Control was 2; set to 1 and refreshed the policy (CiTool exit 0)
+23:12:13 PASS M0_sac_enforcing_and_frozen_installer: SAC state 1; installer sha256 c671a60a4d8c1bb2dd8104cb883d1025de0de449f850bd98e5f746edaf9edda2
+23:12:13 PASS M0_sac_blocks_unsigned: unsigned probe: Program 'sac-probe.exe' failed to run: An Application Control policy has blocked this fileAt C:\r130\in\wizard.ps1:105 char:14
++   try { $o = & $probe 2>&1 | Out-String; $ran = ($o -match 'ran') } c ...
++              ~~~~~~~~~~~~~.
+23:12:17 page 1 recorded (15 controls; next button: Next)
+23:12:17 accept the licence
+23:12:18 page 2 recorded (15 controls; next button: Next)
+23:12:18 press Next
+23:12:21 page 3 recorded (15 controls; next button: Next)
+23:12:21 press Next
+23:12:23 page 4 recorded (14 controls; next button: Next)
+23:12:23 press Next
+23:12:26 page 5 recorded (12 controls; next button: Next)
+23:12:26 press Next
+23:12:28 page 6 recorded (12 controls; next button: Install)
+23:12:28 press Install
+23:12:32 page 7 recorded (11 controls; next button: Next)
+23:12:32 press Next
+23:12:35 page 8 recorded (6 controls; next button: Finish)
+23:12:35 press Finish
+23:12:37 PASS setup_exit_0: exit 0
+23:12:37 FAIL M1_tools_disabled_with_reason: FFmpeg: Destination location:
+      C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+
+Setup type:
+      Full installation (all skills)
+
+Selected components:
+      knaif core runtime (required)
+      Skills
+         ffmpeg — convert / compress / resize video  audio
+         documents — PDF  Office toolkit
+
+Additional tasks:
+      Integration:
+         Add knaif to my PATH (so "knaif" works in any terminal)
+ enabled=True | Tesseract: 
+23:12:37 PASS M2_no_ghostscript_choice: 0 Ghostscript choices
+23:12:37 PASS M1b_no_cuda_offer: 0 controls mention CUDA
+23:12:37 PASS M3_finish_page_names_tools:     FFmpeg: not installed (Smart App Control blocks it) /     Ghostscript: not installed (Smart App Control blocks it) /     LibreOffice: not installed /     Tesseract OCR: not installed (Smart App Control blocks it) / Smart App Control is on: Windows blocks tools that are not validly signed by their makers (knaif itself is signed). They work only with Smart App Control off.
+23:12:37 PASS M5_no_old_version_named: 0 controls name 1.2.x: 
+23:12:37 PASS M4_skills_deps_marks_tools: [MISS] libreoffice    (optional) install: download from https://www.libreoffice.org/download/download-libreoffice/ / [MISS] tesseract      (optional) not installed — Smart App Control blocks it on this PC / ffmpeg: / [MISS] ffmpeg         (required) not installed — Smart App Control blocks it on this PC / The `ffmpeg` skill needs ffmpeg, which Smart App Control blocks on this PC: Windows runs only programs that are validly signed or that it trusts, and this one is not. It works only with Smart App Control off: Windows Security > App & browser control > Smart App Control. / Smart App Control is on. Windows then runs only programs that are validly signed or that it trusts, and it blocks ghostscript, tesseract, ffmpeg (knaif itself is signed). They work only with Smart App Control off: Windows Security > App & browser control > Smart App Control.
+23:12:37 PASS sac_enforcing_at_end: SAC state 1
+23:12:37 PASS run_completed: every page walked
+23:12:37 DONE: 11 checks, 1 failed [M1_tools_disabled_with_reason]. Review the page-NN.png screenshots on the host (M5). Close this Sandbox window; it discards everything.

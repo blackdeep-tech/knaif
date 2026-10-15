@@ -99,8 +99,26 @@ Log ("machine: " + (Get-CimInstance Win32_OperatingSystem).Caption + "; GPUs: " 
      ((Get-CimInstance Win32_VideoController | ForEach-Object Name) -join ', '))
 Remove-Item Env:KNAIF_PDFIUM_PATH -ErrorAction SilentlyContinue
 Set-Location C:\
+# The Sandbox follows the host image: with the host's Smart App Control off, a fresh Sandbox starts in
+# evaluation (2), which only watches (first run 2026-10-15: both SAC checks failed on that alone). This
+# is a throwaway Windows, so switch it to enforcing and refresh the policy; the checks below then
+# require that it took, and an unsigned program built here must be refused.
+$sac0 = Sac
+if ($sac0 -ne 1) {
+  Set-ItemProperty $SacKey -Name VerifiedAndReputablePolicyState -Value 1 -Type DWord
+  & CiTool.exe --refresh --json *> "$Out\citool-refresh.txt"
+  Log "Smart App Control was $sac0; set to 1 and refreshed the policy (CiTool exit $LASTEXITCODE)"
+}
 $sac = Sac
 Check 'sac_enforcing_at_start' ($sac -eq 1) "VerifiedAndReputablePolicyState $sac (1 = enforcing)"
+$probe = "$env:TEMP\sac-probe.exe"
+try {
+  Add-Type -OutputType ConsoleApplication -OutputAssembly $probe -TypeDefinition 'public static class P { public static void Main() { System.Console.WriteLine("ran"); } }' -ErrorAction Stop
+  $ran = $false
+  try { $o = & $probe 2>&1 | Out-String; $ran = ($o -match 'ran') } catch { $o = $_.Exception.Message }
+  Log "unsigned probe refused: $(-not $ran) ($(($o -split "`n")[0].Trim()))"
+  if ($ran) { Check 'sac_enforcing_at_start' $false "state $sac, but an unsigned program ran" }
+} catch { Log "could not build the unsigned probe: $($_.Exception.Message)" }
 New-Item -ItemType Directory -Force C:\r130\work | Out-Null
 
 # 1. The unpacked zip.

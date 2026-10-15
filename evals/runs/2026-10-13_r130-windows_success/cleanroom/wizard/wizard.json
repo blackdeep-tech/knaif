@@ -1,0 +1,46 @@
+﻿{
+    "M0_sac_enforcing_and_frozen_installer":  {
+                                                  "pass":  true,
+                                                  "detail":  "SAC state 1; installer sha256 c671a60a4d8c1bb2dd8104cb883d1025de0de449f850bd98e5f746edaf9edda2"
+                                              },
+    "M0_sac_blocks_unsigned":  {
+                                   "pass":  true,
+                                   "detail":  "unsigned probe: Program \u0027sac-probe.exe\u0027 failed to run: An Application Control policy has blocked this fileAt C:\\r130\\in\\wizard.ps1:105 char:14\r\n+   try { $o = \u0026 $probe 2\u003e\u00261 | Out-String; $ran = ($o -match \u0027ran\u0027) } c ...\r\n+              ~~~~~~~~~~~~~."
+                               },
+    "setup_exit_0":  {
+                         "pass":  true,
+                         "detail":  "exit 0"
+                     },
+    "M1_tools_disabled_with_reason":  {
+                                          "pass":  false,
+                                          "detail":  "FFmpeg: Destination location:\r\n      C:\\Users\\WDAGUtilityAccount\\AppData\\Local\\Programs\\knaif\r\n\r\nSetup type:\r\n      Full installation (all skills)\r\n\r\nSelected components:\r\n      knaif core runtime (required)\r\n      Skills\r\n         ffmpeg — convert / compress / resize video  audio\r\n         documents — PDF  Office toolkit\r\n\r\nAdditional tasks:\r\n      Integration:\r\n         Add knaif to my PATH (so \"knaif\" works in any terminal)\r\n enabled=True | Tesseract: "
+                                      },
+    "M2_no_ghostscript_choice":  {
+                                     "pass":  true,
+                                     "detail":  "0 Ghostscript choices"
+                                 },
+    "M1b_no_cuda_offer":  {
+                              "pass":  true,
+                              "detail":  "0 controls mention CUDA"
+                          },
+    "M3_finish_page_names_tools":  {
+                                       "pass":  true,
+                                       "detail":  "    FFmpeg: not installed (Smart App Control blocks it)\r /     Ghostscript: not installed (Smart App Control blocks it)\r /     LibreOffice: not installed\r /     Tesseract OCR: not installed (Smart App Control blocks it)\r / Smart App Control is on: Windows blocks tools that are not validly signed by their makers (knaif itself is signed). They work only with Smart App Control off.\r"
+                                   },
+    "M5_no_old_version_named":  {
+                                    "pass":  true,
+                                    "detail":  "0 controls name 1.2.x: "
+                                },
+    "M4_skills_deps_marks_tools":  {
+                                       "pass":  true,
+                                       "detail":  "[MISS] libreoffice    (optional) install: download from https://www.libreoffice.org/download/download-libreoffice/ / [MISS] tesseract      (optional) not installed — Smart App Control blocks it on this PC / ffmpeg: / [MISS] ffmpeg         (required) not installed — Smart App Control blocks it on this PC / The `ffmpeg` skill needs ffmpeg, which Smart App Control blocks on this PC: Windows runs only programs that are validly signed or that it trusts, and this one is not. It works only with Smart App Control off: Windows Security \u003e App \u0026 browser control \u003e Smart App Control. / Smart App Control is on. Windows then runs only programs that are validly signed or that it trusts, and it blocks ghostscript, tesseract, ffmpeg (knaif itself is signed). They work only with Smart App Control off: Windows Security \u003e App \u0026 browser control \u003e Smart App Control."
+                                   },
+    "sac_enforcing_at_end":  {
+                                 "pass":  true,
+                                 "detail":  "SAC state 1"
+                             },
+    "run_completed":  {
+                          "pass":  true,
+                          "detail":  "every page walked"
+                      }
+}

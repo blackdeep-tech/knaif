@@ -1,0 +1,33 @@
+1.3.0 release clean-room run 2026-10-15T23:08:52
+23:08:53 machine: Microsoft Windows 11 Enterprise; GPUs: Microsoft Remote Display Adapter
+23:08:53 FAIL sac_enforcing_at_start: VerifiedAndReputablePolicyState 2 (1 = enforcing)
+23:08:56 PASS zip_binary_is_frozen: sha256 c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79
+23:08:57 PASS zip_version_is_130: knaif 1.3.0 (inference: llama.cpp)
+23:08:57 PASS zip_skills_list: exit 0
+23:08:57 PASS zip_every_binary_signed: not valid []; Blackdeep 16; Microsoft 4
+23:09:00 PASS install_121: exit 0; rows 1; version 1.2.1
+23:09:00 PASS installed_121_is_published: sha256 c4574ca9cd0a8919b62a5121ecd44c434e4b192225d866490d9159574c89f172
+23:09:08 PASS cli_121_holds_mutex: alive True; mutex True
+23:09:08 PASS upgrade_refused_while_running: exit 1; CLI still running True; rows 1; version 1.2.1
+23:09:26 PASS upgrade_installs: exit 0; rows 1; version 1.3.0
+23:09:26 PASS upgrade_publisher: publisher 'Blackdeep Technologies Ltd'
+23:09:26 PASS upgrade_same_folder: before C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif; after C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+23:09:26 PASS upgrade_no_folder_exists_prompt: log mentions 'already exists': False
+23:09:26 PASS upgraded_binary_is_frozen: sha256 c2e758e7d20ca197c05ff7e76f6b741d0e92b0c9f1d813bee1fb759924c39e79
+23:09:26 PASS upgraded_version_is_130: knaif 1.3.0 (inference: llama.cpp)
+23:09:26 PASS upgrade_no_leftover_libraries: not in the 1.3.0 artifact: []
+23:09:26 PASS upgraded_every_binary_signed: not valid []; Blackdeep 17 (zip 16 + uninstaller); Microsoft 4
+23:09:33 PASS daemon_started: knaif daemon is running (pid 7456). |   model:    knaif-qwen3-4b-v2-q4_k_m |   requests: 0 |   idle:     2 s (stops after 10 min)
+23:09:38 PASS reinstall_over_daemon: exit 0; status 'knaif daemon is not running.'; knaif processes 0
+23:09:38 PASS reinstall_replaced_and_unlocked: rewritten True (10/13/2026 20:29:10); frozen hash True; exclusive open True
+23:09:43 PASS daemon_started_again: knaif daemon is running (pid 8608). |   model:    knaif-qwen3-4b-v2-q4_k_m |   requests: 0 |   idle:     2 s (stops after 10 min)
+23:09:49 PASS uninstall_over_daemon: exit 0; rows 0; knaif processes 0; exe left False
+23:09:49 PASS uninstall_keeps_user_models: models kept
+23:09:51 PASS fresh_install: exit 0; rows 1; version 1.3.0; at C:\Users\WDAGUtilityAccount\AppData\Local\Programs\knaif
+23:09:51 PASS fresh_every_binary_signed: not valid []; Blackdeep 17; Microsoft 4
+23:10:00 PASS fresh_real_request: exit 0; produced [sample-rotated.pdf]
+23:10:05 PASS fresh_uninstall: exit 0; rows 0; exe left False; knaif processes 0
+23:10:05 PASS skills_deps_names_missing_tools: see skills-deps.txt
+23:10:05 FAIL sac_enforcing_at_end: VerifiedAndReputablePolicyState 2 (1 = enforcing)
+23:10:05 PASS run_completed: every scenario ran
+23:10:05 DONE: 30 checks, 2 failed [sac_enforcing_at_start, sac_enforcing_at_end]. Grade on the host (grade.py), then do the manual part (report.md). Close this Sandbox window when done; it discards everything.
