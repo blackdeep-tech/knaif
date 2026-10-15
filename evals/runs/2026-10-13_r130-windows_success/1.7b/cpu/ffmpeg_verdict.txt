@@ -1,0 +1,11 @@
+
+=== L4 acceptance: ffmpeg (policy v3) ===
+  baseline    : knaif-qwen3-1.7b-v2 / success / n=861
+  coverage    : 1.0000 (floor 1.0000)
+  outcome_accuracy  : 0.9175  (floor 0.8999, python 0.9199)
+  avg_knaif_score   : 0.9816  (floor 0.9585, python 0.9785)
+NOT ACCEPTED - 3 of 46 thresholds unmet:
+  [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22)
+  [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45)
+  [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json

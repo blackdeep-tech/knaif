@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.0] — 2026-10-10
 
+**knaif on macOS, and an optional model daemon.** Same models as 1.2.0 (`knaif-qwen3-4b-v2`
+and `knaif-qwen3-1.7b-v2`); macOS joins Windows and Linux, a daemon can keep the model loaded
+between runs, and `knaif run` acts without asking unless a file would be replaced.
+
+**Measured on the shipped binary.** Every number below comes from the packaged 1.3.0 binary
+running each request in a fresh process, executing for real and graded on the files it produced:
+ffmpeg 861 and documents 164 requests, complete coverage, the safety gate re-run on the binary.
+Each backend is accepted against the bar on its own (the model's floor, and its Python score
+minus 0.02, on outcome and knaif score, plus every required capability slice).
+
+| Model | OS · backend | ffmpeg outcome / knaif | documents outcome / knaif | Safety gate | Verdict |
+|---|---|---|---|---|---|
+| `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · CPU | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CPU ¹ | 0.943 / 0.985 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | macOS · Metal | 0.938 / 0.986 | 0.976 / 0.985 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | macOS · CPU ¹ | 0.940 / 0.986 | 0.976 / 0.985 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+| `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
+| `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Linux · CPU ¹ | 0.920 / 0.981 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: two slices short ² |
+| `knaif-qwen3-1.7b-v2` | macOS · Metal | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+| `knaif-qwen3-1.7b-v2` | macOS · CPU ¹ | 0.922 / 0.976 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+
+Measured 2026-10-11/15 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) and an M1 Pro
+(macOS). The native and Python runtimes agree on every corpus request where both planned the same
+thing (0 port bugs; on Windows CUDA 0.00% ffmpeg and 0.70% documents plan disagreement, both
+models; on macOS Metal also 0 port bugs). Plans through
+the daemon are byte-identical to plans made without it, on every platform. The installers were
+checked in clean machines: on Windows an upgrade from 1.2.1, a reinstall and an uninstall while
+the daemon runs, with Smart App Control enforcing; on Linux the tarball and the AppImage on the
+oldest supported Ubuntu and on a bare system with no Python; on macOS the `.pkg` on macOS 12.
+¹ Sampled, not measured in full: a 150-request CPU sample on that OS swapped into the same model's
+Windows CPU (Linux) or Metal (macOS) results. The samples planned at most 6 requests differently,
+none for the worse.
+² See *Known issues*.
+
 ### Added
 
 - **knaif runs on macOS** (Apple Silicon, macOS 12 or later), with Metal GPU inference. The
@@ -51,6 +91,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known issues
 
+- **`knaif-qwen3-1.7b-v2` on Vulkan, Metal and CPU, a few ffmpeg capability slices**, unchanged
+  from 1.2.0: the 1.7B clears them by a single request on CUDA, and other backends break a near-tie
+  the other way. Windows Vulkan, macOS Metal and the macOS CPU miss `batch` (25 of 29, 26
+  required); the Windows CPU misses `codec` (19/22), `adjust_speed` (40/45) and `batch` (24/29),
+  the Linux CPU `adjust_speed` (40/45) and `batch` (25/29). On Windows and Linux the whole gap is
+  among the same three requests as in 1.2.0, where the model asks a question instead of planning:
+  "re-encode all videos with h265", its Chinese twin ("批量将所有视频转换为HEVC"), and a German
+  half-speed-plus-CRF request. Overall scores and the safety gate clear on every backend. Released by owner decision;
+  the 4B model clears the bar on every backend.
 - With Smart App Control on, the ffmpeg skill cannot run on Windows: Windows blocks FFmpeg.
 - **On a Mac, the first run takes about 15 s longer** while Metal compiles its shaders; later runs
   do not pay it again.
