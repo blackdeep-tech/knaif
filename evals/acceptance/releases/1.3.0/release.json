@@ -1,0 +1,97 @@
+{
+  "version": "1.3.0",
+  "skills": {
+    "documents": {
+      "declared": "supported",
+      "derived": "supported",
+      "layers": {
+        "L1": {
+          "state": "valid",
+          "detail": "contracts/parity/* green on both runtimes"
+        },
+        "L2": {
+          "state": "valid",
+          "detail": "deterministic pipeline + ordered execution green"
+        },
+        "L3": {
+          "state": "valid",
+          "detail": "2 cell(s) valid [not checked here: native_binary for knaif-qwen3-4b-v2] [not checked here: native_binary for knaif-qwen3-1.7b-v2]"
+        },
+        "L4": {
+          "state": "valid",
+          "detail": "14 cell(s) valid [composed, not a full run: knaif-qwen3-4b-v2|linux-x64|cpu, knaif-qwen3-4b-v2|macos|cpu, knaif-qwen3-1.7b-v2|linux-x64|cpu, knaif-qwen3-1.7b-v2|macos|cpu] [not checked here: native_binary for knaif-qwen3-4b-v2|windows-x64|cuda] [not checked here: native_binary for knaif-qwen3-4b-v2|windows-x64|vulkan] [not checked here: native_binary for knaif-qwen3-4b-v2|windows-x64|cpu] [not checked here: native_binary for knaif-qwen3-4b-v2|linux-x64|cuda] [not checked here: native_binary for knaif-qwen3-4b-v2|linux-x64|cpu] [not checked here: native_binary for knaif-qwen3-4b-v2|macos|mtl] [not checked here: native_binary for knaif-qwen3-4b-v2|macos|cpu] [not checked here: native_binary for knaif-qwen3-1.7b-v2|windows-x64|cuda] [not checked here: native_binary for knaif-qwen3-1.7b-v2|windows-x64|vulkan] [not checked here: native_binary for knaif-qwen3-1.7b-v2|windows-x64|cpu] [not checked here: native_binary for knaif-qwen3-1.7b-v2|linux-x64|cuda] [not checked here: native_binary for knaif-qwen3-1.7b-v2|linux-x64|cpu] [not checked here: native_binary for knaif-qwen3-1.7b-v2|macos|mtl] [not checked here: native_binary for knaif-qwen3-1.7b-v2|macos|cpu]"
+        }
+      }
+    },
+    "ffmpeg": {
+      "declared": "supported",
+      "derived": "supported",
+      "layers": {
+        "L1": {
+          "state": "valid",
+          "detail": "contracts/parity/* green on both runtimes"
+        },
+        "L2": {
+          "state": "valid",
+          "detail": "deterministic pipeline + ordered execution green"
+        },
+        "L3": {
+          "state": "valid",
+          "detail": "2 cell(s) valid [not checked here: native_binary for knaif-qwen3-4b-v2] [not checked here: native_binary for knaif-qwen3-1.7b-v2]"
+        },
+        "L4": {
+          "state": "excepted",
+          "detail": "excepted: knaif-qwen3-1.7b-v2|windows-x64|vulkan (NOT ACCEPTED - 1 of 46 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) — owner exception 2026-09-29: waived by the 1.3.0 gate rules (owner, 2026-09-29 for Windows): the 1.7B ffmpeg vulkan cell misses only slices 1.2.0 waived; verdict: NOT ACCEPTED - 1 of 46 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) [not checked here: native_binary]), knaif-qwen3-1.7b-v2|windows-x64|cpu (NOT ACCEPTED - 3 of 46 thresholds unmet: [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22) [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29) — owner exception 2026-09-29: waived by the 1.3.0 gate rules (owner, 2026-09-29 for Windows): the 1.7B ffmpeg cpu cell misses only slices 1.2.0 waived; verdict: NOT ACCEPTED - 3 of 46 thresholds unmet: [slice] slice 'codec' outcome_accuracy 0.864 < floor 0.900 (n=22) [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.828 < floor 0.896 (n=29) [not checked here: native_binary]), knaif-qwen3-1.7b-v2|linux-x64|cpu (NOT ACCEPTED - 2 of 46 thresholds unmet: [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) — owner exception 2026-09-29: waived by the 1.3.0 gate rules (owner, 2026-09-29 for Linux): the 1.7B ffmpeg cpu cell misses only slices 1.2.0 waived; verdict: NOT ACCEPTED - 2 of 46 thresholds unmet: [slice] slice 'adjust_speed' outcome_accuracy 0.889 < floor 0.900 (n=45) [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) [not checked here: native_binary]), knaif-qwen3-1.7b-v2|macos|mtl (NOT ACCEPTED - 1 of 46 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) — owner exception 2026-10-07: waived by the 1.3.0 gate rules (owner, 2026-10-07 for macOS): the 1.7B ffmpeg Metal cell misses only the batch slice, which 1.2.0 waived; verdict: NOT ACCEPTED - 1 of 46 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) [not checked here: native_binary]), knaif-qwen3-1.7b-v2|macos|cpu (NOT ACCEPTED - 1 of 46 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) — owner exception 2026-10-07: waived by the 1.3.0 gate rules (owner, 2026-10-07 for macOS): the 1.7B ffmpeg composed CPU cell misses only the batch slice, which 1.2.0 waived; verdict: NOT ACCEPTED - 1 of 46 thresholds unmet: [slice] slice 'batch' outcome_accuracy 0.862 < floor 0.896 (n=29) [not checked here: native_binary]) [composed, not a full run: knaif-qwen3-4b-v2|linux-x64|cpu, knaif-qwen3-4b-v2|macos|cpu, knaif-qwen3-1.7b-v2|linux-x64|cpu, knaif-qwen3-1.7b-v2|macos|cpu]"
+        }
+      }
+    }
+  },
+  "matrix": {
+    "models": [
+      "knaif-qwen3-4b-v2",
+      "knaif-qwen3-1.7b-v2"
+    ],
+    "entries": [
+      {
+        "os": "windows-x64",
+        "backend": "cuda",
+        "coverage": "full"
+      },
+      {
+        "os": "windows-x64",
+        "backend": "vulkan",
+        "coverage": "full"
+      },
+      {
+        "os": "windows-x64",
+        "backend": "cpu",
+        "coverage": "full"
+      },
+      {
+        "os": "linux-x64",
+        "backend": "cuda",
+        "coverage": "full"
+      },
+      {
+        "os": "linux-x64",
+        "backend": "cpu",
+        "coverage": "full"
+      },
+      {
+        "os": "linux-x64",
+        "backend": "vulkan",
+        "coverage": "not-measured"
+      },
+      {
+        "os": "macos",
+        "backend": "mtl",
+        "coverage": "full"
+      },
+      {
+        "os": "macos",
+        "backend": "cpu",
+        "coverage": "full"
+      }
+    ]
+  }
+}
