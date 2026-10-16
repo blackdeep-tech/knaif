@@ -368,6 +368,9 @@ Each signature is timestamped (`timestamp_url` in `signing.json`). That is not o
 Signing certificates are valid for about three days, and an untimestamped signature stops validating
 when its certificate expires.
 
+How the account and the certificate profile were set up:
+[plans/2026-07-27-code-signing.md](plans/2026-07-27-code-signing.md), *Owner runbook*.
+
 The build no longer needs a "Developer PowerShell for VS": `build-native-kind` locates Visual
 Studio and enters `VsDevCmd.bat` itself, and sets `CMAKE_GENERATOR` and `CUDAARCHS`. **Packaging
 still wants that shell** — see the `$VCToolsRedistDir` note below. Driving cargo by hand still
@@ -454,6 +457,25 @@ A signing fix found in step 2 means a new commit, another run, and steps 2–3 a
 files.
 
 `just package-pkg` builds the `.pkg` **unsigned**, for inspecting it — never publish that one.
+
+### Keeping the signing identities alive
+
+None of these live in the repository, and a lapse surfaces only on release day, so check them when
+a release branch is cut.
+
+- **Windows (Azure Artifact Signing).** The certificate profile is continuous and Microsoft rotates
+  the short-lived certificates itself (hence the timestamp, above). The subscription bills monthly:
+  keep a budget alert on it so a failed payment is noticed before a release. Signing also needs the
+  maintainer's *Certificate Profile Signer* role and a current `az login`.
+- **macOS (Developer ID).** The Apple Developer Program membership renews yearly; if it lapses, new
+  builds can no longer be signed or notarized (already-notarized releases keep working). The
+  Developer ID Application and Installer certificates are valid for five years; when reissued,
+  replace `MACOS_CERT_APP_P12_BASE64`, `MACOS_CERT_INSTALLER_P12_BASE64` and `MACOS_CERT_PASSWORD`
+  in the `release` environment. How to reissue them:
+  [plans/2026-09-30-macos-signing-certificates.md](plans/2026-09-30-macos-signing-certificates.md).
+- **If a key or a login leaks.** Windows: remove the Azure role assignment. macOS: revoke the
+  Developer ID certificate in the Apple portal and delete the App Store Connect API key, then
+  replace the matching secrets. The repository never holds any of them.
 
 ### Build traps (both OSes)
 
@@ -1011,7 +1033,8 @@ release that quotes L1's 100% as a quality figure is claiming the prompts match 
 reader mistakes it for something else.
 
 State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
-locally, macOS unexercised** — say that rather than implying three platforms.
+locally, and macOS (since 1.3.0) on a physical Apple Silicon Mac plus a clean-room VM on the oldest
+supported macOS** — say which platform each number came from rather than implying more.
 
 **Windows signing and SmartScreen.** The Windows binaries are signed by **Blackdeep Technologies
 Ltd** (§2, *Signing*). Say so, and tell users how to check it: `setup.exe` → Properties → Digital

@@ -1,7 +1,13 @@
 # Website split — knaif.org (product) + knaif.dev (framework)
 
-**Status:** Active · **Created:** 2026-08-04 · **Completed:** —
+**Status:** Done · **Created:** 2026-08-04 · **Completed:** 2026-10-16
 **Owner:** site · **Ref:** `site/redesign`
+
+> **Closed 2026-10-16.** Both sites have been live since the 2026-08-06 cutover and have carried
+> every release since; their operation is [SITE.md](../SITE.md). The two items left unticked below
+> are owner steps, not plan work, and moved to [TODO.md](../TODO.md) *Open / Next*: the Amplify
+> catch-all rule (re-checked 2026-10-16: a mistyped URL still gets the home page) and the full
+> operator review.
 
 > **Status note:** Revised 2026-08-05 after an audit found one repo-breaking defect (this
 > header, which failed `test_plan_headers.py`) and six design gaps. Corrected since v1:

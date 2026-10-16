@@ -741,9 +741,8 @@ eval-native-backends skill *args:
 #   just parity ffmpeg --limit 20
 # Two comparison levels (pass-through --mode): `--mode command` (default) diffs the rendered
 # ffmpeg argv from `run --dry-run` — tests intent expansion + render, but python skips
-# compress/platform/thumbnail/batch/reverse and native REFUSES multi-step chains outright
-# (it executes one intent per invocation — audit F5 — so a chain row's native outcome is a
-# `reject`, which compares as a mismatch rather than a rendered command); `--mode plan`
+# compress/platform/thumbnail/batch/reverse; native previews every step of a multi-step chain
+# (it refused chains until 2026-09-10 — audit F5 — when the ordered executor landed); `--mode plan`
 # diffs the `plan --json` envelope (tool+args) for EVERY intent and full chains (no render),
 # treating native's materialized optional-arg defaults as equivalent. Run both for full coverage.
 # `--batch` (plan mode only) loads each model ONCE and streams all utterances via `plan --batch`

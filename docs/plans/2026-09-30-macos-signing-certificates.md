@@ -1,10 +1,15 @@
 # macOS signing — certificates and notarization credentials
 
-**Status:** Planning · **Created:** 2026-09-30 · **Completed:** —
+**Status:** Done · **Created:** 2026-09-30 · **Completed:** 2026-10-16
 **Owner:** owner · **Ref:** macOS plan §9 (workstream F), currently on `feat/macos-support`; Windows
 equivalent: `code-signing` plan, on the 1.2.1 release branch
 **Release:** 1.3.0
 
+> **Closed 2026-10-16:** every step was done for 1.3.0, whose macOS files were signed and notarized
+> in CI with these certificates and secrets (release-1.3.0 index, decisions of 2026-09-30 and
+> 2026-10-10). Kept as the how-to for reissuing them; renewals and what to do after a leak are in
+> [RELEASE.md](../RELEASE.md) *Keeping the signing identities alive*.
+>
 > **Status note:** owner runbook only — the owner-side steps to obtain what macOS signing needs. The
 > signing and notarization *pipeline* is built in the macOS plan §9 (F1–F6); this plan is what
 > that one waits on. Portal labels change often; trust Apple's pages over this text.
@@ -30,11 +35,11 @@ Only the **Account Holder** can create Developer ID certificates, so the steps b
 signed in as the owner. A Mac is **not** required to get the certificates: Apple's portal accepts
 a certificate signing request made anywhere.
 
-### - [ ] M1 — Team ID
+### - [x] M1 — Team ID
 
 developer.apple.com → Membership details → copy the 10-character **Team ID**.
 
-### - [ ] M2 — Keys and certificate requests
+### - [x] M2 — Keys and certificate requests
 
 Two keys, two CSRs — keep them separate:
 
@@ -47,7 +52,7 @@ openssl req -new -newkey rsa:2048 -nodes -keyout developer_id_installer.key \
 
 Keep the `.key` files out of the repository and off shared drives. They are the signing identity.
 
-### - [ ] M3 — Request the certificates and make the `.p12` files
+### - [x] M3 — Request the certificates and make the `.p12` files
 
 developer.apple.com → Certificates, Identifiers & Profiles → Certificates → **+** →
 *Developer ID Application*, upload the first CSR; repeat with *Developer ID Installer* and the
@@ -63,7 +68,7 @@ openssl pkcs12 -export -inkey developer_id_app.key -in developer_id_app.pem \
 Repeat for the installer pair. Use a long random export password and keep it in a password
 manager. (On a Mac, Keychain Access can export the same files — either way works.)
 
-### - [ ] M4 — Notarization key
+### - [x] M4 — Notarization key
 
 appstoreconnect.apple.com → Users and Access → Integrations → App Store Connect API → **Team
 Keys** → generate a key with the **Developer** role (raise it only if `notarytool` reports a
@@ -71,14 +76,14 @@ permissions error). Note the **Key ID** and the **Issuer ID**, and download the 
 lets you download it once.** The macOS plan (F1) prefers this over an app-specific password because
 it is revocable and scoped.
 
-### - [ ] M5 — First signed build, by hand
+### - [x] M5 — First signed build, by hand
 
 Per the 2026-09-30 macOS decision, the contributor's Mac signs and notarizes the first build,
 importing the two `.p12` files into a temporary keychain and storing the notary credentials with
 `xcrun notarytool store-credentials`. Hand the files over through a password manager, not chat or
 email, and delete the copies afterwards.
 
-### - [ ] M6 — CI secrets
+### - [x] M6 — CI secrets
 
 Once the manual run works, add these as **environment secrets** on a protected `release`
 environment, so only a run the owner starts and approves can reach them. The workflow reads

@@ -260,7 +260,8 @@ Plan: `docs/plans/2026-06-16-oop-skill-architecture.md`
   `HANDLERS` path deleted), `knaif.steps` shared library, io + ffmpeg migrated, core control
   tools de-duplicated, `core_tools.yaml` as the single metadata parse path, docs rewritten.
 - [~] **Remainder (io rebuild):** `executor.py` still holds the legacy bare-`CommandAgent` io
-  implementation, now redundant with the OOP io skill. Removing it = its own effort.
+  implementation, now redundant with the OOP io skill. Removing it = its own effort, tracked as
+  **io rebuild** in *Open / Next*.
 
 ---
 
@@ -314,8 +315,8 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   suite green. Follow-up: tag ffmpeg `_engine` chunks YAML-able vs. imperative (risk #1b).
 - [ ] Phase 5 (optional, still open): migrate skill tests off the raw
   `sys.modules["_skill_oop_<skill>_handlers"]` key onto the `_deps`/`_engine` module seam,
-  then retire the legacy alias in `skill.py`. ~44 references across the ffmpeg/documents
-  test suites keep the alias — and its pop-forces-reload contract — load-bearing today.
+  then retire the legacy alias in `skill.py`. ~83 references (re-counted 2026-10-16: the
+  ffmpeg and documents test suites, plus about ten in core tests) keep the alias — and its pop-forces-reload contract — load-bearing today.
 
 ---
 
@@ -591,7 +592,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
     `apps/cli/src/main.rs`, plus six end-to-end cases in `apps/cli/tests/executor_semantics.rs`
     — all deterministic, no model/GPU needed, per the audit's own ask.
   - [~] **F9 — acceptance snapshots RE-LOCKED (2026-09-08). HALF DONE — the identity half is
-    outstanding.** The audit asked for two things: adopt compatible full-corpus executing
+    outstanding.** **What is left (re-checked 2026-10-16):** add the corpus sha256, the row-id set
+    and the model sha256 to `eval_snapshot.json`, and check them in `diff_snapshots`, which today
+    compares only `total` (a count). Identity exists elsewhere — scoreboards record `model_sha256`
+    and `git_sha`, and the per-release acceptance records pin corpus, model, settings, verifier
+    and binary hashes — but not in the snapshot the regression gate reads. The audit asked for two things: adopt compatible full-corpus executing
     snapshots, *and* "store corpus hash/row IDs, model checksum/config, and code identity" in
     them. The first is done (below). The second is **not**: the re-locked snapshots carry
     metrics plus `backend`/`backend_public_name` (a side effect of the report-labelling
@@ -817,7 +822,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
   the redist matching the compiler. All three were *unverified* before — RELEASE.md called two of
   them out as never having run. A failure there next time is a regression, not a first discovery.
 
-- [ ] **CI + CUDA opt-in — only C4 remains** (2026-08-08) — plan:
+- [x] **CI + CUDA opt-in — only C4 remains** (2026-08-08) — **Closed 2026-10-16:** the plan has
+  been Done since 2026-08-08, and C4 became the lifecycle's L4, run for every release since 1.2.0
+  (`evals/acceptance/releases/`). The record below is history. Plan:
   [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md).
   This repo had no CI at all; `.github/workflows/` did not exist. Now `ci.yml` runs path-gated
   `python` / `native` / `native-llama` / `loader-compat` / `site` / `packaging` / `hooks` /
@@ -878,67 +885,14 @@ This **Open / Next** section is the live backlog (originally distilled from the
       `just bootstrap` (the documented path, and mise-based) now adds them explicitly, and
       `rust-toolchain.toml` says why its own `components` list cannot be relied on.
 
-- [ ] **Runtime parity process — Python/Rust must agree, measurably** — plan:
-  [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md).
-  **Replaces** the 2026-08-08 prompt-parity plan, retired 2026-09-10 once its measurements were
-  carried into the successor (they are reproduced there in full; the file is in git history).
-  - **The old premise was measured false (2026-09-09).** "Native plans worse than Python" is not
-    supported: 847 paired utterances, native vs Python **11/5 wins, p = 0.21**. Holding the prompt
-    identical the two planners agree on **99.6%** (3/847). What the owner saw on 2026-08-07 was
-    almost certainly the **executor** — native `run` refuses every multi-step plan — not the
-    planner, which emits correct chains on 39/41 chain utterances.
-  - **The prompt divergence is real but not costly, and its two halves cancel.** Retrieval helps
-    (8/1, p = 0.039); example selection *hurts* (16/1 and 14/1, p ≤ 0.001). Native lacks the first
-    and has the better second, which is why the totals wash out.
-  - **So the work is a process, not a fix.** Four layers with per-layer thresholds: **L1 contract**
-    and **L2 deterministic** (no GGUF, every PR, **100%** — a mismatch there is a bug, never
-    noise), **L3 behavioral** (≥99% per row, and `scripts/parity_check.py` already does most of
-    it — it needs a threshold, a saved record and a trigger), **L4 shipped path** (the native
-    binary executing for real, graded on the artifacts it produces, within 2 pts of the
-    Python-locked bar — the only layer that measures what a user actually gets). A single blended "99%" is rejected: it would let a deterministic port bug hide
-    inside model noise, which is how the prompt divergence survived a year.
-  - **Two rules.** *Python is the reference; Rust moves* — with a written, measured exception, and
-    V2 is that exception (the evidence says **delete `select_examples` from Python** rather than
-    port it to Rust). And *compare the same stage on both sides*: an ad-hoc comparison that broke
-    this rule reported 18.2% disagreement, of which 150/154 were Rust's clarify gate running
-    against a Python path that had none. The true figure was 3/847.
-  - **`not_implemented` marker landed 2026-09-10.** Native marks a capability it has not
-    built with a `not_implemented:` prefix instead of `reject:`; `knaif.evalsuite.outcomes`
-    carries the shared vocabulary and a `coverage()` that counts a deliberate refusal as
-    attempted; `parity_check.py` reports `native-not-implemented` as its own gating bucket.
-    A test pins the marker identical across Rust, the parity script and the Python module.
-  - **Started 2026-09-10 — S2 acceptance bars are written and enforceable.** Each active skill
-    now carries `skills/<name>/acceptance.yaml`: aggregate floors on an executing verifier,
-    required capability slices (chains included, budgeted in rows where the slice is too small
-    for a rate to mean anything), and safety at **100%**. `just eval-accept` grades a run against
-    it and `just eval-safety` runs the safety corpus; both fail closed on an unreported slice, an
-    unidentified run, a `cheap` run, or a safety corpus that was never executed. A test asserts
-    each skill's committed snapshot clears its own floors — a floor above the bar the skill was
-    accepted on is fiction.
-  - **S3g factorial ran 2026-09-10 — and V2 reversed.** 12 cells (example selection x `top_k`,
-    both skills, executing verifier on real artifacts, paired McNemar):
-    `evals/runs/2026-09-10_s3g-factorial_success/summary.md`.
-    - **`select_examples` stays; Rust gains it** rather than Python dropping it. Static wins the
-      ffmpeg aggregate at `top_k=8` (0.916 vs 0.902, 30/14, p = 0.0226) and in the same cell
-      pushes `concat_video` under its floor (0.800 → 0.733) and busts `chain2`'s budget. On
-      documents it does nothing at all. The 2026-09-09 finding does not survive per-slice
-      artifact grading — which is exactly why the plan required re-running it.
-    - **`top_k` stays at 5.** 8 edges 5 on ffmpeg but never significantly (p = 0.19); 99 is worse
-      than both; on documents there is no effect and 99 lowers artifact quality.
-  - ⚠️ **ffmpeg fails its own S2 safety bar: 6/9, with 0 breaches.** All five dangerous requests
-    are refused; the three misses are *over*-refusals — `reject` where the corpus asks for
-    `clarify` (overwrite-originals, and both raw-command rows). Every aggregate floor and every
-    required slice passes in the shipped configuration, so safety is the only thing standing
-    between ffmpeg and acceptance. **Needs an owner decision:** either the model learns to
-    clarify those three (training data), or the corpus rows are wrong and should expect
-    `reject`. Do not silently relax `safety.pass_rate`.
-  - **The gate is `skill.yaml`'s `runtimes.native.status`** — a skill cannot be `supported` until
-    L1/L2 are 100% and L3 ≥99%, with the run saved under `evals/parity/` and indexed. Without a
-    gate the layers are a checklist nobody must run, which is the failure mode being fixed.
-  - ~~**Blocked on chains**~~ — cleared 2026-09-10: native executes multi-step plans (next item).
-  - **Evidence is committed**, not just described: `evals/parity/2026-09-09_p2b-prefix-baseline/`
-    (847 pre-fix envelopes, with git/corpus/model/binary sha256 and the inference backend pinned)
-    and `evals/parity/2026-09-09_p3-prompt-factorial/` (3 388 inferences, four prompt shapes).
+- [ ] **Runtime parity process — Python/Rust must agree, measurably** — built and enforced:
+  L1–L4 run per release, `just check-gate` derives each skill's status from its evidence, and
+  both shipped skills are `supported` (re-checked 2026-10-16). **What is left is reconciling the
+  plan,** [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md):
+  its header still says "L4 … never run over a corpus" (last worked 2026-09-11), and S1, S3–S6 and
+  N3/N4/N5/N8 are unticked. Tick what the releases since did, move what is open, close it. The
+  measurements this entry used to carry (11/5 wins, p = 0.21; the S3g factorial) are in that plan;
+  the L3 bar is now AGENTS.md's (0 port bugs plus a pre-registered disagreement bound), not ≥99%.
 
 - [x] **Native `run` rejects every multi-step plan — the executor, not the planner** (found
   2026-09-09). **Done 2026-09-10** by Workstream E of
@@ -950,37 +904,41 @@ This **Open / Next** section is the live backlog (originally distilled from the
   offer is gated on the build itself (`cuda_payload_is_worth_offering` in `apps/cli/src/main.rs`):
   a binary with CUDA compiled in, or one that cannot load payloads, never shows it.
 
-- [ ] **Building for a corpus run: pick the CUDA feature set on Blackwell** (measured 2026-09-09).
-  `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only and plans **~1
-  utterance / 30 s** on this box — a 847-utterance corpus run is ~7 hours. With
-  `CMAKE_CUDA_ARCHITECTURES=120 --features "llama,cuda,pdfium"` the same corpus takes **~8 min**
-  (111 utt/min, measured). Vulkan is *not* the fallback on this generation:
-  [PERFORMANCE.md](PERFORMANCE.md) §2 records it collapsing to roughly CPU speed on Blackwell.
-  Worth a line wherever corpus/parity runs are documented, because the default feature set is the
-  slow one and the failure mode is silent — it just looks like the run is taking a long time.
+- [ ] **Building for a corpus run: say which build to use** (measured 2026-09-09, corrected
+  2026-10-16). A plain `cargo build --release -p knaif-cli --features "llama,pdfium"` is CPU-only
+  and plans **~1 utterance / 30 s** here — a corpus run takes hours; the CUDA build does the same
+  corpus in **~8 min** (111 utt/min). Build it with `just build-native-kind cuda`, which sets
+  `CUDAARCHS` (a bare `CMAKE_CUDA_ARCHITECTURES` env var does nothing — NATIVE.md §10). The old
+  "Vulkan collapses to CPU speed on Blackwell" no longer holds (re-measured 2026-09-25: ~72% of
+  CUDA, NATIVE.md §5.4). What is left: a line wherever corpus/parity runs are documented, and
+  `just parity` taking a `--native-bin` (it hardcodes `target/debug/knaif`), because the failure
+  mode is silent — the run just looks slow.
 
-- [ ] **Website split — knaif.org + knaif.dev** — plan:
-  [plans/2026-08-04-website-split.md](plans/2026-08-04-website-split.md). Replaces the single
-  mkdocs page with two Astro sites (Starlight for `.dev`), pnpm, Amplify CI/CD from this repo.
-  **Both sites are written and every build-side item is closed** (2026-08-05): 7 pages on `.org`,
-  24 on `.dev`, mkdocs retired, `amplify.yml` committed, and `site-check` now runs inside
-  `just check`. What is left is not code:
-  - **Operator review of both sites in full** — `just site-dev org` / `just site-dev dev`. This
-    is the launch gate; nothing publishes incrementally.
-  - **The a11y gate is closed** (2026-08-06) — `just site-a11y` drives Chromium over 32 pages
-    in both themes. Keyboard navigation passed as built (1,486 tab stops, no trap, skip link
-    first everywhere); contrast did not, and the seven defects are fixed — the primary
-    download button was 3.11:1 and the whole bracket motif failed AA on every page. Two new
-    tokens, `--on-coral` and `--focus`. See §9a of the plan.
-  - **Catch-all custom rule points at `index.html` on both apps** — Amplify's SPA default
-    (`/<*>` → `/index.html`, `404-200`), so a mistyped URL serves the home page and the visitor
-    sees no sign anything was wrong. Both sites now ship a 404 page; the rule should be `/<*>`
-    → `/404.html`, status `404`. Console state, no repository change fixes it — see
-    [SITE.md §5](SITE.md). The sibling defect, `www.knaif.dev` carrying `.org`'s redirect rule
-    verbatim, was found the same way and is fixed.
-  - **Done 2026-08-06:** both Amplify apps created, domains pointed and cut over, the PyPI
-    `Documentation` URL repointed to knaif.dev, cross-domain nav closed, and site operations
-    — deploy model, pre-merge gates, rollback — written up in [SITE.md](SITE.md).
+- [ ] **Websites: two owner steps left from the split** — the
+  [website-split plan](plans/2026-08-04-website-split.md) is closed (2026-10-16): both sites are
+  live, built from this repo by Amplify, and run per [SITE.md](SITE.md). Not code:
+  - **Catch-all custom rule still serves the home page on both apps** — re-checked 2026-10-16: a
+    mistyped URL on knaif.org and knaif.dev returns the home page's exact bytes (status 404, so
+    the status half was changed), not the sites' own 404 page. The rule should be `/<*>` →
+    `/404.html`, status `404`. Console state, no repository change fixes it — see
+    [SITE.md §5](SITE.md).
+  - **Operator review of both sites in full** (`just site-dev org` / `just site-dev dev`), the
+    plan's launch gate, was never recorded as done.
+
+- [ ] **macOS follow-ups** — left open when the [macOS plan](plans/2026-08-02-macos-support.md)
+  closed (2026-10-16):
+  - **Unified memory on an 8 GB Mac** (plan D4): run `knaif-qwen3-4b-v2` on an 8 GB Apple Silicon
+    Mac, record whether it fits on Metal, and whether macOS should recommend the 1.7B there. Only a
+    16 GB M1 Pro has been measured.
+  - **The CPU fallback with and without OpenMP** (plan D5): measure a Homebrew `libomp` build
+    against the shipped no-OpenMP build, to record what turning OpenMP off costs.
+  - **The first-run Metal shader compile** (~15 s once per account, plan D3), shipped as a known
+    issue: decide whether to warm it during `models pull`/the first run, or ship a prebuilt
+    `default.metallib`.
+  - **Keep 1.3.0's notarization logs:** they are a 90-day GitHub artifact
+    (`knaif-macos-notary-<sha>`); copy them into `evals/` before it expires in early January 2027.
+  - **Third-party license reports** under `installers/licenses/` were last regenerated for 1.2.0:
+    run `just licenses-all` before the next release cut.
 
   Two constraints worth carrying out of the plan because they bite elsewhere: download URLs come
   from a **published-release** snapshot, never from `Cargo.toml` (RELEASE.md bumps the version
@@ -1054,8 +1012,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
     [plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md](plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md)'s
     C3 runner matrix.
 
-- [ ] **⚠️ The eval regression gate currently proves nothing — and this is NOT macOS work.**
-  Surfaced 2026-08-02 by an audit of the macOS plan (its task C0), verified against the code, and
+- [x] **⚠️ The eval regression gate currently proves nothing — and this is NOT macOS work.**
+  **Closed 2026-10-16 (the box was never ticked):** fail-closed since `dc595fb` (#56, audit F6) —
+  `regression` refuses to run without `--current` and never compares a snapshot to itself, so
+  point 1's "still defaults to the self-compare" below is history; the bars are re-locked on
+  `success`. Surfaced 2026-08-02 by an audit of the macOS plan (its task C0), verified against the code, and
   listed separately because it invalidates a gate every skill depends on:
   1. ~~`cmd_regression` sets `current = baseline` by default — *"compare snapshot to itself
      (no-op)"* — so without `--current FILE` it **always passes**.~~ **Fixed 2026-08-03**: it still
@@ -1182,7 +1143,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
      `_clean_json` to `knaif-core` `extract.rs` (strip `<think>`/```` ``` ```` fences → first
      brace-balanced object), wired into `knaif plan`. Validation-retry loop rides with the
      `CommandAgent` port. **All three Phase 5 leftovers now resolved.**
-- [ ] **OSS-readiness blockers — now planned, not loose.** **Workstream S is fully discharged as
+- [x] **OSS-readiness blockers — now planned, not loose.** **Done (closed 2026-10-16):** the repo
+  is public, `knaif` is claimed and published on PyPI since 1.0.x, and `python/training/.env` is
+  no longer tracked. **Workstream S is fully discharged as
   of 2026-07-24** — S7 (the owner-driven, plan-by-plan documentation refactor) closed with the
   published set at **33 plans + README**: zero broken `plans/*.md` references tree-wide, the
   README index in sync both directions, and all **11** plans cited from source/config still
@@ -1201,7 +1164,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
   is tracked despite `.gitignore:24` — contents benign (cache paths only), but gitignore can't
   protect an already-tracked file, so it's a trap for the next person; prep-pass task S1 decides.
 - [ ] **Orchestrator honesty** — honor `json_mode` in `infer_stream`, test the on-path,
-  align the thinking-conflict guard across backends.
+  align the thinking-conflict guard across backends. Re-checked 2026-10-16, three gaps in
+  `python/core/knaif/orchestrator.py`: `infer_stream` never reads `json_mode` (llama.cpp or
+  Ollama) and the Ollama stream sends no `think: false`; Ollama `infer` guards on
+  `json_mode and not thinking_enabled` while llama.cpp `infer` sets `response_format` whenever
+  `json_mode` is on; tests cover only `json_mode=False`.
 - [x] **Validator-feedback retry** — one retry with the validator error injected (cheapest
   known accuracy win; error strings already exist). **Done:** `CommandAgent.infer` now
   re-prompts the model once on a parse or structural-validation failure, injecting the
@@ -1213,8 +1180,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
   Toggle via `agent.repair_invalid_plans`. **Measured** (Qwen3-1.7B, full 297-row ffmpeg
   corpus): 73.7% → 75.4% pass (+5 rows recovered: parse_error/error → plan), +18% latency
   on failing rows. End-to-end coverage in `python/core/tests/test_evalsuite_retry.py`.
-- [ ] **Sandbox/CLI safety posture** — decide + document the `sandbox=None` default and the
-  CLI's blanket `confirmed=True`.
+- [ ] **Sandbox/CLI safety posture** — decide + document the `sandbox=None` default
+  (`agent.py`, `create_agent`; one sentence in ARCHITECTURE.md, no decision recorded) and the
+  CLI's `confirmed=True`. Re-checked 2026-10-16: it is no longer blanket — the SDK app passes it
+  only after the approval gate (`confirmed = not dry_run`) and the overwrite gate always asks —
+  but `--silent` skips approval and still passes `confirmed=True`.
 - [x] **Native `run` first-run fixes** — cluster surfaced by the first manual `just native
   ffmpeg` runs, all resolved 2026-07-06: raw-output dump on parse failure behind `$KNAIF_DEBUG`
   (Task 1); backslash paths normalized `\`→`/` before the prompt so echoed paths yield valid JSON
@@ -1231,13 +1201,17 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `~/.aws`/`~/.ssh` (owner chose simplicity over per-OS convention dirs). Test asserts the
   `~/.knaif/models` path and no-Roaming; existing installed models migrated off Roaming.
 - [ ] **io rebuild** — remove legacy `executor.py` file-ops; settle arg validation behind
-  `arg_value_sets`; add `HandlerContext.resolve()`. This is the Phase 9 remainder:
+  `arg_value_sets` (core checks them only for `file_type` today, so e.g. junk in ffmpeg's
+  `container` still passes); add `HandlerContext.resolve()` (absent, re-checked 2026-10-16). One
+  item with Phase 9's *Remainder* line, which points here. This is the Phase 9 remainder:
   `python/core/knaif/executor.py` still holds the bare-`CommandAgent` io implementation
   (`cmd_list_files`/`find_files`/`delete_files`/`move_files`), redundant with the OOP io
   skill since PR #15 but still the bare-agent default and directly unit-tested by
   `test_executor.py` — so removing it means deciding the bare-agent default and migrating
   those tests. Plan: `docs/plans/2026-06-16-oop-skill-architecture.md` (Phase 5).
-- [ ] **`knaif.cli` SDK — three deliberate v1 deferrals, all demand-triggered.** None needs a
+- [x] **`knaif.cli` SDK — three deliberate v1 deferrals, all demand-triggered.** **Closed
+  2026-10-16 (owner):** tracked in `docs/SDK.md` (*Not in v1*), where each trigger is written;
+  nothing here adds to it. None needs a
   plan; each has a written trigger, and all three are now stated in `docs/SDK.md` (*Not in v1*)
   so third-party readers can tell "scoped out" from "missing". Design detail lives in
   `docs/plans/2026-06-19-knaif-cli-sdk.md` (Decisions 1 and 6, Phase 4, Phase 7 note).
@@ -1322,9 +1296,16 @@ This **Open / Next** section is the live backlog (originally distilled from the
   **Deliberately not fixed in 1.0.1:** `v1.0.1` is already tagged, pushed, and protected by the
   `release-tags` ruleset (the tag cannot be moved), and `CHANGELOG.md` states the native runtime is
   unchanged in 1.0.1 — a spinner string does not justify falsifying either.
-- [ ] **ffmpeg consolidation** — `_standard_pipeline` builder, `$var.field` over dict-unwraps,
-  `_append_codec_flags`, test fixtures (~1,000 removable lines).
-- [ ] **Constrain `container` (and friends) with `arg_value_sets`.** `convert_video.container`
+- [x] ~~**ffmpeg consolidation** — `_standard_pipeline` builder, `$var.field` over dict-unwraps,
+  `_append_codec_flags`, test fixtures (~1,000 removable lines).~~ **Dropped 2026-10-16 (owner):**
+  the functions it names no longer exist — the engine became a recipe builder and the handlers
+  were split (2,584 → 247 lines) — and any refactor now has to keep native parity too.
+- [x] **Constrain `container` (and friends) with `arg_value_sets`.** **Done 2026-10-16 (found
+  done):** the "normalize" route — a codec token in `container` moves to `video_codec` on both
+  runtimes (`skills/ffmpeg/python/intents.py`, `skills/ffmpeg/native/src/run.rs`; since 1.0.1,
+  `1f8a16f`), so the "can only fail" below no longer holds. Left: core still checks
+  `arg_value_sets` only for `file_type`, so other junk in `container` passes validation — part of
+  **io rebuild** above. `convert_video.container`
   has no schema or value set, so a model emitting `container: "hevc"` / `"av1"` — a *codec*
   name in the container slot — passes validation untouched and reaches the expander, where it
   can only fail. Observed on non-English utterances across several rows. Either declare the
@@ -1341,8 +1322,11 @@ This **Open / Next** section is the live backlog (originally distilled from the
   this as an eval-only trim — `train.jsonl` may still want the examples. Full analysis:
   [plans/2026-06-08-local3-outcome-fixes.md](plans/2026-06-08-local3-outcome-fixes.md)
   (*CORPUS TRIM*); principles in `docs/EVAL_FRAMEWORK.md` (*Corpus composition*).
-- [ ] **Re-lock the ffmpeg snapshot with `output_diff` — two defects, one re-lock (decided
-  2026-07-24).** **(a) Wrong verifier:** `skills/ffmpeg/data/eval_snapshot.json` is still
+- [x] **Re-lock the ffmpeg snapshot with `output_diff` — two defects, one re-lock (decided
+  2026-07-24).** **Closed 2026-10-16:** both defects are gone — the snapshot is on an executing
+  verifier and the current row set (`success`, 861 utterances, re-locked with the 4B v2), the
+  "better end state" the follow-on below describes; `success` became the bar by later decision
+  (see F9 above). **(a) Wrong verifier:** `skills/ffmpeg/data/eval_snapshot.json` is still
   `verifier: cheap`, but the acceptance bar must now be an *executing* verifier — see *The eval
   ladder* in `docs/EVAL_FRAMEWORK.md`. `cheap` never runs the command, so it cannot see a wrong
   artifact, and it reports **false** regressions when the corpus is annotated (the 0.973→0.928
@@ -1393,7 +1377,10 @@ This **Open / Next** section is the live backlog (originally distilled from the
   preserved documents, but failed the ffmpeg gate (full 0.870, hard 0.909). Distill-v1
   added 45 verifier-filtered synthetic ffmpeg rows and preserved documents, but also failed
   the ffmpeg gate (full 0.844, hard 0.891).
-- [~] **Qwen3 fine-tuning pass 3** — mostly done (2026-07-02). Corrected the pass-2 headline
+- [x] **Qwen3 fine-tuning pass 3** — **Closed 2026-10-16:** the snapshots it waited on were
+  re-locked on `success` (ffmpeg 861, documents 164 utterances, on `knaif-qwen3-4b-v2`), so the
+  "297 of 847" text below is history; Task 6 (preference tuning) stays a conditional idea in
+  [FINE_TUNING.md](FINE_TUNING.md), not a backlog item. Mostly done (2026-07-02). Corrected the pass-2 headline
   (v3 effect real but +3.6pt hard not 5.4pt; Q6-inflated), completed the 1.7B quant sweep
   (Q6 pick), **retrained + PROMOTED 4B-v3** for ffmpeg+documents (passes gate, eliminated the
   old enum-bleed contamination), applied retrieval keyword fixes (non-CJK misses 70→46,

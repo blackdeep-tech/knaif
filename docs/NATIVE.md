@@ -286,6 +286,8 @@ Conclusions (all evidence-backed):
   NVIDIA cards. Measured usable on both NVIDIA architectures tried: ~as fast as CUDA on Ampere, ~72%
   of CUDA on Blackwell.
 - **CPU** is the no-GPU last resort.
+- **On macOS, Metal** — the `metal` kind is the only macOS build (Apple Silicon; CPU stays the
+  fallback inside it). Its measured numbers are the `M1P` rows of [PERFORMANCE.md](PERFORMANCE.md) §2.
 - Consider `knaif-qwen3-1.7b-v2` for the Vulkan/CPU fallback paths to offset slower compute (its
   per-backend numbers, including the slices it misses there, are on the model card).
 - Do **not** invest in a Vulkan pipeline-cache patch for speed.
@@ -527,6 +529,10 @@ just verify-build-kind vulkan   # assert the layout, and read the kind from what
 On Windows this needs **no Developer PowerShell**: the script locates Visual Studio with `vswhere`
 and enters `VsDevCmd.bat` itself when `cl.exe` is absent, setting `LIBCLANG_PATH`,
 `CMAKE_GENERATOR` and `CUDAARCHS` for you.
+
+On macOS (Apple Silicon) build `just build-native-kind metal`, the only functional kind there. The
+Xcode Command Line Tools are enough; full Xcode is not needed. Packaging, signing and notarization
+are in [RELEASE.md](RELEASE.md) §2, *macOS — build on a Mac, sign and notarize by script*.
 
 The first build of a kind compiles everything from scratch — about a minute for `base`/`cpu`,
 15-30 minutes for `cuda` (183 CUDA translation units). After that, switching between kinds costs
