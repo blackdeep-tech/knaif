@@ -93,8 +93,9 @@ jobs:
             echo "site=$(match "$common|^site/")"
             echo "packaging=$(match "$common|^installers/")"
             # D11 (macOS support plan): only what can change the macOS build or its packaging —
-            # a Python-only or docs PR must not queue for a macOS runner.
-            echo "macos=$(match "$common|^(native/|apps/|installers/|scripts/|skills/[^/]+/native/|skills/[^/]+/skill\.yaml|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
+            # a Python-only or docs PR must not queue for a macOS runner. `contracts/` too: the
+            # job runs the L1/L2 parity contracts, which macOS's `supported` status depends on.
+            echo "macos=$(match "$common|^(native/|apps/|installers/|scripts/|contracts/|skills/[^/]+/native/|skills/[^/]+/skill\.yaml|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
           } >> "$GITHUB_OUTPUT"
 
   # MATRIX over both ends of requires-python (">=3.10,<3.15"), added 2026-08-08.
@@ -423,6 +424,14 @@ jobs:
         run: uv venv
       - name: just install
         run: just install
+      # L1/L2 on macOS: both runtimes against the parity contracts. macOS is `supported` from
+      # 1.3.0, and the gate allows that only while the contracts record coverage here
+      # (`_coverage.macos: CI`); this step is what makes that record true.
+      - name: just install-skills
+        run: just install-skills
+      - name: just check-contracts (L1/L2 parity on macOS)
+        run: just check-contracts
+
       - name: The installer tests, under macOS's bash 3.2
         run: >-
           uv run pytest -q python/core/tests/test_installer_pkg.py

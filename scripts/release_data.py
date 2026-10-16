@@ -48,6 +48,8 @@ ASSET_MATCHERS = {
     "windows-x64.zip": ("windows-x64", "portable"),
     "linux-x64.tar.gz": ("linux-x64", "portable"),
     "linux-x86_64.AppImage": ("linux-x64", "appimage"),
+    "macos-arm64.pkg": ("macos", "installer"),
+    "macos-arm64.zip": ("macos", "portable"),
 }
 
 

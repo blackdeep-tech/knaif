@@ -5,7 +5,7 @@
   "_coverage": {
     "ubuntu": "CI",
     "windows": "local",
-    "macos": "unexercised"
+    "macos": "CI"
   },
   "max_tool_examples": 3,
   "example_sets": {

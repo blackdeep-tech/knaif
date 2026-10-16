@@ -88,4 +88,4 @@ def test_expected_prompts_are_inline_not_sibling_goldens() -> None:
 def test_the_contract_states_its_own_scope_and_coverage() -> None:
     """A contract that overstates what it proves is worse than none."""
     assert "not final token IDs" in DOC["_scope"].replace("NOT", "not")
-    assert DOC["_coverage"] == {"ubuntu": "CI", "windows": "local", "macos": "unexercised"}
+    assert DOC["_coverage"] == {"ubuntu": "CI", "windows": "local", "macos": "CI"}

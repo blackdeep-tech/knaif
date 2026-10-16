@@ -5,7 +5,7 @@
   "_coverage": {
     "ubuntu": "CI",
     "windows": "local",
-    "macos": "unexercised"
+    "macos": "CI"
   },
   "registries": {
     "demo": "resize_video:\n  description: \"Resize a video.\"\n  required_args: [inputs]\n  optional_args: [height, output]\nstrip_audio:\n  description: \"Remove the audio track.\"\n  required_args: [inputs]\n  optional_args: [output]\nconcat_video:\n  description: \"Join several videos.\"\n  required_args: [inputs]\n  optional_args: [output]\ninspect_video:\n  description: \"Report a video's properties.\"\n  required_args: [inputs]\nwatermark_video:\n  description: \"Stamp a watermark on a video.\"\n  required_args: [inputs]\n  arg_schemas:\n    output: {type: string, help: \"where to write it\"}\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n",

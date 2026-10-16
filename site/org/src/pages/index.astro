@@ -65,8 +65,8 @@ const stable = skills.filter((s) => s.stage === "stable");
       <div class="step">
         <h2>Code does the work</h2>
         <p>
-          Ordinary, tested code builds the command, shows it to you, asks before it writes,
-          and runs it. Same request, same command, every time.
+          Ordinary, tested code builds the command, shows it to you, asks before it replaces a
+          file, and runs it. Same request, same command, every time.
         </p>
       </div>
     </div>
@@ -103,10 +103,10 @@ const stable = skills.filter((s) => s.stage === "stable");
         </p>
       </div>
       <div>
-        <h3>It asks before it writes</h3>
+        <h3>It asks before it replaces</h3>
         <p>
-          Anything that changes a file needs your confirmation, and that gate is enforced in
-          code — not left to the model's judgement.
+          Replacing a file that already exists always needs your yes, and that gate is enforced
+          in code — not left to the model's judgement. Add --confirm to approve every step.
         </p>
       </div>
     </div>
@@ -141,7 +141,13 @@ const stable = skills.filter((s) => s.stage === "stable");
   const note = document.querySelector<HTMLElement>("[data-note]");
   if (link) {
     const ua = navigator.userAgent;
-    const id = /Windows/i.test(ua) ? "windows-x64" : /Linux|X11/i.test(ua) ? "linux-x64" : null;
+    const id = /Windows/i.test(ua)
+      ? "windows-x64"
+      : /Macintosh/i.test(ua)
+        ? "macos"
+        : /Linux|X11/i.test(ua)
+          ? "linux-x64"
+          : null;
     const card = id && document.querySelector<HTMLAnchorElement>(`.dl[data-platform="${id}"]`);
     if (card) {
       link.href = card.href;

@@ -60,7 +60,7 @@
           "cpu",
           "vulkan"
         ],
-        "text": "Every download includes CPU and Vulkan support, and auto-selects Vulkan when a capable driver is present."
+        "text": "Every Windows and Linux download includes CPU and Vulkan support, and auto-selects Vulkan when a capable driver is present. On a Mac, knaif runs on the GPU through Metal."
       },
       "optional": [
         {
@@ -135,11 +135,30 @@
         "status": "supported"
       },
       {
+        "arch": "arm64",
+        "artifacts": [
+          {
+            "artifact": "knaif-<ver>-macos-arm64.pkg",
+            "kind": "installer",
+            "notes": "Signed and notarized installer. It offers the model and the supporting tools (through Homebrew, when Homebrew is installed).",
+            "recommended": true
+          },
+          {
+            "artifact": "knaif-<ver>-macos-arm64.zip",
+            "kind": "portable",
+            "notes": "Unpack anywhere and run. Or with Homebrew: brew install blackdeep-tech/knaif/knaif"
+          }
+        ],
         "id": "macos",
         "name": "macOS",
-        "notes": "Core is cross-platform; packaging is a fast-follow. No artifact is published.",
-        "requires": null,
-        "status": "planned"
+        "requires": "Apple Silicon and macOS 12 or later",
+        "status": "supported",
+        "warnings": [
+          {
+            "id": "first-run",
+            "text": "The first run takes about 15 s longer while Metal compiles its shaders; later runs do not pay it again. Intel Macs are not supported."
+          }
+        ]
       }
     ],
     "schema_version": 1
