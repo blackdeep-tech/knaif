@@ -914,14 +914,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `just parity` taking a `--native-bin` (it hardcodes `target/debug/knaif`), because the failure
   mode is silent — the run just looks slow.
 
-- [ ] **Websites: two owner steps left from the split** — the
+- [ ] **Websites: one owner step left from the split** — the
   [website-split plan](plans/2026-08-04-website-split.md) is closed (2026-10-16): both sites are
   live, built from this repo by Amplify, and run per [SITE.md](SITE.md). Not code:
-  - **Catch-all custom rule still serves the home page on both apps** — re-checked 2026-10-16: a
-    mistyped URL on knaif.org and knaif.dev returns the home page's exact bytes (status 404, so
-    the status half was changed), not the sites' own 404 page. The rule should be `/<*>` →
-    `/404.html`, status `404`. Console state, no repository change fixes it — see
-    [SITE.md §5](SITE.md).
+  - [x] **Catch-all custom rule** — **fixed 2026-10-16** on both apps: `/<*>` → `/404.html`,
+    status `404-200` (the rewrite, not plain `404`; why in [SITE.md §5](SITE.md)). Checked the
+    same day: a missing page answers 404 with the site's own 404 page on knaif.org and
+    knaif.dev, and every sitemap page (9 and 25) and every asset the home pages load answers 200.
   - **Operator review of both sites in full** (`just site-dev org` / `just site-dev dev`), the
     plan's launch gate, was never recorded as done.
 
