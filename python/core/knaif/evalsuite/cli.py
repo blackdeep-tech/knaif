@@ -2207,7 +2207,7 @@ def cmd_shards(args: argparse.Namespace) -> None:
         "corpus": corpus_path.name,
         "corpus_sha256": hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
         "rows_requested": args.rows,
-        "total": sum(e["rows"] for e in entries),
+        "total": sum(len(shard) for shard in shards),
         "count": len(entries),
         "method": "evenly spaced in corpus order, dealt round-robin",
         "shards": entries,
