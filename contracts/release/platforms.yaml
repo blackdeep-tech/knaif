@@ -62,10 +62,18 @@ platforms:
 
   - id: macos
     name: macOS
-    status: planned
-    requires: null
+    arch: arm64
+    status: supported
+    # Apple Silicon only: the published build is arm64, Metal on (RELEASE.md, "macOS — which file").
+    requires: "Apple Silicon and macOS 12 or later"
+    artifacts:
+      - artifact: "knaif-<ver>-macos-arm64.pkg"
+        kind: installer
+        recommended: true
+      - artifact: "knaif-<ver>-macos-arm64.zip"
+        kind: portable
 
-# Every published artifact is CPU + Vulkan. `cpu` is a build kind, not a release artifact
+# Every published Windows and Linux artifact is CPU + Vulkan; macOS runs on Metal (and the CPU). `cpu` is a build kind, not a release artifact
 # (RELEASE.md §1) — it offers a user nothing the default lacks, at the cost of making them
 # choose. Do not surface it on the website.
 gpu:

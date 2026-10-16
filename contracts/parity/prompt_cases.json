@@ -6,7 +6,7 @@
   "_coverage": {
     "ubuntu": "CI",
     "windows": "local",
-    "macos": "unexercised"
+    "macos": "CI"
   },
   "registries": {
     "demo": "convert_video:\n  description: \"Convert a video to a different container or codec.\"\n  keywords: [convert, transcode, mp4, webm, convertir, 转换]\n  required_args: [inputs]\n  optional_args: [container, output]\n  arg_schemas:\n    container: {type: enum, enum: [mp4, webm, mkv], help: \"target container\"}\ncompress_video:\n  description: \"Compress a video to a smaller file size.\"\n  keywords: [compress, smaller, shrink, comprimir, 压缩]\n  required_args: [inputs]\n  optional_args: [quality]\n  arg_schemas:\n    quality: {type: enum, enum: [low, high]}\ntrim_video:\n  description: \"Trim a video to a time range.\"\n  keywords: [trim, cut, shorten]\n  required_args: [inputs, start]\n  optional_args: [end]\nlist_formats:\n  description: \"List the container formats this skill supports.\"\n  keywords: [formats, list]\nrun_batch:\n  description: \"Internal batch executor.\"\n  internal: true\n  required_args: [commands]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"

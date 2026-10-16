@@ -146,6 +146,16 @@ def test_python_and_docs_changes_never_queue_for_a_macos_runner(path):
     assert not _decide([path])["macos"]
 
 
+@pytest.mark.parametrize(
+    "path", ["contracts/parity/prompt_cases.json", "contracts/runtime/generation.yaml"]
+)
+def test_a_parity_contract_reaches_the_macos_job(path):
+    """macOS is a supported platform from 1.3.0, which the gate allows only while the parity
+    contracts record coverage there (`_coverage.macos: CI`). The macOS job runs
+    `just check-contracts`, so a change to a contract must reach it."""
+    assert _decide([path])["macos"]
+
+
 def test_a_skill_contract_or_crate_reaches_the_macos_job():
     """The .pkg mirrors skill.yaml's macos blocks, and each skill crate is built there."""
     for path in ("skills/documents/skill.yaml", "skills/ffmpeg/native/src/lib.rs"):

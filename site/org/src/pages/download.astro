@@ -16,7 +16,7 @@ import {
 
 <Base
   title={`Download knaif ${rel.version}`}
-  description="Download knaif for Windows or Linux. One binary, no Python, no account. Verify it against the published checksums."
+  description="Download knaif for Windows, macOS or Linux. One binary, no Python, no account. Verify it against the published checksums."
 >
   <section>
     <p class="eyebrow">download · {rel.tag}</p>
@@ -100,15 +100,19 @@ import {
     <p class="eyebrow">verify what you downloaded</p>
     <p>
       The Windows binaries are signed by Blackdeep Technologies Ltd (Properties → Digital
-      Signatures), but a browser or SmartScreen warning says only that a file is new, not whether it
-      is intact: the checksum is what tells you that. Every artifact is listed in one manifest.
+      Signatures) and the macOS files are signed and notarized by Apple's service, but a browser or
+      SmartScreen warning says only that a file is new, not whether it is intact: the checksum is what tells you
+      that. Every artifact is listed in one manifest.
     </p>
     <a class="btn ghost" href={rel.checksums_url}>SHA256SUMS for {rel.tag}</a>
     <div class="scroll-x">
       <pre class="term"><code><span class="dim"># Windows (PowerShell)</span>
 Get-FileHash .\knaif-{rel.version}-windows-x64-setup.exe -Algorithm SHA256
 
-<span class="dim"># Linux / macOS</span>
+<span class="dim"># macOS</span>
+shasum -a 256 knaif-{rel.version}-macos-arm64.pkg
+
+<span class="dim"># Linux</span>
 sha256sum knaif-{rel.version}-linux-x64.tar.gz</code></pre>
     </div>
   </section>
@@ -155,7 +159,13 @@ sha256sum knaif-{rel.version}-linux-x64.tar.gz</code></pre>
   const note = document.querySelector<HTMLElement>("[data-note]");
   if (picker && link && note) {
     const ua = navigator.userAgent;
-    const id = /Windows/i.test(ua) ? "windows-x64" : /Linux|X11/i.test(ua) ? "linux-x64" : null;
+    const id = /Windows/i.test(ua)
+      ? "windows-x64"
+      : /Macintosh/i.test(ua)
+        ? "macos"
+        : /Linux|X11/i.test(ua)
+          ? "linux-x64"
+          : null;
     const card = id && document.querySelector<HTMLElement>(`[data-platform="${id}"]`);
     const primary = card?.querySelector<HTMLAnchorElement>(".asset.primary");
     if (primary) {
