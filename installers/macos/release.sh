@@ -86,5 +86,5 @@ Done: $ZIP and $PKG are signed and notarized; the .pkg is stapled.
 Next, by hand (RELEASE.md):
   1. clean room on these exact files — E3 (macOS 12 VM), E4 (quarantined launch), E6 (.pkg)
   2. SHA256SUMS over the complete release set, after everything else, right before publishing
-  3. the Homebrew formula: installers/macos/homebrew/render-formula.sh $ZIP
+  3. the Homebrew cask: installers/macos/homebrew/render-cask.sh $ZIP
 EOF

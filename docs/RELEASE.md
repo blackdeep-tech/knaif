@@ -170,8 +170,8 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 **macOS is arm64 only** (Apple Silicon; the macOS support plan, D4), and `metal` plays `vulkan`'s
 role there: the only functional kind, so it gets the plain name. It ships as two files because only
 a `.pkg` can carry a stapled notarization ticket, which lets a quarantined download run offline; the
-`.zip`'s ticket is looked up online on first run (D6). The Homebrew formula in
-`blackdeep-tech/homebrew-knaif` points at the `.zip` (§5 step 9).
+`.zip`'s ticket is looked up online on first run (D6). The Homebrew cask in
+`blackdeep-tech/homebrew-knaif` points at the `.zip` and installs it untouched (§5 step 9).
 
 The **support matrix** these artifacts imply — supported OSes, the measured runtime
 floors and GPU backends — is declared once in
@@ -933,11 +933,14 @@ that path once against throwaway outputs:
      `uv run pytest python/core/tests/test_release_data.py` verifies the snapshot's shape
      offline.
 8. **Delete** the release branch.
-9. **Update the Homebrew tap** (macOS). Render the formula from the published `.zip` — the exact
+9. **Update the Homebrew tap** (macOS). Render the cask from the published `.zip` — the exact
    file `SHA256SUMS` covers — and commit it to `blackdeep-tech/homebrew-knaif` as
-   `Formula/knaif.rb`:
-   `installers/macos/homebrew/render-formula.sh dist/knaif-<ver>-macos-arm64.zip > knaif.rb`.
-   Check it with `brew install --build-from-source ./knaif.rb && brew test knaif` on a Mac.
+   `Casks/knaif.rb`:
+   `installers/macos/homebrew/render-cask.sh dist/knaif-<ver>-macos-arm64.zip > knaif.rb`.
+   Check it on a Mac: `brew update && brew install blackdeep-tech/knaif/knaif`, then
+   `knaif --version`, `knaif skills list` and one real request. **A cask, never a formula:** a
+   formula install rewrites the bundled `.dylib` install names and re-signs them ad hoc, and the
+   Developer ID `knaif` then refuses to load them ("different Team IDs", 1.3.0, 2026-10-16).
 
 ---
 

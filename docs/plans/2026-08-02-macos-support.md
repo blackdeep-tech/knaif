@@ -691,9 +691,14 @@ open; where a task's older text disagrees, these win and the task is updated to 
 - **D18 — Time Machine: exclude `~/.knaif/models` only.** `tmutil addexclusion` when a model is
   downloaded — in the `.pkg` postinstall and in `knaif models pull` on Darwin. Models can be
   downloaded again; config and the rest of `~/.knaif` stay in backups. (§12 Q6, F5b.)
-- **D19 — the Homebrew formula depends on `ffmpeg` only.** `depends_on "ffmpeg"` (the ffmpeg skill
+- **D19 — the Homebrew package depends on `ffmpeg` only.** `depends_on "ffmpeg"` (the ffmpeg skill
   needs it); ghostscript, tesseract and LibreOffice go in `caveats`. The model is not downloaded at
   install time — `caveats` says to run `knaif models pull`. (G5.)
+  **Amended 2026-10-16 (owner): a cask, not a formula.** The first install of the published 1.3.0
+  formula failed on a Mac exactly as G5 warned: Homebrew rewrote the bundled `.dylib` install names,
+  re-signed them ad hoc, and `knaif` (Developer ID, hardened runtime) refused to load them
+  ("different Team IDs"). A cask unpacks the notarized `.zip` untouched and links only the
+  executable; the dependency and caveats above are unchanged (`depends_on formula: "ffmpeg"`).
 
 ---
 
@@ -2108,7 +2113,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       staging libomp), `docs/MODELS.md` (only if D4 changes a recommendation), `README.md` platform
       support, `evals/INDEX.md` rows, `docs/TODO.md` and `docs/plans/README.md` entries. Run
       `just licenses-all` before any release cut, per the existing rule.
-- [ ] **G5. Homebrew tap — in 1.3.0 (D12), no longer a fast-follow.** The owner creates the
+- [x] **G5. Homebrew tap — in 1.3.0 (D12), no longer a fast-follow.** The owner creates the
       repository. **Formula shape (D19):** `depends_on "ffmpeg"`; ghostscript, tesseract and
       LibreOffice in `caveats`; the model is not downloaded at install — `caveats` says to run
       `knaif models pull`. A
@@ -2122,6 +2127,13 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > caveats. **Watch the first install:** Homebrew's relocation may rewrite the dylibs' install
       > names and re-sign them ad hoc, dropping the Developer ID signature from the installed copy.
       > If it does, record it here; a cask is the fallback shape.
+      >
+      > **Done 2026-10-16, as a cask.** The owner created `blackdeep-tech/homebrew-knaif`. The
+      > rendered formula installed, but `knaif` would not start: `dyld: Library not loaded:
+      > @rpath/libggml-base.0.dylib … different Team IDs` — the relocation above, as predicted. The
+      > tap now carries `Casks/knaif.rb` (D19 amended), rendered by `homebrew/render-cask.sh` from
+      > `knaif-cask.rb.in`; on the same Mac `brew install blackdeep-tech/knaif/knaif` gave a working
+      > `knaif`, which planned on the 4B model and converted a video with ffmpeg end to end.
 
 - [ ] **G6. Hand off to CI.** [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
       explicitly parks macOS out of its C3 matrix *"until macOS packaging lands"*. When this plan

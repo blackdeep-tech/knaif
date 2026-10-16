@@ -1,4 +1,4 @@
-"""Guard the macOS signing pipeline and the Homebrew formula (installers/macos/).
+"""Guard the macOS signing pipeline and the Homebrew cask (installers/macos/).
 
 F2 asks for the release order to be "encoded in a script so it cannot be got wrong by hand". That
 property is testable without a Mac: every Apple tool the scripts call (codesign, xcrun, spctl,
@@ -248,7 +248,7 @@ def test_notarize_needs_credentials(apple, tmp_path: Path) -> None:
     assert proc.returncode == 2 and "KNAIF_NOTARY_PROFILE" in proc.stderr
 
 
-# -- the Homebrew formula (D19) -----------------------------------------------------------------
+# -- the Homebrew cask (D19, amended 2026-10-16) ----------------------------------------------------
 
 
 def _skills() -> list[dict]:
@@ -265,11 +265,11 @@ def _external_tools() -> list[dict]:
 
 
 @pytest.fixture()
-def formula(tmp_path: Path) -> tuple[str, bytes]:
+def cask(tmp_path: Path) -> tuple[str, bytes]:
     zip_path = tmp_path / "knaif-9.9.9-macos-arm64.zip"
     zip_path.write_bytes(b"the notarized archive")
     proc = subprocess.run(
-        [_bash(), (MACOS / "homebrew" / "render-formula.sh").as_posix(), zip_path.as_posix()],
+        [_bash(), (MACOS / "homebrew" / "render-cask.sh").as_posix(), zip_path.as_posix()],
         capture_output=True,
         text=True,
     )
@@ -277,22 +277,33 @@ def formula(tmp_path: Path) -> tuple[str, bytes]:
     return proc.stdout, zip_path.read_bytes()
 
 
-def test_the_formula_names_the_release_and_its_checksum(formula) -> None:
-    text, data = formula
+def test_the_cask_names_the_release_and_its_checksum(cask) -> None:
+    text, data = cask
     assert "@" not in re.sub(r"#.*", "", text)
+    assert 'version "9.9.9"' in text
     assert "/download/v9.9.9/knaif-9.9.9-macos-arm64.zip" in text
     assert f'sha256 "{hashlib.sha256(data).hexdigest()}"' in text
     manifest = yaml.safe_load(
         (REPO / "contracts/models/model-manifest.yaml").read_text(encoding="utf-8")
     )
     assert f"knaif models pull {manifest['recommendations']['desktop']}" in text
-    assert "depends_on arch: :arm64" in text and "depends_on macos: :monterey" in text
+    assert "depends_on arch: :arm64" in text and 'depends_on macos: ">= :monterey"' in text
 
 
-def test_the_formula_depends_on_exactly_the_required_tools(formula) -> None:
+def test_it_is_a_cask_that_links_the_published_tree_untouched(cask) -> None:
+    # 2026-10-16: a formula install rewrote the bundled .dylib install names and re-signed them ad
+    # hoc, and knaif (Developer ID, hardened runtime) refused to load them ("different Team IDs").
+    # A cask unpacks the notarized .zip as published and only links the executable.
+    text, _ = cask
+    assert re.search(r'^cask "knaif" do$', text, re.M)
+    assert 'binary "knaif-9.9.9-macos-arm64/bin/knaif"' in text
+    assert "class Knaif < Formula" not in text and "def install" not in text
+
+
+def test_the_cask_depends_on_exactly_the_required_tools(cask) -> None:
     # D19: a required tool is a dependency; an optional one is a caveat, never a dependency.
-    text, _ = formula
-    deps = set(re.findall(r'^\s*depends_on "([^"]+)"', text, re.M))
+    text, _ = cask
+    deps = set(re.findall(r'^\s*depends_on formula: "([^"]+)"', text, re.M))
     required = {t["macos"]["brew"] for t in _external_tools() if t.get("required")}
     assert deps == required
     for tool in _external_tools():
@@ -307,7 +318,7 @@ def test_render_refuses_a_file_that_is_not_a_macos_release(tmp_path: Path) -> No
     other = tmp_path / "knaif-9.9.9-linux-x64.tar.gz"
     other.write_bytes(b"x")
     proc = subprocess.run(
-        [_bash(), (MACOS / "homebrew" / "render-formula.sh").as_posix(), other.as_posix()],
+        [_bash(), (MACOS / "homebrew" / "render-cask.sh").as_posix(), other.as_posix()],
         capture_output=True,
         text=True,
     )
