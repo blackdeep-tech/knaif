@@ -27,7 +27,6 @@ table changes only when a release opens or ships.
 
 | Release | Lane | Branch | Index | State |
 |---|---|---|---|---|
-| 1.3.0 | minor | `release/1.3.0` (merged, deleted) | [release-1.3.0](2026-09-30-release-1.3.0.md) | **published 2026-10-16** (GitHub, PyPI); open: `brew test` on a Mac |
 
 ## Plan header format
 
@@ -157,7 +156,7 @@ that release's scope table (via its plan).
 | 2026-09-26 | [policy-gate-and-skill-adapters](2026-09-26-policy-gate-and-skill-adapters.md) | Done | Three release-1.2 retrains failed on the shared plan/clarify/reject decision, never on skill knowledge. Tests two fixes with pre-written pass/fail rules: E1 a deterministic safety gate (offline replay, no GPU), E2 one LoRA adapter per skill on a shared base (feasibility spike, then per-skill adapters vs the union model). Pauses release 1.2 at R5. |
 | 2026-09-27 | [release-1.3-skill-adapters-and-superskill](2026-09-27-release-1.3-skill-adapters-and-superskill.md) | Draft | Moved out of 1.3.0 (2026-10-05), version not chosen: per-skill LoRA adapters on a shared base (E2b, restated as quality of base + adapter as served), the superskill/router (design to be discussed with the owner), and more skills. Evidence from release 1.2's failed union retrains. |
 | 2026-09-30 | [release-1.2.1](2026-09-30-release-1.2.1.md) | Done | **Published 2026-10-02** (GitHub, PyPI). Release index for 1.2.1 (patch): bug fixes to 1.2.0 that change no behavior on shipped platforms; scope chosen in its own session. |
-| 2026-09-30 | [release-1.3.0](2026-09-30-release-1.3.0.md) | Active | **Published 2026-10-16** (GitHub, PyPI): macOS on Apple Silicon, the optional model daemon, `run` acting without asking. Open until `brew test` passes on a Mac. |
+| 2026-09-30 | [release-1.3.0](2026-09-30-release-1.3.0.md) | Done | **Published 2026-10-16** (GitHub, PyPI, Homebrew tap as a cask): macOS on Apple Silicon, the optional model daemon, `run` acting without asking. |
 | 2026-09-30 | [macos-signing-certificates](2026-09-30-macos-signing-certificates.md) | Planning | Owner-side steps for macOS signing: Team ID, the two Developer ID certificates, the notarization key and the CI secrets. The pipeline itself is the macOS plan's section 9. |
 | 2026-09-30 | [release-workflow](2026-09-30-release-workflow.md) | Active | How releases are developed: a `release/X.Y.Z` branch per release (several may be open), one `feat/*` branch and plan per feature (started from `main` until its release is chosen), a short release index on the release branch, and a patch lane that may not change behavior on shipped platforms. Adds the `Release:` plan field and its lint. Worktrees postponed. |
 | 2026-10-01 | [cli-terminal-output](2026-10-01-cli-terminal-output.md) | Done | Shipped in 1.2.1: in a terminal, `knaif run` shows the plan and steps as a flowchart with the ffmpeg command, curated errors, colors and per-phase timings (total excludes prompt waits); llama.cpp's own output only under `--verbose`. Piped output keeps the lines the eval lane reads. Terminal logo drafted for the owner's decision. |
