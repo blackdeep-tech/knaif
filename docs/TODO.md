@@ -1007,7 +1007,9 @@ This **Open / Next** section is the live backlog (originally distilled from the
     ~120 ms warm for all four CUDA libs, so it buys no startup time. Weigh against the
     `90-virtual` forward-compat PTX rationale in NATIVE.md §10.
 
-- [ ] **macOS support — now planned, not deferred.**
+- [x] **macOS support — shipped in knaif 1.3.0 (2026-10-16).** The record below is the planning history.
+  [macos-support](plans/2026-08-02-macos-support.md) stays open only to reconcile its unticked tasks.
+  Was: **macOS support — now planned, not deferred.**
   [plans/2026-08-02-macos-support.md](plans/2026-08-02-macos-support.md) (Planning, not started).
   macOS has been out of scope since the dual-runtime plan's Phase 9 and is still listed as a
   limitation in [NATIVE.md](NATIVE.md) §12. **The inference question is settled by reading the

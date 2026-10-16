@@ -648,10 +648,12 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
   offers it on first run when it detects an eligible GPU (§5.5).
   Both OSes now emit a real payload from `package.sh --kind=cuda` — through 1.0.x, Windows produced
   the historical static-with-redist *app* instead, so a Windows user had nothing to install at all.
-- **CI** — there is no `.github/workflows/` yet; v1 gates on **local** green. CI + `release.yml` +
-  eval-parity are tracked in the same post-v1 plan (they need the final org, so they land after the
-  transfer).
-- **macOS** — no installers/notarization; explicitly out for v1.
+- **CI** — `.github/workflows/ci.yml` gates every PR (Python, native, site, packaging, and a macOS
+  runner for native and installer changes); `release.yml` packages Linux and signs macOS. The L3/L4
+  evidence runs stay local (RELEASE.md §4).
+- **macOS** — supported from 1.3.0: Apple Silicon, macOS 12 or later, the `metal` kind; a signed and
+  notarized `.pkg` and `.zip`, and a Homebrew cask (`blackdeep-tech/homebrew-knaif`). Intel Macs are not
+  supported.
 - **Linux CPU floor** — the CPU artifact is glibc-linked; a static-musl floor build is a possible
   fast-follow (CUDA/Vulkan need glibc + the vendor driver regardless).
 - **Persistent daemon** — built, opt-in (§5.7): repeat GPU runs drop from ~2.6 s to ~0.7 s on CUDA.

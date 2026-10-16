@@ -4,6 +4,13 @@
 **Owner:** native/packaging · **Ref:** [`installers/macos/README.md`](../../installers/macos/README.md) (placeholder this plan replaces) · [`installers/package.sh`](../../installers/package.sh) · [`docs/NATIVE.md`](../NATIVE.md) §5, §9, §10, §12 · [`docs/RELEASE.md`](../RELEASE.md) · [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) (C3 matrix, §*Out of scope*)
 **Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
 
+> **Shipped in knaif 1.3.0 (2026-10-16).** macOS is a supported platform: the signed and notarized
+> `.pkg` and `.zip`, the Homebrew cask, every gate passed (release-1.3.0, Evidence). The plan stays
+> Active until its unticked tasks are reconciled: round 2 appears to have done several without
+> ticking them (the clean room in `evals/runs/2026-10-12_r130-macos_cleanroom` looks like E3, E4 and
+> E6; each needs checking against its task before it is ticked); what is genuinely open (D4 unified
+> memory, G6 the CI hand-off, for example) moves to TODO.md, then this plan closes.
+
 > **Synced with 1.2.0 on 2026-09-30** (merge of `main` into this branch, done on Windows). What
 > changed for the remaining work:
 > - **C0 is superseded.** Release 1.2 re-locked both snapshots for the shipped models; the merge
