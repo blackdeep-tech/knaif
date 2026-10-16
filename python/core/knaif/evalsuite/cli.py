@@ -2180,6 +2180,42 @@ def load_plans(path: Path) -> dict[tuple[str, int], Any]:
     return plans
 
 
+def cmd_shards(args: argparse.Namespace) -> None:
+    """Pre-draw one cell's `native --only` shards and a manifest naming the corpus they came from."""
+    from .corpus import load_corpus
+    from .shards import draw_shards
+
+    corpus_path = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    if not corpus_path.exists():
+        sys.exit(f"Corpus not found: {corpus_path}")
+    corpus = load_corpus(corpus_path)
+    try:
+        shards = draw_shards(corpus, count=args.count, rows=args.rows)
+    except ValueError as exc:
+        sys.exit(str(exc))
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    entries = []
+    for k, shard in enumerate(shards):
+        name = f"shard-{k:02d}.json"
+        (out / name).write_text(json.dumps([list(p) for p in shard]) + "\n", encoding="utf-8")
+        entries.append({"file": name, "rows": len(shard)})
+    manifest = {
+        "skill": args.skill,
+        # The file name only: the manifest travels between machines and into public runs.
+        "corpus": corpus_path.name,
+        "corpus_sha256": hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
+        "rows_requested": args.rows,
+        "total": sum(e["rows"] for e in entries),
+        "count": len(entries),
+        "method": "evenly spaced in corpus order, dealt round-robin",
+        "shards": entries,
+    }
+    (out / "shards.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(f"{manifest['total']} utterances in {len(entries)} shards -> {out}")
+
+
 def cmd_rerun_set(args: argparse.Namespace) -> None:
     """The rows a composed cell must re-run: every base row whose reused plan differs in full, or
     that has none. Written as a `native --only` file (R5c T9b)."""
@@ -2674,6 +2710,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_rr.add_argument("--plans", required=True, metavar="FILE", help="Reused plans (.jsonl)")
     p_rr.add_argument("--out", required=True, metavar="FILE", help="The `--only` file to write")
 
+    # shards — pre-drawn `--only` files that split one L4 cell across CI jobs
+    p_sh = sub.add_parser(
+        "shards",
+        help="Pre-draw a cell's rows as `native --only` shards, for running it on several machines",
+        description=(
+            "Picks the whole corpus, or --rows utterances evenly spaced in corpus order, and deals "
+            "them round-robin into --count shard files plus a shards.json manifest that names the "
+            "corpus by sha256. Deterministic, so the shards can be written into a run before any "
+            "result and redrawn anywhere to check them."
+        ),
+    )
+    p_sh.add_argument("--skill", required=True)
+    p_sh.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
+    p_sh.add_argument("--count", required=True, type=int, help="How many shards")
+    p_sh.add_argument("--rows", type=int, default=None, help="Utterances to draw (default: all)")
+    p_sh.add_argument("--out", required=True, metavar="DIR")
+
     # accept-native — L4d, the only check that can buy `supported`
     p_accn = sub.add_parser(
         "accept-native",
@@ -3021,6 +3074,7 @@ def main() -> None:
         "accept-native": cmd_accept_native,
         "compose": cmd_compose,
         "rerun-set": cmd_rerun_set,
+        "shards": cmd_shards,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,
