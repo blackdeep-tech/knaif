@@ -1,10 +1,15 @@
 # Daemon mode and prompt-prefix reuse
 
-**Status:** Active · **Created:** 2026-10-01 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-01 · **Completed:** 2026-10-16
 **Owner:** native CLI · **Ref:** [TODO.md](../TODO.md) (*Daemon mode*; *Inference latency: daemon +
 prompt-prefix KV reuse*) · [PERFORMANCE.md §6](../PERFORMANCE.md) ·
 [release-1.2.1](2026-09-30-release-1.2.1.md) (*Deferred*)
 **Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
+
+> **Status note (2026-10-16).** Shipped in knaif 1.3.0: the opt-in daemon (`knaif daemon
+> start|status|stop`, `run --daemon`), with plans byte-identical in process and through the daemon on
+> Windows, Linux and macOS (release-1.3.0, Evidence). Prompt-prefix reuse stays off (D2: it changes
+> plans).
 
 **Goal:** Cut the time of a `knaif run` by keeping the model loaded between runs (daemon mode)
 and by not re-processing the fixed part of the prompt on every request (prefix reuse), without
