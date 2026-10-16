@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Render the Homebrew formula for a published macOS .zip (G5, D19).
+# Render the Homebrew cask for a published macOS .zip (G5, D19 as amended 2026-10-16).
 #
-#   installers/macos/homebrew/render-formula.sh dist/knaif-<ver>-macos-arm64.zip [> knaif.rb]
+#   installers/macos/homebrew/render-cask.sh dist/knaif-<ver>-macos-arm64.zip [> knaif.rb]
 #
 # Run it on the FINAL notarized .zip — the file whose SHA256SUMS row is published — and commit the
-# output to the tap as Formula/knaif.rb. The version comes from the file name, the checksum from
+# output to the tap as Casks/knaif.rb. The version comes from the file name, the checksum from
 # its bytes and the model from the manifest; nothing is typed by hand.
 
 set -euo pipefail
@@ -35,4 +35,4 @@ MODEL="$(awk '/^recommendations:/{r=1; next} r && /^[^ #]/{r=0} r && $1=="deskto
   "$ROOT/contracts/models/model-manifest.yaml")"
 [ -n "$MODEL" ] || { echo "ERROR: no recommendations.desktop in the model manifest" >&2; exit 1; }
 
-sed -e "s|@VERSION@|$VER|g" -e "s|@SHA256@|$SHA|g" -e "s|@MODEL@|$MODEL|g" "$HERE/knaif.rb.in"
+sed -e "s|@VERSION@|$VER|g" -e "s|@SHA256@|$SHA|g" -e "s|@MODEL@|$MODEL|g" "$HERE/knaif-cask.rb.in"

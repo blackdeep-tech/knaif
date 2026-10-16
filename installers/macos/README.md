@@ -1,7 +1,7 @@
 # `installers/macos/` — macOS packaging, signing and the clean room
 
 The macOS release: an arm64 `.zip` (portable tree) and a `.pkg` (installer with an options page),
-both signed with Developer ID and notarized, the `.pkg` stapled, plus a Homebrew formula. The
+both signed with Developer ID and notarized, the `.pkg` stapled, plus a Homebrew cask. The
 plan and its decisions are in `docs/plans/2026-08-02-macos-support.md` (D1–D19); this file is how
 to run it.
 
@@ -22,7 +22,7 @@ to run it.
 | `notarize.sh` | submit, read the log even on success, staple a `.pkg` (F3b, F6) |
 | `release.sh` | the whole order: sign → `.zip` → notarize → `.pkg` → notarize → staple → F7 checks |
 | `clean-room.sh` | run inside the macOS 12 VM: E3, E4 and E6's install half |
-| `homebrew/` | the formula template and its renderer (D19) |
+| `homebrew/` | the cask template and its renderer (D19, amended 2026-10-16) |
 
 ## Prerequisites (on the Mac)
 
@@ -113,11 +113,15 @@ the same quarantined files. `sample.pdf` comes from `just eval-fixtures document
 After the release is published (RELEASE.md §5 step 9):
 
 ```bash
-installers/macos/homebrew/render-formula.sh dist/knaif-<ver>-macos-arm64.zip > knaif.rb
-brew install --build-from-source ./knaif.rb && brew test knaif
+installers/macos/homebrew/render-cask.sh dist/knaif-<ver>-macos-arm64.zip > knaif.rb
 ```
 
-Commit it to `blackdeep-tech/homebrew-knaif` as `Formula/knaif.rb`. Watch the first install for
-Homebrew rewriting the dylibs' install names (its relocation step): if it does, it re-signs them
-ad hoc and the Developer ID signature is gone from the installed copy. That would be a finding for
-the plan, not something to patch around in the formula.
+Commit it to `blackdeep-tech/homebrew-knaif` as `Casks/knaif.rb`, then on a Mac:
+`brew update && brew install blackdeep-tech/knaif/knaif`, `knaif --version`, `knaif skills list`
+and one real request.
+
+**A cask, not a formula.** 1.3.0 first shipped a formula, and the warning this section carried came
+true: Homebrew's formula install rewrote the bundled `.dylib` install names, re-signed them ad hoc,
+and `knaif` (Developer ID, hardened runtime) refused to load them — `dyld: Library not loaded:
+@rpath/libggml-base.0.dylib … different Team IDs` (2026-10-16). A cask unpacks the notarized `.zip`
+untouched and only links the executable, so every signature survives.
