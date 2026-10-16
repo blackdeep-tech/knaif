@@ -56,7 +56,7 @@ import { CardGrid, Card, LinkCard } from '@astrojs/starlight/components';
 
 A small local model reads a request and emits a JSON plan — nothing else. It cannot run a
 command, cannot write a shell string, and never owns a safety decision. Deterministic code
-validates that plan, expands it into concrete steps, asks before it writes, and executes it.
+validates that plan, expands it into concrete steps, asks before it replaces a file, and executes it.
 You pay the AI cost once, while building; the shipped thing runs on a 4B model on the user's
 own machine, for free, the same way every time.
 

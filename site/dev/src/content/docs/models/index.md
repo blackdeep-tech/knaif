@@ -135,7 +135,7 @@ their own rows. The 4B v2 (FT cycle `sft-v4-flat`) lifts ffmpeg from 0.921 to **
 documents from 0.970 to **0.976** under the same grader; the 1.7B v2 (`sft-v9-flat`) lifts ffmpeg
 from 0.878 to **0.920** and passes the safety set it missed by one request as v1. Both are
 measured on the shipped binary per backend before release; the 1.7B has its own acceptance bar and
-misses a few thin ffmpeg slices on Vulkan and CPU, which ships by owner decision and is listed on
+misses a few thin ffmpeg slices on Vulkan, Metal and CPU, which ships by owner decision and is listed on
 the model card.
 
 Fine-tuning also **shrinks the quantization tax** rather than merely raising the score: the
