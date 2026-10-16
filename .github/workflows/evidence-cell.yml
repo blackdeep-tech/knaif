@@ -7,10 +7,11 @@
 # acceptance records are written from the downloaded boards, by a person.
 #
 # Rules this file keeps (python/core/tests/test_evidence_workflow.py):
-#   - started by hand only, so no fork, push or PR can run it, and it can write nothing back;
+#   - started by hand (no fork or PR can run it; see the T0 push trigger below), and it can
+#     write nothing back;
 #   - every file it uses is checked first: the release file against the release's SHA256SUMS,
 #     the model against the sha256 in contracts/models/model-manifest.yaml;
-#   - no repository, branch or machine is named, so it runs unchanged in a fork.
+#   - no repository or machine is named, so it runs unchanged in a fork.
 #
 # The checkout is the ref the workflow is started on: its corpus, harness and fixtures. The
 # binary is the release named in `release`. For a release's own cells, start it on the release
@@ -42,6 +43,11 @@ on:
       shards:
         description: "How many runners share the rows"
         default: "1"
+  # T0 EXPERIMENT ONLY — REMOVE BEFORE MERGING. While the method is an experiment it runs from
+  # its own branch (owner, 2026-10-17): a push there starts T0's three fixed cells, and only when
+  # the commit message contains [t0] (the `setup` job's `if`). Everything else needs a person.
+  push:
+    branches: [feat/faster-release-evidence]
 
 permissions:
   contents: read
@@ -51,47 +57,55 @@ defaults:
     shell: bash
 
 jobs:
-  draw:
+  # Which cells run: the one asked for by hand, or T0's three fixed cells on a [t0] push. One
+  # matrix entry per shard; each shard job redraws the cell's shards (deterministic) and runs its
+  # own, so no job waits on another's upload.
+  setup:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[t0]')
     runs-on: ubuntu-latest
     outputs:
-      shards: ${{ steps.draw.outputs.shards }}
+      cells: ${{ steps.cells.outputs.cells }}
     env:
-      SKILL: ${{ inputs.skill }}
-      ROWS: ${{ inputs.rows }}
-      COUNT: ${{ inputs.shards }}
+      EVENT: ${{ github.event_name }}
+      IN_RELEASE: ${{ inputs.release }}
+      IN_OS: ${{ inputs.os }}
+      IN_SKILL: ${{ inputs.skill }}
+      IN_MODEL: ${{ inputs.model }}
+      IN_ROWS: ${{ inputs.rows }}
+      IN_SHARDS: ${{ inputs.shards }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - name: Install the harness
+      - id: cells
         run: |
-          uv venv --python 3.12
-          uv pip install -e python/core
-      - name: Draw the shards
-        id: draw
-        run: |
-          rows_arg=()
-          if [ -n "$ROWS" ]; then rows_arg=(--rows "$ROWS"); fi
-          uv run --no-sync python -m knaif.evalsuite shards --skill "$SKILL" --count "$COUNT" \
-            "${rows_arg[@]}" --out shards
-          echo "shards=$(uv run --no-sync python -c 'import json; print(json.dumps(list(range(json.load(open("shards/shards.json"))["count"]))))')" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: shards
-          path: shards/
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          e = os.environ
+          if e["EVENT"] == "workflow_dispatch":
+              cells = [dict(release=e["IN_RELEASE"], os=e["IN_OS"], skill=e["IN_SKILL"],
+                            model=e["IN_MODEL"], rows=e["IN_ROWS"], shards=int(e["IN_SHARDS"]))]
+          else:  # T0 (plan, Tasks): CPU on Windows and Linux, Metal on macOS, 1.3.0's files.
+              t0 = dict(release="v1.3.0", skill="ffmpeg", model="knaif-qwen3-4b-v2", shards=1)
+              cells = [dict(t0, os="windows", rows="100"), dict(t0, os="linux", rows="100"),
+                       dict(t0, os="macos", rows="20")]
+          runner = {"windows": "windows-latest", "linux": "ubuntu-latest", "macos": "macos-15"}
+          include = [dict(c, runner=runner[c["os"]], shard=k) for c in cells for k in range(c["shards"])]
+          print("cells=" + json.dumps(include))
+          PY
 
   cell:
-    needs: draw
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.draw.outputs.shards) }}
-    runs-on: ${{ inputs.os == 'windows' && 'windows-latest' || inputs.os == 'macos' && 'macos-15' || 'ubuntu-latest' }}
+        include: ${{ fromJSON(needs.setup.outputs.cells) }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     env:
-      RELEASE: ${{ inputs.release }}
-      OS: ${{ inputs.os }}
-      SKILL: ${{ inputs.skill }}
-      MODEL: ${{ inputs.model }}
+      RELEASE: ${{ matrix.release }}
+      OS: ${{ matrix.os }}
+      SKILL: ${{ matrix.skill }}
+      MODEL: ${{ matrix.model }}
+      ROWS: ${{ matrix.rows }}
+      COUNT: ${{ matrix.shards }}
       SHARD: ${{ matrix.shard }}
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -184,10 +198,11 @@ jobs:
       - name: Regenerate the fixtures
         run: uv run --no-sync python -m knaif.evalsuite fixtures regen --skill "$SKILL"
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: shards
-          path: shards
+      - name: Draw the cell's shards (the same draw in every job)
+        run: |
+          rows_arg=()
+          if [ -n "$ROWS" ]; then rows_arg=(--rows "$ROWS"); fi
+          uv run --no-sync python -m knaif.evalsuite shards --skill "$SKILL" --count "$COUNT"             "${rows_arg[@]}" --out shards
 
       # The lane is written here, from what was downloaded: relative paths, resolved against the
       # checkout, so nothing about this runner ends up in the config.
@@ -235,5 +250,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cell-${{ inputs.os }}-${{ inputs.skill }}-${{ inputs.model }}-shard-${{ matrix.shard }}
-          path: out/
+          name: cell-${{ matrix.os }}-${{ matrix.skill }}-${{ matrix.model }}-shard-${{ matrix.shard }}
+          path: |
+            out/
+            shards/shards.json

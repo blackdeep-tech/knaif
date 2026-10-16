@@ -222,6 +222,11 @@ artifacts; the acceptance records are written on this box from them, so nothing 
 infrastructure change with no product code. GitHub offers a manually dispatched workflow only when
 its file is on the default branch, and T0(d)/(e) must measure the real public runners (4-core
 x64, Apple Silicon); private-repo runners are smaller and metered, so they would not predict them.
+*Amended 2026-10-17 (owner):* not yet — the method is still an experiment. Until T0 shows it can
+work, the workflow stays on this plan's branch and runs from there: a push to that branch whose
+commit message contains `[t0]` starts T0's three fixed cells on the same public runners. That push
+trigger is removed before the workflow is ever merged; `main` gets it only once the method is
+adopted.
 
 **C3. Decide before using it (a new measurement condition).** The cell is measured on GitHub's
 server CPUs, not this box's Ryzen: llama.cpp may pick a different CPU code path and a few plans can
@@ -508,8 +513,9 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       dropped 2026-10-15 with Part F.)*
 - [ ] **T0b. C1/C2 workflow:** a `workflow_dispatch` cell workflow (shard matrix for CPU and
       macOS, download and verify the frozen files, cached models, compose + safety +
-      `accept-native` job, artifacts). **First half built 2026-10-16**, so that T0(d)/(e) can run
-      once it is on `main`: `evalsuite shards` (pre-drawn `--only` files, evenly spaced in corpus
+      `accept-native` job, artifacts). **First half built 2026-10-16**, and T0(d)/(e) run from
+      this branch with a `[t0]` commit (C2's 2026-10-17 amendment; **remove the push trigger
+      before merging**): `evalsuite shards` (pre-drawn `--only` files, evenly spaced in corpus
       order and dealt round-robin, with a manifest naming the corpus sha256) and
       `.github/workflows/evidence-cell.yml` (a published release's file checked against its
       `SHA256SUMS`, the model against the manifest's sha256 and cached by it, the skill's system
