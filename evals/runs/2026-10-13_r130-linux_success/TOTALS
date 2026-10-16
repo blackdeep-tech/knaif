@@ -1,0 +1,16 @@
+4b/cuda/ffmpeg.log 861 2.6
+4b/cuda/documents.log 164 1.5
+1.7b/cuda/ffmpeg.log 861 2.2
+1.7b/cuda/documents.log 164 1.1
+4b/cpu/sample/ffmpeg.log 115 15
+4b/cpu/sample/documents.log 35 15
+1.7b/cpu/sample/ffmpeg.log 115 10
+1.7b/cpu/sample/documents.log 35 10
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/4b/ffmpeg.inprocess.jsonl 115 8
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/4b/documents.inprocess.jsonl 35 8
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/4b/ffmpeg.daemon.jsonl 115 8
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/4b/documents.daemon.jsonl 35 8
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/1.7b/ffmpeg.inprocess.jsonl 115 5
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/1.7b/documents.inprocess.jsonl 35 5
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/1.7b/ffmpeg.daemon.jsonl 115 5
+../../parity/2026-10-13_r130-linux-daemon-plan-equality/1.7b/documents.daemon.jsonl 35 5

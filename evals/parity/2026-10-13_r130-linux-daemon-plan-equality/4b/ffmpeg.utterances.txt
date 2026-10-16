@@ -1,0 +1,115 @@
+extract the audio from clip.mp4 as mp3
+encode clip.mp4 at crf 22
+compress clip.mp4 to crf18
+convert clip.mp4 with decent quality
+upload clip.mp4 to WhatsApp
+Ton aus clip.mp4 entfernen
+clip_4k.mp4 auf 720p skalieren
+сжать видео clip.mp4
+bulk convert all videos in folder to mp4 with h264
+process every file in the directory and make mp4s
+пакетно конвертирай всички видеа в mp4
+play clip.mp4 backwards
+обърни clip.mp4
+clip.mp4 umkehren und speichern
+clip.mp4 stummschalten
+Zwei MP4-Dateien zusammenfuegen
+upscale clip.mp4 to 4K
+extract aac audio from clip.mp4
+компресирай clip_ctr.mp4 под 500 KB
+компресирай clip.mp4 с CRF 30
+prepare clip.mp4 for WhatsApp
+将clip.mp4准备好发布到Instagram
+clip_4k.mp4 fuer E-Mail-Anhang komprimieren
+将clip.mov转换为MP4
+resize the 4K video to 1080p
+Das 4K-Video auf 1080p herunterskalieren
+convert audio.mp3 to aac
+prepare clip.mov for TikTok
+trim clip.mp4 to the first 5 seconds, then resize it to 720p
+изрежи clip.mp4 до 5 секунди и го преоразмери до 720p
+make the video smaller and ready for WhatsApp
+извлечи само звука от clip.mp4 между 3 и 5 секунда като mp3
+convert clip.mov to mp4 and then trim it to 3 seconds
+change clip.mov to mp4 format and cut to the first 3 seconds
+clip.mov nach MP4 konvertieren und auf 3 Sekunden kuerzen
+play the video backwards and make it smaller
+将clip.mp4加速2倍并去除音频
+преоразмери 4K клипа до 720p и го заглуши
+cut to 2s then optimize for Instagram
+play clip_no_audio backwards and save as webm
+将无音频视频倒放并保存为WebM
+convert the mp3 to wav and lower the sample rate to 22050 Hz
+изрежи clip.mov до 4 секунди и извлечи звука като aac
+extract audio from clip.mov as mp3 and then reduce its bitrate
+improve the video quality magically
+convert clip.mp4 and overwrite the original file
+convert videos from the system root directory
+cut clip.mp4 to a 1-frame video clip
+convert clip.mp4 to mkv
+hey can u compress clip.mp4 lol
+scale clip.mp4 to zero resolution
+Video auf 720p skalieren und Seitenverhaeltnis behalten
+convert a transport stream to mp4
+clip.mp4 verlustfrei neu kodieren
+tone map the HDR video to SDR
+конвертирай clip.mp4 в mp4 с H.264
+изрежи clip.mp4 от 2 до 7 секунди
+отрежи clip.mp4 от 2 до 7 секунди
+пусни clip.mp4 с двойна скорост
+направи clip.mp4 подходящ за WhatsApp
+将clip.mp4缩小到720p
+将clip.mp4反向播放
+从clip.mp4的第3秒截取缩略图
+clip.mp4 nach AV1 konvertieren
+将clip.mp4转换为AV1
+Standbild aus der Mitte von clip.mp4
+извлечи кадър от средата на clip.mp4
+Das 4K-Video auf 720p komprimieren
+grab every 10th frame from clip.mp4 as thumbnails
+extract frames at 1 frame per second
+slow motion the 4K clip to 0.25x
+create a thumbnail from audio.mp3
+clip.mp4 mit mittlerer Qualitaet komprimieren
+compresser clip_ctr.mp4 pour envoi par email
+reduire la taille de clip_ctr.mp4
+mettre clip_4k.mp4 en 720p
+уменьшить разрешение clip_4k.mp4 до 720p
+Alle Videos nach HEVC konvertieren
+extract a thumbnail from the end of clip.mp4
+Die Dateigroe von clip_ctr.mp4 um 50% reduzieren
+make a 4K still from clip.mp4 at 5s
+clip.mp4 um 6dB lauter machen
+усили звука на clip.mp4 с 6dB
+join clip.mov and clip.mp4 and resize to full HD
+обърни clip.mp4 с главата надолу
+clip.mp4 um 90 Grad drehen und horizontal spiegeln
+завърти clip.mp4 на 90 градуса и го огледай хоризонтално
+Lautstärke von clip.mp4 verdoppeln
+将三个视频合并为merged.mp4
+strip audio from the no-audio clip
+convert clip_mov to mkv
+将无音频视频剪切到3秒
+Das 4K-Video rueckwaerts abspielen
+audio.mp3 um 6dB lauter machen
+normalize audio.mp3
+намали звука на audio.mp3 наполовина
+clip.mp4 um 90 Grad drehen und komprimieren
+trim clip.mp4 to 5 seconds and flip it horizontally
+resize clip_4k to 720p and then strip the audio
+play clip_4k backwards then optimize for Instagram
+将4K文件压缩到可以邮件发送的大小
+изрежи mov файла от 1 до 5 секунди
+resize 4K to 1080p and optimize for YouTube upload
+将4K视频压缩到1080p并为YouTube优化
+clip.mp4 auf 1080x1080 mit schwarzen Balken einpassen
+stretch clip.mp4 to 1280x720
+crop clip.mp4 to 4:5 for Instagram
+Just give me a raw ffmpeg command.
+konvertiere clip.mov nach mp4, skaliere auf 480p und entferne die Tonspur
+поверни clip.mp4 на 90 градусов по часовой стрелке, измени размер до 480p и сожми его
+обрежь clip.mp4 до первых 6 секунд, измени размер до 540p и убери звук
+pull the soundtrack out of clip.mp4 to mp3
+rip just the audio from clip.mp4 as mp3
+grab one frame from clip.mp4 at the 3s mark as png
+play clip.mp4 backwards and scale it down to 480p

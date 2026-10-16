@@ -1,0 +1,4 @@
+windows-cuda/linux-cuda: 861 shared rows (in one board only: 0)
+  decision  flips   0: both-correct 0, only windows-cuda correct 0, only linux-cuda correct 0, both-wrong 0
+  canonical flips   0: both-correct 0, only windows-cuda correct 0, only linux-cuda correct 0, both-wrong 0
+{"label": "windows-cuda/linux-cuda", "shared": 861, "decision": {"flips": 0, "both_correct": [], "only_a": [], "only_b": [], "both_wrong": []}, "canonical": {"flips": 0, "both_correct": [], "only_a": [], "only_b": [], "both_wrong": []}}

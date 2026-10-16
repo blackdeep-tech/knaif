@@ -8,14 +8,13 @@
 your filesystem.**
 
 ```console
-$ knaif run ffmpeg "convert clip.mp4 to webm at 720p and drop the audio"
-
-  $ ffmpeg -y -i clip.mp4 -vf scale=-2:720 -an clip_converted.webm
-
-Run this? [y/N]
+$ knaif run ffmpeg "resize clip.mp4 to 720p"
+running: ffmpeg -y -i clip.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_resized.mp4
+✓ clip_resized.mp4
 ```
 
-knaif runs a **local** model. Nothing leaves your machine.
+knaif runs a **local** model. Nothing leaves your machine. Add `--dry-run` to only print the
+command, or `--confirm` to approve each step before it runs.
 
 ## What it is
 
@@ -106,9 +105,10 @@ calibration, caveats, and a one-command harness to reproduce all of it:
 
 ## Status
 
-**v1.2.0** — new models (`knaif-qwen3-4b-v2`, the default, and `knaif-qwen3-1.7b-v2`), and the
-native binary now runs every step of a multi-step plan. Measured on the shipped binary per OS and
-backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on the
+**v1.3.0** — knaif runs on macOS (Apple Silicon, with Metal) as well as Windows and Linux, and an
+optional model daemon keeps the model loaded between runs. Same models as 1.2.0
+(`knaif-qwen3-4b-v2`, the default, and `knaif-qwen3-1.7b-v2`). Measured on the shipped binary per
+OS and backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on the
 [model card](https://huggingface.co/blackdeep/knaif).
 
 | | |
@@ -116,8 +116,8 @@ backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on 
 | **Windows** | x64, **Windows 10 or later** |
 | **Linux** | x64, **glibc 2.34+ and libstdc++ with `GLIBCXX_3.4.30`** — Ubuntu 22.04+, Debian 12+, Fedora 36+, Mint 21+ |
 | **Not supported** | RHEL / Rocky / Alma 9 — glibc is new enough, but its `libstdc++` is one version short |
-| **macOS** | not yet — core is cross-platform, packaging is a fast-follow |
-| **GPU** | CPU and Vulkan in every artifact; NVIDIA cards add CUDA with `knaif backend install cuda` |
+| **macOS** | Apple Silicon, **macOS 12 or later** — a signed and notarized `.pkg` or `.zip`, or `brew install blackdeep-tech/knaif/knaif`; Intel Macs are not supported |
+| **GPU** | Windows and Linux: CPU and Vulkan in every artifact; NVIDIA cards add CUDA with `knaif backend install cuda`. macOS: Metal |
 | **Skills** | `ffmpeg` and `documents` are production; `io` is stale and under rebuild |
 | **Windows binaries** | signed by Blackdeep Technologies Ltd — SmartScreen may still warn on a new release until it builds download reputation (More info → Run anyway; verify the checksum first) |
 | **Python package** | on PyPI as [`knaif`](https://pypi.org/project/knaif/) — `pip install knaif` |
@@ -131,7 +131,8 @@ value.
 ## Two ways to use it
 
 **As a tool** — the native CLI, a single binary, no Python needed. Download from
-[Releases](https://github.com/blackdeep-tech/knaif/releases), then:
+[knaif.org](https://knaif.org/download) or [Releases](https://github.com/blackdeep-tech/knaif/releases)
+(on a Mac, also `brew install blackdeep-tech/knaif/knaif`), then:
 
 ```console
 $ knaif models pull knaif-qwen3-4b-v2        # ~2.5 GB, verified against a pinned SHA-256
@@ -139,7 +140,12 @@ $ knaif run ffmpeg "make a thumbnail from the first frame of clip.mp4"
 $ knaif run ffmpeg --dry-run "..."           # print the command, don't execute
 $ knaif plan --skill ffmpeg "..."            # the validated plan envelope, as JSON
 $ knaif skills deps                          # which external tools are missing
+$ knaif daemon start                         # optional: keep the model loaded between runs
 ```
+
+The daemon makes repeat runs faster on a GPU (about 2.6 s to 0.7 s on an NVIDIA card); on a CPU it
+saves nothing measurable. Runs use it when it is running and load the model themselves otherwise;
+it stops after 10 idle minutes.
 
 `run` executes for real and acts straight away; `--confirm` asks `Proceed? [Y/n]` first. It asks
 `Replace <file>? [y/N]` before replacing a file that already exists (Enter keeps it; `--overwrite`

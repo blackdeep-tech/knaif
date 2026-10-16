@@ -1,0 +1,35 @@
+within sample.pdf find gamma
+compress sample.pdf
+delete page 2 from sample.pdf
+extract the text from sample.pdf
+where does Alpha appear in sample.pdf
+rotate sample.pdf 90 degrees
+turn page 2 of sample.pdf 180 degrees
+move page 3 of sample.pdf to the front
+rearrange sample.pdf as 2,1,3
+merge sample.pdf and sample-scanned.pdf into merged.pdf
+stitch sample.pdf and sample-scanned.pdf into out.pdf
+put a DRAFT stamp on sample.pdf
+encrypt sample.pdf using the password hunter2
+export sample.md as txt
+compress sample.pdf
+shrink sample.pdf
+make sample-scanned.pdf searchable
+turn sample-scanned.pdf into a searchable pdf
+rotate sample.pdf 90 degrees and then compress it
+open sample-protected.pdf with the password secret
+I want to be able to Ctrl+F through sample-scanned.pdf, but right now it behaves like a flat image.
+sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.
+I'd rather send the client one attachment than two - combine sample.pdf and sample-scanned.pdf into one.pdf.
+Numérote les pages de sample.pdf.
+Раздели страници 2-3 от sample.pdf в нов файл.
+watermark sample.pdf with CONFIDENTIAL and then compress the result
+extract the text from the first 2 pages of sample.pdf
+extract the first two pages from sample.pdf
+pull the first 2 pages of sample.pdf
+search sample.pdf for the term invoice
+where does invoice appear in sample.pdf
+convert sample.docx to pdf
+comprime sample.pdf
+turn sample.pdf 90 degrees and shrink the file
+pull pages 1-2 of sample.pdf into a separate pdf and shrink the file

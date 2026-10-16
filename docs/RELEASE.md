@@ -79,6 +79,8 @@ site, CI and eval records may go straight to `main`.
    Active on the release branch. On `main`, add the release to *Releases in flight* in
    [plans/README.md](plans/README.md), and leave `main`'s copy of the index alone from then on so
    the two never conflict when the release merges back.
+   **The first task on a new minor branch is the toolchain and llama.cpp refresh** (below), before
+   any feature lands and before any eval evidence is recorded.
 3. **Develop** — `feat/*` and `fix/*` PRs into the release branch. Merge `main` in whenever it moves.
 4. **Freeze** — no new scope. Bump the version (§0). Write the `CHANGELOG.md` section from the
    index's scope table plus `git log --first-parent release/X.Y.Z`, so it is in the commit that gets
@@ -88,6 +90,40 @@ site, CI and eval records may go straight to `main`.
 6. **Ship** — §5: merge to `main`, tag the tested commit, publish. Merge `main` into every other
    open release branch. Delete the release branch.
 7. **Close** — set the index to Done and remove its *Releases in flight* row.
+
+### Toolchain and llama.cpp refresh — first task of every minor
+
+Nothing bumps these pins automatically, and between minors they hold still on purpose: speed
+figures and parity evidence name the llama.cpp version they were measured on
+([PERFORMANCE.md](PERFORMANCE.md)), so a bump in the middle of a release would make finished
+evidence describe a build that no longer ships. Bumping at the start of each minor keeps the gap to
+upstream at one cycle, and the release's own gates (§4) then measure the new versions. Applies from
+the first minor opened after 1.3.0. **Patch releases keep the previous tag's pins**: a llama.cpp
+bump can change model output, which the patch lane does not allow.
+
+On a `chore/deps-X.Y.0` branch into the release, one PR:
+
+| Pin | Files that must agree |
+|---|---|
+| Rust toolchain (latest stable) | `rust-toolchain.toml` `channel`, `mise.toml` `rust`, `Cargo.toml` `rust-version`, the stack table in [NATIVE.md](NATIVE.md) |
+| `llama-cpp-2` + `llama-cpp-sys-2` (same version) | `native/crates/knaif-llm/Cargo.toml`, `Cargo.lock`, [NATIVE.md](NATIVE.md) |
+| `llama-cpp-python` | `uv.lock` (`uv lock --upgrade-package llama-cpp-python`) |
+
+Before the PR:
+
+- `just check-native` and `just test-native`. A new Rust release usually means a few new clippy
+  lints, and the warnings count as errors.
+- Re-read the comments in `knaif-llm/Cargo.toml` against the new wrapper: `default-features = false`
+  keeps `openmp` out, and the direct `llama-cpp-sys-2` dependency is only there because the
+  wrapper does not forward `vulkan`. Drop that workaround if the wrapper now forwards it.
+- Build every kind the release ships (CPU, Vulkan, CUDA, Metal) and check offload is really on the
+  GPU (`detect_backend()` and placement, [INFERENCE.md](INFERENCE.md)).
+- `just check-contracts`, then `just parity <skill> --limit 20` per skill as a quick read. The full
+  L3/L4 runs come later, in §4, on the frozen commit.
+
+If the new llama.cpp regresses (a build breaks, a backend loses offload, parity drops), keep the
+previous pin for this minor and record the reason as a Decision in the release index. Do not hold
+the release up for it.
 
 ---
 

@@ -3,7 +3,7 @@
 Plan §0 *Round 2, at the freeze*, step 6 (step 10 of the Mac's list), approved by the owner with a
 4 h budget (relayed by Deyan, 2026-10-12). Started 2026-10-12 04:18:33 (`LOG`); the automatic part
 ran until 04:35 (17 min; the last check, `host-signature/`, was written at 04:35:25). The message of
-commit `c4e1df0` and the first version of this report said 35 min; that was the documents re-run's
+commit `2aee662` and the first version of this report said 35 min; that was the documents re-run's
 time, copied here by mistake.
 
 **What was measured:** only the CI release files of run `38075857537` on the freeze commit

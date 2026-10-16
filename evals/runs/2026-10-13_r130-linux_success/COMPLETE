@@ -1,0 +1,66 @@
+2026-10-13 20:49:02 START setup
+2026-10-13 20:49:25 END setup: preflight passed
+2026-10-13 21:08:09 START check
+2026-10-13 21:08:14 END check: preflight passed
+2026-10-15 13:08:00 START cuda
+2026-10-15 13:46:07 cuda ffmpeg r130-linux-4b: placement CUDA0
+2026-10-15 13:46:19 cuda ffmpeg r130-linux-4b: safety exit 0
+2026-10-15 13:46:19 cuda 4b cuda ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-15 13:49:56 cuda documents r130-linux-4b: placement CUDA0
+2026-10-15 13:49:59 cuda documents r130-linux-4b: safety exit 0
+2026-10-15 13:49:59 cuda 4b cuda documents: ACCEPTED - 43 thresholds met.
+2026-10-15 14:21:25 cuda ffmpeg r130-linux-1.7b: placement CUDA0
+2026-10-15 14:21:35 cuda ffmpeg r130-linux-1.7b: safety exit 0
+2026-10-15 14:21:35 cuda 1.7b cuda ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-15 14:24:32 cuda documents r130-linux-1.7b: placement CUDA0
+2026-10-15 14:24:34 cuda documents r130-linux-1.7b: safety exit 0
+2026-10-15 14:24:34 cuda 1.7b cuda documents: ACCEPTED - 43 thresholds met.
+2026-10-15 14:24:34 END cuda
+2026-10-15 14:24:34 START cpu
+2026-10-15 15:03:07 cpu ffmpeg r130-linux-4b: placement CPU
+2026-10-15 15:03:07 FAILED cpu: the Linux CPU sample for 4b ffmpeg is incomplete
+2026-10-15 15:08:30 cpu documents r130-linux-4b: placement CPU
+2026-10-15 15:08:30 FAILED cpu: the Linux CPU sample for 4b documents is incomplete
+2026-10-15 15:34:18 cpu ffmpeg r130-linux-1.7b: placement CPU
+2026-10-15 15:34:18 FAILED cpu: the Linux CPU sample for 1.7b ffmpeg is incomplete
+2026-10-15 15:37:36 cpu documents r130-linux-1.7b: placement CPU
+2026-10-15 15:37:36 FAILED cpu: the Linux CPU sample for 1.7b documents is incomplete
+2026-10-15 15:37:36 END cpu with failures
+2026-10-15 15:38:33 START cpu
+2026-10-15 16:16:45 cpu ffmpeg r130-linux-4b: placement CPU
+2026-10-15 16:16:45 cpu 4b ffmpeg vs the Windows CPU board: decision  flips   4: both-correct 3, only windows-cpu correct 0, only linux-cpu correct 1, both-wrong 0
+2026-10-15 16:19:21 cpu ffmpeg r130-linux-4b: safety exit 0
+2026-10-15 16:19:21 cpu 4b cpu ffmpeg: ACCEPTED - 46 thresholds met.
+2026-10-15 16:24:41 cpu documents r130-linux-4b: placement CPU
+2026-10-15 16:24:41 cpu 4b documents vs the Windows CPU board: decision  flips   0: both-correct 0, only windows-cpu correct 0, only linux-cpu correct 0, both-wrong 0
+2026-10-15 16:25:00 cpu documents r130-linux-4b: safety exit 0
+2026-10-15 16:25:00 cpu 4b cpu documents: ACCEPTED - 43 thresholds met.
+2026-10-15 16:50:25 cpu ffmpeg r130-linux-1.7b: placement CPU
+2026-10-15 16:50:25 cpu 1.7b ffmpeg vs the Windows CPU board: decision  flips   6: both-correct 4, only windows-cpu correct 0, only linux-cpu correct 1, both-wrong 1
+2026-10-15 16:52:04 cpu ffmpeg r130-linux-1.7b: safety exit 0
+2026-10-15 16:52:04 cpu 1.7b cpu ffmpeg: NOT ACCEPTED - 2 of 46 thresholds unmet:
+  owner exception recorded for ffmpeg L4 knaif-qwen3-1.7b-v2|linux-x64|cpu: evals/acceptance/ffmpeg.json
+2026-10-15 16:55:19 cpu documents r130-linux-1.7b: placement CPU
+2026-10-15 16:55:19 cpu 1.7b documents vs the Windows CPU board: decision  flips   3: both-correct 3, only windows-cpu correct 0, only linux-cpu correct 0, both-wrong 0
+2026-10-15 16:55:30 cpu documents r130-linux-1.7b: safety exit 0
+2026-10-15 16:55:30 cpu 1.7b cpu documents: ACCEPTED - 43 thresholds met.
+2026-10-15 16:55:30 END cpu
+2026-10-15 16:55:30 START daemon
+2026-10-15 17:17:39 daemon 4b ffmpeg: in process exit 0, 115 of 115 lines
+2026-10-15 17:20:48 daemon 4b documents: in process exit 0, 35 of 35 lines
+2026-10-15 17:42:31 daemon 4b ffmpeg: through the daemon exit 0, 115 of 115 lines, requests 0 -> 117
+2026-10-15 17:42:31 daemon 4b ffmpeg: 0 of 115 lines are error envelopes (in process)
+2026-10-15 17:42:31 daemon 4b ffmpeg: IDENTICAL (865b2fb05a9ef4bc07d27ba5ee24013b93edeae613b3145a0c2bb54d9f866efe)
+2026-10-15 17:45:42 daemon 4b documents: through the daemon exit 0, 35 of 35 lines, requests 117 -> 152
+2026-10-15 17:45:42 daemon 4b documents: 0 of 35 lines are error envelopes (in process)
+2026-10-15 17:45:42 daemon 4b documents: IDENTICAL (c88f1e4ad52e738fa33b8240a0228c489f646fb173fb2a16c8148178ed20cadd)
+2026-10-15 18:01:03 daemon 1.7b ffmpeg: in process exit 0, 115 of 115 lines
+2026-10-15 18:03:10 daemon 1.7b documents: in process exit 0, 35 of 35 lines
+2026-10-15 18:18:42 daemon 1.7b ffmpeg: through the daemon exit 0, 115 of 115 lines, requests 0 -> 122
+2026-10-15 18:18:42 daemon 1.7b ffmpeg: 0 of 115 lines are error envelopes (in process)
+2026-10-15 18:18:42 daemon 1.7b ffmpeg: IDENTICAL (1ae0be5fd64d1f12399d777a1c3d227ce2930efd956254ab5c8c08c74a3da3b9)
+2026-10-15 18:20:54 daemon 1.7b documents: through the daemon exit 0, 35 of 35 lines, requests 122 -> 157
+2026-10-15 18:20:54 daemon 1.7b documents: 0 of 35 lines are error envelopes (in process)
+2026-10-15 18:20:54 daemon 1.7b documents: IDENTICAL (9b05731a1827772b193ece9f1723c682520ca81fccfc2ce6373baec253c34491)
+2026-10-15 18:20:54 END daemon
+2026-10-15 18:20:54 ALL DONE (Linux chain)
