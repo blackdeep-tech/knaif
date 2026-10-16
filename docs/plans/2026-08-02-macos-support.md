@@ -1,15 +1,29 @@
 # macOS Support — Metal inference, packaging, signing, and a third release platform
 
-**Status:** Active · **Created:** 2026-08-02 · **Completed:** —
+**Status:** Done · **Created:** 2026-08-02 · **Completed:** 2026-10-16
 **Owner:** native/packaging · **Ref:** [`installers/macos/README.md`](../../installers/macos/README.md) (placeholder this plan replaces) · [`installers/package.sh`](../../installers/package.sh) · [`docs/NATIVE.md`](../NATIVE.md) §5, §9, §10, §12 · [`docs/RELEASE.md`](../RELEASE.md) · [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md) (C3 matrix, §*Out of scope*)
 **Release:** 1.3.0 · release index: [release-1.3.0](2026-09-30-release-1.3.0.md)
 
-> **Shipped in knaif 1.3.0 (2026-10-16).** macOS is a supported platform: the signed and notarized
-> `.pkg` and `.zip`, the Homebrew cask, every gate passed (release-1.3.0, Evidence). The plan stays
-> Active until its unticked tasks are reconciled: round 2 appears to have done several without
-> ticking them (the clean room in `evals/runs/2026-10-12_r130-macos_cleanroom` looks like E3, E4 and
-> E6; each needs checking against its task before it is ticked); what is genuinely open (D4 unified
-> memory, G6 the CI hand-off, for example) moves to TODO.md, then this plan closes.
+> **Shipped in knaif 1.3.0 (2026-10-16); closed the same day.** macOS is a supported platform: the
+> signed and notarized `.pkg` and `.zip`, the Homebrew cask, every gate passed (release-1.3.0,
+> Evidence). The unticked tasks were checked one by one against the evidence on 2026-10-16:
+> - **Ticked, done:** C4 (`evals/runs/2026-10-10_r130-macos_success/`), D3 (cold 18.89 s / warm
+>   3.46 s in the clean room's `step-d-metal-fresh-account`; no remedy in 1.3.0, a known issue in
+>   the CHANGELOG), E3, E4 and E6 (`evals/runs/2026-10-12_r130-macos_cleanroom/` runs 1–3, plus
+>   `evals/runs/2026-10-09_mac-prefreeze-pkg-tests/` for the unsigned half of E4), F2–F7 (the frozen
+>   CI files: `installers/macos/release.sh`, `notarize.sh`, the clean room's `host-signature`
+>   checks; no entitlements were needed), G1–G4 (the last stale lines in RELEASE.md, NATIVE.md and
+>   PERFORMANCE.md fixed on closing) and G6 (the path-filtered `macos` job in `ci.yml`, signing in
+>   `release.yml`).
+> - **Still open, moved to TODO.md:** D4 (no 8 GB Mac was available) and D5 (the CPU fallback
+>   with and without OpenMP).
+>
+> Where the text below no longer matches what shipped: the Homebrew tap carries a **cask**
+> (`knaif-cask.rb.in`, `render-cask.sh`), not the formula G5, §0 and D19's first wording describe;
+> G6's CI is a separate `macos-15` job, not a matrix entry (`macos-14` cannot build the `apple_m4`
+> variant); C4's real gate was native L4 on the `mac-*` lanes, not the Python commands shown; F2's
+> SHA256SUMS step belongs to the release procedure, not `release.sh`; the build-kind table G2
+> names is in NATIVE.md §9.
 
 > **Synced with 1.2.0 on 2026-09-30** (merge of `main` into this branch, done on Windows). What
 > changed for the remaining work:
@@ -1233,7 +1247,7 @@ already pass, on a third platform, for the first time.**
       > printed OK regardless. **Criterion 6 can now be honestly claimed.** Also corrected here: the
       > audit's "+17/+14 rows" drift figures compared utterances to `eval.jsonl` line counts — the
       > real drift was +550 / +35 utterances.
-- [ ] **C4. The eval ladder for both shipped skills** *(C0 was discharged by 1.2.0's re-locked snapshots)*. `just eval-fixtures <skill>`
+- [x] **C4. The eval ladder for both shipped skills** *(C0 was discharged by 1.2.0's re-locked snapshots)*. `just eval-fixtures <skill>`
       — **always first**, since missing fixtures score correct plans ~0 — then run each snapshot's
       **exact** verifier against a single pinned production backend and **save** the scoreboard, then
       diff it explicitly:
@@ -1503,7 +1517,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > the staged tree; `load_backend` then loads only `libggml-cpu-apple_m1.so`). 4B, median of 3:
       > load 4003 ms, prompt 25 888 ms (94 tok/s), generation 4935 ms (6.5 tok/s), inference
       > 30 940 ms. Metal is 5.4× on prompt, 2.6× on generation, ~4.5× end to end.
-- [ ] **D3. ⚠️ The first-run shader tax — measure it, and do NOT plan to fix it at install time.**
+- [x] **D3. ⚠️ The first-run shader tax — measure it, and do NOT plan to fix it at install time.**
       Vulkan's first-ever run cost **38.3 s** of pipeline compilation vs 2.1 s warm (§2), and *the
       first launch after install looks hung*. macOS is structurally similar-but-different: the Metal
       library is embedded as **source**, compiled by the Metal runtime, with an OS-level shader
@@ -1536,7 +1550,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > **Again on the frozen 1.3.0 CI `.zip`, 2026-10-13:** another new standard account, the same
       > request. **Cold 18.89 s, warm 3.46 s**, 37/37 on `MTL0`, exit 0 both times: unchanged.
       > Record: `evals/runs/2026-10-12_r130-macos_cleanroom/step-d-metal-fresh-account/`.
-- [ ] **D4. Unified-memory behaviour.** Apple Silicon shares one memory pool, so "VRAM" is a
+- [ ] *(moved to TODO.md 2026-10-16, still open)* **D4. Unified-memory behaviour.** Apple Silicon shares one memory pool, so "VRAM" is a
       soft, OS-capped fraction (`iogpu.wired_limit_pct`). Test the recommended 4B model on the
       lowest memory configuration reachable and note where it stops fitting. If 8 GB Macs cannot
       hold 4B comfortably, that is a **model-recommendation** decision, not a bug — the manifest
@@ -1545,7 +1559,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > **Partial 2026-10-03:** on the 16 GB `M1P` the 4B fits with room to spare — 2376 MB of
       > weights and a 302 MB compute buffer on `MTL0` against Metal's 12 713 MB working-set cap.
       > No 8 GB Mac was reachable, so where it stops fitting is still open.
-- [ ] **D5. Feed the OpenMP decision (D3 in §2).** If `GGML_OPENMP=OFF` is the chosen fix, measure
+- [ ] *(moved to TODO.md 2026-10-16, still open)* **D5. Feed the OpenMP decision (D3 in §2).** If `GGML_OPENMP=OFF` is the chosen fix, measure
       the CPU-fallback path with and without it, so the trade is recorded rather than asserted.
       > **Open.** D2's CPU number (2026-10-03) is the no-OpenMP build that ships; the with-OpenMP
       > side needs a separate build with Homebrew's libomp and was not made.
@@ -1661,7 +1675,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > not merely into smoke.sh, because packaging is the only step every artifact passes through by
       > construction") over what this bullet's first line said. `installers/smoke.sh` itself has not
       > been touched yet; its `.pkg` gap (second bullet) is still open, tracked under E6.
-- [ ] **E3. ⚠️ Clean-room run in a macOS VM — on the OLDEST supported macOS, with real inference.**
+- [x] **E3. ⚠️ Clean-room run in a macOS VM — on the OLDEST supported macOS, with real inference.**
       > **Split by D16 (2026-09-30).** The VM proves load, Gatekeeper and a real **CPU** inference;
       > Metal offload is proven on physical hardware from a fresh user account, because a macOS
       > guest's paravirtualized GPU is not evidence about a real Mac. Record what Metal does in the
@@ -1701,7 +1715,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > 37/37 then exit 1, INFO only. Metal on hardware from a fresh account: D3. Record:
       > `evals/runs/2026-10-12_r130-macos_cleanroom/`.
 
-- [ ] **E4. Gatekeeper behaviour, simulated honestly — including extraction semantics.** `curl` does
+- [x] **E4. Gatekeeper behaviour, simulated honestly — including extraction semantics.** `curl` does
       **not** set the quarantine attribute; Safari and Finder do, and they **propagate** it to
       extracted contents. So neither a `curl` download nor `xattr`-ing an archive and unpacking it
       with command-line `tar`/`unzip` reproduces what a user experiences. Test at least one of:
@@ -1737,7 +1751,7 @@ methodology as the existing ones so they are comparable: Qwen3-4B q4_k_m, the ff
       > the extracted `knaif`, which ran with no block (D3). Record:
       > `evals/runs/2026-10-12_r130-macos_cleanroom/` (`host-signature/`).
 
-- [ ] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
+- [x] **E6. `.pkg` verification — two gates `smoke.sh` structurally cannot provide.**
       *Added 2026-08-02 after audit.*
       - **Static inspection:** `pkgutil --expand` the package and check payload contents, install
         location, file ownership and modes, the receipt's identifier and version (D7), the
@@ -1902,7 +1916,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > **That build is not releasable:** it was made in a checkout under `~`, so `knaif` and
       > `libggml` carry one home-directory path each, and `release.sh` does not re-run the path guard
       > before signing. The release build is to be made again outside `~` and signed again.
-- [ ] **F2. ⚠️ Order of operations — and it is a DAG with two branches, not one line.** *Revised
+- [x] **F2. ⚠️ Order of operations — and it is a DAG with two branches, not one line.** *Revised
       2026-08-02 after audit.* Any modification to a Mach-O invalidates its signature, and
       `install_name_tool` (B3) and `strip` are modifications. **Stapling also mutates the `.pkg`**,
       which is why checksums come last:
@@ -1936,7 +1950,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > `test_release_refuses_a_tree_that_carries_the_builders_home`). To tick on the clean release
       > build.
 
-- [ ] **F3. Sign inside-out with the hardened runtime, and verify per-binary.** Every `.dylib`
+- [x] **F3. Sign inside-out with the hardened runtime, and verify per-binary.** Every `.dylib`
       first, the exe last, `--options runtime --timestamp --sign "Developer ID Application: …"`.
       **Do not lean on `codesign --deep` over the tree** — `--deep` is a bundle-oriented convenience
       that Apple explicitly discourages for signing and that reads poorly over a flat `bin/` of
@@ -1954,7 +1968,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > (`flags=0x10000(runtime)`), secure timestamp, team `8YJ4KKV9SJ`; every one verified. No
       > entitlements (F4). To tick on the clean release build.
 
-- [ ] **F3b. Read the notarization log even on success.** *Added 2026-08-02 after audit.*
+- [x] **F3b. Read the notarization log even on success.** *Added 2026-08-02 after audit.*
       `xcrun notarytool log <submission-id>` after an `Accepted` result — Apple's own guidance is to
       review it, because a submission can be accepted while carrying warnings (an unsigned nested
       binary, a missing secure timestamp) that become failures on a later OS or a later policy
@@ -1971,7 +1985,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > ticket lists all 10 Mach-O, the `.pkg` ticket the same 10 plus the package. Kept in
       > `evals/runs/2026-10-06_mac-signing-first_notary/``notary/`.
 
-- [ ] **F4. ⚠️ Determine the minimum entitlements empirically — start with none.** Two are
+- [x] **F4. ⚠️ Determine the minimum entitlements empirically — start with none.** Two are
       plausibly required and both weaken the hardened runtime, so neither is added speculatively:
       - `com.apple.security.cs.allow-jit` — Metal compiles the embedded shader source at runtime.
         Metal's compilation normally happens in a system XPC service rather than in-process, so
@@ -1992,7 +2006,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > Notarization: both submissions Accepted, `issues: null`, all 10 CDHashes in each ticket (F3b,
       > F6); the `.pkg` stapled; `spctl` accepts it as `Notarized Developer ID` (F7).
       > Evidence: `evals/runs/2026-10-06_mac-signing-first_notary/` (`notary/` is `dist/notary/`).
-- [ ] **F5. The `.pkg`, specified rather than gestured at.** `pkgbuild` (payload + install location
+- [x] **F5. The `.pkg`, specified rather than gestured at.** `pkgbuild` (payload + install location
       + identifier + `--version` **derived from `package.sh`'s `VER`**, D7) → `productbuild`
       (distribution + Developer ID Installer signature). Decide and document, because each is
       user-visible and none has a safe default:
@@ -2046,7 +2060,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > → `[Excluded]`. Not proof that the postinstall set it: an earlier `knaif models pull` on this
       > Mac may have. A fresh account (the E3/E4 room) would separate the two.
 
-- [ ] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
+- [x] **F6. Notarize and staple — the two branches of F2's DAG.** `xcrun notarytool submit --wait`
       on the `.pkg` **and** on the `.zip` (D6 makes the `.zip` both the notarized and the published
       container, so there is no longer a mismatch to reason about), then `xcrun stapler staple` the
       `.pkg` and `xcrun stapler validate` it. Read both logs (F3b).
@@ -2063,7 +2077,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > notarized, stapled and validated (`The staple and validate action worked!`). To tick on the
       > clean release build.
 
-- [ ] **F7. Verify the way Gatekeeper does, not the way the signer does.** *Corrected 2026-08-02
+- [x] **F7. Verify the way Gatekeeper does, not the way the signer does.** *Corrected 2026-08-02
       after audit.* For **bare command-line binaries** use
       `codesign -R="notarized" --check-notarization -vv <binary>`; `spctl --type exec` is the legacy
       *app-bundle* check and is not the right instrument for a CLI (`spctl -a -vvv -t install`
@@ -2091,7 +2105,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
 
 ## 10. Workstream G — release integration and documentation
 
-- [ ] **G1. `docs/RELEASE.md`.** Add macOS to the artifact table (§1), a build-and-package section
+- [x] **G1. `docs/RELEASE.md`.** Add macOS to the artifact table (§1), a build-and-package section
       (§2) alongside Linux and Windows, the signing/notarization sequence, the macOS clean-room and
       static-check rows in §4, and macOS notes in §6 (Gatekeeper, `xattr`, `.pkg` vs `.zip`,
       Intel unsupported, `brew` for external tools, uninstall/`~/.knaif` removal).
@@ -2100,7 +2114,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > clean room, checksums after stapling, §5 tag upload and step 9 (Homebrew tap), §6 user notes. Check
       > each against what actually happens on the Mac.
 
-- [ ] **G2. `docs/NATIVE.md`.** §5.3's build-kind table gains `metal`; §5.5's backend
+- [x] **G2. `docs/NATIVE.md`.** §5.3's build-kind table gains `metal`; §5.5's backend
       recommendation gains a macOS line; §9's packaging section gains the macOS layout; §10 gains
       the build commands; **§12's "macOS — no installers/notarization; explicitly out for v1" line
       is deleted**, which is the single clearest signal that this plan landed.
@@ -2108,14 +2122,14 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > **Partly done 2026-09-30:** §5.3 gains the `metal` row. The §12 line is deleted only when this
       > plan lands; §5.5 and §9/§10 wait for the Mac's measured facts.
 
-- [ ] **G3. `installers/macos/README.md`.** Replace the placeholder with the real thing. Its current
+- [x] **G3. `installers/macos/README.md`.** Replace the placeholder with the real thing. Its current
       content is a promissory note and its predictions should be checked against what actually
       happened — in particular it says "universal2 if feasible, else per-arch", which D4 answers.
       >
       > **Drafted 2026-09-30 (Windows):** the placeholder is replaced; the file says which steps have not
       > run on a Mac yet. Update it as they do.
 
-- [ ] **G4. The rest.** `docs/PERFORMANCE.md` (Workstream D), `docs/INFERENCE.md` (§ macOS rows are
+- [x] **G4. The rest.** `docs/PERFORMANCE.md` (Workstream D), `docs/INFERENCE.md` (§ macOS rows are
       Python-side and already partly correct — reconcile), `docs/PROVENANCE.md` (only if D3 lands on
       staging libomp), `docs/MODELS.md` (only if D4 changes a recommendation), `README.md` platform
       support, `evals/INDEX.md` rows, `docs/TODO.md` and `docs/plans/README.md` entries. Run
@@ -2142,7 +2156,7 @@ needed: **Developer ID Application** (binaries and dylibs) and **Developer ID In
       > `knaif-cask.rb.in`; on the same Mac `brew install blackdeep-tech/knaif/knaif` gave a working
       > `knaif`, which planned on the 4B model and converted a video with ffmpeg end to end.
 
-- [ ] **G6. Hand off to CI.** [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
+- [x] **G6. Hand off to CI.** [post-v1-ci-and-cuda-opt-in](2026-07-17-post-v1-ci-and-cuda-opt-in.md)
       explicitly parks macOS out of its C3 matrix *"until macOS packaging lands"*. When this plan
       closes, that condition is met: add `macos-14`/`macos-15` (arm64) runners to the matrix and note
       that signing and notarization need repository secrets, which is why they cannot simply be

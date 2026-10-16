@@ -37,8 +37,8 @@ driver 616.92. **v2 end-to-end on the shipped binary added 2026-09-28** (§5). *
 | **`M1P`** | Apple M1 Pro, integrated (Metal), 16-core GPU | Apple Silicon, arm64 | 16 GB unified (Metal's `recommendedMaxWorkingSetSize` 12 713 MB) | Apple M1 Pro, 8 P + 2 E |
 
 `M3P` — macOS 26.6 (build 25G72), Xcode 26.6 / CLT 26.6.0 (full Xcode installed; §7 of the
-[2026-08-02 macOS support plan](plans/2026-08-02-macos-support.md) M3 still needs to test whether
-CLT alone suffices). `MACOSX_DEPLOYMENT_TARGET=12.0` is the chosen floor for the shipped artifact
+[2026-08-02 macOS support plan](plans/2026-08-02-macos-support.md) M3 has since shown that the
+Command Line Tools alone suffice, on `M1P` below). `MACOSX_DEPLOYMENT_TARGET=12.0` is the chosen floor for the shipped artifact
 (D9) — this machine's own OS is far newer, so it proves nothing about the floor by itself; the E3
 clean-room VM must run the floor OS.
 
