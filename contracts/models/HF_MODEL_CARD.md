@@ -47,6 +47,7 @@ A knaif release is bound to the models it was tested with; its bundled manifest 
 
 | knaif | Default (desktop / CLI) | Mobile / low footprint |
 |---|---|---|
+| 1.3.0 | `knaif-qwen3-4b-v2` | `knaif-qwen3-1.7b-v2` |
 | 1.2.0 | `knaif-qwen3-4b-v2` | `knaif-qwen3-1.7b-v2` |
 | 1.1.0 | `knaif-qwen3-4b-v1` | `knaif-qwen3-1.7b-v1` |
 | 1.0.1 | `knaif-qwen3-4b-v1` | `knaif-qwen3-1.7b-v1` |
@@ -79,7 +80,7 @@ every run behind them: [evals/INDEX.md](https://github.com/blackdeep-tech/knaif/
 
 ### From the shipped binary, per backend
 
-The same corpora and grader, but run by the packaged knaif 1.2.0 binary itself: one fresh process
+The same corpora and grader, but run by the packaged knaif 1.3.0 binary itself: one fresh process
 per request, executing for real, graded on the files it produced, with complete coverage and the
 safety gate re-run on the binary. Each backend is accepted against the bar on its own: the
 model's floor, and its Python score minus 0.02, on outcome and knaif score, plus every required
@@ -89,29 +90,31 @@ capability slice.
 |---|---|---|---|---|---|
 | `knaif-qwen3-4b-v2` | Windows · CUDA | 0.943 / 0.984 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.941 / 0.986 | 0.976 / 0.987 | 11/11 · 9/9 | accepted |
-| `knaif-qwen3-4b-v2` | Windows · CPU ¹ | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Windows · CPU | 0.942 / 0.986 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-4b-v2` | Linux · CUDA | 0.945 / 0.981 | 0.982 / 0.980 | 11/11 · 9/9 | accepted |
-| `knaif-qwen3-4b-v2` | Linux · CPU ³ | 0.943 / 0.985 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
-| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.979 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | Linux · CPU ¹ | 0.943 / 0.985 | 0.976 / 0.982 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | macOS · Metal | 0.938 / 0.986 | 0.976 / 0.985 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-4b-v2` | macOS · CPU ¹ | 0.940 / 0.986 | 0.976 / 0.985 | 11/11 · 9/9 | accepted |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.921 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 | `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.918 / 0.982 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: three slices short ² |
 | `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.922 / 0.977 | 0.963 / 0.994 | 11/11 · 9/9 | accepted |
-| `knaif-qwen3-1.7b-v2` | Linux · CPU ³ | 0.920 / 0.981 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: two slices short ² |
+| `knaif-qwen3-1.7b-v2` | Linux · CPU ¹ | 0.920 / 0.981 | 0.963 / 0.996 | 11/11 · 9/9 | ffmpeg: two slices short ² |
+| `knaif-qwen3-1.7b-v2` | macOS · Metal | 0.919 / 0.978 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
+| `knaif-qwen3-1.7b-v2` | macOS · CPU ¹ | 0.922 / 0.976 | 0.963 / 0.994 | 11/11 · 9/9 | ffmpeg: one slice short ² |
 
-Measured 2026-09-28/29 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) with the release binary.
-¹ The 4B CPU cell is composed: the CUDA cell's results for every request whose CPU plan was shown
-to match, and a real CPU run for every request where it did not (60 ffmpeg, 4 documents).
+Measured 2026-10-11/15 with the release binary on an RTX 5080 (Windows 11, and Ubuntu 24.04 under
+WSL2) and an M1 Pro (macOS).
+¹ Sampled, not measured in full: a 150-request CPU sample on that OS swapped into the same model's
+Windows CPU (Linux) or Metal (macOS) results; at most 9 requests planned differently, none for the
+worse.
 ² The 1.7B clears these capability slices by a single request on CUDA, so a backend that breaks a
-near-tie the other way falls below: on Vulkan `batch` (25 of 29, 26 needed); on the Windows CPU
-`codec` (19/22), `adjust_speed` (40/45) and `batch` (24/29); on the Linux CPU `adjust_speed` (40/45)
-and `batch` (25/29). The whole gap is three requests where the model
-asks a question instead of planning (two "re-encode all videos to HEVC" phrasings, one in Chinese,
-and a German speed-plus-quality request). Overall scores stay within 0.4 points of CUDA's, and
-the aggregates and the safety gate clear everywhere. Released by owner decision.
-³ Sampled, not measured in full: the Windows CPU cell with a 150-request Linux CPU sample
-swapped in. The sample planned 3–5% of requests differently from Windows, none for the worse
-(Linux right as often as Windows or more often); accepting it instead of a full Linux CPU run
-was the owner's decision.
+near-tie the other way falls below: on Windows Vulkan, macOS Metal and the macOS CPU `batch` (25 of
+29, 26 needed); on the Windows CPU `codec` (19/22), `adjust_speed` (40/45) and `batch` (24/29); on
+the Linux CPU `adjust_speed` (40/45) and `batch` (25/29). On Windows and Linux the whole gap is among
+three requests where the model asks a question instead of planning (two "re-encode all videos to
+HEVC" phrasings, one in Chinese, and a German speed-plus-quality request), the same three as with
+knaif 1.2.0. The aggregates and the safety gate clear everywhere. Released by owner decision.
 
 ## Known limitations
 
