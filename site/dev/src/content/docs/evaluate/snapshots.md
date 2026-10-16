@@ -86,7 +86,7 @@ the runs were kept.
 
 ## What good looks like
 
-For reference, the committed bars for knaif 1.2.0 — **as measured in the Python lane**, on the
+For reference, the committed bars for knaif 1.2.0 and 1.3.0, which ship the same models — **as measured in the Python lane**, on the
 `success` verifier. Every figure here is read straight from the skill's snapshot:
 `data/eval_snapshot.json` for the default model (`knaif-qwen3-4b-v2`), and
 `data/eval_snapshot.knaif-qwen3-1.7b-v2.json` for the 1.7B, which has its own bar:
@@ -106,7 +106,7 @@ clarify and reject rows, which are harder to get right than they look.
 **These are authoring-lane numbers.** They come from the Python runtime — the `knaif`
 package, and what the SDK gives you. The native CLI is a separate measurement (L4: the
 shipped binary, executing for real, one fresh process per request), and it is the number that
-backs "the CLI works". For knaif 1.2.0 it was measured on every backend the release covers:
+backs "the CLI works". For knaif 1.3.0 it was measured on every backend the release covers:
 
 | ffmpeg `outcome_accuracy`, 4B v2 | |
 |---|---:|
@@ -115,6 +115,7 @@ backs "the CLI works". For knaif 1.2.0 it was measured on every backend the rele
 | Native CLI, Windows · Vulkan | **0.941** |
 | Native CLI, Windows · CPU | **0.942** |
 | Native CLI, Linux · CUDA | **0.945** |
+| Native CLI, macOS · Metal | **0.938** |
 
 Every one of these cells is accepted against the bar (the model's floor and its Python score
 minus 0.02, every required capability slice, safety at 100% on the binary); the per-backend
