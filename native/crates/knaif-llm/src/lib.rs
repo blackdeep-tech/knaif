@@ -147,8 +147,20 @@ fn build_llama(path: &std::path::Path, verbose: bool) -> Result<Box<dyn LlmBacke
         .and_then(|v| v.parse().ok())
         .unwrap_or(MAX_TOKENS);
     Ok(Box::new(
-        LlamaCppBackend::load(path, ngl, verbose)?.with_max_tokens(max_tokens),
+        LlamaCppBackend::load(path, ngl, verbose)?
+            .with_max_tokens(max_tokens)
+            .with_prefix_reuse(prefix_reuse_enabled()),
     ))
+}
+
+/// Whether to reuse the processed start of the previous prompt (`$KNAIF_PREFIX_REUSE=1`).
+/// Off unless asked for: see `LlamaCppBackend::with_prefix_reuse`.
+#[cfg(feature = "llama")]
+fn prefix_reuse_enabled() -> bool {
+    matches!(
+        std::env::var("KNAIF_PREFIX_REUSE").ok().as_deref(),
+        Some("1" | "true" | "on")
+    )
 }
 
 #[cfg(not(feature = "llama"))]

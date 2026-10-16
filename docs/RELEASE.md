@@ -2,9 +2,12 @@
 
 How releases are developed on branches, then how to build, package, verify, and publish one. CI
 (`ci.yml`) runs on every PR, including PRs into `release/*`, and `main` requires its `ci` check.
-`release.yml` packages Linux on PRs that touch packaging paths and uploads to a **draft** Release on
+`release.yml` packages Linux on PRs into `main` or `release/*` that touch packaging paths (and by hand,
+from the Actions tab, on any branch) and uploads to a **draft** Release on
 a `v*.*.*` tag. It never publishes: the tag, the public Release and the PyPI upload stay manual,
-because none of them can be undone. Windows artifacts are built by hand (§2).
+because none of them can be undone. Windows artifacts are built by hand (§2). The macOS files are
+signed and notarized by `release.yml` too, but only when it is run by hand on the release branch at
+the freeze, never at the tag (§2, *macOS*).
 
 Background: [NATIVE.md](NATIVE.md) §5.3 (loadable backends), §9 (packaging), §10 (building).
 Decision record for the branch workflow:
@@ -76,6 +79,8 @@ site, CI and eval records may go straight to `main`.
    Active on the release branch. On `main`, add the release to *Releases in flight* in
    [plans/README.md](plans/README.md), and leave `main`'s copy of the index alone from then on so
    the two never conflict when the release merges back.
+   **The first task on a new minor branch is the toolchain and llama.cpp refresh** (below), before
+   any feature lands and before any eval evidence is recorded.
 3. **Develop** — `feat/*` and `fix/*` PRs into the release branch. Merge `main` in whenever it moves.
 4. **Freeze** — no new scope. Bump the version (§0). Write the `CHANGELOG.md` section from the
    index's scope table plus `git log --first-parent release/X.Y.Z`, so it is in the commit that gets
@@ -85,6 +90,40 @@ site, CI and eval records may go straight to `main`.
 6. **Ship** — §5: merge to `main`, tag the tested commit, publish. Merge `main` into every other
    open release branch. Delete the release branch.
 7. **Close** — set the index to Done and remove its *Releases in flight* row.
+
+### Toolchain and llama.cpp refresh — first task of every minor
+
+Nothing bumps these pins automatically, and between minors they hold still on purpose: speed
+figures and parity evidence name the llama.cpp version they were measured on
+([PERFORMANCE.md](PERFORMANCE.md)), so a bump in the middle of a release would make finished
+evidence describe a build that no longer ships. Bumping at the start of each minor keeps the gap to
+upstream at one cycle, and the release's own gates (§4) then measure the new versions. Applies from
+the first minor opened after 1.3.0. **Patch releases keep the previous tag's pins**: a llama.cpp
+bump can change model output, which the patch lane does not allow.
+
+On a `chore/deps-X.Y.0` branch into the release, one PR:
+
+| Pin | Files that must agree |
+|---|---|
+| Rust toolchain (latest stable) | `rust-toolchain.toml` `channel`, `mise.toml` `rust`, `Cargo.toml` `rust-version`, the stack table in [NATIVE.md](NATIVE.md) |
+| `llama-cpp-2` + `llama-cpp-sys-2` (same version) | `native/crates/knaif-llm/Cargo.toml`, `Cargo.lock`, [NATIVE.md](NATIVE.md) |
+| `llama-cpp-python` | `uv.lock` (`uv lock --upgrade-package llama-cpp-python`) |
+
+Before the PR:
+
+- `just check-native` and `just test-native`. A new Rust release usually means a few new clippy
+  lints, and the warnings count as errors.
+- Re-read the comments in `knaif-llm/Cargo.toml` against the new wrapper: `default-features = false`
+  keeps `openmp` out, and the direct `llama-cpp-sys-2` dependency is only there because the
+  wrapper does not forward `vulkan`. Drop that workaround if the wrapper now forwards it.
+- Build every kind the release ships (CPU, Vulkan, CUDA, Metal) and check offload is really on the
+  GPU (`detect_backend()` and placement, [INFERENCE.md](INFERENCE.md)).
+- `just check-contracts`, then `just parity <skill> --limit 20` per skill as a quick read. The full
+  L3/L4 runs come later, in §4, on the frozen commit.
+
+If the new llama.cpp regresses (a build breaks, a backend loses offload, parity drops), keep the
+previous pin for this minor and record the reason as a Decision in the release index. Do not hold
+the release up for it.
 
 ---
 
@@ -124,12 +163,23 @@ GPU. It is a strict superset of `cpu` and runs everywhere `cpu` does, so it gets
 | `knaif-<ver>-windows-x64-setup.exe` | `vulkan` | Inno installer (per-user, no admin), same tree |
 | `knaif-<ver>-linux-x64.tar.gz` | `vulkan` | portable tree — CPU + Vulkan |
 | `knaif-<ver>-linux-x86_64.AppImage` | `vulkan` | the same tree as a single file |
+| `knaif-<ver>-macos-arm64.zip` | `metal` | portable tree — CPU + Metal; signed and notarized |
+| `knaif-<ver>-macos-arm64.pkg` | `metal` | Installer package (admin, `/usr/local/knaif`, options page), same tree; signed, notarized, **stapled** |
 | `SHA256SUMS` | — | one line per published artifact |
 
+**macOS is arm64 only** (Apple Silicon; the macOS support plan, D4), and `metal` plays `vulkan`'s
+role there: the only functional kind, so it gets the plain name. It ships as two files because only
+a `.pkg` can carry a stapled notarization ticket, which lets a quarantined download run offline; the
+`.zip`'s ticket is looked up online on first run (D6). The Homebrew formula in
+`blackdeep-tech/homebrew-knaif` points at the `.zip` (§5 step 9).
+
 The **support matrix** these artifacts imply — supported OSes, the measured runtime
-floors, GPU backends, and the external-tool caveats — is declared once in
+floors and GPU backends — is declared once in
 [`contracts/release/platforms.yaml`](../contracts/release/platforms.yaml) and read by the
-website. State a floor there, not in prose here, so the two cannot disagree.
+website. State a floor there, not in prose here, so the two cannot disagree. The download page's
+*wording* (warnings, artifact notes, the GPU, external-tool and model paragraphs) is in
+[`site/data/download-copy.yaml`](../site/data/download-copy.yaml), outside `contracts/` so that
+rewording it does not stale the eval gate; run `just site-data` after editing it.
 
 **`cpu` is a build kind, not a release artifact.** It exists for a box with no Vulkan SDK and is
 named `knaif-<ver>-<os>-<arch>-cpu.*` so it cannot overwrite the real one. Do not publish it: it
@@ -202,7 +252,8 @@ from a 9p mount, and `.gitattributes` line endings are correct. `--dev` mounts t
 for iterating on packaging; never publish what it produces.
 
 **CI builds this half too** — [`.github/workflows/release.yml`](../.github/workflows/release.yml)
-runs the same script on every PR that touches packaging, and on a `v*.*.*` tag attaches the result
+runs the same script on every PR into `main` or `release/*` that touches packaging (a PR between
+feature branches waits for its branch's own PR, or a manual run), and on a `v*.*.*` tag attaches the result
 to a **draft** release. It is a packaging *check* that happens to upload: the value is catching
 breakage on the PR that caused it rather than on release day. It never publishes, and it never
 generates `SHA256SUMS` — see §5.
@@ -280,7 +331,17 @@ installers/package.sh --no-build --kind=vulkan --profile=release-vulkan   # -> d
 & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installers\windows\knaif.iss
 ```
 
-`just package-native vulkan` + `just installer` wrap the same steps.
+`just package-native vulkan` + `just installer` wrap the same steps **and set both environment
+variables for you** — prefer them.
+
+**`CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON` is required on every OS.** llama.cpp defaults
+`LLAMA_OPENSSL=ON` and runs an unguarded `find_package(OpenSSL)`; because its vendored `cpp-httplib`
+is a static library linking OpenSSL `PUBLIC`, any build box that happens to have OpenSSL >= 3 dev
+files installed links `libssl`/`libcrypto` into the `llama-common` core library the artifact ships.
+`package.sh` and `scripts/build_native_kind.sh` (behind `just build-native-kind`) set it, so only
+a hand-typed cargo build can miss it. Nothing ships
+broken if you forget — `check_pe_imports.py` fails packaging — but it fails *after* the full build.
+Same trap shape as OpenMP; see the 2026-08-02 macOS support plan, E1.
 
 **Signing.** A release is signed on this box with Azure Artifact Signing (account `knaif`, profile
 `knaif-windows`, recorded in [`installers/windows/signing.json`](../installers/windows/signing.json)).
@@ -357,6 +418,43 @@ from, and it is the wrong licence path besides — the Distributable List grant 
 is scoped to files inside a Visual Studio installation's `VC\redist` (see `docs/PROVENANCE.md`). The
 tree comes from the MSVC v14x **build tools** component in the VS Installer, nothing else.
 
+### macOS — build on a Mac, sign and notarize by script
+
+Built on Apple Silicon (full Xcode or the Command Line Tools), never cross-compiled. The steps and
+their order are scripted, because every Mach-O modification after signing invalidates the signature
+and stapling rewrites the `.pkg` (the macOS support plan, F2):
+
+```bash
+just package-native metal     # build + stage + check_macho_deps.py + the (unsigned) .zip
+just release-macos            # sign every Mach-O → .zip → notarize → .pkg → notarize → staple → F7
+```
+
+`release-macos` needs the two Developer ID identities and notarization credentials in the
+environment — `KNAIF_SIGN_IDENTITY`, `KNAIF_INSTALLER_IDENTITY`, `KNAIF_TEAM_ID`, and
+`KNAIF_NOTARY_PROFILE` (or the API-key trio `KNAIF_NOTARY_KEY`/`_KEY_ID`/`_ISSUER`); the
+certificates come from the macOS signing-certificates plan. It reads every notarization log, not
+just the status, and fails on any issue or on a binary missing from the ticket. Details, including
+the clean-room VM: `installers/macos/README.md`.
+
+**The release files are signed in CI, once, at the freeze** (owner, 2026-10-10). A signed file is
+never byte-identical twice (every signature carries a timestamp), so the files that are tested must
+be the very files published:
+
+1. At the freeze commit, run **Actions → Package → Run workflow** on the `release/X.Y.Z` branch.
+   Its `macos` job (protected `release` environment, on only while the repository variable
+   `MACOS_SIGNING` is `enabled`) runs the two commands above on a `macos-15` runner and keeps the
+   notarized `.zip` and the stapled `.pkg` as the artifact `knaif-macos-<sha>` for 90 days. The
+   run's summary lists their sha256; record it.
+2. The macOS evidence (L4 Metal on a physical Mac), the clean room (§4) and the testers all use
+   those two files: `gh run download <run-id> -n knaif-macos-<sha>`, then check the sha256.
+3. At publish (§5), attach those same two files to the draft. The tag builds no macOS files: a
+   re-signed copy would be a file nobody tested.
+
+A signing fix found in step 2 means a new commit, another run, and steps 2–3 again on the new
+files.
+
+`just package-pkg` builds the `.pkg` **unsigned**, for inspecting it — never publish that one.
+
 ### Build traps (both OSes)
 
 - **Changing `CUDAARCHS` or the generator needs a clean.** `always_configure(false)` means cmake will
@@ -375,7 +473,7 @@ tree comes from the MSVC v14x **build tools** component in the VS Installer, not
   `NUM_JOBS`, **not** `CMAKE_BUILD_PARALLEL_LEVEL`. On a 15 GB box the same default (16 jobs) does
   not OOM outright; it *pages*, which is worse to diagnose because it produces no error at all.
 
-### Windows binaries must not carry the builder's home directory
+### Windows and macOS binaries must not carry the builder's home directory
 
 Rust embeds source paths as panic locations and C/C++/CUDA embed them through `__FILE__`, so every
 crate built out of the cargo registry carries `C:\Users\<name>\.cargo\registry\...` into the binary.
@@ -391,9 +489,20 @@ directory (`scripts/check_no_local_paths.py`). Two consequences:
 - **The C flags reach CMake only on a fresh configure.** After first adopting them (or changing
   them), clean the llama.cpp build once: `cargo clean -p llama-cpp-sys-2 --profile release-<kind>`.
 
+macOS does the same with clang's `-ffile-prefix-map` (`path_hygiene_env ... clang`).
+
 One build-directory path remains: llama.cpp compiles in its backend search folder
-(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`). It names the checkout's location,
-not a person.
+(`...\target\release-<kind>\build\llama-cpp-sys-2-*\out\backends`) into `knaif` and `libggml`. It is
+a value, not a source path, so no remap reaches it. It names the checkout's location, not a person —
+**as long as the checkout is outside the home directory**, which is the norm on Windows (`C:\src\...`)
+and not on a Mac. A macOS release builds from a checkout outside it (under `/Users/Shared`, say);
+one under `~` fails the guard on exactly those files, and the guard says so.
+
+On a GitHub-hosted runner the guard forbids nothing: the runner's account (`/Users/runner`,
+`/home/runner`, `C:\Users\runneradmin`) names nobody, exactly like a container's `/root`. It has to
+be exempt there, not just tolerated: the prebuilt PDFium every macOS package ships was built on such a
+runner and carries `/Users/runner/work/pdfium-binaries/...` about 650 times. The exemption applies
+only when `GITHUB_ACTIONS=true`, so a person whose account is named `runner` is still protected.
 
 ### A Windows CUDA build takes about an hour, and shows nothing while it does
 
@@ -672,7 +781,7 @@ Add/Remove row's `DisplayVersion` advances to the new version rather than adding
 Each `ISCC` run needs its `dist\staging\knaif-<ver>-windows-x64` to exist — copy the staged tree to
 the second version's name rather than rebuilding, since the payload is irrelevant to this check.
 
-### Clean-room verification — REQUIRED, both OSes
+### Clean-room verification — REQUIRED, every OS
 
 > **The rule these findings earned, which applies to every artifact shape added later:
 > a verification step that runs on the build box tests STAGING, never PORTABILITY.**
@@ -692,6 +801,7 @@ other missed.
 # Static — no VM, no container, runs anywhere. Both must exit 0.
 python scripts/check_pe_imports.py dist/staging/knaif-<ver>-windows-x64/bin
 python3 scripts/check_elf_deps.py  dist/staging/knaif-<ver>-linux-x64/bin
+python3 scripts/check_macho_deps.py dist/staging/knaif-<ver>-macos-arm64/bin --min-os 12.0
 
 # Dynamic — Linux, both artifacts, BOTH directions
 installers/linux/check-floor.sh dist/knaif-<ver>-linux-x64.tar.gz
@@ -713,6 +823,14 @@ Drive it from a `.wsb` with the artifact mapped read-only, a writable folder for
 `LogonCommand`. Assert `knaif.exe skills list` exits 0; a missing runtime exits **-1073741515**
 (`0xC0000135`) printing nothing at all.
 
+**macOS: run the FINAL signed files in a macOS 12 VM** (`tart`; the oldest supported macOS, with
+no Xcode, Command Line Tools or Homebrew — D8, D15) through `installers/macos/clean-room.sh`: once
+with the `.zip` online, once with the `.pkg` offline (the stapled ticket is what makes that work),
+and once `--upgrade-from` the previous `.pkg`. The script quarantines the file the way a browser
+does, runs `smoke.sh`, and gates on a real request from a copy of the tree **with the Metal
+backend removed**: a VM's GPU is Apple's paravirtualized one, so Metal is proven on a physical
+Mac instead (D16). Host steps: `installers/macos/README.md`.
+
 Then, per artifact set:
 
 - **Artifact hygiene** — no `*.gguf`, `*.ipynb`, `*.jsonl`, `*.py`, no `eval`/`sandbox`/`notebook`
@@ -726,7 +844,12 @@ Then, per artifact set:
 ```bash
 cd dist && sha256sum knaif-<ver>-* > SHA256SUMS      # Linux
 # Windows: Get-FileHash -Algorithm SHA256 <file>
+# macOS:   shasum -a 256 <file>
 ```
+
+The macOS files are summed **after** `just release-macos` has stapled the `.pkg`: stapling rewrites
+it, so an earlier checksum describes a file that no longer exists. The freeze-time CI run's summary
+gives the right sums (§2, *macOS*).
 
 ---
 
@@ -780,11 +903,19 @@ that path once against throwaway outputs:
    future version.
 4. **Tag and push `vX.Y.Z` on the tested commit** — the one the evidence names, now in `main`'s
    history. The `release-tags` ruleset means the tag cannot be moved afterwards. Pushing it starts
-   `release.yml`, which uploads the Linux artifacts to a draft Release.
+   `release.yml`, which uploads the Linux artifacts to a draft Release. Add the Windows artifacts,
+   and the macOS `.zip` and `.pkg` from the freeze-time run (§2, *macOS*) after checking their
+   sha256 against that run's summary: `gh release upload vX.Y.Z <files>`.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
    public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
    chance to catch a stale artifact.
 6. **Verify** a fresh download installs and runs, independent of the build box.
+   **Submit the Windows `setup.exe` and the `.zip` to Microsoft's Security Intelligence portal**
+   (<https://www.microsoft.com/wdsi/filesubmission>, *Software developer*, "Incorrectly detected as
+   malware/malicious" or "new software"). Free, every release. A signature
+   does not exempt a binary from Defender's heuristics, and an installer that ships loadable
+   `ggml-*.dll` backends and then downloads a 2.5 GB file is the shape that draws a false positive.
+   Note the submission IDs in the release index.
 7. **Refresh the website's download data — now automatic.** Publishing the release fires
    `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
    **pushes a branch** if it changed; the run summary links straight to the compare page.
@@ -802,6 +933,11 @@ that path once against throwaway outputs:
      `uv run pytest python/core/tests/test_release_data.py` verifies the snapshot's shape
      offline.
 8. **Delete** the release branch.
+9. **Update the Homebrew tap** (macOS). Render the formula from the published `.zip` — the exact
+   file `SHA256SUMS` covers — and commit it to `blackdeep-tech/homebrew-knaif` as
+   `Formula/knaif.rb`:
+   `installers/macos/homebrew/render-formula.sh dist/knaif-<ver>-macos-arm64.zip > knaif.rb`.
+   Check it with `brew install --build-from-source ./knaif.rb && brew test knaif` on a Mac.
 
 ---
 
@@ -887,6 +1023,11 @@ the absence of a warning, is what proves the download is intact.
 an **unsigned** installer outright, with no bypass ("An Application Control policy has blocked this
 file"). Earlier knaif releases were unsigned and are affected; the signed installer installs and
 upgrades an existing install with enforcement on (verified in Windows Sandbox, 2026-10-02).
+The **supporting tools** are another matter: Windows blocks FFmpeg (so the ffmpeg skill cannot
+run) and the Ghostscript and Tesseract installers, because their makers do not sign them validly;
+LibreOffice works. Setup and `knaif skills deps` say so when Smart App Control is on
+(`windows.smart_app_control: blocked` in each skill's `skill.yaml`). Say it in the release body
+until it changes.
 
 **Checksum verification.**
 
@@ -897,6 +1038,17 @@ sha256sum -c SHA256SUMS --ignore-missing                        # Linux
 
 **AppImage.** `chmod +x knaif-<ver>-linux-x86_64.AppImage && ./knaif-<ver>-linux-x86_64.AppImage`.
 Needs FUSE2 (`libfuse2t64` on Ubuntu 24.04); otherwise run with `--appimage-extract-and-run`.
+
+**macOS — which file.** Apple Silicon only, macOS 12 or later; Intel Macs are not supported. The
+**`.pkg` is the recommended download**: it is signed, notarized and stapled, so it opens with no
+Gatekeeper warning even offline; its options page offers the skills, the PATH link, the supporting
+tools through Homebrew, and the model download. The **`.zip`** is the portable tree, also notarized,
+but its first run needs the network for Gatekeeper to look the ticket up. With Homebrew:
+`brew install blackdeep-tech/knaif/knaif` (installs ffmpeg with it; `knaif models pull` afterwards).
+Supporting tools come from Homebrew — `knaif skills deps` prints the exact `brew install` for each.
+On a macOS version Homebrew no longer builds packages for (macOS 12, for example), Homebrew
+compiles ffmpeg from source, which can take hours; the `.pkg` downloads the model before any tool,
+so the model never waits for it.
 
 **First run.** No `--model` needed — knaif offers to download the recommended GGUF (~2.5 GB) into
 `~/.knaif/models`. Upgrading knaif re-downloads nothing while the recommendation is unchanged.
@@ -909,6 +1061,12 @@ it too and **deletes by default** — answer No only if you plan to reinstall an
 ~2.5 GB model. Upgrades never prompt (Inno installs over an existing install without uninstalling);
 a `/SILENT` uninstall deletes without asking. The **Linux tarball and AppImage have no uninstaller** —
 delete the unpacked folder (or the `.AppImage`) and, to reclaim the model, `rm -rf ~/.knaif`.
+**macOS packages have no uninstall action of their own**, so the `.pkg` ships one:
+`sudo /usr/local/knaif/uninstall.sh` (add `--purge` to remove `~/.knaif` too); Homebrew tools stay
+with Homebrew. The `.zip`: delete the folder. On macOS the model store is kept out of Time Machine.
+An upgrade or uninstall first stops a running model daemon (`knaif daemon start`): the Windows
+installer refuses to go on while it cannot, and the `.pkg` and `uninstall.sh` stop it as the user it
+belongs to and carry on regardless, since macOS can replace files a process holds open.
 
 **Unattended install — pass `/TYPE=full`.** The interactive installer defaults to the `full` type
 (all skills), but a `/VERYSILENT` install *without* `/TYPE` or `/COMPONENTS` reuses whatever component

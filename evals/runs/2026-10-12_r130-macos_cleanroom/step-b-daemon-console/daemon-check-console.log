@@ -1,0 +1,50 @@
++ K=/usr/local/bin/knaif
+++ stat -f %Su /dev/console
+console=admin
++ echo console=admin
++ /usr/local/bin/knaif daemon start
+Starting the model daemon (knaif-qwen3-4b-v2-q4_k_m)...
+knaif daemon is running with knaif-qwen3-4b-v2-q4_k_m.
+Later runs use it automatically; stop it with `knaif daemon stop`.
++ sleep 3
++ /usr/local/bin/knaif daemon status
+knaif daemon is running (pid 866).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     3 s (stops after 10 min)
++ sudo installer -pkg /Users/admin/room/knaif-1.3.0-macos-arm64.pkg -target /
+installer: Package name is knaif 1.3.0
+installer: Upgrading at base path /
+installer: The upgrade was successful.
++ pgrep -fl 'knaif daemon serve'
+DAEMON-GONE
++ echo DAEMON-GONE
++ grep 'preinstall: knaif' /var/log/install.log
++ tail -1
+2026-10-12 14:53:12-07 Admins-Virtual-Machine package_script_service[619]: ./preinstall: knaif daemon stopped.
++ /usr/local/bin/knaif daemon start
+Starting the model daemon (knaif-qwen3-4b-v2-q4_k_m)...
+knaif daemon is running with knaif-qwen3-4b-v2-q4_k_m.
+Later runs use it automatically; stop it with `knaif daemon stop`.
++ sleep 3
++ /usr/local/bin/knaif daemon status
+knaif daemon is running (pid 908).
+  model:    knaif-qwen3-4b-v2-q4_k_m
+  requests: 0
+  idle:     3 s (stops after 10 min)
++ sudo /usr/local/knaif/uninstall.sh
+knaif daemon stopped.
+removed /usr/local/bin/knaif
+removed /usr/local/knaif
+forgot receipt tech.blackdeep.knaif.core
+forgot receipt tech.blackdeep.knaif.skill.documents
+forgot receipt tech.blackdeep.knaif.skill.ffmpeg
+kept ~/.knaif (downloaded models): remove it with --purge, or by hand
+knaif is uninstalled. Homebrew tools stay installed: brew uninstall <name> to remove one.
++ pgrep -fl 'knaif daemon serve'
+DAEMON-GONE
++ echo DAEMON-GONE
++ ls -d /Users/admin/.knaif/models
+/Users/admin/.knaif/models
+~/.knaif kept
++ echo '~/.knaif kept'

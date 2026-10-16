@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -185,3 +188,128 @@ def test_a_result_with_only_a_top_level_command_is_dumped() -> None:
 
     cmd = ["ffmpeg", "-y", "-i", "a.mp4", "b.mp4"]
     assert rendered_argvs([{"tool": "run_concat", "result": {"command": cmd}}]) == [cmd]
+
+
+# ── 1.3.0: act without asking; ask before replacing a file ─────────────────────
+
+
+def test_a_run_asks_only_when_confirm_is_opted_into():
+    from knaif.app import approval_required
+
+    assert approval_required(auto_approve=None, confirm=False) is False  # the default acts
+    assert approval_required(auto_approve=None, confirm=True) is True
+    assert approval_required(auto_approve=True, confirm=True) is False  # -y skips the question
+    assert approval_required(auto_approve=False, confirm=False) is True  # -Y still asks
+
+
+def test_planned_outputs_are_read_from_a_preview(tmp_path):
+    from knaif.app import planned_outputs
+
+    there = tmp_path / "there.mp4"
+    there.write_bytes(b"x")
+    gone = tmp_path / "gone.mp4"
+    results = [
+        {"tool": "run_ffmpeg", "result": {"command": ["ffmpeg", "-y", "-i", "a", str(there)]}},
+        {"tool": "x", "result": {"output": str(gone), "outputs": [str(there)]}},
+        {"tool": "y", "result": {"preview_output": str(gone)}},
+        {"tool": "z", "result": None},
+    ]
+    assert planned_outputs(results) == [str(there)]
+
+
+def test_overwrite_gate_asks_with_no_as_the_default():
+    from knaif.app import overwrite_gate
+
+    asked: list[tuple[str, bool]] = []
+
+    def ask(question: str, default_yes: bool) -> bool | None:
+        asked.append((question, default_yes))
+        return True
+
+    assert overwrite_gate([], False, ask) is True
+    assert overwrite_gate(["out.mp4"], True, ask) is True
+    assert asked == [], "nothing to replace, or --overwrite: no question"
+    assert overwrite_gate(["out.mp4"], False, ask) is True
+    assert asked == [("Replace out.mp4?", False)]
+    assert overwrite_gate(["a", "b"], False, lambda q, d: False) is False
+
+
+def test_overwrite_gate_without_a_terminal_names_the_flag():
+    from knaif.app import overwrite_gate
+
+    with pytest.raises(click.ClickException, match="--overwrite"):
+        overwrite_gate(["out.mp4"], False, lambda q, d: None)
+
+
+def test_run_accepts_confirm_and_overwrite(runner):
+    result = runner.invoke(
+        cli,
+        ["run", "ffmpeg", "convert", "a.mov", "to", "mp4", "--backend", "mock"]
+        + ["--dry-run", "--confirm", "--overwrite"],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_a_real_preview_finds_an_existing_ffmpeg_output(tmp_path, monkeypatch):
+    """The gate reads a dry-run of the plan, so it must see what ffmpeg's expansion would write."""
+    from knaif import create_agent
+    from knaif.app import _existing_outputs
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "clip.mp4").write_bytes(b"x")
+    (tmp_path / "silent.mp4").write_bytes(b"precious")
+    agent = create_agent("ffmpeg", sandbox=str(tmp_path))
+    plan = {
+        "plan": [{"tool": "strip_audio", "args": {"inputs": ["clip.mp4"], "output": "silent.mp4"}}]
+    }
+    found = _existing_outputs(agent, plan, "strip audio from clip.mp4")
+    assert [Path(p).name for p in found] == ["silent.mp4"]
+    assert (tmp_path / "silent.mp4").read_bytes() == b"precious"
+
+
+def test_an_image_sequence_pattern_names_the_files_it_would_write(tmp_path):
+    from knaif.app import planned_outputs
+
+    (tmp_path / "frame_001.png").write_bytes(b"x")
+    (tmp_path / "frame_x.png").write_bytes(b"x")
+    pattern = str(tmp_path / "frame_%03d.png")
+    results = [{"tool": "run", "result": {"command": ["ffmpeg", "-y", "-i", "a", pattern]}}]
+    assert [Path(p).name for p in planned_outputs(results)] == ["frame_001.png"]
+
+
+def test_the_preview_reaches_intents_after_a_confirmation_gate(tmp_path, monkeypatch):
+    """`reverse_video` expands through `wait_for_confirmation`, which declines when nothing is
+    confirmed and ends the whole plan: the preview then never reached the next intent's output."""
+    from knaif import create_agent
+    from knaif.app import _existing_outputs
+
+    monkeypatch.chdir(tmp_path)
+    for name in ("a.mp4", "b.mp4"):
+        (tmp_path / name).write_bytes(b"x")
+    (tmp_path / "valuable.mp4").write_bytes(b"precious")
+    agent = create_agent("ffmpeg", sandbox=str(tmp_path))
+    plan = {
+        "plan": [
+            {"tool": "reverse_video", "args": {"inputs": ["a.mp4"], "output": "rev.mp4"}},
+            {"tool": "strip_audio", "args": {"inputs": ["b.mp4"], "output": "valuable.mp4"}},
+        ]
+    }
+    found = _existing_outputs(agent, plan, "reverse a.mp4 then strip audio from b.mp4")
+    assert [Path(p).name for p in found] == ["valuable.mp4"]
+
+
+def test_a_preview_that_fails_falls_back_to_the_outputs_the_plan_names(tmp_path, monkeypatch):
+    """A chain whose later step reads a file an earlier step has not written yet cannot be
+    previewed. The gate must not vanish, and the real run is what reports the error."""
+    from knaif.app import _existing_outputs
+
+    (tmp_path / "named.mp4").write_bytes(b"precious")
+
+    class Broken:
+        intent_completed = None
+
+        def execute_plan(self, *a, **k):
+            raise ValueError("cannot preview")
+
+    plan = {"plan": [{"tool": "x", "args": {"output": str(tmp_path / "named.mp4")}}]}
+    assert [Path(p).name for p in _existing_outputs(Broken(), plan, "x")] == ["named.mp4"]

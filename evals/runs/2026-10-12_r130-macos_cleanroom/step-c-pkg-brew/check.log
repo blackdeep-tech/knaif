@@ -1,0 +1,41 @@
+console=admin
+knaif 1.3.0 (inference: llama.cpp)
+tech.blackdeep.knaif.core
+tech.blackdeep.knaif.skill.documents
+tech.blackdeep.knaif.skill.ffmpeg
+--- model
+total 4877504
+-rw-r--r--  1 admin  staff  2497280960 Oct 12 22:31 knaif-qwen3-4b-v2-q4_k_m.gguf
+a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7  /Users/admin/.knaif/models/knaif-qwen3-4b-v2-q4_k_m.gguf
+[Excluded]    /System/Volumes/Data/Users/admin/.knaif/models
+--- brew
+ffmpeg: not installed
+libreoffice 
+/Applications/LibreOffice.app
+documents:
+  [MISS] ghostscript    (optional) install: brew install ghostscript
+  [OK  ] libreoffice    (optional) /opt/homebrew/bin/soffice
+  [MISS] tesseract      (optional) install: brew install tesseract
+ffmpeg:
+  [MISS] ffmpeg         (required) install: brew install ffmpeg
+The `ffmpeg` skill needs these tool(s), which knaif can't find on your PATH or in their usual install folders:
+  - ffmpeg (ffmpeg, ffprobe) — install: brew install ffmpeg
+Install it, then re-run. Or use --dry-run to preview the command without executing. (knaif never changes your PATH.)
+--- install.log (knaif lines, this install)
+PackageKit (package_script_service): Preparing to execute script "./postinstall" in /private/tmp/PKInstallSandbox.T2xxM7/Scripts/tech.blackdeep.knaif.finish.y4Tiat
+PackageKit: Executing script "postinstall" in /tmp/PKInstallSandbox.T2xxM7/Scripts/tech.blackdeep.knaif.finish.y4Tiat
+./postinstall: knaif: opening a Terminal window to finish setup for admin
+		knaif-1.3.0-macos-arm64.pkg#finish.pkg : tech.blackdeep.knaif.finish : 1.3.0
+		knaif-1.3.0-macos-arm64.pkg#finish.pkg : tech.blackdeep.knaif.finish : 1.3.0
+		knaif-1.3.0-macos-arm64.pkg#finish.pkg : tech.blackdeep.knaif.finish : 1.3.0
+file://localhost/Users/admin/room/knaif-1.3.0-macos-arm64.pkg#finish.pkg
+	    "PKLeopardPackage <id=tech.blackdeep.knaif.finish, version=1.3.0, url=file:///Users/admin/room/knaif-1.3.0-macos-arm64.pkg#finish.pkg>"
+./postinstall: knaif: linked /usr/local/bin/knaif -> /usr/local/knaif/bin/knaif
+./postinstall: knaif: the knaif-qwen3-4b-v2 download runs in a Terminal window at the end of setup
+./postinstall: knaif: installing FFmpeg with Homebrew runs in a Terminal window at the end of setup
+./postinstall: knaif: installing LibreOffice with Homebrew runs in a Terminal window at the end of setup
+PackageKit (package_script_service): Preparing to execute script "./postinstall" in /private/tmp/PKInstallSandbox.WGb93B/Scripts/tech.blackdeep.knaif.finish.AbcCQB
+PackageKit: Executing script "postinstall" in /tmp/PKInstallSandbox.WGb93B/Scripts/tech.blackdeep.knaif.finish.AbcCQB
+./postinstall: knaif: opening a Terminal window to finish setup for admin
+--- queue file
+ls: /usr/local/knaif/.setup-steps: No such file or directory

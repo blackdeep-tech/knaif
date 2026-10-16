@@ -1,0 +1,115 @@
+cut clip.mp4 from 2 seconds to 5 seconds
+make clip.mp4 suitable for YouTube upload
+convert clip.mp4 crf26
+convert clip.mp4 losslessly
+upload clip.mp4 to WhatsApp
+add subtitles from subtitle.srt to clip.mp4
+recorta clip.mp4 del segundo 2 al 5
+clip_4k.mp4 auf 720p skalieren
+convertir clip.mp4 en mkv
+this clip is too big to email
+ускори clip.mp4 до 2x скорост
+slow down clip.mp4 to half speed
+make it 4x faster
+конвертирай всички mp4 файлове в mkv
+clip.mp4 rueckwaerts abspielen
+stitch two clips together
+将clip.mp4缩放到720p
+从clip.mp4生成海报图片
+cut clip.mp4 between 2 and 5 seconds
+clip.mp4 von 2 bis 5 Sekunden schneiden
+изрежи clip.mp4 от 2 до 5 секунди
+encode clip.mp4 with quality 30
+convert clip.mov to webm with vp9
+将clip.mp4准备好发送到WhatsApp
+make clip.mp4 ready for Instagram
+resize the 4K video to 1080p
+clip.mov-Container nach MKV aendern
+grab a frame from the 4K video at 2 seconds
+从4K视频2秒处截取一帧
+将4K视频加速3倍
+MP3 in FLAC konvertieren
+change the mp3 to aac format
+prepare clip.mov for TikTok
+make clip.mov suitable for TikTok
+为TikTok准备clip.mov
+resize to 480p and remove audio
+Das 4K-Video auf 1080p skalieren und mit CRF 28 komprimieren
+convert clip.mov to mp4 and then trim it to 3 seconds
+clip.mov nach MP4 konvertieren und auf 3 Sekunden kuerzen
+ускори clip.mp4 двойно и махни звука
+extract the audio from clip.mp4 and convert it to flac
+Audio aus clip.mp4 extrahieren und als FLAC speichern
+извлечи звука от clip.mp4 и го запази като flac
+Das 4K-Video auf 2 Sekunden kuerzen und als WebM exportieren
+grab a thumbnail from the 4K clip at 1 second and use it as a cover
+slow down clip.mp4 to half speed and compress it with CRF 25
+забави clip.mp4 до 0.5x и го компресирай с CRF 25
+play clip_no_audio backwards and save as webm
+Den stummen Clip umkehren und als WebM speichern
+MP3 nach WAV konvertieren und Samplerate auf 22050 Hz setzen
+cut clip.mov to 4 seconds then save audio as aac
+compress clip_4k.mp4 to 1080p and then prepare for YouTube
+забави 4K клипа до 0.5x и го преоразмери до 1080p
+extract audio from clip.mov as mp3 and then reduce its bitrate
+batch convert all videos to mp4 and then compress them with CRF 26
+Alle Videos nach MP4 mit H.264 und CRF 26 konvertieren
+пакетно конвертирай всички видеа в mp4 с CRF 26
+批量转换所有视频为CRF 26的H.264 MP4
+изрежи clip.mp4 от 1 до 6 секунди и после го обърни
+encode clip.mp4 with CRF 51
+compress clip.mp4 at maximum compression CRF 51
+clip.mp4 mit CRF 51 stark komprimieren
+convert clip.mp4 to MKV format
+re-encode clip.mp4 to the same codec
+trim clip.mp4 from 50 to 60 seconds when it is only 10 seconds long
+缩放到720p保持宽高比
+convert a transport stream to mp4
+overlay a logo on the video
+stabilize clip.mp4
+hdr to sdr conversion for clip.mp4
+ускори clip.mp4 до 2x
+извлечи кадър от clip.mp4 на 3 секунди
+clip.mp4 lauter machen
+将4K视频减速到0.25倍
+Das 4K-Video fuer TikTok vorbereiten
+пакетно конвертирай mov файловете в mp4
+concatenate clip.mov and clip_no_audio.mp4
+clip.mp4 mit mittlerer Qualitaet komprimieren
+quick preview encode with low quality
+уменьшить разрешение clip_4k.mp4 до 720p
+batch convert all files to hevc
+re-encode all videos with h265
+пакетно конвертирай всички видеа в HEVC
+从clip.mp4末尾截取缩略图
+halve the file size of clip_ctr.mp4
+Die Dateigroe von clip_ctr.mp4 um 50% reduzieren
+boost the volume of clip.mp4 by 6dB
+Audio von clip.mp4 normalisieren
+turn clip.mp4 counterclockwise 90°
+clip.mp4 um 270 Grad drehen
+flip clip.mp4 upside down
+make clip.mp4 twice as loud
+обърни mov файла
+подготви клипа без звук за YouTube
+компресирай с целева скорост 500 kbps
+combine the 4K and 1080p clips in sequence
+reverse the 4K clip
+trim clip.mp4 to 3-5 seconds, save it, then extract the audio as mp3
+audio.mp3 um 6dB lauter machen
+cut to first 5s of clip.mp4 then mirror it left-right
+extract a frame at 1s from clip_4k to use as poster
+компресирай 4K клипа до 1080p и го подготви за YouTube
+将clip.mp4裁剪为正方形
+clip.mp4 auf 9:16 zuschneiden
+crop and resize clip.mp4 to 1080 by 1920
+将clip.mp4拉伸到1280x720
+clip.mp4 auf 4:5 zuschneiden
+направи миниатюра от clip.mp4 и компресирай clip.mp4
+把clip.mp4的0到2秒剪成part1.mp4，再把clip.mp4的4到7秒剪成part2.mp4
+schneide clip.mp4 auf die ersten 5 Sekunden, skaliere auf 720p und komprimiere es
+turn clip.mp4 90 degrees to the right, scale down to 480p and shrink the file
+skaliere clip_4k.mp4 auf 1080p herunter, komprimiere es und entferne die Tonspur
+ускори clip.mp4 2 пъти, преоразмери до 480p и компресирай го
+convertis clip.mov en mp4, redimensionne en 360p, puis compresse-le
+reverse clip.mp4 and resize it to 480p

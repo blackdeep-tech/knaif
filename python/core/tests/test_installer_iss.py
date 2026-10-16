@@ -450,7 +450,7 @@ def test_without_winget_every_tool_task_is_grayed_out() -> None:
     """
     code = _code()
     assert re.search(
-        r"CurPageID\s*=\s*wpSelectTasks\s+then\s+GrayOutToolTasks\s*;", code
+        r"CurPageID\s*=\s*wpSelectTasks\s+then\s+(begin\s+)?GrayOutToolTasks\s*;", code
     ), "the tasks page does not call GrayOutToolTasks"
     body = re.search(r"procedure GrayOutToolTasks;(.*?)\nend;", code, flags=re.S)
     assert body, "GrayOutToolTasks is not defined in [Code]"
@@ -497,6 +497,65 @@ def test_the_finish_page_reports_every_tool() -> None:
             mode,
             dirs,
         ), f"the finish page reports {task!r} as {reported.get(key)}, the offer is {(mode, dirs)}"
+
+
+def _blocked_by_smart_app_control() -> dict[frozenset[str], bool]:
+    """``{commands: blocked}`` for every external tool of a skill the installer ships."""
+    out = {}
+    for component in COMPONENT_NAMES:
+        if not component.startswith("skills\\"):
+            continue
+        skill = component.split("\\", 1)[1]
+        manifest = yaml.safe_load((SKILLS / skill / "skill.yaml").read_text(encoding="utf-8"))
+        for tool in manifest.get("dependencies", {}).get("external_tools", []):
+            win = tool.get("windows") or {}
+            out[frozenset(tool["commands"])] = win.get("smart_app_control") == "blocked"
+    return out
+
+
+def test_smart_app_control_grays_out_the_tools_it_blocks() -> None:
+    """With Smart App Control on, a tool it blocks is shown unchecked and disabled.
+
+    2026-10-02, Windows Sandbox with enforcement on: winget installed FFmpeg, then Windows
+    refused to run it, and the Tesseract installer never started. The wizard must not offer
+    installs that cannot work; ``skill.yaml`` (``windows.smart_app_control: blocked``) says
+    which, and this list must follow it.
+    """
+    code = _code()
+    assert re.search(
+        r"CurPageID\s*=\s*wpSelectTasks\s+then\s+begin\s+GrayOutToolTasks\s*;\s*"
+        r"GrayOutBlockedToolTasks\s*;",
+        code,
+    ), "the tasks page does not call GrayOutBlockedToolTasks"
+    body = re.search(r"procedure GrayOutBlockedToolTasks;(.*?)\nend;", code, flags=re.S)
+    assert body, "GrayOutBlockedToolTasks is not defined in [Code]"
+    body = body.group(1)
+    assert re.search(r"if\s+not\s+SmartAppControlOn\s+then\s+Exit\s*;", body)
+    assert re.search(r"ItemEnabled\[I\]\s*:=\s*False", body)
+    grayed = set(re.findall(r"Caption\s*=\s*'([^']+)'", body))
+    blocked = _blocked_by_smart_app_control()
+    for (_, cmds), (_, _, task, _, _) in _installer_offers().items():
+        caption = next(t["Description"] for t in TASKS if t["Name"] == task)
+        if blocked[cmds]:
+            assert caption in grayed, f"{task!r} is blocked but stays tickable"
+        else:
+            assert caption not in grayed, f"{task!r} is not blocked but is grayed out"
+
+
+def test_the_finish_page_names_what_smart_app_control_blocks() -> None:
+    """The finish page marks each blocked tool, from the same ``skill.yaml`` facts."""
+    code = _code()
+    body = re.search(r"procedure ReportTools;(.*?)\nend;", code, flags=re.S).group(1)
+    listed = re.search(r'#define SacBlockedTools "([^"]*)"', ISS_TEXT)
+    assert listed, "knaif.iss has no SacBlockedTools list"
+    names = set(listed.group(1).split("|"))
+    assert "SacBlocks(ToolName)" in _code(), "ToolLine never asks whether a tool is blocked"
+    blocked = _blocked_by_smart_app_control()
+    lines = re.findall(r"ToolLine\('([^']+)',\s*'[^']+',\s*'([^']*)'", body)
+    assert lines, "ReportTools has no ToolLine calls"
+    for name, cmds in lines:
+        want = blocked[frozenset(cmds.split(","))]
+        assert (name in names) == want, f"{name!r}: skill.yaml says blocked={want}"
 
 
 def test_dependency_tasks_share_one_group_heading() -> None:

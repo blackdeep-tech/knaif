@@ -22,6 +22,10 @@ clap = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }
 indicatif = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+# The daemon's access token (see daemon.rs).
+getrandom = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 # SetConsoleOutputCP at startup — see `enable_utf8_console` in main.rs.
@@ -38,6 +42,9 @@ llama = ["knaif-llm/llama"]
 # GPU backends for llama.cpp (compile-time; both pull in `llama` transitively via knaif-llm).
 cuda = ["knaif-llm/cuda"]
 vulkan = ["knaif-llm/vulkan"]
+# D3 (2026-08-02 macOS support plan): forwards the opt-in OpenMP control. Set for the Linux/
+# Windows release kinds (feats_for_kind in installers/package.sh); omitted on macOS.
+openmp = ["knaif-llm/openmp"]
 # Loadable ggml backends: the exe `dlopen`s `ggml-*` libs found at runtime rather than
 # static-linking them, so CUDA can ship as an opt-in payload. See knaif-llm's note.
 dynamic-backends = ["knaif-llm/dynamic-backends"]

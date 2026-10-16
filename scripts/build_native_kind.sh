@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build one native kind into its OWN directory: target/release-<kind>/.
 #
-# kind = base | cpu | vulkan | cuda, the same vocabulary installers/package.sh uses. The feature
+# kind = base | cpu | vulkan | cuda | metal (macOS only), the same vocabulary installers/package.sh uses. The feature
 # set is READ FROM package.sh (`--print-feats`) rather than copied, so the two cannot drift.
 #
 # Each kind gets the matching `release-<kind>` cargo profile, which is what stops two kinds
@@ -16,7 +16,8 @@
 # re-runs the build through VsDevCmd.bat when cl.exe is absent. An existing developer shell is
 # used as-is.
 #
-# Honoured if already set: LIBCLANG_PATH, CMAKE_GENERATOR, CUDAARCHS, KNAIF_CUDA_DEV_ARCHS.
+# Honoured if already set: LIBCLANG_PATH, CMAKE_GENERATOR, CUDAARCHS, KNAIF_CUDA_DEV_ARCHS,
+# MACOSX_DEPLOYMENT_TARGET.
 
 set -euo pipefail
 
@@ -25,9 +26,9 @@ cd "$ROOT"
 
 KIND="${1:-cpu}"
 case "$KIND" in
-  base|cpu|vulkan|cuda) ;;
+  base|cpu|vulkan|cuda|metal) ;;
   *)
-    echo "usage: $0 <base|cpu|vulkan|cuda>" >&2
+    echo "usage: $0 <base|cpu|vulkan|cuda|metal>" >&2
     exit 2
     ;;
 esac
@@ -85,6 +86,22 @@ if [ "$KIND" = vulkan ] && [ -z "${CMAKE_GENERATOR:-}" ]; then
   echo "  CMAKE_GENERATOR=Ninja"
 fi
 
+# Two build-box-dependent inputs that must be set before the FIRST configure — neither is a
+# `rerun-if-env-changed` input in llama-cpp-sys-2's build.rs, so setting them later silently keeps a
+# cached build's old value. package.sh sets the same two when it builds itself; see its comments.
+#  - CMAKE_DISABLE_FIND_PACKAGE_OpenSSL: llama.cpp defaults LLAMA_OPENSSL=ON with an unguarded
+#    `find_package(OpenSSL)`, so any box with OpenSSL dev files links libssl/libcrypto into the
+#    llama-common core lib we ship. knaif never uses that TLS code. All platforms.
+#  - MACOSX_DEPLOYMENT_TARGET: the macOS floor is a decided property of the artifact (D9 in the
+#    2026-08-02 macOS support plan), not whatever SDK is installed.
+if [ -n "$FEATS" ]; then
+  export CMAKE_DISABLE_FIND_PACKAGE_OpenSSL=ON
+fi
+if [ "$OS" = macos ]; then
+  export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+  echo "  MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+fi
+
 # Assemble the cargo invocation once; `base` carries no features, and an empty --features would
 # be a different thing from omitting it.
 cargo_args=(build --profile "$PROFILE" -p knaif-cli)
@@ -93,6 +110,17 @@ cargo_args=(build --profile "$PROFILE" -p knaif-cli)
 if [ "$OS" != windows ]; then
   : "${CMAKE_GENERATOR:=Ninja}"
   export CMAKE_GENERATOR
+  # macOS builds on the contributor's own box, so the cargo home and checkout are remapped as on
+  # Windows (scripts/path_hygiene.sh, clang flags). Linux release builds run in a container.
+  if [ "$OS" = macos ]; then
+    # shellcheck source=path_hygiene.sh
+    . "$ROOT/scripts/path_hygiene.sh"
+    hygiene="$(path_hygiene_env "${CARGO_HOME:-$HOME/.cargo}" "$ROOT" clang)"
+    while IFS= read -r line; do
+      export "${line?}"
+    done <<< "$hygiene"
+    echo "  path hygiene: cargo home and checkout remapped (Rust, C/C++)"
+  fi
   exec cargo "${cargo_args[@]}"
 fi
 

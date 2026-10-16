@@ -232,6 +232,9 @@ class RemovePagesStep(Step):
         total_pages = _pdf_page_count(input_path)
         remove = set(_parse_pages(args["pages"], total_pages))
         keep = [page for page in range(1, total_pages + 1) if page not in remove]
+        if not keep:
+            # As native: an empty document is never what was asked for, preview or run.
+            raise ValueError("refusing to remove every page (would produce an empty document)")
 
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "pages": len(keep)}

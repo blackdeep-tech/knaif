@@ -413,6 +413,30 @@ def _failures(entry: dict[str, Any]) -> int | None:
     return int(round(total * (1.0 - rate)))
 
 
+def _safety_coverage_problem(safety: dict[str, Any], corpus_ids: list[str]) -> str | None:
+    """Why *safety* does not cover the corpus *corpus_ids*, or None when it does."""
+    outcomes = safety.get("outcomes")
+    if isinstance(outcomes, list) and outcomes:
+        ran = {str(o.get("id")) for o in outcomes if isinstance(o, dict)}
+        want = set(corpus_ids)
+        missing, extra = sorted(want - ran), sorted(ran - want)
+        if not missing and not extra:
+            return None
+        parts = []
+        if missing:
+            parts.append(f"{len(missing)} of {len(want)} corpus rows were not run ({missing[:3]}…)")
+        if extra:
+            parts.append(f"{len(extra)} rows are not in the corpus ({extra[:3]}…)")
+        return "the safety result does not cover the safety corpus: " + "; ".join(parts)
+    total = _population(safety.get("total"))
+    if total is not None and total != len(corpus_ids):
+        return (
+            f"the safety result covers {total} rows, but the safety corpus has "
+            f"{len(corpus_ids)}"
+        )
+    return None
+
+
 def check_acceptance(
     spec: dict[str, Any],
     scoreboard: dict[str, Any],
@@ -420,12 +444,17 @@ def check_acceptance(
     *,
     coverage_floor: float = ACCEPTANCE_COVERAGE_FLOOR,
     validate_spec: bool = True,
+    safety_rows: list[str] | None = None,
 ) -> AcceptanceReport:
     """Grade *scoreboard* against a skill's S2 bar.
 
     *safety* is the result of running the skill's safety corpus, as
     ``{"total": N, "pass_rate": R}``. Passing ``None`` — i.e. never running it —
     is a violation, not an omission.
+
+    *safety_rows* are the ids of the skill's safety corpus as it stands. Given, the safety
+    record must cover exactly those rows (by its outcomes' ids, else by its total), so a
+    truncated run, or one over an older corpus, cannot certify the skill.
 
     *coverage_floor* exists so the native lane can delegate here while keeping its own,
     deliberately lowerable floor (L4e) — one gate, one place, not two coverage rules that
@@ -682,6 +711,14 @@ def check_acceptance(
                 )
             )
 
+        # The whole corpus, not a passing part of it: 5 of 11 rows at 100% would otherwise
+        # read exactly like 11 of 11.
+        if safety_rows is not None:
+            checked += 1
+            gap = _safety_coverage_problem(safety, safety_rows)
+            if gap:
+                violations.append(Violation("safety", "coverage", gap))
+
         # Safety is not prompt- or model-independent: what the model is shown changes what
         # it refuses, so a safety result is only evidence for the configuration that
         # produced it.
@@ -847,6 +884,7 @@ def check_native_acceptance(
     *,
     coverage_floor: float = NATIVE_COVERAGE_FLOOR,
     tolerance: float = NATIVE_TOLERANCE,
+    safety_rows: list[str] | None = None,
 ) -> AcceptanceReport:
     """Grade an L4 lane run against the S2 bar and the frozen Python baseline.
 
@@ -1022,6 +1060,7 @@ def check_native_acceptance(
         safety,
         coverage_floor=coverage_floor,
         validate_spec=False,
+        safety_rows=safety_rows,
     )
     return AcceptanceReport(
         violations=violations + list(delegated.violations),

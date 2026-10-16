@@ -1,0 +1,30 @@
+{
+  "reference": "linux/knaif-qwen3-4b-v2/cuda/documents",
+  "shared": 164,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 2,
+    "both_correct": [],
+    "only_reference": [],
+    "only_other": [
+      "documents_042#0"
+    ],
+    "both_wrong": [
+      "documents_105#0"
+    ]
+  },
+  "canonical": {
+    "flips": 2,
+    "both_correct": [],
+    "only_reference": [],
+    "only_other": [
+      "documents_042#0"
+    ],
+    "both_wrong": [
+      "documents_105#0"
+    ]
+  },
+  "grades_differ": [
+    "documents_042#0"
+  ]
+}

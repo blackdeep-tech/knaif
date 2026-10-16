@@ -2,8 +2,9 @@
 //! tree (Phase 9) and the runtime `knaif setup`/doctor + execution preflight (Phase 8).
 //!
 //! Reads `dependencies.external_tools` from a bundle `skill.yaml` (the declarative source of
-//! truth, identical for every runtime), probes `PATH` — then, on Windows, the install folders the
-//! entry declares, since the Ghostscript/LibreOffice/Tesseract installers never touch `PATH` —
+//! truth, identical for every runtime), probes `PATH` — then the install folders the entry
+//! declares for this OS, since the Windows installers of Ghostscript/LibreOffice/Tesseract never
+//! touch `PATH` and on macOS a LibreOffice cask lives inside its `.app` —
 //! for each declared tool, and reports what is satisfied plus an actionable install hint. The
 //! skills launch the binary the same lookup picks (`resolve_declared_*`), so found means used. **Detection only** — never launches a tool and
 //! never modifies `PATH`. Third-party tools are installed via their own installers / package
@@ -40,6 +41,27 @@ pub struct ExternalTool {
     /// folders the vendor's installer uses (most of which never put themselves on `PATH`).
     #[serde(default)]
     pub windows: WindowsInstall,
+    /// macOS-only install facts: the Homebrew formula (or cask) and the folders searched after
+    /// `PATH`.
+    #[serde(default)]
+    pub macos: MacosInstall,
+}
+
+/// The `macos:` block of an external tool in `skill.yaml`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct MacosInstall {
+    /// Homebrew formula (`brew install <name>`), or cask name when `cask` is set. The `.pkg`
+    /// installer's options page installs the same name.
+    #[serde(default)]
+    pub brew: Option<String>,
+    /// `brew` names a cask (`brew install --cask <name>`) — an `.app`, not a formula.
+    #[serde(default)]
+    pub cask: bool,
+    /// Install folders searched after `PATH`, as absolute paths. Homebrew's `bin` is listed
+    /// because a knaif started outside a login shell (the `.pkg` postinstall, a GUI) does not have
+    /// it on `PATH`; a cask's binary sits inside its `.app` and is never on `PATH`.
+    #[serde(default)]
+    pub dirs: Vec<String>,
 }
 
 /// The `windows:` block of an external tool in `skill.yaml`.
@@ -55,6 +77,11 @@ pub struct WindowsInstall {
     /// matches within one path component, and several matches are tried newest version first.
     #[serde(default)]
     pub dirs: Vec<String>,
+    /// `blocked` when Windows' Smart App Control was seen to block the tool or its installer
+    /// (not validly signed by its maker). Only a fact about the tool: whether Smart App Control
+    /// is on is the machine's, and the caller reads it.
+    #[serde(default)]
+    pub smart_app_control: Option<String>,
 }
 
 /// Per-OS install channel hint (`install: {windows, macos, linux}` in skill.yaml).
@@ -71,12 +98,15 @@ pub struct InstallHints {
 impl InstallHints {
     /// The install hint for the OS this binary is running on, if declared.
     pub fn current(&self) -> Option<&str> {
-        if cfg!(windows) {
-            self.windows.as_deref()
-        } else if cfg!(target_os = "macos") {
-            self.macos.as_deref()
-        } else {
-            self.linux.as_deref()
+        self.for_os(std::env::consts::OS)
+    }
+
+    /// The install hint for `os` (a [`std::env::consts::OS`] value), if declared.
+    fn for_os(&self, os: &str) -> Option<&str> {
+        match os {
+            "windows" => self.windows.as_deref(),
+            "macos" => self.macos.as_deref(),
+            _ => self.linux.as_deref(),
         }
     }
 }
@@ -94,15 +124,28 @@ pub struct ToolStatus {
     pub missing: Vec<String>,
     /// Install hint for the current OS, if declared.
     pub install_hint: Option<String>,
+    /// The tool declares that Smart App Control blocks it (see `WindowsInstall`).
+    pub smart_app_control_blocks: bool,
 }
 
 impl ExternalTool {
-    /// The declared install folders that exist on this machine, or none off Windows.
+    /// Does Smart App Control block this tool or its installer, where it is on?
+    pub fn blocked_by_smart_app_control(&self) -> bool {
+        self.windows.smart_app_control.as_deref() == Some("blocked")
+    }
+
+    /// The declared install folders for this OS that exist on this machine.
     fn known_dirs(&self) -> Vec<PathBuf> {
-        if cfg!(windows) {
-            expand_dirs(&self.windows.dirs)
-        } else {
-            Vec::new()
+        expand_dirs(self.declared_dirs(std::env::consts::OS))
+    }
+
+    /// The install folders declared for `os` (a [`std::env::consts::OS`] value); none on Linux,
+    /// where package managers put every tool on `PATH`.
+    fn declared_dirs(&self, os: &str) -> &[String] {
+        match os {
+            "windows" => &self.windows.dirs,
+            "macos" => &self.macos.dirs,
+            _ => &[],
         }
     }
 
@@ -146,33 +189,38 @@ impl ExternalTool {
             found,
             missing,
             install_hint: hint_for(
-                &self.install,
-                &self.windows,
-                cfg!(windows),
+                self,
+                std::env::consts::OS,
                 cfg!(windows) && winget_available(),
             ),
+            smart_app_control_blocks: self.blocked_by_smart_app_control(),
         }
     }
 }
 
-/// What to tell the user to do about a missing tool. On Windows: the exact winget command when
-/// winget is there, else the vendor's download page — a bare "winget" is no help on a machine
-/// without it. Elsewhere, or with nothing Windows-specific declared, the per-OS channel hint.
-fn hint_for(
-    install: &InstallHints,
-    win: &WindowsInstall,
-    on_windows: bool,
-    winget: bool,
-) -> Option<String> {
-    if on_windows {
-        if let (true, Some(id)) = (winget, &win.winget) {
-            return Some(format!("winget install -e --id {id}"));
+/// What to tell the user to do about a missing tool on `os`. On Windows: the exact winget command
+/// when winget is there, else the vendor's download page — a bare "winget" is no help on a machine
+/// without it. On macOS: the exact `brew install` command. Otherwise, or with nothing
+/// OS-specific declared, the per-OS channel hint.
+fn hint_for(tool: &ExternalTool, os: &str, winget: bool) -> Option<String> {
+    match os {
+        "windows" => {
+            if let (true, Some(id)) = (winget, &tool.windows.winget) {
+                return Some(format!("winget install -e --id {id}"));
+            }
+            if let Some(url) = &tool.windows.download {
+                return Some(format!("download from {url}"));
+            }
         }
-        if let Some(url) = &win.download {
-            return Some(format!("download from {url}"));
+        "macos" => {
+            if let Some(name) = &tool.macos.brew {
+                let cask = if tool.macos.cask { "--cask " } else { "" };
+                return Some(format!("brew install {cask}{name}"));
+            }
         }
+        _ => {}
     }
-    install.current().map(str::to_string)
+    tool.install.for_os(os).map(str::to_string)
 }
 
 /// Is winget usable here? It is an App Execution Alias (a zero-byte reparse point in
@@ -547,6 +595,7 @@ dependencies:
             ],
             install: InstallHints::default(),
             windows: WindowsInstall::default(),
+            macos: MacosInstall::default(),
         };
         let status = tool.detect();
         assert!(status.satisfied, "any-of: one resolved alias satisfies");
@@ -566,6 +615,7 @@ dependencies:
             commands: vec!["knaiftestalla".into(), "knaiftestallb".into()],
             install: InstallHints::default(),
             windows: WindowsInstall::default(),
+            macos: MacosInstall::default(),
         };
         // Only one of two present → not satisfied.
         let partial = tool.detect();
@@ -590,6 +640,7 @@ dependencies:
             commands: vec![],
             install: InstallHints::default(),
             windows: WindowsInstall::default(),
+            macos: MacosInstall::default(),
         };
         assert!(!tool.detect().satisfied);
     }
@@ -621,6 +672,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["x".into()],
                 install_hint: None,
+                smart_app_control_blocks: false,
             },
             ToolStatus {
                 name: "req-ok".into(),
@@ -629,6 +681,7 @@ dependencies:
                 found: vec![],
                 missing: vec![],
                 install_hint: None,
+                smart_app_control_blocks: false,
             },
             ToolStatus {
                 name: "opt-missing".into(),
@@ -637,6 +690,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["y".into()],
                 install_hint: None,
+                smart_app_control_blocks: false,
             },
         ];
         let unmet = unmet_required(&statuses);
@@ -653,6 +707,7 @@ dependencies:
             found: vec![],
             missing: vec![],
             install_hint: Some("winget".into()),
+            smart_app_control_blocks: false,
         }];
         assert!(missing_required_message("ffmpeg", &statuses).is_none());
         // No declared tools at all (e.g. documents) is also unblocked.
@@ -669,6 +724,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["ffmpeg".into(), "ffprobe".into()],
                 install_hint: Some("winget".into()),
+                smart_app_control_blocks: false,
             },
             // An unmet OPTIONAL tool must not appear in the blocking message.
             ToolStatus {
@@ -678,6 +734,7 @@ dependencies:
                 found: vec![],
                 missing: vec!["tesseract".into()],
                 install_hint: Some("winget".into()),
+                smart_app_control_blocks: false,
             },
         ];
         let msg = missing_required_message("ffmpeg", &statuses).expect("required tool is missing");
@@ -714,6 +771,25 @@ dependencies:
         assert!(parse_external_tools(FFMPEG_YAML)[0].windows.dirs.is_empty());
     }
 
+    #[test]
+    fn a_tool_smart_app_control_blocks_says_so_and_its_status_carries_it() {
+        let yaml = "\
+dependencies:
+  external_tools:
+    - name: tesseract
+      commands: [knaif-no-such-tesseract]
+      windows:
+        smart_app_control: blocked
+    - name: libreoffice
+      commands: [knaif-no-such-soffice]
+";
+        let tools = parse_external_tools(yaml);
+        assert!(tools[0].blocked_by_smart_app_control());
+        assert!(!tools[1].blocked_by_smart_app_control());
+        assert!(tools[0].detect().smart_app_control_blocks);
+        assert!(!tools[1].detect().smart_app_control_blocks);
+    }
+
     /// A fake executable named `cmd` in `dir`, spelled the way this platform's lookup finds it.
     fn fake_exe(dir: &Path, cmd: &str) -> PathBuf {
         std::fs::create_dir_all(dir).unwrap();
@@ -733,9 +809,9 @@ dependencies:
         path
     }
 
-    /// A declared folder, written the way `skill.yaml` does (backslashes) but with this
-    /// platform's separator: the folder search only runs on Windows in the product, while these
-    /// tests run everywhere, and a backslash is not a separator off Windows.
+    /// A declared folder, written the way `skill.yaml`'s `windows.dirs` does (backslashes) but with
+    /// this platform's separator: these tests run everywhere, and a backslash is not a separator
+    /// off Windows.
     fn declared(pattern: &str) -> String {
         pattern.replace('\\', std::path::MAIN_SEPARATOR_STR)
     }
@@ -825,6 +901,7 @@ dependencies:
                 dirs: vec![declared(r"%KNAIF_TEST_ANY_ROOT%\bin")],
                 ..WindowsInstall::default()
             },
+            macos: MacosInstall::default(),
         };
         let dirs = expand_dirs(&tool.windows.dirs);
         assert_eq!(tool.resolve_any_in(&dirs), Some(in_folder));
@@ -838,44 +915,140 @@ dependencies:
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    fn hinted_tool(win: WindowsInstall, mac: MacosInstall) -> ExternalTool {
+        ExternalTool {
+            name: "tool".into(),
+            required: true,
+            all_required: false,
+            commands: vec!["tool".into()],
+            install: InstallHints {
+                windows: Some("winget".into()),
+                macos: Some("brew".into()),
+                linux: Some("package_manager".into()),
+            },
+            windows: win,
+            macos: mac,
+        }
+    }
+
     #[test]
     fn the_windows_hint_is_the_winget_command_else_the_download_page() {
-        let install = InstallHints {
-            windows: Some("winget".into()),
-            macos: Some("brew".into()),
-            linux: Some("package_manager".into()),
-        };
         let win = WindowsInstall {
             winget: Some("Gyan.FFmpeg".into()),
             download: Some("https://ffmpeg.org/download.html".into()),
             dirs: vec![],
+            smart_app_control: None,
         };
+        let tool = hinted_tool(win, MacosInstall::default());
         assert_eq!(
-            hint_for(&install, &win, true, true).as_deref(),
+            hint_for(&tool, "windows", true).as_deref(),
             Some("winget install -e --id Gyan.FFmpeg")
         );
         assert_eq!(
-            hint_for(&install, &win, true, false).as_deref(),
+            hint_for(&tool, "windows", false).as_deref(),
             Some("download from https://ffmpeg.org/download.html")
         );
+        // No winget package (Ghostscript since 2026-10): the download page even with winget here.
+        let download_only = WindowsInstall {
+            winget: None,
+            download: Some("https://ghostscript.com/releases/gsdnld.html".into()),
+            dirs: vec![],
+            smart_app_control: None,
+        };
+        let download_only = hinted_tool(download_only, MacosInstall::default());
+        assert_eq!(
+            hint_for(&download_only, "windows", true).as_deref(),
+            Some("download from https://ghostscript.com/releases/gsdnld.html")
+        );
         // Nothing Windows-specific declared: the plain channel hint, as before.
-        if cfg!(windows) {
-            assert_eq!(
-                hint_for(&install, &WindowsInstall::default(), true, false).as_deref(),
-                Some("winget")
-            );
-        } else {
-            // Off Windows the block is ignored.
-            let other = if cfg!(target_os = "macos") {
-                "brew"
-            } else {
-                "package_manager"
-            };
-            assert_eq!(
-                hint_for(&install, &win, false, false).as_deref(),
-                Some(other)
-            );
-        }
+        let bare = hinted_tool(WindowsInstall::default(), MacosInstall::default());
+        assert_eq!(hint_for(&bare, "windows", false).as_deref(), Some("winget"));
+        // Off Windows the block is ignored.
+        assert_eq!(
+            hint_for(&tool, "linux", false).as_deref(),
+            Some("package_manager")
+        );
+        assert_eq!(hint_for(&tool, "macos", false).as_deref(), Some("brew"));
+    }
+
+    #[test]
+    fn the_macos_hint_is_the_brew_command() {
+        let formula = MacosInstall {
+            brew: Some("ffmpeg".into()),
+            ..MacosInstall::default()
+        };
+        let tool = hinted_tool(WindowsInstall::default(), formula);
+        assert_eq!(
+            hint_for(&tool, "macos", false).as_deref(),
+            Some("brew install ffmpeg")
+        );
+        // A cask (LibreOffice is an .app, not a formula) needs `--cask`.
+        let cask = MacosInstall {
+            brew: Some("libreoffice".into()),
+            cask: true,
+            ..MacosInstall::default()
+        };
+        let tool = hinted_tool(WindowsInstall::default(), cask);
+        assert_eq!(
+            hint_for(&tool, "macos", false).as_deref(),
+            Some("brew install --cask libreoffice")
+        );
+        // The macOS block never leaks into another OS's hint.
+        assert_eq!(hint_for(&tool, "windows", false).as_deref(), Some("winget"));
+    }
+
+    #[test]
+    fn install_folders_are_the_ones_declared_for_the_running_os() {
+        let tool = hinted_tool(
+            WindowsInstall {
+                dirs: vec![r"%ProgramFiles%\LibreOffice\program".into()],
+                ..WindowsInstall::default()
+            },
+            MacosInstall {
+                dirs: vec!["/Applications/LibreOffice.app/Contents/MacOS".into()],
+                ..MacosInstall::default()
+            },
+        );
+        assert_eq!(
+            tool.declared_dirs("windows"),
+            [r"%ProgramFiles%\LibreOffice\program".to_string()]
+        );
+        assert_eq!(
+            tool.declared_dirs("macos"),
+            ["/Applications/LibreOffice.app/Contents/MacOS".to_string()]
+        );
+        assert!(tool.declared_dirs("linux").is_empty());
+    }
+
+    #[test]
+    fn the_macos_block_parses() {
+        let yaml = "\
+dependencies:
+  external_tools:
+    - name: libreoffice
+      commands: [soffice]
+      macos:
+        brew: libreoffice
+        cask: true
+        dirs: [/Applications/LibreOffice.app/Contents/MacOS]
+";
+        let tools = parse_external_tools(yaml);
+        assert_eq!(tools[0].macos.brew.as_deref(), Some("libreoffice"));
+        assert!(tools[0].macos.cask);
+        assert_eq!(
+            tools[0].macos.dirs,
+            ["/Applications/LibreOffice.app/Contents/MacOS".to_string()]
+        );
+        // Absent block: no formula, not a cask, no folders.
+        let bare = parse_external_tools(
+            "\
+dependencies:
+  external_tools:
+    - name: x
+      commands: [x]
+",
+        );
+        assert!(bare[0].macos.brew.is_none() && !bare[0].macos.cask);
     }
 
     #[test]

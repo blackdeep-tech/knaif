@@ -149,3 +149,38 @@ fn chain_intermediates_are_threaded() {
         }
     }
 }
+
+#[test]
+fn rejected_cases_fail_in_preview() {
+    // A dry run must refuse what execution would refuse, not promise an output. documents_105
+    // (2026-10-03): `preview` accepted `reorder_pages` with `order: "original"` and returned an
+    // output path, while `run` and Python (in both modes) rejected the order. The Python side of
+    // this contract is `test_rejected_plans_fail_in_a_dry_run`.
+    let doc = fixtures();
+    let bundle = repo_root().join("skills/documents");
+    let base = enter_fixture_dir(&doc);
+
+    let cases = doc["rejected_cases"]
+        .as_array()
+        .expect("rejected_cases array");
+    assert!(!cases.is_empty(), "fixture file has no rejected cases");
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let want = case["expected_error"].as_str().unwrap();
+        let mut rejected = None;
+        for step in case["plan"]["plan"].as_array().unwrap() {
+            let tool = step["tool"].as_str().unwrap();
+            let empty = serde_json::Map::new();
+            let args = step["args"].as_object().unwrap_or(&empty);
+            if let Err(err) = preview(tool, args, &base, None, &bundle) {
+                rejected = Some(format!("{err:#}"));
+                break;
+            }
+        }
+        let msg = rejected.unwrap_or_else(|| panic!("case {name}: preview accepted the plan"));
+        assert!(
+            msg.contains(want),
+            "case {name}: rejected with {msg:?}, expected it to mention {want:?}"
+        );
+    }
+}

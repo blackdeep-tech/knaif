@@ -30,7 +30,7 @@ _COMMON = re.compile(r"common='(?P<pattern>[^']+)'")
 
 
 def _filters() -> dict[str, re.Pattern[str]]:
-    """The four job filters, as the workflow actually spells them."""
+    """The job filters, as the workflow actually spells them."""
     text = WORKFLOW.read_text(encoding="utf-8")
 
     common = _COMMON.search(text)
@@ -53,10 +53,10 @@ def _decide(files: list[str]) -> dict[str, bool]:
     return {name: any(rx.search(f) for f in files) for name, rx in filters.items()}
 
 
-JOBS = ("python", "native", "site", "packaging")
+JOBS = ("python", "native", "site", "packaging", "macos")
 
 
-def test_workflow_declares_the_four_filters():
+def test_workflow_declares_one_filter_per_job():
     assert set(_filters()) == set(JOBS)
 
 
@@ -71,13 +71,15 @@ def test_every_filtered_job_exists_in_the_workflow():
     "path,expected",
     [
         ("python/core/knaif/planner.py", {"python"}),
-        ("scripts/site_data.py", {"python"}),
-        ("native/crates/knaif-core/src/lib.rs", {"native"}),
-        ("apps/cli/src/main.rs", {"native"}),
-        ("Cargo.toml", {"native"}),
-        ("rust-toolchain.toml", {"native"}),
+        # D11 (macOS support plan): the macOS job takes scripts/ whole.
+        ("scripts/site_data.py", {"python", "macos"}),
+        ("native/crates/knaif-core/src/lib.rs", {"native", "macos"}),
+        ("apps/cli/src/main.rs", {"native", "macos"}),
+        ("Cargo.toml", {"native", "macos"}),
+        ("rust-toolchain.toml", {"native", "macos"}),
         ("site/org/src/pages/index.astro", {"site"}),
-        ("installers/smoke.sh", {"packaging"}),
+        ("installers/smoke.sh", {"packaging", "macos"}),
+        ("installers/macos/pkg/Distribution.xml.in", {"packaging", "macos"}),
         # Docs are not gated by any job; only the aggregate check runs.
         ("docs/plans/2026-07-17-post-v1-ci-and-cuda-opt-in.md", set()),
         ("README.md", set()),
@@ -133,6 +135,21 @@ def test_push_to_main_runs_everything():
     main rather than never surfacing at all.
     """
     assert all(_decide([]).values())
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["python/core/knaif/agent.py", "skills/ffmpeg/python/handlers.py", "docs/RELEASE.md"],
+)
+def test_python_and_docs_changes_never_queue_for_a_macos_runner(path):
+    """D11: a Python-only or docs PR must not wait on the macOS job."""
+    assert not _decide([path])["macos"]
+
+
+def test_a_skill_contract_or_crate_reaches_the_macos_job():
+    """The .pkg mirrors skill.yaml's macos blocks, and each skill crate is built there."""
+    for path in ("skills/documents/skill.yaml", "skills/ffmpeg/native/src/lib.rs"):
+        assert _decide([path])["macos"], path
 
 
 def test_a_nested_directory_does_not_match_a_top_level_prefix():

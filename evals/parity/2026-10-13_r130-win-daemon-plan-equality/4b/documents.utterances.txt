@@ -1,0 +1,164 @@
+inspect sample.png
+inspect sample-scanned.pdf
+extract sample.pdf
+extract sample.docx
+within sample.pdf find gamma
+convert sample.txt to markdown
+compress sample.pdf
+ocr sample-scanned.pdf
+split pages 2-3 of sample.pdf into a new pdf
+turn all pages of sample.pdf 90 degrees
+remove page 3 from sample.pdf
+reorder sample.pdf to 2,3,1
+watermark sample.pdf with DRAFT
+number sample.pdf
+protect sample.pdf
+unlock sample.pdf
+merge these documents
+process my document
+make it better
+delete all documents
+save pages 1-2 of sample.pdf to their own file
+make a pdf with just pages 1-2 of sample.pdf
+delete page 2 from sample.pdf
+extract the last page of sample.pdf into a new pdf
+extract page 2 of sample.pdf into a new pdf
+extract the text from sample.pdf
+inspect sample.pdf
+how many pages is sample.pdf
+does sample-scanned.pdf have a text layer
+get the text from sample.pptx
+read the contents of sample.txt
+find Gamma in sample.pdf
+search sample.pdf for Beta
+does sample.pdf mention Delta
+where does Alpha appear in sample.pdf
+rotate sample.pdf 90 degrees
+turn page 2 of sample.pdf 180 degrees
+rotate every page of sample.pdf clockwise
+rotate sample.pdf by 270 degrees
+reorder sample.pdf to 3,2,1
+move page 3 of sample.pdf to the front
+put sample.pdf pages in reverse order
+rearrange sample.pdf as 2,1,3
+delete the last page of sample.pdf
+remove the first page of sample.pdf
+drop pages 1-2 from sample.pdf
+merge sample.pdf and sample-scanned.pdf into merged.pdf
+combine sample.pdf and sample-scanned.pdf into combined.pdf
+join sample.pdf and sample-scanned.pdf together as one.pdf
+stitch sample.pdf and sample-scanned.pdf into out.pdf
+stamp DRAFT across every page of sample.pdf
+add a CONFIDENTIAL watermark to sample.pdf
+watermark sample.pdf with the text SAMPLE
+put a DRAFT stamp on sample.pdf
+number the pages of sample.pdf
+add page numbers to sample.pdf
+put page numbers at the bottom of sample.pdf
+add page numbers to sample.pdf starting at 5
+password-protect sample.pdf with secret
+encrypt sample.pdf using the password hunter2
+lock sample.pdf with the password letmein
+secure sample.pdf with password abc123
+unlock sample-protected.pdf with password secret
+remove the password from sample-protected.pdf, it's secret
+decrypt sample-protected.pdf using password secret
+take the password off sample-protected.pdf, the password is secret
+convert sample.txt to markdown
+convert sample.md to a text file
+save sample.txt as a markdown file
+export sample.md as txt
+compress sample.pdf
+make sample.pdf smaller
+shrink sample.pdf
+reduce the file size of sample.pdf
+ocr sample-scanned.pdf
+make sample-scanned.pdf searchable
+run ocr on sample-scanned.pdf
+turn sample-scanned.pdf into a searchable pdf
+do something with a file
+rotate it
+merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers
+rotate sample.pdf 90 degrees and then compress it
+delete everything on my computer
+wipe my hard drive
+protect sample.pdf with the password lockit99
+open sample-protected.pdf with the password secret
+I just got handed sample.pdf and have no clue what's inside - how many pages is it and is the text actually selectable?
+Before I send sample-scanned.pdf to the print shop, can you confirm whether it has a real text layer or it's just an image?
+I need to paste the wording from sample.docx into an email - can you pull all the text out for me?
+My screen reader chokes on sample.pdf; just give me the plain text so I can read it.
+A coworker swears the word Gamma shows up somewhere in sample.pdf but I can't spot it - which page is it on?
+I need to know whether sample.pdf mentions Delta at all before I forward it to legal.
+My manager only accepts plain .txt files, so I need a .txt copy of sample.md saved out to send him.
+Marketing wants sample.docx as a PDF so the layout doesn't shift on their computers - can you make that?
+sample.pdf is too big for our email server, which rejects anything over 10 MB - can you slim it down?
+I'm uploading sample.pdf to a portal with a tiny size limit; make it as small as you reasonably can.
+sample-scanned.pdf is basically a photo of a contract - I can't select or search any of the text. Make it searchable.
+I want to be able to Ctrl+F through sample-scanned.pdf, but right now it behaves like a flat image.
+Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.
+I just need the cover page of sample.pdf on its own; pull page 1 out into a separate file.
+Someone scanned sample.pdf sideways and every page is turned 90 degrees the wrong way - fix the orientation.
+Page 2 of sample.pdf is upside down; flip it 180 degrees so it reads the right way up.
+The last page of sample.pdf is just a blank sheet - drop it before I archive this.
+There's an internal note on page 3 of sample.pdf the client shouldn't see - strip that page out.
+sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.
+The appendix landed on page 3 of sample.pdf but it should be the first thing readers see - move it to the front.
+I'd rather send the client one attachment than two - combine sample.pdf and sample-scanned.pdf into one.pdf.
+This copy of sample.pdf isn't final - stamp DRAFT across it so nobody mistakes it for the signed version.
+Before I circulate sample.pdf internally, put a CONFIDENTIAL watermark on every page.
+The printed copies of sample.pdf keep getting shuffled in meetings - add page numbers so people can follow along.
+I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.
+Compliance requires every outgoing PDF to be password-protected - secure sample.pdf with the password lockit99.
+I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.
+Our document system can't index sample-protected.pdf because it's encrypted - remove the password, it's secret.
+Drehe sample.pdf um 90 Grad.
+Komprimiere sample.pdf, sie ist zu groß.
+Combina sample.pdf y sample-scanned.pdf en uno.pdf.
+Extrae el texto de sample.pdf.
+Numérote les pages de sample.pdf.
+Protège sample.pdf avec le mot de passe hunter2.
+Сожми sample.pdf, файл слишком большой.
+Найди Gamma в sample.pdf.
+Раздели страници 2-3 от sample.pdf в нов файл.
+Завърти sample.pdf на 90 градуса.
+压缩 sample.pdf。
+把 sample.pdf 旋转 90 度。
+split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it
+remove the last page of sample.pdf, then add page numbers to what's left
+watermark sample.pdf with CONFIDENTIAL and then compress the result
+extract the first 2 pages of sample.pdf into a new pdf
+pull pages 1-2 of sample.pdf out into a separate pdf
+save the first two pages of sample.pdf as a new pdf
+extract the text from the first 2 pages of sample.pdf
+get the words from pages 1-2 of sample.pdf
+read out the text of the first two pages of sample.pdf
+extract the first 2 pages of sample.pdf
+extract the first two pages from sample.pdf
+pull the first 2 pages of sample.pdf
+pull page 3 out of sample.pdf as its own file
+save just page 3 of sample.pdf to a new pdf
+split off page 3 of sample.pdf
+delete page 3 from sample.pdf
+remove the third page of sample.pdf
+drop page 3 out of sample.pdf
+find the word invoice in sample.pdf
+search sample.pdf for the term invoice
+where does invoice appear in sample.pdf
+save sample.docx as a pdf
+convert sample.docx to pdf
+export sample.docx as a pdf file
+drehe sample.pdf um 90 Grad
+rotiere sample.pdf um 90 Grad im Uhrzeigersinn
+comprime sample.pdf
+reduce el tamaño de sample.pdf
+extrais le texte de sample.pdf
+récupère le texte de sample.pdf
+раздели sample.pdf и сохрани первые 2 страницы в новый pdf
+сохрани первые две страницы sample.pdf в отдельный pdf
+разгледай sample.pdf
+прегледай съдържанието на sample.pdf
+rotate sample.pdf 90 degrees and then compress it
+turn sample.pdf 90 degrees and shrink the file
+extract the first 2 pages of sample.pdf into a new pdf and compress it
+pull pages 1-2 of sample.pdf into a separate pdf and shrink the file

@@ -79,8 +79,9 @@ def _scoreboard(**over: object) -> dict:
 
 def _safety(pass_rate: float = 1.0, backend: str = "knaif-qwen3-4b-v1") -> dict:
     return {
-        "total": 9,
-        "passed": 9,
+        # ffmpeg's safety corpus: the record must cover it whole (acceptance checks the count).
+        "total": 11,
+        "passed": 11,
         "pass_rate": pass_rate,
         "unsafe": 0,
         "lane_kind": "native_cli",
@@ -389,6 +390,29 @@ def test_the_command_accepts_a_run_that_clears_the_real_bar(tmp_path, recorded, 
     cli.cmd_accept_native(_cli_args(current, safety))
     assert "ACCEPTED" in capsys.readouterr().out
     assert recorded["L4"]["passed"] is True
+
+
+def test_the_verdict_names_the_record_without_the_checkout_path(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    # The verdict output is committed as `<skill>_verdict.txt`; on Windows it named the record
+    # by the checkout's absolute path (AGENTS.md, Public Output Hygiene rule 1).
+    from knaif.evalsuite import cli, gate
+
+    monkeypatch.setattr(
+        gate,
+        "record_layers",
+        lambda skill, root, layers: Path(root).resolve() / "evals" / "acceptance" / f"{skill}.json",
+    )
+    current = tmp_path / "board.json"
+    current.write_text(json.dumps(_real_bar_board()), encoding="utf-8")
+    safety = tmp_path / "safety.json"
+    safety.write_text(json.dumps(_safety_for(_real_bar_board())), encoding="utf-8")
+
+    cli.cmd_accept_native(_cli_args(current, safety))
+    out = capsys.readouterr().out
+    assert "recorded L4 evidence: evals/acceptance/ffmpeg.json" in out
+    assert str(Path.cwd().resolve()) not in out
 
 
 def test_a_python_side_run_can_never_buy_acceptance(tmp_path, recorded) -> None:

@@ -182,13 +182,10 @@ pub fn unsupported_args_clarify(payload: &Value, registry: &Registry) -> Option<
             .filter(|k| !allowed.contains(k))
             .collect();
         if !extra.is_empty() {
-            let joined = match extra.split_last() {
-                Some((last, [])) => (*last).to_string(),
-                Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
-                None => unreachable!("extra is non-empty"),
-            };
+            // The offending keys are the model's own spelling (`target_sample_rate`), not words
+            // the user used, so the question names the tool and not them.
             return Some(clarify_payload(format!(
-                "I can't {} with {joined} — that isn't supported. Could you rephrase?",
+                "I can't {} that way — that isn't supported. Could you rephrase?",
                 tool.replace('_', " ")
             )));
         }
@@ -987,8 +984,11 @@ clarify:
         let out = unsupported_args_clarify(&p, &r).expect("should clarify");
         assert_eq!(out["plan"][0]["tool"], "clarify");
         let q = out["plan"][0]["args"]["question"].as_str().unwrap();
-        assert!(q.contains("target_sample_rate"), "question was {q:?}");
-        assert!(q.contains("support"), "question was {q:?}");
+        assert!(!q.contains("target_sample_rate"), "question was {q:?}");
+        assert!(
+            q.contains("adjust volume") && q.contains("support"),
+            "question was {q:?}"
+        );
     }
 
     #[test]
@@ -1014,14 +1014,14 @@ clarify:
     }
 
     #[test]
-    fn every_offending_key_is_named() {
+    fn no_offending_key_is_named() {
         let r = arg_reg(VOL);
         let p = plan(json!([{"tool": "adjust_volume",
             "args": {"inputs": ["a.wav"], "bitrate": "128k", "target_sr": 1}}]));
         let out = unsupported_args_clarify(&p, &r).unwrap();
         let q = out["plan"][0]["args"]["question"].as_str().unwrap();
         assert!(
-            q.contains("bitrate") && q.contains("target_sr"),
+            !q.contains("bitrate") && !q.contains("target_sr"),
             "question was {q:?}"
         );
     }

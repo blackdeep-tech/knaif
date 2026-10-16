@@ -56,6 +56,12 @@ fn default_store_dir() -> PathBuf {
     home().join(".knaif").join("models")
 }
 
+/// The command that keeps `dir` out of system backups on `os` (a [`std::env::consts::OS`] value),
+/// or `None` where there is nothing to do.
+fn backup_exclusion_argv(os: &str, dir: &Path) -> Option<Vec<std::ffi::OsString>> {
+    (os == "macos").then(|| vec!["tmutil".into(), "addexclusion".into(), dir.into()])
+}
+
 /// Progress callback for a streaming download: `(downloaded_bytes, total_bytes)`, where `total`
 /// is the server-reported content length when known. Called repeatedly as chunks arrive.
 pub type ProgressFn<'a> = dyn FnMut(u64, Option<u64>) + 'a;
@@ -119,6 +125,31 @@ impl ModelStore {
 
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
+    }
+
+    /// Keep the store out of Time Machine (macOS): multi-GB files that can always be downloaded
+    /// again. Only the default `~/.knaif/models` — a `$KNAIF_MODELS_DIR` is a folder the user
+    /// chose and manages. The exclusion is sticky (`tmutil addexclusion` without `-p`): an
+    /// attribute on the folder, no admin rights needed. Returns whether one was applied; callers
+    /// report an error but never fail a download over it.
+    pub fn exclude_from_backups(&self) -> std::io::Result<bool> {
+        if self.dir != default_store_dir() {
+            return Ok(false);
+        }
+        let Some(argv) = backup_exclusion_argv(std::env::consts::OS, &self.dir) else {
+            return Ok(false);
+        };
+        let status = std::process::Command::new(&argv[0])
+            .args(&argv[1..])
+            .stdout(std::process::Stdio::null())
+            .status()?;
+        if status.success() {
+            Ok(true)
+        } else {
+            Err(std::io::Error::other(format!(
+                "tmutil addexclusion: {status}"
+            )))
+        }
     }
 
     fn manifest_path(&self, name: &str) -> Option<PathBuf> {
@@ -390,6 +421,28 @@ recommendations:
     fn store_with(dir: PathBuf, sha: &str) -> ModelStore {
         let manifest_text = MANIFEST.replace("PLACEHOLDER", sha);
         ModelStore::with_dir(dir, Manifest::from_yaml(&manifest_text).unwrap())
+    }
+
+    #[test]
+    fn time_machine_exclusion_is_tmutil_on_macos_only() {
+        let dir = Path::new("/Users/alice/.knaif/models");
+        assert_eq!(
+            backup_exclusion_argv("macos", dir),
+            Some(vec![
+                "tmutil".into(),
+                "addexclusion".into(),
+                "/Users/alice/.knaif/models".into()
+            ])
+        );
+        assert_eq!(backup_exclusion_argv("linux", dir), None);
+        assert_eq!(backup_exclusion_argv("windows", dir), None);
+    }
+
+    #[test]
+    fn a_store_the_user_pointed_elsewhere_is_left_in_backups() {
+        // Only the default ~/.knaif/models is excluded: a $KNAIF_MODELS_DIR is the user's folder.
+        let store = store_with(tmpdir("tm"), "0");
+        assert!(!store.exclude_from_backups().unwrap());
     }
 
     #[test]

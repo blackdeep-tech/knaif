@@ -1519,7 +1519,7 @@ def test_unsupported_arg_on_nl_path_clarifies(tmp_path):
     assert len(results) == 1
     assert results[0]["tool"] == "clarify"
     assert results[0]["result"]["status"] == "clarification_needed"
-    assert "target_sample_rate" in results[0]["result"]["question"]
+    assert "target_sample_rate" not in results[0]["result"]["question"]
 
 
 def test_unsupported_arg_without_utterance_still_errors(tmp_path):

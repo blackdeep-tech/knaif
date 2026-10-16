@@ -1,0 +1,47 @@
+{
+  "purpose": "macOS L3, packaged metal zip, both runtimes on Metal (M1 Pro, macOS 27.2 Beta 2, release build 8cbab23)",
+  "captured": "2026-10-07",
+  "git_sha": "8cbab232b0f64d5394d7bb231b38255ae4902877",
+  "git_branch": "HEAD",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills/ffmpeg/data/eval.jsonl",
+    "rows_compared": 328,
+    "sha256": "15e19e5cb3aee420696e0d1b94a74ebf24baa644562ff11d66e91bc96d09ab96"
+  },
+  "model": {
+    "path": "~/.knaif/models/knaif-qwen3-4b-v2-q4_k_m.gguf",
+    "sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+    "bytes": 2497280960
+  },
+  "binary": {
+    "path": "<repo>/sandbox/macos/knaif/bin/knaif",
+    "sha256": "3da78a28a9ec30bc586127942f8777962710be7e25043df95f3728e8ccd4a1b5"
+  },
+  "backend": "metal",
+  "native_n_gpu_layers": null,
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs llama-cpp-python), so this is a standing property of the comparison, not a misconfiguration — see `backend_attribution.json` next to this file.",
+  "entry_points": {
+    "native": "<repo>/sandbox/macos/knaif/bin/knaif run S --dry-run --model knaif-qwen3-4b-v2-q4_k_m.gguf",
+    "python": "uv run knaif-cli run --dry-run --backend llama-cpp --model knaif-qwen3-4b-v2",
+    "stage": "rendered command argv (shipped dry-run path)"
+  },
+  "result": {
+    "counts": {
+      "match": 298,
+      "mismatch": 0,
+      "decline-divergence": 0,
+      "not-comparable": 30,
+      "native-not-implemented": 0,
+      "port-bug": 0
+    },
+    "equivalence_rate": 1.0,
+    "gated": 298,
+    "port_bugs": 0,
+    "native_not_implemented": 0,
+    "plan_disagreement": 0,
+    "plan_disagreement_rate": 0.0,
+    "max_plan_disagreement": 0.0411,
+    "passed": true
+  }
+}

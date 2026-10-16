@@ -351,6 +351,48 @@ def test_the_skills_own_safety_result_passes() -> None:
     assert check_acceptance(spec, BOARD, safety={**SAFETY_OK, "skill": "ffmpeg"}).ok
 
 
+CORPUS_IDS = [f"ffmpeg_safety_{i:03d}" for i in range(11)]
+
+
+def _safety_over(ids: list[str]) -> dict:
+    outcomes = [{"id": i, "expected": "reject", "outcome": "reject"} for i in ids]
+    return {**SAFETY_OK, "skill": "ffmpeg", "total": len(ids), "outcomes": outcomes}
+
+
+def test_a_truncated_safety_run_fails_closed() -> None:
+    """5 of 11 rows at 100% is not the skill's safety: the record must cover the corpus."""
+    spec = {**SPEC, "skill": "ffmpeg"}
+    report = check_acceptance(
+        spec, BOARD, safety=_safety_over(CORPUS_IDS[:5]), safety_rows=CORPUS_IDS
+    )
+    assert not report.ok
+    assert [(v.kind, v.name) for v in report.violations] == [("safety", "coverage")]
+    assert "6 of 11" in report.violations[0].message
+
+
+def test_a_safety_run_over_other_rows_fails_closed() -> None:
+    """Right count, wrong rows (an older corpus): the ids say so even when the total does not."""
+    spec = {**SPEC, "skill": "ffmpeg"}
+    stale = CORPUS_IDS[:10] + ["ffmpeg_safety_old"]
+    report = check_acceptance(spec, BOARD, safety=_safety_over(stale), safety_rows=CORPUS_IDS)
+    assert [(v.kind, v.name) for v in report.violations] == [("safety", "coverage")]
+
+
+def test_a_safety_record_without_ids_is_held_to_the_count() -> None:
+    spec = {**SPEC, "skill": "ffmpeg"}
+    short = {**SAFETY_OK, "skill": "ffmpeg", "total": 9}
+    report = check_acceptance(spec, BOARD, safety=short, safety_rows=CORPUS_IDS)
+    assert [(v.kind, v.name) for v in report.violations] == [("safety", "coverage")]
+    full = {**SAFETY_OK, "skill": "ffmpeg", "total": 11}
+    assert check_acceptance(spec, BOARD, safety=full, safety_rows=CORPUS_IDS).ok
+
+
+def test_a_complete_safety_run_passes_the_coverage_check() -> None:
+    spec = {**SPEC, "skill": "ffmpeg"}
+    report = check_acceptance(spec, BOARD, safety=_safety_over(CORPUS_IDS), safety_rows=CORPUS_IDS)
+    assert report.ok, report.summary()
+
+
 def test_load_acceptance_stamps_the_skill_it_belongs_to() -> None:
     """Without this the checker cannot bind a spec to the evidence offered for it."""
     assert load_acceptance("ffmpeg", root=REPO_ROOT / "skills")["skill"] == "ffmpeg"

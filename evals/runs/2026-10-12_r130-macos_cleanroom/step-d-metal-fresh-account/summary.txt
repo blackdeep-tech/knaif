@@ -1,0 +1,27 @@
+Step D: Metal from a fresh standard account on the physical Mac (M1 Pro, macOS 27.2), 2026-10-13.
+A new account (not round 1's), the CI .zip (sha256 bb042cc4...) copied to ~/Downloads, given Safari's
+quarantine (0083;<hex time>;Safari;) and extracted by Finder (Archive Utility). The extracted bin/knaif
+carries the quarantine too. Command, twice, from ~/work with the fixture sample.pdf:
+  /usr/bin/time -p ~/Downloads/knaif-1.3.0-macos-arm64/bin/knaif run documents --yes --verbose \
+    --model <repo>/models/knaif-qwen3-4b-v2-q4_k_m.gguf "rotate sample.pdf 90 degrees"
+No Gatekeeper block: the quarantined binary ran unattended, from a script, to exit 0, both times.
+
+== run 1 (cold, the first launch in this account)
+ggml_metal_device_init: GPU name:   MTL0 (Apple M1 Pro)
+load_backend: loaded MTL backend from ~/Downloads/knaif-1.3.0-macos-arm64/bin/libggml-metal.so
+llama_prepare_model_devices: using device MTL0 (Apple M1 Pro) (unknown id) - 12123 MiB free
+load_tensors: offloaded 37/37 layers to GPU
+✓ wrote ~/work/sample-rotated.pdf
+real 18.89
+user 0.33
+sys 0.71
+
+== run 2 (warm)
+ggml_metal_device_init: GPU name:   MTL0 (Apple M1 Pro)
+load_backend: loaded MTL backend from ~/Downloads/knaif-1.3.0-macos-arm64/bin/libggml-metal.so
+llama_prepare_model_devices: using device MTL0 (Apple M1 Pro) (unknown id) - 12123 MiB free
+load_tensors: offloaded 37/37 layers to GPU
+✓ wrote ~/work/sample-rotated-1.pdf
+real 3.46
+user 0.25
+sys 0.35

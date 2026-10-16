@@ -10,7 +10,8 @@ check that makes it a failure instead of a discovery.
     python scripts/check_no_local_paths.py dist/staging/<dir> [--forbid PREFIX ...]
     python scripts/check_no_local_paths.py --checkout FILE ...     (the pre-commit hook)
 
-Without --forbid, forbids this machine's home directory (none inside a container running as root).
+Without --forbid, forbids this machine's home directory (none inside a container running as root,
+or on a GitHub-hosted runner).
 --checkout also forbids the checkout's own absolute path: right for files committed to the public
 repo, wrong for binaries, where llama.cpp compiles in its backend folder under the build tree.
 """
@@ -22,15 +23,31 @@ import os
 import re
 from pathlib import Path
 
+# The accounts GitHub-hosted runners build as. Like a container's `/root` they name nobody, and the
+# prebuilt PDFium every macOS package ships was itself built on one: its libpdfium.dylib carries
+# `/Users/runner/work/pdfium-binaries/...` ~650 times, which no remap of ours can reach. Exempt only
+# under GitHub Actions, so a person who happens to be called `runner` is still protected.
+RUNNER_HOMES = ("/Users/runner", "/home/runner", "C:\\Users\\runneradmin")
 
-def forbidden_prefixes(home: str | None = None, windows: bool | None = None) -> list[str]:
+
+def forbidden_prefixes(
+    home: str | None = None, windows: bool | None = None, ci: bool | None = None
+) -> list[str]:
     """The prefixes that identify the builder: their home directory, unless it is a container's
-    `/root`, which names nobody."""
+    `/root` or a GitHub-hosted runner's account, which name nobody."""
     home = home if home is not None else os.path.expanduser("~")
     windows = os.name == "nt" if windows is None else windows
+    ci = os.environ.get("GITHUB_ACTIONS") == "true" if ci is None else ci
     if not home or (not windows and home.rstrip("/") == "/root"):
         return []
-    return [home.rstrip("/\\")]
+    home = home.rstrip("/\\")
+    if not home:  # `/` (some service accounts): nothing to forbid, and "" would match every path
+        return []
+    if ci and home.replace("/", "\\").lower() in (
+        h.replace("/", "\\").lower() for h in RUNNER_HOMES
+    ):
+        return []
+    return [home]
 
 
 def _pattern(prefix: str) -> re.Pattern[bytes]:
@@ -61,7 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.checkout:
         prefixes = [*prefixes, str(Path.cwd().resolve())]
     if not prefixes:
-        print("check_no_local_paths: nothing to forbid here (container root); skipped")
+        print(
+            "check_no_local_paths: nothing to forbid here (container root or GitHub runner); skipped"
+        )
         return 0
     files: list[Path] = []
     for raw in args.paths:
@@ -74,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {n:6d}  {f}")
         if args.checkout:
             print("Write paths relative to the repo, or as <repo>/... and ~/... (AGENTS.md).")
+        elif hits(str(Path.cwd().resolve()).encode(), prefixes):
+            # No remap reaches llama.cpp's backend folder, which it compiles in as a value.
+            print("This checkout is inside the home directory, and llama.cpp compiles its backend")
+            print("folder (under target/) into the binaries. Build from a checkout outside it,")
+            print("for example under /Users/Shared (docs/RELEASE.md).")
         else:
             print("Build with scripts/build_native_kind.sh (scripts/path_hygiene.sh remaps it).")
         return 1

@@ -13,11 +13,25 @@
 #                 never required.
 #
 # `os` ids are `contracts/release/platforms.yaml` ids; `backend` is what the run's layers actually
-# landed on (`compute_backend`, folded to cuda | vulkan | cpu), not what the binary offered.
+# landed on (`compute_backend`, folded to cuda | vulkan | mtl | cpu), not what the binary offered.
 
-current_release: "1.2.0"
+current_release: "1.3.0"
 
 releases:
+  "1.3.0":
+    # The cells of the release plan's gate rules (pre-registered 2026-10-07). The CPU cells of
+    # Linux and macOS are composed from the pre-drawn sample, as 1.2.0 did Linux's.
+    models: [knaif-qwen3-4b-v2, knaif-qwen3-1.7b-v2]
+    entries:
+      - { os: windows-x64, backend: cuda, coverage: full }
+      - { os: windows-x64, backend: vulkan, coverage: full }
+      - { os: windows-x64, backend: cpu, coverage: full }
+      - { os: linux-x64, backend: cuda, coverage: full }
+      - { os: linux-x64, backend: cpu, coverage: full }        # composed
+      - { os: linux-x64, backend: vulkan, coverage: not-measured }
+      - { os: macos, backend: mtl, coverage: full }            # Apple Silicon, the `.zip`
+      - { os: macos, backend: cpu, coverage: full }            # composed into the Metal board
+
   "1.2.0":
     # Both ship together (R0). Model names are the public manifest keys.
     models: [knaif-qwen3-4b-v2, knaif-qwen3-1.7b-v2]

@@ -15,6 +15,19 @@ brew install ffmpeg         # macOS
 winget install Gyan.FFmpeg  # Windows
 ```
 
+On a macOS version Homebrew no longer builds packages for (macOS 12 with Homebrew 7, for
+example), `brew install ffmpeg` compiles FFmpeg and about 25 dependencies from source, which can
+take hours.
+
+**Tested versions.** knaif is tested with the versions below; older ones may work but are not
+tested and may not. knaif does not check versions at run time.
+
+| Tool | Windows | Linux (Ubuntu 24.04) |
+|---|---|---|
+| `ffmpeg` / `ffprobe` | 8.1.1 (Gyan build) | 6.1.1 |
+
+Lowest tested: **FFmpeg 6.1**. (Recorded 2026-10-06 from the Windows dev box and the Linux L4 lane.)
+
 If the binaries are missing, `_deps.py` raises a clear error at execution time
 (`ffmpeg not found on PATH. Install ffmpeg to use the ffmpeg skill.` / the same for
 `ffprobe`). Dry-run (`dry_run=True`) and the `cheap` eval verifier are text-only and

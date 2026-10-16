@@ -1,0 +1,78 @@
+{
+  "logFormatVersion": 1,
+  "jobId": "7f51076b-cc1e-438a-bee5-33c79b09e51b",
+  "status": "Accepted",
+  "statusSummary": "Ready for distribution",
+  "statusCode": 0,
+  "archiveFilename": "knaif-1.2.1-macos-arm64.pkg",
+  "uploadDate": "2026-10-08T21:24:35.698Z",
+  "sha256": "48eda817e361283a71c3c5cdea4de0cf001e76c6a5ce90ac5791794fee0a2535",
+  "ticketContents": [
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg",
+      "digestAlgorithm": "SHA-1",
+      "cdhash": "b4c2311256f1522ac01a70ef5d4d6a084bea161e"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libpdfium.dylib",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "19b3e171f366e0ff6551f43de80f966fa9bf51a9",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libggml.0.13.1.dylib",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "9c979ea99e5d488d2c91599a0f519c1353b9bcbc",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/knaif",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "24fc5003c9615dcbe801386927df3c220c142d42",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libllama.0.0.0.dylib",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "191a6346b229e23bda2e8863325e2cb9e6363c8f",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libllama-common.0.0.0.dylib",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "4ddab7641cf0879034be08ddbe050d96c4781ee2",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libggml-cpu-apple_m4.so",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "5140ccc92d948a3d239bac3ee097203c60067012",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libggml-cpu-apple_m2_m3.so",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "8491795e1205dbb36bf8a5c40f5668fb7cbb3f2b",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libggml-cpu-apple_m1.so",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "f7441fc9b262ab9e3e08acf0e5f7a1b58ce6d0b6",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libggml-metal.so",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "31a506102ed850e179ffeaec2501638506965be3",
+      "arch": "arm64"
+    },
+    {
+      "path": "knaif-1.2.1-macos-arm64.pkg/core.pkg Contents/Payload/usr/local/knaif/bin/libggml-base.0.13.1.dylib",
+      "digestAlgorithm": "SHA-256",
+      "cdhash": "82893ad419cd753e3c4118e415884335184eda1c",
+      "arch": "arm64"
+    }
+  ],
+  "issues": null
+}

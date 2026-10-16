@@ -334,7 +334,9 @@ native-mock *args:
 
 # Cargo features for real-inference runs. Override for a GPU backend, e.g.
 # `KNAIF_FEATS=llama,vulkan,pdfium just native ...` (or cuda).
-FEATS := env_var_or_default("KNAIF_FEATS", "llama,pdfium")
+# `openmp` is explicit since knaif-llm turned llama-cpp-2's defaults off (see package.sh
+# feats_for_kind); macOS leaves it out so a dev build cannot pick up Homebrew's libomp.
+FEATS := env_var_or_default("KNAIF_FEATS", if os() == "macos" { "llama,pdfium" } else { "llama,openmp,pdfium" })
 
 # Default model for `just native`. A name resolves against the model store; a .gguf path is used
 # as-is. Override per-run with `KNAIF_MODEL=... just native ...` or an inline `--model` (last wins).
@@ -421,7 +423,7 @@ package *args:
     bash "{{justfile_directory()}}/installers/package.sh" {{args}}
 
 # Build a FUNCTIONAL release artifact (real llama.cpp inference) and package it into dist/.
-# kind = cpu | vulkan | cuda. Builds via `just build-native-kind`, so it lands in its own
+# kind = cpu | vulkan | cuda (Windows/Linux) | metal (macOS only). Builds via `just build-native-kind`, so it lands in its own
 # target/release-<kind>/ and does NOT need a "Developer PowerShell for VS" — the build script
 # locates Visual Studio and enters VsDevCmd.bat itself, and sets LIBCLANG_PATH, CMAKE_GENERATOR
 # and CUDAARCHS. package.sh is then pointed at that directory with --profile.
@@ -430,6 +432,8 @@ package *args:
 #   just package-native cpu       # build kind only (a box with no Vulkan SDK) -> `-cpu` suffix.
 #                                 # NOT a release artifact: C5b ships one default artifact per OS.
 #   just package-native cuda      # opt-in CUDA payload for ~/.knaif/backends (NOT an app), BOTH OSes
+#   just package-native metal     # THE MACOS RELEASE ARTIFACT. Gets the plain name (D2: it is the
+#                                 # ONLY functional kind there — `cpu`/`vulkan`/`cuda` are refused).
 #
 # `dynamic-backends` is REQUIRED for EVERY functional kind, `cuda` included: it is what makes the
 # ggml backends loadable, which is what lets CUDA be opt-in (C5/Option 3). Building without it
@@ -457,8 +461,8 @@ package-native kind="cpu":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{kind}}" in
-      cpu|vulkan|cuda) ;;
-      *) echo "kind must be cpu|vulkan|cuda" >&2; exit 1;;
+      cpu|vulkan|cuda|metal) ;;
+      *) echo "kind must be cpu|vulkan|cuda|metal" >&2; exit 1;;
     esac
     bash "{{justfile_directory()}}/scripts/build_native_kind.sh" {{kind}}
     bash "{{justfile_directory()}}/installers/package.sh" --no-build --kind={{kind}} --profile=release-{{kind}}
@@ -489,6 +493,21 @@ package-linux *args:
 [unix]
 package-linux *args:
     bash "{{justfile_directory()}}/installers/linux/build-in-container.sh" {{args}}
+
+# macOS: the .pkg from the staged `metal` tree (stage it first with `just package-native metal`).
+# UNSIGNED — for inspecting it (`pkgutil --expand`, E6) and trying the options page. The published
+# .pkg comes from `just release-macos`, which signs the binaries first (F2's order).
+[macos]
+package-pkg *args:
+    bash "{{justfile_directory()}}/installers/macos/build-pkg.sh" {{args}}
+
+# macOS release: sign, notarize and staple the staged `metal` tree as .zip + .pkg, in F2's order.
+# Needs the Developer ID identities and notary credentials in the environment — see
+# installers/macos/README.md. Writes no SHA256SUMS: that is generated once, over the complete
+# release set, right before publishing (RELEASE.md).
+[macos]
+release-macos *args:
+    bash "{{justfile_directory()}}/installers/macos/release.sh" {{args}}
 
 # Compile the Windows Inno Setup installer from the STAGED artifact (stage it first with
 # `just package-native vulkan`). Needs Inno Setup 6 (ISCC). kind selects which staged artifact to

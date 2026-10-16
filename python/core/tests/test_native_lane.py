@@ -393,3 +393,11 @@ def test_eval_native_refuses_an_unpackaged_binary(tmp_path, monkeypatch) -> None
     with pytest.raises(SystemExit) as exc:
         cli.cmd_native(args)
     assert "PDFium" in str(exc.value.code) and "--allow-unpackaged" in str(exc.value.code)
+
+
+def test_the_lane_approves_replacing_files_so_a_corpus_run_stays_non_interactive() -> None:
+    """Since 1.3.0 `--yes` no longer approves replacing an existing file, and a corpus run has
+    nobody to ask: without `--overwrite` a row whose output already exists would stop instead of
+    producing the plan the lane is measuring."""
+    argv = build_argv(_lane(), "ffmpeg", "convert a.mov to mp4")
+    assert "--overwrite" in argv[: argv.index("--")]

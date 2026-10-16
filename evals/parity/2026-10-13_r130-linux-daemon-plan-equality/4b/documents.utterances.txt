@@ -1,0 +1,35 @@
+remove page 3 from sample.pdf
+unlock sample.pdf
+does sample.pdf mention Delta
+where does Alpha appear in sample.pdf
+turn page 2 of sample.pdf 180 degrees
+reorder sample.pdf to 3,2,1
+rearrange sample.pdf as 2,1,3
+delete the last page of sample.pdf
+remove the first page of sample.pdf
+save sample.txt as a markdown file
+export sample.md as txt
+make sample.pdf smaller
+make sample-scanned.pdf searchable
+turn sample-scanned.pdf into a searchable pdf
+My screen reader chokes on sample.pdf; just give me the plain text so I can read it.
+I need to know whether sample.pdf mentions Delta at all before I forward it to legal.
+I'm uploading sample.pdf to a portal with a tiny size limit; make it as small as you reasonably can.
+I just need the cover page of sample.pdf on its own; pull page 1 out into a separate file.
+The appendix landed on page 3 of sample.pdf but it should be the first thing readers see - move it to the front.
+Before I circulate sample.pdf internally, put a CONFIDENTIAL watermark on every page.
+I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.
+Drehe sample.pdf um 90 Grad.
+Komprimiere sample.pdf, sie ist zu groß.
+Extrae el texto de sample.pdf.
+Protège sample.pdf avec le mot de passe hunter2.
+Сожми sample.pdf, файл слишком большой.
+压缩 sample.pdf。
+watermark sample.pdf with CONFIDENTIAL and then compress the result
+extract the text from the first 2 pages of sample.pdf
+save just page 3 of sample.pdf to a new pdf
+split off page 3 of sample.pdf
+save sample.docx as a pdf
+reduce el tamaño de sample.pdf
+сохрани первые две страницы sample.pdf в отдельный pdf
+rotate sample.pdf 90 degrees and then compress it

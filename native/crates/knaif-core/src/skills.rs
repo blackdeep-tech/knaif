@@ -74,7 +74,24 @@ pub fn resolve_skills_root() -> Option<PathBuf> {
     // Installed layout: `skills/` ships beside the executable — resolve relative to it so a
     // packaged `knaif` run from any directory still finds its bundles.
     let exe = std::env::current_exe().ok()?;
-    skills_root_near(exe.parent()?)
+    skills_root_for_exe(&exe)
+}
+
+fn skills_root_for_exe(exe: &Path) -> Option<PathBuf> {
+    skills_root_near(real_exe_path(exe).parent()?)
+}
+
+/// The running executable with symlinks resolved, for every "look beside the binary" lookup.
+///
+/// macOS reports the path the program was *invoked* by, so a `knaif` reached through the `.pkg`'s
+/// `/usr/local/bin/knaif` link (or Homebrew's) would otherwise look for `skills/` and `contracts/`
+/// next to the link. Linux's `/proc/self/exe` is already resolved; resolving again is harmless.
+pub fn current_exe_real() -> Option<PathBuf> {
+    std::env::current_exe().ok().map(|exe| real_exe_path(&exe))
+}
+
+fn real_exe_path(exe: &Path) -> PathBuf {
+    crate::sandbox::resolve_real(exe, Path::new(""))
 }
 
 /// Find a `skills/` bundle dir relative to the executable's directory: beside it, or one level up
@@ -199,6 +216,49 @@ mod tests {
         assert_eq!(skills_root_near(&root), Some(root.join("skills")));
         // No bundle anywhere near → None.
         assert_eq!(skills_root_near(&bin.join("nested")), None);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// Make a file symlink, or `None` where the OS refuses (Windows without Developer Mode).
+    fn symlink_file(target: &Path, link: &Path) -> Option<()> {
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(target, link);
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(target, link);
+        made.ok()
+    }
+
+    #[test]
+    fn skills_root_follows_a_symlinked_exe_to_the_install() {
+        // The macOS `.pkg` and the Homebrew formula put `knaif` on PATH as a symlink
+        // (`/usr/local/bin/knaif` → `/usr/local/knaif/bin/knaif`). macOS reports the path the
+        // program was invoked by, so the lookup must resolve the link before looking for skills/.
+        let root = std::env::temp_dir().join(format!("knaif_link_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let install_bin = root.join("install").join("bin");
+        let on_path = root.join("usr_local_bin");
+        fs::create_dir_all(&install_bin).unwrap();
+        fs::create_dir_all(&on_path).unwrap();
+        write_skill(
+            &root.join("install").join("skills"),
+            "ffmpeg",
+            "name: ffmpeg\ndescription: media\n",
+        );
+        let exe = install_bin.join("knaif");
+        fs::write(&exe, b"").unwrap();
+        let link = on_path.join("knaif");
+        if symlink_file(&exe, &link).is_none() {
+            eprintln!("skipped: this OS refused to create a symlink");
+            let _ = fs::remove_dir_all(&root);
+            return;
+        }
+
+        let found = skills_root_for_exe(&link).expect("skills/ found through the link");
+        assert_eq!(
+            fs::canonicalize(found).unwrap(),
+            fs::canonicalize(root.join("install").join("skills")).unwrap()
+        );
 
         let _ = fs::remove_dir_all(&root);
     }

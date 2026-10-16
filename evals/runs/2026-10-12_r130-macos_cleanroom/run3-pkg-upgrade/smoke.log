@@ -1,0 +1,9 @@
+smoke: knaif
+  ok  --version -> knaif 1.3.0 (inference: llama.cpp)
+  ok  skills list -> ffmpeg + documents found from an unrelated cwd
+  ok  skills deps -> dependency detection runs
+  ok  plan --json -> JSON envelope on stdout
+  ok  LICENSE + NOTICE present
+  ok  contracts present (core tools, model manifest, backend manifest)
+  ok  backend list -> manifest resolves exe-relative
+PASS: knaif (v1.3.0)

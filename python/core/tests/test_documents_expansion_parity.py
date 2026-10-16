@@ -86,3 +86,20 @@ def test_chain_intermediates_are_threaded(doc: dict, agent) -> None:
                 f"{case['name']}: step {i + 2} takes {declared!r} but step {i + 1} produced "
                 f"{produced!r} — the chain is not threaded"
             )
+
+
+def test_rejected_plans_fail_in_a_dry_run(doc: dict, agent) -> None:
+    """A dry run must refuse what execution would refuse, not promise an output.
+
+    documents_105 (2026-10-03): native's dry run accepted `reorder_pages` with `order: "original"`
+    and printed an output path; its execution, and Python in both modes, rejected the order. The
+    native side of this contract is `rejected_cases_fail_in_preview` in
+    skills/documents/native/tests/expansion_parity.rs.
+    """
+    assert doc["rejected_cases"], "fixture file has no rejected cases"
+    for case in doc["rejected_cases"]:
+        with pytest.raises(Exception) as caught:
+            agent.execute_plan(case["plan"], dry_run=True, confirmed=False)
+        assert case["expected_error"] in str(
+            caught.value
+        ), f"{case['name']}: rejected with {caught.value!r}, expected {case['expected_error']!r}"

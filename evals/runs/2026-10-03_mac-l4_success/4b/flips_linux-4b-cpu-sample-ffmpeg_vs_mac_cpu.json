@@ -1,0 +1,30 @@
+{
+  "reference": "linux/knaif-qwen3-4b-v2/cpu-sample/ffmpeg",
+  "shared": 115,
+  "only_one_side": 0,
+  "decision": {
+    "flips": 2,
+    "both_correct": [
+      "ffmpeg_hard_016#1"
+    ],
+    "only_reference": [
+      "ffmpeg_246#2"
+    ],
+    "only_other": [],
+    "both_wrong": []
+  },
+  "canonical": {
+    "flips": 2,
+    "both_correct": [
+      "ffmpeg_hard_016#1"
+    ],
+    "only_reference": [
+      "ffmpeg_246#2"
+    ],
+    "only_other": [],
+    "both_wrong": []
+  },
+  "grades_differ": [
+    "ffmpeg_246#2"
+  ]
+}

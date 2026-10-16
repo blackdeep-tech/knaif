@@ -143,10 +143,38 @@ def test_without_a_matrix_the_flat_record_still_works(tree: Path) -> None:
 
 @pytest.mark.parametrize(
     ("device", "family"),
-    [("CUDA0", "cuda"), ("Vulkan0", "vulkan"), ("CPU", "cpu"), (None, None), ("Metal", "metal")],
+    [
+        ("CUDA0", "cuda"),
+        ("Vulkan0", "vulkan"),
+        ("CPU", "cpu"),
+        ("MTL0", "mtl"),
+        (None, None),
+        ("Metal", "metal"),
+    ],
 )
 def test_backend_family(device, family) -> None:
     assert backend_family(device) == family
+
+
+def test_the_repo_matrix_holds_the_1_3_0_gate_cells() -> None:
+    """The cells of the 1.3.0 gate rules (release plan, pre-registered 2026-10-07)."""
+    root = Path(__file__).resolve().parents[3]
+    matrix = load_matrix(root)
+    assert matrix is not None
+    assert matrix["current_release"] == "1.3.0"
+    cells = set(required_cells(matrix, "L4"))
+    for model in ("knaif-qwen3-4b-v2", "knaif-qwen3-1.7b-v2"):
+        for os_id, backend in (
+            ("windows-x64", "cuda"),
+            ("windows-x64", "vulkan"),
+            ("windows-x64", "cpu"),
+            ("linux-x64", "cuda"),
+            ("linux-x64", "cpu"),
+            ("macos", "mtl"),
+            ("macos", "cpu"),
+        ):
+            assert cell_key(model, os_id, backend) in cells
+    assert len(cells) == 14
 
 
 def test_the_repo_matrix_is_well_formed() -> None:
@@ -162,7 +190,7 @@ def test_the_repo_matrix_is_well_formed() -> None:
     release = matrix["releases"][matrix["current_release"]]
     for entry in release["entries"]:
         assert entry["os"] in known_os, entry
-        assert entry["backend"] in {"cuda", "vulkan", "cpu"}, entry
+        assert entry["backend"] in {"cuda", "vulkan", "mtl", "cpu"}, entry
         assert entry["coverage"] in {"full", "not-measured"}, entry
 
 

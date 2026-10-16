@@ -1,0 +1,72 @@
+## 4b metal ffmpeg
+   rows        : 861 vs 861 (shared 861)
+   placement   : MTL0 vs MTL0
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9384 vs 0.9384
+   knaif score : 0.9857 vs 0.9857
+   verdict     : ACCEPTED - 45 thresholds met.  |  ACCEPTED - 45 thresholds met.
+   safety      : 11/11 vs 11/11
+   p50 latency : 7979 ms vs 8009 ms
+   plans differ: 0   grades differ: 0
+## 4b metal documents
+   rows        : 164 vs 164 (shared 164)
+   placement   : MTL0 vs MTL0
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9756 vs 0.9756
+   knaif score : 0.9851 vs 0.9851
+   verdict     : ACCEPTED - 42 thresholds met.  |  ACCEPTED - 42 thresholds met.
+   safety      : 9/9 vs 9/9
+   p50 latency : 3363 ms vs 3387 ms
+   plans differ: 0   grades differ: 0
+## 1.7b metal ffmpeg
+   rows        : 861 vs 861 (shared 861)
+   placement   : MTL0 vs MTL0
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9187 vs 0.9187
+   knaif score : 0.9780 vs 0.9780
+   verdict     : NOT ACCEPTED - 1 of 45 thresholds unmet:  |  NOT ACCEPTED - 1 of 45 thresholds unmet:
+   safety      : 11/11 vs 11/11
+   p50 latency : 4052 ms vs 4048 ms
+   plans differ: 0   grades differ: 0
+## 1.7b metal documents
+   rows        : 164 vs 164 (shared 164)
+   placement   : MTL0 vs MTL0
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9634 vs 0.9634
+   knaif score : 0.9945 vs 0.9945
+   verdict     : ACCEPTED - 42 thresholds met.  |  ACCEPTED - 42 thresholds met.
+   safety      : 9/9 vs 9/9
+   p50 latency : 1675 ms vs 1691 ms
+   plans differ: 0   grades differ: 0
+## 4b cpu ffmpeg
+   rows        : 115 vs 115 (shared 115)
+   placement   : CPU vs CPU
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9130 vs 0.9130
+   knaif score : 0.9789 vs 0.9789
+   p50 latency : 30554 ms vs 32639 ms
+   plans differ: 0   grades differ: 0
+## 4b cpu documents
+   rows        : 35 vs 35 (shared 35)
+   placement   : CPU vs CPU
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 1.0000 vs 1.0000
+   knaif score : 0.9926 vs 0.9926
+   p50 latency : 13654 ms vs 14579 ms
+   plans differ: 0   grades differ: 0
+## 1.7b cpu ffmpeg
+   rows        : 115 vs 115 (shared 115)
+   placement   : CPU vs CPU
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9304 vs 0.9304
+   knaif score : 0.9694 vs 0.9694
+   p50 latency : 16839 ms vs 16965 ms
+   plans differ: 0   grades differ: 0
+## 1.7b cpu documents
+   rows        : 35 vs 35 (shared 35)
+   placement   : CPU vs CPU
+   binary      : d3e91b27b24c vs d3e91b27b24c
+   outcome     : 0.9429 vs 0.9429
+   knaif score : 0.9905 vs 0.9905
+   p50 latency : 7188 ms vs 7287 ms
+   plans differ: 0   grades differ: 0

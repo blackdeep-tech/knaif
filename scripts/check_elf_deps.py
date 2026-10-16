@@ -71,10 +71,20 @@ def _verkey(v: str) -> list[int]:
     return [int(p) for p in re.findall(r"\d+", v)] or [0]
 
 
+class NotAnELF(ValueError):
+    """A file whose magic is not ELF at all — a script, a README. Safe to skip.
+
+    Distinct from a plain ValueError, which means "its magic SAYS ELF and it still would not
+    parse" — truncated, 32-bit, corrupt — and must fail rather than be skipped. Collapsing the two
+    lets a broken binary ship while the checker prints ok. `check_pe_imports.py` sidesteps this by
+    only inspecting `.exe`/`.dll`; ELF executables carry no suffix, so magic is the only signal.
+    """
+
+
 def _sections(data: bytes):
     """Yield (name_off, sh_type, sh_offset, sh_size, sh_link, sh_entsize) plus the shstrtab."""
     if data[:4] != b"\x7fELF":
-        raise ValueError("not an ELF file")
+        raise NotAnELF("not an ELF file")
     if data[4] != 2:
         raise ValueError("not ELF64 (32-bit binaries are not shipped)")
     (e_shoff,) = struct.unpack_from("<Q", data, 0x28)
@@ -95,8 +105,23 @@ def _cstr(data: bytes, offset: int) -> str:
 
 
 def analyse(path: Path) -> tuple[list[str], dict[str, str]]:
-    """Return (DT_NEEDED names, {library: max required symbol version})."""
+    """Return (DT_NEEDED names, {library: max required symbol version}).
+
+    Raises `NotAnELF` for a file that is not ELF at all, `ValueError` for one that claims to be and
+    is malformed. `struct.error` is folded into the latter: it does NOT subclass `ValueError`, so a
+    truncated ELF used to escape every caller's handler as an uncaught crash rather than a reported
+    failure — the same hardening `check_macho_deps.py` already does around its own header walk.
+    """
     data = path.read_bytes()
+    try:
+        return _analyse(data)
+    except NotAnELF:
+        raise
+    except struct.error as exc:
+        raise ValueError(f"malformed ELF structure: {exc}") from exc
+
+
+def _analyse(data: bytes) -> tuple[list[str], dict[str, str]]:
     sections = _sections(data)
 
     needed: list[str] = []
@@ -179,9 +204,18 @@ def main(argv: list[str] | None = None) -> int:
     for binary in binaries:
         try:
             needed, versions = analyse(binary)
-        except ValueError as exc:
+        except NotAnELF as exc:
+            # Genuinely not our format — bin/ holds scripts and data too.
             if args.verbose:
                 print(f"  --   {binary.name}: {exc} (skipped)")
+            continue
+        except ValueError as exc:
+            # Its magic SAYS ELF and it still would not parse: truncated, 32-bit, or corrupt.
+            # Skipping this is how a broken binary ships while the checker reports a clean tree.
+            failures.append(
+                f"{binary.name}: claims to be an ELF but cannot be parsed — {exc}. A file this "
+                "checker cannot read is a file it cannot clear; treat it as a failure, not a skip"
+            )
             continue
 
         for lib in needed:

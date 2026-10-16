@@ -24,7 +24,7 @@ pub use clarify_gate::{
 pub use deps::{
     detect_skill_deps, expand_dirs, load_external_tools, missing_required_message,
     parse_external_tools, resolve_declared_command, resolve_declared_tool, unmet_required,
-    ExternalTool, InstallHints, ToolStatus, WindowsInstall,
+    ExternalTool, InstallHints, MacosInstall, ToolStatus, WindowsInstall,
 };
 pub use extract::{extract_json, ExtractedJson};
 pub use nl_clarify_gate::nl_clarify_gate;
@@ -40,4 +40,4 @@ pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
 pub use retrieval::{retrieve_tools, RetrievedTools, DEFAULT_TOP_K};
 pub use safety::{is_unsafe_request, load_unsafe_phrases};
 pub use sandbox::{assert_in_sandbox, lexical_normalize, resolve_real};
-pub use skills::{list_skills, resolve_skills_root, SkillMeta};
+pub use skills::{current_exe_real, list_skills, resolve_skills_root, SkillMeta};

@@ -7,6 +7,7 @@ someone scrubbing the output afterwards.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from knaif.evalsuite.redact import redact_local_paths
@@ -48,6 +49,21 @@ def test_windows_paths_match_in_any_case_and_a_longer_name_does_not() -> None:
 
 def test_a_container_root_home_is_left_alone() -> None:
     assert redact_local_paths("/root/.cargo/x", root="/src", home="/root") == "/root/.cargo/x"
+
+
+def test_a_saved_scoreboard_carries_no_local_path(tmp_path: Path) -> None:
+    # `evalsuite run` and `evalsuite native` saved boards whose rows held the checkout's
+    # absolute path, so the macOS 1.3.0 boards could not be committed.
+    from knaif.evalsuite.report import save_scoreboard_json
+
+    checkout, home = str(Path.cwd().resolve()), str(Path.home())
+    board = {"rows": [{"command": f"knaif run {checkout}/sandbox/a.mp4", "model": f"{home}/m"}]}
+
+    out = tmp_path / "board.json"
+    save_scoreboard_json(board, out)
+
+    row = json.loads(out.read_text(encoding="utf-8"))["rows"][0]
+    assert row == {"command": "knaif run <repo>/sandbox/a.mp4", "model": "~/m"}
 
 
 def test_the_committed_evidence_writers_redact() -> None:

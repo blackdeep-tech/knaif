@@ -84,6 +84,8 @@ which can only be adopted before the first outside contribution.
   low-reputation `setup.exe` that also ships loadable `ggml-*.dll` backends and downloads a 2.5 GB
   file post-install is exactly the shape that draws a heuristic hit.
   **Fold the submission into [`docs/RELEASE.md`](../RELEASE.md) as a release step, not a one-off.**
+  *Folded in 2026-10-07 (RELEASE.md §5 step 6); the submissions themselves are made at each
+  release, starting with 1.3.0.*
 
 ---
 
@@ -148,13 +150,14 @@ Two layers, and signing only the installer leaves every bundled DLL unsigned.
 - [x] **Always timestamp** (`/tr` + `/td sha256`). Untimestamped binaries stop validating the day the
   certificate expires, which with a 458-day cap is now a yearly cliff rather than a distant one.
 
-## - [ ] S3 — Docs
+## - [x] S3 — Docs
 
-- [ ] Update [`docs/RELEASE.md`](../RELEASE.md): the §6 "ships unsigned" note and the checksum
+- [x] Update [`docs/RELEASE.md`](../RELEASE.md): the §6 "ships unsigned" note and the checksum
   guidance both change, and S0's Defender submission becomes a standing release step.
   *Partly done 2026-10-02:* §2 *Signing* (setup + `KNAIF_SIGN_CMD`) and §6 (signed, SmartScreen
   still possible, Smart App Control) are written, and README.md's support table no longer says
-  unsigned. **Open:** the Defender submission step (S0).
+  unsigned. *Done 2026-10-07:* the Defender submission is §5 step 6, a standing release step;
+  §6 also says which supporting tools Smart App Control blocks.
 - [x] Update [`installers/windows/README.md`](../../installers/windows/README.md) if it describes the
   artifact as unsigned.
 - [x] **Reconcile `AppPublisher` with the certificate subject** (now `Blackdeep Technologies Ltd`,
@@ -208,7 +211,12 @@ describes the signed cut, including the Defender submission step.
   optimisation of this plan, **not a dependency of it** — a hand-cut signed release is a complete
   outcome. If SignPath Foundation is ever adopted, this becomes a hard dependency, since it signs
   only CI-built artifacts; revisit the ordering at that point and not before.
-- **macOS notarization** — no macOS installer exists yet.
+- **macOS signing and notarization** — its own plans: the pipeline in
+  [macos-support](2026-08-02-macos-support.md) §9 (Workstream F) and the owner's certificate steps
+  in [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). Unlike here it is not
+  optional (Gatekeeper blocks, SmartScreen only warns), and it signs in CI from a protected
+  `release` environment; if this plan ever moves Windows signing into CI too, reuse that pattern
+  rather than designing a second one.
 - **Kernel-mode or driver signing** — knaif ships no drivers.
 
 ---

@@ -1,0 +1,12 @@
+Starting the model daemon (knaif-qwen3-1.7b-v2-q6_k)...
+knaif daemon is running with knaif-qwen3-1.7b-v2-q6_k.
+Later runs use it automatically; stop it with `knaif daemon stop`.
+knaif daemon is running (pid 39596).
+  model:    knaif-qwen3-1.7b-v2-q6_k
+  requests: 0
+  idle:     0 s (stops after 10 min)
+knaif daemon is running (pid 39596).
+  model:    knaif-qwen3-1.7b-v2-q6_k
+  requests: 1067
+  idle:     0 s (stops after 10 min)
+knaif daemon stopped.

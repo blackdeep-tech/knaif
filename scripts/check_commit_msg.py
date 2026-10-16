@@ -61,6 +61,21 @@ SKIP_RE = re.compile(
     r"^(?:Merge\s|Revert\s\"|Applying\s|Rebase\s)",
 )
 
+# Published commits the range check met only after they were shared, by full ID. Rewording them
+# would rewrite every commit after them on a shared branch (merge, never rebase), so they pass
+# by name. Add an ID here only with the owner's approval; never a pattern.
+EXEMPT_COMMITS = {
+    "e687fe191231a7680e9d5b31f980089e7580b69f": (
+        "macOS plan record, 2026-08-03: subject over 72 characters (owner, 2026-10-09)"
+    ),
+    "0a3c1fcae5520ac1a4db254a2efb40def931d7cf": (
+        "macOS OpenMP finding, 2026-08-07: no type(scope) header (owner, 2026-10-09)"
+    ),
+    "fa12542ec65f2b455308dcf31ce03f123c24e4c1": (
+        "macOS C1-C7 record, 2026-08-07: no type(scope) header (owner, 2026-10-09)"
+    ),
+}
+
 # `git commit --verbose` appends the staged diff below this marker.
 SCISSORS = "# ------------------------ >8 ------------------------"
 
@@ -137,6 +152,9 @@ def _check_range(rev_range: str) -> int:
 
     failed = 0
     for sha, raw in commits:
+        if sha in EXEMPT_COMMITS:
+            print(f"{sha[:12]} exempt: {EXEMPT_COMMITS[sha]}")
+            continue
         problems = check(strip_comments(raw))
         if not problems:
             continue

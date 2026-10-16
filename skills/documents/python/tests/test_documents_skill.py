@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import json
 import shutil
@@ -595,6 +596,21 @@ def test_reorder_pages_rejects_all_out_of_range_order(tmp_path: Path):
             {"input": str(manifest["pdf"]), "order": "9,10,11"},
             _handler_context(tmp_path),
         )
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_remove_pages_refuses_to_remove_every_page(tmp_path: Path, dry_run: bool):
+    # Removing every page would write an empty document. Native refuses it; so does Python, in
+    # the preview as well as the run, and a repeated page counts once ("1,1,2" of 3 is fine).
+    _require_documents_extra()
+    module = _load_fixture_module()
+    manifest = module.generate_documents_fixtures(tmp_path)
+    handlers = _documents_handlers_module()
+    ctx = dataclasses.replace(_handler_context(tmp_path), dry_run=dry_run)
+    with pytest.raises(ValueError, match="every page"):
+        handlers.RemovePagesStep().handle({"input": str(manifest["pdf"]), "pages": "1-3"}, ctx)
+    kept = handlers.RemovePagesStep().handle({"input": str(manifest["pdf"]), "pages": "1,1,2"}, ctx)
+    assert kept["pages"] == 1
 
 
 def test_rotate_remove_and_reorder_pdf_pages(tmp_path: Path):

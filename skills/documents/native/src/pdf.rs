@@ -154,12 +154,19 @@ pub fn rotate_pages(doc: &mut Document, selected: &[i64], degrees: i64) -> anyho
 
 /// Delete `remove` (1-based) pages, keeping the rest in order. Mirrors the pikepdf
 /// build-a-new-doc-of-kept-pages behavior via lopdf's `delete_pages`.
-pub fn remove_pages(doc: &mut Document, remove: &[i64]) -> anyhow::Result<()> {
-    let total = page_count(doc) as i64;
-    let to_delete: Vec<u32> = remove.iter().map(|p| *p as u32).collect();
-    if to_delete.len() as i64 >= total {
+/// Refuse a removal that leaves no page. Repeats count once ("1,1,2" of 3 keeps page 3), as in
+/// Python's `RemovePagesStep`. Shared by the run and the preview.
+pub fn check_removal(total: i64, remove: &[i64]) -> anyhow::Result<()> {
+    let distinct: std::collections::BTreeSet<i64> = remove.iter().copied().collect();
+    if distinct.len() as i64 >= total {
         anyhow::bail!("refusing to remove every page (would produce an empty document)");
     }
+    Ok(())
+}
+
+pub fn remove_pages(doc: &mut Document, remove: &[i64]) -> anyhow::Result<()> {
+    check_removal(page_count(doc) as i64, remove)?;
+    let to_delete: Vec<u32> = remove.iter().map(|p| *p as u32).collect();
     doc.delete_pages(&to_delete);
     Ok(())
 }

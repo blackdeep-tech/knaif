@@ -1,0 +1,8 @@
+ProductName:	macOS
+ProductVersion:	12.6
+BuildVersion:	21G115
+console=root
+SoftwareUpdate AutomaticCheckEnabled=0
+SoftwareUpdate AutomaticDownload=0
+SoftwareUpdate AutomaticallyInstallMacOSUpdates=0
+SoftwareUpdate CriticalUpdateInstall=0

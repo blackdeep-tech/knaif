@@ -1,0 +1,44 @@
+macOS 12.6; console user: root
+
+######## signed
+quarantine on extracted knaif: 0083;6ac8ed6b;Safari;BEFE31A1-8E72-4B03-8ACA-3857F5BEFF56
+codesign: Signature size=9080 TeamIdentifier=8YJ4KKV9SJ 
+-- launch: knaif --version
+exit 0: knaif 1.2.1 (inference: llama.cpp)
+-- spctl --assess -t execute: ~/e4-signed/knaif-1.2.1-macos-arm64/bin/knaif: rejected (the code is valid but does not seem to be an app) origin=Developer ID Application: Blackdeep Technologies Ltd OOD (8YJ4KKV9SJ) 
+-- spctl --assess -t install (.pkg): knaif-1.2.1-macos-arm64.pkg: accepted source=Notarized Developer ID origin=Developer ID Installer: Blackdeep Technologies Ltd OOD (8YJ4KKV9SJ) 
+
+######## unsigned
+quarantine on extracted knaif: 0083;6ac8ed6d;Safari;0E2063B9-3FF0-4C0C-83DA-B8419F1B7525
+codesign: Signature=adhoc TeamIdentifier=not set 
+-- launch: knaif --version
+exit 137: 
+-- spctl --assess -t execute: ~/e4-unsigned/knaif-1.2.1-macos-arm64/bin/knaif: rejected 
+-- spctl --assess -t install (.pkg): knaif-1.2.1-macos-arm64-unsigned.pkg: rejected source=no usable signature 
+
+######## syspolicyd decisions (last 3 min)
+2026-10-09 06:34:25.161 Df syspolicyd[130:820] [com.apple.syspolicy.exec:default] Adding Gatekeeper denial breadcrumb (direct): PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52216), (team: (null)), (id: knaif-5555494428f6b9bc56b8347e82c7d2ca04e335ac), (bundle_id: NOT_A_BUNDLE)
+2026-10-09 06:34:25.243 Df syspolicyd[130:5a5] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:25.257 Df syspolicyd[130:5a5] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:35.520 Df syspolicyd[130:822] [com.apple.syspolicy.exec:default] GK performScan: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52328), (team: (null)), (id: (null)), (bundle_id: (null))
+2026-10-09 06:34:35.846 Df syspolicyd[130:822] [com.apple.syspolicy.exec:default] GK evaluateScanResult: 1, PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52328), (team: 8YJ4KKV9SJ), (id: knaif), (bundle_id: NOT_A_BUNDLE), 1, 0, 1, 0, 4, 4, 0
+2026-10-09 06:34:35.846 Df syspolicyd[130:822] [com.apple.syspolicy.exec:default] Clearing Gatekeeper denial breadcrumb: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52328), (team: 8YJ4KKV9SJ), (id: knaif), (bundle_id: NOT_A_BUNDLE)
+2026-10-09 06:34:35.859 Df syspolicyd[130:8dd] [com.apple.syspolicy.exec:default] GK performScan: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52337), (team: (null)), (id: (null)), (bundle_id: (null))
+2026-10-09 06:34:36.069 Df syspolicyd[130:8dd] [com.apple.syspolicy.exec:default] GK evaluateScanResult: 1, PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52337), (team: 8YJ4KKV9SJ), (id: libggml-base.0), (bundle_id: NOT_A_BUNDLE), 1, 0, 1, 0, 4, 4, 0
+2026-10-09 06:34:36.081 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK performScan: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52327), (team: (null)), (id: (null)), (bundle_id: (null))
+2026-10-09 06:34:36.370 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK evaluateScanResult: 1, PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52327), (team: 8YJ4KKV9SJ), (id: libggml.0), (bundle_id: NOT_A_BUNDLE), 1, 0, 1, 0, 4, 4, 0
+2026-10-09 06:34:36.383 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK performScan: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52330), (team: (null)), (id: (null)), (bundle_id: (null))
+2026-10-09 06:34:36.619 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK evaluateScanResult: 1, PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52330), (team: 8YJ4KKV9SJ), (id: libllama-common.0), (bundle_id: NOT_A_BUNDLE), 1, 0, 1, 0, 4, 4, 0
+2026-10-09 06:34:36.632 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK performScan: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52329), (team: (null)), (id: (null)), (bundle_id: (null))
+2026-10-09 06:34:36.863 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK evaluateScanResult: 1, PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52329), (team: 8YJ4KKV9SJ), (id: libllama.0), (bundle_id: NOT_A_BUNDLE), 1, 0, 1, 0, 4, 4, 0
+2026-10-09 06:34:37.303 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK performScan: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52419), (team: (null)), (id: (null)), (bundle_id: (null))
+2026-10-09 06:34:37.391 Df syspolicyd[130:805] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:37.410 Df syspolicyd[130:805] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:37.487 Df syspolicyd[130:8eb] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:37.504 Df syspolicyd[130:8eb] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:37.529 Df syspolicyd[130:805] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:37.627 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] GK evaluateScanResult: 1, PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52419), (team: (null)), (id: knaif-5555494428f6b9bc56b8347e82c7d2ca04e335ac), (bundle_id: NOT_A_BUNDLE), 1, 0, 1, 0, 0, 0, 5
+2026-10-09 06:34:37.627 E  syspolicyd[130:805] [com.apple.syspolicy.exec:default] Denying, eval requires a prompt but there is no logged in user: PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52419), (team: (null)), (id: knaif-5555494428f6b9bc56b8347e82c7d2ca04e335ac), (bundle_id: NOT_A_BUNDLE)
+2026-10-09 06:34:37.627 Df syspolicyd[130:805] [com.apple.syspolicy.exec:default] Adding Gatekeeper denial breadcrumb (direct): PST: (vuid: E9F63F15-B85C-4099-8DA1-C14B15F0F611), (objid: 52419), (team: (null)), (id: knaif-5555494428f6b9bc56b8347e82c7d2ca04e335ac), (bundle_id: NOT_A_BUNDLE)
+2026-10-09 06:34:37.723 Df syspolicyd[130:8eb] [com.apple.securityd:SecError] Error checking with notarization daemon: 3
+2026-10-09 06:34:37.737 Df syspolicyd[130:8eb] [com.apple.securityd:SecError] Error checking with notarization daemon: 3

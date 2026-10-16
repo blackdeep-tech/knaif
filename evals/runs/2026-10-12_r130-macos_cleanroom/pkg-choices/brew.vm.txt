@@ -1,0 +1,5 @@
+12.6
+console=root
+/opt/homebrew/bin/brew
+Homebrew 7.0.9
+ca-certificates cmake mpdecimal ninja openssl@4 pkgconf readline sqlite xz 
