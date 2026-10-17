@@ -378,3 +378,26 @@ def test_recorded_plans_that_do_not_line_up_are_refused(tmp_path, monkeypatch) -
     recorded.write_text(json.dumps(_plan("a")) + "\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="1 line.* 3 selected"):
         cli.cmd_native(_native_args(tmp_path, batch_plans=str(recorded)))
+
+
+def test_the_batch_file_is_found_from_the_folder_the_binary_runs_in(tmp_path, monkeypatch) -> None:
+    """The binary runs with cwd = the batch folder, so a relative path to the batch file (the
+    lane sandbox is relative by default) pointed nowhere: the first T0 CUDA stage, 2026-10-17."""
+    seen: dict[str, Any] = {}
+
+    def fake(argv, **kw):
+        arg = Path(argv[argv.index("--batch") + 1])
+        resolved = arg if arg.is_absolute() else Path(kw["cwd"]) / arg
+        seen["exists"] = resolved.is_file()
+        return subprocess.CompletedProcess(argv, 0, json.dumps(_plan("a")) + "\n", "")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(native_lane.subprocess, "run", fake)
+    batch_plan(
+        _lane(tmp_path),
+        "ffmpeg",
+        ["one"],
+        fixture_dir=_fixtures(tmp_path),
+        work_dir=Path("sb") / ".batch",
+    )
+    assert seen["exists"], "the binary would not find its batch file"

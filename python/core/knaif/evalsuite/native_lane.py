@@ -348,7 +348,8 @@ def batch_plan(
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True)
     provision_fixtures(fixture_dir, work_dir)
-    batch_file = work_dir / ".knaif-batch.txt"
+    # Absolute: the binary runs with cwd = work_dir, where a relative path points nowhere.
+    batch_file = (work_dir / ".knaif-batch.txt").resolve()
     batch_file.write_text("".join(u + "\n" for u in utterances), encoding="utf-8")
     argv = [
         str(lane.binary),

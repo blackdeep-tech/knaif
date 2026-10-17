@@ -187,7 +187,12 @@ plans to equal the batch plans for those rows.
 **B2. Cross-backend cells by confirmation.** Vulkan and CPU differ from CUDA only in arithmetic.
 Batch-plan each backend (B1), re-run in full only the rows whose plan differs from CUDA, and add a
 **fresh pre-drawn confirmation sample** on that backend (the step 1.3.0's amendment found missing).
-1.3.0's 4B CPU cell (~4.3 h) would have been ~30–40 min.
+1.3.0's 4B CPU cell (~4.3 h) would have been ~30–40 min. *Corrected by T0, 2026-10-17:* it
+would not. That estimate assumed execution was a CPU row's cost; it is planning (12.5 of 13.2 s a
+row, even in one batch), and finding the rows whose CPU plan differs means planning all of them.
+On a GPU backend B2 still saves the execution of the matching rows (Vulkan vs CUDA plans differ on
+63 of 861 ffmpeg rows, 5 of 164 documents). What shortens a CPU cell is not re-planning at all:
+the store (Part E) when planning did not change, the subset (Part D) when it did.
 
 **B3. Daemon plan equality on a stratified sample** (every tool, both skills, ~150 rows) instead of
 the whole corpus twice; the full corpus only when the daemon or the generation path changed.
@@ -463,8 +468,18 @@ add what is missing and add more complex rows — and say what that does to comp
 
 | Skill | Rows | Utterances identical across two rows | Rows sharing tool, outcome and success criteria | Chain rows |
 |---|---:|---:|---:|---:|
-| ffmpeg | 328 | 42 | 213 in 41 groups | 27 |
-| documents | 143 | 7 | 85 in 27 groups | 7 |
+| ffmpeg | 328 | ~~42~~ **12** | ~~213 in 41 groups~~ **215 rows in 39 groups** | 27 |
+| documents | 143 | ~~7~~ **5** | ~~85 in 27 groups~~ **110 rows in 28 groups** | 7 |
+
+*Corrected 2026-10-17 by `evalsuite corpus-audit` (T7).* The 2026-10-15 scan kept only `a-z0-9`
+when it compared text, so every Chinese, Russian or Bulgarian utterance collapsed to its file
+names (32 ffmpeg rows "shared" the utterance `clipmp4`), and it counted rows beyond the first of
+each group rather than rows in groups. The groups also turn out to be a weak duplicate signal:
+most are clarify and reject rows, which carry no criteria and test different requests that all
+expect a question or a refusal, and single requests written in five languages. What a removal
+can rest on is narrower, and is what the audit proposes: a row whose every utterance is already
+in another row expecting exactly the same result (tools, outcome, fixture, criteria). That is
+**3 ffmpeg rows and 5 documents rows**; the reports are under `evals/corpus-review/2026-10-17/`.
 
 - **Every aggregate breaks.** `diff_snapshots` refuses a population (`total`) mismatch by design,
   so after any row is added or removed each skill's snapshots (4B and 1.7B) must be re-locked
@@ -540,7 +555,7 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
 
 ## Tasks
 
-- [ ] **T0. Measure before building.** On the frozen 1.3.0 binary: (a) time `plan --batch` for one
+- [x] **T0. Measure before building.** On the frozen 1.3.0 binary: (a) time `plan --batch` for one
       ffmpeg cell vs today's 44 min; (b) time executing those plans one after another (no model);
       (c) compare `plan --batch` plans with the cell's `run` plans, every row, on CUDA, Vulkan, CPU;
       (d) time one 100-row CPU shard on a GitHub Windows and Linux runner; (e) on a GitHub macOS
@@ -563,10 +578,16 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       So B1's execution half must keep `run`'s screen and its clarify gate, which it does by
       replaying through `run` itself (T3). On the same evidence, `plan --batch` took ~0.45 s a
       row against ~2.5 s for `run` (the 1.3.0 `TOTALS`): ~6.5 min against ~36 min for the 4B
-      ffmpeg cell's planning. Still to measure: (b) execution alone, (a) a fresh batch-planned
-      cell end to end, and (c) on Vulkan and CPU — the script is
-      `evals/runs/2026-10-17_t0-box_success/run_all.sh` (stages `exec`, no GPU; `cuda`,
-      `vulkan`, `cpu`), each compared row by row with 1.3.0's cell.
+      ffmpeg cell's planning.
+      **(a)–(c) done 2026-10-17 on this box** (`evals/runs/2026-10-17_t0-box_success/`,
+      `report.md`; the owner gave the box for the afternoon): the frozen 1.3.0 binary,
+      batch-planned and executed by replay, **both models, CUDA, Vulkan (whole cells) and CPU
+      (100 rows a skill): the same grade, plan and command as 1.3.0's cell on every one of the
+      7,450 rows compared**, and every live cold-start row planned as in the batch. Cell times on
+      a GPU about halve (4B CUDA ffmpeg 43.7 → 22.2 min; Vulkan 50.4 → 27.2; 1.7B CUDA 35.4 →
+      17.3). On the CPU only 13–34% (4B ffmpeg 17.2 → 13.2 s a row): planning is the cost there,
+      not the model load (≈95% of a CPU row even in one batch). (b) Execution alone: 13.7 min
+      for 861 ffmpeg rows, 23 s for 164 documents rows.
 - [ ] **T0b. C1/C2 workflow:** a `workflow_dispatch` cell workflow (shard matrix for CPU and
       macOS, download and verify the frozen files, cached models, compose + safety +
       `accept-native` job, artifacts). **First half built 2026-10-16**, and T0(d)/(e) run from
@@ -595,6 +616,12 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       source run — the match above was made by aggregates. `save_snapshot` must record
       `source_run` (folder + scoreboard sha256) and the gate must refuse a snapshot without one;
       the two existing snapshots get the field by a metadata-only edit, not a re-run.
+      *Corrected 2026-10-17:* those four source scoreboards are **not committed**: they exist
+      only on the maintainer's machine (`evals/**` ignores per-arm boards). Checked the same day:
+      each one's aggregates equal its snapshot's exactly, each carries every row (861 / 164),
+      and `check_no_local_paths` finds nothing in them. `source_run` can only name a committed
+      run, so they are committed first (owner's decision: it publishes per-row results), then
+      the field is added.
 - [ ] **T2c. E1/E2: the store** — key derivation, lookup, write, and `evalsuite cell` composing a
       board from the store plus a list of missing keys; tests with synthetic fingerprints that
       each reuse row of E3 reuses exactly what it says and nothing more.
@@ -623,6 +650,14 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       the missing and complex rows under their own tag, the safety corpus reviewed; the owner
       approves the removal list and the new rows before they land. Kept rows byte-identical
       (a test diffs kept ids against the previous corpus).
+      **Scan built 2026-10-17:** `evalsuite corpus-audit --skill <s> --out DIR` (report.md +
+      audit.json; edits nothing). It proposes only rows wholly contained in another row with the
+      same expected result (never a safety row; the larger row is kept), and lists for a person
+      the same words with different expected results (5 ffmpeg pairs, each differing only in
+      criteria, one also in fixture), near-duplicate paraphrases, and coverage per tool. First
+      reports: `evals/corpus-review/2026-10-17/{ffmpeg,documents}/report.md` — **3 + 5 rows
+      proposed, waiting for the owner**. Safety corpora: no repeats. Still to do: the owner's
+      decision, `eval_removed.jsonl`, the kept-rows test, and the new complex rows.
 - [ ] **T7b. Re-lock on the reviewed corpus**, one commit per model per skill, from the next
       fine-tune cycle's full run; the hard-rows slice floor written then. The subset (T2b) is
       derived after this.

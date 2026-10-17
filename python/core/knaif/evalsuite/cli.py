@@ -2316,6 +2316,45 @@ def cmd_row_diff(args: argparse.Namespace) -> None:
         print(f"  saved to {out}")
 
 
+def cmd_corpus_audit(args: argparse.Namespace) -> None:
+    """Part G's duplicate scan: what to propose for removal, what needs a person (T7)."""
+    from knaif.registry import load_registry
+
+    from .corpus_audit import audit_rows, render_markdown
+
+    corpus_path = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    if not corpus_path.exists():
+        sys.exit(f"Corpus not found: {corpus_path}")
+    raw = corpus_path.read_bytes()
+    rows = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
+    safety_path = corpus_path.with_name("safety_test.jsonl")
+    safety = (
+        [
+            json.loads(line)
+            for line in safety_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if safety_path.exists()
+        else []
+    )
+    registry = load_registry(Path("skills") / args.skill / "tools.yaml")
+    public = [name for name, tool in registry.items() if not tool.internal]
+    audit = audit_rows(
+        args.skill, rows, safety, public, corpus_sha256=hashlib.sha256(raw).hexdigest()
+    )
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "audit.json").write_text(
+        json.dumps(audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    (out / "report.md").write_text(render_markdown(audit), encoding="utf-8")
+    print(
+        f"{args.skill}: {audit['rows']} rows, {len(audit['proposed_removals'])} proposed for "
+        f"removal, {len(audit['duplicates']['across_rows'])} utterances in more than one row, "
+        f"{len(audit['near_duplicates'])} near-duplicate pairs -> {out / 'report.md'}"
+    )
+
+
 def cmd_rerun_set(args: argparse.Namespace) -> None:
     """The rows a composed cell must re-run: every base row whose reused plan differs in full, or
     that has none. Written as a `native --only` file (R5c T9b)."""
@@ -2827,6 +2866,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_sh.add_argument("--rows", type=int, default=None, help="Utterances to draw (default: all)")
     p_sh.add_argument("--out", required=True, metavar="DIR")
 
+    # corpus-audit — Part G's duplicate scan (T7)
+    p_ca = sub.add_parser(
+        "corpus-audit",
+        help="Scan a skill's eval corpus for duplicates and coverage gaps (proposes, never edits)",
+        description=(
+            "Proposes for removal only the rows whose every utterance repeats an earlier row with "
+            "the same expected result (never a safety row), and lists everything looser for a "
+            "person: the same words with a different expected result, near-duplicate paraphrases, "
+            "tools with no plan or clarify row. Writes report.md and audit.json; edits nothing."
+        ),
+    )
+    p_ca.add_argument("--skill", required=True)
+    p_ca.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
+    p_ca.add_argument("--out", required=True, metavar="DIR")
+
     # row-diff — two boards compared row by row (G3)
     p_rd = sub.add_parser(
         "row-diff",
@@ -3215,6 +3269,7 @@ def main() -> None:
         "rerun-set": cmd_rerun_set,
         "shards": cmd_shards,
         "row-diff": cmd_row_diff,
+        "corpus-audit": cmd_corpus_audit,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,

@@ -29,6 +29,9 @@
 #   bash evals/runs/<this folder>/run_all.sh vulkan   T0(c): the same cell on Vulkan          ~25-35 min
 #   bash evals/runs/<this folder>/run_all.sh cpu      T0(c): 100 rows per skill on the CPU    ~30-45 min
 #
+# MODEL=1.7b before any stage runs it for knaif-qwen3-1.7b-v2 instead (added 2026-10-17, after
+# the 4B stages, so B1 is checked on both shipped models).
+#
 # Budgets are estimates from 1.3.0's timings on this box, not promises. Each stage also prints
 # where its time went (board `timing`: plan_batch_s, rows_s).
 #
@@ -58,11 +61,18 @@ ART=sandbox/r130/artifact                                                      #
 EXE_REL="$ART/knaif-1.3.0-windows-x64/bin/knaif.exe"
 CUDA_DIR="$(cygpath -aw sandbox/r130/backends-cuda)"
 EMPTY_DIR="$(cygpath -aw sandbox/r130/backends-empty)"
-REF=evals/runs/2026-10-13_r130-windows_success/4b                  # 1.3.0's 4B Windows boards
-BATCH130=evals/parity/2026-10-13_r130-win-daemon-plan-equality/4b  # 1.3.0's CUDA batch plans
-LANE=r130-win-4b
-GGUF=models/knaif-qwen3-4b-v2-q4_k_m.gguf
-GGUF_SHA256=a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7
+# MODEL=4b (default) or MODEL=1.7b. The 4B's outputs are <stage>/, the 1.7B's 1.7b/<stage>/.
+MODEL="${MODEL:-4b}"
+case "$MODEL" in
+  4b) GGUF=models/knaif-qwen3-4b-v2-q4_k_m.gguf
+      GGUF_SHA256=a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7; OUT="$R" ;;
+  1.7b) GGUF=models/knaif-qwen3-1.7b-v2-q6_k.gguf
+      GGUF_SHA256=d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5; OUT="$R/1.7b" ;;
+  *) echo "MODEL must be 4b or 1.7b" >&2; exit 2 ;;
+esac
+REF="evals/runs/2026-10-13_r130-windows_success/$MODEL"                  # 1.3.0's Windows boards
+BATCH130="evals/parity/2026-10-13_r130-win-daemon-plan-equality/$MODEL"  # 1.3.0's CUDA batch plans
+LANE="r130-win-$MODEL"
 THREADS="${THREADS:-8}"                     # as 1.3.0's cells
 export KNAIF_N_THREADS="$THREADS" KNAIF_N_THREADS_BATCH="$THREADS"
 unset KNAIF_PDFIUM_PATH KNAIF_BACKEND_MANIFEST KNAIF_N_GPU_LAYERS KNAIF_LLM_BACKEND KNAIF_LLM_MOCK_RESPONSE
@@ -79,7 +89,7 @@ failed() { log "FAILED $STAGE: $*"; FAILED=1; }
 abort() { log "ABORTED $STAGE: $*"; exit 1; }
 
 # -- preflight -------------------------------------------------------------------------------------
-log "START $STAGE"
+log "START $STAGE ($MODEL)"
 git merge-base --is-ancestor "$FREEZE" HEAD || abort "HEAD does not contain the freeze commit $FREEZE"
 [ -z "$(git diff --name-only "$FREEZE" HEAD -- skills)" ] \
   || abort "skills/ (corpora, verifiers, fixtures) differ from the freeze: grades would not be comparable"
@@ -120,7 +130,7 @@ field() {  # $1 board, $2 python expression over `b` -> printed value
 }
 
 one() {  # $1 skill, $2 reference board: run the stage's cell for one skill, then diff it
-  local skill="$1" ref="$2" d="$R/$STAGE/$skill" board args=() got
+  local skill="$1" ref="$2" d="$OUT/$STAGE/$skill" board args=() got
   rm -rf "$d" && mkdir -p "$d"
   $UV python -m knaif.evalsuite fixtures regen --skill "$skill" > "$d/fixtures.log" 2>&1 \
     || { failed "$skill: fixture regeneration failed"; return 1; }
@@ -143,7 +153,7 @@ one() {  # $1 skill, $2 reference board: run the stage's cell for one skill, the
   [ "$got" = "$WANT" ] || { failed "VOID $skill: the probe ran on '$got', expected $WANT"; return 1; }
   $UV python -m knaif.evalsuite row-diff "$board" "$ref" --out "$d/comparison.json" > "$d/rowdiff.txt" 2>&1 \
     || { failed "$skill: row-diff failed"; return 1; }
-  log "$STAGE $skill: placement $got; timing $(field "$board" "b.get('timing')"); cold start $(field "$board" "b.get('batch_live')")"
+  log "$STAGE $MODEL $skill: placement $got; timing $(field "$board" "b.get('timing')"); cold start $(field "$board" "b.get('batch_live')")"
   sed 's/^/    /' "$d/rowdiff.txt" | head -40 | tee -a "$R/COMPLETE"
 }
 
