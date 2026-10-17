@@ -552,6 +552,21 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       grade identically to the box on 100/100 rows but run 3.1× slower; macOS on GitHub's runner
       is unusable. The process is optimized on this machine first; other machines later. (a)–(c)
       still wait for the owner.
+      **(c) on CUDA, answered from 1.3.0's own evidence (2026-10-17, no new run):** the
+      daemon check's in-process pass is `plan --batch` over every utterance on the frozen
+      binary, CUDA (`evals/parity/2026-10-13_r130-win-daemon-plan-equality/`); against the plans
+      1.3.0's CUDA cells dumped from `run`, both models, both skills (2,050 utterances), **every
+      row the model planned is identical**. Of the 17 rows that are not, 16 are rows `run` never
+      asked the model about: the unsafe-phrase screen rejects them before inference, and `plan
+      --batch` does not screen. The 17th is a row the model failed to plan, an error on both
+      paths.
+      So B1's execution half must keep `run`'s screen and its clarify gate, which it does by
+      replaying through `run` itself (T3). On the same evidence, `plan --batch` took ~0.45 s a
+      row against ~2.5 s for `run` (the 1.3.0 `TOTALS`): ~6.5 min against ~36 min for the 4B
+      ffmpeg cell's planning. Still to measure: (b) execution alone, (a) a fresh batch-planned
+      cell end to end, and (c) on Vulkan and CPU — the script is
+      `evals/runs/2026-10-17_t0-box_success/run_all.sh` (stages `exec`, no GPU; `cuda`,
+      `vulkan`, `cpu`), each compared row by row with 1.3.0's cell.
 - [ ] **T0b. C1/C2 workflow:** a `workflow_dispatch` cell workflow (shard matrix for CPU and
       macOS, download and verify the frozen files, cached models, compose + safety +
       `accept-native` job, artifacts). **First half built 2026-10-16**, and T0(d)/(e) run from
@@ -586,6 +601,16 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
 - [ ] **T3. B1 in the lane:** one-load batch planning + sequential execution + the cold-start sample, behind a
       lane option, with tests; validated by re-running one 1.3.0 cell both ways and requiring the
       same verdict and the same per-row grades. The lane fills the store (E1) rather than a board.
+      **Lane half built 2026-10-17:** `evalsuite native --batch-plan` (one `knaif plan --batch`
+      in a folder holding every fixture, then each row through `knaif run` with no model, the
+      mock backend replaying its plan: `KNAIF_LLM_BACKEND=mock`, `KNAIF_LLM_MOCK_RESPONSE`, a
+      seam the binary already had, so no product code changed); `--live-sample FILE` (the
+      cold-start rows run live, their plans compared with the batch's, recorded as
+      `batch_live`); `--batch-plans FILE` (execution alone, from a recorded batch); the board
+      records `planning: batch` and `timing`, and `accept-native` **refuses** a batch-planned
+      board until T1's rules adopt the method. `evalsuite row-diff` (G3) compares two boards
+      row by row (grade, plan, command). Smoke-tested on the frozen 1.3.0 binary: 3 rows, same
+      grade, plan and command as 1.3.0's CUDA cell. Still to do: the T0 stages, then the store.
 - [ ] **T4. Run scripts on the store:** a release's run script becomes "compute missing keys per
       cell, batch-plan them, execute them, run the never-reused samples, compose, grade"; A1/A2
       are what the key lookup does, not separate steps.

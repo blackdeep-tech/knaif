@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -1019,8 +1020,9 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     lane_sandbox = sandbox / f"lane-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
 
+    batched = bool(getattr(args, "batch_plan", False) or getattr(args, "batch_plans", None))
     print(f"\nLane: {lane.name}  (kind: native_cli)")
-    print(f"  entry point : {lane.entry_point}")
+    print(f"  entry point : {lane.batch_entry_point if batched else lane.entry_point}")
     print(f"  binary      : {lane.binary}")
     print(f"  model       : {lane.model_path}")
     print(f"  fixtures    : {fixture_dir}")
@@ -1029,6 +1031,56 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     compute_backend = measured.summary
     print(f"  compute     : {measured.detail}\n", flush=True)
 
+    only = load_only(getattr(args, "only", None))
+    recorded = getattr(args, "batch_plans", None)
+    batch = bool(getattr(args, "batch_plan", False)) or bool(recorded)
+    live = load_only(getattr(args, "live_sample", None))
+    if live is not None and not batch:
+        sys.exit("ERROR: --live-sample is the cold-start sample of a --batch-plan run.")
+    plans: dict[tuple[str, int], dict[str, Any]] | None = None
+    plans_source: dict[str, Any] | None = None
+    timing: dict[str, Any] = {}
+    if batch:
+        rows = corpus[: args.limit] if args.limit is not None else corpus
+        keys = [
+            (r.id, j)
+            for r in rows
+            for j in range(len(r.utterances))
+            if only is None or (r.id, j) in only
+        ]
+        by_key = {(r.id, j): u for r in rows for j, u in enumerate(r.utterances)}
+        if recorded:
+            raw = Path(recorded).read_bytes()
+            lines = [ln for ln in raw.decode("utf-8").splitlines() if ln.strip()]
+            if len(lines) != len(keys):
+                sys.exit(
+                    f"ERROR: --batch-plans {recorded} has {len(lines)} line(s) for {len(keys)} "
+                    "selected utterances; it must be `plan --batch` over exactly these, in "
+                    "corpus order."
+                )
+            envelopes = [json.loads(ln) for ln in lines]
+            timing["plan_batch_s"] = None
+            plans_source = {
+                "path": Path(recorded).as_posix(),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "lines": len(lines),
+            }
+            print(f"  planning    : {len(keys)} plan(s) from {recorded}, not re-planned\n")
+        else:
+            print(f"  planning    : {len(keys)} row(s) in one batch (one model load)", flush=True)
+            t0 = time.perf_counter()
+            envelopes = native_lane.batch_plan(
+                lane,
+                args.skill,
+                [by_key[k] for k in keys],
+                fixture_dir=fixture_dir,
+                work_dir=lane_sandbox / ".batch",
+            )
+            timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
+            print(f"  planned in  : {timing['plan_batch_s']} s\n", flush=True)
+        plans = dict(zip(keys, envelopes, strict=True))
+
+    t0 = time.perf_counter()
     outputs = run_native_corpus(
         lane,
         args.skill,
@@ -1037,13 +1089,31 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         sandbox=lane_sandbox,
         limit=args.limit,
         verbose=args.verbose,
-        only=load_only(getattr(args, "only", None)),
+        only=only,
+        plans=plans,
+        live=live,
     )
+    timing["rows_s"] = round(time.perf_counter() - t0, 1)
+    timing["rows"] = len(outputs)
     scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, lane_sandbox)
 
     scoreboard["lane"] = lane.name
     scoreboard["lane_kind"] = "native_cli"
-    scoreboard["lane_entry_point"] = lane.entry_point
+    scoreboard["lane_entry_point"] = lane.batch_entry_point if batch else lane.entry_point
+    # Wall-clock of this run's phases on this machine: what B1 is measured by, never a speed
+    # figure (speed is measured as docs/PERFORMANCE.md says).
+    scoreboard["timing"] = timing
+    if batch and plans is not None:
+        compared, mismatches = native_lane.batch_live_mismatches(outputs, plans, live or set())
+        scoreboard["planning"] = "batch"
+        if plans_source is not None:
+            scoreboard["plans_source"] = plans_source
+        scoreboard["batch_live"] = {
+            "sample": len(live or ()),
+            "compared": compared,
+            "mismatches": mismatches,
+        }
+        print(f"  cold start  : {compared} live row(s) compared, {len(mismatches)} differ")
     # Left null rather than assumed when the binary does not say: two runs on different
     # compute backends are not comparable, and a record that guesses cannot be checked.
     # Scalar kept so records written before 2026-09-21 stay readable, but now derived from
@@ -2021,6 +2091,12 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             f"(packaged_layout={current.get('packaged_layout')!r}). L4 is a claim about the "
             "artifact users install; run `eval-native` against the unpacked release artifact."
         )
+    if current.get("planning") == "batch":
+        sys.exit(
+            f"--current {current_path} was planned in one batch and executed from those plans "
+            "(`native --batch-plan`). No release's gate rules accept that method yet (plan "
+            "2026-10-14-faster-release-evidence, T1), so it is a measurement, not L4 evidence."
+        )
 
     snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
@@ -2214,6 +2290,30 @@ def cmd_shards(args: argparse.Namespace) -> None:
     }
     (out / "shards.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"{manifest['total']} utterances in {len(entries)} shards -> {out}")
+
+
+def cmd_row_diff(args: argparse.Namespace) -> None:
+    """Two scoreboards row by row: grade, plan and command on the rows both measured (G3)."""
+    from .rowdiff import row_diff
+
+    a = json.loads(Path(args.a).read_text(encoding="utf-8"))
+    b = json.loads(Path(args.b).read_text(encoding="utf-8"))
+    try:
+        d = row_diff(a, b)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    n = d["common"]
+    print(f"{n} row(s) in both ({d['rows_a']} in a, {d['rows_b']} in b)")
+    print(f"  {d['same_grade']} / {n} same grade")
+    print(f"  {d['same_plan']} / {n} same plan")
+    print(f"  {d['same_command']} / {n} same command")
+    for g in d["grade_differs"]:
+        print(f"  grade differs: {g['id']}[{g['utterance_idx']}]  a={g['a']}  b={g['b']}")
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
+        print(f"  saved to {out}")
 
 
 def cmd_rerun_set(args: argparse.Namespace) -> None:
@@ -2727,6 +2827,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_sh.add_argument("--rows", type=int, default=None, help="Utterances to draw (default: all)")
     p_sh.add_argument("--out", required=True, metavar="DIR")
 
+    # row-diff — two boards compared row by row (G3)
+    p_rd = sub.add_parser(
+        "row-diff",
+        help="Compare two scoreboards row by row: grade, plan and command",
+        description=(
+            "Keys on (id, utterance_idx) and compares only the rows both boards measured, so two "
+            "runs over different populations are compared on what they share, never as one "
+            "aggregate."
+        ),
+    )
+    p_rd.add_argument("a", metavar="A", help="Scoreboard JSON")
+    p_rd.add_argument("b", metavar="B", help="Scoreboard JSON")
+    p_rd.add_argument("--out", default=None, metavar="FILE", help="Write the full diff as JSON")
+
     # accept-native — L4d, the only check that can buy `supported`
     p_accn = sub.add_parser(
         "accept-native",
@@ -2825,6 +2939,31 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="JSON list of [id, utterance_idx] to run, indices kept (a pre-drawn sample, or the "
         "rows a composed cell re-grades). Not an acceptance run on its own: see `compose`.",
+    )
+    p_nat.add_argument(
+        "--batch-plan",
+        action="store_true",
+        dest="batch_plan",
+        help="Plan every selected row in ONE `knaif plan --batch` (one model load), then run "
+        "each row with no model, the mock replaying its plan. A measurement (plan "
+        "2026-10-14-faster-release-evidence, B1): `accept-native` refuses the board.",
+    )
+    p_nat.add_argument(
+        "--live-sample",
+        default=None,
+        dest="live_sample",
+        metavar="FILE",
+        help="With --batch-plan: JSON list of [id, utterance_idx] that run live, with the model, "
+        "as the cold-start sample; their plans are compared with the batch's.",
+    )
+    p_nat.add_argument(
+        "--batch-plans",
+        default=None,
+        dest="batch_plans",
+        metavar="FILE",
+        help="Like --batch-plan, but the plans come from FILE: an earlier `knaif plan --batch` "
+        "output over exactly the selected rows, in corpus order, from the same binary and "
+        "model. Measures execution alone.",
     )
     p_nat.add_argument("--save", default=None, metavar="DIR")
     p_nat.add_argument("--verbose", action="store_true")
@@ -3075,6 +3214,7 @@ def main() -> None:
         "compose": cmd_compose,
         "rerun-set": cmd_rerun_set,
         "shards": cmd_shards,
+        "row-diff": cmd_row_diff,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,

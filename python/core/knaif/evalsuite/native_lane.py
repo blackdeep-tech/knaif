@@ -152,6 +152,15 @@ class LaneConfig:
         """What this lane runs, stated for the record (rule 2)."""
         return f"{self.binary} run <skill> --yes --overwrite --model {self.model_path.name}"
 
+    @property
+    def batch_entry_point(self) -> str:
+        """What a batch-planned run (B1) runs, stated for the record."""
+        return (
+            f"{self.binary} plan --skill <skill> --batch <rows> --json --model "
+            f"{self.model_path.name}; then per row {self.binary} run <skill> --yes --overwrite "
+            "with KNAIF_LLM_BACKEND=mock replaying that row's batch plan"
+        )
+
 
 def load_lane(config_path: Path, lane: str, root: Path) -> LaneConfig:
     """Read one lane from the eval config's top-level `lanes:` section.
@@ -290,6 +299,110 @@ def build_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
     ]
 
 
+def build_replay_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
+    """`build_argv` without `--model`: the mock backend stands in for inference (B1).
+
+    With no model named and `$KNAIF_LLM_BACKEND=mock`, `run` takes the model's output from
+    `$KNAIF_LLM_MOCK_RESPONSE` and does everything after it for real: the unsafe-phrase screen
+    (which runs before inference), parsing, validation, defaults, expansion, the clarify gate
+    and execution. Without a model it also never probes the GPU.
+    """
+    argv = build_argv(lane, skill, utterance)
+    i = argv.index("--model")
+    return argv[:i] + argv[i + 2 :]
+
+
+#: The variables that turn the model off. Stripped from every live row, so a parent shell that
+#: set them can never make a "live" row a replay.
+_MOCK_VARS = ("KNAIF_LLM_BACKEND", "KNAIF_LLM_MOCK_RESPONSE")
+
+
+def _replay_env(plan: dict[str, Any]) -> dict[str, str]:
+    return {
+        **_lane_env(),
+        "KNAIF_LLM_BACKEND": "mock",
+        "KNAIF_LLM_MOCK_RESPONSE": json.dumps(plan, ensure_ascii=False),
+    }
+
+
+def batch_plan(
+    lane: LaneConfig,
+    skill: str,
+    utterances: list[str],
+    *,
+    fixture_dir: Path,
+    work_dir: Path,
+) -> list[dict[str, Any]]:
+    """Plan every utterance with ONE model load: `knaif plan --batch`, one envelope per line.
+
+    `plan --batch` and `run` share `PlanSession::plan`, and `run` dumps the plan before its
+    clarify gate, so a batch envelope is the plan `run` would have dumped for that utterance
+    (1.3.0's Windows CUDA evidence: identical on every row the model planned). Planning
+    resolves bare stems against the working directory, so the batch runs in a directory holding
+    every fixture, as each row's does. A line that failed to plan is `{"plan": [], "error": …}`.
+    """
+    for u in utterances:
+        if "\n" in u or "\r" in u:
+            raise ValueError(f"utterance has a line break; `plan --batch` reads lines: {u!r}")
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    work_dir.mkdir(parents=True)
+    provision_fixtures(fixture_dir, work_dir)
+    batch_file = work_dir / ".knaif-batch.txt"
+    batch_file.write_text("".join(u + "\n" for u in utterances), encoding="utf-8")
+    argv = [
+        str(lane.binary),
+        "plan",
+        "--skill",
+        skill,
+        "--batch",
+        str(batch_file),
+        "--json",
+        "--model",
+        str(lane.model_path),
+    ]
+    proc = subprocess.run(
+        argv,
+        cwd=work_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env={k: v for k, v in _lane_env().items() if k not in _MOCK_VARS},
+        timeout=lane.timeout_s * max(1, len(utterances)),
+    )
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if proc.returncode != 0 or len(lines) != len(utterances):
+        raise RuntimeError(
+            f"`plan --batch` returned {len(lines)} plan line(s) for {len(utterances)} utterances "
+            f"(exit {proc.returncode}): {extract_failure(proc.stdout, proc.stderr)}"
+        )
+    return [json.loads(line) for line in lines]
+
+
+def batch_live_mismatches(
+    outputs: list[AgentOutput],
+    plans: dict[tuple[str, int], dict[str, Any]],
+    live: set[tuple[str, int]],
+) -> tuple[int, list[list[Any]]]:
+    """The cold-start check (B1): do the live rows' plans equal the batch's?
+
+    Returns how many live rows were compared and the `[id, utterance_idx]` of each that
+    differs. A live row with no dumped plan is not compared: the unsafe-phrase screen stopped
+    it before inference, and `plan --batch` does not screen.
+    """
+    compared = 0
+    mismatches: list[list[Any]] = []
+    for out in outputs:
+        key = (out.id, out.utterance_idx)
+        if key not in live or key not in plans or out.plan is None:
+            continue
+        compared += 1
+        if out.plan != plans[key]:
+            mismatches.append([out.id, out.utterance_idx])
+    return compared, mismatches
+
+
 def extract_failure(stdout: str, stderr: str) -> str:
     """The reason a run failed, rather than whatever happened to be last on stderr.
 
@@ -385,6 +498,8 @@ def run_native_corpus(
     limit: int | None = None,
     verbose: bool = False,
     only: set[tuple[str, int]] | None = None,
+    plans: dict[tuple[str, int], dict[str, Any]] | None = None,
+    live: set[tuple[str, int]] | None = None,
 ) -> list[AgentOutput]:
     """Execute every corpus utterance through the shipped binary and collect what it produced.
 
@@ -394,6 +509,12 @@ def run_native_corpus(
 
     *only* runs just those `(id, utterance_idx)` pairs, keeping their corpus indices so a sample
     or a set of re-graded rows lines up with the full runs it is compared with or composed into.
+
+    *plans* (B1) are `batch_plan`'s envelopes by `(id, utterance_idx)`: a row with one runs
+    without the model, the mock replaying that plan (`build_replay_argv`); a row whose batch
+    planning failed is recorded as that error without running, as `run` would have failed the
+    same way. Rows in *live* (the cold-start sample), and rows with no batch plan, run with
+    the model as before.
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
@@ -409,26 +530,38 @@ def run_native_corpus(
             provision_fixtures(fixture_dir, work_dir)
             before = _snapshot_files(work_dir)
 
-            argv = build_argv(lane, skill, utterance)
+            key = (row.id, utt_idx)
+            planned = None if plans is None or key in (live or set()) else plans.get(key)
+            if planned is None:
+                argv = build_argv(lane, skill, utterance)
+                env = {k: v for k, v in _lane_env().items() if k not in _MOCK_VARS}
+            else:
+                argv = build_replay_argv(lane, skill, utterance)
+                env = _replay_env(planned)
             t0 = time.perf_counter()
             error: str | None = None
-            try:
-                proc = subprocess.run(
-                    argv,
-                    cwd=work_dir,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    env={**_lane_env()},
-                    timeout=lane.timeout_s,
-                )
-                parsed = parse_run_output(proc.stdout, proc.stderr, proc.returncode)
-                if parsed["outcome"] == "error":
-                    error = extract_failure(proc.stdout, proc.stderr)
-            except subprocess.TimeoutExpired:
+            parsed: dict[str, Any]
+            if planned is not None and planned.get("error"):
                 parsed = {"plan": None, "commands": [], "outcome": "error", "results": []}
-                error = f"timed out after {lane.timeout_s:.0f}s"
+                error = f"planning failed (plan --batch): {planned['error']}"[:500]
+            else:
+                try:
+                    proc = subprocess.run(
+                        argv,
+                        cwd=work_dir,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        env=env,
+                        timeout=lane.timeout_s,
+                    )
+                    parsed = parse_run_output(proc.stdout, proc.stderr, proc.returncode)
+                    if parsed["outcome"] == "error":
+                        error = extract_failure(proc.stdout, proc.stderr)
+                except subprocess.TimeoutExpired:
+                    parsed = {"plan": None, "commands": [], "outcome": "error", "results": []}
+                    error = f"timed out after {lane.timeout_s:.0f}s"
             latency_ms = (time.perf_counter() - t0) * 1000
 
             produced = _produced_files(work_dir, before)
