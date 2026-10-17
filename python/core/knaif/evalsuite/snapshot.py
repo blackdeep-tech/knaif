@@ -28,7 +28,9 @@ def snapshot_path(skill: str, model: str | None = None, root: Path | str = ".") 
     return default if held in (None, model) else data / f"eval_snapshot.{model}.json"
 
 
-def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
+def save_snapshot(
+    scoreboard: dict[str, Any], path: Path | str, source_run: dict[str, str] | None = None
+) -> None:
     """
     Write a snapshot JSON — same format as the scoreboard, without per-row detail.
 
@@ -37,6 +39,9 @@ def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
     experience and does so silently. `acceptance.py` already refuses a `cheap` scoreboard
     and `eval-native` refuses one at the CLI; this closes the writer, because
     `run --snapshot` still defaults to `--verifier cheap`.
+
+    *source_run* names the saved scoreboard the snapshot was locked from (folder, file,
+    sha256): the per-row grades a release bar compares against live there, not here.
     """
     verifier = scoreboard.get("verifier")
     if verifier is None:
@@ -54,6 +59,8 @@ def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
 
     path = Path(path)
     snapshot = {k: v for k, v in scoreboard.items() if k != "rows"}
+    if source_run is not None:
+        snapshot["source_run"] = dict(source_run)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         json.dump(snapshot, fh, indent=2, ensure_ascii=False)

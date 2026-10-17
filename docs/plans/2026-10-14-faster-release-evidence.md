@@ -656,11 +656,37 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       the same words with different expected results (5 ffmpeg pairs, each differing only in
       criteria, one also in fixture), near-duplicate paraphrases, and coverage per tool. First
       reports: `evals/corpus-review/2026-10-17/{ffmpeg,documents}/report.md` — **3 + 5 rows
-      proposed, waiting for the owner**. Safety corpora: no repeats. Still to do: the owner's
-      decision, `eval_removed.jsonl`, the kept-rows test, and the new complex rows.
+      proposed**. Safety corpora: no repeats. **Approved by the owner 2026-10-17, all eight**
+      (ffmpeg 007→080, 050→179, 063→080; documents 067→006, 071→007, 075→008, 082→142,
+      115→137): checked against every 1.3.0 board and the 4B reference run, each pair always
+      graded alike, and no rate-floor slice falls under `min_rate_rows` (documents
+      `multilingual` lands exactly on it, 17 → 16). Built the same day: `evalsuite
+      corpus-remove` (applies approved ids from the audit, refuses anything that would lose a
+      test, writes `eval_removed.jsonl` with the removed row and `eval_kept.sha256` pinning
+      every kept line) and `test_corpus_integrity` (G2.1 over the real corpora). **Not applied
+      yet**: the removal lands as the first stage of the re-lock (T7b), on the owner's green
+      light. **Owner, later the same day: finish all changes on the corpus before re-locking.**
+      The whole change is prepared as `evals/corpus-review/2026-10-17/proposal.md`, waiting
+      for approval: the five same-words pairs decided (remove 010 → 168 and 023 → 097; keep
+      078/187, 084/185, 097/189, which add a phrasing), so **10 removals** in
+      `<skill>/decisions.json`; and **18 new `hard2` rows** (`new_rows.<skill>.jsonl`: 10
+      ffmpeg, 8 documents — chains and fan-out requests over the tools that had no chain row),
+      each passing the new `evalsuite corpus-check` (schema, tag, no id or utterance the corpus
+      or `train.jsonl` has). ffmpeg baselines are `validated_by: null` for the owner's
+      notebook. The re-lock script gained an `append` stage (R1 covers it; R5 now says the
+      `hard2` floor is written after the run).
 - [ ] **T7b. Re-lock on the reviewed corpus**, one commit per model per skill, from the next
       fine-tune cycle's full run; the hard-rows slice floor written then. The subset (T2b) is
-      derived after this.
+      derived after this. **Prepared 2026-10-17, waiting for the owner's green light:**
+      `evals/runs/2026-10-18_relock-corpus-v2_success/run_all.sh` (stages `check`, `remove`,
+      `run`, `compare`, `lock`; rules R1–R5 pre-registered in the script; ~40 min of CUDA for
+      both models, both skills, safety). The lock goes through the new `evalsuite lock`, which
+      writes a snapshot from the saved board under `evals/runs/` and records `source_run`
+      (folder, file, sha256) — T2b's missing field — so the four re-locked snapshots name their
+      committed source runs from the start. *Decided by the owner 2026-10-17:* one re-lock,
+      after every corpus change — the script's stages are now `remove` → `append` → `run` →
+      `compare` → `lock`, with the new rows in the same run (R5: the `hard2` floor is written
+      from this run's measurement, by the owner).
 - [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and

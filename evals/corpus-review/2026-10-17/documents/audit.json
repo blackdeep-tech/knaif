@@ -1,0 +1,788 @@
+{
+  "skill": "documents",
+  "corpus_sha256": "e7684f794e2bdea7538f8576c20f5a40ce530bf647275d85e22ad3868610d2f6",
+  "rows": 143,
+  "utterances": 164,
+  "duplicates": {
+    "across_rows": [
+      {
+        "text": "convert sample.txt to markdown",
+        "rows": [
+          "documents_006",
+          "documents_067"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "compress sample.pdf",
+        "rows": [
+          "documents_007",
+          "documents_071"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "ocr sample-scanned.pdf",
+        "rows": [
+          "documents_008",
+          "documents_075"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "rotate sample.pdf 90 degrees and then compress it",
+        "rows": [
+          "documents_082",
+          "documents_142"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "drehe sample.pdf um 90 grad",
+        "rows": [
+          "documents_115",
+          "documents_137"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      }
+    ],
+    "within_row": []
+  },
+  "groups": [
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "find_in_document",
+          "matches_count": 1
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "find_in_document"
+        ]
+      },
+      "rows": [
+        "documents_005",
+        "documents_032",
+        "documents_033",
+        "documents_035",
+        "documents_091",
+        "documents_122"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_format": "md",
+          "artifact_text_contains": "Invoice Alpha",
+          "expected_tool": "convert_document",
+          "output_exists": true
+        },
+        "fixture": "sample.txt",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_document"
+        ]
+      },
+      "rows": [
+        "documents_006",
+        "documents_067",
+        "documents_069"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "compress_pdf",
+          "no_larger_than": "sample.pdf",
+          "output_exists": true,
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "compress_pdf"
+        ]
+      },
+      "rows": [
+        "documents_007",
+        "documents_071",
+        "documents_072",
+        "documents_073",
+        "documents_074",
+        "documents_095",
+        "documents_096",
+        "documents_116",
+        "documents_121",
+        "documents_125",
+        "documents_138"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_text_contains": "Scanned image text",
+          "expected_tool": "ocr_document",
+          "output_exists": true
+        },
+        "fixture": "sample-scanned.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "ocr_document"
+        ]
+      },
+      "rows": [
+        "documents_008",
+        "documents_075",
+        "documents_076",
+        "documents_077",
+        "documents_078",
+        "documents_097",
+        "documents_098"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "split_pdf",
+          "output_exists": true,
+          "page_texts": [
+            "Beta",
+            "Gamma"
+          ]
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "split_pdf"
+        ]
+      },
+      "rows": [
+        "documents_009",
+        "documents_099",
+        "documents_123"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "rotate_pages",
+          "output_exists": true,
+          "rotation": 90
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "rotate_pages"
+        ]
+      },
+      "rows": [
+        "documents_010",
+        "documents_036",
+        "documents_038",
+        "documents_115",
+        "documents_124",
+        "documents_126",
+        "documents_137"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "remove_pages",
+          "output_exists": true,
+          "page_texts": [
+            "Alpha",
+            "Beta"
+          ],
+          "pages": 2
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "remove_pages"
+        ]
+      },
+      "rows": [
+        "documents_011",
+        "documents_044",
+        "documents_103",
+        "documents_104"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "every_page_contains": "DRAFT",
+          "expected_tool": "watermark",
+          "output_exists": true,
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "watermark"
+        ]
+      },
+      "rows": [
+        "documents_013",
+        "documents_051",
+        "documents_054",
+        "documents_108"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "add_page_numbers",
+          "output_exists": true,
+          "page_numbers_from": 1,
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "add_page_numbers"
+        ]
+      },
+      "rows": [
+        "documents_014",
+        "documents_055",
+        "documents_056",
+        "documents_057",
+        "documents_110",
+        "documents_119"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "sample.pdf",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "documents_015",
+        "documents_016",
+        "documents_132"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": null,
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "documents_017",
+        "documents_018",
+        "documents_019",
+        "documents_079",
+        "documents_080"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": null,
+        "outcome": "reject",
+        "outputs": [],
+        "tools": [
+          "reject"
+        ]
+      },
+      "rows": [
+        "documents_020",
+        "documents_083",
+        "documents_084"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "split_pdf",
+          "output_exists": true,
+          "page_texts": [
+            "Alpha",
+            "Beta"
+          ]
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "split_pdf"
+        ]
+      },
+      "rows": [
+        "documents_021",
+        "documents_022",
+        "documents_140"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "extract_text",
+          "text_contains": "Gamma page three"
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "extract_text"
+        ]
+      },
+      "rows": [
+        "documents_026",
+        "documents_090",
+        "documents_118",
+        "documents_139"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "inspect_document",
+          "format": "pdf",
+          "has_text_layer": true,
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "inspect_document"
+        ]
+      },
+      "rows": [
+        "documents_027",
+        "documents_087"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "inspect_document",
+          "has_text_layer": false
+        },
+        "fixture": "sample-scanned.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "inspect_document"
+        ]
+      },
+      "rows": [
+        "documents_029",
+        "documents_088"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "find_in_document",
+          "matches_count": 0
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "find_in_document"
+        ]
+      },
+      "rows": [
+        "documents_034",
+        "documents_092",
+        "documents_135"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "rotate_pages",
+          "output_exists": true,
+          "rotation": [
+            0,
+            180,
+            0
+          ]
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "rotate_pages"
+        ]
+      },
+      "rows": [
+        "documents_037",
+        "documents_102"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "reorder_pages",
+          "output_exists": true,
+          "page_texts": [
+            "Gamma",
+            "Beta",
+            "Alpha"
+          ],
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "reorder_pages"
+        ]
+      },
+      "rows": [
+        "documents_040",
+        "documents_042",
+        "documents_105"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "reorder_pages",
+          "output_exists": true,
+          "page_texts": [
+            "Gamma",
+            "Alpha",
+            "Beta"
+          ],
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "reorder_pages"
+        ]
+      },
+      "rows": [
+        "documents_041",
+        "documents_106"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "merge_pdfs",
+          "output_exists": true,
+          "page_texts": [
+            "Alpha",
+            "Beta",
+            "Gamma",
+            ""
+          ],
+          "pages": 4
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "merge_pdfs"
+        ]
+      },
+      "rows": [
+        "documents_047",
+        "documents_048",
+        "documents_049",
+        "documents_050",
+        "documents_107",
+        "documents_117"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "every_page_contains": "CONFIDENTIAL",
+          "expected_tool": "watermark",
+          "output_exists": true,
+          "pages": 3
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "watermark"
+        ]
+      },
+      "rows": [
+        "documents_052",
+        "documents_109"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_encrypted": true,
+          "decrypts_with": "hunter2",
+          "expected_tool": "protect_pdf",
+          "output_exists": true,
+          "page_texts": [
+            "Alpha",
+            "Beta",
+            "Gamma"
+          ]
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "protect_pdf"
+        ]
+      },
+      "rows": [
+        "documents_060",
+        "documents_111",
+        "documents_120"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_encrypted": false,
+          "expected_tool": "unlock_pdf",
+          "output_exists": true,
+          "page_texts": [
+            "Alpha",
+            "Beta",
+            "Gamma"
+          ]
+        },
+        "fixture": "sample-protected.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "unlock_pdf"
+        ]
+      },
+      "rows": [
+        "documents_063",
+        "documents_064",
+        "documents_065",
+        "documents_066",
+        "documents_086",
+        "documents_113",
+        "documents_114"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_format": "txt",
+          "artifact_text_contains": "Alpha",
+          "expected_tool": "convert_document",
+          "output_exists": true
+        },
+        "fixture": "sample.md",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_document"
+        ]
+      },
+      "rows": [
+        "documents_068",
+        "documents_070",
+        "documents_093"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "expected_tool": "rotate_pages",
+          "output_exists": true,
+          "pages": 3,
+          "rotation": 90
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "rotate_pages",
+          "compress_pdf"
+        ]
+      },
+      "rows": [
+        "documents_082",
+        "documents_142"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_encrypted": true,
+          "decrypts_with": "lockit99",
+          "expected_tool": "protect_pdf",
+          "output_exists": true,
+          "page_texts": [
+            "Alpha",
+            "Beta",
+            "Gamma"
+          ]
+        },
+        "fixture": "sample.pdf",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "protect_pdf"
+        ]
+      },
+      "rows": [
+        "documents_085",
+        "documents_112"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "artifact_format": "pdf",
+          "artifact_text_contains": "Docx Alpha paragraph",
+          "expected_tool": "convert_document",
+          "output_exists": true
+        },
+        "fixture": "sample.docx",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_document"
+        ]
+      },
+      "rows": [
+        "documents_094",
+        "documents_136"
+      ]
+    }
+  ],
+  "near_duplicates": [],
+  "proposed_removals": [
+    {
+      "id": "documents_067",
+      "kept": "documents_006",
+      "reason": "every utterance is in documents_006, with the same expected result"
+    },
+    {
+      "id": "documents_071",
+      "kept": "documents_007",
+      "reason": "every utterance is in documents_007, with the same expected result"
+    },
+    {
+      "id": "documents_075",
+      "kept": "documents_008",
+      "reason": "every utterance is in documents_008, with the same expected result"
+    },
+    {
+      "id": "documents_082",
+      "kept": "documents_142",
+      "reason": "every utterance is in documents_142, with the same expected result"
+    },
+    {
+      "id": "documents_115",
+      "kept": "documents_137",
+      "reason": "every utterance is in documents_137, with the same expected result"
+    }
+  ],
+  "coverage": {
+    "tools": {
+      "inspect_document": {
+        "plan": 8,
+        "chain": 0
+      },
+      "extract_text": {
+        "plan": 10,
+        "chain": 0
+      },
+      "find_in_document": {
+        "plan": 9,
+        "chain": 0
+      },
+      "merge_pdfs": {
+        "plan": 6,
+        "chain": 1
+      },
+      "split_pdf": {
+        "plan": 11,
+        "chain": 2
+      },
+      "rotate_pages": {
+        "plan": 11,
+        "chain": 2
+      },
+      "remove_pages": {
+        "plan": 8,
+        "chain": 1
+      },
+      "reorder_pages": {
+        "plan": 7,
+        "chain": 0
+      },
+      "watermark": {
+        "plan": 7,
+        "chain": 2
+      },
+      "add_page_numbers": {
+        "plan": 7,
+        "chain": 2
+      },
+      "protect_pdf": {
+        "plan": 8,
+        "chain": 0
+      },
+      "unlock_pdf": {
+        "plan": 7,
+        "chain": 0
+      },
+      "convert_document": {
+        "plan": 8,
+        "chain": 0
+      },
+      "compress_pdf": {
+        "plan": 11,
+        "chain": 4
+      },
+      "ocr_document": {
+        "plan": 7,
+        "chain": 0
+      }
+    },
+    "outcomes": {
+      "plan": 132,
+      "clarify": 8,
+      "reject": 3
+    },
+    "chain_rows": 7,
+    "no_plan_row": []
+  },
+  "safety": {
+    "rows": 9,
+    "duplicates": []
+  }
+}

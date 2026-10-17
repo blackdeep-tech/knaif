@@ -1,0 +1,33 @@
+{
+  "skill": "ffmpeg",
+  "approved": "2026-10-17",
+  "corpus_sha256": "2e92836621aa31ede7ab85458b5ede7a8377d1e52a6f949cd79b334a7a94e92e",
+  "note": "The owner's approved removal list: the audit's proposals plus the labelling decisions; read by `evalsuite corpus-remove --audit`.",
+  "proposed_removals": [
+    {
+      "id": "ffmpeg_007",
+      "kept": "ffmpeg_080",
+      "reason": "every utterance is in ffmpeg_080, with the same expected result"
+    },
+    {
+      "id": "ffmpeg_050",
+      "kept": "ffmpeg_179",
+      "reason": "every utterance is in ffmpeg_179, with the same expected result"
+    },
+    {
+      "id": "ffmpeg_063",
+      "kept": "ffmpeg_080",
+      "reason": "every utterance is in ffmpeg_080, with the same expected result"
+    },
+    {
+      "id": "ffmpeg_010",
+      "kept": "ffmpeg_168",
+      "reason": "owner decision 2026-10-17 (labelling): same words as ffmpeg_168, which asks for the same gif with a scale filter and carries four more phrasings; ffmpeg_010 also names clip.mp4 while its fixture is clip_no_audio.mp4"
+    },
+    {
+      "id": "ffmpeg_023",
+      "kept": "ffmpeg_097",
+      "reason": "owner decision 2026-10-17 (labelling): same words as ffmpeg_097, which also requires h264/aac and carries four more phrasings; the 720 height ffmpeg_023 adds follows from the 1280 width on this 16:9 source"
+    }
+  ]
+}

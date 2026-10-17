@@ -89,7 +89,8 @@ def test_cli_writes_only_files_and_a_manifest(tmp_path: Path) -> None:
 
     manifest = json.loads((out / "shards.json").read_text(encoding="utf-8"))
     assert manifest["skill"] == "demo"
-    assert manifest["corpus_sha256"] == hashlib.sha256(corpus_path.read_bytes()).hexdigest()
+    lf = corpus_path.read_bytes().replace(b"\r\n", b"\n")
+    assert manifest["corpus_sha256"] == hashlib.sha256(lf).hexdigest()
     assert manifest["count"] == 3 and manifest["total"] == 7
     assert [s["file"] for s in manifest["shards"]] == [
         "shard-00.json",

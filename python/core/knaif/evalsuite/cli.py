@@ -2281,7 +2281,10 @@ def cmd_shards(args: argparse.Namespace) -> None:
         "skill": args.skill,
         # The file name only: the manifest travels between machines and into public runs.
         "corpus": corpus_path.name,
-        "corpus_sha256": hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
+        # LF-normalised, as the gate hashes a corpus: the same value on a CRLF checkout and on CI.
+        "corpus_sha256": hashlib.sha256(
+            corpus_path.read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest(),
         "rows_requested": args.rows,
         "total": sum(len(shard) for shard in shards),
         "count": len(entries),
@@ -2340,7 +2343,11 @@ def cmd_corpus_audit(args: argparse.Namespace) -> None:
     registry = load_registry(Path("skills") / args.skill / "tools.yaml")
     public = [name for name, tool in registry.items() if not tool.internal]
     audit = audit_rows(
-        args.skill, rows, safety, public, corpus_sha256=hashlib.sha256(raw).hexdigest()
+        args.skill,
+        rows,
+        safety,
+        public,
+        corpus_sha256=hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest(),
     )
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -2353,6 +2360,90 @@ def cmd_corpus_audit(args: argparse.Namespace) -> None:
         f"removal, {len(audit['duplicates']['across_rows'])} utterances in more than one row, "
         f"{len(audit['near_duplicates'])} near-duplicate pairs -> {out / 'report.md'}"
     )
+
+
+def cmd_lock(args: argparse.Namespace) -> None:
+    """Lock a skill's baseline from a SAVED scoreboard, naming it (T2b `source_run`).
+
+    `run --snapshot` locks from the run it just made; this locks from a board already on disk
+    under `evals/runs/`, so the lock is a separate, deliberate step after the run was read, and
+    the snapshot records exactly which file carries its per-row grades.
+    """
+    from .snapshot import save_snapshot
+
+    current_path = Path(args.current)
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
+    try:
+        rel = current_path.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        rel = None
+    if rel is None or rel.parts[:2] != ("evals", "runs"):
+        sys.exit(
+            f"--current {current_path} is not under evals/runs/: a snapshot's source run must be "
+            "part of the committed run history, where its per-row grades can be read back."
+        )
+    raw = current_path.read_bytes()
+    board: dict[str, Any] = json.loads(raw)
+    if not board.get("rows"):
+        sys.exit(f"--current {current_path} carries no per-row grades; a source run must.")
+    verifiers, _ = _load_skill_verifiers(args.skill)
+    _assert_skill_owns_verifier(args.skill, str(board.get("verifier")), verifiers)
+    source_run = {
+        "folder": rel.parent.as_posix(),
+        "scoreboard": rel.name,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
+    snap_path = _snapshot_path(args.skill, board.get("backend_public_name"))
+    try:
+        save_snapshot(board, snap_path, source_run=source_run)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    print(
+        f"{args.skill}: locked {snap_path} from {source_run['folder']}/{source_run['scoreboard']} "
+        f"({board.get('backend_public_name') or board.get('backend')}, {board.get('verifier')}, "
+        f"{board.get('total')} rows, outcome {board.get('outcome_accuracy')}, "
+        f"knaif {board.get('avg_knaif_score')})"
+    )
+
+
+def cmd_corpus_remove(args: argparse.Namespace) -> None:
+    """Apply owner-approved removals from a `corpus-audit` (G2.1, T7)."""
+    from .corpus_review import apply_removals
+
+    corpus_path = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    audit = json.loads(Path(args.audit).read_text(encoding="utf-8"))
+    proposed = {r["id"]: r for r in audit.get("proposed_removals") or []}
+    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+    unknown = [i for i in ids if i not in proposed]
+    if unknown:
+        sys.exit(f"not proposed by {args.audit}: {', '.join(unknown)}")
+    try:
+        apply_removals(corpus_path, [proposed[i] for i in ids], date=args.date)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    print(f"{args.skill}: removed {len(ids)} row(s) from {corpus_path}; see eval_removed.jsonl")
+
+
+def cmd_corpus_check(args: argparse.Namespace) -> None:
+    """Check rows proposed for a corpus before they are appended (G2.2/G2.4, T7)."""
+    from .corpus_check import check_new_rows
+
+    def jsonl(path: Path) -> list[dict[str, Any]]:
+        return [
+            json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
+        ]
+
+    data = Path("skills") / args.skill / "data"
+    rows = jsonl(Path(args.rows))
+    existing = jsonl(data / "eval.jsonl")
+    train = jsonl(data / "train.jsonl") if (data / "train.jsonl").exists() else []
+    problems = check_new_rows(rows, existing, train, tag=args.tag)
+    for p in problems:
+        print(f"  {p}")
+    if problems:
+        sys.exit(f"{args.skill}: {len(problems)} problem(s) in {args.rows}")
+    print(f"{args.skill}: {len(rows)} row(s) ok to append from {args.rows}")
 
 
 def cmd_rerun_set(args: argparse.Namespace) -> None:
@@ -2881,6 +2972,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_ca.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
     p_ca.add_argument("--out", required=True, metavar="DIR")
 
+    # lock — a snapshot from a saved board, naming its source run (T2b)
+    p_lock = sub.add_parser(
+        "lock",
+        help="Lock a skill's baseline from a saved scoreboard under evals/runs/ (records source_run)",
+    )
+    p_lock.add_argument("--skill", required=True)
+    p_lock.add_argument(
+        "--current", required=True, metavar="FILE", help="Scoreboard JSON with rows"
+    )
+
+    # corpus-remove — apply approved removals from a corpus-audit (T7)
+    p_cr = sub.add_parser(
+        "corpus-remove",
+        help="Remove owner-approved rows named by a corpus-audit; records them in eval_removed.jsonl",
+    )
+    p_cr.add_argument("--skill", required=True)
+    p_cr.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
+    p_cr.add_argument(
+        "--audit", required=True, metavar="FILE", help="The audit.json the owner approved"
+    )
+    p_cr.add_argument("--ids", required=True, help="Comma-separated row ids to remove (approved)")
+    p_cr.add_argument("--date", required=True, help="YYYY-MM-DD of the approval")
+
+    # corpus-check — proposed rows, before they are appended (T7)
+    p_cc = sub.add_parser(
+        "corpus-check", help="Check rows proposed for a corpus before appending them"
+    )
+    p_cc.add_argument("--skill", required=True)
+    p_cc.add_argument("--rows", required=True, metavar="FILE", help="JSONL of proposed rows")
+    p_cc.add_argument("--tag", default="hard2", help="The review tag every new row must carry")
+
     # row-diff — two boards compared row by row (G3)
     p_rd = sub.add_parser(
         "row-diff",
@@ -3270,6 +3392,9 @@ def main() -> None:
         "shards": cmd_shards,
         "row-diff": cmd_row_diff,
         "corpus-audit": cmd_corpus_audit,
+        "corpus-remove": cmd_corpus_remove,
+        "corpus-check": cmd_corpus_check,
+        "lock": cmd_lock,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,

@@ -187,7 +187,9 @@ def test_the_cli_audits_the_real_corpus_and_edits_nothing(tmp_path: Path) -> Non
     before = hashlib.sha256(corpus.read_bytes()).hexdigest()
     cli.cmd_corpus_audit(argparse.Namespace(skill="documents", corpus=None, out=str(tmp_path)))
     audit = json.loads((tmp_path / "audit.json").read_text(encoding="utf-8"))
-    assert audit["corpus_sha256"] == before == hashlib.sha256(corpus.read_bytes()).hexdigest()
+    assert before == hashlib.sha256(corpus.read_bytes()).hexdigest(), "the corpus is untouched"
+    lf = corpus.read_bytes().replace(b"\r\n", b"\n")
+    assert audit["corpus_sha256"] == hashlib.sha256(lf).hexdigest()
     assert "inspect_document" in audit["coverage"]["tools"]
     assert "resolve_inputs" not in audit["coverage"]["tools"], "internal tools are not audited"
     assert (tmp_path / "report.md").read_text(encoding="utf-8").startswith("# Corpus audit")
