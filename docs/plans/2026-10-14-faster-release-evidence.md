@@ -49,6 +49,13 @@ rules*) · [RELEASE.md §4](../RELEASE.md) · [skill-quality-lifecycle](2026-09-
 > expected to be among them.
 >
 > **Started 2026-10-16** (1.3.0 published that day; the start condition is met). T0 goes first.
+>
+> **Amended 2026-10-17 (owner), after T0's CI half (C5):** the CPU and macOS cells do **not** move
+> to GitHub runners — CPU there grades correctly but 3× slower, and macOS is unusable. **First the
+> process itself is made faster on this one machine** (Parts A, B, D, E: test only what changed,
+> load the model once, the coverage subset, the result store); where the cells run comes after.
+> Other machines stay an option for then: the maintainer's spare machines (a second Windows PC, a
+> laptop's WSL, the M1 Pro Mac), or rented AWS machines, priced in C6.
 
 **Goal:** Cut a release's evidence from ~12 h on this box to ~2–3 h for a full release and under
 1 h for a small one, without weakening any bar: same floors, same safety rule, same verdicts.
@@ -189,7 +196,7 @@ the whole corpus twice; the full corpus only when the daemon or the generation p
 binary × backend rather than per cell where the binary and model are the same; reuse L3's Python
 side between releases when the Python fingerprint did not change.
 
-## Part C — move the CPU cells, and macOS, to CI
+## Part C — move the CPU cells, and macOS, off this machine (CI measured; spare machines chosen)
 
 The CPU cells are ~7 h of Windows and ~1.25 h of Linux, and need no GPU. GitHub's standard runners
 can run them (checked 2026-10-14 in GitHub's docs, *Actions limits* and *GitHub-hosted runners*).
@@ -239,6 +246,37 @@ the path rule (AGENTS.md, rule 5).
 subset (Part D) on CPU is ~25 jobs, ~1 h of wall time, whatever the skill count on the box.
 Fixtures and each skill's system requirements (ffmpeg, tesseract, …) are installed per job from
 the skill's declared requirements, as `ci.yml` already does for the reference skills.
+
+**C5. What T0 measured, and the decision it led to (2026-10-17).** Run `38976996643` (workflow
+`evidence-cell.yml`, 2026-10-16), the published 1.3.0 files, ffmpeg, `knaif-qwen3-4b-v2`, 100 rows
+drawn evenly across the corpus (20 on macOS); the boards were compared row by row with 1.3.0's
+own CPU cells, measured on the maintainer's machine with the same binaries (sha256 equal):
+
+| | Windows (4 cores) | Linux (4 cores) | macOS `macos-15` (M1, 3 cores, 7 GB) |
+|---|---|---|---|
+| Ran on | CPU, 37 layers | CPU, 37 layers | unknown: the placement probe itself hit the 900 s timeout |
+| Median per row | 49.6 s (box: 15.8 s, **3.1× slower**) | 50.3 s (box: 16.2 s, 3.1×) | ~900 s: **16 of 20 rows timed out**; the 4 that finished were correct |
+| Same grade as the box | **100 / 100** | **100 / 100** | — |
+| Same plan as the box | 93 / 100 (7 differ in argument detail only, as C3 predicted; some differ between the two runners too) | 93 / 100 | — |
+
+So CPU cells on CI are **correct** (the same verdict on every row) but **3× slower per row** than
+this box, and macOS on GitHub's standard runner is **unusable** (≈15 min a row). The owner's
+conclusion (2026-10-17): CI is only partly useful — it moves the CPU cells off this machine
+only with heavy sharding, and macOS not at all. **Decided: optimize the process on this one
+machine first** (Parts A, B, D, E); moving cells elsewhere comes after, and the maintainer's spare
+machines are the first option then — a second Windows PC (Windows CPU), a laptop's WSL (Linux CPU,
+and CUDA), the M1 Pro Mac (macOS, as in 1.3.0) — each recording its machine (CPU model, cores, OS)
+next to the run, as `docs/PERFORMANCE.md` names the machine behind every figure. The CI workflow
+stays on this plan's branch, unmerged.
+
+**C6. Rented CPU machines, priced as the fallback (2026-10-17, not adopted).** If the spare
+machines are too slow or not available when a release needs them: AWS `c7a.8xlarge` (32 cores,
+EPYC 9R14, 64 GiB) in eu-north-1 costs **$1.76/h Linux, $3.23/h Windows on demand; $0.37 and
+$1.77 on spot** (AWS's price files, 2026-10-17; Frankfurt and Ireland cost a little more). With
+the coverage subset (~254 utterances, both models) a release's CPU cells are about an hour per OS:
+**~$5 on demand, ~$2 on spot**; the full corpus about four times that. Untested: CPU generation is
+bound by memory bandwidth, so how far several processes at once scale on one VM must be measured
+(one 100-row shard at 1, 2, 4, 8 processes: ~$2 on demand) before any rule relies on it.
 
 ## Part D — a release corpus: coverage, not paraphrases
 
@@ -510,7 +548,10 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       in the VM, and how long per row. (a)–(c) run on this box only when the owner schedules them
       (nothing runs here unasked); (d)–(e) are CI-only. This says whether B1, C1 and the macOS
       move hold and what they save; nothing is built before it. *(The vast.ai parts (f)/(g) were
-      dropped 2026-10-15 with Part F.)*
+      dropped 2026-10-15 with Part F.)* **(d) and (e) done 2026-10-16/17** (C5): CI CPU cells
+      grade identically to the box on 100/100 rows but run 3.1× slower; macOS on GitHub's runner
+      is unusable. The process is optimized on this machine first; other machines later. (a)–(c)
+      still wait for the owner.
 - [ ] **T0b. C1/C2 workflow:** a `workflow_dispatch` cell workflow (shard matrix for CPU and
       macOS, download and verify the frozen files, cached models, compose + safety +
       `accept-native` job, artifacts). **First half built 2026-10-16**, and T0(d)/(e) run from
