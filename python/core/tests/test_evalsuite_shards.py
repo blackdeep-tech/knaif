@@ -103,3 +103,31 @@ def test_cli_writes_only_files_and_a_manifest(tmp_path: Path) -> None:
     loaded = [load_only(str(out / s["file"])) for s in manifest["shards"]]
     assert set().union(*loaded) == {(f"r{i:02d}", 0) for i in range(7)}
     assert [s["rows"] for s in manifest["shards"]] == [len(x) for x in loaded]
+
+
+# -- the release subset (plan 2026-10-14-faster-release-evidence, Part I, I5/I11) --
+
+
+def test_shards_can_be_drawn_from_a_given_population_in_corpus_order() -> None:
+    corpus = _corpus(10, per_row=2)
+    within = [("r07", 0), ("r01", 0), ("r04", 0), ("r09", 0)]
+    (only,) = draw_shards(corpus, count=1, rows=2, within=within)
+    assert only == [("r01", 0), ("r07", 0)], "evenly spaced over the population, corpus order"
+
+
+def test_cli_draws_from_the_committed_subset_and_says_so(tmp_path: Path) -> None:
+    from knaif.evalsuite.release_subset import SUBSET_FILE, derive_subset
+
+    corpus_path = tmp_path / "eval.jsonl"
+    rows = [{"id": f"r{i}", "utterances": ["a", "b"], "expected_outcome": "plan",
+             "expected_tool": f"t{i % 3}", "tags": []} for i in range(9)]  # fmt: skip
+    corpus_path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    subset = derive_subset("demo", corpus_path)
+    (tmp_path / SUBSET_FILE).write_text(json.dumps(subset), encoding="utf-8")
+    out = tmp_path / "shards"
+    cmd_shards(argparse.Namespace(skill="demo", corpus=str(corpus_path), count=1, rows=None,
+                                  out=str(out), subset=True))  # fmt: skip
+
+    manifest = json.loads((out / "shards.json").read_text(encoding="utf-8"))
+    assert manifest["population"] == {"kind": "subset", "corpus_sha256": subset["corpus_sha256"]}
+    assert load_only(str(out / "shard-00.json")) == {("r0", 0), ("r1", 0), ("r2", 0)}

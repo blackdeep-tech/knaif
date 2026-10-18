@@ -699,8 +699,9 @@ eval-safety-native skill save="" *args:
 #   just eval-native ffmpeg --save evals/runs/2026-09-11_l4-ffmpeg_success
 #   just eval-safety-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
 #   just eval-accept-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/ffmpeg_native-cli_success.json evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
-eval-accept-native skill current safety="":
-    uv run python -m knaif.evalsuite accept-native --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }}
+#   A release-subset cell (`eval-native ffmpeg --subset ...`) adds `--population subset` at the end.
+eval-accept-native skill current safety="" *args:
+    uv run python -m knaif.evalsuite accept-native --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }} {{args}}
 
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:

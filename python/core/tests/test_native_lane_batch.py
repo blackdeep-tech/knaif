@@ -25,6 +25,7 @@ from knaif.evalsuite.corpus import CorpusRow
 from knaif.evalsuite.native_lane import (
     LaneConfig,
     batch_live_mismatches,
+    batch_live_unplanned,
     batch_plan,
     run_native_corpus,
 )
@@ -240,6 +241,26 @@ def test_a_live_row_the_safety_screen_stopped_is_not_compared() -> None:
     assert (compared, mismatches) == (0, [])
 
 
+def test_a_live_row_without_a_plan_is_recorded_with_how_it_ended() -> None:
+    """Not compared is not the same as fine: a live row that crashed (a backend that failed to
+    load) has no plan either, and that is the failure the cold-start sample exists to catch."""
+    from knaif.evalsuite.runner import AgentOutput
+
+    def out(rid: str, **kw: Any) -> AgentOutput:
+        base = {"id": rid, "utterance": "u", "plan": None, "artifact": None,
+                "outcome": "reject", "latency_ms": 1.0, "utterance_idx": 0}  # fmt: skip
+        return AgentOutput(**{**base, **kw})
+
+    outputs = [out("screened"), out("crashed", outcome="error", error="backend failed"),
+               out("planned", plan=_plan("trim_video"), outcome="plan"), out("not-live")]  # fmt: skip
+    live = {("screened", 0), ("crashed", 0), ("planned", 0), ("never-ran", 0)}
+    assert batch_live_unplanned(outputs, live) == [
+        {"row": ["crashed", 0], "outcome": "error", "error": "backend failed"},
+        {"row": ["never-ran", 0], "outcome": None, "error": "no output"},
+        {"row": ["screened", 0], "outcome": "reject", "error": None},
+    ]
+
+
 # ── a batch-planned board is not acceptance evidence until the rules say so ───
 
 
@@ -327,6 +348,11 @@ def test_a_batch_run_plans_the_selected_rows_once_and_records_it(tmp_path, monke
     assert "--batch <rows>" in board["lane_entry_point"]
     assert {"plan_batch_s", "rows_s", "rows"} <= set(board["timing"])
     assert board["batch_live"]["sample"] == 1
+    assert board["batch_live"]["rows"] == [["r1", 0]]
+    # The fake lane runs nothing, so the live row has no output: recorded, not dropped.
+    assert board["batch_live"]["unplanned"] == [
+        {"row": ["r1", 0], "outcome": None, "error": "no output"}
+    ]
 
 
 def test_a_live_run_is_unchanged_and_carries_no_batch_fields(tmp_path, monkeypatch) -> None:

@@ -404,6 +404,26 @@ def batch_live_mismatches(
     return compared, mismatches
 
 
+def batch_live_unplanned(
+    outputs: list[AgentOutput], live: set[tuple[str, int]]
+) -> list[dict[str, Any]]:
+    """The live rows that produced no plan, and how each one ended.
+
+    `batch_live_mismatches` cannot compare them, and not compared is not the same as fine: the
+    screen's rejections land here, but so does a row whose backend failed to load, which is the
+    failure the cold-start sample exists to catch. Acceptance reads this list (Part I, I5).
+    """
+    by_key = {(o.id, o.utterance_idx): o for o in outputs}
+    unplanned: list[dict[str, Any]] = []
+    for key in sorted(live):
+        out = by_key.get(key)
+        if out is None:
+            unplanned.append({"row": list(key), "outcome": None, "error": "no output"})
+        elif out.plan is None:
+            unplanned.append({"row": list(key), "outcome": out.outcome, "error": out.error})
+    return unplanned
+
+
 def extract_failure(stdout: str, stderr: str) -> str:
     """The reason a run failed, rather than whatever happened to be last on stderr.
 

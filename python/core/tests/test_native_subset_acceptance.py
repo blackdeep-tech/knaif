@@ -175,6 +175,9 @@ def _real_subset_board(flip: int | None = None) -> dict[str, Any]:
         lane_kind="native_cli",
         packaged_layout=True,
         population={"kind": "subset", "corpus_sha256": subset["corpus_sha256"], "rows": len(rows)},
+        # Windows CUDA: a platform 1.2.0 measured in full, so D1 lets the subset stand in.
+        os="windows-x64",
+        compute_backend="CUDA0",
     )
     return board
 
@@ -197,6 +200,8 @@ def _write_cell(tmp_path: Path, board: dict[str, Any]) -> argparse.Namespace:
                 "lane_kind": "native_cli",
                 "packaged_layout": True,
                 "backend": board["backend_public_name"],
+                # The lane's safety file names the binary, model, backend and OS of its board.
+                **{k: board[k] for k in ("os", "compute_backend") if k in board},
             }
         ),
         encoding="utf-8",
@@ -212,20 +217,75 @@ def recorded(monkeypatch):
     from knaif.evalsuite import gate
 
     seen: dict = {}
-    monkeypatch.setattr(gate, "record_layers", lambda skill, root, layers: seen.update(layers))
+
+    def _fake(skill, root, layers):
+        seen.update(layers)
+        return Path("evals/acceptance") / f"{skill}.json"
+
+    monkeypatch.setattr(gate, "record_layers", _fake)
     return seen
 
 
-def test_python_s_own_grades_on_the_real_subset_are_accepted_and_not_recorded(
+def test_python_s_own_grades_on_the_real_subset_are_accepted_and_recorded(
     tmp_path, recorded, capsys
 ) -> None:
     from knaif.evalsuite import cli
 
-    cli.cmd_accept_native(_write_cell(tmp_path, _real_subset_board()))
+    board = _real_subset_board()
+    cli.cmd_accept_native(_write_cell(tmp_path, board))
     out = capsys.readouterr().out
     assert "ACCEPTED" in out and "NOT ACCEPTED" not in out
-    assert "not L4 evidence" in out
-    assert recorded == {}, "a subset verdict is a measurement until T1's rules adopt it"
+    entry = recorded["L4"]
+    assert entry["passed"] is True
+    assert entry["cell"] == f"{board['backend_public_name']}|windows-x64|cuda"
+    assert entry["population"] == board["population"]
+
+
+def test_a_platform_never_measured_in_full_cannot_start_on_the_subset(tmp_path, recorded) -> None:
+    """D1: a skill's first release on a platform measures the full corpus there."""
+    from knaif.evalsuite import cli
+
+    board = _real_subset_board()
+    board["os"] = "freebsd-x64"
+    with pytest.raises(SystemExit, match="full corpus"):
+        cli.cmd_accept_native(_write_cell(tmp_path, board))
+    assert recorded == {}
+
+
+def _batch(board: dict[str, Any], **live: Any) -> dict[str, Any]:
+    sample = [[f"r{i}", 0] for i in range(30)]
+    board["planning"] = "batch"
+    board["batch_live"] = {"sample": 30, "compared": 30, "mismatches": [], "rows": sample,
+                           "unplanned": [], **live}  # fmt: skip
+    return board
+
+
+def test_a_batch_planned_subset_cell_whose_cold_start_held_is_accepted(
+    tmp_path, recorded, capsys
+) -> None:
+    from knaif.evalsuite import cli
+
+    cli.cmd_accept_native(_write_cell(tmp_path, _batch(_real_subset_board())))
+    assert recorded["L4"]["passed"] is True
+    assert recorded["L4"]["planning"] == "batch"
+
+
+def test_a_cold_start_mismatch_sends_the_cell_back_to_a_live_run(tmp_path, recorded) -> None:
+    from knaif.evalsuite import cli
+
+    board = _batch(_real_subset_board(), mismatches=[["ffmpeg_001", 0]])
+    with pytest.raises(SystemExit, match="live"):
+        cli.cmd_accept_native(_write_cell(tmp_path, board))
+    assert recorded == {}
+
+
+def test_a_batch_planned_full_corpus_board_is_still_refused(tmp_path, recorded) -> None:
+    from knaif.evalsuite import cli
+
+    args = _write_cell(tmp_path, _batch(_real_subset_board()))
+    args.population = "full"
+    with pytest.raises(SystemExit, match="subset"):
+        cli.cmd_accept_native(args)
 
 
 def test_one_row_python_passed_failing_on_the_binary_is_not_accepted(
@@ -273,3 +333,131 @@ def test_a_source_run_is_found_whatever_the_checkout_s_line_endings(tmp_path) ->
 def test_a_snapshot_without_a_source_run_is_refused(tmp_path) -> None:
     with pytest.raises(ValueError, match="source_run"):
         load_source_run({}, tmp_path)
+
+
+# -- the cold-start check (Part I, I5) --
+
+from knaif.evalsuite.acceptance import cold_start_problems  # noqa: E402
+
+
+def _cold(**live: Any) -> dict[str, Any]:
+    return _batch({}, **live)
+
+
+def test_a_live_board_needs_no_cold_start() -> None:
+    assert cold_start_problems({"rows": []}) == []
+
+
+def test_a_held_cold_start_passes() -> None:
+    assert cold_start_problems(_cold()) == []
+
+
+def test_a_rejection_by_the_screen_is_not_a_cold_start_problem() -> None:
+    unplanned = [{"row": ["r0", 0], "outcome": "reject", "error": None}]
+    assert cold_start_problems(_cold(compared=29, unplanned=unplanned)) == []
+
+
+def test_a_short_sample_fails() -> None:
+    (p,) = cold_start_problems(_cold(sample=29, rows=[["r", 0]] * 29))
+    assert "30" in p
+
+
+def test_a_mismatch_fails() -> None:
+    (p,) = cold_start_problems(_cold(mismatches=[["r3", 0]]))
+    assert "r3#0" in p
+
+
+def test_a_live_row_that_failed_fails() -> None:
+    unplanned = [{"row": ["r0", 0], "outcome": "error", "error": "backend failed to load"}]
+    (p,) = cold_start_problems(_cold(compared=29, unplanned=unplanned))
+    assert "backend failed to load" in p
+
+
+def test_a_board_that_predates_the_unplanned_record_fails() -> None:
+    board = _cold()
+    del board["batch_live"]["unplanned"]
+    assert cold_start_problems(board)
+
+
+# -- D1: which platforms have had a full-corpus cell --
+
+from knaif.evalsuite.gate import earlier_platform_cell  # noqa: E402
+
+
+def _archive(root: Path, version: str, cells: dict[str, dict[str, Any]]) -> None:
+    path = root / "evals" / "acceptance" / "releases" / version / "x.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"skill": "x", "layers": {"L4": {"cells": cells}}}), "utf-8")
+
+
+def test_an_earlier_full_cell_on_the_platform_is_found(tmp_path) -> None:
+    _archive(tmp_path, "1.0.0", {"m|linux-x64|cpu": {"passed": False}})
+    _archive(tmp_path, "1.1.0", {"m|linux-x64|cpu": {"passed": True, "composed": True}})
+    assert earlier_platform_cell("x", tmp_path, "linux-x64", "cpu") == "1.1.0"
+
+
+def test_a_subset_cell_or_another_platform_does_not_count(tmp_path) -> None:
+    _archive(tmp_path, "1.0.0", {
+        "m|linux-x64|cpu": {"passed": True, "population": {"kind": "subset"}},
+        "m|linux-x64|cuda": {"passed": True},
+    })  # fmt: skip
+    assert earlier_platform_cell("x", tmp_path, "linux-x64", "cpu") is None
+
+
+def test_an_owner_excepted_cell_counts(tmp_path) -> None:
+    _archive(tmp_path, "1.0.0", {"m|macos|mtl": {"passed": False, "owner_exception": {"r": 1}}})
+    assert earlier_platform_cell("x", tmp_path, "macos", "mtl") == "1.0.0"
+
+
+@pytest.mark.parametrize(
+    "os_id,backend",
+    [("windows-x64", "cuda"), ("windows-x64", "vulkan"), ("windows-x64", "cpu"),
+     ("linux-x64", "cuda"), ("linux-x64", "cpu"), ("macos", "mtl"), ("macos", "cpu")],
+)  # fmt: skip
+def test_every_shipped_platform_has_had_its_full_cell(os_id: str, backend: str) -> None:
+    for skill in ("ffmpeg", "documents"):
+        assert earlier_platform_cell(skill, Path("."), os_id, backend), (skill, os_id, backend)
+
+
+def test_the_gate_names_a_subset_cell(tmp_path: Path) -> None:
+    """Part I, I9: a cell measured on the release subset says so wherever the gate reports it."""
+    from knaif.evalsuite.gate import evaluate_skill, record_layers
+    from knaif.evalsuite.matrix import cell_key
+
+    from .test_acceptance_matrix import MODEL, _contracts_and_l3, _matrix
+    from .test_gate import make_tree
+
+    tree = make_tree(tmp_path)
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    cuda = cell_key(MODEL, "windows-x64", "cuda")
+    subset = {"kind": "subset", "corpus_sha256": SHA, "rows": 3}
+    record_layers(
+        "demo", tree, {"L4": {"cell": cuda, "summary": "ok", "passed": True, "population": subset}}
+    )
+    record_layers(
+        "demo", tree, {"L4": {"cell": cell_key(MODEL, "windows-x64", "cpu"), "summary": "ok",
+                              "passed": True}}
+    )  # fmt: skip
+    l4 = next(s for s in evaluate_skill("demo", tree, "supported").layers if s.layer == "L4")
+    assert l4.state == "valid"
+    assert "release subset" in l4.detail and cuda in l4.detail
+
+
+def test_an_l3_record_over_the_subset_says_so(tmp_path: Path) -> None:
+    from knaif.evalsuite.gate import load_acceptance_record, record_from_parity_run
+
+    from .test_gate import make_tree
+
+    tree = make_tree(tmp_path)
+    run = tree / "evals" / "parity" / "2026-10-19_l3-subset"
+    run.mkdir(parents=True)
+    pop = {"kind": "subset", "corpus_sha256": SHA}
+    meta = {"result": {"port_bugs": 0, "native_not_implemented": 0, "passed": True,
+                       "plan_disagreement_rate": 0.0, "max_plan_disagreement": 0.0411},
+            "model": {"sha256": "m" * 64}, "binary": {"sha256": "b" * 64}, "population": pop}  # fmt: skip
+    (run / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    record_from_parity_run("demo", tree, run)
+    entry = (load_acceptance_record("demo", tree) or {})["layers"]["L3"]
+    entry = next(iter(entry["cells"].values())) if "cells" in entry else entry
+    assert entry["population"] == pop

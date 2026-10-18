@@ -22,10 +22,22 @@ Pair = tuple[str, int]
 
 
 def draw_shards(
-    corpus: Sequence[CorpusRow], *, count: int, rows: int | None = None
+    corpus: Sequence[CorpusRow],
+    *,
+    count: int,
+    rows: int | None = None,
+    within: Sequence[Pair] | None = None,
 ) -> list[list[Pair]]:
-    """Split the corpus (or `rows` utterances of it) into `count` shards, deterministically."""
+    """Split the corpus (or `rows` utterances of it) into `count` shards, deterministically.
+
+    *within* limits the draw to those utterances, kept in corpus order: the release subset, for
+    a subset cell's shards and its cold-start sample (plan 2026-10-14-faster-release-evidence,
+    Part I, I5).
+    """
     pairs: list[Pair] = [(r.id, j) for r in corpus for j in range(len(r.utterances))]
+    if within is not None:
+        keep = set(within)
+        pairs = [p for p in pairs if p in keep]
     if rows is not None:
         if rows < 1:
             raise ValueError(f"rows must be at least 1, got {rows}")

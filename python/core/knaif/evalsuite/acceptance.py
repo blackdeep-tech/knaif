@@ -1233,3 +1233,40 @@ def check_native_subset_acceptance(
         violations=violations + list(delegated.violations),
         checked=checked + delegated.checked,
     )
+
+
+#: The cold-start sample a batch-planned cell must carry (Part I, I5; B1: 30 per skill).
+COLD_START_MIN = 30
+
+
+def cold_start_problems(board: dict[str, Any], min_sample: int = COLD_START_MIN) -> list[str]:
+    """Why a batch-planned board's cold-start sample does not hold (Part I, I5); empty if it does.
+
+    A live board needs none. A batch-planned one must have run at least *min_sample* rows live,
+    every live plan equal to its batch plan, and every live row without a plan stopped by the
+    unsafe-phrase screen (a `reject` with no error): a live row that crashed has no plan either,
+    and that is the failure the sample exists to catch. Any problem sends the cell back to a live
+    run on the subset (owner, 2026-10-18).
+    """
+    if board.get("planning") != "batch":
+        return []
+    live = board.get("batch_live") or {}
+    problems: list[str] = []
+    if int(live.get("sample") or 0) < min_sample:
+        problems.append(
+            f"the cold-start sample ran {live.get('sample')} row(s) live; {min_sample} are required"
+        )
+    mismatches = live.get("mismatches") or []
+    if mismatches:
+        shown = ", ".join(f"{rid}#{idx}" for rid, idx in mismatches[:5])
+        problems.append(f"{len(mismatches)} live plan(s) differ from the batch's: {shown}")
+    if "unplanned" not in live:
+        problems.append("the board does not record its live rows without a plan; re-run the lane")
+    for entry in live.get("unplanned") or []:
+        if entry.get("outcome") != "reject" or entry.get("error"):
+            rid, idx = entry.get("row") or ["?", 0]
+            problems.append(
+                f"live row {rid}#{idx} produced no plan and was not a screen rejection "
+                f"({entry.get('outcome')!r}: {entry.get('error')})"
+            )
+    return problems

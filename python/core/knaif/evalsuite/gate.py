@@ -1076,6 +1076,14 @@ def _cells_state(
     # A composed cell (evalsuite.compose) rests on reused evidence; it counts, and says so.
     composed = [c for c in cells if ((stored or {}).get(c) or {}).get("composed")]
     note = f" [composed, not a full run: {', '.join(composed)}]" if composed else ""
+    # So does a cell measured on the release subset (plan 2026-10-14-faster-release-evidence, I9).
+    subset = [
+        c
+        for c in cells
+        if ((((stored or {}).get(c) or {}).get("population")) or {}).get("kind") == "subset"
+    ]
+    if subset:
+        note += f" [release subset: {', '.join(subset)}]"
     # Results carried over to an equivalent rebuild are named in every state.
     carried = sorted(
         {m for st in per_cell.values() for m in re.findall(r"\[equivalent: ([^\]]+)\]", st.detail)}
@@ -1301,11 +1309,14 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
         "model": (meta.get("model") or {}).get("sha256"),
         "native_binary": (meta.get("binary") or {}).get("sha256"),
     }
+    # A run over the release subset says so (plan 2026-10-14-faster-release-evidence, I4/I9).
+    population = {"population": meta["population"]} if meta.get("population") else {}
     return record_layers(
         skill,
         root,
         {
             "L3": {
+                **population,
                 "cell": _model_name(meta, root),
                 "evidence": evidence,
                 "run": str(run_dir.relative_to(root)) if run_dir.is_absolute() else str(run_dir),
@@ -1395,6 +1406,28 @@ def write_release_record(
         json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     return out
+
+
+def earlier_platform_cell(skill: str, root: Path, os_id: str, backend: str) -> str | None:
+    """The release whose frozen record holds an accepted L4 cell for *skill* on this OS and
+    backend measured over more than the release subset, or None (Part I, I2; D1).
+
+    A skill's first release on a platform measures the full corpus there; the subset applies
+    from then on, for any model. Accepted means passed or covered by an owner exception. A
+    composed cell counts (owner, 2026-10-18): 1.2.0 and 1.3.0 accepted Linux and macOS CPU that
+    way, as each release's evidence for those platforms.
+    """
+    for path in sorted((Path(root) / RELEASES_DIR).glob(f"*/{skill}.json")):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        cells = (((record.get("layers") or {}).get("L4") or {}).get("cells")) or {}
+        for key, entry in cells.items():
+            parts = str(key).split("|")
+            if len(parts) != 3 or (parts[1], parts[2]) != (os_id, backend):
+                continue
+            accepted = entry.get("passed") is True or isinstance(entry.get("owner_exception"), dict)
+            if accepted and (entry.get("population") or {}).get("kind") != "subset":
+                return path.parent.name
+    return None
 
 
 def _is_patch_of(version: str, base: str) -> bool:

@@ -1132,6 +1132,8 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             "sample": len(live or ()),
             "compared": compared,
             "mismatches": mismatches,
+            "rows": [list(k) for k in sorted(live or ())],
+            "unplanned": native_lane.batch_live_unplanned(outputs, live or set()),
         }
         print(f"  cold start  : {compared} live row(s) compared, {len(mismatches)} differ")
     # Left null rather than assumed when the binary does not say: two runs on different
@@ -2111,18 +2113,29 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             f"(packaged_layout={current.get('packaged_layout')!r}). L4 is a claim about the "
             "artifact users install; run `eval-native` against the unpacked release artifact."
         )
-    if current.get("planning") == "batch":
-        sys.exit(
-            f"--current {current_path} was planned in one batch and executed from those plans "
-            "(`native --batch-plan`). No release's gate rules accept that method yet (plan "
-            "2026-10-14-faster-release-evidence, T1), so it is a measurement, not L4 evidence."
-        )
     population = getattr(args, "population", None) or "full"
     if population == "full" and (current.get("population") or {}).get("kind") == "subset":
         sys.exit(
             f"--current {current_path} measured the release subset, not the corpus; grade it "
             "with --population subset."
         )
+    if current.get("planning") == "batch":
+        # Batch planning is accepted on the release subset only, and only while its cold-start
+        # sample holds (plan 2026-10-14-faster-release-evidence, Part I, I5).
+        if population != "subset":
+            sys.exit(
+                f"--current {current_path} was planned in one batch (`native --batch-plan`); "
+                "the gate rules accept that only on the release subset (Part I, I5)."
+            )
+        from .acceptance import cold_start_problems
+
+        problems = cold_start_problems(current)
+        if problems:
+            sys.exit(
+                "the cold-start sample does not hold, so this cell's batch planning is void: "
+                + "; ".join(problems)
+                + ". Re-run the cell live on the subset (`native --subset`, no --batch-plan)."
+            )
 
     snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
@@ -2168,33 +2181,33 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
 
     coverage_floor = args.min_coverage if args.min_coverage is not None else NATIVE_COVERAGE_FLOOR
     if population == "subset":
-        _accept_native_subset(args, spec, baseline, current, safety, coverage_floor)
-        return
-    report = check_native_acceptance(
-        spec,
-        baseline,
-        current,
-        safety=safety,
-        coverage_floor=coverage_floor,
-        safety_rows=[row.id for row in load_safety_corpus(args.skill)],
-    )
-    floors = native_aggregate_floors(spec, baseline)
-
-    def _num(value: Any) -> str:
-        return f"{float(value):.4f}" if isinstance(value, (int, float)) else str(value)
-
-    print(f"\n=== L4 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
-    print(
-        f"  baseline    : {baseline.get('backend_public_name')} / "
-        f"{baseline.get('verifier')} / n={baseline.get('total')}"
-    )
-    print(f"  coverage    : {_num(current.get('coverage'))} (floor {coverage_floor:.4f})")
-    for metric, floor in floors.items():
-        print(
-            f"  {metric:<18}: {_num(current.get(metric))}  (floor {floor:.4f}, "
-            f"python {_num(baseline.get(metric))})"
+        report = _accept_native_subset(args, spec, baseline, current, safety, coverage_floor)
+    else:
+        report = check_native_acceptance(
+            spec,
+            baseline,
+            current,
+            safety=safety,
+            coverage_floor=coverage_floor,
+            safety_rows=[row.id for row in load_safety_corpus(args.skill)],
         )
-    print(report.summary())
+        floors = native_aggregate_floors(spec, baseline)
+
+        def _num(value: Any) -> str:
+            return f"{float(value):.4f}" if isinstance(value, (int, float)) else str(value)
+
+        print(f"\n=== L4 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
+        print(
+            f"  baseline    : {baseline.get('backend_public_name')} / "
+            f"{baseline.get('verifier')} / n={baseline.get('total')}"
+        )
+        print(f"  coverage    : {_num(current.get('coverage'))} (floor {coverage_floor:.4f})")
+        for metric, floor in floors.items():
+            print(
+                f"  {metric:<18}: {_num(current.get(metric))}  (floor {floor:.4f}, "
+                f"python {_num(baseline.get(metric))})"
+            )
+        print(report.summary())
 
     # The fingerprint this run was taken under: the tree as it is, plus what only the run knows
     # — the GGUF and binary it measured and the policy it was graded by. A board too old to
@@ -2241,14 +2254,25 @@ def _accept_native_subset(
     current: dict[str, Any],
     safety: dict[str, Any] | None,
     coverage_floor: float,
-) -> None:
+) -> Any:
     """`accept-native --population subset` (D2): per-row regression against the accepted Python
-    run on the committed subset. Printed, never recorded: no release's gate rules adopt the
-    subset yet (plan 2026-10-14-faster-release-evidence, T1)."""
+    run on the committed subset (plan 2026-10-14-faster-release-evidence, Part I, I3). Returns
+    the report, which the caller records like a full cell's. Refused outright, recording
+    nothing, on a platform where the skill never had a full-corpus cell (I2, D1)."""
     from .acceptance import check_native_subset_acceptance, load_safety_corpus
+    from .gate import earlier_platform_cell
+    from .matrix import backend_family, current_os
     from .release_subset import corpus_path, load_subset_beside
     from .snapshot import load_source_run
 
+    os_id = str(current.get("os") or current_os())
+    backend = backend_family(current.get("compute_backend")) or "unknown"
+    if earlier_platform_cell(args.skill, Path.cwd(), os_id, backend) is None:
+        sys.exit(
+            f"{args.skill} has no accepted full-corpus L4 cell on {os_id}/{backend} in any "
+            "release record: its first release there measures the full corpus, and the subset "
+            "applies from the next one (Part I, I2)."
+        )
     try:
         subset = load_subset_beside(args.skill, corpus_path(args.skill))
         python_board = load_source_run(baseline, Path.cwd())
@@ -2270,13 +2294,13 @@ def _accept_native_subset(
     print(f"  python run  : {source['folder']}/{source['scoreboard']}")
     print(f"  subset      : {subset['count']} utterances (corpus {subset['corpus_sha256'][:12]})")
     print(f"  coverage    : {current.get('coverage')} (floor {coverage_floor:.4f})")
+    if current.get("planning") == "batch":
+        live = current.get("batch_live") or {}
+        print(
+            f"  planning    : batch, cold start {live.get('compared')}/{live.get('sample')} equal"
+        )
     print(report.summary())
-    print(
-        "  a measurement, not L4 evidence: no release's gate rules adopt the subset yet "
-        "(plan 2026-10-14-faster-release-evidence, T1); nothing recorded"
-    )
-    if not report.ok:
-        sys.exit(1)
+    return report
 
 
 def load_only(path: str | None) -> set[tuple[str, int]] | None:
@@ -2339,8 +2363,19 @@ def cmd_shards(args: argparse.Namespace) -> None:
     if not corpus_path.exists():
         sys.exit(f"Corpus not found: {corpus_path}")
     corpus = load_corpus(corpus_path)
+    within: list[tuple[str, int]] | None = None
+    population: dict[str, Any] | None = None
+    if getattr(args, "subset", False):
+        from .release_subset import load_subset_beside, subset_rows
+
+        try:
+            doc = load_subset_beside(args.skill, corpus_path)
+        except ValueError as exc:
+            sys.exit(str(exc))
+        within = subset_rows(doc)
+        population = {"kind": "subset", "corpus_sha256": doc["corpus_sha256"]}
     try:
-        shards = draw_shards(corpus, count=args.count, rows=args.rows)
+        shards = draw_shards(corpus, count=args.count, rows=args.rows, within=within)
     except ValueError as exc:
         sys.exit(str(exc))
 
@@ -2365,6 +2400,8 @@ def cmd_shards(args: argparse.Namespace) -> None:
         "method": "evenly spaced in corpus order, dealt round-robin",
         "shards": entries,
     }
+    if population is not None:
+        manifest["population"] = population
     (out / "shards.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"{manifest['total']} utterances in {len(entries)} shards -> {out}")
 
@@ -2579,6 +2616,11 @@ def l4_record_entry(
     if current.get("composed"):
         entry["composed"] = True
         entry["composed_from"] = current.get("composed_from")
+    # A subset cell, and a batch-planned one, say so in the record (Part I, I9).
+    if current.get("population"):
+        entry["population"] = current["population"]
+    if current.get("planning"):
+        entry["planning"] = current["planning"]
     return entry
 
 
@@ -3048,6 +3090,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_sh.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
     p_sh.add_argument("--count", required=True, type=int, help="How many shards")
     p_sh.add_argument("--rows", type=int, default=None, help="Utterances to draw (default: all)")
+    p_sh.add_argument(
+        "--subset",
+        action="store_true",
+        help="Draw from the committed release subset only (its cells' shards, and the 30-row "
+        "cold-start sample with --count 1 --rows 30)",
+    )
     p_sh.add_argument("--out", required=True, metavar="DIR")
 
     # corpus-audit — Part G's duplicate scan (T7)

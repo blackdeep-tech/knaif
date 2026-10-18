@@ -553,6 +553,114 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
   library crate rather than per-domain branches in `apps/cli` (audit F11); a stable interface a
   client can depend on. Each is a public feature in its own right, planned separately.
 
+## Part I — the rules a release adopts (T1, approved by the owner 2026-10-18)
+
+**Approved 2026-10-18 (owner), as written, with I5's and I6's proposals decided as stated.** They
+take effect for a release once the code in I11 exists; until then `accept-native` keeps refusing
+batch-planned boards and records no subset verdict. The next release's index copies the rules
+below into its *Gate decision rules* before its freeze, in the 1.3.0 shape: each run script
+copies them verbatim, and a change after that is an amendment recorded before the stage it
+affects. They come in two stages, because the result store does not exist yet:
+
+- **Stage 1 (adoptable once T3's acceptance half is built):** the subset, batch planning, the
+  cold-start sample, no reuse between cells or releases. Every row is measured in the release.
+- **Stage 2 (once T2 and T2c exist):** Stage 1 plus the store's reuse (E3), with what is never
+  reused (E4) unchanged.
+
+**I1. What is measured.** The frozen release artifacts, built by the release scripts, per cell
+(model × platform × backend × skill). A cell that did not run on its expected device is void.
+
+**I2. Populations.**
+- *Model acceptance* (Python, full corpus, S2 floors, `eval-accept`) runs when the planning
+  fingerprint changed since the locked snapshot: the model, prompt, retrieval, generation settings
+  or planner code (D3). It runs before L3 and L4, and its snapshot is re-locked in its own commit
+  with `evalsuite lock` (which records `source_run`). Otherwise the locked snapshot stands.
+- *L4 cells* measure the committed `data/release_subset.json`; `release-subset --check` must pass
+  at the freeze commit. A skill × platform with no earlier accepted full-corpus native cell
+  measures the full corpus there once instead (D1).
+- *Safety* runs on the binary over the whole safety corpus in every cell. It is never subsetted
+  and never reused.
+
+**I3. The L4 bar on the subset** (D2, as `accept-native --population subset` grades it): no row
+the accepted Python run passed may fail on the binary; `outcome_accuracy` and `avg_knaif_score`
+within 0.02 of Python's **on the same rows** (the snapshot's `source_run`); coverage 1.0; safety
+100%. The S2 slice floors do not apply, so slice waivers have nothing to waive: a regressed row
+goes to the owner with both plans and commands, and a safety miss is never waived.
+
+**I4. L3** on the subset rows: 0 port bugs, 0 capabilities native lacks, plan disagreement within
+the 1.2.0 bounds, unchanged (≤ 0.0411 ffmpeg, ≤ 0.0183 documents). *Measured 2026-10-18:* 1.3.0's
+eight L3 records (Windows and macOS, both models, both skills) had **no** disagreement on the
+subset's rows; over the full corpus, one documents row each.
+
+**I5. Planning (B1).** Each cell batch-plans the subset on its own backend (`native --subset
+--batch-plan`, one model load); each row then runs through the shipped `knaif run` with its plan
+replayed. A **cold-start sample** of 30 utterances per skill is drawn once per release from the
+subset (`evalsuite shards --rows 30`, evenly spaced) and committed in the run folder before any
+result. It runs live in every cell, one process per row, and each live plan must equal its batch
+plan; rows the unsafe-phrase screen rejects before inference are excluded, as in T0. Any mismatch
+voids that cell's batch planning, and the cell re-runs live, in full, on the subset (owner,
+2026-10-18).
+
+**I6. Across backends (B2).** Stage 1: none. Each cell executes its own plans; execution costs
+0.1–0.7 s a row, so there is little to save. Stage 2: execution is reused by plan hash (E3).
+The cold-start rows, which run live end to end on every backend, are also B2's fresh confirmation
+sample: one sample, not two (owner, 2026-10-18; E4's list shrinks accordingly).
+
+**I7. Daemon plan equality (B3).** In-process vs through the daemon, byte-identical, both models,
+both skills, over the subset's utterances, on the platforms 1.3.0 checked (Windows CUDA, macOS
+Metal, Linux CPU). The full corpus is used when the daemon or the generation path changed since
+the last release. A difference goes to the owner before any release claim about the daemon.
+
+**I8. Reuse between releases (E3), Stage 2 only.** Plans are reused when the model sha256 and the
+planning fingerprint are unchanged; outcomes when the execution fingerprint of the plan's tools is
+unchanged. Until T2 splits the `native` fingerprint, any change under `native/` stales every
+outcome, so in practice no outcome is reused. Never reused (E4): safety, the cold-start sample.
+
+**I9. Reporting (E2).** Each board records per row whether its plan and its outcome were measured
+in this release or reused from `<release, cell>`. The gate prints both counts per cell, and the
+release notes say per cell "N measured, M reused from <release>" and the population ("release
+subset, n utterances" or "full corpus"). In Stage 1 every row is measured.
+
+**I10. What it costs** (wall clock on this box from T0's per-row figures, both models; not speed
+figures):
+
+| Windows | 1.3.0 method | Stage 1 | Stage 2, planning unchanged |
+|---|---:|---:|---:|
+| CUDA cells | 1 h 29 min | ~11 min | ~8 min |
+| Vulkan cells | 1 h 44 min | ~13 min | ~8 min |
+| CPU cells | ~7 h | ~1 h 30 min | ~21 min |
+| L3 (CUDA) | 59 min | ~35 min | ~17 min (Python side reused) |
+| Daemon equality | ~1–1.5 h | ~20 min | ~20 min |
+| **Total** | **~12 h** | **~3 h** | **~1 h 15 min** |
+
+Stage 1's CPU cells are planning: 13.2 s a row for the 4B, 10.7 s for the 1.7B, over 194 ffmpeg
+and 80 documents utterances. Only the store removes that (B2's T0 correction). In Stage 2 what
+remains on the CPU is the cold-start sample, which always runs live: 30 utterances per skill, at
+1.3.0's live cost per row.
+
+**I11. Code a release needs before adopting Stage 1** (T3's acceptance half): `accept-native`
+accepting a batch-planned board whose cold-start sample has at least 30 compared rows and no
+mismatch; recording a subset verdict, with its population, as L4 evidence; the gate requiring a
+skill × platform's earlier accepted full-corpus cell before it accepts a subset one (D1); shards
+drawn from the subset, with a composed cell keeping its `population`; L3 (`parity_check.py`)
+limited to the subset rows.
+
+**Built 2026-10-19, so Stage 1 can be adopted.** `accept-native --population subset` accepts a
+batch-planned board only while its cold-start sample holds: at least 30 live rows, no plan that
+differs, and every live row without a plan a screen rejection. The lane now records each live
+row that produced no plan and how it ended, because a crashed live row has no plan either and
+was previously not compared at all. Otherwise it refuses with "re-run the cell live"; a
+batch-planned full-corpus board is still refused. A subset verdict is recorded as L4 evidence
+with its `population` and `planning`, and the gate names subset cells as it names composed ones.
+D1 is checked when the verdict is recorded: `gate.earlier_platform_cell` looks for an accepted
+cell on that OS and backend in `evals/acceptance/releases/*`. *Owner, 2026-10-18:* composed cells
+count, so ffmpeg and documents have one on every shipped platform (1.2.0 or 1.3.0), and a test
+keeps it so. `shards --subset` draws a subset cell's shards and its cold-start sample (`--count 1
+--rows 30`). `compose` keeps a shared `population` and refuses boards over different ones.
+`parity_check.py --subset` runs L3 on the subset's rows, and its report and the L3 record carry
+the population. The `just` recipes pass the flags through (`eval-accept-native` gained `*args`).
+Not built here: the CI join job that composes disjoint shards (T0b).
+
 ## Tasks
 
 - [x] **T0. Measure before building.** On the frozen 1.3.0 binary: (a) time `plan --batch` for one
@@ -600,10 +708,13 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       `runner.json` timings as artifacts), guarded by `test_evidence_workflow.py`. Still to add:
       taking the Package run's files as well as a published release's, and the join job
       (compose the shards, safety on the binary, `accept-native`).
-- [ ] **T1. Write the rules** as gate-decision rules in the shape of the 1.3.0 ones, for the owner
+- [x] **T1. Write the rules** as gate-decision rules in the shape of the 1.3.0 ones, for the owner
       to approve: the subset population and per-row regression bar (D2), the store's reuse table
       (E3) and never-reused list (E4), the cold-start and confirmation samples (B1, B2), the daemon
       sample (B3), and how the gate and the release notes print measured vs reused counts (E2).
+      **Written and approved 2026-10-18 as Part I** (two stages: Stage 1 without the store, Stage 2
+      with it). Owner decisions: a cold-start mismatch re-runs the cell live; the cold-start rows
+      double as the cross-backend confirmation sample. Stage 1's code is listed in I11.
 - [ ] **T2. A3: split the `native` fingerprint** into planning and per-tool execution, with tests
       that a change to one tool's code stales only that tool's records. The halves are the store's
       key components (E1).

@@ -431,3 +431,20 @@ def test_reused_plans_refuse_duplicates_and_non_integer_indices(tmp_path: Path) 
     for bad in (1.0, True, "0", None):
         with pytest.raises(ValueError, match="utterance_idx"):
             load_plans(write({"id": "a", "utterance_idx": bad, "plan": plan}))
+
+
+def test_a_composed_subset_cell_keeps_its_population() -> None:
+    """Part I, I11: a cell composed over the release subset is still a subset cell."""
+    pop = {"kind": "subset", "corpus_sha256": "c" * 64, "rows": 2}
+    base = _board([_scored("a", 0, True, 1.0), _scored("a", 1, False, 0.0)], population=pop)
+    repl = _board([_scored("a", 1, True, 1.0)], compute_backend="CPU", population=pop)
+    out = cmp.compose_cell(base, repl, sources={"base": "b.json", "replacements": "r.json"})
+    assert out["population"] == pop
+
+
+def test_boards_over_different_populations_do_not_compose() -> None:
+    pop = {"kind": "subset", "corpus_sha256": "c" * 64, "rows": 2}
+    base = _board([_scored("a", 0, True, 1.0), _scored("a", 1, False, 0.0)])
+    repl = _board([_scored("a", 1, True, 1.0)], population=pop)
+    with pytest.raises(ValueError, match="population"):
+        cmp.compose_cell(base, repl, sources={"base": "b.json", "replacements": "r.json"})
