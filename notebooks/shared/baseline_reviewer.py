@@ -25,7 +25,7 @@ from IPython.display import HTML as IHTML
 from IPython.display import Audio, Image, Video, display
 
 from knaif.evalsuite.chain import run_command_chain
-from knaif.evalsuite.corpus import save_corpus
+from knaif.evalsuite.corpus import save_row
 
 # ── media helpers ───────────────────────────────────────────────────────────────
 
@@ -284,7 +284,7 @@ def make_reviewer(
             row.outputs_validated_by = reviewer
         else:
             row.baseline = {**(row.baseline or {}), "validated_by": reviewer}
-        save_corpus(corpus_ref[0], corpus_path)
+        save_row(corpus_path, row)
         lbl_status.value = f"<span style='color:green'>✓ {row.id} accepted</span>"
         _advance()
 
@@ -308,7 +308,7 @@ def make_reviewer(
             for o, cmd in zip(row_outputs, lines, strict=True):
                 o["command"] = cmd
             row.outputs_validated_by = reviewer
-            save_corpus(corpus_ref[0], corpus_path)
+            save_row(corpus_path, row)
             lbl_status.value = f"<span style='color:green'>✓ {row.id} edited and accepted</span>"
             _advance()
             return
@@ -316,7 +316,7 @@ def make_reviewer(
         new_cmd = ta_command.value.strip()
         if new_cmd:
             row.baseline = {**(row.baseline or {}), "command": new_cmd, "validated_by": reviewer}
-            save_corpus(corpus_ref[0], corpus_path)
+            save_row(corpus_path, row)
             lbl_status.value = f"<span style='color:green'>✓ {row.id} edited and accepted</span>"
         else:
             lbl_status.value = "<span style='color:orange'>⚠ Empty command — skipped</span>"
