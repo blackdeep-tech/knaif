@@ -74,6 +74,38 @@ def load_snapshot(path: Path | str) -> dict[str, Any]:
         return json.load(fh)  # type: ignore[no-any-return]
 
 
+def load_source_run(snapshot: dict[str, Any], root: Path | str = ".") -> dict[str, Any]:
+    """The committed scoreboard a snapshot was locked from (`source_run`), with its per-row
+    grades — what the release subset is compared with row by row (D2).
+
+    Refused when the snapshot names none, the file is missing, or its bytes are not the ones
+    the lock hashed. Line endings are the one difference forgiven: the lock hashed the file as
+    written on one machine, and a checkout elsewhere may hold it with the other line ending.
+    """
+    import hashlib
+
+    source = snapshot.get("source_run")
+    if not source:
+        raise ValueError(
+            "the snapshot names no source_run, so its per-row grades cannot be read back; "
+            "re-lock it with `evalsuite lock`"
+        )
+    path = Path(root) / source["folder"] / source["scoreboard"]
+    if not path.is_file():
+        raise ValueError(
+            f"the snapshot's source_run {source['folder']}/{source['scoreboard']} is missing"
+        )
+    raw = path.read_bytes()
+    lf = raw.replace(b"\r\n", b"\n")
+    candidates = (raw, lf, lf.replace(b"\n", b"\r\n"))
+    if all(hashlib.sha256(c).hexdigest() != source.get("sha256") for c in candidates):
+        raise ValueError(
+            f"{source['folder']}/{source['scoreboard']} does not match the sha256 the snapshot "
+            "recorded; it is not the run the baseline was locked from"
+        )
+    return json.loads(raw)
+
+
 def diff_snapshots(
     baseline: dict[str, Any],
     current: dict[str, Any],

@@ -274,7 +274,7 @@ def _native_args(tmp_path: Path, **kw) -> argparse.Namespace:
         "sandbox": str(tmp_path / "sb"), "fixture_dir": str(_fixtures(tmp_path)),
         "config": "eval_backends.yaml", "lane": "t", "allow_unpackaged": True, "limit": None,
         "verbose": False, "only": None, "save": None, "min_coverage": 2.0,
-        "batch_plan": False, "live_sample": None, "batch_plans": None,
+        "batch_plan": False, "live_sample": None, "batch_plans": None, "subset": False,
     }  # fmt: skip
     return argparse.Namespace(**{**base, **kw})
 
@@ -401,3 +401,67 @@ def test_the_batch_file_is_found_from_the_folder_the_binary_runs_in(tmp_path, mo
         work_dir=Path("sb") / ".batch",
     )
     assert seen["exists"], "the binary would not find its batch file"
+
+
+# -- the release subset (plan 2026-10-14-faster-release-evidence, D1/D2, T2b) --
+
+
+def _with_subset(tmp_path: Path, args: argparse.Namespace) -> dict[str, Any]:
+    """Commit a subset beside the test corpus, derived from it as `release-subset` does."""
+    from knaif.evalsuite.release_subset import SUBSET_FILE, derive_subset
+
+    doc = derive_subset("ffmpeg", Path(args.corpus))
+    (Path(args.corpus).parent / SUBSET_FILE).write_text(json.dumps(doc), encoding="utf-8")
+    return doc
+
+
+def test_a_subset_run_measures_the_committed_subset_and_says_so(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    seen = _patch_native(tmp_path, monkeypatch)
+    args = _native_args(tmp_path, subset=True)
+    doc = _with_subset(tmp_path, args)
+    board = cli.cmd_native(args)
+    assert seen["rows_kw"]["only"] == {("r1", 0)}, "one stratum: utterance 0 of its first row"
+    assert board["population"] == {
+        "kind": "subset",
+        "corpus_sha256": doc["corpus_sha256"],
+        "rows": 1,
+    }
+
+
+def test_a_stale_subset_is_refused(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    _patch_native(tmp_path, monkeypatch)
+    args = _native_args(tmp_path, subset=True)
+    _with_subset(tmp_path, args)
+    with Path(args.corpus).open("a", encoding="utf-8") as fh:
+        fh.write(
+            json.dumps({"id": "r3", "utterances": ["x"], "expected_outcome": "clarify"}) + "\n"
+        )
+    with pytest.raises(SystemExit, match="regenerate"):
+        cli.cmd_native(args)
+
+
+def test_a_shard_of_the_subset_runs_and_one_outside_it_is_refused(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    seen = _patch_native(tmp_path, monkeypatch)
+    inside, outside = tmp_path / "in.json", tmp_path / "out.json"
+    inside.write_text(json.dumps([["r1", 0]]), encoding="utf-8")
+    outside.write_text(json.dumps([["r2", 1]]), encoding="utf-8")
+    args = _native_args(tmp_path, subset=True, only=str(inside))
+    _with_subset(tmp_path, args)
+    cli.cmd_native(args)
+    assert seen["rows_kw"]["only"] == {("r1", 0)}
+    args.only = str(outside)
+    with pytest.raises(SystemExit, match="not in the release subset"):
+        cli.cmd_native(args)
+
+
+def test_a_full_run_records_no_population(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    _patch_native(tmp_path, monkeypatch)
+    assert "population" not in cli.cmd_native(_native_args(tmp_path))

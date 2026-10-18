@@ -1032,6 +1032,24 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     print(f"  compute     : {measured.detail}\n", flush=True)
 
     only = load_only(getattr(args, "only", None))
+    population: dict[str, Any] | None = None
+    if getattr(args, "subset", False):
+        # The release subset (D1): the committed one beside this corpus, refused when stale.
+        # An --only file is a shard of it and must stay inside it.
+        from .release_subset import load_subset_beside, subset_rows
+
+        try:
+            doc = load_subset_beside(args.skill, corpus_path)
+        except ValueError as exc:
+            sys.exit(f"ERROR: {exc}")
+        rows_in = set(subset_rows(doc))
+        if only is not None and not only <= rows_in:
+            outside = sorted(only - rows_in)
+            sys.exit(
+                f"ERROR: --only names {len(outside)} row(s) not in the release subset: {outside[:5]}"
+            )
+        only = only if only is not None else rows_in
+        population = {"kind": "subset", "corpus_sha256": doc["corpus_sha256"], "rows": len(only)}
     recorded = getattr(args, "batch_plans", None)
     batch = bool(getattr(args, "batch_plan", False)) or bool(recorded)
     live = load_only(getattr(args, "live_sample", None))
@@ -1103,6 +1121,8 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     # Wall-clock of this run's phases on this machine: what B1 is measured by, never a speed
     # figure (speed is measured as docs/PERFORMANCE.md says).
     scoreboard["timing"] = timing
+    if population is not None:
+        scoreboard["population"] = population
     if batch and plans is not None:
         compared, mismatches = native_lane.batch_live_mismatches(outputs, plans, live or set())
         scoreboard["planning"] = "batch"
@@ -2097,6 +2117,12 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             "(`native --batch-plan`). No release's gate rules accept that method yet (plan "
             "2026-10-14-faster-release-evidence, T1), so it is a measurement, not L4 evidence."
         )
+    population = getattr(args, "population", None) or "full"
+    if population == "full" and (current.get("population") or {}).get("kind") == "subset":
+        sys.exit(
+            f"--current {current_path} measured the release subset, not the corpus; grade it "
+            "with --population subset."
+        )
 
     snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
@@ -2141,6 +2167,9 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
                 )
 
     coverage_floor = args.min_coverage if args.min_coverage is not None else NATIVE_COVERAGE_FLOOR
+    if population == "subset":
+        _accept_native_subset(args, spec, baseline, current, safety, coverage_floor)
+        return
     report = check_native_acceptance(
         spec,
         baseline,
@@ -2201,6 +2230,51 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
         print(f"  COMPOSED cell (not a full run): {entry['composed_from']}")
     path = record_layers(args.skill, Path.cwd(), {"L4": entry})
     print(f"  recorded L4 evidence: {_shown(path)}")
+    if not report.ok:
+        sys.exit(1)
+
+
+def _accept_native_subset(
+    args: argparse.Namespace,
+    spec: dict[str, Any],
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    safety: dict[str, Any] | None,
+    coverage_floor: float,
+) -> None:
+    """`accept-native --population subset` (D2): per-row regression against the accepted Python
+    run on the committed subset. Printed, never recorded: no release's gate rules adopt the
+    subset yet (plan 2026-10-14-faster-release-evidence, T1)."""
+    from .acceptance import check_native_subset_acceptance, load_safety_corpus
+    from .release_subset import corpus_path, load_subset_beside
+    from .snapshot import load_source_run
+
+    try:
+        subset = load_subset_beside(args.skill, corpus_path(args.skill))
+        python_board = load_source_run(baseline, Path.cwd())
+    except ValueError as exc:
+        sys.exit(str(exc))
+    report = check_native_subset_acceptance(
+        spec,
+        baseline,
+        python_board,
+        current,
+        subset,
+        safety,
+        coverage_floor=coverage_floor,
+        safety_rows=[row.id for row in load_safety_corpus(args.skill)],
+    )
+    source = baseline["source_run"]
+    print(f"\n=== L4 acceptance on the release subset: {args.skill} ===")
+    print(f"  baseline    : {baseline.get('backend_public_name')} / {baseline.get('verifier')}")
+    print(f"  python run  : {source['folder']}/{source['scoreboard']}")
+    print(f"  subset      : {subset['count']} utterances (corpus {subset['corpus_sha256'][:12]})")
+    print(f"  coverage    : {current.get('coverage')} (floor {coverage_floor:.4f})")
+    print(report.summary())
+    print(
+        "  a measurement, not L4 evidence: no release's gate rules adopt the subset yet "
+        "(plan 2026-10-14-faster-release-evidence, T1); nothing recorded"
+    )
     if not report.ok:
         sys.exit(1)
 
@@ -2444,6 +2518,25 @@ def cmd_corpus_check(args: argparse.Namespace) -> None:
     if problems:
         sys.exit(f"{args.skill}: {len(problems)} problem(s) in {args.rows}")
     print(f"{args.skill}: {len(rows)} row(s) ok to append from {args.rows}")
+
+
+def cmd_release_subset(args: argparse.Namespace) -> None:
+    """Derive and write a skill's release subset, or check the committed one (D1, T2b)."""
+    from .release_subset import build_subset, check_subset, subset_path
+
+    if args.check:
+        problems = check_subset(args.skill)
+        if problems:
+            sys.exit(problems[0])
+        print(f"{args.skill}: {subset_path(args.skill)} matches the corpus")
+        return
+    doc = build_subset(args.skill)
+    path = subset_path(args.skill)
+    # One row per line, so a regenerated subset diffs row by row.
+    head = json.dumps({k: v for k, v in doc.items() if k != "rows"}, indent=1)[:-2]
+    rows = ",\n".join(f"  {json.dumps(r)}" for r in doc["rows"])
+    path.write_text(f'{head},\n "rows": [\n{rows}\n ]\n}}\n', encoding="utf-8")
+    print(f"{args.skill}: {doc['count']} utterances -> {path}")
 
 
 def cmd_rerun_set(args: argparse.Namespace) -> None:
@@ -3003,6 +3096,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_cc.add_argument("--rows", required=True, metavar="FILE", help="JSONL of proposed rows")
     p_cc.add_argument("--tag", default="hard2", help="The review tag every new row must carry")
 
+    # release-subset — the rows an L4 release cell measures (D1, T2b)
+    p_rs = sub.add_parser(
+        "release-subset",
+        help="Write skills/<skill>/data/release_subset.json from the corpus (or --check it)",
+    )
+    p_rs.add_argument("--skill", required=True)
+    p_rs.add_argument(
+        "--check", action="store_true", help="Fail when the committed subset is stale"
+    )
+
     # row-diff — two boards compared row by row (G3)
     p_rd = sub.add_parser(
         "row-diff",
@@ -3049,6 +3152,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="min_coverage",
         help="Override the acceptance coverage floor (default: complete coverage, per "
         "contracts/release/native_status.yaml). Lower it only deliberately, and say why.",
+    )
+    p_accn.add_argument(
+        "--population",
+        choices=("full", "subset"),
+        default="full",
+        help="subset: grade a `native --subset` board per row against the snapshot's source "
+        "run (D2). Printed only; not recorded as L4 evidence until the gate rules adopt it.",
     )
 
     # safety
@@ -3140,6 +3250,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Like --batch-plan, but the plans come from FILE: an earlier `knaif plan --batch` "
         "output over exactly the selected rows, in corpus order, from the same binary and "
         "model. Measures execution alone.",
+    )
+    p_nat.add_argument(
+        "--subset",
+        action="store_true",
+        help="Run the committed release subset (data/release_subset.json, D1) instead of the "
+        "full corpus; with --only, the shard must lie inside it. The board records it as its "
+        "population, which `accept-native --population subset` requires.",
     )
     p_nat.add_argument("--save", default=None, metavar="DIR")
     p_nat.add_argument("--verbose", action="store_true")
@@ -3394,6 +3511,7 @@ def main() -> None:
         "corpus-audit": cmd_corpus_audit,
         "corpus-remove": cmd_corpus_remove,
         "corpus-check": cmd_corpus_check,
+        "release-subset": cmd_release_subset,
         "lock": cmd_lock,
         "safety": cmd_safety,
         "native": cmd_native,

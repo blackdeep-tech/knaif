@@ -607,7 +607,7 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
 - [ ] **T2. A3: split the `native` fingerprint** into planning and per-tool execution, with tests
       that a change to one tool's code stales only that tool's records. The halves are the store's
       key components (E1).
-- [ ] **T2b. D1: `evalsuite release-subset`** and the committed `release_subset.json` per skill,
+- [x] **T2b. D1: `evalsuite release-subset`** and the committed `release_subset.json` per skill,
       with the corpus-sha drift test; `accept-native --population subset` (D2) reading per-row
       Python verdicts from the locked snapshot run. **No skill needs re-locking for this**
       (checked 2026-10-14): all four snapshots are policy 3 / `success`, and each one's source
@@ -622,6 +622,22 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       and `check_no_local_paths` finds nothing in them. `source_run` can only name a committed
       run, so they are committed first (owner's decision: it publishes per-row results), then
       the field is added.
+      **Built 2026-10-18.** *Owner, same day:* `hard2` joins the always-included tags (they are
+      chains that lost their chain tags only under A1). `evalsuite release-subset --skill <s>
+      [--check]` writes `data/release_subset.json` (rows one per line, the corpus file name and
+      its LF-normalised sha256): **ffmpeg 194 utterances of 333 rows, documents 80 of 146**.
+      `test_every_committed_subset_matches_its_corpus` fails on a stale one, and so does any
+      corpus edit, even a baseline validation: regenerate it in the same commit.
+      `evalsuite native --subset` runs it (an `--only` shard must lie inside it) and the board
+      records `population`. `accept-native --population subset` grades per row against the
+      snapshot's `source_run` board (sha-checked, either line ending) per D2: no row Python
+      passed may fail, both aggregates within 0.02 of Python's on the same rows, coverage 1.0,
+      safety 100% on the binary, no S2 slice floors; the full mode refuses a subset board.
+      Self-check: each of the four snapshots' own grades on the subset is ACCEPTED (ffmpeg 4B
+      0.954 / 1.7B 0.902, documents 0.938 / 0.925 outcome). **The verdict is printed, never
+      recorded** as L4 evidence, like a batch-planned board, until T1's rules adopt the subset
+      (and D1's full first-release cell per platform). Still open for T4: shards drawn from the
+      subset and a composed subset cell carrying its `population`; L3 on the subset (D4).
 - [ ] **T2c. E1/E2: the store** — key derivation, lookup, write, and `evalsuite cell` composing a
       board from the store plus a list of missing keys; tests with synthetic fingerprints that
       each reuse row of E3 reuses exactly what it says and nothing more.
@@ -645,7 +661,7 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
 - [ ] **T6. RELEASE.md and EVAL_FRAMEWORK.md** describe the new method (two instruments, the
       store, the CI cells); the next release index's gate rules adopt it; AGENTS.md's lifecycle
       table says L4 measures the subset.
-- [ ] **T7. Corpus review (Part G), before T2b.** Per skill: a duplicate report (the G1 scan as a
+- [x] **T7. Corpus review (Part G), before T2b.** Per skill: a duplicate report (the G1 scan as a
       script, `evalsuite corpus-audit`), the removal list with reasons (`eval_removed.jsonl`),
       the missing and complex rows under their own tag, the safety corpus reviewed; the owner
       approves the removal list and the new rows before they land. Kept rows byte-identical
@@ -710,6 +726,10 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       `test_no_committed_reference_command_is_shell_quoted` now refuse a quoted reference
       command. **All ten ffmpeg `hard2` baselines validated** by the owner in the authoring
       notebook the same day (`validated_by` / `outputs_validated_by: human`).
+      **`hard2` floor written (owner, 2026-10-18), as failure counts at the measured values:**
+      ffmpeg `max_failures: 2` (4B 25/27) with a 1.7B entry of 4 (23/27); documents
+      `max_failures: 8` for both (4B 8/16, 1.7B 9/16), since a model entry may only lower a
+      floor. All four re-lock boards re-graded ACCEPTED under it. T7 closes here.
 - [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and
