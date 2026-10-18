@@ -124,6 +124,9 @@ evals/**
 !evals/corpus-review/**/*.json
 !evals/corpus-review/**/*.jsonl
 !evals/corpus-review/**/*.md
+# The corpus v2 re-lock's boards carry the per-row grades the four snapshots name as their
+# `source_run` (plan 2026-10-14-faster-release-evidence, T2b): committed, with the row diffs.
+!evals/runs/2026-10-18_relock-corpus-v2_success/**/*.json
 evals/**/.baselines/
 evals/**/out.*
 evals/**/report.html

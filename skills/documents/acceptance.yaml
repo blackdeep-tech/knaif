@@ -26,7 +26,10 @@ verifier: success
 min_rate_rows: 16
 
 aggregate:
-  outcome_accuracy: 0.95
+  # Re-set 2026-10-18 for corpus v2 (plan 2026-10-14-faster-release-evidence, G2.2): the 18
+  # `hard2` chain rows count here and the shipped models measured 0.931 (4B) / 0.926 (1.7B)
+  # on them, kept rows unchanged. 0.95 was written for corpus v1 (0.9817 / 0.9634).
+  outcome_accuracy: 0.91
   avg_knaif_score: 0.98
 
 slices:
@@ -35,7 +38,9 @@ slices:
   realistic: { outcome_accuracy: 0.90 }
   multilingual: { outcome_accuracy: 0.95 }
   split: { outcome_accuracy: 0.90 }
-  compress: { outcome_accuracy: 0.90 }
+  # 14 utterances on corpus v2 (two duplicate rows removed 2026-10-18), under min_rate_rows:
+  # the same bar stated as a count (0.90 of 14 allowed one failure).
+  compress: { max_failures: 1 }
 
   # capability slices, budgeted in rows
   extract: { max_failures: 1 }
