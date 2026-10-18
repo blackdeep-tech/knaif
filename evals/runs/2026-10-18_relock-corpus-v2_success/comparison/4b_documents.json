@@ -1,0 +1,99 @@
+{
+  "rows_a": 175,
+  "rows_b": 164,
+  "common": 159,
+  "only_a": [
+    [
+      "documents_hard2_001",
+      0
+    ],
+    [
+      "documents_hard2_001",
+      1
+    ],
+    [
+      "documents_hard2_002",
+      0
+    ],
+    [
+      "documents_hard2_002",
+      1
+    ],
+    [
+      "documents_hard2_003",
+      0
+    ],
+    [
+      "documents_hard2_003",
+      1
+    ],
+    [
+      "documents_hard2_004",
+      0
+    ],
+    [
+      "documents_hard2_004",
+      1
+    ],
+    [
+      "documents_hard2_005",
+      0
+    ],
+    [
+      "documents_hard2_005",
+      1
+    ],
+    [
+      "documents_hard2_006",
+      0
+    ],
+    [
+      "documents_hard2_006",
+      1
+    ],
+    [
+      "documents_hard2_007",
+      0
+    ],
+    [
+      "documents_hard2_007",
+      1
+    ],
+    [
+      "documents_hard2_008",
+      0
+    ],
+    [
+      "documents_hard2_008",
+      1
+    ]
+  ],
+  "only_b": [
+    [
+      "documents_067",
+      0
+    ],
+    [
+      "documents_071",
+      0
+    ],
+    [
+      "documents_075",
+      0
+    ],
+    [
+      "documents_082",
+      0
+    ],
+    [
+      "documents_115",
+      0
+    ]
+  ],
+  "same_grade": 159,
+  "same_plan": 159,
+  "same_command": 159,
+  "grade_differs": [],
+  "plan_differs": [],
+  "command_differs": []
+}

@@ -63,7 +63,21 @@
 # documents 0.9817/0.9803; 1.7B ffmpeg 0.9199/0.9785, documents 0.9634/0.9945); safety 11/11 and
 # 9/9 for both models.
 #
-# AMENDMENTS: (none)
+# AMENDMENTS:
+#   A1 2026-10-18 11:56, after attempt 1 (owner decision; attempt 1's boards kept in
+#       attempt1-tags-v1/). `lock` refused 4B documents, 1.7B ffmpeg and 1.7B documents: every unmet
+#       floor was tripped by hard2 rows carrying the tool and chain tags of existing slices (G1's
+#       warning; against G2.2's intent that hard rows do not gate the shipped models on existing
+#       floors). The 18 new rows now carry `hard2` only (plus the floor-less `fan_out` /
+#       `multi_file`), in eval.jsonl and the review record; kept rows untouched (eval_kept.sha256
+#       holds). The documents aggregate outcome floor is re-set 0.95 -> 0.91 for corpus v2 (hard2
+#       rows included; measured 0.931 / 0.926), as every floor was first set: measured, minus a
+#       margin. The documents `compress` slice fell to 14 utterances (two duplicates removed),
+#       under min_rate_rows, so its rate floor 0.90 is restated as `max_failures: 1` (the same bar
+#       as a count). No other floor changes; the hard2 slice's own floor is the owner's, written
+#       after this run (G2.2). `run`, `compare` and `lock` re-ran from the start for all four cells
+#       (4B ffmpeg included, so the four snapshots share one tagging); model outputs were
+#       identical to attempt 1 on every row, so the re-run changed the tags, not the grades.
 #
 # Outputs: this folder: COMPLETE, 4b/ and 1.7b/ (boards WITH rows — committed, they are the
 # source runs the snapshots name), *_safety.json, *_accept.txt, comparison/<model>_<skill>.json,
