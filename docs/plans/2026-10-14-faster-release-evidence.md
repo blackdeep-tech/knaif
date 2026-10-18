@@ -708,7 +708,8 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       and the three kept rows re-pinned in `eval_kept.sha256`; no utterance, outcome or criteria
       changed, and no snapshot reads baseline commands. `corpus-check` and
       `test_no_committed_reference_command_is_shell_quoted` now refuse a quoted reference
-      command.
+      command. **All ten ffmpeg `hard2` baselines validated** by the owner in the authoring
+      notebook the same day (`validated_by` / `outputs_validated_by: human`).
 - [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and
