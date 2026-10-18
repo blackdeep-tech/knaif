@@ -60,6 +60,11 @@ slices:
   # multi-step chains — small, and exactly the stratum native cannot execute yet
   multi-step: { max_failures: 1 }
   chain2: { max_failures: 1 }
+  # Corpus v2's chain and fan-out rows (plan 2026-10-14-faster-release-evidence, G2.2), written
+  # from the re-lock that first measured them (evals/runs/2026-10-18_relock-corpus-v2_success):
+  # 4B 8/16, 1.7B 9/16, so one budget holds for both. Half the misses are the known chain-preview
+  # bug (docs/TODO.md); the next promotion is expected to raise this.
+  hard2: { max_failures: 8 }
 
   # control outcomes
   clarify: { max_failures: 4 }
