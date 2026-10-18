@@ -364,11 +364,26 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   has no such guard yet: add the same `input.exists()` guard there at the merge, and make
   Python's preview skip the count for an input an earlier step writes. Add an L2 case
   (preceding step → page removal) in `contracts/parity/documents_expansion_cases.json`.
+  **Measured 2026-10-18** by the corpus v2 re-lock run (`evals/runs/2026-10-18_relock-corpus-v2_success`):
+  `split_pdf`, `rotate_pages` and `reorder_pages` count the input's pages before the
+  `ctx.dry_run` check (`skills/documents/python/steps.py`), and the eval runner previews every
+  plan before executing it, so every chain whose second step is one of them fails with "No such
+  file" in Python: `documents_142[1]` (compress → rotate, failing since 2026-09-26) and the new
+  `hard2` rows 005 (merge → split), 006 (watermark → rotate), 008 (split → reorder). The fix
+  is a measured improvement on those rows, so it re-locks the documents baselines when it lands.
 - [ ] **FFmpeg under Smart App Control** — Windows blocks the Gyan build (unsigned), so on a PC with
   Smart App Control on the ffmpeg skill cannot run; setup and `skills deps` now say so (1.3.0),
   but there is no fix. A validly signed FFmpeg is the only one, which is the parked media-runtime
   plan (branch `docs/media-runtime-and-mobile`; owner, 2026-10-07: leave it for now). Ghostscript and Tesseract are blocked too: neither maker signs validly (Tesseract's
   certificate expired in 2023, including on the newer `tesseract-ocr.tesseract` 5.5.3 package).
+- [ ] **`strip_audio` stream-copies h264 into a `.webm` output** — found 2026-10-18 by the
+  corpus v2 run (`ffmpeg_hard2_005`, "scale clip_4k.mp4 down to 720p, drop the audio and save it as
+  webm"): both models plan resize → strip_audio with no `convert_video`, and `strip_audio` renders
+  `-c:v copy` into the `.webm` the request named, which ffmpeg refuses ("Only VP8 or VP9 or AV1
+  video"). Two fixes, both runtimes: a renderer must never stream-copy a codec into a container
+  that cannot hold it (re-encode, or keep the source container and say so), and the prompt or
+  training should make "save it as webm" a `convert_video` step. Measured on the row; a fix
+  re-locks ffmpeg.
 - [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
 - [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding

@@ -675,7 +675,7 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       or `train.jsonl` has). ffmpeg baselines are `validated_by: null` for the owner's
       notebook. The re-lock script gained an `append` stage (R1 covers it; R5 now says the
       `hard2` floor is written after the run).
-- [ ] **T7b. Re-lock on the reviewed corpus**, one commit per model per skill, from the next
+- [x] **T7b. Re-lock on the reviewed corpus**, one commit per model per skill, from the next
       fine-tune cycle's full run; the hard-rows slice floor written then. The subset (T2b) is
       derived after this. **Prepared 2026-10-17, waiting for the owner's green light:**
       `evals/runs/2026-10-18_relock-corpus-v2_success/run_all.sh` (stages `check`, `remove`,
@@ -687,6 +687,20 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       after every corpus change — the script's stages are now `remove` → `append` → `run` →
       `compare` → `lock`, with the new rows in the same run (R5: the `hard2` floor is written
       from this run's measurement, by the owner).
+      **Run 2026-10-18** (owner's green light; `report.md` in the run folder): corpus v2 is
+      on disk (ffmpeg 333 rows, documents 146), the four runs took 33 min of CUDA, safety 100%
+      everywhere, and **every kept row graded and planned exactly as in the previous source
+      runs** (2,030/2,030). 4B ffmpeg ACCEPTED and locked. The other three cells are NOT
+      ACCEPTED and therefore not locked: every unmet floor is tripped by `hard2` rows, which
+      carried the tool and chain tags of existing slices, and the documents aggregate floor
+      (0.95) counts them — what G1 warned of. Half the failing `hard2` documents rows are the
+      known chain-preview bug (TODO), the rest the model asking instead of chaining. **Owner
+      decision, same day (amendment A1):** the new rows carry `hard2` only (plus `fan_out` /
+      `multi_file`, which have no floor), the documents aggregate outcome floor is 0.91 for
+      corpus v2, and the documents `compress` slice (14 utterances now) is a count floor.
+      **Attempt 2 (12:28): all four cells ACCEPTED and locked**, same grades on every row as
+      attempt 1; each snapshot names its board as `source_run`. The `hard2` floor (G2.2) is
+      the owner's to write: measured ffmpeg 25/27 and 23/27, documents 8/16 and 9/16.
 - [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and
