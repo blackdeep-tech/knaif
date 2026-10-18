@@ -701,6 +701,14 @@ arrives with its evidence, not only its files (decided 2026-10-15, owner):
       **Attempt 2 (12:28): all four cells ACCEPTED and locked**, same grades on every row as
       attempt 1; each snapshot names its board as `source_run`. The `hard2` floor (G2.2) is
       the owner's to write: measured ffmpeg 25/27 and 23/27, documents 8/16 and 9/16.
+      **G2.1 exception, owner 2026-10-18:** five ffmpeg baselines (kept rows 215, 242, 252;
+      new rows `hard2_001`, `hard2_006`) shell-quoted their `-filter_complex` value. The harness
+      splits commands on whitespace, so ffmpeg received the quotes, the baseline exited non-zero,
+      and `output_diff` left those rows unscored without reporting it. The quotes are removed
+      and the three kept rows re-pinned in `eval_kept.sha256`; no utterance, outcome or criteria
+      changed, and no snapshot reads baseline commands. `corpus-check` and
+      `test_no_committed_reference_command_is_shell_quoted` now refuse a quoted reference
+      command.
 - [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and

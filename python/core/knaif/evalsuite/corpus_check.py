@@ -18,6 +18,22 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower().rstrip(".!?"))
 
 
+def command_problems(row: dict[str, Any]) -> list[str]:
+    """Problems with *row*'s reference commands as the harness runs them.
+
+    `evalsuite.chain` splits a command on whitespace, as the skills render one, so a shell
+    quote reaches ffmpeg as a literal character and the baseline fails to run.
+    """
+    rid = str(row.get("id"))
+    commands = [(row.get("baseline") or {}).get("command")]
+    commands += [o.get("command") for o in row.get("outputs") or [] if isinstance(o, dict)]
+    return [
+        f"{rid}: shell quote in reference command {cmd!r}"
+        for cmd in commands
+        if isinstance(cmd, str) and ('"' in cmd or "'" in cmd)
+    ]
+
+
 def check_new_rows(
     rows: list[dict[str, Any]],
     existing: list[dict[str, Any]],
@@ -44,6 +60,7 @@ def check_new_rows(
         tools = row.get("expected_tools")
         if tools and row.get("expected_tool") != tools[0]:
             problems.append(f"{rid}: expected_tool must be expected_tools[0] ({tools[0]})")
+        problems.extend(command_problems(row))
         for u in row.get("utterances", []):
             key = _norm(u)
             if key in seen and seen[key] in ids:

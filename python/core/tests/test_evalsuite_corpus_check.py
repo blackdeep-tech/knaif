@@ -10,7 +10,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from knaif.evalsuite.corpus_check import check_new_rows
+import pytest
+
+from knaif.evalsuite.corpus_check import check_new_rows, command_problems
 
 EXISTING = [{"id": "x_001", "utterances": ["trim clip.mp4"], "expected_outcome": "plan"}]
 TRAIN = [{"utterance": "Reverse clip.mp4!", "plan": {"plan": []}}]
@@ -67,6 +69,29 @@ def test_a_schema_error_is_reported_not_raised() -> None:
 def test_two_new_rows_may_not_share_an_utterance() -> None:
     rows = [_row(), _row(id="x_hard2_002")]
     assert any("also in proposed" in p for p in check_new_rows(rows, EXISTING, TRAIN, tag="hard2"))
+
+
+def test_a_shell_quoted_baseline_is_refused() -> None:
+    cmd = 'ffmpeg -y -i clip.mp4 -filter_complex "[0:v]reverse[v]" -map [v] out.mp4'
+    problems = check_new_rows([_row(baseline={"command": cmd})], EXISTING, TRAIN, tag="hard2")
+    assert any("quote" in p for p in problems)
+
+
+def test_a_shell_quoted_output_command_is_refused() -> None:
+    outputs = [{"command": "ffmpeg -y -i clip.mp4 -vf 'scale=-2:480' out.mp4", "criteria": {}}]
+    problems = check_new_rows([_row(outputs=outputs)], EXISTING, TRAIN, tag="hard2")
+    assert any("quote" in p for p in problems)
+
+
+@pytest.mark.parametrize(
+    "corpus", sorted(Path("skills").glob("*/data/eval.jsonl")), ids=lambda p: p.parts[1]
+)
+def test_no_committed_reference_command_is_shell_quoted(corpus: Path) -> None:
+    """The harness splits a reference command on whitespace (`evalsuite.chain`), as the skills
+    render them; a shell quote reaches ffmpeg as a literal character and the baseline fails."""
+    rows = [json.loads(line) for line in corpus.read_text(encoding="utf-8").splitlines() if line]
+    bad = [p for row in rows for p in command_problems(row)]
+    assert not bad, "\n".join(bad)
 
 
 def test_the_cli_checks_a_proposal_file_against_the_real_corpus(tmp_path: Path, capsys) -> None:
