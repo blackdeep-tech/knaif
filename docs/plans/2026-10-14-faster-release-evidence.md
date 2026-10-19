@@ -888,7 +888,11 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       the stage lock names its shell and a lock whose process is gone is taken over, with a
       line in the log. Checked on the 1.3.0 binary on the CPU: `plan --batch --verbose` keeps
       stdout to the envelopes (37 layers on CPU in the trace), a live row parses as before, and
-      expecting CUDA0 raises. **No Codex pass (owner, 2026-10-19):** the Fable 5.1 audit stands
+      expecting CUDA0 raises. **On the GPU the same afternoon**
+      (`evals/runs/2026-10-19_store-check2_success`, 11.5 min, developer CUDA build): ffmpeg and
+      documents subsets recorded then reused (194/194 and 80/80 identical, reuse planned nothing),
+      no VOID, cold start 30/30 for both, safety 11/11, and ffmpeg's record board identical on all
+      194 rows to the morning's run before these changes. **No Codex pass (owner, 2026-10-19):** the Fable 5.1 audit stands
       as this plan's audit. T5 closes here.
 - [x] **T6. RELEASE.md and EVAL_FRAMEWORK.md** describe the new method (two instruments, the
       store, the CI cells); the next release index's gate rules adopt it; AGENTS.md's lifecycle
