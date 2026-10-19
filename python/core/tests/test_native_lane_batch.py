@@ -52,9 +52,19 @@ def _plan(tool: str) -> dict[str, Any]:
 class _Recorder:
     """Stands in for `subprocess.run`, answering like the binary would."""
 
-    def __init__(self, batch_stdout: str = "") -> None:
+    def __init__(self, batch_stdout: str = "", device: str | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self.batch_stdout = batch_stdout
+        self.device = device
+
+    def _trace(self, argv: list[str]) -> str:
+        """llama.cpp's load trace: only a process that loads the model, and only under --verbose."""
+        if self.device is None or "--model" not in argv or "--verbose" not in argv:
+            return ""
+        return "".join(
+            f"load_tensors: layer {i:3d} assigned to device {self.device}, is_swa = 0\n"
+            for i in range(3)
+        )
 
     def __call__(self, argv, **kw) -> subprocess.CompletedProcess:
         argv = [str(a) for a in argv]
@@ -63,11 +73,11 @@ class _Recorder:
             call["batch_file"] = Path(argv[argv.index("--batch") + 1]).read_text(encoding="utf-8")
             call["cwd_files"] = sorted(p.name for p in Path(kw["cwd"]).iterdir())
             self.calls.append(call)
-            return subprocess.CompletedProcess(argv, 0, self.batch_stdout, "")
+            return subprocess.CompletedProcess(argv, 0, self.batch_stdout, self._trace(argv))
         self.calls.append(call)
         env = call["env"]
         plan = env.get("KNAIF_LLM_MOCK_RESPONSE") or json.dumps(_plan("live_tool"))
-        stderr = f"{native_lane.PLAN_DUMP_MARKER}{plan}\n"
+        stderr = f"{self._trace(argv)}{native_lane.PLAN_DUMP_MARKER}{plan}\n"
         return subprocess.CompletedProcess(argv, 0, "", stderr)
 
 
@@ -520,8 +530,59 @@ def test_a_recording_batch_plans_with_the_model_and_records(tmp_path, monkeypatc
                work_dir=tmp_path / "batch", record_dir=ns)  # fmt: skip
     call = rec.calls[0]
     assert "--model" in call["argv"]
-    assert call["env"]["KNAIF_LLM_RECORD_DIR"] == str(ns.resolve())
+    assert call["env"]["KNAIF_LLM_RECORD_DIR"] == str((tmp_path / "batch.record").resolve())
     assert "KNAIF_LLM_BACKEND" not in call["env"]
+    assert ns.is_dir()
+
+
+class _Recording(_Recorder):
+    """A recording batch that writes one reply file per utterance, as the binary does."""
+
+    def __init__(self, replies: dict[str, str], device: str) -> None:
+        super().__init__("".join(json.dumps(_plan("a")) + "\n" for _ in replies), device)
+        self.replies = replies
+
+    def __call__(self, argv, **kw) -> subprocess.CompletedProcess:
+        out = super().__call__(argv, **kw)
+        staging = Path(kw["env"]["KNAIF_LLM_RECORD_DIR"])
+        for key, text in self.replies.items():
+            (staging / f"{key}.txt").write_text(text, encoding="utf-8")
+        return out
+
+
+def _record(tmp_path, monkeypatch, replies, device, ns):
+    monkeypatch.setattr(native_lane.subprocess, "run", _Recording(replies, device))
+    return batch_plan(_lane(tmp_path), "ffmpeg", list(replies), fixture_dir=_fixtures(tmp_path),
+                      work_dir=tmp_path / "batch", record_dir=ns,
+                      expect_device="CUDA0")  # fmt: skip
+
+
+def test_recorded_replies_reach_the_namespace_once_the_batch_ran_where_expected(
+    tmp_path, monkeypatch
+) -> None:
+    ns = tmp_path / "ns"
+    _record(tmp_path, monkeypatch, {"k1": "r1", "k2": "r2"}, "CUDA0", ns)
+    assert sorted(p.name for p in ns.iterdir()) == ["k1.txt", "k2.txt"]
+    assert not (tmp_path / "batch.record").exists()
+
+
+def test_replies_from_a_batch_on_another_device_never_reach_the_namespace(
+    tmp_path, monkeypatch
+) -> None:
+    ns = tmp_path / "ns"
+    with pytest.raises(native_lane.PlacementError):
+        _record(tmp_path, monkeypatch, {"k1": "r1"}, "CPU", ns)
+    assert not ns.exists() or not any(ns.iterdir())
+
+
+def test_a_reply_that_differs_from_the_stored_one_moves_nothing(tmp_path, monkeypatch) -> None:
+    ns = tmp_path / "ns"
+    ns.mkdir()
+    (ns / "k1.txt").write_text("stored", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="record conflict"):
+        _record(tmp_path, monkeypatch, {"k1": "different", "k2": "new"}, "CUDA0", ns)
+    assert sorted(p.name for p in ns.iterdir()) == ["k1.txt"]
+    assert (ns / "k1.txt").read_text(encoding="utf-8") == "stored"
 
 
 def test_store_rows_execute_by_replay_and_live_rows_never_see_the_store(
@@ -602,7 +663,11 @@ def test_a_first_store_run_plans_everything_with_the_model_and_says_so(
     assert board["planning"] == "batch"
     assert board["store"]["measured"] == 3 and board["store"]["reused"] == 0
     assert {r["reply"] for r in board["rows"]} == {"measured"}
-    assert (calls[0]["replay_dir"] / "key.json").is_file()
+    key = json.loads((calls[0]["replay_dir"] / "key.json").read_text(encoding="utf-8"))
+    from knaif.evalsuite.matrix import current_os
+
+    assert key["platform"] == current_os(), "replies are kept per platform (owner, 2026-10-19)"
+    assert key["backend"] == "cuda"
 
 
 def test_a_second_store_run_reuses_every_reply_and_plans_nothing(tmp_path, monkeypatch) -> None:
@@ -676,3 +741,105 @@ def test_cold_start_rows_are_labelled_live_not_reused(tmp_path, monkeypatch) -> 
     )
     reply = {(r["id"], r["utterance_idx"]): r["reply"] for r in board["rows"]}
     assert reply == {("r1", 0): "reused", ("r2", 0): "reused", ("r2", 1): "live"}
+
+
+# -- every process that loads the model reports where it ran (audit 2026-10-19, P2) --
+
+
+def _batch(tmp_path, **kw):
+    return batch_plan(_lane(tmp_path), "ffmpeg", ["one"], fixture_dir=_fixtures(tmp_path),
+                      work_dir=tmp_path / "batch", **kw)  # fmt: skip
+
+
+def test_a_recording_batch_on_the_expected_device_passes(tmp_path, monkeypatch) -> None:
+    rec = _Recorder(json.dumps(_plan("a")) + "\n", device="CUDA0")
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    _batch(tmp_path, record_dir=tmp_path / "ns", expect_device="CUDA0")
+    assert "--verbose" in rec.calls[0]["argv"], "the load trace is how the device is known"
+
+
+def test_a_recording_batch_on_another_device_voids_the_cell(tmp_path, monkeypatch) -> None:
+    """A CUDA cell whose batch fell back to the CPU would record CPU replies into the CUDA
+    namespace, where every later release would reuse them as CUDA's."""
+    rec = _Recorder(json.dumps(_plan("a")) + "\n", device="CPU")
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    with pytest.raises(native_lane.PlacementError, match="CPU.*CUDA0"):
+        _batch(tmp_path, record_dir=tmp_path / "ns", expect_device="CUDA0")
+
+
+def test_a_batch_that_does_not_say_where_it_ran_voids_the_cell(tmp_path, monkeypatch) -> None:
+    rec = _Recorder(json.dumps(_plan("a")) + "\n", device=None)
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    with pytest.raises(native_lane.PlacementError, match="did not report"):
+        _batch(tmp_path, record_dir=tmp_path / "ns", expect_device="CUDA0")
+
+
+def test_a_replay_batch_loads_no_model_and_is_not_checked(tmp_path, monkeypatch) -> None:
+    rec = _Recorder(json.dumps(_plan("a")) + "\n", device=None)
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    _batch(tmp_path, replay_dir=tmp_path / "ns", expect_device="CUDA0")
+    assert "--verbose" not in rec.calls[0]["argv"]
+
+
+def _run_on(tmp_path, monkeypatch, device, plans=None, live=None):
+    rec = _Recorder(device=device)
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    outputs = run_native_corpus(_lane(tmp_path), "ffmpeg", _corpus(),
+                                fixture_dir=_fixtures(tmp_path), sandbox=tmp_path / "sb",
+                                plans=plans, live=live, expect_device="CUDA0")  # fmt: skip
+    return outputs, rec
+
+
+def test_live_rows_on_the_expected_device_pass_and_replayed_rows_are_not_checked(
+    tmp_path, monkeypatch
+) -> None:
+    plans = {("r1", 0): _plan("convert_video"), ("r2", 0): _plan("trim_video"),
+             ("r2", 1): _plan("trim_video")}  # fmt: skip
+    outputs, rec = _run_on(tmp_path, monkeypatch, "CUDA0", plans, live={("r2", 1)})
+    assert ["--verbose" in c["argv"] for c in rec.calls] == [False, False, True]
+    assert outputs[2].plan == _plan("live_tool"), "the trace does not disturb the plan dump"
+
+
+def test_a_live_row_on_another_device_voids_the_cell(tmp_path, monkeypatch) -> None:
+    with pytest.raises(native_lane.PlacementError, match=r"r1\[0\].*CPU"):
+        _run_on(tmp_path, monkeypatch, "CPU")
+
+
+def test_a_live_row_that_loaded_no_model_is_not_a_device_mismatch(tmp_path, monkeypatch) -> None:
+    """The unsafe-phrase screen refuses before the model loads; such a row says nothing about
+    the device, and `batch_live_unplanned` already reports how it ended."""
+    outputs, _ = _run_on(tmp_path, monkeypatch, None)
+    assert len(outputs) == 3
+
+
+def test_every_lane_process_plans_in_process_never_through_a_daemon(tmp_path, monkeypatch) -> None:
+    """L4 measures the binary loading the model itself (Part I). A daemon holding the model
+    would answer without recording into the store or saying where its layers ran."""
+    monkeypatch.delenv("KNAIF_NO_DAEMON", raising=False)
+    _, rec = _run(tmp_path, monkeypatch, {("r1", 0): _plan("convert_video")})
+    rec.batch_stdout = json.dumps(_plan("a")) + "\n"
+    batch_plan(_lane(tmp_path), "ffmpeg", ["one"], fixture_dir=tmp_path / "fixtures",
+               work_dir=tmp_path / "batch", record_dir=tmp_path / "ns")  # fmt: skip
+    assert len(rec.calls) == 4
+    assert all(c["env"].get("KNAIF_NO_DAEMON") == "1" for c in rec.calls)
+
+
+def test_the_cell_expects_the_probed_device_everywhere_and_a_mismatch_is_void(
+    tmp_path, monkeypatch
+) -> None:
+    from knaif.evalsuite import cli
+
+    seen = _patch_native(tmp_path, monkeypatch)
+    save = tmp_path / "board.json"
+    args = _native_args(tmp_path, batch_plan=True)
+    cli.cmd_native(args)
+    assert seen["rows_kw"]["expect_device"] == "CUDA0"
+
+    def on_cpu(*a, **kw):
+        raise native_lane.PlacementError("r1[0] ran the model on CPU; the cell expected CUDA0")
+
+    monkeypatch.setattr(native_lane, "run_native_corpus", on_cpu)
+    args.save = str(save)
+    with pytest.raises(SystemExit, match=r"VOID: r1\[0\] ran the model on CPU"):
+        cli.cmd_native(args)
+    assert not save.exists()

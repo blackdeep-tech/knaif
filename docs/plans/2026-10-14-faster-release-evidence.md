@@ -340,8 +340,8 @@ That key moved at **every** release (the workspace version lives in `Cargo.toml`
 changes for unrelated reasons), so a stored plan would never have been reused. Instead:
 
 ```text
-replies/   key = (sha256 of the exact prompt, model sha256, inference fingerprint, backend class,
-                  the run settings that change the arithmetic)
+replies/   key = (sha256 of the exact prompt, model sha256, inference fingerprint, platform,
+                  backend class, the run settings that change the arithmetic)
            value = the model's raw reply, replayed into the binary (KNAIF_LLM_BACKEND=replay)
 ```
 
@@ -642,8 +642,9 @@ Metal, Linux CPU). The full corpus is used when the daemon or the generation pat
 the last release. A difference goes to the owner before any release claim about the daemon.
 
 **I8. Reuse between releases (E3), Stage 2 only.** A model reply is reused when its exact prompt,
-the model sha256, the inference fingerprint, the backend class and the run settings are unchanged
-(`native --store`, E1 as amended). Outcomes are never reused: every row executes in every release
+the model sha256, the inference fingerprint, the platform, the backend class and the run settings
+are unchanged (`native --store`, E1 as amended; the platform added by the owner 2026-10-19, since
+1.3.0's Linux CPU planned 3–6% of its rows unlike Windows CPU). Outcomes are never reused: every row executes in every release
 (owner, 2026-10-19). Never reused (E4): safety, the cold-start sample, execution. Only the frozen
 artifact writes `evals/store`, and each recorded reply is logged with the binary and run that
 recorded it. The key does not name the compiler toolchain or build flags: the cold-start sample is
@@ -849,8 +850,23 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       gained). No slice waivers: the subset has no slice floors. `.gitignore` now commits
       `evals/store/**`, `cold_start_*.json` and `fingerprints.json`. Checked here without the
       GPU: both scripts parse, an unfilled template refuses to run, `draw` writes 30 utterances
-      per skill and keeps them on a second run. **Still to do:** Linux (WSL) and macOS variants.
-- [ ] **T5. Codex audit** of T1–T4 before the next release uses them.
+      per skill and keeps them on a second run.
+      **Linux and macOS built 2026-10-19.** One shared script and one template, the platform a
+      pin (`PLATFORM=windows|linux|macos`): Windows cells CUDA, Vulkan, CPU, L3 and daemon on
+      CUDA; Linux (WSL on this box, owner 2026-10-19, from a clone on the Linux disk; `/mnt` is
+      refused) cells CUDA and CPU, no L3, daemon on the CPU (I7); macOS cells Metal and CPU (a
+      copy of the artifact without `libggml-metal`, its own lanes), L3 and daemon on Metal, from
+      a checkout outside the home folder. The cold-start samples are drawn once per release in
+      the first platform's run (`COLD_START_DIR`); the other runs refuse `draw` and use those
+      committed files. The store's namespace now names the platform (owner, 2026-10-19; I8
+      amended): 1.3.0's Linux CPU planned 3–6% of its sampled rows unlike Windows CPU, while
+      CUDA agreed on all 2,050, so no platform replays another's replies. Checked here: the
+      Windows steps on the 1.3.0 zip (sha256 and Authenticode as recorded in 1.3.0), the Linux
+      steps in WSL on the 1.3.0 tarball (its pinned sha256; the Windows checkout's path becomes
+      `<windows-checkout>`), every platform's devices, lanes and cell keys, and the refusals
+      (unknown platform, L3 on Linux, a backend the platform lacks). **Not run here:** macOS,
+      including bash 3.2 (the script avoids empty arrays and bash-4 builtins for it).
+- [x] **T5. Codex audit** of T1–T4 before the next release uses them.
       **Audit 1, 2026-10-19.** Codex stopped at its usage limit after four minutes (its last step
       found the store's line endings, fixed). The owner had the same brief run by a Fable 5.1
       reviewer: no P0; seven P1s, all fixed, all keeping the rules: a lower file score on a row
@@ -863,10 +879,17 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       fixed: a `live` stage for a cell whose cold start failed; a re-recorded reply that differs
       fails instead of overwriting; cold-start rows are labelled `live`; the cold-start sample
       must be committed before a cell. The owner kept the toolchain out of the key (the cold
-      start is the net, I8). **Not done:** checking the backend class per row process rather
-      than once per cell (P2), refusing `--store` when a daemon would serve the plan (P3; it
-      fails closed today), a stale stage lock after a hard kill (P3). A Codex pass over the
-      result remains to be done.
+      start is the net, I8). **The last three, 2026-10-19 (owner: fix all):** every process
+      that loads the model (the batch, each live row, each safety row) runs under `--verbose`
+      and must put its layers on the device the cell's probe found, or the cell is VOID and
+      nothing is graded; a recording batch writes into a staging folder and its replies reach
+      the namespace only after that check (a reply differing from a stored one moves nothing);
+      every lane process runs with `KNAIF_NO_DAEMON=1`, so no daemon can answer for the binary;
+      the stage lock names its shell and a lock whose process is gone is taken over, with a
+      line in the log. Checked on the 1.3.0 binary on the CPU: `plan --batch --verbose` keeps
+      stdout to the envelopes (37 layers on CPU in the trace), a live row parses as before, and
+      expecting CUDA0 raises. **No Codex pass (owner, 2026-10-19):** the Fable 5.1 audit stands
+      as this plan's audit. T5 closes here.
 - [ ] **T6. RELEASE.md and EVAL_FRAMEWORK.md** describe the new method (two instruments, the
       store, the CI cells); the next release index's gate rules adopt it; AGENTS.md's lifecycle
       table says L4 measures the subset.
@@ -939,6 +962,11 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       ffmpeg `max_failures: 2` (4B 25/27) with a 1.7B entry of 4 (23/27); documents
       `max_failures: 8` for both (4B 8/16, 1.7B 9/16), since a model entry may only lower a
       floor. All four re-lock boards re-graded ACCEPTED under it. T7 closes here.
+      **G2.1 exception, owner 2026-10-19:** kept rows `ffmpeg_300`–`302` reviewed in the authoring
+      notebook (300's baseline, the outputs of 301 and 302; `validated_by` / `outputs_validated_by:
+      human`). Only those fields changed, so the three were re-pinned in `eval_kept.sha256` and
+      `release_subset.json` regenerated: the same 194 utterances, only its `corpus_sha256` moved. No
+      utterance or expected outcome changed, so the snapshots' source runs still bind.
 - [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and

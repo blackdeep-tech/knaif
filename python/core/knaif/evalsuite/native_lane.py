@@ -137,6 +137,31 @@ def summarize_placement(placement: dict[str, int]) -> str | None:
     return max(sorted(placement), key=lambda device: placement[device])
 
 
+class PlacementError(RuntimeError):
+    """A process that loaded the model ran it on another device than the cell's probe found.
+
+    The probe is one process; a batch and every live row are others, and any of them could fall
+    back (a driver fault, a payload that did not load). A CUDA cell whose batch ran on the CPU
+    would record CPU replies into the CUDA namespace of the store, where later releases reuse
+    them, so the whole cell is void (Part I, I1; audit 2026-10-19).
+    """
+
+
+def check_placement(text: str, expected: str, where: str, *, required: bool) -> None:
+    """Raise `PlacementError` unless *text*'s load trace puts the model on *expected*.
+
+    *required* is for a process that must have loaded the model (a recording batch); a live row
+    the unsafe-phrase screen refused never loads it and says nothing, which is not a mismatch.
+    """
+    ran = summarize_placement(parse_tensor_placement(text))
+    if ran is None:
+        if required:
+            raise PlacementError(f"{where} did not report where the model ran; expected {expected}")
+        return
+    if ran != expected:
+        raise PlacementError(f"{where} ran the model on {ran}; the cell expected {expected}")
+
+
 @dataclass(frozen=True)
 class LaneConfig:
     """One `lanes:` entry, resolved against the repo root."""
@@ -363,12 +388,17 @@ def batch_plan(
     work_dir: Path,
     replay_dir: Path | None = None,
     record_dir: Path | None = None,
+    expect_device: str | None = None,
 ) -> list[dict[str, Any]]:
     """Plan every utterance with ONE model load: `knaif plan --batch`, one envelope per line.
 
     With *replay_dir* no model is loaded: every model call is answered from that store namespace,
     and an utterance whose prompt it does not hold comes back as a replay miss. With
     *record_dir* the model plans and each raw reply is also written there (T2c).
+
+    With *expect_device* a batch that loads the model runs under `--verbose` (llama.cpp's trace
+    goes to stderr, the envelopes stay on stdout) and must have put its layers there, or
+    `PlacementError` is raised.
 
     `plan --batch` and `run` share `PlanSession::plan`, and `run` dumps the plan before its
     clarify gate, so a batch envelope is the plan `run` would have dumped for that utterance
@@ -391,9 +421,18 @@ def batch_plan(
         env = _store_replay_env(replay_dir)
     else:
         argv += ["--model", str(lane.model_path)]
+        if expect_device is not None:
+            argv.append("--verbose")
         env = _clean_env()
         if record_dir is not None:
-            env["KNAIF_LLM_RECORD_DIR"] = str(Path(record_dir).resolve())
+            # Staged beside the work folder, and promoted into the namespace only once the
+            # batch is known to have run where the cell says: a store never holds a reply from
+            # a process that fell back to another device.
+            staging = work_dir.with_name(work_dir.name + ".record")
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.mkdir(parents=True)
+            env["KNAIF_LLM_RECORD_DIR"] = str(staging.resolve())
     proc = subprocess.run(
         argv,
         cwd=work_dir,
@@ -410,7 +449,37 @@ def batch_plan(
             f"`plan --batch` returned {len(lines)} plan line(s) for {len(utterances)} utterances "
             f"(exit {proc.returncode}): {extract_failure(proc.stdout, proc.stderr)}"
         )
+    if expect_device is not None and replay_dir is None:
+        check_placement(proc.stderr, expect_device, "`plan --batch`", required=True)
+    if record_dir is not None and replay_dir is None:
+        promote_replies(staging, Path(record_dir))
     return [json.loads(line) for line in lines]
+
+
+def promote_replies(staging: Path, namespace: Path) -> list[str]:
+    """Move recorded replies from *staging* into *namespace*; the keys that were new there.
+
+    A reply the namespace already holds must be the same bytes: greedy decoding of the same
+    prompt by the same stack gives the same reply, and a different one is the determinism the
+    store rests on failing, so it stops the run rather than overwriting (as the binary's own
+    record does). Nothing is moved unless every reply passes.
+    """
+    namespace.mkdir(parents=True, exist_ok=True)
+    replies = sorted(staging.glob("*.txt"))
+    new: list[Path] = []
+    for reply in replies:
+        held = namespace / reply.name
+        if not held.exists():
+            new.append(reply)
+        elif held.read_bytes() != reply.read_bytes():
+            raise RuntimeError(
+                f"record conflict: {reply.stem} was recorded with a different reply than "
+                f"{namespace.name[:12]} holds; the model is not deterministic here"
+            )
+    for reply in new:
+        shutil.move(reply, namespace / reply.name)
+    shutil.rmtree(staging, ignore_errors=True)
+    return [p.stem for p in new]
 
 
 def batch_live_mismatches(
@@ -554,6 +623,7 @@ def run_native_corpus(
     plans: dict[tuple[str, int], dict[str, Any]] | None = None,
     live: set[tuple[str, int]] | None = None,
     replay_dir: Path | None = None,
+    expect_device: str | None = None,
 ) -> list[AgentOutput]:
     """Execute every corpus utterance through the shipped binary and collect what it produced.
 
@@ -573,6 +643,9 @@ def run_native_corpus(
     With *replay_dir* (the result store, T2c) a planned row replays the model's recorded raw
     reply instead of its printed plan, so everything after the model runs afresh in this binary;
     *plans* then serve only to skip rows whose planning failed and for the cold-start check.
+
+    With *expect_device* every row that runs the model runs under `--verbose` and must report its
+    layers on that device; a row on another raises `PlacementError` (`check_placement`).
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
@@ -592,6 +665,8 @@ def run_native_corpus(
             planned = None if plans is None or key in (live or set()) else plans.get(key)
             if planned is None:
                 argv = build_argv(lane, skill, utterance)
+                if expect_device is not None:
+                    argv.insert(argv.index("--"), "--verbose")
                 env = _clean_env()
             elif replay_dir is not None:
                 argv = build_replay_argv(lane, skill, utterance)
@@ -617,6 +692,9 @@ def run_native_corpus(
                         env=env,
                         timeout=lane.timeout_s,
                     )
+                    if planned is None and expect_device is not None:
+                        where = f"{row.id}[{utt_idx}]"
+                        check_placement(proc.stderr, expect_device, where, required=False)
                     parsed = parse_run_output(proc.stdout, proc.stderr, proc.returncode)
                     if parsed["outcome"] == "error":
                         error = extract_failure(proc.stdout, proc.stderr)
@@ -663,7 +741,9 @@ def _lane_env() -> dict[str, str]:
     artifact users install, which carries PDFium beside the binary (release plan R2).
     """
     env = {k: v for k, v in os.environ.items() if k != "KNAIF_PDFIUM_PATH"}
-    return {**env, "KNAIF_DUMP_PLAN": "1"}
+    # In process, always (Part I): a running daemon holding the model would otherwise answer, and
+    # it neither records into the store nor says where its layers ran.
+    return {**env, "KNAIF_DUMP_PLAN": "1", "KNAIF_NO_DAEMON": "1"}
 
 
 def pdfium_library_name() -> str:

@@ -5,9 +5,12 @@ already passed parsing, validation, an occasional repair call, the clarify gate 
 resolution, which are execution code that a later release may change. A reply is replayed into
 the new binary (`KNAIF_LLM_BACKEND=replay`), which runs everything after the model afresh.
 
-Under greedy decoding a reply is decided by the exact prompt plus four things, which together name
+Under greedy decoding a reply is decided by the exact prompt plus five things, which together name
 a **namespace**: the model's sha256, the inference fingerprint (`evalsuite.fingerprints`), the
-backend's arithmetic class, and the run settings that change the arithmetic. Inside a namespace
+platform, the backend's arithmetic class, and the run settings that change the arithmetic. The
+platform is there because the same sources build to different arithmetic per OS and CPU: in
+1.3.0, Linux CPU planned 3-6% of the rows unlike Windows CPU, while CUDA agreed on all 2,050
+(owner, 2026-10-19). Inside a namespace
 folder the binary itself writes and reads `<prompt_key>.txt` (`KNAIF_LLM_RECORD_DIR`,
 `KNAIF_LLM_REPLAY_DIR`); `key.json` says what the folder holds. A prompt the namespace does not
 hold is a replay miss, and the misses are exactly the utterances a cell must plan with the model.
@@ -23,6 +26,9 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+
+#: What names a namespace, all of it and nothing else.
+COMPONENTS: tuple[str, ...] = ("model_sha256", "inference", "platform", "backend", "settings")
 
 #: Default store root, committed like the run folders (owner, 2026-10-15).
 STORE_ROOT = Path("evals/store")
@@ -53,7 +59,15 @@ def run_settings(env: dict[str, str] | None = None) -> dict[str, str | None]:
 
 
 def namespace(components: dict[str, Any]) -> str:
-    """The namespace id: sha256 of the components as canonical JSON."""
+    """The namespace id: sha256 of the components as canonical JSON.
+
+    Refuses a missing or unknown component: a caller that left one out would share replies
+    between cells that must not share them.
+    """
+    missing = [c for c in COMPONENTS if c not in components]
+    unknown = sorted(set(components) - set(COMPONENTS))
+    if missing or unknown:
+        raise ValueError(f"store namespace: missing {missing}, unknown {unknown}")
     return hashlib.sha256(json.dumps(components, sort_keys=True).encode("utf-8")).hexdigest()
 
 

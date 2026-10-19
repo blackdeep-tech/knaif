@@ -978,7 +978,19 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     This is the acceptance layer. Everything else in the eval suite measures the Python
     runtime, or measures a plan; this runs `knaif run` — no `--dry-run` — and grades the files
     that appear on disk with the skill's executing verifier.
+
+    A process that ran the model on another device than the cell's probe voids the run: nothing
+    is graded or saved, and a recording batch's replies never reach the store.
     """
+    from .native_lane import PlacementError
+
+    try:
+        return _cmd_native(args)
+    except PlacementError as exc:
+        sys.exit(f"VOID: {exc}. Nothing was graded.")
+
+
+def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     from . import native_lane
     from .corpus import load_corpus
     from .native_lane import detect_backend, run_native_corpus
@@ -1078,7 +1090,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         # The result store (T2c): replay what the namespace holds, plan only the misses with the
         # model (recording their replies), then replay everything so every row has its plan.
         from .fingerprints import inference_fingerprint
-        from .matrix import backend_family
+        from .matrix import backend_family, current_os
         from .store import STORE_ROOT, is_replay_miss, namespace_dir, run_settings
 
         # The committed store holds the frozen artifacts' replies only: a developer build records
@@ -1104,6 +1116,8 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             "model_sha256": model_sha,
             # Of the checkout the binary under test was built from (the freeze commit).
             "inference": inference_fingerprint(Path.cwd()),
+            # Per platform: the same sources compute differently per OS and CPU (owner, 2026-10-19).
+            "platform": current_os(),
             "backend": backend_family(compute_backend) or "unknown",
             "settings": run_settings(),
         }
@@ -1138,6 +1152,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
                 fixture_dir=fixture_dir,
                 work_dir=lane_sandbox / ".batch",
                 record_dir=replay_dir,
+                expect_device=compute_backend,
             )
             timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
             # Which binary recorded each new reply, and in which run (I9 "reused from <run>").
@@ -1204,6 +1219,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
                 [by_key[k] for k in keys],
                 fixture_dir=fixture_dir,
                 work_dir=lane_sandbox / ".batch",
+                expect_device=compute_backend,
             )
             timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
             print(f"  planned in  : {timing['plan_batch_s']} s\n", flush=True)
@@ -1222,6 +1238,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         plans=plans,
         live=live,
         replay_dir=replay_dir,
+        expect_device=compute_backend,
     )
     timing["rows_s"] = round(time.perf_counter() - t0, 1)
     timing["rows"] = len(outputs)
@@ -2099,14 +2116,18 @@ def _safety_through_the_lane(
     # half ran on the binary, model and backend the quality half names.
     measured = native_lane.detect_backend(lane, args.skill, lane_sandbox)
 
-    outputs = native_lane.run_native_corpus(
-        lane,
-        args.skill,
-        rows,
-        fixture_dir=fixture_dir,
-        sandbox=lane_sandbox,
-        verbose=getattr(args, "verbose", False),
-    )
+    try:
+        outputs = native_lane.run_native_corpus(
+            lane,
+            args.skill,
+            rows,
+            fixture_dir=fixture_dir,
+            sandbox=lane_sandbox,
+            verbose=getattr(args, "verbose", False),
+            expect_device=measured.summary,
+        )
+    except native_lane.PlacementError as exc:
+        sys.exit(f"VOID: {exc}. Nothing was graded.")
     result = score_safety(rows, [o.outcome for o in outputs])
     result["skill"] = args.skill
     result["backend"] = lane.public_name or lane.name
