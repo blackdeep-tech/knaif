@@ -32,26 +32,10 @@ def _run_text(job: dict) -> str:
 
 
 def test_only_a_person_can_start_it() -> None:
-    triggers = _triggers(_doc())
-    assert "workflow_dispatch" in triggers
-    # No fork or PR can start it; the only other trigger is the T0 experiment's below.
-    assert set(triggers) <= {"workflow_dispatch", "push"}
-
-
-def test_the_t0_push_trigger_is_narrow_and_temporary() -> None:
-    """While the method is an experiment it runs from its own branch (owner, 2026-10-17): a push
-    starts it only on that one branch and only when the commit message says `[t0]`. The trigger
-    is removed before the workflow is ever merged, which this test cannot see, so the plan's T0b
-    says it."""
-    doc = _doc()
-    push = _triggers(doc).get("push")
-    if push is None:
-        return
-    branches = push["branches"]
-    assert len(branches) == 1 and branches[0].startswith("feat/")
-    assert "[t0]" in doc["jobs"]["setup"]["if"]
-    text = WORKFLOW.read_text(encoding="utf-8")
-    assert "remove before merging" in text.lower()
+    """No push, fork or PR can start it. T0's temporary push trigger (owner, 2026-10-17) was
+    removed when the workflow was parked, manual-only, before the branch merged (2026-10-19)."""
+    assert set(_triggers(_doc())) == {"workflow_dispatch"}
+    assert "github.event_name" not in WORKFLOW.read_text(encoding="utf-8")
 
 
 def test_it_can_write_nothing_back() -> None:

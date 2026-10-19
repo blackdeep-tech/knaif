@@ -7,8 +7,7 @@
 # acceptance records are written from the downloaded boards, by a person.
 #
 # Rules this file keeps (python/core/tests/test_evidence_workflow.py):
-#   - started by hand (no fork or PR can run it; see the T0 push trigger below), and it can
-#     write nothing back;
+#   - started by hand only (no push, fork or PR can run it), and it can write nothing back;
 #   - every file it uses is checked first: the release file against the release's SHA256SUMS,
 #     the model against the sha256 in contracts/models/model-manifest.yaml;
 #   - no repository or machine is named, so it runs unchanged in a fork.
@@ -16,6 +15,11 @@
 # The checkout is the ref the workflow is started on: its corpus, harness and fixtures. The
 # binary is the release named in `release`. For a release's own cells, start it on the release
 # branch at the freeze.
+#
+# PARKED (owner, 2026-10-19): the plan improves the process on the maintainer's machine first and
+# other machines later. T0 measured CI CPU cells at ~3x this box's time and macOS runners unusable
+# for Metal; the join job (compose the shards, safety on the binary, `accept-native`) and taking a
+# Package run's files are not built. Kept runnable by hand for diagnosis; see docs/TODO.md.
 name: Evidence cell
 
 on:
@@ -43,11 +47,6 @@ on:
       shards:
         description: "How many runners share the rows"
         default: "1"
-  # T0 EXPERIMENT ONLY — REMOVE BEFORE MERGING. While the method is an experiment it runs from
-  # its own branch (owner, 2026-10-17): a push there starts T0's three fixed cells, and only when
-  # the commit message contains [t0] (the `setup` job's `if`). Everything else needs a person.
-  push:
-    branches: [feat/faster-release-evidence]
 
 permissions:
   contents: read
@@ -57,16 +56,13 @@ defaults:
     shell: bash
 
 jobs:
-  # Which cells run: the one asked for by hand, or T0's three fixed cells on a [t0] push. One
-  # matrix entry per shard; each shard job redraws the cell's shards (deterministic) and runs its
+  # Which cell runs: the one asked for by hand. One matrix entry per shard; each shard job redraws the cell's shards (deterministic) and runs its
   # own, so no job waits on another's upload.
   setup:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[t0]')
     runs-on: ubuntu-latest
     outputs:
       cells: ${{ steps.cells.outputs.cells }}
     env:
-      EVENT: ${{ github.event_name }}
       IN_RELEASE: ${{ inputs.release }}
       IN_OS: ${{ inputs.os }}
       IN_SKILL: ${{ inputs.skill }}
@@ -79,13 +75,8 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           e = os.environ
-          if e["EVENT"] == "workflow_dispatch":
-              cells = [dict(release=e["IN_RELEASE"], os=e["IN_OS"], skill=e["IN_SKILL"],
-                            model=e["IN_MODEL"], rows=e["IN_ROWS"], shards=int(e["IN_SHARDS"]))]
-          else:  # T0 (plan, Tasks): CPU on Windows and Linux, Metal on macOS, 1.3.0's files.
-              t0 = dict(release="v1.3.0", skill="ffmpeg", model="knaif-qwen3-4b-v2", shards=1)
-              cells = [dict(t0, os="windows", rows="100"), dict(t0, os="linux", rows="100"),
-                       dict(t0, os="macos", rows="20")]
+          cells = [dict(release=e["IN_RELEASE"], os=e["IN_OS"], skill=e["IN_SKILL"],
+                        model=e["IN_MODEL"], rows=e["IN_ROWS"], shards=int(e["IN_SHARDS"]))]
           runner = {"windows": "windows-latest", "linux": "ubuntu-latest", "macos": "macos-15"}
           include = [dict(c, runner=runner[c["os"]], shard=k) for c in cells for k in range(c["shards"])]
           print("cells=" + json.dumps(include))

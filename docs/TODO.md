@@ -336,6 +336,17 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   in the parked [media-runtime-and-mobile](plans/2026-10-03-media-runtime-and-mobile.md), Thread A.
   To decide: whether it is in scope for the next release, and if so, reopen that plan.
 
+- [ ] **Release evidence on other machines (parked, owner 2026-10-19).** The faster-release-evidence
+  plan sped up the process on the release box first; other machines come later (owner, 2026-10-17).
+  Left from its T0b: `.github/workflows/evidence-cell.yml` runs one cell's shards by hand on GitHub's
+  runners, but has no join job (compose the shards, safety on the binary, `accept-native`) and takes
+  only a published release's files, not a Package run's. T0 measured CI CPU at ~3x the box's time and
+  macOS runners unusable for Metal, so the candidates are the spare machines named in the plan (a
+  second Windows PC, a laptop's WSL, the M1 Pro Mac) running `scripts/release_evidence.sh`.
+- [ ] **macOS has not yet run `scripts/release_evidence.sh`** (written 2026-10-19 for all three
+  platforms, checked on Windows and in WSL). Its first macOS `check` stage, at the next release's
+  freeze, is the test, including bash 3.2.
+
 - [x] **4B audit and measured improvement — experiment pass** — closed 2026-09-17; [results and follow-ups](plans/2026-09-17-4b-audit-and-improvement.md). Deterministic speed fix measured with no observed control regressions; model candidate rejected, prompt diagnostic not adopted. Broader model improvement remains open. Nothing committed or promoted.
 - [x] **Re-lock both snapshots — done 2026-09-17.** `POLICY_VERSION` 3 required it and the evidence is in [`2026-09-17_t7-relock-policy-v3_success`](../evals/runs/2026-09-17_t7-relock-policy-v3_success/report.md). ffmpeg **0.9388954172 / 0.9801227169** (third independent reproduction of the corrected instrument, to ten decimals), documents **0.9817073171 / 1.0** (unchanged in value). Both **S2 ACCEPTED** (39 / 36 thresholds), safety 11/11 and 9/9, suite green. The promotion verdict was recorded first, per T7's ordering rule.
 - [x] **Skill and prompt workbench** — **done 2026-09-22** (`notebooks/skill_workbench.ipynb`) — one notebook, both runtimes, any model, chosen backend, dry-run or real, with measured timing. Plan: [skill-prompt-workbench](plans/2026-09-21-skill-prompt-workbench.md). Wanted before the v2 publish decision, because the current testers cannot make it: they use a pre-restructure `src/skills/` path, list no knaif fine-tune at all, and show the model all 30 tools where production sends ~8 — which changed **4 of 14** plans and made the model look *worse* than it is. Carries two core fixes: `infer_stream` needs `registry_override` (T1), and `detect_backend()` reports `CUDA0` even when every layer is on CPU (T2), which is what the L4 lane records.

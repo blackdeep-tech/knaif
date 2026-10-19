@@ -1,9 +1,9 @@
 # Faster release evidence: test what changed, and test it faster
 
-**Status:** Active · **Created:** 2026-10-14 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-14 · **Completed:** 2026-10-19
 **Owner:** evals / release · **Ref:** [release-1.3.0](2026-09-30-release-1.3.0.md) (*Gate decision
 rules*) · [RELEASE.md §4](../RELEASE.md) · [skill-quality-lifecycle](2026-09-10-skill-quality-lifecycle.md)
-**Release:** —
+**Release:** main
 
 > **Status note:** asked for by the owner on 2026-10-14, during 1.3.0's Windows evidence chain
 > (~12 h): *"I will wait it this time but for the next runs I'd like to find a better/faster
@@ -56,6 +56,13 @@ rules*) · [RELEASE.md §4](../RELEASE.md) · [skill-quality-lifecycle](2026-09-
 > load the model once, the coverage subset, the result store); where the cells run comes after.
 > Other machines stay an option for then: the maintainer's spare machines (a second Windows PC, a
 > laptop's WSL, the M1 Pro Mac), or rented AWS machines, priced in C6.
+>
+> **Done 2026-10-19 (owner): every task closed, merged to `main` on its own** (no release was open,
+> so `Release: main`). Nothing waits here: the next release uses the method by copying
+> `scripts/release_evidence_run_all.template.sh` at its freeze, which carries Part I verbatim, and
+> its index cites it. Left outside this plan: macOS's first run of the script at that freeze and
+> evidence on other machines (docs/TODO.md), and what a published model or skill brings with it
+> ([published-evidence](2026-10-19-published-evidence.md)).
 
 **Goal:** Cut a release's evidence from ~12 h on this box to ~2–3 h for a full release and under
 1 h for a small one, without weakening any bar: same floors, same safety rule, same verdicts.
@@ -558,6 +565,10 @@ tooling gains as `evalsuite row-diff`), and the release notes and site say "corp
 
 ## Part H — what a published model or skill brings with it
 
+*Moved 2026-10-19 (owner) to [published-evidence](2026-10-19-published-evidence.md), which
+corrects one line: the result store is filled by the first release cell, not from the published
+Python run. Kept here as the decision's record.*
+
 Models are trained, and skills developed, before they appear in this repository; a release only
 ever contains an established result. So that the gates here can judge it, a model or a skill
 arrives with its evidence, not only its files (decided 2026-10-15, owner):
@@ -730,7 +741,7 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       17.3). On the CPU only 13–34% (4B ffmpeg 17.2 → 13.2 s a row): planning is the cost there,
       not the model load (≈95% of a CPU row even in one batch). (b) Execution alone: 13.7 min
       for 861 ffmpeg rows, 23 s for 164 documents rows.
-- [ ] **T0b. C1/C2 workflow:** a `workflow_dispatch` cell workflow (shard matrix for CPU and
+- [x] **T0b. C1/C2 workflow:** a `workflow_dispatch` cell workflow (shard matrix for CPU and
       macOS, download and verify the frozen files, cached models, compose + safety +
       `accept-native` job, artifacts). **First half built 2026-10-16**, and T0(d)/(e) run from
       this branch with a `[t0]` commit (C2's 2026-10-17 amendment; **remove the push trigger
@@ -742,6 +753,10 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       `runner.json` timings as artifacts), guarded by `test_evidence_workflow.py`. Still to add:
       taking the Package run's files as well as a published release's, and the join job
       (compose the shards, safety on the binary, `accept-native`).
+      **Parked 2026-10-19 (owner):** the push trigger and T0's fixed cells are removed, the
+      workflow runs by hand only (`test_evidence_workflow.py` now requires it), and the unfinished
+      half is in docs/TODO.md (*Release evidence on other machines*), with the spare machines as
+      the likelier route.
 - [x] **T1. Write the rules** as gate-decision rules in the shape of the 1.3.0 ones, for the owner
       to approve: the subset population and per-row regression bar (D2), the store's reuse table
       (E3) and never-reused list (E4), the cold-start and confirmation samples (B1, B2), the daemon
@@ -822,7 +837,7 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       Python run's on those rows. The store is `binary` in `.gitattributes`: under `* text=auto`
       a Windows checkout would have rewritten a recorded reply's line endings (Codex audit,
       2026-10-19, its last step before a usage limit stopped it; the audit is to be re-run).
-- [ ] **T3. B1 in the lane:** one-load batch planning + sequential execution + the cold-start sample, behind a
+- [x] **T3. B1 in the lane:** one-load batch planning + sequential execution + the cold-start sample, behind a
       lane option, with tests; validated by re-running one 1.3.0 cell both ways and requiring the
       same verdict and the same per-row grades. The lane fills the store (E1) rather than a board.
       **Lane half built 2026-10-17:** `evalsuite native --batch-plan` (one `knaif plan --batch`
@@ -835,7 +850,9 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       board until T1's rules adopt the method. `evalsuite row-diff` (G3) compares two boards
       row by row (grade, plan, command). Smoke-tested on the frozen 1.3.0 binary: 3 rows, same
       grade, plan and command as 1.3.0's CUDA cell. Still to do: the T0 stages, then the store.
-- [ ] **T4. Run scripts on the store:** a release's run script becomes "compute missing keys per
+      **Done:** T0 (2026-10-17) re-ran 1.3.0's cells both ways, identical on all 7,450 rows; the
+      store (T2c) fills it, and both store runs of 2026-10-19 hold it on 194 + 80 subset rows.
+- [x] **T4. Run scripts on the store:** a release's run script becomes "compute missing keys per
       cell, batch-plan them, execute them, run the never-reused samples, compose, grade"; A1/A2
       are what the key lookup does, not separate steps.
       **Windows built 2026-10-19.** `scripts/release_evidence.sh` holds the mechanics (1.3.0's
@@ -866,6 +883,8 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       `<windows-checkout>`), every platform's devices, lanes and cell keys, and the refusals
       (unknown platform, L3 on Linux, a backend the platform lacks). **Not run here:** macOS,
       including bash 3.2 (the script avoids empty arrays and bash-4 builtins for it).
+      **Closed for Windows and Linux (owner, 2026-10-19);** macOS is tested by its first `check`
+      at the next release's freeze (docs/TODO.md).
 - [x] **T5. Codex audit** of T1–T4 before the next release uses them.
       **Audit 1, 2026-10-19.** Codex stopped at its usage limit after four minutes (its last step
       found the store's line endings, fixed). The owner had the same brief run by a Fable 5.1
@@ -982,13 +1001,15 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       human`). Only those fields changed, so the three were re-pinned in `eval_kept.sha256` and
       `release_subset.json` regenerated: the same 194 utterances, only its `corpus_sha256` moved. No
       utterance or expected outcome changed, so the snapshots' source runs still bind.
-- [ ] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
+- [x] **T8. The published-evidence path (Part H):** `evalsuite redact` producing a committable run
       folder and `evalsuite row-diff` (G3); `docs/FINE_TUNING.md`, `docs/MODELS.md`,
       `docs/PROVENANCE.md` (a per-model "what was published" table), `docs/RELEASE.md` and
       AGENTS.md say what a published model and skill bring with them.
-- [ ] **T8b. The enablers (Part H)**, each as its own public plan when the owner opens it:
+      **Moved 2026-10-19 (owner)** to [published-evidence](2026-10-19-published-evidence.md)
+      (P1, P2); `row-diff` is built.
+- [x] **T8b. The enablers (Part H)**, each as its own public plan when the owner opens it:
       external skills path for Python, native skill registration as a crate, a stable client
-      interface.
+      interface. **Moved 2026-10-19 (owner)** to [published-evidence](2026-10-19-published-evidence.md) (P3).
 
 ## Open questions for the owner
 
