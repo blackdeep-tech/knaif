@@ -2557,6 +2557,21 @@ def cmd_corpus_check(args: argparse.Namespace) -> None:
     print(f"{args.skill}: {len(rows)} row(s) ok to append from {args.rows}")
 
 
+def cmd_fingerprints(args: argparse.Namespace) -> None:
+    """Print the native inference fingerprint and each skill's execution fingerprint (A3, T2)."""
+    from .fingerprints import execution_fingerprint, inference_fingerprint
+
+    print(
+        json.dumps(
+            {
+                "inference": inference_fingerprint(),
+                "execution": {skill: execution_fingerprint(skill) for skill in args.skill},
+            },
+            indent=2,
+        )
+    )
+
+
 def cmd_release_subset(args: argparse.Namespace) -> None:
     """Derive and write a skill's release subset, or check the committed one (D1, T2b)."""
     from .release_subset import build_subset, check_subset, subset_path
@@ -3144,6 +3159,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_cc.add_argument("--rows", required=True, metavar="FILE", help="JSONL of proposed rows")
     p_cc.add_argument("--tag", default="hard2", help="The review tag every new row must carry")
 
+    # fingerprints — the native planning / execution halves the store keys on (A3, T2)
+    p_fp = sub.add_parser(
+        "fingerprints",
+        help="Print the native inference fingerprint and each skill's execution fingerprint as JSON",
+    )
+    p_fp.add_argument("--skill", action="append", required=True, help="Repeat for several")
+
     # release-subset — the rows an L4 release cell measures (D1, T2b)
     p_rs = sub.add_parser(
         "release-subset",
@@ -3560,6 +3582,7 @@ def main() -> None:
         "corpus-remove": cmd_corpus_remove,
         "corpus-check": cmd_corpus_check,
         "release-subset": cmd_release_subset,
+        "fingerprints": cmd_fingerprints,
         "lock": cmd_lock,
         "safety": cmd_safety,
         "native": cmd_native,

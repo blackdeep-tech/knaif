@@ -335,6 +335,26 @@ outcomes/  key = (plan hash, execution fingerprint of the tools the plan uses, O
            value = the graded outcome: per-row grades, produced-file hashes, failure text
 ```
 
+*Amended 2026-10-19 (owner), after T2 measured the file-level planning key at the release tags.*
+That key moved at **every** release (the workspace version lives in `Cargo.toml`, and `main.rs`
+changes for unrelated reasons), so a stored plan would never have been reused. Instead:
+
+```text
+plans/     key = (sha256 of the exact prompt, model sha256, inference fingerprint, backend class)
+           value = the model's raw reply, which the lane already replays through the mock
+outcomes/  key = (plan hash, the skill's execution fingerprint, OS, fixture-set sha256, verifier)
+```
+
+The prompt comes from the new binary itself (`KNAIF_DUMP_PROMPT` under `plan --batch` with the mock
+backend: every subset prompt in seconds, no model). The **inference fingerprint** is `knaif-llm`,
+`knaif-models` (model and backend-library resolution), llama.cpp's `Cargo.lock` entries and
+`generation.yaml`. The **execution fingerprint** is per skill: every other native file, plus the
+skill's crate and runtime bundle files (`evalsuite.fingerprints`, `evalsuite fingerprints`). At
+the tags, inference moved at 1.2.1 (backend-library resolution) and 1.3.0 (`knaif-llm`: macOS
+build, OpenMP, prefix reuse): both were real inference changes, so both would rightly have
+re-planned. Run settings that change the arithmetic (`KNAIF_N_THREADS`, `KNAIF_N_CTX`,
+`KNAIF_MAX_TOKENS`, GPU layers) join the key in T2c.
+
 Backend arithmetic class is `cuda` / `vulkan` / `cpu` / `metal` per model: it is the only reason two
 backends can plan differently. The planning fingerprint is A3's planning half; the execution
 fingerprint is A3's per-tool execution half, so a change to one tool's code invalidates only the
@@ -715,9 +735,16 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       **Written and approved 2026-10-18 as Part I** (two stages: Stage 1 without the store, Stage 2
       with it). Owner decisions: a cold-start mismatch re-runs the cell live; the cold-start rows
       double as the cross-backend confirmation sample. Stage 1's code is listed in I11.
-- [ ] **T2. A3: split the `native` fingerprint** into planning and per-tool execution, with tests
+- [x] **T2. A3: split the `native` fingerprint** into planning and per-tool execution, with tests
       that a change to one tool's code stales only that tool's records. The halves are the store's
       key components (E1).
+      **Done 2026-10-19, as amended by the owner:** execution per **skill**, not per tool (ffmpeg
+      renders every tool through one engine; documents' tools reach nearly every module), and
+      plans keyed by the **exact prompt** plus an inference fingerprint instead of a file-level
+      planning fingerprint (E1's amendment says why). `evalsuite/fingerprints.py` and `evalsuite
+      fingerprints --skill …`; tests pin what moves each key, that the version bump, the corpus
+      and `acceptance.yaml` move none, and that every native source file is classified. The
+      gate's own `native` fingerprint is unchanged: L3/L4 records still pin the binary.
 - [x] **T2b. D1: `evalsuite release-subset`** and the committed `release_subset.json` per skill,
       with the corpus-sha drift test; `accept-native --population subset` (D2) reading per-row
       Python verdicts from the locked snapshot run. **No skill needs re-locking for this**
