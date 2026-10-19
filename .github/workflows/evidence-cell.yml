@@ -1,0 +1,247 @@
+# Evidence cell: run part of one L4 cell on GitHub's runners.
+#
+# The CPU cells and macOS Metal move off the maintainer's machine (plan
+# docs/plans/2026-10-14-faster-release-evidence.md, Part C). A cell's rows are pre-drawn into
+# shards (`evalsuite shards`), each shard runs the PUBLISHED binary on its own runner through the
+# native lane, and the boards and timings come back as artifacts. Nothing is committed from here:
+# acceptance records are written from the downloaded boards, by a person.
+#
+# Rules this file keeps (python/core/tests/test_evidence_workflow.py):
+#   - started by hand only (no push, fork or PR can run it), and it can write nothing back;
+#   - every file it uses is checked first: the release file against the release's SHA256SUMS,
+#     the model against the sha256 in contracts/models/model-manifest.yaml;
+#   - no repository or machine is named, so it runs unchanged in a fork.
+#
+# The checkout is the ref the workflow is started on: its corpus, harness and fixtures. The
+# binary is the release named in `release`. For a release's own cells, start it on the release
+# branch at the freeze.
+#
+# PARKED (owner, 2026-10-19): the plan improves the process on the maintainer's machine first and
+# other machines later. T0 measured CI CPU cells at ~3x this box's time and macOS runners unusable
+# for Metal; the join job (compose the shards, safety on the binary, `accept-native`) and taking a
+# Package run's files are not built. Kept runnable by hand for diagnosis; see docs/TODO.md.
+name: Evidence cell
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Published release tag whose files are measured (e.g. v1.3.0)"
+        required: true
+      os:
+        description: "Runner OS"
+        type: choice
+        options: [windows, linux, macos]
+        default: linux
+      skill:
+        type: choice
+        options: [ffmpeg, documents]
+        default: ffmpeg
+      model:
+        type: choice
+        options: [knaif-qwen3-4b-v2, knaif-qwen3-1.7b-v2]
+        default: knaif-qwen3-4b-v2
+      rows:
+        description: "Utterances to draw, evenly spaced (empty = the whole corpus)"
+        default: "100"
+      shards:
+        description: "How many runners share the rows"
+        default: "1"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Which cell runs: the one asked for by hand. One matrix entry per shard; each shard job redraws the cell's shards (deterministic) and runs its
+  # own, so no job waits on another's upload.
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      cells: ${{ steps.cells.outputs.cells }}
+    env:
+      IN_RELEASE: ${{ inputs.release }}
+      IN_OS: ${{ inputs.os }}
+      IN_SKILL: ${{ inputs.skill }}
+      IN_MODEL: ${{ inputs.model }}
+      IN_ROWS: ${{ inputs.rows }}
+      IN_SHARDS: ${{ inputs.shards }}
+    steps:
+      - id: cells
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          e = os.environ
+          cells = [dict(release=e["IN_RELEASE"], os=e["IN_OS"], skill=e["IN_SKILL"],
+                        model=e["IN_MODEL"], rows=e["IN_ROWS"], shards=int(e["IN_SHARDS"]))]
+          runner = {"windows": "windows-latest", "linux": "ubuntu-latest", "macos": "macos-15"}
+          include = [dict(c, runner=runner[c["os"]], shard=k) for c in cells for k in range(c["shards"])]
+          print("cells=" + json.dumps(include))
+          PY
+
+  cell:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.cells) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      RELEASE: ${{ matrix.release }}
+      OS: ${{ matrix.os }}
+      SKILL: ${{ matrix.skill }}
+      MODEL: ${{ matrix.model }}
+      ROWS: ${{ matrix.rows }}
+      COUNT: ${{ matrix.shards }}
+      SHARD: ${{ matrix.shard }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install the harness
+        run: |
+          uv venv --python 3.12
+          uv pip install -e python/core
+          if [ "$SKILL" = documents ]; then uv pip install --group documents --group documents-ocr; fi
+
+      # The skills' declared system requirements (skills/<skill>/SPEC.md), from each OS's own
+      # package manager.
+      - name: Install the skill's system requirements
+        run: |
+          case "$OS" in
+            linux)   sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr ;;
+            macos)   brew install ffmpeg tesseract ;;
+            windows) choco install -y --no-progress ffmpeg tesseract ;;
+          esac
+
+      - name: Download the release file and check it against SHA256SUMS
+        run: |
+          ver="${RELEASE#v}"
+          case "$OS" in
+            linux)   asset="knaif-$ver-linux-x64.tar.gz" ;;
+            macos)   asset="knaif-$ver-macos-arm64.zip" ;;
+            windows) asset="knaif-$ver-windows-x64.zip" ;;
+          esac
+          mkdir -p cell/dl cell/app
+          gh release download "$RELEASE" --repo "$REPO" --dir cell/dl -p "$asset" -p SHA256SUMS
+          uv run --no-sync python - "$asset" <<'PY'
+          import hashlib, sys
+          from pathlib import Path
+          asset = sys.argv[1]
+          sums = dict(reversed(line.split(maxsplit=1)) for line in Path("cell/dl/SHA256SUMS").read_text().splitlines() if line.strip())
+          want = sums.get(asset) or sums.get("*" + asset)
+          got = hashlib.sha256(Path("cell/dl", asset).read_bytes()).hexdigest()
+          if want != got:
+              sys.exit(f"sha256 mismatch for {asset}: SHA256SUMS says {want}, file is {got}")
+          print(f"{asset}: {got} (matches SHA256SUMS)")
+          PY
+          case "$OS" in
+            linux)   tar -xzf "cell/dl/$asset" -C cell/app ;;
+            macos)   ditto -x -k "cell/dl/$asset" cell/app ;;
+            windows) unzip -q "cell/dl/$asset" -d cell/app ;;
+          esac
+          bin=$(find cell/app -path '*/bin/knaif' -o -path '*/bin/knaif.exe' | head -1)
+          test -n "$bin" || { echo "no bin/knaif in $asset"; exit 1; }
+          echo "KNAIF_BIN=$bin" >> "$GITHUB_ENV"
+          "$bin" --version
+
+      - name: Find the model in the manifest
+        id: model
+        run: |
+          uv run --no-sync python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, yaml
+          m = yaml.safe_load(open("contracts/models/model-manifest.yaml", encoding="utf-8"))["models"][os.environ["MODEL"]]
+          print(f"file={m['file']}\nurl={m['url']}\nsha256={m['sha256']}")
+          PY
+
+      - uses: actions/cache@v4
+        with:
+          path: cell/models
+          key: model-${{ steps.model.outputs.sha256 }}
+
+      - name: Download the model and check it against the manifest
+        env:
+          FILE: ${{ steps.model.outputs.file }}
+          URL: ${{ steps.model.outputs.url }}
+          SHA: ${{ steps.model.outputs.sha256 }}
+        run: |
+          mkdir -p cell/models
+          if [ ! -f "cell/models/$FILE" ]; then curl -fsSL --retry 3 -o "cell/models/$FILE" "$URL"; fi
+          uv run --no-sync python - <<'PY'
+          import hashlib, os, sys
+          path = os.path.join("cell", "models", os.environ["FILE"])
+          h = hashlib.sha256()
+          with open(path, "rb") as f:
+              for chunk in iter(lambda: f.read(1 << 20), b""):
+                  h.update(chunk)
+          if h.hexdigest() != os.environ["SHA"]:
+              sys.exit(f"sha256 mismatch for {path}: manifest says {os.environ['SHA']}, file is {h.hexdigest()}")
+          print(f"{path}: matches the manifest")
+          PY
+          echo "MODEL_PATH=cell/models/$FILE" >> "$GITHUB_ENV"
+
+      - name: Regenerate the fixtures
+        run: uv run --no-sync python -m knaif.evalsuite fixtures regen --skill "$SKILL"
+
+      - name: Draw the cell's shards (the same draw in every job)
+        run: |
+          rows_arg=()
+          if [ -n "$ROWS" ]; then rows_arg=(--rows "$ROWS"); fi
+          uv run --no-sync python -m knaif.evalsuite shards --skill "$SKILL" --count "$COUNT"             "${rows_arg[@]}" --out shards
+
+      # The lane is written here, from what was downloaded: relative paths, resolved against the
+      # checkout, so nothing about this runner ends up in the config.
+      - name: Write the lane
+        run: |
+          cat > cell/lane.yaml <<EOF
+          lanes:
+            ci:
+              kind: native_cli
+              binary: $KNAIF_BIN
+              model_path: $MODEL_PATH
+              public_name: $MODEL
+              timeout_s: 900
+          EOF
+          cat cell/lane.yaml
+
+      - name: Run the shard
+        run: |
+          shard=$(printf 'shard-%02d' "$SHARD")
+          mkdir -p "out/$shard"
+          start=$(date +%s)
+          set +e
+          uv run --no-sync python -m knaif.evalsuite native --skill "$SKILL" --lane ci \
+            --config cell/lane.yaml --only "shards/$shard.json" --save "out/$shard"
+          status=$?
+          set -e
+          end=$(date +%s)
+          uv run --no-sync python - "out/$shard/runner.json" "$start" "$end" "$status" <<'PY'
+          import json, os, platform, sys
+          out, start, end, status = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+          rows = len(json.load(open(os.path.join("shards", os.path.basename(os.path.dirname(out)) + ".json"))))
+          json.dump({
+              "release": os.environ["RELEASE"], "os": os.environ["OS"], "skill": os.environ["SKILL"],
+              "model": os.environ["MODEL"], "shard": int(os.environ["SHARD"]), "rows": rows,
+              "wall_s": end - start, "s_per_row": round((end - start) / rows, 2), "exit": status,
+              "runner": {"os": os.environ.get("RUNNER_OS"), "arch": os.environ.get("RUNNER_ARCH"),
+                         "cpus": os.cpu_count(), "machine": platform.machine(),
+                         "processor": platform.processor()},
+              "commit": os.environ.get("GITHUB_SHA"),
+          }, open(out, "w"), indent=2)
+          print(open(out).read())
+          PY
+          exit "$status"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cell-${{ matrix.os }}-${{ matrix.skill }}-${{ matrix.model }}-shard-${{ matrix.shard }}
+          path: |
+            out/
+            shards/shards.json

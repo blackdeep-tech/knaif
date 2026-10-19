@@ -154,3 +154,25 @@ def save_corpus(rows: list[CorpusRow], path: Path | str) -> None:
     with path.open("w", encoding="utf-8") as fh:
         for row in rows:
             fh.write(json.dumps(row.to_dict(), ensure_ascii=False) + "\n")
+
+
+def save_row(path: Path | str, row: CorpusRow) -> None:
+    """Write *row* back into the corpus at *path*, changing only its own line.
+
+    Every other line keeps its bytes and its line ending. Kept rows are immutable once a
+    review has pinned them (`data/eval_kept.sha256`), and re-serialising the whole file, as
+    `save_corpus` does, would change lines nobody edited.
+    """
+    path = Path(path)
+    text = path.read_bytes().decode("utf-8")
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        body = line.rstrip("\r\n")
+        if not body.strip() or body.lstrip().startswith("#"):
+            continue
+        if str(json.loads(body)["id"]) == row.id:
+            ending = line[len(body) :] or ("\r\n" if "\r\n" in text else "\n")
+            lines[i] = json.dumps(row.to_dict(), ensure_ascii=False) + ending
+            path.write_bytes("".join(lines).encode("utf-8"))
+            return
+    raise ValueError(f"row {row.id!r} is not in {path}")

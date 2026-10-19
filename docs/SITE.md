@@ -156,11 +156,19 @@ source: /<*>   target: /index.html   status: 404-200
 
 Neither site is an SPA. Under that rule a mistyped URL serves the **home page** — the
 visitor sees the front page with nothing indicating the address was wrong, and `.dev`'s
-generated `404.html` is never reached. Both sites ship a 404 page, so the rule should be:
+generated `404.html` is never reached. Both sites ship a 404 page, so the rule is (set on both
+apps 2026-10-16):
 
 ```
-source: /<*>   target: /404.html   status: 404
+source: /<*>   target: /404.html   status: 404-200
 ```
+
+**Keep `404-200`, not plain `404`.** AWS names `404-200` a "404 rewrite rule" and `404` a "404
+redirect rule" (CloudFormation `AWS::Amplify::App` *CustomRule*, `status`). The rewrite serves the
+404 page in place with HTTP **404** and the visitor's address unchanged — measured: under the old
+default it answered 404 with the home page's body, and with this rule it answers 404 with the
+site's own 404 page. Plain `404` behaves as a redirect and has caused trouble here before; the
+Amplify guide's own fix for an unexpected 302 is to restore "the default 404 rewrite rule".
 
 Check it the way a visitor would, looking at the body and not only the status:
 

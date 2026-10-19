@@ -68,7 +68,7 @@ site, CI and eval records may go straight to `main`.
 | Scope | features (plans), model changes, new platforms | code bug fixes only |
 | Not allowed | — | a new or retrained model, prompt wording, `tools.yaml` / contract changes, new CLI flags, any behavior change on a platform already shipped |
 | Starts from | `main` | `main` when nothing it gained since the previous tag ships in an artifact (`git diff --name-only vX.Y.(Z-1) main`); otherwise that tag |
-| Gates | all of §4: L3, the full L4 matrix, clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (§4), clean room, upgrade path |
+| Gates | all of §4: L3 and every L4 cell (the release subset, through the run script), clean room, upgrade path | `just check`, the affected skill's L4 **sampled** (§4), clean room, upgrade path |
 | If the rule is broken | — | the change moves to the next minor, or the patch runs the minor gates |
 
 ### Lifecycle
@@ -632,28 +632,105 @@ reference, or that a skill still does the job. Those are L3 and L4 of
 they cannot live in CI — which is exactly why they have to be a named release step rather than
 something someone remembers.
 
-```bash
-# L3 — behavioral parity, native vs the Python reference, over the skill's corpus.
-KNAIF_PARITY_BACKEND=cuda uv run python scripts/parity_check.py --skill ffmpeg   --native-bin target/release/knaif.exe   --model-path models/knaif-qwen3-4b-v2-q4_k_m.gguf   --cwd sandbox/fixtures/ffmpeg   --label <ver>-l3-ffmpeg --purpose "release <ver> parity" --max-plan-disagreement <bound written before the run>
+**One run script per platform.** A release measures L3 and L4 through
+`scripts/release_evidence.sh`, the way
+[the faster-release-evidence plan](plans/2026-10-14-faster-release-evidence.md) Part I lays down
+(owner, 2026-10-18). Through 1.3.0 every cell ran the whole corpus, one process per utterance, and a
+Windows release took about 12 hours of the box; the script measures a fixed subset with one model
+load and reuses model replies the release did not change.
 
-# L4 — the shipped path: the binary executing for real, graded on the files it produces.
+1. **At the freeze**, copy `scripts/release_evidence_run_all.template.sh` once per platform to
+   `evals/runs/<date>_r<ver>-<platform>_success/run_all.sh`. Fill in its pins: the platform, the
+   version, the freeze commit, the frozen artifact and its sha256, and the lane prefix (add the
+   lanes to `eval_backends.yaml`, `binary:` inside the unpacked artifact). The copy carries Part I's
+   rules verbatim, and `test_release_evidence_template.py` keeps the template equal to the plan.
+   Commit it before its first stage: changing a rule after a result is an amendment, written into
+   the script with its date and reason before the stage it affects.
+2. **Run one stage per invocation**, each after the owner approves it with its time budget, never
+   two at once on one machine. Exit 0 passed, 1 the stage broke, 2 refused before running, 3 it ran
+   with gate misses for the owner. `bash scripts/watch_run.sh <run folder>` follows a stage.
+
+| Stage | What it does |
+|---|---|
+| `check` | Preflight only: HEAD contains the freeze and the working tree under `native/ apps/ skills/ contracts/` and the Cargo files *is* the freeze, the committed release subsets match their corpora, the artifact and model sha256s, the binary's version and signature. Writes `fingerprints.json`, what the store keys this release's replies on. |
+| `setup` | Installs and verifies the CUDA payload (Windows, Linux). |
+| `draw` | The cold-start samples, 30 utterances per skill, drawn **once per release** in the first platform's run. Commit them before any cell: a cell refuses to start without them. |
+| `l3` | L3 on the subset, both models × skills (Windows CUDA, macOS Metal). |
+| `gpu`, `cpu` | The L4 cells: the subset through the result store, safety over the whole safety corpus on the same binary and backend, then `accept-native --population subset`. |
+| `live` | `MODEL=… BACKEND=… SKILL=…`: one cell re-run live, in full on the subset, after its cold-start sample did not hold. |
+| `daemon` | Plan equality, in process vs through the daemon, over the subset's utterances, byte-identical. |
+| `store` | Checks what the run added under `evals/store` for local paths and counts it, for the commit. |
+
+| Platform | Where | L4 cells | L3 | Daemon |
+|---|---|---|---|---|
+| `windows` | the Windows box, Git Bash | CUDA, Vulkan, CPU | CUDA | CUDA |
+| `linux` | WSL on the same box, from a clone on the Linux disk (`/mnt` is refused) | CUDA, CPU | — | CPU |
+| `macos` | the Mac, from a checkout outside the home folder | Metal, CPU (a copy of the artifact without `libggml-metal`, its own lanes) | Metal | Metal |
+
+Windows runs first: it draws the cold-start samples, and its commit (samples, store) is pulled into
+the WSL clone and onto the Mac before their stages. The other runs name the Windows run folder as
+`COLD_START_DIR` and refuse to draw their own. The store keeps replies per platform, so each
+platform plans its own subset once (one model load per cell) and reuses those replies in later
+releases.
+
+**What a cell measures.**
+
+- **The release subset**, `skills/<skill>/data/release_subset.json`: one utterance per tool ×
+  outcome × tag stratum, plus every `chain2`, `chain3`, `edge`, `safety` and `hard2` row (ffmpeg 194
+  utterances of 883, documents 80 of 175). The full corpus stays the Python model-acceptance
+  instrument (`just eval-accept`), which runs when the model, prompt, retrieval, generation settings
+  or planner code changed since the locked snapshot. How the subset is derived and regenerated:
+  [EVAL_FRAMEWORK.md](EVAL_FRAMEWORK.md#native-release-evidence--the-subset-and-the-store).
+- **A skill's first release on a platform measures the full corpus there**, once. `accept-native`
+  refuses a subset verdict for a platform with no earlier accepted full-corpus cell (a composed cell
+  from an earlier release counts), and the script reports it as a gate miss for the owner.
+- **Planning in one model load.** Each prompt the store does not hold for this model, inference
+  fingerprint, platform, backend and run settings is planned by one `knaif plan --batch` that
+  records the model's raw reply. Every row then executes through the shipped `knaif run` with its
+  reply replayed (`KNAIF_LLM_BACKEND=replay`), so parsing, validation, expansion, the clarify gate
+  and execution all run afresh in this binary. Execution is never reused. The 30 cold-start rows run
+  live, one process per row, and each live plan must equal the replayed one; if not, the cell's
+  batch planning is void and the cell re-runs live (`live`).
+- **Safety** runs on the binary over the whole safety corpus in every cell, never subsetted and
+  never reused.
+
+**The verdict.** `accept-native --population subset` grades each cell against the accepted Python
+run on the same rows (the snapshot's `source_run`, sha256-checked): no row Python passed may fail,
+or score a lower knaif score, on the binary; every subset row the Python run graded must still have
+that utterance and expected outcome in the corpus; `outcome_accuracy` and `avg_knaif_score` within
+0.02 of Python's on those rows; coverage 1.0; safety 100%; the cold-start sample holding. The S2
+slice floors do not apply to the subset, so there is nothing to waive: a regressed row goes to the
+owner with both plans and both commands. It writes its verdict into `evals/acceptance/<skill>.json`
+either way, so a failing cell is recorded as **failing** rather than left looking unmeasured, and
+`just check-gate` derives the status that evidence supports, printing `[release subset: …]` and
+`[replies: <cell> N measured, M reused]` for the cells it rests on.
+
+**VOID.** A cell is void, and recorded as failing, when any process that loaded the model (the
+batch, a live row, a safety row) put its layers on another device than the cell's probe found,
+when its board ran another binary than the verified artifact, or when its placement is not the
+expected one. A recording batch's replies reach the store only after its device check passed.
+
+**What this replaced.** The 1.2.0/1.3.0 rules for CPU cells (`evalsuite rerun-set` + `compose` on
+Windows, the pre-drawn t15 sample composed into another board on Linux and macOS) and the full
+corpus on every backend. Those commands stay for diagnosis; a release's cells come from the script.
+
+By hand, for diagnosis or a skill's first full-corpus cell on a platform (the script's lanes and
+binary rules still apply):
+
+```bash
 just eval-fixtures ffmpeg          # ALWAYS first: missing fixtures score correct plans ~0
 just eval-native ffmpeg --save evals/runs/<date>_<ver>-l4-ffmpeg_success
 just eval-safety-native ffmpeg evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
-
-# L4 acceptance — the verdict. The only check that can buy `supported`.
 just eval-accept-native ffmpeg \
   evals/runs/<date>_<ver>-l4-ffmpeg_success/ffmpeg_native-cli_success.json \
-  evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json
+  evals/runs/<date>_<ver>-l4-ffmpeg_success/safety.json     # --population full (the default)
 ```
 
-`accept-native` is what turns the run into a verdict: it grades the lane's scoreboard against
-**both** the skill's written S2 bar and the frozen Python baseline — `native ≥ max(S2 floor,
-accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete coverage,
-with every required capability slice holding and safety at 100%. It writes its verdict into
-`evals/acceptance/<skill>.json` either way, so a failing run is recorded as **failing** rather
-than left looking unmeasured, and `just check-gate` then derives the status that evidence
-supports.
+A full-corpus run is graded against **both** the skill's written S2 bar and the frozen Python
+baseline — `native ≥ max(S2 floor, accepted Python score − 0.02)` on `outcome_accuracy` and
+`avg_knaif_score`, at complete coverage, with every required capability slice holding and safety at
+100%. `--store` refuses a developer build: only the frozen artifact writes `evals/store`, and every
+reply it records is logged in its namespace's `recorded.jsonl` with the binary and run.
 
 **Every cell of the acceptance matrix.** `contracts/release/acceptance_matrix.yaml` lists the
 release's models and its OS × backend entries. Each `accept-native` verdict is filed under
@@ -692,6 +769,9 @@ product:
   when unset. Greedy argmax over different FP accumulation can flip a near-tie, so two runs on
   different backends are not comparable — this is measured, not theoretical (see
   `evals/parity/2026-09-10_l3-ffmpeg-command/backend_attribution.json`).
+- **Commit what the store gained** with the run (`store` stage first). `evals/store/**` is
+  committed byte for byte (`binary` in `.gitattributes`): a reply replays into the binary as
+  recorded, and a rewritten line ending would make it a different reply.
 - **Add a row to `evals/INDEX.md`** for each saved run. A run nobody indexed is a run nobody can
   find when the next release asks "was this better or worse?".
 - **Quote the right number.** L4 — the binary executing for real, reported *with its coverage* —
@@ -702,9 +782,11 @@ product:
   side is correct; native has been the better answer on real rows.
 
 **A rebuild after acceptance.** Every L3/L4 cell pins the native source, the skill bundle and the
-measured binary, so any fix after acceptance stales them. Re-measure, or — owner's decision —
-carry the results over with `evalsuite equivalence`, which maps the measured values to the new
-ones in `evals/acceptance/equivalences.json` and makes the gate print `[equivalent: <id>]`:
+measured binary, so any fix after acceptance stales them. Re-measure: through the run script this
+is cheap when the fix leaves the inference fingerprint alone, since every stored reply is reused
+and a cell costs its cold-start rows and execution. Or — owner's decision — carry the results over
+with `evalsuite equivalence`, which maps the measured values to the new ones in
+`evals/acceptance/equivalences.json` and makes the gate print `[equivalent: <id>]`:
 
 ```bash
 # a text fix: the native source differs only by the declared replacements, inside strings/comments
@@ -1032,9 +1114,17 @@ So: **an L4 number, reported with its coverage, is the only one that may back "i
 release that quotes L1's 100% as a quality figure is claiming the prompts match and hoping the
 reader mistakes it for something else.
 
-State the platform coverage with it. This release process verifies **Ubuntu in CI, Windows
-locally, and macOS (since 1.3.0) on a physical Apple Silicon Mac plus a clean-room VM on the oldest
-supported macOS** — say which platform each number came from rather than implying more.
+State the platform coverage with it. This release process verifies **Ubuntu in CI (the tests),
+Windows and Linux (WSL) on the release box, and macOS (since 1.3.0) on a physical Apple Silicon Mac
+plus a clean-room VM on the oldest supported macOS** — say which platform each number came from
+rather than implying more.
+
+State what each cell measured, too. Per cell, the population ("release subset, n utterances" or
+"full corpus") and how much of it this release planned: "N measured, M reused from <release>".
+`just check-gate` prints both for every cell it rests on (`[release subset: …]`,
+`[replies: …]`). A reused reply was produced by the same model, inference code, platform, backend
+and settings, and replayed into this release's binary, which ran everything after the model again;
+say "reused", not "measured", for it all the same.
 
 **Windows signing and SmartScreen.** The Windows binaries are signed by **Blackdeep Technologies
 Ltd** (§2, *Signing*). Say so, and tell users how to check it: `setup.exe` → Properties → Digital

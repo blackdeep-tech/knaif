@@ -494,6 +494,18 @@ def load_rows(skill: str, tags_filter: set[str] | None) -> list[Row]:
     return rows
 
 
+def subset_ids(skill: str) -> tuple[list[str], dict[str, str]]:
+    """The committed release subset's row ids, and the population a report records for them
+    (plan 2026-10-14-faster-release-evidence, Part I, I4). A stale subset is refused."""
+    from knaif.evalsuite.release_subset import load_subset_beside
+
+    doc = load_subset_beside(skill, REPO_ROOT / "skills" / skill / "data" / "eval.jsonl")
+    return [rid for rid, _ in doc["rows"]], {
+        "kind": "subset",
+        "corpus_sha256": doc["corpus_sha256"],
+    }
+
+
 def select_rows(rows: list[Row], ids: list[str]) -> list[Row]:
     """The rows named in *ids*, in corpus order. An id the corpus does not have is an error, not a
     smaller sample: a pre-registered sample that silently shrank would vouch for fewer requests
@@ -1158,6 +1170,12 @@ def main() -> int:
         "error. For pre-registered sample runs.",
     )
     ap.add_argument(
+        "--subset",
+        action="store_true",
+        help="Compare the committed release subset's rows (data/release_subset.json); the report "
+        "records it as its population. Refused when the subset is stale.",
+    )
+    ap.add_argument(
         "--tags", default="", help="Comma-separated tag filter (row kept if any tag matches)."
     )
     ap.add_argument(
@@ -1283,6 +1301,15 @@ def main() -> int:
         # compares each row's first utterance, so the index is not used).
         listed = json.loads(Path(args.only).read_text(encoding="utf-8"))
         rows = select_rows(rows, [e[0] if isinstance(e, list) else e for e in listed])
+    population: dict[str, str] | None = None
+    if args.subset:
+        if args.only or tags_filter:
+            ap.error("--subset is the population; it does not combine with --only or --tags")
+        try:
+            ids, population = subset_ids(args.skill)
+        except ValueError as exc:
+            ap.error(str(exc))
+        rows = select_rows(rows, ids)
     if args.skip_chains:
         rows = [r for r in rows if not r.is_chain]
     if args.limit:
@@ -1481,6 +1508,8 @@ def main() -> int:
         "elapsed_s": round(elapsed, 1),
         "rows": results,
     }
+    if population is not None:
+        report["population"] = population
     out.write_text(
         json.dumps(redact_local_paths(report, root=REPO_ROOT), indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -1490,6 +1519,8 @@ def main() -> int:
         meta = redact_local_paths(
             build_meta(args, rows, entry_points, counts, rate, verdict), root=REPO_ROOT
         )
+        if population is not None:
+            meta["population"] = population
         (run_dir / "meta.json").write_text(
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )

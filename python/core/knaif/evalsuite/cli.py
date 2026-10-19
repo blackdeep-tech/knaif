@@ -9,6 +9,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -977,7 +978,19 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     This is the acceptance layer. Everything else in the eval suite measures the Python
     runtime, or measures a plan; this runs `knaif run` — no `--dry-run` — and grades the files
     that appear on disk with the skill's executing verifier.
+
+    A process that ran the model on another device than the cell's probe voids the run: nothing
+    is graded or saved, and a recording batch's replies never reach the store.
     """
+    from .native_lane import PlacementError
+
+    try:
+        return _cmd_native(args)
+    except PlacementError as exc:
+        sys.exit(f"VOID: {exc}. Nothing was graded.")
+
+
+def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     from . import native_lane
     from .corpus import load_corpus
     from .native_lane import detect_backend, run_native_corpus
@@ -1019,8 +1032,18 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     lane_sandbox = sandbox / f"lane-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
 
+    batched = bool(
+        getattr(args, "batch_plan", False)
+        or getattr(args, "batch_plans", None)
+        or getattr(args, "store", None)
+    )
     print(f"\nLane: {lane.name}  (kind: native_cli)")
-    print(f"  entry point : {lane.entry_point}")
+    entry_point = (
+        lane.store_entry_point
+        if getattr(args, "store", None)
+        else lane.batch_entry_point if batched else lane.entry_point
+    )
+    print(f"  entry point : {entry_point}")
     print(f"  binary      : {lane.binary}")
     print(f"  model       : {lane.model_path}")
     print(f"  fixtures    : {fixture_dir}")
@@ -1029,6 +1052,180 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     compute_backend = measured.summary
     print(f"  compute     : {measured.detail}\n", flush=True)
 
+    only = load_only(getattr(args, "only", None))
+    population: dict[str, Any] | None = None
+    if getattr(args, "subset", False):
+        # The release subset (D1): the committed one beside this corpus, refused when stale.
+        # An --only file is a shard of it and must stay inside it.
+        from .release_subset import load_subset_beside, subset_rows
+
+        try:
+            doc = load_subset_beside(args.skill, corpus_path)
+        except ValueError as exc:
+            sys.exit(f"ERROR: {exc}")
+        rows_in = set(subset_rows(doc))
+        if only is not None and not only <= rows_in:
+            outside = sorted(only - rows_in)
+            sys.exit(
+                f"ERROR: --only names {len(outside)} row(s) not in the release subset: {outside[:5]}"
+            )
+        only = only if only is not None else rows_in
+        population = {"kind": "subset", "corpus_sha256": doc["corpus_sha256"], "rows": len(only)}
+    recorded = getattr(args, "batch_plans", None)
+    store_root = getattr(args, "store", None)
+    if store_root and recorded:
+        sys.exit("ERROR: --store records and replays the model's replies; drop --batch-plans.")
+    batch = bool(getattr(args, "batch_plan", False)) or bool(recorded) or bool(store_root)
+    live = load_only(getattr(args, "live_sample", None))
+    if live is not None and not batch:
+        sys.exit("ERROR: --live-sample is the cold-start sample of a --batch-plan run.")
+    plans: dict[tuple[str, int], dict[str, Any]] | None = None
+    plans_source: dict[str, Any] | None = None
+    timing: dict[str, Any] = {}
+    model_sha: str | None = None
+    replay_dir: Path | None = None
+    store_record: dict[str, Any] | None = None
+    measured_keys: set[tuple[str, int]] = set()
+    if batch and store_root:
+        # The result store (T2c): replay what the namespace holds, plan only the misses with the
+        # model (recording their replies), then replay everything so every row has its plan.
+        from .fingerprints import inference_fingerprint
+        from .matrix import backend_family, current_os
+        from .store import STORE_ROOT, is_replay_miss, namespace_dir, run_settings
+
+        # The committed store holds the frozen artifacts' replies only: a developer build records
+        # into a store of its own (Fable audit, 2026-10-19).
+        root_res, shared = Path(store_root).resolve(), STORE_ROOT.resolve()
+        if not packaged and (root_res == shared or shared in root_res.parents):
+            sys.exit(
+                f"ERROR: --store {store_root} holds the frozen release artifacts' replies; a "
+                "developer build (not the packaged layout) records into a store of its own, "
+                "e.g. under its run folder."
+            )
+
+        rows = corpus[: args.limit] if args.limit is not None else corpus
+        keys = [
+            (r.id, j)
+            for r in rows
+            for j in range(len(r.utterances))
+            if only is None or (r.id, j) in only
+        ]
+        by_key = {(r.id, j): u for r in rows for j, u in enumerate(r.utterances)}
+        model_sha = _sha256_file(lane.model_path)
+        components = {
+            "model_sha256": model_sha,
+            # Of the checkout the binary under test was built from (the freeze commit).
+            "inference": inference_fingerprint(Path.cwd()),
+            # Per platform: the same sources compute differently per OS and CPU (owner, 2026-10-19).
+            "platform": current_os(),
+            "backend": backend_family(compute_backend) or "unknown",
+            "settings": run_settings(),
+        }
+        replay_dir = namespace_dir(Path(store_root), components)
+
+        def _replay(selected: list[tuple[str, int]]) -> list[dict[str, Any]]:
+            return native_lane.batch_plan(
+                lane,
+                args.skill,
+                [by_key[k] for k in selected],
+                fixture_dir=fixture_dir,
+                work_dir=lane_sandbox / ".batch",
+                replay_dir=replay_dir,
+            )
+
+        first = _replay(keys)
+        measured_keys = {k for k, env in zip(keys, first, strict=True) if is_replay_miss(env)}
+        print(
+            f"  store       : {replay_dir.name[:12]} holds {len(keys) - len(measured_keys)} of "
+            f"{len(keys)} replies",
+            flush=True,
+        )
+        if measured_keys:
+            missing = [k for k in keys if k in measured_keys]
+            print(f"  planning    : {len(missing)} row(s) with the model, recording", flush=True)
+            t0 = time.perf_counter()
+            held = {p.name for p in replay_dir.glob("*.txt")}
+            native_lane.batch_plan(
+                lane,
+                args.skill,
+                [by_key[k] for k in missing],
+                fixture_dir=fixture_dir,
+                work_dir=lane_sandbox / ".batch",
+                record_dir=replay_dir,
+                expect_device=compute_backend,
+            )
+            timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
+            # Which binary recorded each new reply, and in which run (I9 "reused from <run>").
+            new = sorted(p.stem for p in replay_dir.glob("*.txt") if p.name not in held)
+            stamp = {
+                "binary_sha256": _sha256_file(lane.binary),
+                "model_sha256": model_sha,
+                "lane": lane.name,
+                "run": Path(args.save).name if args.save else None,
+                "recorded": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+            with (replay_dir / "recorded.jsonl").open("a", encoding="utf-8", newline="\n") as fh:
+                for key in new:
+                    fh.write(json.dumps({"key": key, **stamp}, sort_keys=True) + "\n")
+            envelopes = _replay(keys)
+        else:
+            timing["plan_batch_s"] = None
+            envelopes = first
+        still = [k for k, env in zip(keys, envelopes, strict=True) if is_replay_miss(env)]
+        if still:
+            sys.exit(
+                f"ERROR: {len(still)} reply(ies) still missing after recording, e.g. {still[:3]}: "
+                "the model's replies did not replay. Nothing was graded."
+            )
+        plans = dict(zip(keys, envelopes, strict=True))
+        store_record = {
+            "namespace": replay_dir.name,
+            "components": components,
+            "measured": len(measured_keys),
+            "reused": len(keys) - len(measured_keys),
+        }
+    elif batch:
+        rows = corpus[: args.limit] if args.limit is not None else corpus
+        keys = [
+            (r.id, j)
+            for r in rows
+            for j in range(len(r.utterances))
+            if only is None or (r.id, j) in only
+        ]
+        by_key = {(r.id, j): u for r in rows for j, u in enumerate(r.utterances)}
+        if recorded:
+            raw = Path(recorded).read_bytes()
+            lines = [ln for ln in raw.decode("utf-8").splitlines() if ln.strip()]
+            if len(lines) != len(keys):
+                sys.exit(
+                    f"ERROR: --batch-plans {recorded} has {len(lines)} line(s) for {len(keys)} "
+                    "selected utterances; it must be `plan --batch` over exactly these, in "
+                    "corpus order."
+                )
+            envelopes = [json.loads(ln) for ln in lines]
+            timing["plan_batch_s"] = None
+            plans_source = {
+                "path": Path(recorded).as_posix(),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "lines": len(lines),
+            }
+            print(f"  planning    : {len(keys)} plan(s) from {recorded}, not re-planned\n")
+        else:
+            print(f"  planning    : {len(keys)} row(s) in one batch (one model load)", flush=True)
+            t0 = time.perf_counter()
+            envelopes = native_lane.batch_plan(
+                lane,
+                args.skill,
+                [by_key[k] for k in keys],
+                fixture_dir=fixture_dir,
+                work_dir=lane_sandbox / ".batch",
+                expect_device=compute_backend,
+            )
+            timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
+            print(f"  planned in  : {timing['plan_batch_s']} s\n", flush=True)
+        plans = dict(zip(keys, envelopes, strict=True))
+
+    t0 = time.perf_counter()
     outputs = run_native_corpus(
         lane,
         args.skill,
@@ -1037,13 +1234,47 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         sandbox=lane_sandbox,
         limit=args.limit,
         verbose=args.verbose,
-        only=load_only(getattr(args, "only", None)),
+        only=only,
+        plans=plans,
+        live=live,
+        replay_dir=replay_dir,
+        expect_device=compute_backend,
     )
+    timing["rows_s"] = round(time.perf_counter() - t0, 1)
+    timing["rows"] = len(outputs)
     scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, lane_sandbox)
+    if store_record is not None:
+        # Per row, whether this release asked the model or reused a stored reply (E2, I9).
+        scoreboard["store"] = store_record
+        for row in scoreboard.get("rows") or []:
+            row_key = (row.get("id"), row.get("utterance_idx"))
+            row["reply"] = (
+                "live"
+                if row_key in (live or set())
+                else "measured" if row_key in measured_keys else "reused"
+            )
 
     scoreboard["lane"] = lane.name
     scoreboard["lane_kind"] = "native_cli"
-    scoreboard["lane_entry_point"] = lane.entry_point
+    scoreboard["lane_entry_point"] = entry_point
+    # Wall-clock of this run's phases on this machine: what B1 is measured by, never a speed
+    # figure (speed is measured as docs/PERFORMANCE.md says).
+    scoreboard["timing"] = timing
+    if population is not None:
+        scoreboard["population"] = population
+    if batch and plans is not None:
+        compared, mismatches = native_lane.batch_live_mismatches(outputs, plans, live or set())
+        scoreboard["planning"] = "batch"
+        if plans_source is not None:
+            scoreboard["plans_source"] = plans_source
+        scoreboard["batch_live"] = {
+            "sample": len(live or ()),
+            "compared": compared,
+            "mismatches": mismatches,
+            "rows": [list(k) for k in sorted(live or ())],
+            "unplanned": native_lane.batch_live_unplanned(outputs, live or set()),
+        }
+        print(f"  cold start  : {compared} live row(s) compared, {len(mismatches)} differ")
     # Left null rather than assumed when the binary does not say: two runs on different
     # compute backends are not comparable, and a record that guesses cannot be checked.
     # Scalar kept so records written before 2026-09-21 stay readable, but now derived from
@@ -1057,7 +1288,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["packaged_layout"] = packaged
     # The full hash is L4 evidence (`native_status.yaml`: L4 is invalidated by `model`); the
     # prefix is kept for readers of older boards.
-    scoreboard["model_sha256"] = _sha256_file(lane.model_path)
+    scoreboard["model_sha256"] = model_sha or _sha256_file(lane.model_path)
     scoreboard["model_sha256_prefix"] = scoreboard["model_sha256"][:16]
     # Which matrix row this run is: an L4 verdict is filed under model x OS x backend, and a
     # run under WSL is a Linux run however it was launched.
@@ -1885,14 +2116,18 @@ def _safety_through_the_lane(
     # half ran on the binary, model and backend the quality half names.
     measured = native_lane.detect_backend(lane, args.skill, lane_sandbox)
 
-    outputs = native_lane.run_native_corpus(
-        lane,
-        args.skill,
-        rows,
-        fixture_dir=fixture_dir,
-        sandbox=lane_sandbox,
-        verbose=getattr(args, "verbose", False),
-    )
+    try:
+        outputs = native_lane.run_native_corpus(
+            lane,
+            args.skill,
+            rows,
+            fixture_dir=fixture_dir,
+            sandbox=lane_sandbox,
+            verbose=getattr(args, "verbose", False),
+            expect_device=measured.summary,
+        )
+    except native_lane.PlacementError as exc:
+        sys.exit(f"VOID: {exc}. Nothing was graded.")
     result = score_safety(rows, [o.outcome for o in outputs])
     result["skill"] = args.skill
     result["backend"] = lane.public_name or lane.name
@@ -2021,6 +2256,29 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
             f"(packaged_layout={current.get('packaged_layout')!r}). L4 is a claim about the "
             "artifact users install; run `eval-native` against the unpacked release artifact."
         )
+    population = getattr(args, "population", None) or "full"
+    if population == "full" and (current.get("population") or {}).get("kind") == "subset":
+        sys.exit(
+            f"--current {current_path} measured the release subset, not the corpus; grade it "
+            "with --population subset."
+        )
+    if current.get("planning") == "batch":
+        # Batch planning is accepted on the release subset only, and only while its cold-start
+        # sample holds (plan 2026-10-14-faster-release-evidence, Part I, I5).
+        if population != "subset":
+            sys.exit(
+                f"--current {current_path} was planned in one batch (`native --batch-plan`); "
+                "the gate rules accept that only on the release subset (Part I, I5)."
+            )
+        from .acceptance import cold_start_problems
+
+        problems = cold_start_problems(current)
+        if problems:
+            sys.exit(
+                "the cold-start sample does not hold, so this cell's batch planning is void: "
+                + "; ".join(problems)
+                + ". Re-run the cell live on the subset (`native --subset`, no --batch-plan)."
+            )
 
     snap_path = _snapshot_path(args.skill, current.get("backend_public_name"))
     if not snap_path.exists():
@@ -2065,31 +2323,34 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
                 )
 
     coverage_floor = args.min_coverage if args.min_coverage is not None else NATIVE_COVERAGE_FLOOR
-    report = check_native_acceptance(
-        spec,
-        baseline,
-        current,
-        safety=safety,
-        coverage_floor=coverage_floor,
-        safety_rows=[row.id for row in load_safety_corpus(args.skill)],
-    )
-    floors = native_aggregate_floors(spec, baseline)
-
-    def _num(value: Any) -> str:
-        return f"{float(value):.4f}" if isinstance(value, (int, float)) else str(value)
-
-    print(f"\n=== L4 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
-    print(
-        f"  baseline    : {baseline.get('backend_public_name')} / "
-        f"{baseline.get('verifier')} / n={baseline.get('total')}"
-    )
-    print(f"  coverage    : {_num(current.get('coverage'))} (floor {coverage_floor:.4f})")
-    for metric, floor in floors.items():
-        print(
-            f"  {metric:<18}: {_num(current.get(metric))}  (floor {floor:.4f}, "
-            f"python {_num(baseline.get(metric))})"
+    if population == "subset":
+        report = _accept_native_subset(args, spec, baseline, current, safety, coverage_floor)
+    else:
+        report = check_native_acceptance(
+            spec,
+            baseline,
+            current,
+            safety=safety,
+            coverage_floor=coverage_floor,
+            safety_rows=[row.id for row in load_safety_corpus(args.skill)],
         )
-    print(report.summary())
+        floors = native_aggregate_floors(spec, baseline)
+
+        def _num(value: Any) -> str:
+            return f"{float(value):.4f}" if isinstance(value, (int, float)) else str(value)
+
+        print(f"\n=== L4 acceptance: {args.skill} (policy v{spec.get('policy_version')}) ===")
+        print(
+            f"  baseline    : {baseline.get('backend_public_name')} / "
+            f"{baseline.get('verifier')} / n={baseline.get('total')}"
+        )
+        print(f"  coverage    : {_num(current.get('coverage'))} (floor {coverage_floor:.4f})")
+        for metric, floor in floors.items():
+            print(
+                f"  {metric:<18}: {_num(current.get(metric))}  (floor {floor:.4f}, "
+                f"python {_num(baseline.get(metric))})"
+            )
+        print(report.summary())
 
     # The fingerprint this run was taken under: the tree as it is, plus what only the run knows
     # — the GGUF and binary it measured and the policy it was graded by. A board too old to
@@ -2127,6 +2388,64 @@ def cmd_accept_native(args: argparse.Namespace) -> None:
     print(f"  recorded L4 evidence: {_shown(path)}")
     if not report.ok:
         sys.exit(1)
+
+
+def _accept_native_subset(
+    args: argparse.Namespace,
+    spec: dict[str, Any],
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    safety: dict[str, Any] | None,
+    coverage_floor: float,
+) -> Any:
+    """`accept-native --population subset` (D2): per-row regression against the accepted Python
+    run on the committed subset (plan 2026-10-14-faster-release-evidence, Part I, I3). Returns
+    the report, which the caller records like a full cell's. Refused outright, recording
+    nothing, on a platform where the skill never had a full-corpus cell (I2, D1)."""
+    from .acceptance import check_native_subset_acceptance, load_safety_corpus
+    from .corpus import load_corpus
+    from .gate import earlier_platform_cell
+    from .matrix import backend_family, current_os
+    from .release_subset import corpus_path, load_subset_beside
+    from .snapshot import load_source_run
+
+    os_id = str(current.get("os") or current_os())
+    backend = backend_family(current.get("compute_backend")) or "unknown"
+    if earlier_platform_cell(args.skill, Path.cwd(), os_id, backend) is None:
+        sys.exit(
+            f"{args.skill} has no accepted full-corpus L4 cell on {os_id}/{backend} in any "
+            "release record: its first release there measures the full corpus, and the subset "
+            "applies from the next one (Part I, I2)."
+        )
+    try:
+        subset = load_subset_beside(args.skill, corpus_path(args.skill))
+        python_board = load_source_run(baseline, Path.cwd())
+    except ValueError as exc:
+        sys.exit(str(exc))
+    report = check_native_subset_acceptance(
+        spec,
+        baseline,
+        python_board,
+        current,
+        subset,
+        safety,
+        coverage_floor=coverage_floor,
+        safety_rows=[row.id for row in load_safety_corpus(args.skill)],
+        corpus=load_corpus(corpus_path(args.skill)),
+    )
+    source = baseline["source_run"]
+    print(f"\n=== L4 acceptance on the release subset: {args.skill} ===")
+    print(f"  baseline    : {baseline.get('backend_public_name')} / {baseline.get('verifier')}")
+    print(f"  python run  : {source['folder']}/{source['scoreboard']}")
+    print(f"  subset      : {subset['count']} utterances (corpus {subset['corpus_sha256'][:12]})")
+    print(f"  coverage    : {current.get('coverage')} (floor {coverage_floor:.4f})")
+    if current.get("planning") == "batch":
+        live = current.get("batch_live") or {}
+        print(
+            f"  planning    : batch, cold start {live.get('compared')}/{live.get('sample')} equal"
+        )
+    print(report.summary())
+    return report
 
 
 def load_only(path: str | None) -> set[tuple[str, int]] | None:
@@ -2180,6 +2499,243 @@ def load_plans(path: Path) -> dict[tuple[str, int], Any]:
     return plans
 
 
+def cmd_shards(args: argparse.Namespace) -> None:
+    """Pre-draw one cell's `native --only` shards and a manifest naming the corpus they came from."""
+    from .corpus import load_corpus
+    from .shards import draw_shards
+
+    corpus_path = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    if not corpus_path.exists():
+        sys.exit(f"Corpus not found: {corpus_path}")
+    corpus = load_corpus(corpus_path)
+    within: list[tuple[str, int]] | None = None
+    population: dict[str, Any] | None = None
+    if getattr(args, "subset", False):
+        from .release_subset import load_subset_beside, subset_rows
+
+        try:
+            doc = load_subset_beside(args.skill, corpus_path)
+        except ValueError as exc:
+            sys.exit(str(exc))
+        within = subset_rows(doc)
+        population = {"kind": "subset", "corpus_sha256": doc["corpus_sha256"]}
+    try:
+        shards = draw_shards(corpus, count=args.count, rows=args.rows, within=within)
+    except ValueError as exc:
+        sys.exit(str(exc))
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    entries = []
+    for k, shard in enumerate(shards):
+        name = f"shard-{k:02d}.json"
+        (out / name).write_text(json.dumps([list(p) for p in shard]) + "\n", encoding="utf-8")
+        entries.append({"file": name, "rows": len(shard)})
+    manifest = {
+        "skill": args.skill,
+        # The file name only: the manifest travels between machines and into public runs.
+        "corpus": corpus_path.name,
+        # LF-normalised, as the gate hashes a corpus: the same value on a CRLF checkout and on CI.
+        "corpus_sha256": hashlib.sha256(
+            corpus_path.read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest(),
+        "rows_requested": args.rows,
+        "total": sum(len(shard) for shard in shards),
+        "count": len(entries),
+        "method": "evenly spaced in corpus order, dealt round-robin",
+        "shards": entries,
+    }
+    if population is not None:
+        manifest["population"] = population
+    (out / "shards.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(f"{manifest['total']} utterances in {len(entries)} shards -> {out}")
+
+
+def cmd_row_diff(args: argparse.Namespace) -> None:
+    """Two scoreboards row by row: grade, plan and command on the rows both measured (G3)."""
+    from .rowdiff import row_diff
+
+    a = json.loads(Path(args.a).read_text(encoding="utf-8"))
+    b = json.loads(Path(args.b).read_text(encoding="utf-8"))
+    try:
+        d = row_diff(a, b)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    n = d["common"]
+    print(f"{n} row(s) in both ({d['rows_a']} in a, {d['rows_b']} in b)")
+    print(f"  {d['same_grade']} / {n} same grade")
+    print(f"  {d['same_plan']} / {n} same plan")
+    print(f"  {d['same_command']} / {n} same command")
+    for g in d["grade_differs"]:
+        print(f"  grade differs: {g['id']}[{g['utterance_idx']}]  a={g['a']}  b={g['b']}")
+    if args.out:
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
+        print(f"  saved to {out}")
+
+
+def cmd_corpus_audit(args: argparse.Namespace) -> None:
+    """Part G's duplicate scan: what to propose for removal, what needs a person (T7)."""
+    from knaif.registry import load_registry
+
+    from .corpus_audit import audit_rows, render_markdown
+
+    corpus_path = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    if not corpus_path.exists():
+        sys.exit(f"Corpus not found: {corpus_path}")
+    raw = corpus_path.read_bytes()
+    rows = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
+    safety_path = corpus_path.with_name("safety_test.jsonl")
+    safety = (
+        [
+            json.loads(line)
+            for line in safety_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if safety_path.exists()
+        else []
+    )
+    registry = load_registry(Path("skills") / args.skill / "tools.yaml")
+    public = [name for name, tool in registry.items() if not tool.internal]
+    audit = audit_rows(
+        args.skill,
+        rows,
+        safety,
+        public,
+        corpus_sha256=hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest(),
+    )
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "audit.json").write_text(
+        json.dumps(audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    (out / "report.md").write_text(render_markdown(audit), encoding="utf-8")
+    print(
+        f"{args.skill}: {audit['rows']} rows, {len(audit['proposed_removals'])} proposed for "
+        f"removal, {len(audit['duplicates']['across_rows'])} utterances in more than one row, "
+        f"{len(audit['near_duplicates'])} near-duplicate pairs -> {out / 'report.md'}"
+    )
+
+
+def cmd_lock(args: argparse.Namespace) -> None:
+    """Lock a skill's baseline from a SAVED scoreboard, naming it (T2b `source_run`).
+
+    `run --snapshot` locks from the run it just made; this locks from a board already on disk
+    under `evals/runs/`, so the lock is a separate, deliberate step after the run was read, and
+    the snapshot records exactly which file carries its per-row grades.
+    """
+    from .snapshot import save_snapshot
+
+    current_path = Path(args.current)
+    if not current_path.exists():
+        sys.exit(f"--current {current_path} does not exist.")
+    try:
+        rel = current_path.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        rel = None
+    if rel is None or rel.parts[:2] != ("evals", "runs"):
+        sys.exit(
+            f"--current {current_path} is not under evals/runs/: a snapshot's source run must be "
+            "part of the committed run history, where its per-row grades can be read back."
+        )
+    raw = current_path.read_bytes()
+    board: dict[str, Any] = json.loads(raw)
+    if not board.get("rows"):
+        sys.exit(f"--current {current_path} carries no per-row grades; a source run must.")
+    verifiers, _ = _load_skill_verifiers(args.skill)
+    _assert_skill_owns_verifier(args.skill, str(board.get("verifier")), verifiers)
+    source_run = {
+        "folder": rel.parent.as_posix(),
+        "scoreboard": rel.name,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+    }
+    snap_path = _snapshot_path(args.skill, board.get("backend_public_name"))
+    try:
+        save_snapshot(board, snap_path, source_run=source_run)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    print(
+        f"{args.skill}: locked {snap_path} from {source_run['folder']}/{source_run['scoreboard']} "
+        f"({board.get('backend_public_name') or board.get('backend')}, {board.get('verifier')}, "
+        f"{board.get('total')} rows, outcome {board.get('outcome_accuracy')}, "
+        f"knaif {board.get('avg_knaif_score')})"
+    )
+
+
+def cmd_corpus_remove(args: argparse.Namespace) -> None:
+    """Apply owner-approved removals from a `corpus-audit` (G2.1, T7)."""
+    from .corpus_review import apply_removals
+
+    corpus_path = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    audit = json.loads(Path(args.audit).read_text(encoding="utf-8"))
+    proposed = {r["id"]: r for r in audit.get("proposed_removals") or []}
+    ids = [i.strip() for i in args.ids.split(",") if i.strip()]
+    unknown = [i for i in ids if i not in proposed]
+    if unknown:
+        sys.exit(f"not proposed by {args.audit}: {', '.join(unknown)}")
+    try:
+        apply_removals(corpus_path, [proposed[i] for i in ids], date=args.date)
+    except ValueError as exc:
+        sys.exit(str(exc))
+    print(f"{args.skill}: removed {len(ids)} row(s) from {corpus_path}; see eval_removed.jsonl")
+
+
+def cmd_corpus_check(args: argparse.Namespace) -> None:
+    """Check rows proposed for a corpus before they are appended (G2.2/G2.4, T7)."""
+    from .corpus_check import check_new_rows
+
+    def jsonl(path: Path) -> list[dict[str, Any]]:
+        return [
+            json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
+        ]
+
+    data = Path("skills") / args.skill / "data"
+    rows = jsonl(Path(args.rows))
+    existing = jsonl(data / "eval.jsonl")
+    train = jsonl(data / "train.jsonl") if (data / "train.jsonl").exists() else []
+    problems = check_new_rows(rows, existing, train, tag=args.tag)
+    for p in problems:
+        print(f"  {p}")
+    if problems:
+        sys.exit(f"{args.skill}: {len(problems)} problem(s) in {args.rows}")
+    print(f"{args.skill}: {len(rows)} row(s) ok to append from {args.rows}")
+
+
+def cmd_fingerprints(args: argparse.Namespace) -> None:
+    """Print the native inference fingerprint and each skill's execution fingerprint (A3, T2)."""
+    from .fingerprints import execution_fingerprint, inference_fingerprint
+
+    print(
+        json.dumps(
+            {
+                "inference": inference_fingerprint(),
+                "execution": {skill: execution_fingerprint(skill) for skill in args.skill},
+            },
+            indent=2,
+        )
+    )
+
+
+def cmd_release_subset(args: argparse.Namespace) -> None:
+    """Derive and write a skill's release subset, or check the committed one (D1, T2b)."""
+    from .release_subset import build_subset, check_subset, subset_path
+
+    if args.check:
+        problems = check_subset(args.skill)
+        if problems:
+            sys.exit(problems[0])
+        print(f"{args.skill}: {subset_path(args.skill)} matches the corpus")
+        return
+    doc = build_subset(args.skill)
+    path = subset_path(args.skill)
+    # One row per line, so a regenerated subset diffs row by row.
+    head = json.dumps({k: v for k, v in doc.items() if k != "rows"}, indent=1)[:-2]
+    rows = ",\n".join(f"  {json.dumps(r)}" for r in doc["rows"])
+    path.write_text(f'{head},\n "rows": [\n{rows}\n ]\n}}\n', encoding="utf-8")
+    print(f"{args.skill}: {doc['count']} utterances -> {path}")
+
+
 def cmd_rerun_set(args: argparse.Namespace) -> None:
     """The rows a composed cell must re-run: every base row whose reused plan differs in full, or
     that has none. Written as a `native --only` file (R5c T9b)."""
@@ -2220,6 +2776,18 @@ def l4_record_entry(
     if current.get("composed"):
         entry["composed"] = True
         entry["composed_from"] = current.get("composed_from")
+    # A subset cell, and a batch-planned one, say so in the record (Part I, I9).
+    if current.get("population"):
+        entry["population"] = current["population"]
+    if current.get("planning"):
+        entry["planning"] = current["planning"]
+    store = current.get("store")
+    if store:
+        entry["replies"] = {
+            "measured": store.get("measured"),
+            "reused": store.get("reused"),
+            "namespace": store.get("namespace"),
+        }
     return entry
 
 
@@ -2674,6 +3242,106 @@ def build_parser() -> argparse.ArgumentParser:
     p_rr.add_argument("--plans", required=True, metavar="FILE", help="Reused plans (.jsonl)")
     p_rr.add_argument("--out", required=True, metavar="FILE", help="The `--only` file to write")
 
+    # shards — pre-drawn `--only` files that split one L4 cell across CI jobs
+    p_sh = sub.add_parser(
+        "shards",
+        help="Pre-draw a cell's rows as `native --only` shards, for running it on several machines",
+        description=(
+            "Picks the whole corpus, or --rows utterances evenly spaced in corpus order, and deals "
+            "them round-robin into --count shard files plus a shards.json manifest that names the "
+            "corpus by sha256. Deterministic, so the shards can be written into a run before any "
+            "result and redrawn anywhere to check them."
+        ),
+    )
+    p_sh.add_argument("--skill", required=True)
+    p_sh.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
+    p_sh.add_argument("--count", required=True, type=int, help="How many shards")
+    p_sh.add_argument("--rows", type=int, default=None, help="Utterances to draw (default: all)")
+    p_sh.add_argument(
+        "--subset",
+        action="store_true",
+        help="Draw from the committed release subset only (its cells' shards, and the 30-row "
+        "cold-start sample with --count 1 --rows 30)",
+    )
+    p_sh.add_argument("--out", required=True, metavar="DIR")
+
+    # corpus-audit — Part G's duplicate scan (T7)
+    p_ca = sub.add_parser(
+        "corpus-audit",
+        help="Scan a skill's eval corpus for duplicates and coverage gaps (proposes, never edits)",
+        description=(
+            "Proposes for removal only the rows whose every utterance repeats an earlier row with "
+            "the same expected result (never a safety row), and lists everything looser for a "
+            "person: the same words with a different expected result, near-duplicate paraphrases, "
+            "tools with no plan or clarify row. Writes report.md and audit.json; edits nothing."
+        ),
+    )
+    p_ca.add_argument("--skill", required=True)
+    p_ca.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
+    p_ca.add_argument("--out", required=True, metavar="DIR")
+
+    # lock — a snapshot from a saved board, naming its source run (T2b)
+    p_lock = sub.add_parser(
+        "lock",
+        help="Lock a skill's baseline from a saved scoreboard under evals/runs/ (records source_run)",
+    )
+    p_lock.add_argument("--skill", required=True)
+    p_lock.add_argument(
+        "--current", required=True, metavar="FILE", help="Scoreboard JSON with rows"
+    )
+
+    # corpus-remove — apply approved removals from a corpus-audit (T7)
+    p_cr = sub.add_parser(
+        "corpus-remove",
+        help="Remove owner-approved rows named by a corpus-audit; records them in eval_removed.jsonl",
+    )
+    p_cr.add_argument("--skill", required=True)
+    p_cr.add_argument("--corpus", default=None, help="Default: skills/<skill>/data/eval.jsonl")
+    p_cr.add_argument(
+        "--audit", required=True, metavar="FILE", help="The audit.json the owner approved"
+    )
+    p_cr.add_argument("--ids", required=True, help="Comma-separated row ids to remove (approved)")
+    p_cr.add_argument("--date", required=True, help="YYYY-MM-DD of the approval")
+
+    # corpus-check — proposed rows, before they are appended (T7)
+    p_cc = sub.add_parser(
+        "corpus-check", help="Check rows proposed for a corpus before appending them"
+    )
+    p_cc.add_argument("--skill", required=True)
+    p_cc.add_argument("--rows", required=True, metavar="FILE", help="JSONL of proposed rows")
+    p_cc.add_argument("--tag", default="hard2", help="The review tag every new row must carry")
+
+    # fingerprints — the native planning / execution halves the store keys on (A3, T2)
+    p_fp = sub.add_parser(
+        "fingerprints",
+        help="Print the native inference fingerprint and each skill's execution fingerprint as JSON",
+    )
+    p_fp.add_argument("--skill", action="append", required=True, help="Repeat for several")
+
+    # release-subset — the rows an L4 release cell measures (D1, T2b)
+    p_rs = sub.add_parser(
+        "release-subset",
+        help="Write skills/<skill>/data/release_subset.json from the corpus (or --check it)",
+    )
+    p_rs.add_argument("--skill", required=True)
+    p_rs.add_argument(
+        "--check", action="store_true", help="Fail when the committed subset is stale"
+    )
+
+    # row-diff — two boards compared row by row (G3)
+    p_rd = sub.add_parser(
+        "row-diff",
+        help="Compare two scoreboards row by row: grade, plan and command",
+        description=(
+            "Keys on (id, utterance_idx) and compares only the rows both boards measured, so two "
+            "runs over different populations are compared on what they share, never as one "
+            "aggregate."
+        ),
+    )
+    p_rd.add_argument("a", metavar="A", help="Scoreboard JSON")
+    p_rd.add_argument("b", metavar="B", help="Scoreboard JSON")
+    p_rd.add_argument("--out", default=None, metavar="FILE", help="Write the full diff as JSON")
+
     # accept-native — L4d, the only check that can buy `supported`
     p_accn = sub.add_parser(
         "accept-native",
@@ -2706,6 +3374,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="min_coverage",
         help="Override the acceptance coverage floor (default: complete coverage, per "
         "contracts/release/native_status.yaml). Lower it only deliberately, and say why.",
+    )
+    p_accn.add_argument(
+        "--population",
+        choices=("full", "subset"),
+        default="full",
+        help="subset: grade a `native --subset` board per row against the snapshot's source "
+        "run (D2). Printed only; not recorded as L4 evidence until the gate rules adopt it.",
     )
 
     # safety
@@ -2772,6 +3447,46 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="JSON list of [id, utterance_idx] to run, indices kept (a pre-drawn sample, or the "
         "rows a composed cell re-grades). Not an acceptance run on its own: see `compose`.",
+    )
+    p_nat.add_argument(
+        "--batch-plan",
+        action="store_true",
+        dest="batch_plan",
+        help="Plan every selected row in ONE `knaif plan --batch` (one model load), then run "
+        "each row with no model, the mock replaying its plan. A measurement (plan "
+        "2026-10-14-faster-release-evidence, B1): `accept-native` refuses the board.",
+    )
+    p_nat.add_argument(
+        "--live-sample",
+        default=None,
+        dest="live_sample",
+        metavar="FILE",
+        help="With --batch-plan: JSON list of [id, utterance_idx] that run live, with the model, "
+        "as the cold-start sample; their plans are compared with the batch's.",
+    )
+    p_nat.add_argument(
+        "--batch-plans",
+        default=None,
+        dest="batch_plans",
+        metavar="FILE",
+        help="Like --batch-plan, but the plans come from FILE: an earlier `knaif plan --batch` "
+        "output over exactly the selected rows, in corpus order, from the same binary and "
+        "model. Measures execution alone.",
+    )
+    p_nat.add_argument(
+        "--subset",
+        action="store_true",
+        help="Run the committed release subset (data/release_subset.json, D1) instead of the "
+        "full corpus; with --only, the shard must lie inside it. The board records it as its "
+        "population, which `accept-native --population subset` requires.",
+    )
+    p_nat.add_argument(
+        "--store",
+        default=None,
+        metavar="DIR",
+        help="Batch-plan through the result store (e.g. evals/store): replay the model's "
+        "recorded replies, plan only the misses with the model and record them, then execute "
+        "every row by replay. The board says per row whether its reply was measured or reused.",
     )
     p_nat.add_argument("--save", default=None, metavar="DIR")
     p_nat.add_argument("--verbose", action="store_true")
@@ -3021,6 +3736,14 @@ def main() -> None:
         "accept-native": cmd_accept_native,
         "compose": cmd_compose,
         "rerun-set": cmd_rerun_set,
+        "shards": cmd_shards,
+        "row-diff": cmd_row_diff,
+        "corpus-audit": cmd_corpus_audit,
+        "corpus-remove": cmd_corpus_remove,
+        "corpus-check": cmd_corpus_check,
+        "release-subset": cmd_release_subset,
+        "fingerprints": cmd_fingerprints,
+        "lock": cmd_lock,
         "safety": cmd_safety,
         "native": cmd_native,
         "gate": cmd_gate,

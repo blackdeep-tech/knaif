@@ -876,6 +876,55 @@ def native_aggregate_floors(
     return floors
 
 
+def _baseline_identity(
+    spec: dict[str, Any], baseline: dict[str, Any], scoreboard: dict[str, Any]
+) -> list[Violation]:
+    """The two identity checks every L4 mode makes against the frozen baseline: its scoring
+    policy against the bar's, and the model the run names against the baseline's."""
+    violations: list[Violation] = []
+    # The baseline's own scoring semantics. An unstamped snapshot is comparable *only*
+    # because policy v1 codifies what `scoring.py` already did, and adds one distinction
+    # (`not_implemented`) that Python never emits — so a pre-policy Python snapshot was in
+    # fact graded under v1's rules. That argument expires the moment the policy changes,
+    # and this refuses rather than carrying the assumption silently past it.
+    bar_policy = spec.get("policy_version")
+    base_policy = baseline.get("scoring_policy")
+    if base_policy is not None and base_policy != bar_policy:
+        violations.append(
+            Violation(
+                "identity",
+                "baseline_policy",
+                f"the accepted baseline was graded under scoring policy v{base_policy}, the "
+                f"bar is written against v{bar_policy}. Re-lock the baseline under the new "
+                "semantics (S5) — a number graded under old rules is not a target for a new one.",
+            )
+        )
+    elif base_policy is None and POLICY_VERSION > 1:
+        violations.append(
+            Violation(
+                "identity",
+                "baseline_policy",
+                "the accepted baseline declares no scoring_policy and the policy has since "
+                f"moved to v{POLICY_VERSION}. It was safe to treat an unstamped snapshot as v1 "
+                "(v1 codified the scoring already in force); it is not safe now. Re-lock it (S5).",
+            )
+        )
+
+    want_model = baseline.get("backend_public_name")
+    got_model = scoreboard.get("backend_public_name")
+    if want_model is not None and got_model != want_model:
+        violations.append(
+            Violation(
+                "identity",
+                "model",
+                f"model: the run reports {got_model!r}, the accepted baseline {want_model!r}. "
+                "A different model is a different system, not a parity result.",
+            )
+        )
+
+    return violations
+
+
 def check_native_acceptance(
     spec: dict[str, Any],
     baseline: dict[str, Any],
@@ -935,47 +984,8 @@ def check_native_acceptance(
                 )
             )
 
-    # The baseline's own scoring semantics. An unstamped snapshot is comparable *only*
-    # because policy v1 codifies what `scoring.py` already did, and adds one distinction
-    # (`not_implemented`) that Python never emits — so a pre-policy Python snapshot was in
-    # fact graded under v1's rules. That argument expires the moment the policy changes,
-    # and this refuses rather than carrying the assumption silently past it.
-    checked += 1
-    bar_policy = spec.get("policy_version")
-    base_policy = baseline.get("scoring_policy")
-    if base_policy is not None and base_policy != bar_policy:
-        violations.append(
-            Violation(
-                "identity",
-                "baseline_policy",
-                f"the accepted baseline was graded under scoring policy v{base_policy}, the "
-                f"bar is written against v{bar_policy}. Re-lock the baseline under the new "
-                "semantics (S5) — a number graded under old rules is not a target for a new one.",
-            )
-        )
-    elif base_policy is None and POLICY_VERSION > 1:
-        violations.append(
-            Violation(
-                "identity",
-                "baseline_policy",
-                "the accepted baseline declares no scoring_policy and the policy has since "
-                f"moved to v{POLICY_VERSION}. It was safe to treat an unstamped snapshot as v1 "
-                "(v1 codified the scoring already in force); it is not safe now. Re-lock it (S5).",
-            )
-        )
-
-    checked += 1
-    want_model = baseline.get("backend_public_name")
-    got_model = scoreboard.get("backend_public_name")
-    if want_model is not None and got_model != want_model:
-        violations.append(
-            Violation(
-                "identity",
-                "model",
-                f"model: the run reports {got_model!r}, the accepted baseline {want_model!r}. "
-                "A different model is a different system, not a parity result.",
-            )
-        )
+    checked += 2
+    violations.extend(_baseline_identity(spec, baseline, scoreboard))
 
     # Coverage (L4e): reported together with the score, or neither is reported.
     checked += 1
@@ -1066,3 +1076,248 @@ def check_native_acceptance(
         violations=violations + list(delegated.violations),
         checked=checked + delegated.checked,
     )
+
+
+def _row_key(row: dict[str, Any]) -> tuple[str, int]:
+    return str(row.get("id")), int(row.get("utterance_idx") or 0)
+
+
+def _plan_tools(row: dict[str, Any]) -> str:
+    """A board row's plan as its tool names, for a regression message."""
+    plan = row.get("plan")
+    steps = plan.get("plan") if isinstance(plan, dict) else plan
+    if not isinstance(steps, list):
+        return "no plan"
+    return "+".join(str(s.get("tool")) for s in steps if isinstance(s, dict)) or "empty plan"
+
+
+def check_native_subset_acceptance(
+    spec: dict[str, Any],
+    baseline: dict[str, Any],
+    python_board: dict[str, Any],
+    scoreboard: dict[str, Any],
+    subset: dict[str, Any],
+    safety: dict[str, Any] | None = None,
+    *,
+    coverage_floor: float = NATIVE_COVERAGE_FLOOR,
+    tolerance: float = NATIVE_TOLERANCE,
+    safety_rows: list[str] | None = None,
+    corpus: list[Any] | None = None,
+) -> AcceptanceReport:
+    """Grade an L4 lane run over the release subset (plan 2026-10-14-faster-release-evidence, D2).
+
+    *corpus*, when given, is the skill's corpus as it stands: every subset row the Python run
+    graded must still have that utterance and expected outcome.
+
+    *python_board* is the accepted Python run the snapshot names as its `source_run`, with
+    per-row grades; *subset* is the committed `release_subset.json`. The bar:
+
+    * **per-row regression** — every subset row Python passed, the binary passes too (a row
+      Python failed may stay failed);
+    * the subset's `outcome_accuracy` and `avg_knaif_score` within *tolerance* of Python's on
+      **the same rows**, never against the full-corpus figures;
+    * coverage complete, the board's population exactly this subset, and safety at 100% on
+      the binary, as in the full mode.
+
+    The S2 slice and aggregate floors are not applied: over a subset most slices fall under
+    `min_rate_rows`, and a rate over them is noise. Those floors belong to the model-promotion
+    event, where the full corpus runs (D3).
+    """
+    from .scoring import aggregate_scored_rows
+
+    violations: list[Violation] = []
+    checked = 1
+    for problem in validate_acceptance(spec):
+        violations.append(
+            Violation(
+                "identity",
+                "acceptance_spec",
+                f"the bar itself is not valid, so nothing can be certified against it: {problem}",
+            )
+        )
+
+    checked += 1
+    want, got = baseline.get("verifier"), scoreboard.get("verifier")
+    if want is not None and got != want:
+        violations.append(
+            Violation(
+                "identity",
+                "verifier",
+                f"verifier: the run reports {got!r}, the accepted baseline {want!r}",
+            )
+        )
+    checked += 2
+    violations.extend(_baseline_identity(spec, baseline, scoreboard))
+
+    # The population: this subset, all of it, and nothing else.
+    checked += 1
+    keys = [(str(rid), int(idx)) for rid, idx in subset.get("rows") or []]
+    population = scoreboard.get("population") or {}
+    native_rows = {_row_key(r): r for r in scoreboard.get("rows") or []}
+    if population.get("kind") != "subset" or population.get("corpus_sha256") != subset.get(
+        "corpus_sha256"
+    ):
+        violations.append(
+            Violation(
+                "identity",
+                "population",
+                f"the run's population is {population or 'the full corpus'!r}, not the committed "
+                f"release subset (corpus {str(subset.get('corpus_sha256'))[:12]}); run "
+                "`evalsuite native --subset`",
+            )
+        )
+    else:
+        missing = [k for k in keys if k not in native_rows]
+        extra = sorted(set(native_rows) - set(keys))
+        if missing or extra:
+            violations.append(
+                Violation(
+                    "identity",
+                    "population",
+                    f"the run lacks {len(missing)} subset row(s) "
+                    f"({', '.join(f'{i}#{j}' for i, j in missing[:5])}) and has {len(extra)} "
+                    "row(s) outside it",
+                )
+            )
+
+    checked += 1
+    python_rows = {_row_key(r): r for r in python_board.get("rows") or []}
+    lacking = [k for k in keys if k not in python_rows]
+    if lacking:
+        violations.append(
+            Violation(
+                "identity",
+                "python_rows",
+                f"the accepted Python run has no grade for {len(lacking)} subset row(s) "
+                f"({', '.join(f'{i}#{j}' for i, j in lacking[:5])}); it is not the run this "
+                "subset can be compared with",
+            )
+        )
+
+    # The Python run graded these rows as they stand now: same utterance, same expected outcome.
+    # Kept rows are pinned (G2.1), so this catches a row reworded or relabelled since the lock.
+    if corpus is not None:
+        checked += 1
+        by_id = {str(r.id): r for r in corpus}
+        stale = []
+        for rid, idx in keys:
+            py, row = python_rows.get((rid, idx)), by_id.get(rid)
+            if py is None:
+                continue
+            here = row.utterances[idx] if row is not None and idx < len(row.utterances) else None
+            if (
+                row is None
+                or py.get("utterance") != here
+                or (py.get("expected_outcome") != row.expected_outcome)
+            ):
+                stale.append(f"{rid}#{idx}")
+        if stale:
+            violations.append(
+                Violation(
+                    "identity",
+                    "python_rows",
+                    f"the accepted Python run graded {len(stale)} subset row(s) as they no longer "
+                    f"stand ({', '.join(stale[:5])}); re-lock the snapshot on the current corpus",
+                )
+            )
+
+    # Per-row regression: a row Python passed must pass on the binary, with a file that scores
+    # no lower (owner, 2026-10-19: the right kind of answer with a worse file still fails it).
+    for key in keys:
+        py, nat = python_rows.get(key), native_rows.get(key)
+        if py is None or nat is None:
+            continue
+        checked += 1
+        if not py.get("outcome_correct"):
+            continue
+        py_score, nat_score = _finite(py.get("knaif_score")), _finite(nat.get("knaif_score"))
+        worse_file = py_score is not None and (nat_score is None or nat_score + _EPS < py_score)
+        if not nat.get("outcome_correct") or worse_file:
+            why = (
+                f"knaif {nat_score} < Python's {py_score}"
+                if nat.get("outcome_correct")
+                else f"{nat.get('actual_outcome')!r}, expected {nat.get('expected_outcome')!r}"
+            )
+            violations.append(
+                Violation(
+                    "regression",
+                    f"{key[0]}#{key[1]}",
+                    f"{key[0]}#{key[1]}: Python passed it, the binary did not ({why}). "
+                    f"Python: {_plan_tools(py)} -> {py.get('artifact')!r}; "
+                    f"binary: {_plan_tools(nat)} -> {nat.get('artifact')!r}",
+                )
+            )
+
+    # Aggregates within the allowance of Python on the same rows.
+    on_subset = [python_rows[k] for k in keys if k in python_rows]
+    python_sub = aggregate_scored_rows(on_subset, [], str(baseline.get("verifier")))
+    for metric in NATIVE_METRICS:
+        checked += 1
+        accepted = _finite(python_sub.get(metric))
+        observed = _finite(scoreboard.get(metric))
+        if accepted is None:
+            continue
+        floor = accepted - tolerance
+        if observed is None or observed + _EPS < floor:
+            violations.append(
+                Violation(
+                    "aggregate",
+                    metric,
+                    f"{metric} {observed if observed is None else round(observed, 4)} < "
+                    f"{floor:.4f} (Python {accepted:.4f} on the same rows - {tolerance:.2f})",
+                    floor,
+                    observed,
+                )
+            )
+
+    # Coverage, safety and the run's own policy stamp, as in the full mode; no S2 floors.
+    bar = {k: v for k, v in spec.items() if k not in ("aggregate", "slices", "expected_total")}
+    delegated = check_acceptance(
+        bar,
+        scoreboard,
+        safety,
+        coverage_floor=coverage_floor,
+        validate_spec=False,
+        safety_rows=safety_rows,
+    )
+    return AcceptanceReport(
+        violations=violations + list(delegated.violations),
+        checked=checked + delegated.checked,
+    )
+
+
+#: The cold-start sample a batch-planned cell must carry (Part I, I5; B1: 30 per skill).
+COLD_START_MIN = 30
+
+
+def cold_start_problems(board: dict[str, Any], min_sample: int = COLD_START_MIN) -> list[str]:
+    """Why a batch-planned board's cold-start sample does not hold (Part I, I5); empty if it does.
+
+    A live board needs none. A batch-planned one must have run at least *min_sample* rows live,
+    every live plan equal to its batch plan, and every live row without a plan stopped by the
+    unsafe-phrase screen (a `reject` with no error): a live row that crashed has no plan either,
+    and that is the failure the sample exists to catch. Any problem sends the cell back to a live
+    run on the subset (owner, 2026-10-18).
+    """
+    if board.get("planning") != "batch":
+        return []
+    live = board.get("batch_live") or {}
+    problems: list[str] = []
+    if int(live.get("sample") or 0) < min_sample:
+        problems.append(
+            f"the cold-start sample ran {live.get('sample')} row(s) live; {min_sample} are required"
+        )
+    mismatches = live.get("mismatches") or []
+    if mismatches:
+        shown = ", ".join(f"{rid}#{idx}" for rid, idx in mismatches[:5])
+        problems.append(f"{len(mismatches)} live plan(s) differ from the batch's: {shown}")
+    if "unplanned" not in live:
+        problems.append("the board does not record its live rows without a plan; re-run the lane")
+    for entry in live.get("unplanned") or []:
+        if entry.get("outcome") != "reject" or entry.get("error"):
+            rid, idx = entry.get("row") or ["?", 0]
+            problems.append(
+                f"live row {rid}#{idx} produced no plan and was not a screen rejection "
+                f"({entry.get('outcome')!r}: {entry.get('error')})"
+            )
+    return problems

@@ -661,6 +661,13 @@ eval-backends skill *args:
 eval-snapshot skill verifier="success" *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier {{verifier}} --snapshot --save evals/runs/snapshot_{{skill}}_{{verifier}} {{args}}
 
+# LOCK a skill's baseline from a run already saved under evals/runs/ (e.g.: just eval-lock ffmpeg
+# evals/runs/<run>/ffmpeg_<backend>_success.json). Records `source_run` (folder, file, sha256),
+# which the native release cells grade against row by row; a snapshot without it cannot back a
+# release-subset verdict (docs/EVAL_FRAMEWORK.md, "Native release evidence").
+eval-lock skill current:
+    uv run python -m knaif.evalsuite lock --skill {{skill}} --current {{current}}
+
 # Regression check against saved snapshot. `current` is a scoreboard JSON from a real run
 # (e.g.: just eval-success ffmpeg --save evals/runs/2026-01-01_check --verifier <snapshot's verifier>,
 # then: just eval-regression ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_<verifier>.json).
@@ -699,8 +706,9 @@ eval-safety-native skill save="" *args:
 #   just eval-native ffmpeg --save evals/runs/2026-09-11_l4-ffmpeg_success
 #   just eval-safety-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
 #   just eval-accept-native ffmpeg evals/runs/2026-09-11_l4-ffmpeg_success/ffmpeg_native-cli_success.json evals/runs/2026-09-11_l4-ffmpeg_success/safety.json
-eval-accept-native skill current safety="":
-    uv run python -m knaif.evalsuite accept-native --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }}
+#   A release-subset cell (`eval-native ffmpeg --subset ...`) adds `--population subset` at the end.
+eval-accept-native skill current safety="" *args:
+    uv run python -m knaif.evalsuite accept-native --skill {{skill}} --current {{current}} {{ if safety == "" { "" } else { "--safety " + safety } }} {{args}}
 
 # Compare two backends side-by-side (e.g.: just eval-compare ffmpeg mock,ollama --verbose)
 eval-compare skill backends *args:

@@ -1,0 +1,33 @@
+{
+  "skill": "documents",
+  "approved": "2026-10-17",
+  "corpus_sha256": "e7684f794e2bdea7538f8576c20f5a40ce530bf647275d85e22ad3868610d2f6",
+  "note": "The owner's approved removal list: the audit's proposals plus the labelling decisions; read by `evalsuite corpus-remove --audit`.",
+  "proposed_removals": [
+    {
+      "id": "documents_067",
+      "kept": "documents_006",
+      "reason": "every utterance is in documents_006, with the same expected result"
+    },
+    {
+      "id": "documents_071",
+      "kept": "documents_007",
+      "reason": "every utterance is in documents_007, with the same expected result"
+    },
+    {
+      "id": "documents_075",
+      "kept": "documents_008",
+      "reason": "every utterance is in documents_008, with the same expected result"
+    },
+    {
+      "id": "documents_082",
+      "kept": "documents_142",
+      "reason": "every utterance is in documents_142, with the same expected result"
+    },
+    {
+      "id": "documents_115",
+      "kept": "documents_137",
+      "reason": "every utterance is in documents_137, with the same expected result"
+    }
+  ]
+}

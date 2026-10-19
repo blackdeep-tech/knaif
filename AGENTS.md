@@ -295,8 +295,9 @@ just eval-success <skill>
 # 4. clear the written acceptance bar (floors + required slices + safety at 100%)
 just eval-safety <skill> <save.json>
 just eval-accept <skill> <scoreboard.json> <safety.json>
-# 5. lock the baseline (own commit)
-just eval-snapshot <skill>
+# 5. lock the baseline (own commit), from the saved accepted run: records `source_run`,
+#    which native release cells are graded against row by row
+just eval-lock <skill> <scoreboard.json>
 # 6. native parity, if the skill ships natively
 just parity <skill>
 
@@ -357,7 +358,7 @@ intent; these are the checks that make it true. Full definitions in
 | **L1** contract | prompt, retrieval, generation settings — from `contracts/parity/*.json` | no | 100%, every PR |
 | **L2** deterministic | parse → validate → defaults → expand → clarify gate, and ordered execution | no | 100%, every PR |
 | **L3** behavioral | the two runtimes agree on real corpus utterances | yes (GGUF) | **0 port bugs** (same plan, different commands) and 0 missing capabilities; plan disagreement ≤ a bound written before the run (`--max-plan-disagreement`) |
-| **L4** shipped path | `knaif run` executing for real, graded on the files produced | yes (GGUF + external binaries) | reported **with coverage**; the only number backing "it works" |
+| **L4** shipped path | `knaif run` executing for real, graded on the files produced; a release measures the committed release subset (a skill's first release on a platform, the full corpus) | yes (GGUF + external binaries) | reported **with coverage** and population; the only number backing "it works" |
 
 `runtimes.native.status` is a claim about those layers: `in-progress` (any subset),
 `parity` (L1/L2 at 100%, L3 met), `supported` (additionally full L4 acceptance). **Only
@@ -380,6 +381,17 @@ against both the skill's S2 bar and the frozen Python baseline — `native ≥ m
 accepted Python score − 0.02)` on `outcome_accuracy` and `avg_knaif_score`, at complete
 coverage, every required slice holding, safety at 100% **as measured on the binary**. It
 records the verdict either way, so a failing L4 is evidence rather than an absence.
+
+**A release's L4 cells measure the release subset** (`data/release_subset.json`), through
+`scripts/release_evidence.sh`, one run script per platform copied from its template at the
+freeze (docs/RELEASE.md §4). `accept-native --population subset` grades each row against the
+Python run the snapshot was locked from: no row it passed may fail or score lower on the binary,
+aggregates within 0.02 on the same rows, coverage 1.0, safety 100% over the whole safety corpus.
+Planning is one model load, recorded model replies are reused from `evals/store` when nothing
+that decides them changed, every row still executes, and a 30-row cold-start sample runs live.
+How the subset and the store work: docs/EVAL_FRAMEWORK.md, *Native release evidence*. After a
+corpus change, re-derive the subset (`evalsuite release-subset --skill <s>`); kept corpus rows are
+immutable (*Changing a corpus that has a locked baseline*, same doc).
 
 ## Safety Model
 

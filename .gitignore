@@ -91,6 +91,14 @@ evals/**
 !evals/**/probe_*.jsonl
 !evals/**/gate_probe*.jsonl
 !evals/**/*.sha256
+# A release's cold-start samples are drawn once and committed before its first cell (plan
+# 2026-10-14-faster-release-evidence, Part I, I5), and the fingerprints its replies were keyed on.
+!evals/**/cold_start_*.json
+!evals/**/fingerprints.json
+# The result store: the model's raw replies, keyed by exact prompt, committed so a later release
+# can reuse them and anyone can audit them (owner, 2026-10-15; E1). A run's own scratch store
+# (a developer build's, under evals/runs/<run>/store/) stays ignored.
+!evals/store/**
 # Retrieval baselines are a committed acceptance bar, not scratch — the CI gate
 # (test_retrieval_no_regression_vs_baseline, run by `just check`) reads one by path and
 # errors outright if it is missing. Same role as skills/*/data/eval_snapshot.json; ~1 KB.
@@ -119,6 +127,14 @@ evals/**
 # diffable — the hashes in them are the whole point, since a changed hash is what marks a
 # layer stale. See docs/plans/2026-09-10-skill-quality-lifecycle.md (G2).
 !evals/acceptance/*.json
+# A corpus review's audit, the owner's decisions and the proposed rows are the record a re-lock
+# rests on (plan 2026-10-14-faster-release-evidence, Part G): small text, committed.
+!evals/corpus-review/**/*.json
+!evals/corpus-review/**/*.jsonl
+!evals/corpus-review/**/*.md
+# The corpus v2 re-lock's boards carry the per-row grades the four snapshots name as their
+# `source_run` (plan 2026-10-14-faster-release-evidence, T2b): committed, with the row diffs.
+!evals/runs/2026-10-18_relock-corpus-v2_success/**/*.json
 evals/**/.baselines/
 evals/**/out.*
 evals/**/report.html

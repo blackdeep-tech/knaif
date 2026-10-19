@@ -21,11 +21,10 @@ import traceback as _traceback
 from pathlib import Path
 
 import ipywidgets as widgets
-from IPython.display import HTML as IHTML
-from IPython.display import Audio, Image, Video, display
 
 from knaif.evalsuite.chain import run_command_chain
-from knaif.evalsuite.corpus import save_corpus
+from knaif.evalsuite.corpus import save_row
+from knaif.evalsuite.provisioning import provision_row_dir
 
 # ── media helpers ───────────────────────────────────────────────────────────────
 
@@ -119,18 +118,85 @@ def _criteria_html(results: list[tuple]) -> str:
     )
 
 
-def _preview_widget(path: Path):
-    suffix = path.suffix.lower()
-    try:
-        if suffix in (".mp4", ".webm", ".ogg", ".mov", ".mkv", ".avi"):
-            return Video(str(path), embed=True, width=560)
-        if suffix in (".mp3", ".wav", ".aac", ".flac", ".m4a"):
-            return Audio(str(path), embed=True)
-        if suffix in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
-            return Image(str(path), width=480)
-    except Exception:
-        pass
-    return None
+def _snapshot(directory: Path) -> dict[str, int]:
+    """{relative path: mtime_ns} of every file under *directory*."""
+    directory = Path(directory)
+    return {
+        f.relative_to(directory).as_posix(): f.stat().st_mtime_ns
+        for f in directory.rglob("*")
+        if f.is_file()
+    }
+
+
+def _produced_files(directory: Path, before: dict[str, int]) -> list[Path]:
+    """Files under *directory* that are new or rewritten since *before* was taken.
+
+    The run directory is provisioned with every fixture first, so listing it shows fixture
+    copies; only what the command wrote is an output.
+    """
+    directory = Path(directory)
+    after = _snapshot(directory)
+    return [directory / rel for rel in sorted(after) if before.get(rel) != after[rel]]
+
+
+# Past this a preview's bytes go to the frontend in one widget message; skip it instead.
+_PREVIEW_MAX_BYTES = 20 * 1024 * 1024
+
+_PREVIEW_KINDS = {
+    ".mp4": (widgets.Video, "mp4"),
+    ".webm": (widgets.Video, "webm"),
+    ".ogg": (widgets.Video, "ogg"),
+    ".mov": (widgets.Video, "mp4"),
+    ".mp3": (widgets.Audio, "mp3"),
+    ".wav": (widgets.Audio, "wav"),
+    ".m4a": (widgets.Audio, "mp4"),
+    ".aac": (widgets.Audio, "aac"),
+    ".flac": (widgets.Audio, "flac"),
+    ".jpg": (widgets.Image, "jpeg"),
+    ".jpeg": (widgets.Image, "jpeg"),
+    ".png": (widgets.Image, "png"),
+    ".gif": (widgets.Image, "gif"),
+    ".webp": (widgets.Image, "webp"),
+}
+
+
+def _preview_widget(path: Path) -> widgets.Widget | None:
+    """A media widget for *path*, or None for anything that has no preview.
+
+    Real widgets, not IPython display objects: they are attached by setting a container's
+    ``children`` (a traitlet update), which renders from the run's background thread, where
+    ``display()`` into an Output widget does not in VS Code.
+    """
+    kind = _PREVIEW_KINDS.get(Path(path).suffix.lower())
+    if kind is None or Path(path).stat().st_size > _PREVIEW_MAX_BYTES:
+        return None
+    cls, fmt = kind
+    data = Path(path).read_bytes()
+    if cls is widgets.Image:
+        return cls(value=data, format=fmt, layout=widgets.Layout(max_width="480px"))
+    if cls is widgets.Video:
+        return cls(value=data, format=fmt, autoplay=False, layout=widgets.Layout(width="560px"))
+    return cls(value=data, format=fmt, autoplay=False)
+
+
+def _file_label(path: Path, root: Path) -> widgets.HTML:
+    kb = path.stat().st_size // 1024
+    return widgets.HTML(
+        f"<div style='margin:6px 0 2px'><code style='font-weight:bold'>"
+        f"{_esc(path.relative_to(root).as_posix())}</code> "
+        f"<small style='color:#6b7280'>({kb} KB)</small></div>"
+    )
+
+
+def _previews(files: list[Path], root: Path) -> list[widgets.Widget]:
+    """A label and, where there is one, a player for each produced file."""
+    children: list[widgets.Widget] = []
+    for f in files:
+        children.append(_file_label(f, root))
+        pw = _preview_widget(f)
+        if pw is not None:
+            children.append(pw)
+    return children
 
 
 # ── reviewer widget ─────────────────────────────────────────────────────────────
@@ -171,12 +237,11 @@ def make_reviewer(
     lbl_meta = widgets.HTML()
     ta_command = widgets.Textarea(layout=W(width="100%", height="80px"))
     lbl_status = widgets.HTML()
-    # Textual run log (result header, resolved argv, ffmpeg output, criteria). Set
-    # via .value rather than display()'d into out_run because HTML display() from a
-    # background thread is unreliable in VS Code's notebook renderer. out_run is
-    # kept only for the media preview widgets, which do render from a thread.
+    # Everything a run shows is set as a traitlet (.value / .children), never display()'d
+    # into an Output widget: Run works on a background thread, and display() from a thread
+    # does not render in VS Code's notebook renderer.
     lbl_run_log = widgets.HTML()
-    out_run = widgets.Output()
+    box_preview = widgets.VBox()
 
     btn_accept = widgets.Button(
         description="✓ Accept", button_style="success", layout=W(width="120px")
@@ -202,7 +267,7 @@ def make_reviewer(
             ),
             lbl_status,
             lbl_run_log,
-            out_run,
+            box_preview,
         ],
         layout=W(max_width="800px"),
     )
@@ -210,7 +275,7 @@ def make_reviewer(
     # ── navigation ───────────────────────────────────────────────────────────
 
     def _load(i: int) -> None:
-        out_run.clear_output()
+        box_preview.children = ()
         lbl_status.value = ""
         lbl_run_log.value = ""
         if i >= len(pending_rows):
@@ -284,7 +349,7 @@ def make_reviewer(
             row.outputs_validated_by = reviewer
         else:
             row.baseline = {**(row.baseline or {}), "validated_by": reviewer}
-        save_corpus(corpus_ref[0], corpus_path)
+        save_row(corpus_path, row)
         lbl_status.value = f"<span style='color:green'>✓ {row.id} accepted</span>"
         _advance()
 
@@ -308,7 +373,7 @@ def make_reviewer(
             for o, cmd in zip(row_outputs, lines, strict=True):
                 o["command"] = cmd
             row.outputs_validated_by = reviewer
-            save_corpus(corpus_ref[0], corpus_path)
+            save_row(corpus_path, row)
             lbl_status.value = f"<span style='color:green'>✓ {row.id} edited and accepted</span>"
             _advance()
             return
@@ -316,7 +381,7 @@ def make_reviewer(
         new_cmd = ta_command.value.strip()
         if new_cmd:
             row.baseline = {**(row.baseline or {}), "command": new_cmd, "validated_by": reviewer}
-            save_corpus(corpus_ref[0], corpus_path)
+            save_row(corpus_path, row)
             lbl_status.value = f"<span style='color:green'>✓ {row.id} edited and accepted</span>"
         else:
             lbl_status.value = "<span style='color:orange'>⚠ Empty command — skipped</span>"
@@ -342,47 +407,40 @@ def make_reviewer(
             candidate = fixture_dir / row.fixture
             if candidate.exists():
                 fix_file = candidate
+        before = _snapshot(fixture_dir)
         results = run_command_chain(commands, fixture_dir, out_dir, fixture_file=fix_file)
         all_ok = all(r["returncode"] == 0 for r in results) and len(results) == len(row_outputs)
 
-        with out_run:
-            for i, res in enumerate(results):
-                crit = (row_outputs[i].get("criteria") if i < len(row_outputs) else {}) or {}
-                ok = res["returncode"] == 0
-                head = "✓" if ok else f"❌ exit {res['returncode']}"
-                color = "green" if ok else "#dc2626"
-                display(
-                    IHTML(
-                        f"<div style='font-weight:bold;margin:8px 0 2px;color:{color}'>"
-                        f"out{i}: {head} — <code>{commands[i] if i < len(commands) else ''}</code></div>"
-                    )
+        parts: list[str] = []
+        for i, res in enumerate(results):
+            crit = (row_outputs[i].get("criteria") if i < len(row_outputs) else {}) or {}
+            ok = res["returncode"] == 0
+            head = "✓" if ok else f"❌ exit {res['returncode']}"
+            color = "green" if ok else "#dc2626"
+            parts.append(
+                f"<div style='font-weight:bold;margin:8px 0 2px;color:{color}'>"
+                f"out{i}: {head} — <code>{_esc(commands[i] if i < len(commands) else '')}</code></div>"
+            )
+            if res["stderr"].strip() and not ok:
+                parts.append(
+                    f"<pre style='font-size:11px;background:#fee2e2;padding:8px;"
+                    f"border-radius:4px;white-space:pre-wrap;max-height:200px;"
+                    f"overflow-y:auto'>{_esc(res['stderr'][-2000:])}</pre>"
                 )
-                if res["stderr"].strip() and not ok:
-                    display(
-                        IHTML(
-                            f"<pre style='font-size:11px;background:#fee2e2;padding:8px;"
-                            f"border-radius:4px;white-space:pre-wrap;max-height:200px;"
-                            f"overflow-y:auto'>{res['stderr'][-2000:]}</pre>"
-                        )
-                    )
-                out_path = res["output"]
-                if out_path.exists():
-                    probe = _ffprobe(out_path)
-                    display(IHTML(_criteria_html(_check_criteria(crit, commands[i], probe))))
-                    kb = out_path.stat().st_size // 1024
-                    display(
-                        IHTML(
-                            f"<div style='margin:6px 0 2px'><code style='font-weight:bold'>"
-                            f"{out_path.name}</code> <small style='color:#6b7280'>({kb} KB)</small></div>"
-                        )
-                    )
-                    pw = _preview_widget(out_path)
-                    if pw is not None:
-                        display(pw)
+            if res["output"].exists():
+                probe = _ffprobe(res["output"])
+                parts.append(_criteria_html(_check_criteria(crit, commands[i], probe)))
 
-        produced = sum(1 for r in results if r["output"].exists())
+        produced = _produced_files(out_dir, before)
+        parts.append(
+            f"<div style='margin:8px 0 4px;font-size:12px;color:#6b7280'>"
+            f"Output → <code>{_esc(out_dir)}</code></div>"
+        )
+        lbl_run_log.value = "".join(parts)
+        box_preview.children = tuple(_previews(produced, out_dir))
+
         lbl_status.value = (
-            f"<span style='color:#6b7280'>▶ done — {produced} file(s) in "
+            f"<span style='color:#6b7280'>▶ done — {len(produced)} file(s) in "
             f"authoring_runs/{row.id}/</span>"
             if all_ok
             else "<span style='color:#dc2626'>❌ chain failed</span>"
@@ -392,7 +450,7 @@ def make_reviewer(
     def _on_run(_):
         row = pending_rows[idx[0]]
         btn_run.disabled = True
-        out_run.clear_output()
+        box_preview.children = ()
         lbl_run_log.value = ""
         lbl_status.value = "<span style='color:#6b7280'>⏳ Running…</span>"
 
@@ -433,9 +491,9 @@ def make_reviewer(
             # output elsewhere — which cannot reproduce an `output == input` collision, and
             # with `-y` on every command let a baseline overwrite a shared fixture.
             from knaif.evalsuite.chain import resolve_command
-            from knaif.evalsuite.provisioning import provision_row_dir
 
             provision_row_dir(fixture_dir, out_dir)
+            before = _snapshot(out_dir)
             anchors = [out_dir, fixture_dir]
             if fixture_file is not None:
                 anchors.append(Path(fixture_file).parent)
@@ -455,7 +513,7 @@ def make_reviewer(
                 btn_run.disabled = False
                 return
 
-            output_files = sorted(f for f in out_dir.iterdir() if f.is_file())
+            output_files = _produced_files(out_dir, before)
 
             # Build the run log as a single HTML string and assign it to lbl_run_log.
             # Setting .value is a traitlet update, which renders reliably from a
@@ -496,28 +554,13 @@ def make_reviewer(
             if output_files:
                 parts.append(
                     f"<div style='margin:8px 0 4px;font-size:12px;color:#6b7280'>"
-                    f"Output → <code>{out_dir}</code></div>"
+                    f"Output → <code>{_esc(out_dir)}</code></div>"
                 )
-                for f in output_files:
-                    kb = f.stat().st_size // 1024
-                    parts.append(
-                        f"<div style='margin:6px 0 2px'>"
-                        f"<code style='font-weight:bold'>{f.name}</code>"
-                        f" <small style='color:#6b7280'>({kb} KB)</small></div>"
-                    )
             else:
                 parts.append("<span style='color:orange'>⚠ No output files produced</span>")
 
             lbl_run_log.value = "".join(parts)
-
-            # Media previews are real widgets and do render from a thread, so keep
-            # them in out_run.
-            if output_files:
-                with out_run:
-                    for f in output_files:
-                        pw = _preview_widget(f)
-                        if pw is not None:
-                            display(pw)
+            box_preview.children = tuple(_previews(output_files, out_dir))
 
             lbl_status.value = (
                 f"<span style='color:#6b7280'>▶ done — {len(output_files)} file(s) in "

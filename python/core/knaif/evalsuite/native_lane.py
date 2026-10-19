@@ -137,6 +137,31 @@ def summarize_placement(placement: dict[str, int]) -> str | None:
     return max(sorted(placement), key=lambda device: placement[device])
 
 
+class PlacementError(RuntimeError):
+    """A process that loaded the model ran it on another device than the cell's probe found.
+
+    The probe is one process; a batch and every live row are others, and any of them could fall
+    back (a driver fault, a payload that did not load). A CUDA cell whose batch ran on the CPU
+    would record CPU replies into the CUDA namespace of the store, where later releases reuse
+    them, so the whole cell is void (Part I, I1; audit 2026-10-19).
+    """
+
+
+def check_placement(text: str, expected: str, where: str, *, required: bool) -> None:
+    """Raise `PlacementError` unless *text*'s load trace puts the model on *expected*.
+
+    *required* is for a process that must have loaded the model (a recording batch); a live row
+    the unsafe-phrase screen refused never loads it and says nothing, which is not a mismatch.
+    """
+    ran = summarize_placement(parse_tensor_placement(text))
+    if ran is None:
+        if required:
+            raise PlacementError(f"{where} did not report where the model ran; expected {expected}")
+        return
+    if ran != expected:
+        raise PlacementError(f"{where} ran the model on {ran}; the cell expected {expected}")
+
+
 @dataclass(frozen=True)
 class LaneConfig:
     """One `lanes:` entry, resolved against the repo root."""
@@ -151,6 +176,25 @@ class LaneConfig:
     def entry_point(self) -> str:
         """What this lane runs, stated for the record (rule 2)."""
         return f"{self.binary} run <skill> --yes --overwrite --model {self.model_path.name}"
+
+    @property
+    def batch_entry_point(self) -> str:
+        """What a batch-planned run (B1) runs, stated for the record."""
+        return (
+            f"{self.binary} plan --skill <skill> --batch <rows> --json --model "
+            f"{self.model_path.name}; then per row {self.binary} run <skill> --yes --overwrite "
+            "with KNAIF_LLM_BACKEND=mock replaying that row's batch plan"
+        )
+
+    @property
+    def store_entry_point(self) -> str:
+        """What a run planned through the result store (T2c) runs, stated for the record."""
+        return (
+            f"{self.binary} plan --skill <skill> --batch <rows> --json with "
+            "KNAIF_LLM_BACKEND=replay from the store; the misses with --model "
+            f"{self.model_path.name} and KNAIF_LLM_RECORD_DIR; then per row {self.binary} run "
+            "<skill> --yes --overwrite with KNAIF_LLM_BACKEND=replay"
+        )
 
 
 def load_lane(config_path: Path, lane: str, root: Path) -> LaneConfig:
@@ -290,6 +334,197 @@ def build_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
     ]
 
 
+def build_replay_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
+    """`build_argv` without `--model`: the mock backend stands in for inference (B1).
+
+    With no model named and `$KNAIF_LLM_BACKEND=mock`, `run` takes the model's output from
+    `$KNAIF_LLM_MOCK_RESPONSE` and does everything after it for real: the unsafe-phrase screen
+    (which runs before inference), parsing, validation, defaults, expansion, the clarify gate
+    and execution. Without a model it also never probes the GPU.
+    """
+    argv = build_argv(lane, skill, utterance)
+    i = argv.index("--model")
+    return argv[:i] + argv[i + 2 :]
+
+
+#: The variables that turn the model off, or point it at the result store. Stripped from every
+#: inherited environment, so a parent shell that set them can never make a "live" row a replay,
+#: or a replay record into the store.
+_MOCK_VARS = (
+    "KNAIF_LLM_BACKEND",
+    "KNAIF_LLM_MOCK_RESPONSE",
+    "KNAIF_LLM_REPLAY_DIR",
+    "KNAIF_LLM_RECORD_DIR",
+)
+
+
+def _clean_env() -> dict[str, str]:
+    return {k: v for k, v in _lane_env().items() if k not in _MOCK_VARS}
+
+
+def _replay_env(plan: dict[str, Any]) -> dict[str, str]:
+    return {
+        **_clean_env(),
+        "KNAIF_LLM_BACKEND": "mock",
+        "KNAIF_LLM_MOCK_RESPONSE": json.dumps(plan, ensure_ascii=False),
+    }
+
+
+def _store_replay_env(replay_dir: Path) -> dict[str, str]:
+    """The binary answers every model call from the recorded replies (the result store, T2c)."""
+    return {
+        **_clean_env(),
+        "KNAIF_LLM_BACKEND": "replay",
+        "KNAIF_LLM_REPLAY_DIR": str(Path(replay_dir).resolve()),
+    }
+
+
+def batch_plan(
+    lane: LaneConfig,
+    skill: str,
+    utterances: list[str],
+    *,
+    fixture_dir: Path,
+    work_dir: Path,
+    replay_dir: Path | None = None,
+    record_dir: Path | None = None,
+    expect_device: str | None = None,
+) -> list[dict[str, Any]]:
+    """Plan every utterance with ONE model load: `knaif plan --batch`, one envelope per line.
+
+    With *replay_dir* no model is loaded: every model call is answered from that store namespace,
+    and an utterance whose prompt it does not hold comes back as a replay miss. With
+    *record_dir* the model plans and each raw reply is also written there (T2c).
+
+    With *expect_device* a batch that loads the model runs under `--verbose` (llama.cpp's trace
+    goes to stderr, the envelopes stay on stdout) and must have put its layers there, or
+    `PlacementError` is raised.
+
+    `plan --batch` and `run` share `PlanSession::plan`, and `run` dumps the plan before its
+    clarify gate, so a batch envelope is the plan `run` would have dumped for that utterance
+    (1.3.0's Windows CUDA evidence: identical on every row the model planned). Planning
+    resolves bare stems against the working directory, so the batch runs in a directory holding
+    every fixture, as each row's does. A line that failed to plan is `{"plan": [], "error": …}`.
+    """
+    for u in utterances:
+        if "\n" in u or "\r" in u:
+            raise ValueError(f"utterance has a line break; `plan --batch` reads lines: {u!r}")
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    work_dir.mkdir(parents=True)
+    provision_fixtures(fixture_dir, work_dir)
+    # Absolute: the binary runs with cwd = work_dir, where a relative path points nowhere.
+    batch_file = (work_dir / ".knaif-batch.txt").resolve()
+    batch_file.write_text("".join(u + "\n" for u in utterances), encoding="utf-8")
+    argv = [str(lane.binary), "plan", "--skill", skill, "--batch", str(batch_file), "--json"]
+    if replay_dir is not None:
+        env = _store_replay_env(replay_dir)
+    else:
+        argv += ["--model", str(lane.model_path)]
+        if expect_device is not None:
+            argv.append("--verbose")
+        env = _clean_env()
+        if record_dir is not None:
+            # Staged beside the work folder, and promoted into the namespace only once the
+            # batch is known to have run where the cell says: a store never holds a reply from
+            # a process that fell back to another device.
+            staging = work_dir.with_name(work_dir.name + ".record")
+            if staging.exists():
+                shutil.rmtree(staging)
+            staging.mkdir(parents=True)
+            env["KNAIF_LLM_RECORD_DIR"] = str(staging.resolve())
+    proc = subprocess.run(
+        argv,
+        cwd=work_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        timeout=lane.timeout_s * max(1, len(utterances)),
+    )
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if proc.returncode != 0 or len(lines) != len(utterances):
+        raise RuntimeError(
+            f"`plan --batch` returned {len(lines)} plan line(s) for {len(utterances)} utterances "
+            f"(exit {proc.returncode}): {extract_failure(proc.stdout, proc.stderr)}"
+        )
+    if expect_device is not None and replay_dir is None:
+        check_placement(proc.stderr, expect_device, "`plan --batch`", required=True)
+    if record_dir is not None and replay_dir is None:
+        promote_replies(staging, Path(record_dir))
+    return [json.loads(line) for line in lines]
+
+
+def promote_replies(staging: Path, namespace: Path) -> list[str]:
+    """Move recorded replies from *staging* into *namespace*; the keys that were new there.
+
+    A reply the namespace already holds must be the same bytes: greedy decoding of the same
+    prompt by the same stack gives the same reply, and a different one is the determinism the
+    store rests on failing, so it stops the run rather than overwriting (as the binary's own
+    record does). Nothing is moved unless every reply passes.
+    """
+    namespace.mkdir(parents=True, exist_ok=True)
+    replies = sorted(staging.glob("*.txt"))
+    new: list[Path] = []
+    for reply in replies:
+        held = namespace / reply.name
+        if not held.exists():
+            new.append(reply)
+        elif held.read_bytes() != reply.read_bytes():
+            raise RuntimeError(
+                f"record conflict: {reply.stem} was recorded with a different reply than "
+                f"{namespace.name[:12]} holds; the model is not deterministic here"
+            )
+    for reply in new:
+        shutil.move(reply, namespace / reply.name)
+    shutil.rmtree(staging, ignore_errors=True)
+    return [p.stem for p in new]
+
+
+def batch_live_mismatches(
+    outputs: list[AgentOutput],
+    plans: dict[tuple[str, int], dict[str, Any]],
+    live: set[tuple[str, int]],
+) -> tuple[int, list[list[Any]]]:
+    """The cold-start check (B1): do the live rows' plans equal the batch's?
+
+    Returns how many live rows were compared and the `[id, utterance_idx]` of each that
+    differs. A live row with no dumped plan is not compared: the unsafe-phrase screen stopped
+    it before inference, and `plan --batch` does not screen.
+    """
+    compared = 0
+    mismatches: list[list[Any]] = []
+    for out in outputs:
+        key = (out.id, out.utterance_idx)
+        if key not in live or key not in plans or out.plan is None:
+            continue
+        compared += 1
+        if out.plan != plans[key]:
+            mismatches.append([out.id, out.utterance_idx])
+    return compared, mismatches
+
+
+def batch_live_unplanned(
+    outputs: list[AgentOutput], live: set[tuple[str, int]]
+) -> list[dict[str, Any]]:
+    """The live rows that produced no plan, and how each one ended.
+
+    `batch_live_mismatches` cannot compare them, and not compared is not the same as fine: the
+    screen's rejections land here, but so does a row whose backend failed to load, which is the
+    failure the cold-start sample exists to catch. Acceptance reads this list (Part I, I5).
+    """
+    by_key = {(o.id, o.utterance_idx): o for o in outputs}
+    unplanned: list[dict[str, Any]] = []
+    for key in sorted(live):
+        out = by_key.get(key)
+        if out is None:
+            unplanned.append({"row": list(key), "outcome": None, "error": "no output"})
+        elif out.plan is None:
+            unplanned.append({"row": list(key), "outcome": out.outcome, "error": out.error})
+    return unplanned
+
+
 def extract_failure(stdout: str, stderr: str) -> str:
     """The reason a run failed, rather than whatever happened to be last on stderr.
 
@@ -385,6 +620,10 @@ def run_native_corpus(
     limit: int | None = None,
     verbose: bool = False,
     only: set[tuple[str, int]] | None = None,
+    plans: dict[tuple[str, int], dict[str, Any]] | None = None,
+    live: set[tuple[str, int]] | None = None,
+    replay_dir: Path | None = None,
+    expect_device: str | None = None,
 ) -> list[AgentOutput]:
     """Execute every corpus utterance through the shipped binary and collect what it produced.
 
@@ -394,6 +633,19 @@ def run_native_corpus(
 
     *only* runs just those `(id, utterance_idx)` pairs, keeping their corpus indices so a sample
     or a set of re-graded rows lines up with the full runs it is compared with or composed into.
+
+    *plans* (B1) are `batch_plan`'s envelopes by `(id, utterance_idx)`: a row with one runs
+    without the model, the mock replaying that plan (`build_replay_argv`); a row whose batch
+    planning failed is recorded as that error without running, as `run` would have failed the
+    same way. Rows in *live* (the cold-start sample), and rows with no batch plan, run with
+    the model as before.
+
+    With *replay_dir* (the result store, T2c) a planned row replays the model's recorded raw
+    reply instead of its printed plan, so everything after the model runs afresh in this binary;
+    *plans* then serve only to skip rows whose planning failed and for the cold-start check.
+
+    With *expect_device* every row that runs the model runs under `--verbose` and must report its
+    layers on that device; a row on another raises `PlacementError` (`check_placement`).
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
@@ -409,26 +661,46 @@ def run_native_corpus(
             provision_fixtures(fixture_dir, work_dir)
             before = _snapshot_files(work_dir)
 
-            argv = build_argv(lane, skill, utterance)
+            key = (row.id, utt_idx)
+            planned = None if plans is None or key in (live or set()) else plans.get(key)
+            if planned is None:
+                argv = build_argv(lane, skill, utterance)
+                if expect_device is not None:
+                    argv.insert(argv.index("--"), "--verbose")
+                env = _clean_env()
+            elif replay_dir is not None:
+                argv = build_replay_argv(lane, skill, utterance)
+                env = _store_replay_env(replay_dir)
+            else:
+                argv = build_replay_argv(lane, skill, utterance)
+                env = _replay_env(planned)
             t0 = time.perf_counter()
             error: str | None = None
-            try:
-                proc = subprocess.run(
-                    argv,
-                    cwd=work_dir,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    env={**_lane_env()},
-                    timeout=lane.timeout_s,
-                )
-                parsed = parse_run_output(proc.stdout, proc.stderr, proc.returncode)
-                if parsed["outcome"] == "error":
-                    error = extract_failure(proc.stdout, proc.stderr)
-            except subprocess.TimeoutExpired:
+            parsed: dict[str, Any]
+            if planned is not None and planned.get("error"):
                 parsed = {"plan": None, "commands": [], "outcome": "error", "results": []}
-                error = f"timed out after {lane.timeout_s:.0f}s"
+                error = f"planning failed (plan --batch): {planned['error']}"[:500]
+            else:
+                try:
+                    proc = subprocess.run(
+                        argv,
+                        cwd=work_dir,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        env=env,
+                        timeout=lane.timeout_s,
+                    )
+                    if planned is None and expect_device is not None:
+                        where = f"{row.id}[{utt_idx}]"
+                        check_placement(proc.stderr, expect_device, where, required=False)
+                    parsed = parse_run_output(proc.stdout, proc.stderr, proc.returncode)
+                    if parsed["outcome"] == "error":
+                        error = extract_failure(proc.stdout, proc.stderr)
+                except subprocess.TimeoutExpired:
+                    parsed = {"plan": None, "commands": [], "outcome": "error", "results": []}
+                    error = f"timed out after {lane.timeout_s:.0f}s"
             latency_ms = (time.perf_counter() - t0) * 1000
 
             produced = _produced_files(work_dir, before)
@@ -469,7 +741,9 @@ def _lane_env() -> dict[str, str]:
     artifact users install, which carries PDFium beside the binary (release plan R2).
     """
     env = {k: v for k, v in os.environ.items() if k != "KNAIF_PDFIUM_PATH"}
-    return {**env, "KNAIF_DUMP_PLAN": "1"}
+    # In process, always (Part I): a running daemon holding the model would otherwise answer, and
+    # it neither records into the store nor says where its layers ran.
+    return {**env, "KNAIF_DUMP_PLAN": "1", "KNAIF_NO_DAEMON": "1"}
 
 
 def pdfium_library_name() -> str:

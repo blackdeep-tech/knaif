@@ -1,0 +1,1053 @@
+{
+  "skill": "ffmpeg",
+  "corpus_sha256": "2e92836621aa31ede7ab85458b5ede7a8377d1e52a6f949cd79b334a7a94e92e",
+  "rows": 328,
+  "utterances": 861,
+  "duplicates": {
+    "across_rows": [
+      {
+        "text": "remove the audio track from clip.mp4",
+        "rows": [
+          "ffmpeg_007",
+          "ffmpeg_080"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "make a gif from clip.mp4",
+        "rows": [
+          "ffmpeg_010",
+          "ffmpeg_168"
+        ],
+        "same_expectation": false,
+        "differs_in": [
+          "criteria",
+          "fixture"
+        ]
+      },
+      {
+        "text": "prepare clip.mp4 for whatsapp",
+        "rows": [
+          "ffmpeg_023",
+          "ffmpeg_097"
+        ],
+        "same_expectation": false,
+        "differs_in": [
+          "criteria"
+        ]
+      },
+      {
+        "text": "denoise clip.mp4",
+        "rows": [
+          "ffmpeg_050",
+          "ffmpeg_179"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "ton aus clip.mp4 entfernen",
+        "rows": [
+          "ffmpeg_063",
+          "ffmpeg_080"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "обърни clip.mp4",
+        "rows": [
+          "ffmpeg_078",
+          "ffmpeg_187"
+        ],
+        "same_expectation": false,
+        "differs_in": [
+          "criteria"
+        ]
+      },
+      {
+        "text": "премахни звука от clip.mp4",
+        "rows": [
+          "ffmpeg_080",
+          "ffmpeg_186"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "make clip.mp4 silent",
+        "rows": [
+          "ffmpeg_081",
+          "ffmpeg_hard_012"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "заглуши clip.mp4",
+        "rows": [
+          "ffmpeg_081",
+          "ffmpeg_186"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      },
+      {
+        "text": "преоразмери clip_4k.mp4 до 720p",
+        "rows": [
+          "ffmpeg_084",
+          "ffmpeg_185"
+        ],
+        "same_expectation": false,
+        "differs_in": [
+          "criteria"
+        ]
+      },
+      {
+        "text": "подготви clip.mp4 за whatsapp",
+        "rows": [
+          "ffmpeg_097",
+          "ffmpeg_189"
+        ],
+        "same_expectation": false,
+        "differs_in": [
+          "criteria"
+        ]
+      },
+      {
+        "text": "convert clip.mp4 to mkv",
+        "rows": [
+          "ffmpeg_162",
+          "ffmpeg_164"
+        ],
+        "same_expectation": true,
+        "differs_in": []
+      }
+    ],
+    "within_row": []
+  },
+  "groups": [
+    {
+      "expectation": {
+        "criteria": {
+          "container": "matroska,webm"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_002",
+        "ffmpeg_058",
+        "ffmpeg_062",
+        "ffmpeg_065",
+        "ffmpeg_068",
+        "ffmpeg_076",
+        "ffmpeg_162",
+        "ffmpeg_164"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "no_audio": true
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "strip_audio"
+        ]
+      },
+      "rows": [
+        "ffmpeg_007",
+        "ffmpeg_063",
+        "ffmpeg_080",
+        "ffmpeg_081",
+        "ffmpeg_186",
+        "ffmpeg_196",
+        "ffmpeg_hard_012"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "audio_codec": "mp3",
+          "container": "mp3"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "extract_audio"
+        ]
+      },
+      "rows": [
+        "ffmpeg_008",
+        "ffmpeg_060",
+        "ffmpeg_066"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "video_codec": "hevc"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_009",
+        "ffmpeg_096"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": null,
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "ffmpeg_011",
+        "ffmpeg_012",
+        "ffmpeg_018",
+        "ffmpeg_019",
+        "ffmpeg_025",
+        "ffmpeg_030",
+        "ffmpeg_048",
+        "ffmpeg_049",
+        "ffmpeg_050",
+        "ffmpeg_051",
+        "ffmpeg_052",
+        "ffmpeg_070",
+        "ffmpeg_083",
+        "ffmpeg_151",
+        "ffmpeg_152",
+        "ffmpeg_153",
+        "ffmpeg_154",
+        "ffmpeg_155",
+        "ffmpeg_156",
+        "ffmpeg_157",
+        "ffmpeg_158",
+        "ffmpeg_165",
+        "ffmpeg_169",
+        "ffmpeg_170",
+        "ffmpeg_176",
+        "ffmpeg_177",
+        "ffmpeg_178",
+        "ffmpeg_179",
+        "ffmpeg_180",
+        "ffmpeg_204",
+        "ffmpeg_208"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "encoder": "libx264"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_013",
+        "ffmpeg_035",
+        "ffmpeg_036",
+        "ffmpeg_037",
+        "ffmpeg_038",
+        "ffmpeg_042",
+        "ffmpeg_043"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "image2",
+          "flags": [
+            "-ss 00:00:03"
+          ],
+          "video_codec": "mjpeg"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "create_thumbnail"
+        ]
+      },
+      "rows": [
+        "ffmpeg_014",
+        "ffmpeg_071",
+        "ffmpeg_190",
+        "ffmpeg_200"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": null,
+        "outcome": "reject",
+        "outputs": [],
+        "tools": [
+          null
+        ]
+      },
+      "rows": [
+        "ffmpeg_016",
+        "ffmpeg_017",
+        "ffmpeg_053",
+        "ffmpeg_054",
+        "ffmpeg_055",
+        "ffmpeg_057",
+        "ffmpeg_141",
+        "ffmpeg_143",
+        "ffmpeg_147",
+        "ffmpeg_148",
+        "ffmpeg_150"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4"
+        },
+        "fixture": "clip_ctr.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "compress_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_021",
+        "ffmpeg_022",
+        "ffmpeg_040",
+        "ffmpeg_061"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "max_height": 720,
+          "max_width": 1280
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "prepare_for_platform"
+        ]
+      },
+      "rows": [
+        "ffmpeg_023",
+        "ffmpeg_046"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "filters": [
+            "reverse"
+          ]
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "reverse_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_031",
+        "ffmpeg_032"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "concat_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_033",
+        "ffmpeg_082",
+        "ffmpeg_252"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "compress_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_041",
+        "ffmpeg_069"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": null,
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          null
+        ]
+      },
+      "rows": [
+        "ffmpeg_056",
+        "ffmpeg_142",
+        "ffmpeg_144",
+        "ffmpeg_145",
+        "ffmpeg_146",
+        "ffmpeg_149",
+        "ffmpeg_166",
+        "ffmpeg_216",
+        "ffmpeg_217",
+        "ffmpeg_299"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "adjust_speed"
+        ]
+      },
+      "rows": [
+        "ffmpeg_073",
+        "ffmpeg_074",
+        "ffmpeg_188",
+        "ffmpeg_198"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "clip.mp4",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "ffmpeg_075",
+        "ffmpeg_082b",
+        "ffmpeg_171",
+        "ffmpeg_173",
+        "ffmpeg_203",
+        "ffmpeg_255",
+        "ffmpeg_256",
+        "ffmpeg_272",
+        "ffmpeg_hard_011"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "audio_codec": "aac",
+          "container": "mp4",
+          "video_codec": "h264"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "convert_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_077",
+        "ffmpeg_139",
+        "ffmpeg_175",
+        "ffmpeg_181",
+        "ffmpeg_191"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "video_codec": "h264"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "reverse_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_078",
+        "ffmpeg_122"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "reverse_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_079",
+        "ffmpeg_187",
+        "ffmpeg_197"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "clip.mp4",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          null
+        ]
+      },
+      "rows": [
+        "ffmpeg_085b",
+        "ffmpeg_122b",
+        "ffmpeg_123b",
+        "ffmpeg_129b",
+        "ffmpeg_131b",
+        "ffmpeg_218b",
+        "ffmpeg_219b",
+        "ffmpeg_220b",
+        "ffmpeg_252b"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "filters": [
+            "scale"
+          ]
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "resize_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_086",
+        "ffmpeg_297"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "image2",
+          "video_codec": "mjpeg"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "create_thumbnail"
+        ]
+      },
+      "rows": [
+        "ffmpeg_090",
+        "ffmpeg_202",
+        "ffmpeg_232"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "video_codec": "h264"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "compress_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_094",
+        "ffmpeg_159",
+        "ffmpeg_160",
+        "ffmpeg_163",
+        "ffmpeg_182",
+        "ffmpeg_192",
+        "ffmpeg_218",
+        "ffmpeg_219",
+        "ffmpeg_220"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "audio_codec": "aac",
+          "container": "mp4",
+          "video_codec": "h264"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "prepare_for_platform"
+        ]
+      },
+      "rows": [
+        "ffmpeg_098",
+        "ffmpeg_099",
+        "ffmpeg_189",
+        "ffmpeg_199",
+        "ffmpeg_225"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "clip_4k.mp4",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "ffmpeg_104",
+        "ffmpeg_106",
+        "ffmpeg_110",
+        "ffmpeg_120",
+        "ffmpeg_125",
+        "ffmpeg_126",
+        "ffmpeg_128",
+        "ffmpeg_137",
+        "ffmpeg_207",
+        "ffmpeg_210",
+        "ffmpeg_211",
+        "ffmpeg_235",
+        "ffmpeg_263",
+        "ffmpeg_265",
+        "ffmpeg_266",
+        "ffmpeg_286",
+        "ffmpeg_292"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "clip_no_audio.mp4",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "ffmpeg_111",
+        "ffmpeg_132",
+        "ffmpeg_133",
+        "ffmpeg_254",
+        "ffmpeg_258",
+        "ffmpeg_262",
+        "ffmpeg_288",
+        "ffmpeg_290",
+        "ffmpeg_291"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "audio.mp3",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "ffmpeg_134",
+        "ffmpeg_287"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "frames": 1
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "trim_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_161",
+        "ffmpeg_300"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "audio_codec": "mp3"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "extract_audio"
+        ]
+      },
+      "rows": [
+        "ffmpeg_183",
+        "ffmpeg_193",
+        "ffmpeg_hard_009"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "video_codec": "h264"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "trim_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_184",
+        "ffmpeg_194",
+        "ffmpeg_223"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "filters": [
+            "scale"
+          ],
+          "max_height": 720,
+          "max_width": 1280
+        },
+        "fixture": "clip_4k.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "resize_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_185",
+        "ffmpeg_195",
+        "ffmpeg_222",
+        "ffmpeg_224"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "audio_codec": "aac",
+          "container": "mp4"
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "adjust_volume"
+        ]
+      },
+      "rows": [
+        "ffmpeg_205",
+        "ffmpeg_240",
+        "ffmpeg_241",
+        "ffmpeg_249",
+        "ffmpeg_250",
+        "ffmpeg_251"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4"
+        },
+        "fixture": "clip.mov",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "concat_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_215",
+        "ffmpeg_228",
+        "ffmpeg_242"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "video_codec": "h264"
+        },
+        "fixture": "clip_ctr.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "compress_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_221",
+        "ffmpeg_233"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "filters": [
+            "transpose"
+          ]
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "rotate_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_238",
+        "ffmpeg_245"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "filters": [
+            "scale"
+          ]
+        },
+        "fixture": "clip.mov",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "concat_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_243",
+        "ffmpeg_244"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {},
+        "fixture": "clip.mov",
+        "outcome": "clarify",
+        "outputs": [],
+        "tools": [
+          "clarify"
+        ]
+      },
+      "rows": [
+        "ffmpeg_253",
+        "ffmpeg_257",
+        "ffmpeg_259",
+        "ffmpeg_260",
+        "ffmpeg_264",
+        "ffmpeg_289"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "audio_codec": "mp3"
+        },
+        "fixture": "audio.mp3",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "adjust_volume"
+        ]
+      },
+      "rows": [
+        "ffmpeg_269",
+        "ffmpeg_270",
+        "ffmpeg_271"
+      ]
+    },
+    {
+      "expectation": {
+        "criteria": {
+          "container": "mp4",
+          "filters": [
+            "crop"
+          ]
+        },
+        "fixture": "clip.mp4",
+        "outcome": "plan",
+        "outputs": [],
+        "tools": [
+          "resize_video"
+        ]
+      },
+      "rows": [
+        "ffmpeg_293",
+        "ffmpeg_294",
+        "ffmpeg_295",
+        "ffmpeg_298"
+      ]
+    }
+  ],
+  "near_duplicates": [
+    {
+      "a": "ffmpeg_082",
+      "b": "ffmpeg_252",
+      "similarity": 0.88,
+      "utterance_a": "join clip.mp4 and clip.mov into one file",
+      "utterance_b": "join clip.mp4, clip2.mp4 and clip.mov into one file"
+    },
+    {
+      "a": "ffmpeg_073",
+      "b": "ffmpeg_188",
+      "similarity": 0.8,
+      "utterance_a": "ускори clip.mp4 до 2x скорост",
+      "utterance_b": "ускори clip.mp4 до 2x"
+    }
+  ],
+  "proposed_removals": [
+    {
+      "id": "ffmpeg_007",
+      "kept": "ffmpeg_080",
+      "reason": "every utterance is in ffmpeg_080, with the same expected result"
+    },
+    {
+      "id": "ffmpeg_050",
+      "kept": "ffmpeg_179",
+      "reason": "every utterance is in ffmpeg_179, with the same expected result"
+    },
+    {
+      "id": "ffmpeg_063",
+      "kept": "ffmpeg_080",
+      "reason": "every utterance is in ffmpeg_080, with the same expected result"
+    }
+  ],
+  "coverage": {
+    "tools": {
+      "prepare_for_platform": {
+        "plan": 13,
+        "chain": 0
+      },
+      "compress_video": {
+        "plan": 24,
+        "chain": 9
+      },
+      "convert_video": {
+        "plan": 36,
+        "chain": 6
+      },
+      "resize_video": {
+        "plan": 19,
+        "chain": 13
+      },
+      "trim_video": {
+        "plan": 19,
+        "chain": 10
+      },
+      "extract_audio": {
+        "plan": 14,
+        "chain": 4
+      },
+      "create_thumbnail": {
+        "plan": 17,
+        "chain": 1
+      },
+      "reverse_video": {
+        "plan": 10,
+        "chain": 1
+      },
+      "strip_audio": {
+        "plan": 9,
+        "chain": 9
+      },
+      "adjust_speed": {
+        "plan": 7,
+        "chain": 5
+      },
+      "adjust_volume": {
+        "plan": 10,
+        "chain": 0
+      },
+      "rotate_video": {
+        "plan": 7,
+        "chain": 3
+      },
+      "concat_video": {
+        "plan": 10,
+        "chain": 0
+      }
+    },
+    "outcomes": {
+      "plan": 222,
+      "clarify": 95,
+      "reject": 11
+    },
+    "chain_rows": 27,
+    "no_plan_row": []
+  },
+  "safety": {
+    "rows": 11,
+    "duplicates": []
+  }
+}

@@ -101,6 +101,11 @@ def compose_cell(
         raise ValueError("cannot compose: both runs must come from the packaged layout")
     if not replacements.get("rows"):
         raise ValueError("cannot compose: the replacement board has no rows")
+    if base.get("population") != replacements.get("population"):
+        raise ValueError(
+            f"cannot compose: population differs ({base.get('population')!r} vs "
+            f"{replacements.get('population')!r}); the rows would not describe one cell"
+        )
 
     base_rows = _keyed(base.get("rows") or [], "base")
     new_rows = _keyed(replacements["rows"], "replacement")
@@ -124,6 +129,7 @@ def compose_cell(
         "model_sha256",
         "model_sha256_prefix",
         "packaged_layout",
+        "population",
     ):
         if name in base:
             board[name] = base[name]

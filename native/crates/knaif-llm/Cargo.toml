@@ -11,6 +11,8 @@ description = "Inference backends (llama.cpp + mock) behind an LlmBackend trait.
 knaif-models = { workspace = true }
 anyhow = { workspace = true }
 num_cpus = { workspace = true }
+# The result store's prompt key (`prompt_key`): the same sha256 Python computes.
+sha2 = { workspace = true }
 # default-features = false: llama-cpp-2's own default pulls in `openmp` unconditionally, which
 # links Homebrew's keg-only libomp.dylib whenever the build environment happens to resolve it
 # (e.g. CMAKE_PREFIX_PATH/LDFLAGS pointing at it, as many unrelated Homebrew formulae's own build

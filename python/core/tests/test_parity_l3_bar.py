@@ -464,3 +464,13 @@ def test_only_keeps_the_named_rows_in_corpus_order_and_refuses_unknown_ids() -> 
     assert [r.id for r in pc.select_rows(rows, ["c", "a"])] == ["a", "c"]
     with pytest.raises(SystemExit):
         pc.select_rows(rows, ["a", "zzz"])
+
+
+def test_l3_on_the_release_subset_compares_its_rows() -> None:
+    """Part I, I4: L3 measures the subset's rows (each row's first utterance, as L3 always did)."""
+    subset = json.loads((REPO / "skills/ffmpeg/data/release_subset.json").read_text("utf-8"))
+    ids, population = pc.subset_ids("ffmpeg")
+    assert ids == [rid for rid, _ in subset["rows"]]
+    assert population == {"kind": "subset", "corpus_sha256": subset["corpus_sha256"]}
+    rows = pc.select_rows(pc.load_rows("ffmpeg", None), ids)
+    assert [r.id for r in rows] == ids

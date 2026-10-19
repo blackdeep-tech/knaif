@@ -16,8 +16,8 @@ def find_root(start: Path) -> Path:
 
 
 def make_skill_selector(root: Path) -> widgets.Dropdown:
-    """Return a Dropdown listing available skills under *root*/src/skills."""
-    skills_dir = root / "src" / "skills"
+    """Return a Dropdown listing available skills under *root*/skills."""
+    skills_dir = root / "skills"
     available = sorted(
         p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "skill.yaml").exists()
     )

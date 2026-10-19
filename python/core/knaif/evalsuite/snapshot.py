@@ -28,7 +28,9 @@ def snapshot_path(skill: str, model: str | None = None, root: Path | str = ".") 
     return default if held in (None, model) else data / f"eval_snapshot.{model}.json"
 
 
-def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
+def save_snapshot(
+    scoreboard: dict[str, Any], path: Path | str, source_run: dict[str, str] | None = None
+) -> None:
     """
     Write a snapshot JSON — same format as the scoreboard, without per-row detail.
 
@@ -37,6 +39,9 @@ def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
     experience and does so silently. `acceptance.py` already refuses a `cheap` scoreboard
     and `eval-native` refuses one at the CLI; this closes the writer, because
     `run --snapshot` still defaults to `--verifier cheap`.
+
+    *source_run* names the saved scoreboard the snapshot was locked from (folder, file,
+    sha256): the per-row grades a release bar compares against live there, not here.
     """
     verifier = scoreboard.get("verifier")
     if verifier is None:
@@ -54,6 +59,8 @@ def save_snapshot(scoreboard: dict[str, Any], path: Path | str) -> None:
 
     path = Path(path)
     snapshot = {k: v for k, v in scoreboard.items() if k != "rows"}
+    if source_run is not None:
+        snapshot["source_run"] = dict(source_run)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         json.dump(snapshot, fh, indent=2, ensure_ascii=False)
@@ -65,6 +72,39 @@ def load_snapshot(path: Path | str) -> dict[str, Any]:
     path = Path(path)
     with path.open(encoding="utf-8") as fh:
         return json.load(fh)  # type: ignore[no-any-return]
+
+
+def load_source_run(snapshot: dict[str, Any], root: Path | str = ".") -> dict[str, Any]:
+    """The committed scoreboard a snapshot was locked from (`source_run`), with its per-row
+    grades — what the release subset is compared with row by row (D2).
+
+    Refused when the snapshot names none, the file is missing, or its bytes are not the ones
+    the lock hashed. Line endings are the one difference forgiven: the lock hashed the file as
+    written on one machine, and a checkout elsewhere may hold it with the other line ending.
+    """
+    import hashlib
+
+    source = snapshot.get("source_run")
+    if not source:
+        raise ValueError(
+            "the snapshot names no source_run, so its per-row grades cannot be read back; "
+            "re-lock it with `evalsuite lock`"
+        )
+    path = Path(root) / source["folder"] / source["scoreboard"]
+    if not path.is_file():
+        raise ValueError(
+            f"the snapshot's source_run {source['folder']}/{source['scoreboard']} is missing"
+        )
+    raw = path.read_bytes()
+    lf = raw.replace(b"\r\n", b"\n")
+    candidates = (raw, lf, lf.replace(b"\n", b"\r\n"))
+    if all(hashlib.sha256(c).hexdigest() != source.get("sha256") for c in candidates):
+        raise ValueError(
+            f"{source['folder']}/{source['scoreboard']} does not match the sha256 the snapshot "
+            "recorded; it is not the run the baseline was locked from"
+        )
+    board: dict[str, Any] = json.loads(raw)
+    return board
 
 
 def diff_snapshots(

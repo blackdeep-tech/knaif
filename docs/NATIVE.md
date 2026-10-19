@@ -137,6 +137,13 @@ backend-agnostic. The backend owns chat formatting because framing is model-spec
 - **`MockBackend`** — deterministic, no model. Returns `$KNAIF_LLM_MOCK_RESPONSE` or an
   empty plan. Used by tests, offline dev, and eval/parity harnesses.
 - **`LlamaCppBackend`** (feature `llama`) — real local inference via `llama-cpp-2`.
+- **Record / replay** — the eval lane's result store (plan
+  `2026-10-14-faster-release-evidence`, E1). With `$KNAIF_LLM_RECORD_DIR` set, whatever backend runs
+  also writes each raw reply to `<dir>/<prompt_key>.txt`, where `prompt_key` is the sha256 of the
+  exact `system`, a NUL byte and `user`. `KNAIF_LLM_BACKEND=replay` loads no model and answers each
+  call from `$KNAIF_LLM_REPLAY_DIR` by that key; an unrecorded prompt is an error naming its key.
+  Replay keeps the repair retry, so a recorded repair reply is served as it was live. Nothing is
+  recorded or replayed unless these variables are set.
 
 Selection: a `--model <name|path>` builds `LlamaCppBackend`; otherwise the recommended model is
 auto-selected when available, else the mock runs (§5.6 has the full precedence, including the
@@ -631,8 +638,10 @@ exe). Tests: `cargo test` (the llama.cpp inference proof is gated on `$KNAIF_TES
 | `KNAIF_MODELS_DIR` | Override the GGUF store directory | `~/.knaif/models` |
 | `KNAIF_BACKENDS_DIR` | Override where loadable `ggml-*` backends are scanned for (`dynamic-backends` builds; the exe's own directory is always scanned too) | `~/.knaif/backends` |
 | `KNAIF_NO_CUDA_NUDGE` | Suppress the first-run CUDA offer (§5.5); a stale payload is still reported | off |
-| `KNAIF_LLM_BACKEND` | `mock` opts out of default-model auto-select (§5.6); `llama` needs a model | auto-select, else `mock` |
+| `KNAIF_LLM_BACKEND` | `mock` opts out of default-model auto-select (§5.6); `llama` needs a model; `replay` answers from recorded replies (eval) | auto-select, else `mock` |
 | `KNAIF_LLM_MOCK_RESPONSE` | Canned mock plan (offline dev/eval) | empty plan |
+| `KNAIF_LLM_RECORD_DIR` | Also write each raw model reply to `<dir>/<prompt_key>.txt` (eval result store) | off |
+| `KNAIF_LLM_REPLAY_DIR` | Where `KNAIF_LLM_BACKEND=replay` reads recorded replies | — (required by `replay`) |
 | `KNAIF_N_GPU_LAYERS` | GPU offload layer count (`0` = CPU) | `999` |
 | `KNAIF_N_CTX` | Context / batch size | `8192` |
 | `KNAIF_MAX_TOKENS` | Generation cap | `512` |

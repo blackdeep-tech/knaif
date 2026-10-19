@@ -1,0 +1,13 @@
+{
+  "rows_a": 194,
+  "rows_b": 194,
+  "common": 194,
+  "only_a": [],
+  "only_b": [],
+  "same_grade": 194,
+  "same_plan": 194,
+  "same_command": 194,
+  "grade_differs": [],
+  "plan_differs": [],
+  "command_differs": []
+}

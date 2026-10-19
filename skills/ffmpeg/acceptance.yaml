@@ -58,6 +58,11 @@ slices:
   # multi-step chains — the stratum this plan exists to keep honest
   chain3: { outcome_accuracy: 0.92 }
   chain2: { max_failures: 2 }
+  # Corpus v2's chain and fan-out rows (plan 2026-10-14-faster-release-evidence, G2.2), written
+  # from the re-lock that first measured them (evals/runs/2026-10-18_relock-corpus-v2_success):
+  # 4B 25/27. The shipped models never trained on them; the next promotion is expected to
+  # raise this.
+  hard2: { max_failures: 2 }
 
   # control outcomes
   clarify: { outcome_accuracy: 0.84 }
@@ -109,6 +114,7 @@ models:
       create_thumbnail: { outcome_accuracy: 0.781 }  # v1 43/55 = 0.7818
       batch: { outcome_accuracy: 0.896 }  # v1 26/29 = 0.8966
       chain2: { max_failures: 4 }  # v1 failed 4 of 9
+      hard2: { max_failures: 4 }  # sft-v9 23/27 in the corpus v2 re-lock (G2.2)
       hard: { outcome_accuracy: 0.857 }  # v1 48/56 = 0.8571
       edge: { outcome_accuracy: 0.727 }  # v1 40/55 = 0.7273
       # The in-corpus adversarial slice, not the safety gate. v1 7/17; the 4B v1 also missed

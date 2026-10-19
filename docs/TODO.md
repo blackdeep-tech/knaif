@@ -336,6 +336,17 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   in the parked [media-runtime-and-mobile](plans/2026-10-03-media-runtime-and-mobile.md), Thread A.
   To decide: whether it is in scope for the next release, and if so, reopen that plan.
 
+- [ ] **Release evidence on other machines (parked, owner 2026-10-19).** The faster-release-evidence
+  plan sped up the process on the release box first; other machines come later (owner, 2026-10-17).
+  Left from its T0b: `.github/workflows/evidence-cell.yml` runs one cell's shards by hand on GitHub's
+  runners, but has no join job (compose the shards, safety on the binary, `accept-native`) and takes
+  only a published release's files, not a Package run's. T0 measured CI CPU at ~3x the box's time and
+  macOS runners unusable for Metal, so the candidates are the spare machines named in the plan (a
+  second Windows PC, a laptop's WSL, the M1 Pro Mac) running `scripts/release_evidence.sh`.
+- [ ] **macOS has not yet run `scripts/release_evidence.sh`** (written 2026-10-19 for all three
+  platforms, checked on Windows and in WSL). Its first macOS `check` stage, at the next release's
+  freeze, is the test, including bash 3.2.
+
 - [x] **4B audit and measured improvement — experiment pass** — closed 2026-09-17; [results and follow-ups](plans/2026-09-17-4b-audit-and-improvement.md). Deterministic speed fix measured with no observed control regressions; model candidate rejected, prompt diagnostic not adopted. Broader model improvement remains open. Nothing committed or promoted.
 - [x] **Re-lock both snapshots — done 2026-09-17.** `POLICY_VERSION` 3 required it and the evidence is in [`2026-09-17_t7-relock-policy-v3_success`](../evals/runs/2026-09-17_t7-relock-policy-v3_success/report.md). ffmpeg **0.9388954172 / 0.9801227169** (third independent reproduction of the corrected instrument, to ten decimals), documents **0.9817073171 / 1.0** (unchanged in value). Both **S2 ACCEPTED** (39 / 36 thresholds), safety 11/11 and 9/9, suite green. The promotion verdict was recorded first, per T7's ordering rule.
 - [x] **Skill and prompt workbench** — **done 2026-09-22** (`notebooks/skill_workbench.ipynb`) — one notebook, both runtimes, any model, chosen backend, dry-run or real, with measured timing. Plan: [skill-prompt-workbench](plans/2026-09-21-skill-prompt-workbench.md). Wanted before the v2 publish decision, because the current testers cannot make it: they use a pre-restructure `src/skills/` path, list no knaif fine-tune at all, and show the model all 30 tools where production sends ~8 — which changed **4 of 14** plans and made the model look *worse* than it is. Carries two core fixes: `infer_stream` needs `registry_override` (T1), and `detect_backend()` reports `CUDA0` even when every layer is on CPU (T2), which is what the L4 lane records.
@@ -364,11 +375,26 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   has no such guard yet: add the same `input.exists()` guard there at the merge, and make
   Python's preview skip the count for an input an earlier step writes. Add an L2 case
   (preceding step → page removal) in `contracts/parity/documents_expansion_cases.json`.
+  **Measured 2026-10-18** by the corpus v2 re-lock run (`evals/runs/2026-10-18_relock-corpus-v2_success`):
+  `split_pdf`, `rotate_pages` and `reorder_pages` count the input's pages before the
+  `ctx.dry_run` check (`skills/documents/python/steps.py`), and the eval runner previews every
+  plan before executing it, so every chain whose second step is one of them fails with "No such
+  file" in Python: `documents_142[1]` (compress → rotate, failing since 2026-09-26) and the new
+  `hard2` rows 005 (merge → split), 006 (watermark → rotate), 008 (split → reorder). The fix
+  is a measured improvement on those rows, so it re-locks the documents baselines when it lands.
 - [ ] **FFmpeg under Smart App Control** — Windows blocks the Gyan build (unsigned), so on a PC with
   Smart App Control on the ffmpeg skill cannot run; setup and `skills deps` now say so (1.3.0),
   but there is no fix. A validly signed FFmpeg is the only one, which is the parked media-runtime
   plan (branch `docs/media-runtime-and-mobile`; owner, 2026-10-07: leave it for now). Ghostscript and Tesseract are blocked too: neither maker signs validly (Tesseract's
   certificate expired in 2023, including on the newer `tesseract-ocr.tesseract` 5.5.3 package).
+- [ ] **`strip_audio` stream-copies h264 into a `.webm` output** — found 2026-10-18 by the
+  corpus v2 run (`ffmpeg_hard2_005`, "scale clip_4k.mp4 down to 720p, drop the audio and save it as
+  webm"): both models plan resize → strip_audio with no `convert_video`, and `strip_audio` renders
+  `-c:v copy` into the `.webm` the request named, which ffmpeg refuses ("Only VP8 or VP9 or AV1
+  video"). Two fixes, both runtimes: a renderer must never stream-copy a codec into a container
+  that cannot hold it (re-encode, or keep the source container and say so), and the prompt or
+  training should make "save it as webm" a `convert_video` step. Measured on the row; a fix
+  re-locks ffmpeg.
 - [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
 - [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
@@ -914,14 +940,13 @@ This **Open / Next** section is the live backlog (originally distilled from the
   `just parity` taking a `--native-bin` (it hardcodes `target/debug/knaif`), because the failure
   mode is silent — the run just looks slow.
 
-- [ ] **Websites: two owner steps left from the split** — the
+- [ ] **Websites: one owner step left from the split** — the
   [website-split plan](plans/2026-08-04-website-split.md) is closed (2026-10-16): both sites are
   live, built from this repo by Amplify, and run per [SITE.md](SITE.md). Not code:
-  - **Catch-all custom rule still serves the home page on both apps** — re-checked 2026-10-16: a
-    mistyped URL on knaif.org and knaif.dev returns the home page's exact bytes (status 404, so
-    the status half was changed), not the sites' own 404 page. The rule should be `/<*>` →
-    `/404.html`, status `404`. Console state, no repository change fixes it — see
-    [SITE.md §5](SITE.md).
+  - [x] **Catch-all custom rule** — **fixed 2026-10-16** on both apps: `/<*>` → `/404.html`,
+    status `404-200` (the rewrite, not plain `404`; why in [SITE.md §5](SITE.md)). Checked the
+    same day: a missing page answers 404 with the site's own 404 page on knaif.org and
+    knaif.dev, and every sitemap page (9 and 25) and every asset the home pages load answers 200.
   - **Operator review of both sites in full** (`just site-dev org` / `just site-dev dev`), the
     plan's launch gate, was never recorded as done.
 
