@@ -143,7 +143,10 @@ just eval-snapshot ffmpeg --backends qwen3-4b
 
 This locks the acceptance bar with the `output_diff` verifier (not `cheap` routing) and
 saves the run under `evals/runs/`. Re-lock deliberately, in its own commit, and only when
-adopting a measured improvement.
+adopting a measured improvement. To lock from a run already saved and accepted (what a re-lock
+should do, so the snapshot names the run it came from as `source_run`), use
+`just eval-lock ffmpeg evals/runs/<run>/<scoreboard>.json` instead; the native release cells are
+graded against that run row by row.
 
 ---
 

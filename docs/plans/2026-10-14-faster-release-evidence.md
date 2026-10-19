@@ -890,9 +890,20 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       stdout to the envelopes (37 layers on CPU in the trace), a live row parses as before, and
       expecting CUDA0 raises. **No Codex pass (owner, 2026-10-19):** the Fable 5.1 audit stands
       as this plan's audit. T5 closes here.
-- [ ] **T6. RELEASE.md and EVAL_FRAMEWORK.md** describe the new method (two instruments, the
+- [x] **T6. RELEASE.md and EVAL_FRAMEWORK.md** describe the new method (two instruments, the
       store, the CI cells); the next release index's gate rules adopt it; AGENTS.md's lifecycle
       table says L4 measures the subset.
+      **Written 2026-10-19.** RELEASE.md §4: one run script per platform (stages, platforms, the
+      order across them), what a cell measures, the subset verdict, VOID, what it replaced, the
+      store commit rule; §1's minor gate and §6's per-cell population and "N measured, M reused".
+      EVAL_FRAMEWORK.md: *Changing a corpus that has a locked baseline* (Part G's rules and
+      commands) and *Native release evidence — the subset and the store* (two instruments, the
+      subset, batch planning and the cold start, the store's key and namespace). AGENTS.md: the
+      L4 row and a paragraph on release cells. New `just eval-lock` (the snapshot records
+      `source_run`; `eval-snapshot` does not, so it cannot back a subset verdict), named in the
+      lifecycle's lock step. CI cells are described as not adopted (owner, 2026-10-17: the process
+      on this box first). **The release index part waits for that release:** its run scripts copy
+      the template at its freeze, which carries Part I verbatim.
 - [x] **T7. Corpus review (Part G), before T2b.** Per skill: a duplicate report (the G1 scan as a
       script, `evalsuite corpus-audit`), the removal list with reasons (`eval_removed.jsonl`),
       the missing and complex rows under their own tag, the safety corpus reviewed; the owner

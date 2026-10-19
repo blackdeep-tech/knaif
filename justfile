@@ -661,6 +661,13 @@ eval-backends skill *args:
 eval-snapshot skill verifier="success" *args:
     uv run python -m knaif.evalsuite run --skill {{skill}} --verifier {{verifier}} --snapshot --save evals/runs/snapshot_{{skill}}_{{verifier}} {{args}}
 
+# LOCK a skill's baseline from a run already saved under evals/runs/ (e.g.: just eval-lock ffmpeg
+# evals/runs/<run>/ffmpeg_<backend>_success.json). Records `source_run` (folder, file, sha256),
+# which the native release cells grade against row by row; a snapshot without it cannot back a
+# release-subset verdict (docs/EVAL_FRAMEWORK.md, "Native release evidence").
+eval-lock skill current:
+    uv run python -m knaif.evalsuite lock --skill {{skill}} --current {{current}}
+
 # Regression check against saved snapshot. `current` is a scoreboard JSON from a real run
 # (e.g.: just eval-success ffmpeg --save evals/runs/2026-01-01_check --verifier <snapshot's verifier>,
 # then: just eval-regression ffmpeg evals/runs/2026-01-01_check/ffmpeg_<backend>_<verifier>.json).

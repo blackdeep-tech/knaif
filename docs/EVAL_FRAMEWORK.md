@@ -117,6 +117,36 @@ runs × utterances × backends.
 - Trimming is an **eval** decision only. `train.jsonl` may still want the examples the
   eval no longer needs — teaching a behavior and measuring it have different appetites.
 
+### Changing a corpus that has a locked baseline
+
+Every run, snapshot and release record is compared row by row with earlier ones, so a row
+that changes under them silently breaks every comparison it is part of. The rules (plan
+[2026-10-14-faster-release-evidence](plans/2026-10-14-faster-release-evidence.md), Part G):
+
+- **Kept rows are immutable.** `data/eval_kept.sha256` pins every row's line (sha256 of
+  the line without its newline), and `test_corpus_integrity` fails when one changes. A
+  corpus only loses rows and gains rows.
+- **Removing** goes through a report and the owner. `evalsuite corpus-audit --skill <s>
+  --out DIR` proposes only rows wholly repeated by another row with the same expected
+  result (never a safety row) and lists the looser cases for a person; edits nothing.
+  `evalsuite corpus-remove --audit DIR/audit.json --ids … --date …` applies the approved
+  ids, refuses any removal that would lose a test, and records each removed row in
+  `data/eval_removed.jsonl`.
+- **Adding** rows: they carry their own review tag (e.g. `hard2`), so they cannot move an
+  existing slice's floor, and that tag's floor is written from the re-lock run that first
+  measured them. `evalsuite corpus-check --skill <s> --rows new.jsonl --tag <tag>` checks
+  the schema, the tag, that no id or utterance is already in the corpus or `train.jsonl`,
+  and that no reference command is shell-quoted (the harness splits commands on
+  whitespace, so a quoted value reaches the tool with its quotes).
+- **Fixing a kept row** is an owner decision recorded in the plan with its reason (2026-10-18:
+  five shell-quoted baselines; 2026-10-19: the review marks on `ffmpeg_300`–`302`). Re-pin
+  the row, and regenerate the release subset (below).
+- **Baselines a person has not reviewed** say `validated_by: null` (`outputs_validated_by`
+  for a chain row) and show up in `notebooks/baseline_authoring.ipynb` until someone has.
+- **After the corpus changes**, re-lock once, after every change is in, with
+  `just eval-lock <skill> <saved scoreboard>`, and regenerate the release subset. The skill's
+  L3 and L4 records are stale until the next release measures them.
+
 ### Descriptor rows and the injection assumption
 
 A row whose utterance names no file — `"resize the 4K video to 1080p"`, `"the mov"`,
@@ -323,7 +353,7 @@ building a skill, cross 3–5 once to finish it, then re-run 3–5 on meaningful
 | **1. Authoring** | `uv run pytest skills/<name>/python/tests/`<br>`just native-mock -- skills list` | nothing (mock backend) | seconds | Does it load, validate, dry-run? |
 | **2. Routing** | `just eval <skill> --limit 20`, then full `just eval <skill>` | model | minutes | Does the model pick the right tool? |
 | **3. Honest** | `just eval-fixtures <skill>` **first**, then `just eval-success <skill>` | model + external binaries | slow | Is the produced artifact actually right? |
-| **4. Lock** | `just eval-snapshot <skill>` | model + binaries | slow, rare | Commit the acceptance bar (own commit) |
+| **4. Lock** | `just eval-lock <skill> <the accepted run's scoreboard>` | nothing (reads a saved run) | seconds, rare | Commit the acceptance bar (own commit); records `source_run` for the native release cells |
 | **5. Parity** | `just parity <skill>` | model + native build | slow | Does the native runtime render what Python renders? |
 | **6. Shipped path** | `uv run -m knaif.evalsuite native --skill <name> --lane native-cli --verifier success` | model + native build + external binaries | slowest | Does the **binary a user installs** produce the right files? |
 
@@ -550,6 +580,83 @@ in [`evals/INDEX.md`](../evals/INDEX.md) and archive rather than delete the supe
 one. Per-tag and per-row comparison stays valid across corpus growth where the rows
 themselves are unchanged, and is usually what you actually want.
 
+## Native release evidence — the subset and the store
+
+Two instruments, each answering its own question:
+
+| | Model acceptance (Python) | Release cells (native binary) |
+|---|---|---|
+| Question | is this model + prompt good enough? | does the shipped binary still do what the accepted Python run did? |
+| Runs | when the model, prompt, retrieval, generation settings or planner code changed since the locked snapshot | every release, per model × platform × backend × skill |
+| Rows | the whole corpus | the release subset; a skill's first release on a platform, the whole corpus once |
+| Bar | `acceptance.yaml` floors and slices (`just eval-accept`) | per row against the snapshot's source run (`accept-native --population subset`) |
+| Safety | the whole safety corpus, 100% | the whole safety corpus on the binary, 100%, in every cell |
+
+The release side is what [RELEASE.md](RELEASE.md#runtime-parity-and-shipped-path-acceptance--required-before-publishing)
+§4 runs through `scripts/release_evidence.sh`; the rules are Part I of
+[the faster-release-evidence plan](plans/2026-10-14-faster-release-evidence.md). This
+section is what those cells are made of.
+
+### The release subset
+
+`skills/<skill>/data/release_subset.json` is derived from the corpus, never edited by hand:
+the first utterance of the first row in each (expected tool, expected outcome, tag set)
+stratum, plus every row tagged `chain2`, `chain3`, `edge`, `safety` or `hard2`, utterance 0.
+It covers every capability the corpus tests at about a fifth of its utterances (ffmpeg 194
+of 883, documents 80 of 175); paraphrases test the model, which model acceptance measures on
+the whole corpus. The file names the corpus it was derived from by sha256 (LF line endings),
+so a corpus change makes it stale:
+
+```bash
+uv run -m knaif.evalsuite release-subset --skill ffmpeg           # (re)derive and write it
+uv run -m knaif.evalsuite release-subset --skill ffmpeg --check   # fail when stale (preflight)
+```
+
+A subset verdict needs the snapshot's `source_run`, the saved Python board the snapshot was
+locked from, so lock with `just eval-lock` (above). The verdict compares each subset row
+with that board's grade of the same row, and refuses a row whose utterance or expected
+outcome no longer matches the corpus.
+
+### Planning once, executing every row
+
+A cell plans with **one model load** (`knaif plan --batch`), then runs every row through
+the shipped `knaif run` with the model's reply handed back to it, so everything after the
+model — parsing, validation, expansion, the clarify gate, execution — runs in the binary
+under test (a JSON-repair call is a model call of its own, replayed by its own prompt key). A **cold-start sample** of 30 subset utterances per skill, drawn
+once per release (`evalsuite shards --subset --rows 30`) and committed before any cell, runs
+live, one process per row, in every cell; each live plan must equal the batch's, or the
+cell's batch planning is void and it re-runs live.
+
+### The result store
+
+`evals/store/replies/<namespace>/<prompt key>.txt` holds the model's **raw replies**, not
+plans or outcomes. The binary records them (`KNAIF_LLM_RECORD_DIR`) and replays them
+(`KNAIF_LLM_BACKEND=replay`, `KNAIF_LLM_REPLAY_DIR`); `docs/NATIVE.md` has the variables.
+
+- **The key** is the exact prompt: sha256 of the system prompt, a NUL byte and the user
+  prompt. A release that changes the prompt, retrieval or the files a row sees gets new keys
+  by construction.
+- **The namespace** is everything else that decides a greedy reply: the model's sha256, the
+  inference fingerprint (`evalsuite fingerprints`: `knaif-llm`, `knaif-models`, the
+  generation settings, the backend manifests, the llama.cpp lock entries), the platform, the
+  backend class, and the run settings that change the arithmetic (`KNAIF_N_THREADS`,
+  `KNAIF_N_THREADS_BATCH`, `KNAIF_N_CTX`, `KNAIF_MAX_TOKENS`, `KNAIF_N_GPU_LAYERS`,
+  `KNAIF_PREFIX_REUSE`). Each namespace folder has a `key.json` saying so. The platform is
+  in it because the same sources compute differently per OS and CPU: 1.3.0's Linux CPU
+  planned 3–6% of its sampled rows unlike Windows CPU, while CUDA agreed on all 2,050.
+  The compiler toolchain is not: the cold-start sample is the check on that.
+- **`evalsuite native --store evals/store`** replays the whole selection with no model,
+  plans only the misses with the model while recording them, replays again (a reply still
+  missing stops the run), then executes every row by replay. Each board row says whether its
+  reply was `live` (cold start), `measured` (planned by this release) or `reused`.
+- **Never reused:** execution (every row runs in every release), safety, the cold-start
+  sample. There is no outcomes table: a row executes in 0.1–0.7 s, and the replies hold the
+  expensive half.
+- **Only the frozen artifact writes it.** `--store` refuses a developer build, a reply
+  recorded twice must be the same bytes, a batch whose layers ran on another device than
+  the cell expects never reaches it, and `recorded.jsonl` names the binary and run behind
+  every reply. The store is committed byte for byte (`binary` in `.gitattributes`).
+
 ## Retrieval and the prompt the model actually sees
 
 `run_corpus` applies `retrieve_tools()` per utterance and passes the result as
@@ -745,7 +852,9 @@ Use `--backends <name1>,<name2>` to select a subset. Omit to run all backends.
 ```
 python/core/knaif/evalsuite/      Framework modules (corpus, runner, scoring, report, snapshot, cli)
 skills/<name>/eval/   Per-skill verifiers, fixtures, and playbooks
-skills/<name>/data/   eval.jsonl corpus + eval_snapshot.json (locked baseline)
+skills/<name>/data/   eval.jsonl corpus + eval_snapshot.json (locked baseline), eval_kept.sha256
+                      (kept-row pins), eval_removed.jsonl, release_subset.json
+evals/store/          the result store: recorded model replies per namespace (committed)
 skills/<name>/acceptance.yaml   the S2 acceptance bar (floors, slices, safety)
 ```
 
