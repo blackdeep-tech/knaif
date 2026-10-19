@@ -2327,7 +2327,8 @@ impl PlanSession {
             output_capable,
             file_kinds,
             backend,
-            repair: model.is_some(),
+            // Replay serves a recorded repair reply as it was served live (the result store).
+            repair: model.is_some() || knaif_llm::replay_selected(),
         })
     }
 
@@ -2888,9 +2889,11 @@ fn human_size(bytes: u64) -> String {
     }
 }
 
-/// Whether the user explicitly opted out of real inference via `$KNAIF_LLM_BACKEND=mock`.
+/// Whether the user explicitly opted out of real inference via `$KNAIF_LLM_BACKEND=mock`, or
+/// the eval lane replays recorded replies (`=replay`): either way no model is auto-selected.
 fn mock_forced() -> bool {
     std::env::var("KNAIF_LLM_BACKEND").ok().as_deref() == Some("mock")
+        || knaif_llm::replay_selected()
 }
 
 /// Pick the model backing this invocation. `None` means "run the offline mock".
@@ -3609,6 +3612,20 @@ mod tests {
         .unwrap()
         .expect("explicit --model must be honored");
         assert_eq!(chosen, gguf);
+    }
+
+    #[test]
+    fn replay_beats_auto_select() {
+        // The eval lane's replay answers from recorded replies; an installed model loaded behind
+        // its back would make every "replayed" row a live one.
+        let env = ModelEnv::new("replayenv", "TODO");
+        env.install();
+        std::env::set_var("KNAIF_LLM_BACKEND", "replay");
+        assert_eq!(
+            select_model_with(None, false, DownloadPolicy::Prompt, true).unwrap(),
+            None
+        );
+        std::env::remove_var("KNAIF_LLM_BACKEND");
     }
 
     #[test]

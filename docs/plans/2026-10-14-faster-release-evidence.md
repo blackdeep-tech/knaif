@@ -779,6 +779,18 @@ Not built here: the CI join job that composes disjoint shards (T0b).
 - [ ] **T2c. E1/E2: the store** — key derivation, lookup, write, and `evalsuite cell` composing a
       board from the store plus a list of missing keys; tests with synthetic fingerprints that
       each reuse row of E3 reuses exactly what it says and nothing more.
+      **Binary half built 2026-10-19** (owner approved the binary change the same day): the
+      batch's printed plan has already passed parsing, validation, an occasional repair call, the
+      clarify gate and stem resolution, so storing it would reuse execution code. The store
+      holds the model's **raw replies** instead. `knaif-llm` gained `prompt_key` (sha256 of
+      `system`, NUL, `user`), a recording wrapper (`KNAIF_LLM_RECORD_DIR`) and a replay backend
+      (`KNAIF_LLM_BACKEND=replay`, `KNAIF_LLM_REPLAY_DIR`; a miss is an error naming its key);
+      the CLI skips model auto-select under replay and keeps the repair retry there. Checked on the
+      debug binary: a recorded request replays byte-identical, another misses loudly, and
+      Python's sha256 of the `KNAIF_DUMP_PROMPT` dump equals the file name the binary wrote. This
+      moves the inference fingerprint once, as designed. Documented in `docs/NATIVE.md`. Next:
+      the Python half (namespaces under `evals/store/`, the lane recording while it plans and
+      replaying at execution, misses as the rows to plan live, outcomes, per-row provenance).
 - [ ] **T3. B1 in the lane:** one-load batch planning + sequential execution + the cold-start sample, behind a
       lane option, with tests; validated by re-running one 1.3.0 cell both ways and requiring the
       same verdict and the same per-row grades. The lane fills the store (E1) rather than a board.

@@ -100,7 +100,113 @@ impl LlmBackend for MockBackend {
     }
 }
 
-/// Select a backend, honoring `$KNAIF_LLM_BACKEND` (`mock` | `llama`).
+/// The key of one model call in the eval lane's result store: the sha256 of the exact prompt,
+/// `system`, a NUL byte, then `user`, as UTF-8, in lowercase hex. With greedy decoding the reply
+/// is a function of this prompt, the model, the inference stack and the backend, so a stored
+/// reply can stand in for the call (plan 2026-10-14-faster-release-evidence, E1). Python's store
+/// computes the same key from the prompt dump (`$KNAIF_DUMP_PROMPT`).
+#[must_use]
+pub fn prompt_key(system: &str, user: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(system.as_bytes());
+    h.update([0u8]);
+    h.update(user.as_bytes());
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Eval-lane recording (`$KNAIF_LLM_RECORD_DIR`): the wrapped backend answers as always, and each
+/// reply is also written to `<dir>/<prompt_key>.txt`, byte for byte. Nothing else changes.
+pub struct RecordingBackend {
+    inner: Box<dyn LlmBackend>,
+    dir: std::path::PathBuf,
+}
+
+impl RecordingBackend {
+    pub fn new(inner: Box<dyn LlmBackend>, dir: impl Into<std::path::PathBuf>) -> Self {
+        Self {
+            inner,
+            dir: dir.into(),
+        }
+    }
+}
+
+impl LlmBackend for RecordingBackend {
+    fn generate_plan(&self, system: &str, user: &str) -> Result<String> {
+        let reply = self.inner.generate_plan(system, user)?;
+        let key = prompt_key(system, user);
+        std::fs::create_dir_all(&self.dir)?;
+        // Written whole, then renamed: a reader never sees half a reply.
+        let tmp = self.dir.join(format!("{key}.tmp"));
+        std::fs::write(&tmp, reply.as_bytes())?;
+        std::fs::rename(&tmp, self.dir.join(format!("{key}.txt")))?;
+        Ok(reply)
+    }
+
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+}
+
+/// Eval-lane replay (`$KNAIF_LLM_BACKEND=replay`, `$KNAIF_LLM_REPLAY_DIR`): no model; each call is
+/// answered with the reply recorded for its exact prompt. A prompt never recorded is an error
+/// naming its key, so a miss can never pass as a result.
+pub struct ReplayBackend {
+    dir: std::path::PathBuf,
+}
+
+impl ReplayBackend {
+    pub fn new(dir: impl Into<std::path::PathBuf>) -> Self {
+        Self { dir: dir.into() }
+    }
+
+    /// From the value of `$KNAIF_LLM_REPLAY_DIR`, which replay cannot run without.
+    pub fn from_dir_var(dir: Option<&str>) -> Result<Self> {
+        match dir {
+            Some(d) if !d.is_empty() => Ok(Self::new(d)),
+            _ => Err(anyhow::anyhow!(
+                "KNAIF_LLM_BACKEND=replay needs KNAIF_LLM_REPLAY_DIR (the recorded replies)"
+            )),
+        }
+    }
+}
+
+impl LlmBackend for ReplayBackend {
+    fn generate_plan(&self, system: &str, user: &str) -> Result<String> {
+        let key = prompt_key(system, user);
+        let path = self.dir.join(format!("{key}.txt"));
+        std::fs::read(&path)
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "replay miss: no stored reply for prompt {key} in {}",
+                    self.dir.display()
+                )
+            })
+            .and_then(|bytes| Ok(String::from_utf8(bytes)?))
+    }
+
+    fn name(&self) -> &str {
+        "replay"
+    }
+}
+
+/// Whether this run replays recorded replies (`$KNAIF_LLM_BACKEND=replay`). The CLI then skips
+/// model auto-selection, as for the mock, but keeps the repair retry a real model would get, so
+/// a recorded repair reply is served exactly as it was live.
+#[must_use]
+pub fn replay_selected() -> bool {
+    std::env::var("KNAIF_LLM_BACKEND").ok().as_deref() == Some("replay")
+}
+
+/// Wrap *backend* for recording when `$KNAIF_LLM_RECORD_DIR` is set; otherwise return it as is.
+fn with_recording(backend: Box<dyn LlmBackend>) -> Box<dyn LlmBackend> {
+    match std::env::var("KNAIF_LLM_RECORD_DIR") {
+        Ok(dir) if !dir.is_empty() => Box::new(RecordingBackend::new(backend, dir)),
+        _ => backend,
+    }
+}
+
+/// Select a backend, honoring `$KNAIF_LLM_BACKEND` (`mock` | `llama` | `replay`).
 ///
 /// Defaults to the mock backend. The mock returns `$KNAIF_LLM_MOCK_RESPONSE` when set (a dev/eval
 /// seam for driving `run` / parity harnesses without a model), else an empty plan envelope.
@@ -115,12 +221,15 @@ pub fn backend_from_env() -> Result<Box<dyn LlmBackend>> {
                 _ => MockBackend::empty_plan(),
             }))
         }
+        Some("replay") => Ok(Box::new(ReplayBackend::from_dir_var(
+            std::env::var("KNAIF_LLM_REPLAY_DIR").ok().as_deref(),
+        )?)),
         Some("llama") | Some("llama.cpp") | Some("llamacpp") => Err(anyhow::anyhow!(
             "set --model <path> (and build with --features llama) to use llama.cpp; \
              unset KNAIF_LLM_BACKEND or set it to 'mock' for the offline mock"
         )),
         Some(other) => Err(anyhow::anyhow!(
-            "unknown KNAIF_LLM_BACKEND {other:?} (expected 'mock' or 'llama')"
+            "unknown KNAIF_LLM_BACKEND {other:?} (expected 'mock', 'llama' or 'replay')"
         )),
     }
 }
@@ -130,10 +239,11 @@ pub fn backend_from_env() -> Result<Box<dyn LlmBackend>> {
 /// entry the CLI uses so `--model` drives real inference while offline runs stay on the mock.
 /// `verbose` controls llama.cpp's native stderr trace (ignored for the mock).
 pub fn backend_for(model: Option<&std::path::Path>, verbose: bool) -> Result<Box<dyn LlmBackend>> {
-    match model {
-        Some(path) => build_llama(path, verbose),
-        None => backend_from_env(),
-    }
+    let backend = match model {
+        Some(path) => build_llama(path, verbose)?,
+        None => backend_from_env()?,
+    };
+    Ok(with_recording(backend))
 }
 
 #[cfg(feature = "llama")]
@@ -197,5 +307,74 @@ mod tests {
         // Note: exercises the None/default branch without mutating process env.
         let b = MockBackend::empty_plan();
         assert_eq!(b.name(), "mock");
+    }
+
+    // -- record / replay: the eval lane's result store --
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("knaif-llm-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn the_prompt_key_is_the_sha256_of_system_nul_user() {
+        // Python's store computes the same key from the prompt dump:
+        // hashlib.sha256(b"s\x00u").hexdigest()
+        assert_eq!(
+            prompt_key("s", "u"),
+            "f30a8c69aa63889b1c10206f9668943724ee24dff65dcd7790e7d41426d3031e"
+        );
+        assert_ne!(
+            prompt_key("ab", "c"),
+            prompt_key("a", "bc"),
+            "the boundary is part of it"
+        );
+    }
+
+    #[test]
+    fn recording_keeps_the_reply_and_writes_it_under_its_prompt() {
+        let dir = scratch("record");
+        let b = RecordingBackend::new(Box::new(MockBackend::new("reply one")), &dir);
+        assert_eq!(b.generate_plan("sys", "user").unwrap(), "reply one");
+        assert_eq!(b.name(), "mock");
+        let stored =
+            std::fs::read_to_string(dir.join(format!("{}.txt", prompt_key("sys", "user"))));
+        assert_eq!(stored.unwrap(), "reply one");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn replay_serves_a_recorded_reply_byte_for_byte() {
+        let dir = scratch("replay");
+        let reply = "<think>\n</think>\n{\"plan\": [{\"tool\": \"x\", \"args\": {}}]}\r\n";
+        RecordingBackend::new(Box::new(MockBackend::new(reply)), &dir)
+            .generate_plan("sys", "user")
+            .unwrap();
+        let replay = ReplayBackend::new(&dir);
+        assert_eq!(replay.name(), "replay");
+        assert_eq!(replay.generate_plan("sys", "user").unwrap(), reply);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_prompt_never_recorded_is_a_loud_miss() {
+        let dir = scratch("miss");
+        let err = ReplayBackend::new(&dir)
+            .generate_plan("sys", "other")
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("replay miss"), "{msg}");
+        assert!(msg.contains(&prompt_key("sys", "other")), "{msg}");
+    }
+
+    #[test]
+    fn replay_needs_its_folder() {
+        assert!(ReplayBackend::from_dir_var(None).is_err());
+        assert!(ReplayBackend::from_dir_var(Some("")).is_err());
+        assert_eq!(
+            ReplayBackend::from_dir_var(Some("x")).unwrap().name(),
+            "replay"
+        );
     }
 }
