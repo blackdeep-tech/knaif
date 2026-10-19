@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -52,10 +53,10 @@ def prompt_key(system: str, user: str) -> str:
     return hashlib.sha256(system.encode("utf-8") + b"\0" + user.encode("utf-8")).hexdigest()
 
 
-def run_settings(env: dict[str, str] | None = None) -> dict[str, str | None]:
+def run_settings(env: Mapping[str, str] | None = None) -> dict[str, str | None]:
     """The values of `RUN_SETTINGS` in *env* (default: this process's), unset as None."""
-    env = os.environ if env is None else env
-    return {name: (env.get(name) or None) for name in RUN_SETTINGS}
+    source: Mapping[str, str] = os.environ if env is None else env
+    return {name: (source.get(name) or None) for name in RUN_SETTINGS}
 
 
 def namespace(components: dict[str, Any]) -> str:

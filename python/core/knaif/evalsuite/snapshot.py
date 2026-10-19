@@ -103,7 +103,8 @@ def load_source_run(snapshot: dict[str, Any], root: Path | str = ".") -> dict[st
             f"{source['folder']}/{source['scoreboard']} does not match the sha256 the snapshot "
             "recorded; it is not the run the baseline was locked from"
         )
-    return json.loads(raw)
+    board: dict[str, Any] = json.loads(raw)
+    return board
 
 
 def diff_snapshots(

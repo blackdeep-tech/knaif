@@ -1247,11 +1247,11 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         # Per row, whether this release asked the model or reused a stored reply (E2, I9).
         scoreboard["store"] = store_record
         for row in scoreboard.get("rows") or []:
-            key = (row.get("id"), row.get("utterance_idx"))
+            row_key = (row.get("id"), row.get("utterance_idx"))
             row["reply"] = (
                 "live"
-                if key in (live or set())
-                else "measured" if key in measured_keys else "reused"
+                if row_key in (live or set())
+                else "measured" if row_key in measured_keys else "reused"
             )
 
     scoreboard["lane"] = lane.name

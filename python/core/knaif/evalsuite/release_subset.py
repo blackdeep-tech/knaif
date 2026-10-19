@@ -109,7 +109,10 @@ def load_subset_beside(skill: str, corpus: Path | str) -> dict[str, Any]:
     problems = check_subset_beside(skill, corpus)
     if problems:
         raise ValueError(problems[0])
-    return json.loads((Path(corpus).parent / SUBSET_FILE).read_text(encoding="utf-8"))
+    doc: dict[str, Any] = json.loads(
+        (Path(corpus).parent / SUBSET_FILE).read_text(encoding="utf-8")
+    )
+    return doc
 
 
 def subset_rows(doc: dict[str, Any]) -> list[tuple[str, int]]:
