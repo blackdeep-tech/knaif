@@ -340,10 +340,16 @@ That key moved at **every** release (the workspace version lives in `Cargo.toml`
 changes for unrelated reasons), so a stored plan would never have been reused. Instead:
 
 ```text
-plans/     key = (sha256 of the exact prompt, model sha256, inference fingerprint, backend class)
-           value = the model's raw reply, which the lane already replays through the mock
-outcomes/  key = (plan hash, the skill's execution fingerprint, OS, fixture-set sha256, verifier)
+replies/   key = (sha256 of the exact prompt, model sha256, inference fingerprint, backend class,
+                  the run settings that change the arithmetic)
+           value = the model's raw reply, replayed into the binary (KNAIF_LLM_BACKEND=replay)
 ```
+
+*Amended again 2026-10-19 (owner): no outcomes table.* Measured on the first real run, a row
+executes in 0.1–0.7 s, so reusing outcomes would save a few minutes a cell, while the replies hold
+the expensive half (planning, ~13 s a row on the CPU). Every row is executed fresh in every
+release, which is also the stronger guarantee. The execution fingerprint stays (`evalsuite
+fingerprints`) for the day execution becomes the cost.
 
 The prompt comes from the new binary itself (`KNAIF_DUMP_PROMPT` under `plan --batch` with the mock
 backend: every subset prompt in seconds, no model). The **inference fingerprint** is `knaif-llm`,
@@ -367,17 +373,19 @@ computes the key set the subset needs, looks every key up, and the **fresh work 
 keys only**: missing plans are batch-planned (B1) on that backend, missing outcomes are executed on
 that OS. Everything else is reused, and the board records per row whether its plan and its outcome
 were *measured in this release* or *reused from <release, cell>*. Release notes print the two
-counts per cell. The composed-cell wording ("sampled, not measured in full") goes away: every row
+counts per cell. *As built (T2c, 2026-10-19):* only replies are looked up; the misses are planned
+with the model and recorded, and every row is executed. The board records per row whether its
+reply was `measured` or `reused`, and the L4 record and the gate print both counts. The composed-cell wording ("sampled, not measured in full") goes away: every row
 is measured, the question is only when.
 
 **E3. What is reused across what.**
 
 | Reuse | Why it is safe | What confirms it |
 |---|---|---|
-| CUDA → Vulkan → CPU execution on one OS | an outcome depends on the plan, not on which backend produced it | the plan key differs per backend, so a backend that plans differently gets its own execution |
-| 4B ↔ 1.7B execution | same plan hash → same commands → same files | plan equality is the key, nothing to confirm |
-| Release N → N+1 plans | planning fingerprint and model unchanged | the fingerprint is in the key; B1's cold-start sample re-plans ~30 rows per cell fresh and must hit the stored plans |
-| Release N → N+1 outcomes | execution fingerprint of the plan's tools unchanged | the per-tool fingerprint is in the key; a shared-execution-code change (chain executor, sandbox, paths) is part of every tool's fingerprint and stales everything |
+| ~~CUDA → Vulkan → CPU execution on one OS~~ | dropped with the outcomes table (2026-10-19) | — |
+| ~~4B ↔ 1.7B execution~~ | dropped with the outcomes table (2026-10-19) | — |
+| Release N → N+1 plans (replies) | same prompt text, model, inference fingerprint, backend and run settings | all are in the key; B1's cold-start sample re-plans ~30 rows per cell fresh and must hit the stored plans |
+| ~~Release N → N+1 outcomes~~ | dropped with the outcomes table (2026-10-19) | — |
 | Python side of L3 | Python planning fingerprint unchanged | same as plans |
 
 **E4. What is never reused.** Safety on the binary (per binary × backend, every release); the
@@ -602,7 +610,9 @@ affects. They come in two stages, because the result store does not exist yet:
   and never reused.
 
 **I3. The L4 bar on the subset** (D2, as `accept-native --population subset` grades it): no row
-the accepted Python run passed may fail on the binary; `outcome_accuracy` and `avg_knaif_score`
+the accepted Python run passed may fail on the binary, and on such a row the binary's file may not
+score lower than Python's (owner, 2026-10-19); every subset row the Python run graded must still
+have that utterance and expected outcome in the corpus; `outcome_accuracy` and `avg_knaif_score`
 within 0.02 of Python's **on the same rows** (the snapshot's `source_run`); coverage 1.0; safety
 100%. The S2 slice floors do not apply, so slice waivers have nothing to waive: a regressed row
 goes to the owner with both plans and commands, and a safety miss is never waived.
@@ -622,8 +632,8 @@ voids that cell's batch planning, and the cell re-runs live, in full, on the sub
 2026-10-18).
 
 **I6. Across backends (B2).** Stage 1: none. Each cell executes its own plans; execution costs
-0.1–0.7 s a row, so there is little to save. Stage 2: execution is reused by plan hash (E3).
-The cold-start rows, which run live end to end on every backend, are also B2's fresh confirmation
+0.1–0.7 s a row, so there is little to save. Stage 2: the same; execution is never reused (owner,
+2026-10-19: no outcomes table). The cold-start rows, which run live end to end on every backend, are also B2's fresh confirmation
 sample: one sample, not two (owner, 2026-10-18; E4's list shrinks accordingly).
 
 **I7. Daemon plan equality (B3).** In-process vs through the daemon, byte-identical, both models,
@@ -631,10 +641,13 @@ both skills, over the subset's utterances, on the platforms 1.3.0 checked (Windo
 Metal, Linux CPU). The full corpus is used when the daemon or the generation path changed since
 the last release. A difference goes to the owner before any release claim about the daemon.
 
-**I8. Reuse between releases (E3), Stage 2 only.** Plans are reused when the model sha256 and the
-planning fingerprint are unchanged; outcomes when the execution fingerprint of the plan's tools is
-unchanged. Until T2 splits the `native` fingerprint, any change under `native/` stales every
-outcome, so in practice no outcome is reused. Never reused (E4): safety, the cold-start sample.
+**I8. Reuse between releases (E3), Stage 2 only.** A model reply is reused when its exact prompt,
+the model sha256, the inference fingerprint, the backend class and the run settings are unchanged
+(`native --store`, E1 as amended). Outcomes are never reused: every row executes in every release
+(owner, 2026-10-19). Never reused (E4): safety, the cold-start sample, execution. Only the frozen
+artifact writes `evals/store`, and each recorded reply is logged with the binary and run that
+recorded it. The key does not name the compiler toolchain or build flags: the cold-start sample is
+the only check on a compiler-level change to the arithmetic (owner, 2026-10-19).
 
 **I9. Reporting (E2).** Each board records per row whether its plan and its outcome were measured
 in this release or reused from `<release, cell>`. The gate prints both counts per cell, and the
@@ -776,7 +789,7 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       recorded** as L4 evidence, like a batch-planned board, until T1's rules adopt the subset
       (and D1's full first-release cell per platform). Still open for T4: shards drawn from the
       subset and a composed subset cell carrying its `population`; L3 on the subset (D4).
-- [ ] **T2c. E1/E2: the store** — key derivation, lookup, write, and `evalsuite cell` composing a
+- [x] **T2c. E1/E2: the store** — key derivation, lookup, write, and `evalsuite cell` composing a
       board from the store plus a list of missing keys; tests with synthetic fingerprints that
       each reuse row of E3 reuses exactly what it says and nothing more.
       **Binary half built 2026-10-19** (owner approved the binary change the same day): the
@@ -788,9 +801,26 @@ Not built here: the CI join job that composes disjoint shards (T0b).
       the CLI skips model auto-select under replay and keeps the repair retry there. Checked on the
       debug binary: a recorded request replays byte-identical, another misses loudly, and
       Python's sha256 of the `KNAIF_DUMP_PROMPT` dump equals the file name the binary wrote. This
-      moves the inference fingerprint once, as designed. Documented in `docs/NATIVE.md`. Next:
-      the Python half (namespaces under `evals/store/`, the lane recording while it plans and
-      replaying at execution, misses as the rows to plan live, outcomes, per-row provenance).
+      moves the inference fingerprint once, as designed. Documented in `docs/NATIVE.md`.
+      **Lane half built 2026-10-19.** `evalsuite/store.py`: a namespace is (model sha256,
+      inference fingerprint, backend class, the run settings that change the arithmetic:
+      `KNAIF_N_THREADS`, `KNAIF_N_CTX`, `KNAIF_MAX_TOKENS`, `KNAIF_N_GPU_LAYERS`,
+      `KNAIF_PREFIX_REUSE`), a folder `evals/store/replies/<id>/` with its `key.json`.
+      `evalsuite native --store evals/store` replays the whole selection with no model (seconds),
+      plans only the misses with the model while recording, replays again (a reply still missing
+      stops the run, nothing graded), then executes every row by replay; the cold-start rows run
+      live and never touch the store. The board records `store` (namespace, components, measured
+      vs reused) and each row's `reply`; the L4 record keeps the counts and the gate prints them
+      (I9). The store variables are stripped from every inherited environment. **Not built:**
+      the outcomes table: execution costs 0.1–0.7 s a row, so reusing outcomes would save a few
+      minutes per cell; the replies hold the expensive half.
+      **First real run 2026-10-19** (`evals/runs/2026-10-19_store-check_success`, owner approved the
+      GPU): developer CUDA build, 4B, ffmpeg subset. `record` measured 194 replies (96.6 s of
+      model planning); `reuse` reused 194/194 and planned nothing; cold start 30/30 in both; the
+      two boards agree on all 194 rows (grade, plan, command), outcome 0.9536, the accepted
+      Python run's on those rows. The store is `binary` in `.gitattributes`: under `* text=auto`
+      a Windows checkout would have rewritten a recorded reply's line endings (Codex audit,
+      2026-10-19, its last step before a usage limit stopped it; the audit is to be re-run).
 - [ ] **T3. B1 in the lane:** one-load batch planning + sequential execution + the cold-start sample, behind a
       lane option, with tests; validated by re-running one 1.3.0 cell both ways and requiring the
       same verdict and the same per-row grades. The lane fills the store (E1) rather than a board.
@@ -807,7 +837,36 @@ Not built here: the CI join job that composes disjoint shards (T0b).
 - [ ] **T4. Run scripts on the store:** a release's run script becomes "compute missing keys per
       cell, batch-plan them, execute them, run the never-reused samples, compose, grade"; A1/A2
       are what the key lookup does, not separate steps.
+      **Windows built 2026-10-19.** `scripts/release_evidence.sh` holds the mechanics (1.3.0's
+      tested functions, moved to the subset and the store) and a release copies
+      `scripts/release_evidence_run_all.template.sh` at its freeze: pins (artifact, sha256,
+      freeze, lanes, models), Part I's rules verbatim (a test keeps the copy equal to the plan),
+      amendments, then one stage per invocation: `check`, `setup`, `draw` (the cold-start samples,
+      once, committed before any cell), `l3` (`parity_check --subset`), `gpu` / `cpu` (subset
+      cells through `evals/store`, safety on the binary, `accept-native --population subset`;
+      a platform without its first full cell, or a cold start that did not hold, goes to the
+      owner), `daemon` (the subset's utterances), `store` (path scan and count of what the store
+      gained). No slice waivers: the subset has no slice floors. `.gitignore` now commits
+      `evals/store/**`, `cold_start_*.json` and `fingerprints.json`. Checked here without the
+      GPU: both scripts parse, an unfilled template refuses to run, `draw` writes 30 utterances
+      per skill and keeps them on a second run. **Still to do:** Linux (WSL) and macOS variants.
 - [ ] **T5. Codex audit** of T1–T4 before the next release uses them.
+      **Audit 1, 2026-10-19.** Codex stopped at its usage limit after four minutes (its last step
+      found the store's line endings, fixed). The owner had the same brief run by a Fable 5.1
+      reviewer: no P0; seven P1s, all fixed, all keeping the rules: a lower file score on a row
+      Python passed is now a regression (the owner's reading of I3); the backend payload manifest
+      joined the inference fingerprint; preflight requires the working tree and the Cargo files
+      at the freeze; a developer build cannot write `evals/store` and every recorded reply is
+      logged with its binary and run (`recorded.jsonl`); the Python run must have graded the
+      subset rows as they stand (utterance, expected outcome); `KNAIF_N_THREADS_BATCH` joined the
+      run settings; a cell whose board ran another binary than the verified artifact is VOID. P2s
+      fixed: a `live` stage for a cell whose cold start failed; a re-recorded reply that differs
+      fails instead of overwriting; cold-start rows are labelled `live`; the cold-start sample
+      must be committed before a cell. The owner kept the toolchain out of the key (the cold
+      start is the net, I8). **Not done:** checking the backend class per row process rather
+      than once per cell (P2), refusing `--store` when a daemon would serve the plan (P3; it
+      fails closed today), a stale stage lock after a hard kill (P3). A Codex pass over the
+      result remains to be done.
 - [ ] **T6. RELEASE.md and EVAL_FRAMEWORK.md** describe the new method (two instruments, the
       store, the CI cells); the next release index's gate rules adopt it; AGENTS.md's lifecycle
       table says L4 measures the subset.

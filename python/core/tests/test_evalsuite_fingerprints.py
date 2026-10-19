@@ -41,6 +41,7 @@ FILES = {
     "Cargo.toml": '[workspace.package]\nversion = "1.3.0"',
     "contracts/runtime/generation.yaml": "temperature: 0",
     "contracts/runtime/core_tools.yaml": "tools: []",
+    "contracts/backends/backend-manifest.yaml": "cuda: {sha256: a}",
     "Cargo.lock": LOCK,
     "skills/a/skill.yaml": "name: a",
     "skills/a/tools.yaml": "tools: []",
@@ -156,3 +157,10 @@ def test_the_cli_prints_both_fingerprints(tree: Path, monkeypatch, capsys) -> No
         "inference": inference_fingerprint(tree),
         "execution": {s: execution_fingerprint(s, tree) for s in ("a", "b")},
     }
+
+
+def test_the_backend_payload_moves_inference(tree: Path) -> None:
+    """The manifest pins the ggml-cuda library a CUDA run loads (Fable audit, 2026-10-19)."""
+    assert "inference" in _moved(
+        tree, "contracts/backends/backend-manifest.yaml", "cuda: {sha256: b}"
+    )

@@ -1020,9 +1020,18 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     lane_sandbox = sandbox / f"lane-{lane.name}"
     lane_sandbox.mkdir(parents=True, exist_ok=True)
 
-    batched = bool(getattr(args, "batch_plan", False) or getattr(args, "batch_plans", None))
+    batched = bool(
+        getattr(args, "batch_plan", False)
+        or getattr(args, "batch_plans", None)
+        or getattr(args, "store", None)
+    )
     print(f"\nLane: {lane.name}  (kind: native_cli)")
-    print(f"  entry point : {lane.batch_entry_point if batched else lane.entry_point}")
+    entry_point = (
+        lane.store_entry_point
+        if getattr(args, "store", None)
+        else lane.batch_entry_point if batched else lane.entry_point
+    )
+    print(f"  entry point : {entry_point}")
     print(f"  binary      : {lane.binary}")
     print(f"  model       : {lane.model_path}")
     print(f"  fixtures    : {fixture_dir}")
@@ -1051,14 +1060,116 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         only = only if only is not None else rows_in
         population = {"kind": "subset", "corpus_sha256": doc["corpus_sha256"], "rows": len(only)}
     recorded = getattr(args, "batch_plans", None)
-    batch = bool(getattr(args, "batch_plan", False)) or bool(recorded)
+    store_root = getattr(args, "store", None)
+    if store_root and recorded:
+        sys.exit("ERROR: --store records and replays the model's replies; drop --batch-plans.")
+    batch = bool(getattr(args, "batch_plan", False)) or bool(recorded) or bool(store_root)
     live = load_only(getattr(args, "live_sample", None))
     if live is not None and not batch:
         sys.exit("ERROR: --live-sample is the cold-start sample of a --batch-plan run.")
     plans: dict[tuple[str, int], dict[str, Any]] | None = None
     plans_source: dict[str, Any] | None = None
     timing: dict[str, Any] = {}
-    if batch:
+    model_sha: str | None = None
+    replay_dir: Path | None = None
+    store_record: dict[str, Any] | None = None
+    measured_keys: set[tuple[str, int]] = set()
+    if batch and store_root:
+        # The result store (T2c): replay what the namespace holds, plan only the misses with the
+        # model (recording their replies), then replay everything so every row has its plan.
+        from .fingerprints import inference_fingerprint
+        from .matrix import backend_family
+        from .store import STORE_ROOT, is_replay_miss, namespace_dir, run_settings
+
+        # The committed store holds the frozen artifacts' replies only: a developer build records
+        # into a store of its own (Fable audit, 2026-10-19).
+        root_res, shared = Path(store_root).resolve(), STORE_ROOT.resolve()
+        if not packaged and (root_res == shared or shared in root_res.parents):
+            sys.exit(
+                f"ERROR: --store {store_root} holds the frozen release artifacts' replies; a "
+                "developer build (not the packaged layout) records into a store of its own, "
+                "e.g. under its run folder."
+            )
+
+        rows = corpus[: args.limit] if args.limit is not None else corpus
+        keys = [
+            (r.id, j)
+            for r in rows
+            for j in range(len(r.utterances))
+            if only is None or (r.id, j) in only
+        ]
+        by_key = {(r.id, j): u for r in rows for j, u in enumerate(r.utterances)}
+        model_sha = _sha256_file(lane.model_path)
+        components = {
+            "model_sha256": model_sha,
+            # Of the checkout the binary under test was built from (the freeze commit).
+            "inference": inference_fingerprint(Path.cwd()),
+            "backend": backend_family(compute_backend) or "unknown",
+            "settings": run_settings(),
+        }
+        replay_dir = namespace_dir(Path(store_root), components)
+
+        def _replay(selected: list[tuple[str, int]]) -> list[dict[str, Any]]:
+            return native_lane.batch_plan(
+                lane,
+                args.skill,
+                [by_key[k] for k in selected],
+                fixture_dir=fixture_dir,
+                work_dir=lane_sandbox / ".batch",
+                replay_dir=replay_dir,
+            )
+
+        first = _replay(keys)
+        measured_keys = {k for k, env in zip(keys, first, strict=True) if is_replay_miss(env)}
+        print(
+            f"  store       : {replay_dir.name[:12]} holds {len(keys) - len(measured_keys)} of "
+            f"{len(keys)} replies",
+            flush=True,
+        )
+        if measured_keys:
+            missing = [k for k in keys if k in measured_keys]
+            print(f"  planning    : {len(missing)} row(s) with the model, recording", flush=True)
+            t0 = time.perf_counter()
+            held = {p.name for p in replay_dir.glob("*.txt")}
+            native_lane.batch_plan(
+                lane,
+                args.skill,
+                [by_key[k] for k in missing],
+                fixture_dir=fixture_dir,
+                work_dir=lane_sandbox / ".batch",
+                record_dir=replay_dir,
+            )
+            timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
+            # Which binary recorded each new reply, and in which run (I9 "reused from <run>").
+            new = sorted(p.stem for p in replay_dir.glob("*.txt") if p.name not in held)
+            stamp = {
+                "binary_sha256": _sha256_file(lane.binary),
+                "model_sha256": model_sha,
+                "lane": lane.name,
+                "run": Path(args.save).name if args.save else None,
+                "recorded": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+            with (replay_dir / "recorded.jsonl").open("a", encoding="utf-8", newline="\n") as fh:
+                for key in new:
+                    fh.write(json.dumps({"key": key, **stamp}, sort_keys=True) + "\n")
+            envelopes = _replay(keys)
+        else:
+            timing["plan_batch_s"] = None
+            envelopes = first
+        still = [k for k, env in zip(keys, envelopes, strict=True) if is_replay_miss(env)]
+        if still:
+            sys.exit(
+                f"ERROR: {len(still)} reply(ies) still missing after recording, e.g. {still[:3]}: "
+                "the model's replies did not replay. Nothing was graded."
+            )
+        plans = dict(zip(keys, envelopes, strict=True))
+        store_record = {
+            "namespace": replay_dir.name,
+            "components": components,
+            "measured": len(measured_keys),
+            "reused": len(keys) - len(measured_keys),
+        }
+    elif batch:
         rows = corpus[: args.limit] if args.limit is not None else corpus
         keys = [
             (r.id, j)
@@ -1110,14 +1221,25 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         only=only,
         plans=plans,
         live=live,
+        replay_dir=replay_dir,
     )
     timing["rows_s"] = round(time.perf_counter() - t0, 1)
     timing["rows"] = len(outputs)
     scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, lane_sandbox)
+    if store_record is not None:
+        # Per row, whether this release asked the model or reused a stored reply (E2, I9).
+        scoreboard["store"] = store_record
+        for row in scoreboard.get("rows") or []:
+            key = (row.get("id"), row.get("utterance_idx"))
+            row["reply"] = (
+                "live"
+                if key in (live or set())
+                else "measured" if key in measured_keys else "reused"
+            )
 
     scoreboard["lane"] = lane.name
     scoreboard["lane_kind"] = "native_cli"
-    scoreboard["lane_entry_point"] = lane.batch_entry_point if batch else lane.entry_point
+    scoreboard["lane_entry_point"] = entry_point
     # Wall-clock of this run's phases on this machine: what B1 is measured by, never a speed
     # figure (speed is measured as docs/PERFORMANCE.md says).
     scoreboard["timing"] = timing
@@ -1149,7 +1271,7 @@ def cmd_native(args: argparse.Namespace) -> dict[str, Any]:
     scoreboard["packaged_layout"] = packaged
     # The full hash is L4 evidence (`native_status.yaml`: L4 is invalidated by `model`); the
     # prefix is kept for readers of older boards.
-    scoreboard["model_sha256"] = _sha256_file(lane.model_path)
+    scoreboard["model_sha256"] = model_sha or _sha256_file(lane.model_path)
     scoreboard["model_sha256_prefix"] = scoreboard["model_sha256"][:16]
     # Which matrix row this run is: an L4 verdict is filed under model x OS x backend, and a
     # run under WSL is a Linux run however it was launched.
@@ -2260,6 +2382,7 @@ def _accept_native_subset(
     the report, which the caller records like a full cell's. Refused outright, recording
     nothing, on a platform where the skill never had a full-corpus cell (I2, D1)."""
     from .acceptance import check_native_subset_acceptance, load_safety_corpus
+    from .corpus import load_corpus
     from .gate import earlier_platform_cell
     from .matrix import backend_family, current_os
     from .release_subset import corpus_path, load_subset_beside
@@ -2287,6 +2410,7 @@ def _accept_native_subset(
         safety,
         coverage_floor=coverage_floor,
         safety_rows=[row.id for row in load_safety_corpus(args.skill)],
+        corpus=load_corpus(corpus_path(args.skill)),
     )
     source = baseline["source_run"]
     print(f"\n=== L4 acceptance on the release subset: {args.skill} ===")
@@ -2636,6 +2760,13 @@ def l4_record_entry(
         entry["population"] = current["population"]
     if current.get("planning"):
         entry["planning"] = current["planning"]
+    store = current.get("store")
+    if store:
+        entry["replies"] = {
+            "measured": store.get("measured"),
+            "reused": store.get("reused"),
+            "namespace": store.get("namespace"),
+        }
     return entry
 
 
@@ -3327,6 +3458,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the committed release subset (data/release_subset.json, D1) instead of the "
         "full corpus; with --only, the shard must lie inside it. The board records it as its "
         "population, which `accept-native --population subset` requires.",
+    )
+    p_nat.add_argument(
+        "--store",
+        default=None,
+        metavar="DIR",
+        help="Batch-plan through the result store (e.g. evals/store): replay the model's "
+        "recorded replies, plan only the misses with the model and record them, then execute "
+        "every row by replay. The board says per row whether its reply was measured or reused.",
     )
     p_nat.add_argument("--save", default=None, metavar="DIR")
     p_nat.add_argument("--verbose", action="store_true")

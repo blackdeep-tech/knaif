@@ -448,3 +448,36 @@ def test_boards_over_different_populations_do_not_compose() -> None:
     repl = _board([_scored("a", 1, True, 1.0)], population=pop)
     with pytest.raises(ValueError, match="population"):
         cmp.compose_cell(base, repl, sources={"base": "b.json", "replacements": "r.json"})
+
+
+def test_the_l4_record_counts_replies_measured_and_reused() -> None:
+    """Part I, I9: a cell planned through the store says how much of it this release measured."""
+    from knaif.evalsuite.cli import l4_record_entry
+
+    board = _board([_scored("a", 0, True, 1.0)])
+    board["store"] = {"namespace": "n" * 64, "components": {}, "measured": 2, "reused": 190}
+    entry = l4_record_entry(board, Path("s.json"), summary="ok", passed=True, cell="x", evidence={})
+    assert entry["replies"] == {"measured": 2, "reused": 190, "namespace": "n" * 64}
+
+
+def test_the_gate_prints_replies_measured_and_reused(tmp_path: Path) -> None:
+    from knaif.evalsuite.gate import evaluate_skill, record_layers
+    from knaif.evalsuite.matrix import cell_key
+
+    from .test_acceptance_matrix import MODEL, _contracts_and_l3, _matrix
+    from .test_gate import make_tree
+
+    tree = make_tree(tmp_path)
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    cuda = cell_key(MODEL, "windows-x64", "cuda")
+    replies = {"measured": 4, "reused": 190, "namespace": "n" * 64}
+    record_layers(
+        "demo", tree, {"L4": {"cell": cuda, "summary": "ok", "passed": True, "replies": replies}}
+    )
+    record_layers(
+        "demo", tree, {"L4": {"cell": cell_key(MODEL, "windows-x64", "cpu"), "summary": "ok",
+                              "passed": True}}
+    )  # fmt: skip
+    l4 = next(s for s in evaluate_skill("demo", tree, "supported").layers if s.layer == "L4")
+    assert f"{cuda} 4 measured, 190 reused" in l4.detail

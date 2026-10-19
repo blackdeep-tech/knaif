@@ -51,6 +51,10 @@ site/data/*.json text eol=lf
 *.pdf binary
 contracts/parity/fixtures/** binary
 
+# The result store's recorded model replies are replayed into the binary as recorded
+# (KNAIF_LLM_BACKEND=replay): a CRLF checkout must not change one byte of what the model said.
+evals/store/** binary
+
 # Frozen eval probes are checked against a recorded sha256 of their LF bytes; a CRLF checkout would
 # make every hash check fail on Windows.
 evals/**/probe_*.jsonl     text eol=lf

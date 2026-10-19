@@ -135,11 +135,23 @@ impl LlmBackend for RecordingBackend {
     fn generate_plan(&self, system: &str, user: &str) -> Result<String> {
         let reply = self.inner.generate_plan(system, user)?;
         let key = prompt_key(system, user);
+        let target = self.dir.join(format!("{key}.txt"));
+        // Greedy decoding repeats itself: an existing reply that differs is a broken assumption,
+        // never something to overwrite.
+        if let Ok(held) = std::fs::read(&target) {
+            if held == reply.as_bytes() {
+                return Ok(reply);
+            }
+            return Err(anyhow::anyhow!(
+                "record conflict: prompt {key} already holds a different reply in {}",
+                self.dir.display()
+            ));
+        }
         std::fs::create_dir_all(&self.dir)?;
         // Written whole, then renamed: a reader never sees half a reply.
         let tmp = self.dir.join(format!("{key}.tmp"));
         std::fs::write(&tmp, reply.as_bytes())?;
-        std::fs::rename(&tmp, self.dir.join(format!("{key}.txt")))?;
+        std::fs::rename(&tmp, &target)?;
         Ok(reply)
     }
 
@@ -341,6 +353,28 @@ mod tests {
         let stored =
             std::fs::read_to_string(dir.join(format!("{}.txt", prompt_key("sys", "user"))));
         assert_eq!(stored.unwrap(), "reply one");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_reply_recorded_again_must_be_the_same_reply() {
+        // Greedy decoding repeats itself; a different reply for the same prompt is the very
+        // nondeterminism the store rests on not having, so it fails rather than overwrites.
+        let dir = scratch("conflict");
+        RecordingBackend::new(Box::new(MockBackend::new("first")), &dir)
+            .generate_plan("sys", "user")
+            .unwrap();
+        let same = RecordingBackend::new(Box::new(MockBackend::new("first")), &dir);
+        assert_eq!(same.generate_plan("sys", "user").unwrap(), "first");
+        let other = RecordingBackend::new(Box::new(MockBackend::new("second")), &dir);
+        let msg = other.generate_plan("sys", "user").unwrap_err().to_string();
+        assert!(msg.contains("record conflict"), "{msg}");
+        let kept = std::fs::read_to_string(dir.join(format!("{}.txt", prompt_key("sys", "user"))));
+        assert_eq!(
+            kept.unwrap(),
+            "first",
+            "the stored reply is never overwritten"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

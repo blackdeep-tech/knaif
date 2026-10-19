@@ -161,6 +161,16 @@ class LaneConfig:
             "with KNAIF_LLM_BACKEND=mock replaying that row's batch plan"
         )
 
+    @property
+    def store_entry_point(self) -> str:
+        """What a run planned through the result store (T2c) runs, stated for the record."""
+        return (
+            f"{self.binary} plan --skill <skill> --batch <rows> --json with "
+            "KNAIF_LLM_BACKEND=replay from the store; the misses with --model "
+            f"{self.model_path.name} and KNAIF_LLM_RECORD_DIR; then per row {self.binary} run "
+            "<skill> --yes --overwrite with KNAIF_LLM_BACKEND=replay"
+        )
+
 
 def load_lane(config_path: Path, lane: str, root: Path) -> LaneConfig:
     """Read one lane from the eval config's top-level `lanes:` section.
@@ -312,16 +322,35 @@ def build_replay_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]
     return argv[:i] + argv[i + 2 :]
 
 
-#: The variables that turn the model off. Stripped from every live row, so a parent shell that
-#: set them can never make a "live" row a replay.
-_MOCK_VARS = ("KNAIF_LLM_BACKEND", "KNAIF_LLM_MOCK_RESPONSE")
+#: The variables that turn the model off, or point it at the result store. Stripped from every
+#: inherited environment, so a parent shell that set them can never make a "live" row a replay,
+#: or a replay record into the store.
+_MOCK_VARS = (
+    "KNAIF_LLM_BACKEND",
+    "KNAIF_LLM_MOCK_RESPONSE",
+    "KNAIF_LLM_REPLAY_DIR",
+    "KNAIF_LLM_RECORD_DIR",
+)
+
+
+def _clean_env() -> dict[str, str]:
+    return {k: v for k, v in _lane_env().items() if k not in _MOCK_VARS}
 
 
 def _replay_env(plan: dict[str, Any]) -> dict[str, str]:
     return {
-        **_lane_env(),
+        **_clean_env(),
         "KNAIF_LLM_BACKEND": "mock",
         "KNAIF_LLM_MOCK_RESPONSE": json.dumps(plan, ensure_ascii=False),
+    }
+
+
+def _store_replay_env(replay_dir: Path) -> dict[str, str]:
+    """The binary answers every model call from the recorded replies (the result store, T2c)."""
+    return {
+        **_clean_env(),
+        "KNAIF_LLM_BACKEND": "replay",
+        "KNAIF_LLM_REPLAY_DIR": str(Path(replay_dir).resolve()),
     }
 
 
@@ -332,8 +361,14 @@ def batch_plan(
     *,
     fixture_dir: Path,
     work_dir: Path,
+    replay_dir: Path | None = None,
+    record_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Plan every utterance with ONE model load: `knaif plan --batch`, one envelope per line.
+
+    With *replay_dir* no model is loaded: every model call is answered from that store namespace,
+    and an utterance whose prompt it does not hold comes back as a replay miss. With
+    *record_dir* the model plans and each raw reply is also written there (T2c).
 
     `plan --batch` and `run` share `PlanSession::plan`, and `run` dumps the plan before its
     clarify gate, so a batch envelope is the plan `run` would have dumped for that utterance
@@ -351,17 +386,14 @@ def batch_plan(
     # Absolute: the binary runs with cwd = work_dir, where a relative path points nowhere.
     batch_file = (work_dir / ".knaif-batch.txt").resolve()
     batch_file.write_text("".join(u + "\n" for u in utterances), encoding="utf-8")
-    argv = [
-        str(lane.binary),
-        "plan",
-        "--skill",
-        skill,
-        "--batch",
-        str(batch_file),
-        "--json",
-        "--model",
-        str(lane.model_path),
-    ]
+    argv = [str(lane.binary), "plan", "--skill", skill, "--batch", str(batch_file), "--json"]
+    if replay_dir is not None:
+        env = _store_replay_env(replay_dir)
+    else:
+        argv += ["--model", str(lane.model_path)]
+        env = _clean_env()
+        if record_dir is not None:
+            env["KNAIF_LLM_RECORD_DIR"] = str(Path(record_dir).resolve())
     proc = subprocess.run(
         argv,
         cwd=work_dir,
@@ -369,7 +401,7 @@ def batch_plan(
         text=True,
         encoding="utf-8",
         errors="replace",
-        env={k: v for k, v in _lane_env().items() if k not in _MOCK_VARS},
+        env=env,
         timeout=lane.timeout_s * max(1, len(utterances)),
     )
     lines = [line for line in proc.stdout.splitlines() if line.strip()]
@@ -521,6 +553,7 @@ def run_native_corpus(
     only: set[tuple[str, int]] | None = None,
     plans: dict[tuple[str, int], dict[str, Any]] | None = None,
     live: set[tuple[str, int]] | None = None,
+    replay_dir: Path | None = None,
 ) -> list[AgentOutput]:
     """Execute every corpus utterance through the shipped binary and collect what it produced.
 
@@ -536,6 +569,10 @@ def run_native_corpus(
     planning failed is recorded as that error without running, as `run` would have failed the
     same way. Rows in *live* (the cold-start sample), and rows with no batch plan, run with
     the model as before.
+
+    With *replay_dir* (the result store, T2c) a planned row replays the model's recorded raw
+    reply instead of its printed plan, so everything after the model runs afresh in this binary;
+    *plans* then serve only to skip rows whose planning failed and for the cold-start check.
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
@@ -555,7 +592,10 @@ def run_native_corpus(
             planned = None if plans is None or key in (live or set()) else plans.get(key)
             if planned is None:
                 argv = build_argv(lane, skill, utterance)
-                env = {k: v for k, v in _lane_env().items() if k not in _MOCK_VARS}
+                env = _clean_env()
+            elif replay_dir is not None:
+                argv = build_replay_argv(lane, skill, utterance)
+                env = _store_replay_env(replay_dir)
             else:
                 argv = build_replay_argv(lane, skill, utterance)
                 env = _replay_env(planned)

@@ -1082,6 +1082,15 @@ def _row_key(row: dict[str, Any]) -> tuple[str, int]:
     return str(row.get("id")), int(row.get("utterance_idx") or 0)
 
 
+def _plan_tools(row: dict[str, Any]) -> str:
+    """A board row's plan as its tool names, for a regression message."""
+    plan = row.get("plan")
+    steps = plan.get("plan") if isinstance(plan, dict) else plan
+    if not isinstance(steps, list):
+        return "no plan"
+    return "+".join(str(s.get("tool")) for s in steps if isinstance(s, dict)) or "empty plan"
+
+
 def check_native_subset_acceptance(
     spec: dict[str, Any],
     baseline: dict[str, Any],
@@ -1093,8 +1102,12 @@ def check_native_subset_acceptance(
     coverage_floor: float = NATIVE_COVERAGE_FLOOR,
     tolerance: float = NATIVE_TOLERANCE,
     safety_rows: list[str] | None = None,
+    corpus: list[Any] | None = None,
 ) -> AcceptanceReport:
     """Grade an L4 lane run over the release subset (plan 2026-10-14-faster-release-evidence, D2).
+
+    *corpus*, when given, is the skill's corpus as it stands: every subset row the Python run
+    graded must still have that utterance and expected outcome.
 
     *python_board* is the accepted Python run the snapshot names as its `source_run`, with
     per-row grades; *subset* is the committed `release_subset.json`. The bar:
@@ -1181,19 +1194,57 @@ def check_native_subset_acceptance(
             )
         )
 
-    # Per-row regression.
+    # The Python run graded these rows as they stand now: same utterance, same expected outcome.
+    # Kept rows are pinned (G2.1), so this catches a row reworded or relabelled since the lock.
+    if corpus is not None:
+        checked += 1
+        by_id = {str(r.id): r for r in corpus}
+        stale = []
+        for rid, idx in keys:
+            py, row = python_rows.get((rid, idx)), by_id.get(rid)
+            if py is None:
+                continue
+            here = row.utterances[idx] if row is not None and idx < len(row.utterances) else None
+            if (
+                row is None
+                or py.get("utterance") != here
+                or (py.get("expected_outcome") != row.expected_outcome)
+            ):
+                stale.append(f"{rid}#{idx}")
+        if stale:
+            violations.append(
+                Violation(
+                    "identity",
+                    "python_rows",
+                    f"the accepted Python run graded {len(stale)} subset row(s) as they no longer "
+                    f"stand ({', '.join(stale[:5])}); re-lock the snapshot on the current corpus",
+                )
+            )
+
+    # Per-row regression: a row Python passed must pass on the binary, with a file that scores
+    # no lower (owner, 2026-10-19: the right kind of answer with a worse file still fails it).
     for key in keys:
         py, nat = python_rows.get(key), native_rows.get(key)
         if py is None or nat is None:
             continue
         checked += 1
-        if py.get("outcome_correct") and not nat.get("outcome_correct"):
+        if not py.get("outcome_correct"):
+            continue
+        py_score, nat_score = _finite(py.get("knaif_score")), _finite(nat.get("knaif_score"))
+        worse_file = py_score is not None and (nat_score is None or nat_score + _EPS < py_score)
+        if not nat.get("outcome_correct") or worse_file:
+            why = (
+                f"knaif {nat_score} < Python's {py_score}"
+                if nat.get("outcome_correct")
+                else f"{nat.get('actual_outcome')!r}, expected {nat.get('expected_outcome')!r}"
+            )
             violations.append(
                 Violation(
                     "regression",
                     f"{key[0]}#{key[1]}",
-                    f"{key[0]}#{key[1]}: Python passed it, the binary did not "
-                    f"({nat.get('actual_outcome')!r}, expected {nat.get('expected_outcome')!r})",
+                    f"{key[0]}#{key[1]}: Python passed it, the binary did not ({why}). "
+                    f"Python: {_plan_tools(py)} -> {py.get('artifact')!r}; "
+                    f"binary: {_plan_tools(nat)} -> {nat.get('artifact')!r}",
                 )
             )
 

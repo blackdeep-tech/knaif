@@ -1084,6 +1084,14 @@ def _cells_state(
     ]
     if subset:
         note += f" [release subset: {', '.join(subset)}]"
+    # And how much of a store-planned cell this release asked the model for (I9).
+    replies = [
+        f"{c} {r.get('measured')} measured, {r.get('reused')} reused"
+        for c in cells
+        if (r := ((stored or {}).get(c) or {}).get("replies"))
+    ]
+    if replies:
+        note += f" [replies: {'; '.join(replies)}]"
     # Results carried over to an equivalent rebuild are named in every state.
     carried = sorted(
         {m for st in per_cell.values() for m in re.findall(r"\[equivalent: ([^\]]+)\]", st.detail)}

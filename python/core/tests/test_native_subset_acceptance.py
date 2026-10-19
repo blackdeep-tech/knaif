@@ -461,3 +461,51 @@ def test_an_l3_record_over_the_subset_says_so(tmp_path: Path) -> None:
     entry = (load_acceptance_record("demo", tree) or {})["layers"]["L3"]
     entry = next(iter(entry["cells"].values())) if "cells" in entry else entry
     assert entry["population"] == pop
+
+
+# -- audit 2026-10-19 (Fable): a worse file is a regression; the Python run is bound to the corpus --
+
+
+def test_a_row_whose_file_scores_lower_than_python_s_is_a_regression() -> None:
+    """Owner, 2026-10-19: the right kind of answer with a worse file still fails the row."""
+    native = _native(_row("a", True), _row("b", True, 0.5), _row("c", True))
+    report = _check(_python(*ALL_PASS), native)
+    (v,) = [v for v in report.violations if v.kind == "regression"]
+    assert v.name == "b#0" and "knaif" in v.message
+
+
+def test_a_regression_message_shows_both_plans_and_commands() -> None:
+    nat = _row("b", False, 0.0)
+    nat["plan"] = {"plan": [{"tool": "clarify", "args": {}}]}
+    py = _row("b", True)
+    py["plan"] = {"plan": [{"tool": "trim_video", "args": {}}]}
+    py["artifact"] = "ffmpeg -i clip.mp4 out.mp4"
+    report = _check(
+        _python(_row("a", True), py, _row("c", True)),
+        _native(_row("a", True), nat, _row("c", True)),
+    )
+    (v,) = [v for v in report.violations if v.kind == "regression"]
+    assert (
+        "trim_video" in v.message and "clarify" in v.message and "ffmpeg -i clip.mp4" in v.message
+    )
+
+
+def test_the_python_run_must_have_graded_the_rows_as_they_stand() -> None:
+    from knaif.evalsuite.corpus import CorpusRow
+
+    corpus = [
+        CorpusRow(id=r, utterances=[f"{r} utterance"], expected_outcome="plan") for r in "abc"
+    ]
+    assert check_native_subset_acceptance(
+        SPEC, BASELINE, _python(*ALL_PASS), _native(*ALL_PASS), SUBSET, SAFETY, corpus=corpus
+    ).ok
+    corpus[1] = CorpusRow(id="b", utterances=["b reworded"], expected_outcome="plan")
+    report = check_native_subset_acceptance(
+        SPEC, BASELINE, _python(*ALL_PASS), _native(*ALL_PASS), SUBSET, SAFETY, corpus=corpus
+    )
+    assert any(v.name == "python_rows" and "b#0" in v.message for v in report.violations)
+    corpus[1] = CorpusRow(id="b", utterances=["b utterance"], expected_outcome="clarify")
+    report = check_native_subset_acceptance(
+        SPEC, BASELINE, _python(*ALL_PASS), _native(*ALL_PASS), SUBSET, SAFETY, corpus=corpus
+    )
+    assert any(v.name == "python_rows" for v in report.violations)

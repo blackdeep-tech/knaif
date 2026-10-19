@@ -13,6 +13,7 @@ is read, which is where a mistake would produce a plausible number rather than a
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -296,6 +297,7 @@ def _native_args(tmp_path: Path, **kw) -> argparse.Namespace:
         "config": "eval_backends.yaml", "lane": "t", "allow_unpackaged": True, "limit": None,
         "verbose": False, "only": None, "save": None, "min_coverage": 2.0,
         "batch_plan": False, "live_sample": None, "batch_plans": None, "subset": False,
+        "store": None,
     }  # fmt: skip
     return argparse.Namespace(**{**base, **kw})
 
@@ -491,3 +493,186 @@ def test_a_full_run_records_no_population(tmp_path, monkeypatch) -> None:
 
     _patch_native(tmp_path, monkeypatch)
     assert "population" not in cli.cmd_native(_native_args(tmp_path))
+
+
+# -- the result store: record replies while planning, replay them (T2c) --
+
+
+def test_a_replay_batch_runs_with_no_model_against_the_namespace(tmp_path, monkeypatch) -> None:
+    rec = _Recorder(json.dumps(_plan("a")) + "\n")
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    monkeypatch.setenv("KNAIF_LLM_RECORD_DIR", "leaked from the parent shell")
+    ns = tmp_path / "ns"
+    batch_plan(_lane(tmp_path), "ffmpeg", ["one"], fixture_dir=_fixtures(tmp_path),
+               work_dir=tmp_path / "batch", replay_dir=ns)  # fmt: skip
+    call = rec.calls[0]
+    assert "--model" not in call["argv"]
+    assert call["env"]["KNAIF_LLM_BACKEND"] == "replay"
+    assert call["env"]["KNAIF_LLM_REPLAY_DIR"] == str(ns.resolve())
+    assert "KNAIF_LLM_RECORD_DIR" not in call["env"]
+
+
+def test_a_recording_batch_plans_with_the_model_and_records(tmp_path, monkeypatch) -> None:
+    rec = _Recorder(json.dumps(_plan("a")) + "\n")
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    ns = tmp_path / "ns"
+    batch_plan(_lane(tmp_path), "ffmpeg", ["one"], fixture_dir=_fixtures(tmp_path),
+               work_dir=tmp_path / "batch", record_dir=ns)  # fmt: skip
+    call = rec.calls[0]
+    assert "--model" in call["argv"]
+    assert call["env"]["KNAIF_LLM_RECORD_DIR"] == str(ns.resolve())
+    assert "KNAIF_LLM_BACKEND" not in call["env"]
+
+
+def test_store_rows_execute_by_replay_and_live_rows_never_see_the_store(
+    tmp_path, monkeypatch
+) -> None:
+    rec = _Recorder()
+    monkeypatch.setattr(native_lane.subprocess, "run", rec)
+    monkeypatch.setenv("KNAIF_LLM_REPLAY_DIR", "leaked")
+    plans = {("r1", 0): _plan("convert_video"), ("r2", 0): _plan("trim_video"),
+             ("r2", 1): _plan("trim_video")}  # fmt: skip
+    ns = tmp_path / "ns"
+    run_native_corpus(_lane(tmp_path), "ffmpeg", _corpus(), fixture_dir=_fixtures(tmp_path),
+                      sandbox=tmp_path / "sb", plans=plans, live={("r2", 1)},
+                      replay_dir=ns)  # fmt: skip
+    replayed, live = rec.calls[0], rec.calls[2]
+    assert "--model" not in replayed["argv"]
+    assert replayed["env"]["KNAIF_LLM_BACKEND"] == "replay"
+    assert replayed["env"]["KNAIF_LLM_REPLAY_DIR"] == str(ns.resolve())
+    assert "KNAIF_LLM_MOCK_RESPONSE" not in replayed["env"]
+    assert "--model" in live["argv"]
+    assert not {"KNAIF_LLM_BACKEND", "KNAIF_LLM_REPLAY_DIR", "KNAIF_LLM_RECORD_DIR"} & set(
+        live["env"]
+    )
+
+
+def _patch_store(tmp_path, monkeypatch, recorded: set[str], *, leave_missing: bool = False):
+    """A fake `batch_plan` that behaves like the binary against a namespace folder."""
+    from knaif.evalsuite import scoring
+
+    lane = _lane(tmp_path)
+    lane.binary.write_bytes(b"bin")
+    lane.model_path.write_bytes(b"gguf")
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(native_lane, "load_lane", lambda *a, **k: lane)
+    monkeypatch.setattr(
+        native_lane,
+        "detect_backend",
+        lambda *a, **k: native_lane.BackendMeasurement(placement={"CUDA0": 37}, enumerated="CUDA0"),
+    )
+
+    def fake_batch(lane, skill, utterances, **kw):
+        calls.append({"utterances": list(utterances), **kw})
+        if kw.get("record_dir"):
+            if not leave_missing:
+                recorded.update(utterances)
+                for u in utterances:  # the binary writes one file per prompt key
+                    name = hashlib.sha256(u.encode()).hexdigest()
+                    Path(kw["record_dir"], f"{name}.txt").write_text("reply", encoding="utf-8")
+            return [_plan("live") for _ in utterances]
+        miss = {"plan": [], "error": "replay miss: no stored reply for prompt x in y"}
+        return [_plan("stored") if u in recorded else miss for u in utterances]
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(native_lane, "batch_plan", fake_batch)
+    monkeypatch.setattr(native_lane, "run_native_corpus", lambda *a, **k: seen.update(k) or [])
+    monkeypatch.setattr(
+        scoring,
+        "score_corpus",
+        lambda *a, **k: {"coverage": 1.0, "unattempted": 0, "rows": [
+            {"id": "r1", "utterance_idx": 0}, {"id": "r2", "utterance_idx": 0},
+            {"id": "r2", "utterance_idx": 1}]},
+    )  # fmt: skip
+    return calls, seen
+
+
+def test_a_first_store_run_plans_everything_with_the_model_and_says_so(
+    tmp_path, monkeypatch
+) -> None:
+    from knaif.evalsuite import cli
+
+    recorded: set[str] = set()
+    calls, seen = _patch_store(tmp_path, monkeypatch, recorded)
+    board = cli.cmd_native(_native_args(tmp_path, store=str(tmp_path / "store")))
+    kinds = ["replay" if c.get("replay_dir") else "record" for c in calls]
+    assert kinds == ["replay", "record", "replay"]
+    assert len(calls[1]["utterances"]) == 3, "every miss is planned with the model"
+    assert seen["replay_dir"] == calls[2]["replay_dir"]
+    assert board["planning"] == "batch"
+    assert board["store"]["measured"] == 3 and board["store"]["reused"] == 0
+    assert {r["reply"] for r in board["rows"]} == {"measured"}
+    assert (calls[0]["replay_dir"] / "key.json").is_file()
+
+
+def test_a_second_store_run_reuses_every_reply_and_plans_nothing(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    recorded = {"convert clip.mp4 to mkv", "trim clip.mp4", "cut clip.mp4"}
+    calls, _ = _patch_store(tmp_path, monkeypatch, recorded)
+    board = cli.cmd_native(_native_args(tmp_path, store=str(tmp_path / "store")))
+    assert [bool(c.get("replay_dir")) for c in calls] == [True], "no model, no second pass"
+    assert board["store"]["measured"] == 0 and board["store"]["reused"] == 3
+    assert {r["reply"] for r in board["rows"]} == {"reused"}
+    assert board["timing"]["plan_batch_s"] is None
+
+
+def test_a_reply_recorded_but_still_missing_stops_the_run(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    _patch_store(tmp_path, monkeypatch, set(), leave_missing=True)
+    with pytest.raises(SystemExit, match="still missing"):
+        cli.cmd_native(_native_args(tmp_path, store=str(tmp_path / "store")))
+
+
+def test_a_store_run_states_its_entry_point(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    _patch_store(tmp_path, monkeypatch, set())
+    board = cli.cmd_native(_native_args(tmp_path, store=str(tmp_path / "store")))
+    assert "KNAIF_LLM_BACKEND=replay" in board["lane_entry_point"]
+    assert "mock" not in board["lane_entry_point"]
+
+
+# -- audit 2026-10-19 (Fable): store provenance --
+
+
+def test_a_developer_build_cannot_write_the_release_store(tmp_path, monkeypatch) -> None:
+    """Only the frozen artifact may put replies in `evals/store`; a developer build keeps its own."""
+    from knaif.evalsuite import cli, store
+
+    _patch_store(tmp_path, monkeypatch, set())
+    shared = tmp_path / "evals" / "store"
+    monkeypatch.setattr(store, "STORE_ROOT", shared)
+    with pytest.raises(SystemExit, match="developer build"):
+        cli.cmd_native(_native_args(tmp_path, store=str(shared)))
+    assert not shared.exists(), "refused before anything was written"
+
+
+def test_every_recorded_reply_names_the_binary_that_recorded_it(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    calls, _ = _patch_store(tmp_path, monkeypatch, set())
+    cli.cmd_native(
+        _native_args(tmp_path, store=str(tmp_path / "store"), save=str(tmp_path / "run"))
+    )
+    log = calls[0]["replay_dir"] / "recorded.jsonl"
+    entries = [json.loads(ln) for ln in log.read_text(encoding="utf-8").splitlines()]
+    assert len(entries) == 3
+    assert {e["binary_sha256"] for e in entries} == {hashlib.sha256(b"bin").hexdigest()}
+    assert {e["run"] for e in entries} == {"run"}, "the run folder's name, never a path"
+    assert all(len(e["key"]) == 64 for e in entries)
+
+
+def test_cold_start_rows_are_labelled_live_not_reused(tmp_path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    recorded = {"convert clip.mp4 to mkv", "trim clip.mp4", "cut clip.mp4"}
+    _patch_store(tmp_path, monkeypatch, recorded)
+    live = tmp_path / "live.json"
+    live.write_text(json.dumps([["r2", 1]]), encoding="utf-8")
+    board = cli.cmd_native(
+        _native_args(tmp_path, store=str(tmp_path / "store"), live_sample=str(live))
+    )
+    reply = {(r["id"], r["utterance_idx"]): r["reply"] for r in board["rows"]}
+    assert reply == {("r1", 0): "reused", ("r2", 0): "reused", ("r2", 1): "live"}

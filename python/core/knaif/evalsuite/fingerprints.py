@@ -40,6 +40,9 @@ INFERENCE: tuple[str, ...] = (
     "native/crates/knaif-models/src/**/*.rs",
     "native/crates/knaif-models/Cargo.toml",
     "contracts/runtime/generation.yaml",
+    # The downloadable backend payloads (ggml-cuda, …) by sha256: a rebuilt payload is different
+    # arithmetic under the same source tree (Fable audit, 2026-10-19).
+    "contracts/backends/**/*.yaml",
 )
 
 #: Every native file outside the inference stack and the skill crates, and what they read.
