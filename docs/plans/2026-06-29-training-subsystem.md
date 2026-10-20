@@ -1,7 +1,11 @@
 # Training subsystem — an optional, documented fine-tuning path for skill authors
 
-**Status:** Planning · **Created:** 2026-06-29 · **Completed:** —
+**Status:** Superseded · **Created:** 2026-06-29 · **Completed:** 2026-10-20
 **Owner:** eval · **Ref:** docs/TRAINING_DATA_GENERATION.md, docs/plans/2026-06-27-fine-tuning.md
+
+> **Dropped 2026-10-20 (owner): won't do.** The maintainer's pipeline works and is documented in
+> [FINE_TUNING.md](../FINE_TUNING.md); packaging it for outside skill authors has no user yet. If
+> one appears, start a new plan from the outside-author gap described below.
 
 > **Kept 2026-07-23** (S7 decision — **unexecuted roadmap**, the explicit keep column). Not
 > "cited from source": the keep tier listed it that way, but its only three referrers are

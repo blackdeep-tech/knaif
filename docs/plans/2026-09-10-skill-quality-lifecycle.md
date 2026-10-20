@@ -688,8 +688,11 @@ that finds them, not the one that repairs them.
     rather than the unit tests — that a bare `*.mp4` has an *empty* parent, so `read_dir("")`
     failed and globs matched nothing **in exactly the CLI mode the eval lane uses**. Python never
     hits the last one because it re-bases every relative path onto the sandbox first.
-- [ ] **N8 — "merge everything in this folder" works in neither runtime.** *(Owner decision
-  2026-09-11: do it Python-first then port — HELD as backlog, not started.)* `concat_video` is the
+- [x] **N8 — "merge everything in this folder" works in neither runtime.** *(Owner decision
+  2026-09-11: do it Python-first then port — HELD as backlog, not started.)* *Moved out of this
+  plan 2026-10-19 (owner): feature work, as measured below. It returns with the feature that lets
+  a joining tool (`concat_video`, and `merge_pdfs`, whose `inputs` are also taken as literal
+  paths) read a folder or a pattern, with new corpus rows for it.* `concat_video` is the
   one tool whose inputs do not go through `ResolveInputs`, on **both** sides, so a glob never
   expands for it. N1's fix deliberately excluded it rather than create a divergence.
   - **Measured before deciding, and the measurement is why it is held:** it would move **nothing**.

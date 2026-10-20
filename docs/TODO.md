@@ -245,10 +245,10 @@ Each item is fully tracked in its own plan; this is the roll-up.
       returns `verified: True` unconditionally, `verify_preview` is called with no
       `expected` so its comparison is a no-op, `_build_one_recipe` emits no `expected`,
       and `_step_failed` checks only `returncode`. So a wrong-but-exit-0 artifact still
-      reports success. Build when the P0 backlog clears.
-- [ ] **Context injection** — `docs/plans/2026-06-09-context-injection.md` is **Planned (parked)**,
-      not closed: deliberately deferred to the ffmpeg-UI work, both dependencies shipped, design
-      refreshed 2026-07-22. Listed here so the live backlog and the plan agree.
+      reports success. **Owner, 2026-10-20: build it here**, on its own `feat/` branch, for the
+      next minor.
+- [x] **Context injection** — `docs/plans/2026-06-09-context-injection.md` is **Superseded**
+      (owner, 2026-10-20): not pursued in this repository's plans; the design stays for reference.
 
 ---
 
@@ -333,8 +333,9 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   (signed), but Windows blocks FFmpeg itself, so the ffmpeg skill cannot run at all there; confirmed
   again in the 1.3.0 Windows Sandbox check. The design options (a signed "ffmpeg runtime pack" as a
   separate program, licensing as aggregation, where it is built and signed, how it is downloaded) are
-  in the parked [media-runtime-and-mobile](plans/2026-10-03-media-runtime-and-mobile.md), Thread A.
-  To decide: whether it is in scope for the next release, and if so, reopen that plan.
+  in [media-runtime-and-mobile](plans/2026-10-03-media-runtime-and-mobile.md), Thread A.
+  **Owner, 2026-10-20:** reopened as a test on its own branch (does a reduced, signed build keep
+  every feature; a new media skill instead?); the release is chosen after the test.
 
 - [ ] **Release evidence on other machines (parked, owner 2026-10-19).** The faster-release-evidence
   plan sped up the process on the release box first; other machines come later (owner, 2026-10-17).
@@ -343,6 +344,10 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   only a published release's files, not a Package run's. T0 measured CI CPU at ~3x the box's time and
   macOS runners unusable for Metal, so the candidates are the spare machines named in the plan (a
   second Windows PC, a laptop's WSL, the M1 Pro Mac) running `scripts/release_evidence.sh`.
+- [ ] **Re-evaluate SignPath Foundation for Windows signing** once knaif has more release history.
+  Free, OV-level and CI-integrated, which is the best long-term shape; deferred 2026-07-27 on
+  project maturity. Today's signing (Azure Artifact Signing, from the release box) and the
+  eligibility findings are in the closed [code-signing](plans/2026-07-27-code-signing.md) plan.
 - [ ] **macOS has not yet run `scripts/release_evidence.sh`** (written 2026-10-19 for all three
   platforms, checked on Windows and in WSL). Its first macOS `check` stage, at the next release's
   freeze, is the test, including bash 3.2.
@@ -916,7 +921,7 @@ This **Open / Next** section is the live backlog (originally distilled from the
   both shipped skills are `supported` (re-checked 2026-10-16). **What is left is reconciling the
   plan,** [plans/2026-09-10-skill-quality-lifecycle.md](plans/2026-09-10-skill-quality-lifecycle.md):
   its header still says "L4 … never run over a corpus" (last worked 2026-09-11), and S1, S3–S6 and
-  N3/N4/N5/N8 are unticked. Tick what the releases since did, move what is open, close it. The
+  N3/N4/N5 are unticked (N8 moved out 2026-10-19). Tick what the releases since did, move what is open, close it. The
   measurements this entry used to carry (11/5 wins, p = 0.21; the S3g factorial) are in that plan;
   the L3 bar is now AGENTS.md's (0 port bugs plus a pre-registered disagreement bound), not ≥99%.
 

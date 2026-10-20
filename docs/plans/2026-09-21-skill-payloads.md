@@ -1,10 +1,11 @@
 # Skill payloads — the libraries knaif fetches for itself
 
-**Status:** Planning · **Created:** 2026-09-21 · **Completed:** —
+**Status:** Superseded · **Created:** 2026-09-21 · **Completed:** 2026-10-19
 
 > **Status note:** for knaif 1.2.0 the owner chose to **bundle** PDFium (2026-09-25,
-> [release-1.2](2026-09-25-release-1.2.md) R0), so it no longer gates OCR on this plan. The payload
-> tier itself stays open for later.
+> [release-1.2](2026-09-25-release-1.2.md) R0), so it no longer gates OCR on this plan.
+> **Superseded 2026-10-19 (owner):** PDFium was the only case, so nothing needs a payload tier
+> now. The design below is the starting point if a library ever becomes too big to bundle.
 
 **Goal:** A third delivery tier for skill dependencies: native libraries that knaif downloads on
 demand, sha256-pinned, into a directory outside the install. PDFium is the first case — it is what

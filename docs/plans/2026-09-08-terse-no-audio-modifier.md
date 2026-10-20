@@ -1,8 +1,14 @@
 # Terse "with no audio" — a phantom arg, a prompt rule, and eight untrained rows
 
-**Status:** Draft · **Created:** 2026-09-08 · **Completed:** —
+**Status:** Done · **Created:** 2026-09-08 · **Completed:** 2026-10-19
 **Owner:** ffmpeg / training · **Ref:** eval row `ffmpeg_hard_014`; measured against
 [evals/runs/2026-09-07_rtx5080-core-audit_success](../../evals/runs/2026-09-07_rtx5080-core-audit_success/)
+
+> **Closed 2026-10-19 (owner): fixed by the v2 models, with neither workstream below.** In the
+> corpus v2 re-lock ([`2026-10-18_relock-corpus-v2_success`](../../evals/runs/2026-10-18_relock-corpus-v2_success/))
+> all three utterances of `ffmpeg_hard_014`, "convert clip.mov to mp4 with no audio" included,
+> score 1.0 on both `knaif-qwen3-4b-v2` and `knaif-qwen3-1.7b-v2`. The note below is the state
+> before that.
 
 > **Status note:** The diagnosis is complete and measured; **no fix is approved** — the owner
 > chose "just the diagnosis" on 2026-09-08 and deferred the choice between the two paths in

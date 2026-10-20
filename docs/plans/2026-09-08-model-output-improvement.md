@@ -1,10 +1,16 @@
 # Model output improvement — ffmpeg routing quality
 
-**Status:** Planning · **Created:** 2026-09-08 · **Completed:** —
+**Status:** Superseded · **Created:** 2026-09-08 · **Completed:** 2026-10-19
 **Owner:** core · **Ref:** follows the 2026-09-07 audit
 ([findings](../audits/2026-09-07-core-principles-and-rtx5080.md),
 [fix review](../audits/2026-09-07-fix-review.md)) and the F9 snapshot re-lock; complements
 [skill-quality-lifecycle](2026-09-10-skill-quality-lifecycle.md) (which absorbed the 2026-08-08 native/Python planning-parity plan)
+
+> **Superseded 2026-10-19 (owner): the target was reached by other work.** None of the tasks below
+> was carried out, but ffmpeg's locked snapshot (`skills/ffmpeg/data/eval_snapshot.json`, corpus
+> v2, `knaif-qwen3-4b-v2`, `success`) has outcome accuracy **0.942** and `avg_knaif_score` 0.985,
+> inside the 0.94–0.95 goal. A new model-quality goal starts as a new plan, measured against
+> that snapshot.
 
 **Goal:** Raise ffmpeg routing accuracy from 0.9020 to 0.94–0.95 by fixing the deterministic
 gate, binding, and schema defects behind ~47% of current failures — without touching the

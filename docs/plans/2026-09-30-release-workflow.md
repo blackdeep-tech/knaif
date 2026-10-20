@@ -1,13 +1,13 @@
 # Release workflow — release branches, feature branches, one index per release
 
-**Status:** Active · **Created:** 2026-09-30 · **Completed:** —
+**Status:** Done · **Created:** 2026-09-30 · **Completed:** 2026-10-19
 **Owner:** owner + release · **Ref:** branch `docs/release-workflow`; lessons from
 [release-1.2](2026-09-25-release-1.2.md)
 **Release:** main
 
-> **Status note:** workflow agreed with the owner 2026-09-30 (decisions below); plan approved the
-> same day. W1–W4 done on `docs/release-workflow` (PR #65, awaiting owner review). W5 is in the
-> PR description; W6 set and verified 2026-09-30; W7 happens when 1.3 opens.
+> **Status note (2026-10-19):** closed. W1–W4 merged in #65, W6 set and verified 2026-09-30. W7
+> was carried out: `release/1.3.0` was opened, macOS merged into it (#84) and 1.3.0 shipped
+> 2026-10-16 (#92). W5's last item is moot: the two plan-only branches it named no longer exist.
 
 **Goal:** Let more than one release be developed at once, each on its own branch with its own
 short index of feature plans, with a fast lane for patch releases.
@@ -183,8 +183,9 @@ No branch is recreated; these are the current feature branches, all started from
 - [x] List them in the PR description with their proposed release, for the owner to confirm:
   `feat/ai-skill-direct-calls`, `feat/local-site-analytics` (both hold only a plan; `Release: —`
   until chosen), `origin/feat/macos-support` (1.3.0 per decision 5).
-- [ ] Their plans get the `Release:` line on their own branches, at their next commit — not from
-  this branch.
+- [x] Their plans get the `Release:` line on their own branches, at their next commit — not from
+  this branch. *Moot 2026-10-19: macOS shipped in 1.3.0 under the index, and the two plan-only
+  branches no longer exist.*
 
 ### - [x] W6 — owner: `release/*` ruleset
 
@@ -196,10 +197,11 @@ No branch is recreated; these are the current feature branches, all started from
   updates only, so a tag can still be moved forward to a descendant commit. Done 2026-09-30:
   deletion, non-fast-forward and update are restricted; creation is not.
 
-### - [ ] W7 — first use: open 1.3.0 (separate, when the owner starts 1.3)
+### - [x] W7 — first use: open 1.3.0 (separate, when the owner starts 1.3)
 
 - [x] Release index [release-1.3.0](2026-09-30-release-1.3.0.md) and the *Releases in flight* row,
   proposed on `main` (branch `docs/open-release-1.3.0`); the 1.3 draft stays as the
   adapters/superskill feature plan, `Release: 1.3.0`.
-- [ ] Create `release/1.3.0` from `main` once that PR merges.
-- [ ] macOS: `feat/macos-support` takes in `release/1.3.0` and opens its PR there (with its owner).
+- [x] Create `release/1.3.0` from `main` once that PR merges.
+- [x] macOS: `feat/macos-support` takes in `release/1.3.0` and opens its PR there (with its owner).
+  *Merged 2026-10-09 (#84); 1.3.0 shipped 2026-10-16 (#92).*

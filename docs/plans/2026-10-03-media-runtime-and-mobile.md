@@ -5,6 +5,14 @@
 [TODO.md](../TODO.md) (*Media runtime and mobile*)
 **Release:** —
 
+> **Owner, 2026-10-20: thread A reopens as a test, here, on its own `feat/` branch; no release yet.**
+> A0 is answered: in the 1.3.0 Windows Sandbox check, Smart App Control blocked the winget FFmpeg
+> even when signed knaif ran it, so a signed build is the only fix there. The test settles: (1) does
+> a reduced, signed FFmpeg keep every feature the skill has today; (2) should it become a new
+> video/media skill instead of the ffmpeg skill. Pass criteria are written before any build. Same
+> implementation on every platform unless there is a good reason not to. The owner picks the
+> release after the test. Thread B stays parked.
+>
 > **Status note:** parked 2026-10-03 by the owner ("we will get back to it"). This records a design
 > discussion, not an approved plan: nothing here is decided except where marked **Owner**. Do not
 > implement until the owner reopens it. Two threads: (A) how desktop users get a working, signed
