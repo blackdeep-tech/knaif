@@ -1,7 +1,10 @@
 # Document Corpus Search — find the right file in a folder, in plain English
 
-**Status:** Planning · **Created:** 2026-07-22 · **Completed:** —
+**Status:** Superseded · **Created:** 2026-07-22 · **Completed:** 2026-10-20
 **Owner:** documents · **Ref:** [documents-skill](2026-06-21-documents-skill.md) (*Out of scope*)
+
+> **Superseded 2026-10-20 (owner):** not pursued in this repository's plans. The feature returns
+> with its own PR if it is built; the design below stays for reference.
 
 > **Status note:** Not started. This plan **extracts** a design that had been sitting in the
 > `documents-skill` plan's *Out of scope* section since 2026-06-21, where it survived only

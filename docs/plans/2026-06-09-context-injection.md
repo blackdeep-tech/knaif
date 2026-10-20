@@ -1,7 +1,10 @@
 # Context Injection — optional world-state prepended before inference
 
-**Status:** Planning · **Created:** 2026-06-09 · **Updated:** 2026-07-22 · **Completed:** —
+**Status:** Superseded · **Created:** 2026-06-09 · **Updated:** 2026-07-22 · **Completed:** 2026-10-20
 **Owner:** core / planner · **Ref:** —
+
+> **Superseded 2026-10-20 (owner):** not pursued in this repository's plans. The feature returns
+> with its own PR if it is built; the design below stays for reference.
 
 > **Status note:** **Parked (2026-06-21)** — keep, do not retire. Deliberately
 > deferred until the **ffmpeg UI** work, which is the natural trigger (a UI surfacing

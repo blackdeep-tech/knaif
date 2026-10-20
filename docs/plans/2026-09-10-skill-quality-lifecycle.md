@@ -1,12 +1,20 @@
 # Skill quality lifecycle — Python proves it, Rust ships it, both must agree
 
-**Status:** Active — Workstreams V, E, L1, L2, G complete; L3 measured; L4 built and gated,
-never run over a corpus ·
-**Created:** 2026-09-10 · **Last worked:** 2026-09-11 · **Completed:** —
+**Status:** Done ·
+**Created:** 2026-09-10 · **Last worked:** 2026-10-20 · **Completed:** 2026-10-20
 **Owner:** core · **Ref:** supersedes and absorbs the 2026-08-08 native/Python planning-parity
 plan (retired 2026-09-10; its measurements are carried below, its history is in git);
 builds on `scripts/parity_check.py` and `contracts/parity/`
 
+> **Closed 2026-10-20 (owner).** The process this plan built is how every release runs now:
+> L1/L2 in `just check`, L3 and L4 per release, `just check-gate` deriving each skill's status from
+> its evidence, and both shipped skills `supported` (1.2.0, 1.2.1, 1.3.0, re-checked 2026-10-16).
+> The stages a new skill goes through (S1–S6) are written down as the standing process in
+> AGENTS.md (*Skill Lifecycle Beyond Authoring*) and `docs/EVAL_FRAMEWORK.md`, so they are no
+> longer this plan's checkboxes. Re-checked against the tree on 2026-10-20: N3, N4 and N5 no longer
+> reproduce (notes at each); N8 moved out as feature work; the one open question left (unschema'd
+> args are dropped) moved to `docs/TODO.md`. The notes below are the history up to 2026-09-11.
+>
 > **Status note:** Replaces the prompt-parity plan, which asked *"why is native worse?"* — a
 > question whose premise was measured false on 2026-09-09 (native and Python do not differ
 > significantly; the reported symptom was the **executor** refusing chains, not the planner
@@ -211,7 +219,7 @@ Most of the machinery exists — `docs/EVAL_FRAMEWORK.md`'s eval ladder, `just e
 `docs/FINE_TUNING.md`, `docs/TRAINING_DATA_GENERATION.md`. What is missing is that it is nowhere
 stated as a **precondition for porting**, with a written definition of "satisfactory".
 
-- [ ] **S1 — Implement in Python against the shared contract.** `skill.yaml` / `tools.yaml` /
+- [x] **S1 — Implement in Python against the shared contract.** *Closed 2026-10-20: a standing step for every new skill, written in AGENTS.md (*Skill Lifecycle Beyond Authoring*); ffmpeg and documents both went through it.* `skill.yaml` / `tools.yaml` /
   `prompt.yaml` at the bundle top, handlers under `python/`, a smoke test that loads the skill and
   runs one dry-run plan, `eval/fixtures.py`, and `data/eval.jsonl`. Per `docs/TOOL_SCHEMA.md`.
 - [x] **S2 — Define "satisfactory" for *this* skill, before measuring it.** *(2026-09-10: written for both active skills as `skills/<name>/acceptance.yaml`, with `just eval-accept` / `just eval-safety` to enforce them and a test asserting each skill's own snapshot clears its floors.)* A written threshold
@@ -224,7 +232,7 @@ stated as a **precondition for porting**, with a written definition of "satisfac
     example: 41 utterances out of 847, invisible in any aggregate.
   - **Safety behavior** — `data/safety_test.jsonl` must be **100%**, not within a tolerance. A
     destructive request that plans instead of rejecting is not a score regression.
-- [ ] **S3 — Improve until the thresholds are met**, on the eval ladder (routing with `cheap`
+- [x] **S3 — Improve until the thresholds are met** *Closed 2026-10-20: a standing step for every new skill, written in AGENTS.md (*Skill Lifecycle Beyond Authoring*); ffmpeg and documents both went through it — both clear their S2 bars on `success`.*, on the eval ladder (routing with `cheap`
   while iterating; `eval-fixtures` then `eval-success` before any claim).
 - [x] **S3g — Prompt/pipeline improvement experiments belong here, including V2.** *(Run
   2026-09-10: 12 cells, both skills, executing verifier on real artifacts, per required slice,
@@ -250,7 +258,7 @@ stated as a **precondition for porting**, with a written definition of "satisfac
   - Grade on **artifacts** with an executing verifier, report **per required slice** (chains
     included, judged on Python's ability to execute them, never native's), and accept the winner
     **as a new baseline in its own commit** before any porting assumes it.
-- [ ] **S4 — Fine-tune, and validate across all skills.** Author `data/train.jsonl`, build the
+- [x] **S4 — Fine-tune, and validate across all skills.** *Closed 2026-10-20: a standing step for every new skill, written in AGENTS.md (*Skill Lifecycle Beyond Authoring*); ffmpeg and documents both went through it — the 1.2.0 v2 models were promoted this way.* Author `data/train.jsonl`, build the
   union dataset, train, merge to GGUF, quantize — then evaluate **every active skill** against its
   committed snapshot, not just the new one. Promote by adding the model to `models.yaml` and
   `contracts/models/model-manifest.yaml` and pointing `recommended_model:` at it.
@@ -261,11 +269,11 @@ stated as a **precondition for porting**, with a written definition of "satisfac
     it was supposed to clear — and the promoted quant is not the checkpoint that was evaluated
     during training. Re-run S2's aggregate floors, every required capability slice, and safety at
     100% **against the exact GGUF being promoted**, before S5 freezes anything.
-- [ ] **S5 — Freeze and name the accepted baseline.** Re-lock `data/eval_snapshot.json` with an
+- [x] **S5 — Freeze and name the accepted baseline.** *Done: both skills' snapshots are locked on `success`, last re-locked 2026-10-18 on corpus v2 with `source_run` recorded (`evals/runs/2026-10-18_relock-corpus-v2_success`).* Re-lock `data/eval_snapshot.json` with an
   executing verifier, in its own commit, and record the tuple the port will be held to:
   **skill bundle + contracts + corpus + verifier + model**. Everything downstream compares to
   *this*; an unfrozen baseline makes L4's tolerance meaningless because both sides move.
-- [ ] **S6 — Only now does porting begin.** Stage 4 starts here.
+- [x] **S6 — Only now does porting begin.** Stage 4 starts here. *Closed 2026-10-20: a standing step for every new skill, written in AGENTS.md (*Skill Lifecycle Beyond Authoring*); ffmpeg and documents both went through it.*
 
 ---
 
@@ -688,8 +696,11 @@ that finds them, not the one that repairs them.
     rather than the unit tests — that a bare `*.mp4` has an *empty* parent, so `read_dir("")`
     failed and globs matched nothing **in exactly the CLI mode the eval lane uses**. Python never
     hits the last one because it re-bases every relative path onto the sandbox first.
-- [ ] **N8 — "merge everything in this folder" works in neither runtime.** *(Owner decision
-  2026-09-11: do it Python-first then port — HELD as backlog, not started.)* `concat_video` is the
+- [x] **N8 — "merge everything in this folder" works in neither runtime.** *(Owner decision
+  2026-09-11: do it Python-first then port — HELD as backlog, not started.)* *Moved out of this
+  plan 2026-10-19 (owner): feature work, as measured below. It returns with the feature that lets
+  a joining tool (`concat_video`, and `merge_pdfs`, whose `inputs` are also taken as literal
+  paths) read a folder or a pattern, with new corpus rows for it.* `concat_video` is the
   one tool whose inputs do not go through `ResolveInputs`, on **both** sides, so a glob never
   expands for it. N1's fix deliberately excluded it rather than create a divergence.
   - **Measured before deciding, and the measurement is why it is held:** it would move **nothing**.
@@ -722,10 +733,10 @@ that finds them, not the one that repairs them.
     it bites — the fix would have passed its unit tests and changed nothing measured. Native
     already resolves relative inputs against the cwd in this mode, so this reads the same path
     the same way rather than inventing a second notion of where files live.
-- [ ] **N3 — `target_size_mb` does not drive a downscale natively** (`ffmpeg_020`). For
+- [x] **N3 — `target_size_mb` does not drive a downscale natively** (`ffmpeg_020`). *No longer reproduces (checked 2026-10-20): `target_size_mb` was redesigned as a bitrate ceiling under the quality CRF, the same in both runtimes (`_size_cap_kbit` / `size_cap_kbit`), and neither adds the old `scale=854:480`, so the runtimes agree.* For
   "under 1 MB" Python adds `-vf scale=854:480`; native re-encodes at source resolution and will
   miss the target the user named.
-- [ ] **N4 — Aspect-crop renders a filter ffmpeg REJECTS — on BOTH runtimes** (`ffmpeg_293`, and
+- [x] **N4 — Aspect-crop renders a filter ffmpeg REJECTS — on BOTH runtimes** (`ffmpeg_293`, and
   the same construction is behind the `294`/`296`/`298` cluster). Native emits
   `crop=min(iw//,ih*1/1):min(ih//,iw*1/1)`, Python `crop=min(iw/,ih*1/1):min(ih/,iw*1/1)`. Both
   have a missing operand, and both leave the comma inside `min(…)` unescaped inside a
@@ -733,6 +744,7 @@ that finds them, not the one that repairs them.
   never created. So "crop clip.mp4 to a square" is broken for users on **both** runtimes — a
   cross-runtime product bug that a parity check comparing only "do they agree" would have missed
   entirely, since they nearly agree on being wrong.
+  *Fixed (checked 2026-10-20): both runtimes render `crop=trunc(min(iw\,ih*a/b)/2)*2:trunc(min(ih\,iw*b/a)/2)*2` — both operands present, the comma escaped (`_engine.py`, `engine.rs`, with tests).*
 - [x] **N6 — DONE 2026-09-11, both halves. `reverse_video` is implemented, and every public tool
   in both bundles now exists in the native runtime.**
   - **It was never a missing capability — it was a missing dispatch arm.** The engine had
@@ -821,8 +833,8 @@ that finds them, not the one that repairs them.
     hard-links **every** fixture into each work directory. **Output isolation is untouched** and
     is the property actually worth having: a file produced by one row still cannot satisfy
     another. Hard links because 847 × 8.7 MB of copies is ~7 GB.
-- [ ] **N5 — Not a native defect: Python's `run --dry-run` renders only the first step of some
-  chains** (`ffmpeg_118`). Native renders both steps of compress → prepare_for_platform; Python
+- [x] **N5 — Not a native defect: Python's `run --dry-run` renders only the first step of some
+  chains** (`ffmpeg_118`). *No longer reproduces (checked 2026-10-20): a Python dry run of compress → prepare_for_platform on `clip_ctr.mp4` renders both commands, the second reading the first's output.* Native renders both steps of compress → prepare_for_platform; Python
   renders one. This surfaced only because Workstream E made native render whole chains. Recorded
   so it is not mistaken for a port gap and "fixed" in the wrong runtime.
 

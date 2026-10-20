@@ -2,6 +2,11 @@
 
 **Status:** Draft · **Created:** 2026-06-09 · **Completed:** —
 **Owner:** ffmpeg (+ tiny core touch) · **Ref:** —
+**Release:** —
+
+> **Owner, 2026-10-20: implement here**, as a correctness fix on its own `feat/` branch, meant for
+> the next minor (the `Release:` line moves to it when its index opens). Re-check the 2026-07-22
+> claims below against the tree before starting.
 
 > **Status note:** **Kept, ready to build, queued behind the OSS-readiness P0s**
 > (decided 2026-06-21). Reviewed and endorsed: highest-leverage of the 2026-06-09

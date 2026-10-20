@@ -1,14 +1,14 @@
 # Code Signing — certificate acquisition and the signing pipeline
 
-**Status:** Active · **Created:** 2026-07-27 · **Completed:** —
+**Status:** Done · **Created:** 2026-07-27 · **Completed:** 2026-10-19
 **Owner:** packaging · **Ref:** extracted from [windows-installer-polish](2026-07-25-windows-installer-polish.md) (W4, F5) · [`installers/windows/knaif.iss`](../../installers/windows/knaif.iss) · [`installers/package.sh`](../../installers/package.sh)
 **Release:** 1.2.1
 
 > **Status note (2026-10-02):** S1 and S2 shipped in 1.2.1: the installer, `knaif.exe`, every
 > bundled DLL and the CUDA payload's `ggml-cuda.dll` are signed by Blackdeep Technologies Ltd.
-> Open: S0, the Defender submission of each published artifact (a web form on the owner's Microsoft
-> account), and folding it into RELEASE.md as a standing step (S3); the landscape items are
-> research, not release work.
+> **Closed 2026-10-19:** S0 is done: the Defender submission is RELEASE.md §5 step 6, and 1.3.0's
+> two Windows artifacts were submitted 2026-10-16 (IDs in [release-1.3.0](2026-09-30-release-1.3.0.md)).
+> The renewal budget does not apply to a subscription; re-evaluating SignPath moved to TODO.md.
 
 > **Why this is its own plan.** Signing was W4 of the installer-polish plan, but it is the only
 > workstream there gated on an **external party** — every other one is code the owner can write
@@ -75,9 +75,9 @@ which can only be adopted before the first outside contribution.
 
 ---
 
-## - [ ] S0 — Not blocked, do this now
+## - [x] S0 — Not blocked, do this now
 
-- [ ] **Submit each published artifact to Microsoft's Security Intelligence portal** (the Defender
+- [x] **Submit each published artifact to Microsoft's Security Intelligence portal** (the Defender
   false-positive / developer submission form). Free, needs no certificate, no entity, no owner
   decision. It addresses the **antivirus-detection** half of F5 — which signing would not fix
   anyway, since a signature does not exempt a binary from heuristic detection. An unsigned,
@@ -85,7 +85,7 @@ which can only be adopted before the first outside contribution.
   file post-install is exactly the shape that draws a heuristic hit.
   **Fold the submission into [`docs/RELEASE.md`](../RELEASE.md) as a release step, not a one-off.**
   *Folded in 2026-10-07 (RELEASE.md §5 step 6); the submissions themselves are made at each
-  release, starting with 1.3.0.*
+  release, starting with 1.3.0 (submitted 2026-10-16).*
 
 ---
 
@@ -110,15 +110,18 @@ already obsolete.
 | OV cert on HSM token / cloud HSM | ~$150–300/yr | Worldwide | No | The fallback when the two above do not fit. A physical token makes unattended signing awkward; cloud HSM avoids that |
 | EV cert on token | $400+/yr | Worldwide | No | **No longer justified for SmartScreen.** Only for enterprise procurement or kernel-mode drivers |
 
-- [ ] **Verify Azure Artifact Signing geography at signup, not from the docs.** Microsoft's April
+- [x] **Verify Azure Artifact Signing geography at signup, not from the docs.** Microsoft's April
   2026 comparison lists **orgs in US/CA/EU/UK**, but an April 2025 service update restricted
   onboarding to **US/CA orgs with 3+ years of verifiable history**. The two have not obviously been
-  reconciled.
-- [ ] **Budget for annual renewal.** From **2026-03-01** the CA/Browser Forum caps publicly-trusted
+  reconciled. *Verified 2026-10-01: an EU org account was accepted in North Europe (West Europe
+  refused it), and signing shipped in 1.2.1.*
+- [x] **Budget for annual renewal.** From **2026-03-01** the CA/Browser Forum caps publicly-trusted
   code-signing certificate validity at **458 days**, so any purchased-cert path is a roughly-annual
-  renewal, not a 2–3 year one.
-- [ ] **Re-evaluate SignPath Foundation** once knaif has more release history. Free and CI-integrated
-  is the best long-term shape if the project grows into their criteria.
+  renewal, not a 2–3 year one. *Not applicable (owner, 2026-10-19): knaif signs through Azure
+  Artifact Signing, a monthly subscription with no certificate to buy or renew.*
+- [x] **Re-evaluate SignPath Foundation** once knaif has more release history. Free and CI-integrated
+  is the best long-term shape if the project grows into their criteria. *Moved to
+  [TODO.md](../TODO.md) 2026-10-19, when the plan closed.*
 
 ---
 
