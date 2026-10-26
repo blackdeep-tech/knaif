@@ -8,12 +8,27 @@ display:
   tagline: "Read, convert, combine, and protect documents on your own machine."
   category: documents
 
-toolkits: [fs]
+toolkits: [fs, net]
 
 # Chain intermediates go to the run scratch (<OS temp>/knaif/run-<id>/), so only the outputs the
 # user asked for reach their folder. Read by both runtimes; a skill that sets it must accept paths
 # inside the run's scratch wherever it checks the sandbox. See docs/TOOL_SCHEMA.md, The run scratch.
 scratch_intermediates: true
+
+# http(s) URL inputs: downloaded into the run scratch after confirmation (net toolkit).
+url_inputs:
+  accepted:
+    - application/pdf
+    - application/vnd.openxmlformats-officedocument.*
+    - application/vnd.oasis.opendocument.*
+    - application/msword
+    - application/rtf
+    - text/plain
+    - text/markdown
+    - text/csv
+    - image/*
+    - application/octet-stream
+  max_mb: 200
 
 recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 

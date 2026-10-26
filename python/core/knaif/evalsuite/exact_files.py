@@ -173,6 +173,14 @@ def replay_row(
         )
     except Exception as exc:  # noqa: BLE001 — reported, see docstring
         error = f"{type(exc).__name__}: {exc}"
+    # A replay that stops before running (a clarify, a reject, a declined approval) ran
+    # nothing, so it cannot vouch for the folder: report it, never as clean.
+    first = results[0] if results else {}
+    status = (first.get("result") or {}).get("status")
+    if error is None and (first.get("tool") in ("clarify", "reject") or status == "declined"):
+        said = first.get("args") or {}
+        reason = said.get("question") or said.get("reason") or said.get("prompt") or first
+        error = f"the replay stopped before running: {reason}"
     delivered = deliverables(results, utterance, root=row_dir)
     return {
         "delivered": sorted(
@@ -301,7 +309,9 @@ def replay_row_native(
         KNAIF_LLM_MOCK_RESPONSE=json.dumps(plan),
         KNAIF_DUMP_PLAN="1",
     )
-    argv = [str(binary), "run", skill, "--yes", "--overwrite", "--", *utterance.split()]
+    # `--allow-download` only for a URL row: a binary older than URL inputs rejects the flag.
+    url = ["--allow-download"] if "://" in utterance else []
+    argv = [str(binary), "run", skill, "--yes", "--overwrite", *url, "--", *utterance.split()]
     error: str | None = None
     try:
         proc = subprocess.run(

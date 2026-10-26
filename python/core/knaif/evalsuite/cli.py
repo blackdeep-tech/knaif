@@ -815,6 +815,14 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         for problem in fixture_integrity:
             print(f"  Warning: {problem} — re-run `just eval-fixtures` to restore it", flush=True)
 
+    # URL-input rows (`https://files.knaif.test/...`) are served by a local server; executing
+    # replays fetch from it (knaif.evalsuite.url_server.start_for_corpus).
+    from .url_server import start_for_corpus
+
+    start_for_corpus(
+        _corpus_path(args.skill).parent, fixture_dir, [u for row in corpus for u in row.utterances]
+    )
+
     results: dict[str, dict[str, Any]] = {}
     for backend_name, backend_cfg in backends_cfg.items():
         print(f"\nRunning backend: {backend_name}", flush=True)
@@ -3022,6 +3030,16 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
     work = sandbox / "exact_files" / args.runtime / args.skill
     print(f"exact-files: {len(rows)} row(s) from {args.board}", flush=True)
 
+    # URL-input rows replay their downloads from the local eval server, approved like the run.
+    from .url_server import start_for_corpus
+
+    start_for_corpus(_corpus_path(args.skill).parent, fixture_dir, [r["utterance"] for r in rows])
+
+    def _python_agent(folder: Path) -> Any:
+        agent = create_agent(args.skill, sandbox=folder)
+        agent.allow_download = True
+        return agent
+
     reports: list[dict[str, Any]] = []
     for row in rows:
         row_dir = work / f"{row['id']}__{row.get('utterance_idx') or 0}"
@@ -3031,7 +3049,7 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
             )
         else:
             report = replay_row(
-                lambda folder: create_agent(args.skill, sandbox=folder),
+                _python_agent,
                 row["plan"],
                 row["utterance"],
                 fixture_dir,
@@ -3042,6 +3060,8 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
         )
         reports.append(report)
         status = "LEFT " + ", ".join(report["leftovers"]) if report["leftovers"] else "clean"
+        if report.get("error"):
+            status += f"  (ERROR: {report['error'][:160]})"
         print(f"  [{row['id']}#{report['utterance_idx']}]  {status}", flush=True)
         if not (args.keep and report["leftovers"]):
             shutil.rmtree(row_dir, ignore_errors=True)

@@ -206,6 +206,11 @@ struct RunArgs {
     /// `Replace <file>? [y/N]` (Enter keeps the file), and without a terminal it stops.
     #[arg(long)]
     overwrite: bool,
+    /// Download http(s) URL inputs without asking. Without it, each URL asks
+    /// `Download <url>? [y/N]` (Enter is no), and without a terminal the run stops. `--yes` does
+    /// not cover network access.
+    #[arg(long)]
+    allow_download: bool,
     /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
@@ -1275,6 +1280,11 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     // it; the folder is created only when execution starts, never in a dry run, and removed when
     // `scratch` drops at the end of this function, on success and on failure.
     let mut scratch = knaif_core::scratch::RunScratch::new(args.dry_run);
+    // URL inputs: downloaded into the scratch (a dry run only names the path), so no later stage
+    // sees a URL. Before routing and naming, as Python's fetch stage.
+    if !fetch_url_inputs(&mut steps, &bundle, &mut scratch, &args)? {
+        return Ok(());
+    }
     // Chain intermediates go to the scratch, so only the outputs the user asked for reach their
     // folder. Before the naming repairs below, as Python routes before its collision hook: the
     // repairs must not see a chain's final name on its own intermediate.
@@ -1353,6 +1363,155 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         work_dir: Some(scratch.path()),
     };
     execute_plan(&steps, total, &ctx)
+}
+
+/// URL inputs (port of Python `CommandAgent._fetch_url_inputs`): replace every http(s) URL input
+/// with a file at the top of the run scratch, so outputs derived from it are named in the user's
+/// folder (`user_side_path`). Each URL is approved once: `--allow-download`, else a `[y/N]`
+/// question at a terminal; with neither, or for a skill without `url_inputs:`, the plan becomes a
+/// clarify that says why. A dry run requests nothing. Returns `false` when the user declined.
+fn fetch_url_inputs(
+    steps: &mut Vec<serde_json::Value>,
+    bundle: &Path,
+    scratch: &mut knaif_core::scratch::RunScratch,
+    args: &RunArgs,
+) -> anyhow::Result<bool> {
+    use knaif_core::urls::{is_url, CONTROL_TOOLS, URL_INPUT_KEYS};
+    use serde_json::Value;
+
+    let registry = knaif_core::load_skill_registry(bundle)?;
+    let mut urls: Vec<String> = vec![];
+    for step in steps.iter() {
+        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
+        if CONTROL_TOOLS.contains(&tool) {
+            continue;
+        }
+        let schemas = registry.get(tool).map(|t| &t.arg_schemas);
+        let Some(args_obj) = step.get("args").and_then(Value::as_object) else {
+            continue;
+        };
+        for (key, value) in args_obj {
+            let input_role = schemas
+                .and_then(|s| s.get(key))
+                .and_then(|s| s.path_role.as_deref())
+                == Some("input");
+            if !URL_INPUT_KEYS.contains(&key.as_str()) && !input_role {
+                continue;
+            }
+            let items: Vec<&Value> = match value {
+                Value::Array(a) => a.iter().collect(),
+                other => vec![other],
+            };
+            for item in items.into_iter().filter_map(Value::as_str) {
+                if is_url(item) && !urls.iter().any(|u| u == item) {
+                    urls.push(item.to_string());
+                }
+            }
+        }
+    }
+    if urls.is_empty() {
+        return Ok(true);
+    }
+    let clarify = |q: String| vec![serde_json::json!({"tool": "clarify", "args": {"question": q}})];
+    let Some(url_inputs) = knaif_core::urls::load_url_inputs(&bundle.join("skill.yaml"))? else {
+        *steps = clarify(format!(
+            "This skill works on local files and cannot download {}. Download it first, then \
+             name the file.",
+            urls[0]
+        ));
+        return Ok(true);
+    };
+    let cap = url_inputs.max_bytes;
+    let mut local: Vec<(String, String)> = vec![];
+    if args.dry_run {
+        let mut taken: Vec<String> = vec![];
+        for url in &urls {
+            let mut path = knaif_toolkit_net::planned_path(url, scratch.path());
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let (stem, ext) = match name.split_once('.') {
+                Some((s, e)) => (s.to_string(), format!(".{e}")),
+                None => (name.clone(), String::new()),
+            };
+            let mut n = 0;
+            while taken.contains(&path.file_name().unwrap().to_string_lossy().to_lowercase()) {
+                n += 1;
+                path = scratch.path().join(format!("{stem}-{n}{ext}"));
+            }
+            taken.push(path.file_name().unwrap().to_string_lossy().to_lowercase());
+            let shown = display_path(&path.to_string_lossy(), Some(scratch.path()));
+            note(&format!("would download {url} → {shown}"));
+            local.push((url.clone(), path.to_string_lossy().into_owned()));
+        }
+    } else {
+        for url in &urls {
+            if args.allow_download {
+                continue;
+            }
+            let question = format!("Download {url} (up to {} MB)?", cap / 1_000_000);
+            match ask_yes_no_default(&question, false)? {
+                Some(true) => {}
+                Some(false) => {
+                    print_declined();
+                    return Ok(false);
+                }
+                None => {
+                    *steps = clarify(format!(
+                        "Downloading {url} needs your approval: run this in a terminal to be \
+                         asked, or re-run with --allow-download."
+                    ));
+                    return Ok(true);
+                }
+            }
+        }
+        scratch.enter()?;
+        let policy = knaif_toolkit_net::Policy::new(url_inputs.accepted.clone(), cap);
+        for url in &urls {
+            let got = knaif_toolkit_net::download_file(url, scratch.path(), &policy)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            let shown = display_path(&got.path.to_string_lossy(), Some(scratch.path()));
+            note(&format!("downloaded {url} ({} bytes) → {shown}", got.bytes));
+            local.push((url.clone(), got.path.to_string_lossy().into_owned()));
+        }
+    }
+    let swap = |v: &Value| -> Value {
+        match v {
+            Value::String(s) => local
+                .iter()
+                .find(|(u, _)| u == s)
+                .map_or_else(|| v.clone(), |(_, p)| Value::String(p.clone())),
+            Value::Array(a) => Value::Array(
+                a.iter()
+                    .map(|x| match x {
+                        Value::String(s) => local
+                            .iter()
+                            .find(|(u, _)| u == s)
+                            .map_or_else(|| x.clone(), |(_, p)| Value::String(p.clone())),
+                        other => other.clone(),
+                    })
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    };
+    for step in steps.iter_mut() {
+        let tool = step
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if CONTROL_TOOLS.contains(&tool.as_str()) {
+            continue;
+        }
+        if let Some(obj) = step.get_mut("args").and_then(Value::as_object_mut) {
+            for v in obj.values_mut() {
+                *v = swap(v);
+            }
+        }
+    }
+    Ok(true)
 }
 
 /// A line the run wants the user to see that is not an outcome: in the terminal view it sits in
@@ -2011,7 +2170,9 @@ fn run_documents_step(
     overwrite: bool,
     work_dir: Option<&Path>,
 ) -> anyhow::Result<StepOutcome> {
-    use knaif_skill_documents::run::{commit_in, is_supported, preview_in, Preview, ReadResult};
+    use knaif_skill_documents::run::{
+        commit_in, is_supported, preview_in, read_input_absent, Preview, ReadResult,
+    };
 
     // A routed intermediate's real path names the temp folder (and so the user): `<work>/…`.
     let shown = |path: &Path| match display_path(&path.to_string_lossy(), work_dir) {
@@ -2031,6 +2192,12 @@ fn run_documents_step(
         )));
     }
 
+    if dry_run {
+        if let Some(input) = read_input_absent(tool, step_args, base, sandbox, work_dir)? {
+            println!("would read {}", shown(&input));
+            return Ok(StepOutcome::Continue);
+        }
+    }
     match preview_in(tool, step_args, base, sandbox, bundle, work_dir)? {
         Preview::Read(result) => {
             // Stderr, beside the plan dump, so stdout stays the human answer.

@@ -135,28 +135,38 @@ def make_preview_confirmer(
     return confirm
 
 
-def _render_items(items: list[dict[str, Any]]) -> int:
-    """Render structured items uniformly; return an exit code (0 or 1).
+def _echo_item(item: dict[str, Any], indent: str) -> int:
+    """Render one structured item; return 1 for an error, else 0.
 
     Item kinds:
       - "error"   → red ``✗ {message}`` to stderr, sets exit-code to 1
       - "command" → ``$ {message}`` (bright_black ``$`` prefix)
       - "output"  → green ``✓ {message}``
+      - "text"    → the message as is (a read's answer), every line indented, no colour
       - "info"    → yellow ``{message}``
     """
+    kind = item.get("kind", "info")
+    message = display(item.get("message", ""))
+    if kind == "error":
+        click.echo(indent + click.style(f"✗ {message}", fg="red"), err=True)
+        return 1
+    if kind == "command":
+        click.echo(indent + click.style("$", fg="bright_black") + " " + message)
+    elif kind == "output":
+        click.echo(indent + click.style(f"✓ {message}", fg="green"))
+    elif kind == "text":
+        for line in message.splitlines() or [""]:
+            click.echo(indent + line)
+    else:  # "info" or anything unknown
+        click.echo(indent + click.style(message, fg="yellow"))
+    return 0
+
+
+def _render_items(items: list[dict[str, Any]]) -> int:
+    """Render structured items uniformly (see `_echo_item`); return an exit code (0 or 1)."""
     exit_code = 0
     for item in items:
-        kind = item.get("kind", "info")
-        message = display(item.get("message", ""))
-        if kind == "error":
-            click.echo(click.style(f"  ✗ {message}", fg="red"), err=True)
-            exit_code = 1
-        elif kind == "command":
-            click.echo("  " + click.style("$", fg="bright_black") + " " + message)
-        elif kind == "output":
-            click.echo(click.style(f"  ✓ {message}", fg="green"))
-        else:  # "info" or anything unknown
-            click.echo(click.style(f"  {message}", fg="yellow"))
+        exit_code |= _echo_item(item, "  ")
     return exit_code
 
 
@@ -366,6 +376,32 @@ def _ask_yes_no(question: str, default_yes: bool) -> bool | None:
     return c in ("y", "Y")
 
 
+def wire_downloads(agent: Any, *, allow_download: bool, interactive: bool, ask: Any) -> None:
+    """URL inputs: --allow-download approves every download up front; otherwise a person at a
+    terminal is asked once per URL (default No), and with nobody to ask the run stops, naming
+    the flag (``CommandAgent._fetch_url_inputs``). --yes never covers network access."""
+    agent.allow_download = allow_download
+    agent.download_confirmer = (
+        (lambda url, cap: bool(ask(f"Download {url} (up to {cap // 1_000_000:,} MB)?", False)))
+        if interactive and not allow_download
+        else None
+    )
+
+
+def download_lines(downloads: list[dict[str, Any]]) -> list[str]:
+    """One line per URL input: what a dry run would fetch, or what a run fetched."""
+    from .scratch import display
+
+    lines = []
+    for d in downloads:
+        where = display(str(d.get("path", "")))
+        if d.get("dry_run"):
+            lines.append(f"would download {d['url']} → {where}")
+        else:
+            lines.append(f"downloaded {d['url']} ({d.get('bytes', 0):,} bytes) → {where}")
+    return lines
+
+
 def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     """Ask before replacing each existing output (default No). --overwrite approves up front;
     with nobody to ask it stops, naming the flag. False means the user said no."""
@@ -418,6 +454,13 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     default=False,
     help="Replace files that already exist. Otherwise an existing output asks "
     "'Replace <file>? [y/N]' (Enter keeps it) and, without a terminal, stops.",
+)
+@click.option(
+    "--allow-download",
+    is_flag=True,
+    default=False,
+    help="Download http(s) URL inputs without asking. Otherwise each URL asks "
+    "'Download <url>? [y/N]' and, without a terminal, stops. --yes does not cover it.",
 )
 @click.option(
     "-v",
@@ -482,6 +525,7 @@ def run_cmd(
     auto_approve: bool | None,
     confirm: bool,
     overwrite: bool,
+    allow_download: bool,
     verbose: bool,
     silent: bool,
     backend: str,
@@ -569,18 +613,8 @@ def run_cmd(
         total_s = total_ms / 1000
         timing_label = "dry-run" if dry_run else f"{total_s:.1f}s"
         for item in items:
-            kind = item.get("kind", "info")
-            message = display(item.get("message", ""))
-            prefix = "    "
-            if kind == "error":
-                click.echo(prefix + click.style(f"✗ {message}", fg="red"), err=True)
+            if _echo_item(item, "    "):
                 exit_code_holder[0] = 1
-            elif kind == "command":
-                click.echo(prefix + click.style("$", fg="bright_black") + " " + message)
-            elif kind == "output":
-                click.echo(prefix + click.style(f"✓ {message}", fg="green"))
-            else:
-                click.echo(prefix + click.style(message, fg="yellow"))
         click.echo("    " + click.style(timing_label, fg="bright_black"))
 
     # ── agent ─────────────────────────────────────────────────────────────────
@@ -601,6 +635,12 @@ def run_cmd(
         sys.exit(1)
 
     agent.intent_completed = _on_intent_completed
+    wire_downloads(
+        agent,
+        allow_download=allow_download,
+        interactive=sys.stdin.isatty() and not dry_run,
+        ask=_ask_yes_no,
+    )
 
     # ── infer ─────────────────────────────────────────────────────────────────
     _t_infer = time.perf_counter()
@@ -674,6 +714,13 @@ def run_cmd(
     except ValueError as exc:
         click.echo(click.style(f"\n{exc}", fg="red"), err=True)
         sys.exit(1)
+    if not silent:
+        for line in download_lines(agent.last_downloads):
+            click.echo("  " + click.style(line, fg="bright_black"))
+    if results and (results[0].get("result") or {}).get("status") == "declined":
+        if not silent:
+            click.echo(click.style("\n  (download declined — nothing fetched)", fg="yellow"))
+        sys.exit(0)
     if os.environ.get("KNAIF_DUMP_PLAN"):
         for argv in rendered_argvs(results):
             click.echo(ARGV_DUMP_MARKER + json.dumps(argv, ensure_ascii=False), err=True)

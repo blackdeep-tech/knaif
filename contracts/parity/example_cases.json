@@ -283,7 +283,113 @@
         }
       }
     ],
-    "empty": []
+    "empty": [],
+    "urls": [
+      {
+        "request": "convert a.mov to mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "a.mov"
+                ],
+                "container": "mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert b.mov to mkv",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "b.mov"
+                ],
+                "container": "mkv"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert f.avi to webm",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "f.avi"
+                ],
+                "container": "webm"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "trim c.mp4 to 5 seconds",
+        "output": {
+          "plan": [
+            {
+              "tool": "trim_video",
+              "args": {
+                "input": "c.mp4",
+                "duration": "5"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert https://example.com/d.mov to mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "https://example.com/d.mov"
+                ],
+                "container": "mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "make e.mp4 better",
+        "output": {
+          "plan": [
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "Better how?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "nuke it",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Out of scope."
+              }
+            }
+          ]
+        }
+      }
+    ]
   },
   "cases": [
     {
@@ -502,6 +608,69 @@
       "query": "compress it",
       "expected_requests": [],
       "expected_block": null
+    },
+    {
+      "name": "a_url_example_is_never_shown_to_a_request_without_a_url",
+      "why": "An example whose request carries an http(s) URL is shown only to a request that carries one. Without the rule, 'convert https://example.com/d.mov to mp4' ties 'convert a.mov to mp4' on (tool, words) and takes the third slot from 'convert b.mov to mkv', so adding a URL example would change the prompt of plain convert requests that have nothing to do with URLs.",
+      "example_set": "urls",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "trim_video"
+      ],
+      "query": "convert x.mov to mp4",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "convert b.mov to mkv",
+        "convert f.avi to webm",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"convert b.mov to mkv\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"b.mov\"], \"container\": \"mkv\"}}]}\n\n  request: \"convert f.avi to webm\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"f.avi\"], \"container\": \"webm\"}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_request_with_a_url_ranks_the_url_example_first",
+      "why": "For a request that carries a URL, a URL example outranks one that does not at the same tool overlap, whatever the shared words: the score is (tool overlap, both carry a URL, shared words). Without it, the URL example ties at zero shared words and corpus order leaves it out behind 'convert a.mov' and 'convert f.avi'.",
+      "example_set": "urls",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "trim_video"
+      ],
+      "query": "change https://h.test/y.webm into an mkv",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "convert b.mov to mkv",
+        "convert https://example.com/d.mov to mp4",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"convert b.mov to mkv\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"b.mov\"], \"container\": \"mkv\"}}]}\n\n  request: \"convert https://example.com/d.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"https://example.com/d.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_url_is_recognised_whatever_its_case",
+      "why": "'HTTPS://' is the same URL class as 'https://': both runtimes compare case-insensitively, so an upper-case URL in a request still gets the URL example.",
+      "example_set": "urls",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "trim_video"
+      ],
+      "query": "change HTTPS://H.TEST/Y.WEBM into an mkv",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "convert b.mov to mkv",
+        "convert https://example.com/d.mov to mp4",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"convert b.mov to mkv\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"b.mov\"], \"container\": \"mkv\"}}]}\n\n  request: \"convert https://example.com/d.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"https://example.com/d.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
     }
   ],
   "shipped": [
@@ -518,7 +687,7 @@
         "strip_audio",
         "trim_video"
       ],
-      "corpus_size": 28,
+      "corpus_size": 29,
       "expected_requests": [
         "Compress interview.mp4 for email under 20 MB.",
         "Make clip.mp4 better.",
@@ -541,7 +710,7 @@
         "reverse_video",
         "strip_audio"
       ],
-      "corpus_size": 28,
+      "corpus_size": 29,
       "expected_requests": [
         "Extract the audio from clip.mp4 as MP3.",
         "Extract the audio from clip.mp4 to audio.mp3.",
@@ -564,7 +733,7 @@
         "reverse_video",
         "rotate_video"
       ],
-      "corpus_size": 28,
+      "corpus_size": 29,
       "expected_requests": [
         "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.",
         "Extract the audio from clip.mp4 as MP3.",
@@ -587,7 +756,7 @@
         "unlock_pdf",
         "watermark"
       ],
-      "corpus_size": 5,
+      "corpus_size": 6,
       "expected_requests": [
         "inspect report.pdf",
         "make report.pdf smaller",
@@ -609,7 +778,7 @@
         "unlock_pdf",
         "watermark"
       ],
-      "corpus_size": 5,
+      "corpus_size": 6,
       "expected_requests": [
         "inspect report.pdf",
         "find alpha in notes.txt",

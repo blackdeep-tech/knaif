@@ -100,11 +100,17 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     512 of generation, and qwen3 supports 32K above that. What this number guards is
     instruction-following on a 1.7B as the policy block grows: unpredictable, measurable only
     in an eval arm. The 2026-06-18 precedent points the other way, which is why it moved.
+
+    Raised 15,100 → 15,600 on 2026-10-11 for URL inputs: one rule (an http(s) URL is a valid
+    input, passed exactly as written, never an output; "download" with no link given asks for
+    it) and one URL example (to 15,537 on 2026-10-12, the rule tightened to pay for the
+    no-link clause rather than raising this again). The example is shown only to a request that
+    carries a URL (``select_examples``), so every other retrieved prompt grows by the rule alone.
     """
     system, _ = ffmpeg_agent.build_prompt("compress a video")
     assert (
-        len(system) < 15_100
-    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,100 ceiling"
+        len(system) < 15_600
+    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,600 ceiling"
 
 
 def test_ffmpeg_retrieved_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> None:

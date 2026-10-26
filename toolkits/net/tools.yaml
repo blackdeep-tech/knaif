@@ -1,0 +1,33 @@
+# net toolkit — network tools. A skill that declares `toolkits: [net]` gets these from here,
+# never from a copy in its own tools.yaml. Toolkit tools are internal (the model never sees
+# them) unless the skill lists them under `expose:`.
+
+download_file:
+  effects: [net, fs.write]
+  description: >
+    Download one http(s) URL into `dest_dir` (a folder in the run scratch), under the URL's file
+    name. Refuses other schemes and URLs with credentials, on the first request and on every
+    redirect (at most 5); a response whose content type is not in `accepted` (a web page is named
+    as one); a body over `max_bytes`, by header or while streaming; and a server that stops
+    answering. Sends no cookies or credentials. A refusal leaves nothing behind. In a dry run it
+    makes no request and returns the path it would write. Returns {path, bytes, content_type,
+    url, final_url}.
+  required_args: [url, dest_dir, accepted, max_bytes]
+  optional_args: [connect_timeout_s, read_timeout_s, total_timeout_s]
+  safety_category: safe
+  internal: true
+  arg_schemas:
+    url:
+      type: string
+    dest_dir:
+      type: string
+    accepted:
+      type: array
+    max_bytes:
+      type: integer
+    connect_timeout_s:
+      type: number
+    read_timeout_s:
+      type: number
+    total_timeout_s:
+      type: number

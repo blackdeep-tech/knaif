@@ -120,6 +120,45 @@ def _build_registry_override(
     return _registry.retrieve_tools(utterance, registry, top_k=top_k)
 
 
+def _url_downloads(agent: Any) -> Any:
+    """The replay's ``prepare`` hook for a plan with URL inputs, or None.
+
+    The plan was rendered by a dry run, which names each download's place in the run scratch
+    without fetching it (``agent.last_downloads``). The replay maps run-scratch paths to the
+    row's own scratch (``row_scratch_dir``), so each URL is fetched there, under the name the
+    command uses, by the skill's own ``download_file``.
+    """
+    planned = [d for d in getattr(agent, "last_downloads", None) or [] if d.get("dry_run")]
+    tool = (getattr(agent, "tool_map", None) or {}).get("download_file")
+    url_inputs = getattr(agent, "url_inputs", None)
+    if not planned or tool is None or url_inputs is None:
+        return None
+
+    def prepare(row_dir: Path) -> None:
+        from ..handler_api import HandlerContext
+
+        dest = row_scratch_dir(row_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        for d in planned:
+            ctx = HandlerContext(
+                root=dest, dry_run=False, confirmed=True, skill_dir=agent.skill_dir, work_dir=dest
+            )
+            got = tool.handle(
+                {
+                    "url": d["url"],
+                    "dest_dir": str(dest),
+                    "accepted": list(url_inputs.accepted),
+                    "max_bytes": int(url_inputs.max_bytes),
+                },
+                ctx,
+            )
+            want = dest / Path(d["path"]).name
+            if Path(got["path"]) != want:
+                Path(got["path"]).replace(want)
+
+    return prepare
+
+
 def run_corpus(
     agent: CommandAgent,
     corpus: list[CorpusRow],
@@ -151,6 +190,12 @@ def run_corpus(
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
+    if execute:
+        # URL inputs: an executing run is a real run, so it approves downloads, and its dry-run
+        # planning stands in for the real one, so the preview reads the downloaded bytes
+        # (`CommandAgent.fetch_in_preview`). A plan-level run downloads nothing.
+        agent.allow_download = True
+        agent.fetch_in_preview = True
     if verbose:
         # The denominator for progress watchers (scripts/watch_run.sh), before the first row.
         total = sum(len(row.utterances) if execute else 1 for row in rows)
@@ -250,7 +295,13 @@ def run_corpus(
                     # entirely. What both paths share is the contract — per-row provisioning,
                     # faithful paths, and a failure that reaches the outcome.
                     if artifact_commands:
-                        chain = run_command_chain(artifact_commands, fixture_dir, row_dir)
+                        prepare = _url_downloads(agent)
+                        chain = run_command_chain(
+                            artifact_commands,
+                            fixture_dir,
+                            row_dir,
+                            **({"prepare": prepare} if prepare is not None else {}),
+                        )
                         artifact_paths = [
                             Path(r["output"]) for r in chain if Path(r["output"]).exists()
                         ]

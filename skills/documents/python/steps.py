@@ -103,6 +103,8 @@ class ExtractTextStep(Handler):
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         path = _input_path(args, ctx)
+        if ctx.dry_run and not path.exists():
+            return {"mode": "dry_run", "pages": [], "text": ""}
         records = _extract_text_records(path, args)
         return {"pages": records, "text": "\n".join(record["text"] for record in records)}
 
@@ -112,6 +114,8 @@ class FindInDocumentStep(Handler):
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         path = _input_path(args, ctx)
+        if ctx.dry_run and not path.exists():
+            return {"mode": "dry_run", "matches": [], "count": 0}
         records = _extract_text_records(path, args)
         query = args["query"]
         flags = re.IGNORECASE if args.get("ignore_case", True) else 0
@@ -141,7 +145,9 @@ class MergePdfsStep(Handler):
         pikepdf = _require_pikepdf()
         inputs = _input_paths(args, ctx)
         output = _resolve(args["output"], ctx)
-        pages = sum(_pdf_page_count(path) for path in inputs)
+        # A dry run counts only the inputs already there: a URL input is downloaded, and a
+        # chain intermediate made, only in a real run.
+        pages = sum(_pdf_page_count(path) for path in inputs if not ctx.dry_run or path.exists())
 
         if ctx.dry_run:
             return {

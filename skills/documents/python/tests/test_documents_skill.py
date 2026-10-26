@@ -997,6 +997,44 @@ def test_format_results_surfaces_warning():
     assert {"kind": "info", "message": "Raster compression removes selectable text."} in formatted
 
 
+def test_format_results_prints_what_a_read_found():
+    """A read's answer is the point of running it: print it, in the native CLI's formats."""
+    skill = Skill.load(DOCUMENTS_SKILL_DIR)
+    inspection = {
+        "format": "pdf",
+        "size_bytes": 1234,
+        "encrypted": False,
+        "has_text_layer": True,
+        "pages": 3,
+    }
+    pages = [{"page": 1, "text": "Alpha\n"}, {"page": 2, "text": "Beta"}]
+    match = {"page": 2, "snippet": "Beta", "span": [0, 4]}
+
+    def fmt(tool: str, result: dict) -> list[dict]:
+        return skill.result_formatter([{"tool": tool, "result": result}], dry_run=False)
+
+    assert fmt("inspect_document", inspection) == [
+        {
+            "kind": "text",
+            "message": "pdf: 3 page(s), 1234 bytes, encrypted=False, text_layer=True",
+        }
+    ]
+    assert fmt("extract_text", {"pages": pages, "text": "Alpha\nBeta"}) == [
+        {"kind": "text", "message": "--- page 1 ---\nAlpha\n--- page 2 ---\nBeta"}
+    ]
+    assert fmt("find_in_document", {"matches": [match], "count": 1}) == [
+        {"kind": "text", "message": "p2 [0..4]: Beta"}
+    ]
+    assert fmt("find_in_document", {"matches": [], "count": 0}) == [
+        {"kind": "text", "message": "No matches."}
+    ]
+    locked = fmt("inspect_document", {**inspection, "encrypted": True, "pages": 0})
+    assert "password-protected" in locked[0]["message"]
+    # A dry-run stub (the input is not there yet) has nothing to show.
+    stub = {"mode": "dry_run", "pages": [], "text": ""}
+    assert fmt("extract_text", stub) == [{"kind": "info", "message": "extract_text"}]
+
+
 def test_run_compress_uses_ghostscript_when_available(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
@@ -1132,6 +1170,40 @@ def test_run_compress_dry_run_tolerates_missing_chain_intermediate(tmp_path: Pat
     )
     assert result["mode"] == "dry_run"
     assert result["original_size"] == 0
+
+
+def test_merge_dry_run_tolerates_an_input_not_there_yet(tmp_path: Path):
+    """A URL input is downloaded only in a real run, and a chain intermediate is made only
+    then: a dry-run merge must not open an input that is not there yet."""
+    handlers = _documents_handlers_module()
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
+    result = handlers.MergePdfsStep().handle(
+        {"inputs": ["not-yet-made.pdf", "also-missing.pdf"], "output": "merged.pdf"}, ctx
+    )
+    assert result["mode"] == "dry_run"
+    assert result["output"].endswith("merged.pdf")
+
+
+@pytest.mark.parametrize(
+    ("step", "args", "empty"),
+    [
+        ("ExtractTextStep", {"input": "not-yet-made.pdf"}, {"pages": [], "text": ""}),
+        (
+            "FindInDocumentStep",
+            {"input": "not-yet-made.pdf", "query": "Alpha"},
+            {"matches": [], "count": 0},
+        ),
+    ],
+)
+def test_read_dry_run_tolerates_an_input_not_there_yet(
+    tmp_path: Path, step: str, args: dict, empty: dict
+):
+    """Like inspect_document: a dry run of a read on an input not there yet returns an empty
+    stub instead of raising."""
+    handlers = _documents_handlers_module()
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
+    result = getattr(handlers, step)().handle(args, ctx)
+    assert result == {"mode": "dry_run", **empty}
 
 
 @pytest.mark.parametrize("filename", ["train.jsonl", "safety_test.jsonl"])

@@ -684,7 +684,7 @@ class MySkill(Skill):
     def format_results(self, results: list[dict], *, dry_run: bool) -> list[dict]:
         """Return a list of {kind, message} items.
 
-        kind ∈ {"error", "command", "output", "info"}.
+        kind ∈ {"error", "command", "output", "text", "info"}.
         """
         return [{"kind": "output", "message": "ok"}]
 ```
@@ -696,6 +696,7 @@ The CLI renders each item uniformly:
 | `"error"` | red `✗ {message}` on stderr; sets the CLI exit code to 1 |
 | `"command"` | `$ {message}` with a bright-black `$` prefix |
 | `"output"` | green `✓ {message}` |
+| `"text"` | the message as is, every line indented, no colour: what a read found (extracted text, a page count, matches) |
 | `"info"` | yellow `{message}` |
 
 A skill that does not override `format_results` leaves it returning `None`, and the CLI
@@ -817,6 +818,41 @@ Intermediate files belong to knaif, not to the user. Every run that executes get
   the user named in the request stays where the plan put it.
 - **Scratch paths are never printed.** The one exception is a preview clip, which the user is
   meant to watch. Evidence shows them as `<work>/…` (`evalsuite.redact`).
+
+## URL inputs
+
+A skill can take an http(s) URL wherever it takes an input file
+(`convert https://host/talk.mov to mp4`). It opts in in `skill.yaml`:
+
+```yaml
+toolkits: [fs, net]
+url_inputs:
+  accepted: [video/*, audio/*, application/octet-stream]   # content types; a trailing * is a prefix
+  max_mb: 2000
+```
+
+- **A URL is never a path.** Validation allows one only in an input arg (`inputs`, `input`,
+  `files`, `base`, `append`, or an arg with `path_role: input`). Only http and https are allowed,
+  and never a user name or password. The rules (`knaif.urls`) are pinned for both runtimes by
+  `contracts/parity/url_inputs_cases.json`.
+- **The fetch stage** runs after the clarify gates and before routing, collision naming,
+  expansion and preflight. It replaces every URL with a file at the top of the run scratch, so
+  no later stage sees a URL, and outputs derived from it are named in the user's folder
+  (`user_side_path`). The download itself never reaches the user's folder.
+- **Nothing is fetched without approval.** The CLI's `--allow-download` approves up front.
+  Otherwise each URL asks `Download <url>? [y/N]` (Enter is no), and with no terminal the run
+  stops, naming the flag. `--yes` does not cover network access. In the library, set
+  `agent.allow_download` or `agent.download_confirmer(url, max_bytes)`.
+- **A dry run requests nothing.** It names the scratch path the download would take
+  (`agent.last_downloads`), so the rendered plan is complete. That file is not there yet, so a
+  handler's dry run must not open an input that does not exist (as with a chain intermediate):
+  a read returns an empty stub marked `"mode": "dry_run"`.
+- **The policy** (redirects, timeouts, size cap, content types, no cookies or credentials) lives in
+  the net toolkit's `download_file`; see `toolkits/net/SPEC.md`.
+- **A skill without `url_inputs:`** clarifies: it works on local files.
+- **Both runtimes.** Python: `CommandAgent._fetch_url_inputs`, `knaif-cli run --allow-download`.
+  Native: `fetch_url_inputs` in `apps/cli` (`knaif run --allow-download`), with the
+  `knaif_core::urls` rules and the `knaif-toolkit-net` crate (ureq).
 
 ## Declared effects
 

@@ -174,7 +174,8 @@ from `prompt.yaml`'s SAFETY and TOOL SCOPE blocks.
 | read or write outside the sandbox | `reject` | containment is an invariant, not a feature gap |
 | read system files | `reject` | prohibited data access |
 | **forge or fake someone else's signature** | `reject` | misuse, not a missing tool — **no change to the tool inventory turns this into a capability gap**, which is exactly what separates it from the row below |
-| email, upload to a cloud drive, download a URL, **print, fax** | `clarify` | no network or device tool — a capability gap. Print and fax are the same category as email under a different verb, and the earlier split between them had no argument behind it |
+| email, upload to a cloud drive, **print, fax** | `clarify` | no sending or device tool — a capability gap. Print and fax are the same category as email under a different verb, and the earlier split between them had no argument behind it |
+| download a URL and do nothing to it | `clarify` | keeping a downloaded file is not a document operation. An http(s) URL **as the input** of an operation ("extract the text from https://host/report.pdf") is ordinary work: the file is downloaded into the run's scratch, after confirmation, and only the result reaches the user's folder |
 | translate, summarise or rewrite a document's text | `clarify` | no tool for it |
 | fill in forms, add the user's **own** digital signature, redact, compare or diff two documents | `clarify` | no tool for it |
 

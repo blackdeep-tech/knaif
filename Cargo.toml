@@ -9,6 +9,7 @@ members = [
     "native/crates/knaif-llm",
     "native/crates/knaif-skill-api",
     "toolkits/fs/native",
+    "toolkits/net/native",
     "skills/ffmpeg/native",
     "skills/documents/native",
     "apps/cli",
@@ -71,6 +72,7 @@ knaif-models = { path = "native/crates/knaif-models" }
 knaif-llm = { path = "native/crates/knaif-llm" }
 knaif-skill-api = { path = "native/crates/knaif-skill-api" }
 knaif-toolkit-fs = { path = "toolkits/fs/native" }
+knaif-toolkit-net = { path = "toolkits/net/native" }
 knaif-skill-ffmpeg = { path = "skills/ffmpeg/native" }
 knaif-skill-documents = { path = "skills/documents/native" }
 

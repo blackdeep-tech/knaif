@@ -11,12 +11,17 @@ display:
   tagline: "Convert, compress, and resize video without remembering a single flag."
   category: media
 
-toolkits: [fs]
+toolkits: [fs, net]
 
 # Chain intermediates go to the run scratch (<OS temp>/knaif/run-<id>/), so only the outputs the
 # user asked for reach their folder. Read by both runtimes; a skill that sets it must accept paths
 # inside the run's scratch wherever it checks the sandbox. See docs/TOOL_SCHEMA.md, The run scratch.
 scratch_intermediates: true
+
+# http(s) URL inputs: downloaded into the run scratch after confirmation (net toolkit).
+url_inputs:
+  accepted: [video/*, audio/*, image/*, application/octet-stream]
+  max_mb: 2000
 
 recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 

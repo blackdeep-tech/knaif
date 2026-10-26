@@ -226,15 +226,23 @@ fn word_set(text: &str) -> HashSet<String> {
         .collect()
 }
 
+/// Whether `text` carries an http(s) URL, matching Python's `_carries_url`.
+fn carries_url(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("http://") || lower.contains("https://")
+}
+
 /// Select the examples most relevant to `query` given the retrieved tool set. Port of Python
 /// `select_examples`.
 ///
 /// Always includes the first clarify example and the first reject example, when the corpus has
 /// them, then fills up to `max_tool_examples` domain examples ranked by how many retrieved tools
 /// the example's plan uses (primary) and how many query words its request shares (tiebreaker),
-/// and re-emits the whole selection in corpus order.
+/// and re-emits the whole selection in corpus order. An example whose request carries an http(s)
+/// URL is eligible only when the query carries one too, and then ranks first at equal tool
+/// overlap.
 ///
-/// Two things a re-derivation gets wrong, both pinned by `contracts/parity/example_cases.json`:
+/// Two things a re-derivation gets wrong, both pinned by `contracts/parity/example_cases.json`.:
 /// the cap is a **cap, not a relevance threshold** — three domain examples are kept even when
 /// every one of them scores zero — and the ranking sort must be **stable**, because Python's
 /// `sorted(..., reverse=True)` leaves equal-scoring examples in corpus order. Sorting ascending
@@ -246,6 +254,7 @@ pub fn select_examples<'a>(
     max_tool_examples: usize,
 ) -> Vec<&'a PromptExample> {
     let query_tokens = word_set(query);
+    let query_url = carries_url(query);
 
     let mut keep: Vec<bool> = vec![false; examples.len()];
     for control in ["clarify", "reject"] {
@@ -254,20 +263,24 @@ pub fn select_examples<'a>(
         }
     }
 
-    let mut domain: Vec<(usize, (usize, usize))> = examples
+    // A URL example is shown only to a request that carries a URL, and ranks first among
+    // examples with the same tool overlap there.
+    let mut domain: Vec<(usize, (usize, usize, usize))> = examples
         .iter()
         .enumerate()
         .filter(|(_, e)| !example_tool_set(e).is_empty())
+        .filter(|(_, e)| query_url || !carries_url(&e.request))
         .map(|(i, e)| {
             let tool_overlap = example_tool_set(e)
                 .iter()
                 .filter(|t| retrieved_tool_names.contains(**t))
                 .count();
+            let url_match = usize::from(query_url && carries_url(&e.request));
             let word_overlap = word_set(&e.request)
                 .iter()
                 .filter(|w| query_tokens.contains(*w))
                 .count();
-            (i, (tool_overlap, word_overlap))
+            (i, (tool_overlap, url_match, word_overlap))
         })
         .collect();
     // Stable, descending by score: ties keep corpus order, as Python's stable reverse sort does.
