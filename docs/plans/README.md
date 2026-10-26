@@ -27,6 +27,7 @@ table changes only when a release opens or ships.
 
 | Release | Lane | Branch | Index | State |
 |---|---|---|---|---|
+| 1.4.0 | minor | `release/1.4.0` | [release-1.4.0](2026-10-26-release-1.4.0.md) | opened; toolchain refresh first, scope open |
 
 ## Plan header format
 
@@ -165,6 +166,7 @@ that release's scope table (via its plan).
 | 2026-10-01 | [daemon-mode](2026-10-01-daemon-mode.md) | Done | **Shipped in 1.3.0.** Opt-in daemon (`knaif daemon start|status|stop`, `run --daemon`); repeat CUDA runs ~2.6 s → ~0.7 s, nothing on CPU; plans byte-identical with and without it on all three platforms. Prompt-prefix reuse stays off (it changes plans). |
 | 2026-10-14 | [faster-release-evidence](2026-10-14-faster-release-evidence.md) | Done | **Done 2026-10-19**, merged to `main` on its own; the next release uses it by copying the run-script template at its freeze. Release L4 cells measure a committed release subset per skill (ffmpeg 194, documents 80 utterances), graded row by row against the accepted Python run; planning in one model load with a 30-row live cold-start sample; a result store of the model's raw replies keyed by exact prompt, model, inference code, platform and backend (execution is never reused); `scripts/release_evidence.sh` and its template run Windows, Linux (WSL) and macOS. Everything runs on the release box and the Mac; CI cells and vast.ai not adopted. Open (TODO.md): macOS's first run of the script, at the next release's freeze. |
 | 2026-10-19 | [published-evidence](2026-10-19-published-evidence.md) | Draft | Moved out of faster-release-evidence (Part H, decided 2026-10-15). What a published model or skill brings with it: the full-corpus acceptance run committed through `evalsuite redact`, the snapshot locked with `source_run`, the reviewed corpus, and a per-model "what was published" table; plus the enablers for skills made outside this tree. Not started. |
+| 2026-10-26 | [release-1.4.0](2026-10-26-release-1.4.0.md) | Active | Release index for 1.4.0 (minor): the toolchain and llama.cpp refresh first, then the features and fixes listed in its scope. Lives on `release/1.4.0`; this copy is left untouched until the release merges back. |
 | 2026-10-03 | [media-runtime-and-mobile](2026-10-03-media-runtime-and-mobile.md) | Draft | **Thread A reopened 2026-10-20 as a test here (signed reduced FFmpeg, all features kept? new media skill?); release chosen after.** Was a parked discussion: a separately signed GPL ffmpeg "runtime pack" run as a separate program (knaif stays Apache, no dylib plugin), and a separate mobile media skill (AVFoundation / Media3) sharing a `knaif-media-core` crate with the ffmpeg skill. Open: the Smart App Control experiment, the mobile lifecycle exception. |
 
 ## Open threads (not yet a plan, or spanning plans)
