@@ -1,0 +1,51 @@
+{
+  "_comment": "Prompt rules (`rules:` in a skill's prompt.yaml). A rule with `tools` joins the system header when one of its tools is in this prompt (`present`: the prompt's tools, internal ones left out); a `when: many` rule joins when the request asks for many files (knaif.nl_clarify_gate.asks_for_many_files). Rules join in their order, each after the header's last line: the header's trailing newlines are dropped, then a newline, then the rule's text as written. No rule applies: the header is unchanged. Python `knaif.prompt.apply_prompt_rules`, Rust `knaif_core::prompt::apply_prompt_rules`.",
+  "rules": [
+    {"tools": ["split_video", "extract_frames"], "text": "- ONE FILE INTO MANY: split_video.\n"},
+    {"when": "many", "text": "- MANY FILES: write the steps for one file.\n"}
+  ],
+  "cases": [
+    {
+      "name": "no rule applies",
+      "header": "You plan.\n",
+      "present": ["convert_video"],
+      "utterance": "convert clip.mov to mp4",
+      "expected": "You plan.\n"
+    },
+    {
+      "name": "a rule joins with one of its tools",
+      "header": "You plan.\n",
+      "present": ["convert_video", "extract_frames"],
+      "utterance": "save a still every 5 seconds from clip.mp4",
+      "expected": "You plan.\n- ONE FILE INTO MANY: split_video.\n"
+    },
+    {
+      "name": "a when-many rule joins a request for many files",
+      "header": "You plan.\n",
+      "present": ["convert_video"],
+      "utterance": "convert all the .mov files here to mp4",
+      "expected": "You plan.\n- MANY FILES: write the steps for one file.\n"
+    },
+    {
+      "name": "both join in their order",
+      "header": "You plan.\n\n\n",
+      "present": ["split_video"],
+      "utterance": "split every video here into 10-second parts",
+      "expected": "You plan.\n- ONE FILE INTO MANY: split_video.\n- MANY FILES: write the steps for one file.\n"
+    },
+    {
+      "name": "a request naming one file with a batch word alone is not many",
+      "header": "You plan.",
+      "present": ["extract_text"],
+      "utterance": "extract the text of every page of sample.pdf",
+      "expected": "You plan."
+    },
+    {
+      "name": "a header without a trailing newline",
+      "header": "You plan.",
+      "present": ["convert_video"],
+      "utterance": "convert every mov here to mp4",
+      "expected": "You plan.\n- MANY FILES: write the steps for one file.\n"
+    }
+  ]
+}

@@ -260,6 +260,46 @@ fn ends_cleanly(text: &str, end: usize) -> bool {
         .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
 }
 
+fn place_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(&format!(r"(?i)\b(?:in|into|to|on|onto|from)\s+{FOLDER}")).unwrap()
+    })
+}
+
+fn folder_word_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)^\s+folder\b").unwrap())
+}
+
+/// `text` with every known folder named as a place left out ("in my Downloads folder", "to
+/// Documents"), each replaced by a space: a folder there says where, not how many
+/// (`nl_clarify_gate::asks_for_many_files`). Python `known_folders.without_folder_places`; the
+/// clean end after the folder's name is Python's `(?![\w.])`, then an optional " folder".
+pub fn without_folder_places(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let (mut copied, mut start) = (0, 0);
+    while start <= text.len() {
+        let Some(m) = place_re().find_at(text, start) else {
+            break;
+        };
+        if ends_cleanly(text, m.end()) {
+            let end = m.end()
+                + folder_word_re()
+                    .find(&text[m.end()..])
+                    .map_or(0, |s| s.end());
+            out.push_str(&text[copied..m.start()]);
+            out.push(' ');
+            copied = end;
+            start = end;
+        } else {
+            start = m.start() + text[m.start()..].chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    out.push_str(&text[copied..]);
+    out
+}
+
 /// Whether `re` matches `text` at or after `from`, with a clean end. Every start is tried, as
 /// Python's backtracking search would, so a failed candidate cannot hide a later one.
 fn found_from(re: &Regex, text: &str, from: usize) -> bool {

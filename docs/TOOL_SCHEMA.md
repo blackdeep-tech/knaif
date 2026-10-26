@@ -199,7 +199,8 @@ file_kinds:
   image: [jpg, jpeg, png]
 ```
 
-Both runtimes read it for chain threading only. When a later step names an earlier step's
+Both runtimes read it for chain threading and for the scratch keep rule (below). When a later
+step names an earlier step's
 source file, core rewrites it onto that step's output ("convert clip.mp4 to mkv then strip
 *its* audio"), but never onto a file of a different kind: "make a thumbnail of clip.mp4 and
 compress *it*" compresses the video. An extension no kind lists is unrestricted, and one
@@ -208,6 +209,22 @@ listed under two kinds fails the skill load.
 Threading also stops when the **user repeats the filename**: "thumbnail of clip.mp4 and
 compress clip.mp4" is two steps over one file, and the plan runs as written. When you write
 corpus rows or examples, a name written twice pins that step to the original file.
+
+`batch_kinds` (optional) lists the kinds whose batch glob covers the whole kind:
+
+```yaml
+batch_kinds: [video]
+```
+
+In a request for many files, an input glob `*.<ext>` whose extension the request does not name
+also reads the other extensions of that kind in its folder: "make all the videos here 720p"
+written as `*.mp4` covers the .mov and .mkv files beside it (`["*.mp4", "*.mkv", "*.mov"]`). An
+extension the request names as the files' type ("every .mov", "the mp4s") is never added. A
+format named once, only as the value of the step's `produces: {arg}` argument, is what the step
+converts *to*, not the files' type: "convert all the videos to mp4" covers the mp4s and the other
+videos alike, whichever glob the model wrote. A one-path `input` given
+several globs this way, or by the model, runs once per file. Each kind must be one `file_kinds`
+declares. Pinned by `contracts/parity/kind_glob_cases.json`.
 
 ### Display metadata
 
@@ -608,6 +625,13 @@ classes; restating one in `tools.yaml` is allowed and needs no class.
 - `work_dir`: this run's scratch folder (see *The run scratch* below)
 - `call_tool(name, args)`: run another tool of this skill (its own, a declared toolkit's, or
   core) in the same run. This is how a handler reuses a toolkit tool.
+- `file_finished(file, failure=None)`: a step that works on many files says how each one ended,
+  done or failed with a one-line reason (no paths in it). Core prints a failure as it happens,
+  lets a failed command among done files continue the run instead of stopping it, and ends with
+  the batch summary (`3 done, 1 failed in 4.2s, 12.3 MB`). A step over one file is no batch:
+  its report is ignored and its error takes the usual path. ffmpeg's `inspect_media`,
+  `build_recipes` and `run_batch` report this way. When core itself runs a chain once per file,
+  it reports each file and only keeps the step's reason.
 
 Handlers must honor `ctx.dry_run` for side-effecting work. Destructive public tools are
 blocked by `CommandAgent.execute_plan()` unless `dry_run=True` or `confirmed=True`, but
@@ -816,6 +840,54 @@ Intermediate files belong to knaif, not to the user. Every run that executes get
   `skill.yaml`, read by both runtimes): a step's `output` that a later step reads moves into `work_dir` under the
   same name, with every later reference. An output nothing reads is a deliverable, and a file
   the user named in the request stays where the plan put it.
+- **The keep rule.** An intermediate the user *asked for* stays too, although they never named
+  the file. One rule, two deterministic signals, and core never names a tool:
+  - **Tool signal:** every later step reading it makes a **new thing** from it: a file of
+    another kind ("convert clip.mov to mp4, then extract its audio" leaves the mp4 and the mp3),
+    or a tool that declares `derives: true` because its output is a piece, a page range or a
+    join rather than the input improved ("compress report.pdf and extract pages 1-3" leaves the
+    compressed whole and the pages). **Not when every reader is a join** (`joins_inputs: true`):
+    pieces made for a join are on the way, so "compress all the PDFs here and merge them into
+    one" leaves only the merged file.
+  - **Request signal:** the user named its format as a bare word and no later reader writes that
+    format again: "convert clip.mov to mp4 and make a gif preview" leaves the mp4 and the gif,
+    while "convert to mp4 and make it smaller" leaves only the smaller mp4, because that is mp4
+    again. Extensions are ASCII in every language, so this needs no word lists; the extension of
+    the step's own input never counts ("cut the mp4 at 3 seconds and make a gif" names the
+    source).
+
+  Otherwise a later step refines it, so it moves: "convert to mp4, then speed it up" leaves only
+  the sped-up mp4. Kinds are the skill's `file_kinds`; what a reader writes is its tool's
+  `produces:` in `tools.yaml`, a kind or `{arg: <name>}` when the kind follows an argument naming
+  an extension, else its explicit `output`'s kind. The declaration wins over the extension the
+  model wrote: `extract_audio` writing `clip_audio.mp4` still writes audio, so a wrong extension
+  cannot delete a second result:
+
+  ```yaml
+  extract_audio:
+    produces: audio
+  convert_document:
+    produces: {arg: to_format}   # to_format: txt -> text, pdf -> document
+  trim_video:
+    derives: true                # a piece: its source stays
+  split_pdf:
+    derives: true                # a page range: its source stays
+  ```
+
+  A tool without `produces:` writes the same kind as its input. Core never names a tool: a new
+  skill gets the rule by declaring its kinds and what its tools write.
+- **A result saved only in a batch.** A tool that prints its result for one file can declare
+  `batch_output: <ext>` (documents `extract_text: batch_output: txt`): when core repeats a step
+  of it over many files, each file's result is saved as `<name>.<ext>` next to that file, since
+  printing many files' text helps nobody. The tool then accepts `output`, which the prompt does
+  not list (an optional arg would join every prompt that lists the tool), and the preview's
+  "leaves" line counts the files.
+- **Keeping everything.** `--keep-intermediates` on `knaif run` (both CLIs) keeps every step's
+  output where the plan put it, and so do words in the request: "keep the intermediate files",
+  "keep everything", "behalte alles", "保留中间文件". The phrases are a keep verb next to a scope,
+  never `save` (which names outputs); a negated English request keeps the default. Python
+  `knaif.scratch.wants_everything_kept`, Rust `knaif_core::scratch::wants_everything_kept`,
+  contract `contracts/parity/keep_request_cases.json`.
 - **Scratch paths are never printed.** The one exception is a preview clip, which the user is
   meant to watch. Evidence shows them as `<work>/…` (`evalsuite.redact`).
 
@@ -929,6 +1001,28 @@ examples:
 ```
 
 `Skill.load()` renders examples into the prompt. Keep examples short, concrete, and limited to model-visible tools unless the skill intentionally teaches the model a multi-step public plan.
+
+Extra header lines that only some requests need go under `rules:`, so every other prompt stays
+byte for byte as it was. A rule joins the end of the header when one of its `tools` is in the
+prompt, or, with `when: many`, when the request asks for many files (a batch word, a plural file
+word or a glob, not counting a URL or a known folder named as a place:
+`nl_clarify_gate.asks_for_many_files`, pinned by `contracts/parity/many_files_cases.json`). An
+example marked `when: many` is likewise shown only to such a request.
+
+```yaml
+rules:
+  - tools: [split_video, extract_frames]
+    text: |
+      - ONE FILE INTO MANY: ...
+  - when: many
+    text: |
+      - MANY FILES, SEVERAL STEPS: write the steps as for ONE file ...
+
+examples:
+  - request: "Rotate every mkv in this folder 90 degrees and make them 1080p."
+    when: many
+    output: ...
+```
 
 ## Data Files
 

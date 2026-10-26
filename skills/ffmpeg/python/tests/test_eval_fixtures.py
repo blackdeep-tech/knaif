@@ -14,6 +14,24 @@ def test_all_expected_fixtures_present():
         "clip_ctr.mp4",
         "clip.mov",
         "audio.mp3",
+        "clip_long.mp4",
+        # The folder rows' folder: five short clips, one with no audio, one long 1080p.
+        "batch/beach.mov",
+        "batch/city.mov",
+        "batch/dog.mp4",
+        "batch/party.mp4",
+        "batch/garden.mkv",
+        "batch/silent.mov",
+        "batch/concert.mp4",
+        # One-file folder rows: the folder holds only the file the request names, so "this video"
+        # has one answer. one_long/clip.mp4 is the 75 s clip the "every 10 seconds" rows need.
+        "one_clip/clip.mp4",
+        "one_mov/clip1.mov",
+        "one_long/clip.mp4",
+        # "merge all the clips in this folder into one": numbered so natural order shows.
+        "clips/clip1.mp4",
+        "clips/clip2.mp4",
+        "clips/clip10.mp4",
     }
     assert expected == set(FIXTURES.keys())
 

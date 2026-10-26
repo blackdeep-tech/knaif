@@ -67,6 +67,16 @@ pub fn extract_pdf_text(doc: &Document, pages: &[i64]) -> anyhow::Result<Vec<Pag
 /// files (`.txt`/`.md`) are read as a single page-1 record. Other formats (image OCR, office) are
 /// deferred and error here rather than silently returning nothing.
 pub fn extract_text(path: &Path, pages: Option<&str>) -> anyhow::Result<Vec<PageText>> {
+    extract_text_with(path, pages, false)
+}
+
+/// [`extract_text`], reading a PDF by OCR when `ocr` is asked for or no selected page has text (a
+/// scan), as Python's `_extract_text_records` does.
+pub fn extract_text_with(
+    path: &Path,
+    pages: Option<&str>,
+    ocr: bool,
+) -> anyhow::Result<Vec<PageText>> {
     let suffix = suffix_of(path);
     if TEXT_SUFFIXES.contains(&suffix.as_str()) {
         let text = std::fs::read_to_string(path)
@@ -77,7 +87,11 @@ pub fn extract_text(path: &Path, pages: Option<&str>) -> anyhow::Result<Vec<Page
         let doc = pdf::load(path)?;
         let total = pdf::page_count(&doc) as i64;
         let selected = pdf::parse_pages(pages, total, true)?;
-        return extract_pdf_text(&doc, &selected);
+        let records = extract_pdf_text(&doc, &selected)?;
+        if ocr || records.iter().all(|r| r.text.trim().is_empty()) {
+            return crate::ocr::pdf_text_records(path, &selected, "eng");
+        }
+        return Ok(records);
     }
     if OFFICE_SUFFIXES.contains(&suffix.as_str()) {
         return crate::office::extract_office_text(path);

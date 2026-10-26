@@ -10,3 +10,6 @@ description = "The fs toolkit for native skills: stage an output in the run scra
 [dependencies]
 knaif-core = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

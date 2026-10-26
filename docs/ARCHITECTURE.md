@@ -350,6 +350,12 @@ tools (not the expanded steps), and approval is requested per non-terminal inten
   Approval is **per intent**, not whole-plan: declining intent _N_ stops there but keeps
   the results of intents 1.._N_-1 (for a single-intent plan this means declining returns
   `[]`). Implies `show_plan=True` (cannot approve what you cannot see).
+- **What the plan leaves** (`knaif.result_set`): computed after routing, before anything
+  runs, and stored on `agent.last_result_set`. Every preview ends with it: `leaves
+  beach_small.mp4`, or by type past three files (`leaves 5 mp4 and 5 mp3`); a name that
+  disagrees with what its tool writes is flagged. A chain core runs once per file previews
+  the first file's clauses, then `the same for N more files: …`, then the leaves line, and is
+  approved **once** for the whole batch.
 
 Both flags can be set on the `CommandAgent` constructor or overridden per-call:
 

@@ -127,7 +127,9 @@ pub struct PlanRow {
     pub detail: String,
 }
 
-pub fn render_plan(style: &Style, rows: &[PlanRow]) -> String {
+/// The plan summary: its steps, then `notes` (a batch's "the same for N more files" and what the
+/// plan leaves, `knaif_core::result_set`).
+pub fn render_plan(style: &Style, rows: &[PlanRow], notes: &[String]) -> String {
     let bar = style.paint(Tone::Dim, "│");
     let noun = if rows.len() == 1 { "step" } else { "steps" };
     let mut out = format!(
@@ -153,6 +155,9 @@ pub fn render_plan(style: &Style, rows: &[PlanRow]) -> String {
             row.tool,
             style.paint(Tone::Dim, &row.detail),
         ));
+    }
+    for note in notes {
+        out.push_str(&format!("\n {bar}   {}", style.paint(Tone::Dim, note)));
     }
     out.push_str(&format!("\n {bar}"));
     out
@@ -505,6 +510,7 @@ static VERBOSE: AtomicBool = AtomicBool::new(false);
 static HEADER: AtomicBool = AtomicBool::new(false);
 static CLOSED: AtomicBool = AtomicBool::new(false);
 static WRITTEN: AtomicUsize = AtomicUsize::new(0);
+static WRITTEN_PATHS: Mutex<Vec<std::path::PathBuf>> = Mutex::new(Vec::new());
 static DECLINED: Mutex<Option<(usize, usize)>> = Mutex::new(None);
 static CLOCK: Mutex<Option<Clock>> = Mutex::new(None);
 
@@ -636,6 +642,21 @@ pub fn note_written(n: usize) {
 
 pub fn written() -> usize {
     WRITTEN.load(Ordering::Relaxed)
+}
+
+/// Record the files a step wrote, for the batch summary's size of what the run left.
+pub fn note_written_paths(paths: &[std::path::PathBuf]) {
+    if let Ok(mut all) = WRITTEN_PATHS.lock() {
+        all.extend(paths.iter().cloned());
+    }
+}
+
+/// Every file the run's steps reported writing, in order.
+pub fn written_paths() -> Vec<std::path::PathBuf> {
+    WRITTEN_PATHS
+        .lock()
+        .map(|all| all.clone())
+        .unwrap_or_default()
 }
 
 /// Print the header once, the first time anything in the run speaks.
@@ -928,11 +949,37 @@ mod tests {
                 detail: "silent.mp4 → small.mp4".into(),
             },
         ];
-        let s = render_plan(&PLAIN, &rows);
+        let s = render_plan(&PLAIN, &rows, &[]);
         assert!(s.contains("Plan · 2 steps"), "{s}");
         assert!(s.contains("├─ 1  strip_audio   "), "{s}");
         assert!(s.contains("└─ 2  resize_video  "), "{s}");
-        assert!(render_plan(&PLAIN, &rows[..1]).contains("Plan · 1 step\n"));
+        assert!(render_plan(&PLAIN, &rows[..1], &[]).contains("Plan · 1 step\n"));
+    }
+
+    #[test]
+    fn the_plan_ends_with_what_it_leaves() {
+        // Every preview ends with the result set; a batch shows the first file's
+        // steps, then the same for the rest.
+        let rows = vec![PlanRow {
+            tool: "convert_video".into(),
+            detail: "beach.mov → beach.mp4".into(),
+        }];
+        let notes = vec![
+            "the same for 2 more files: city.mov, silent.mov".to_string(),
+            "leaves 3 mp4".to_string(),
+        ];
+        let s = render_plan(&PLAIN, &rows, &notes);
+        let lines: Vec<&str> = s.lines().collect();
+        assert!(lines[1].contains("└─ 1  convert_video"), "{s}");
+        assert_eq!(
+            lines[2],
+            " │   the same for 2 more files: city.mov, silent.mov"
+        );
+        assert_eq!(lines[3], " │   leaves 3 mp4");
+        assert!(
+            !render_plan(&PLAIN, &rows, &[]).contains("leaves"),
+            "no notes, no lines"
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub mod concat;
 pub mod engine;
 pub mod exec;
 pub mod intent;
+pub mod pieces;
 pub mod profile;
 pub mod run;
 pub mod vocab;

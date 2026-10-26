@@ -7,10 +7,19 @@ import json
 import os
 import re
 import time
-from collections.abc import Collection, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
+from .batch_chain import (
+    BatchLift,
+    BatchReport,
+    PlannedSet,
+    failure_line,
+    first_line,
+    lift_batch,
+    link_set_readers,
+)
 from .core_tools import CORE_TOOL_DEFS
 from .evaluator import compute_metrics, run_eval
 from .executor import HANDLERS as _EXECUTOR_HANDLERS
@@ -42,7 +51,8 @@ from .planner import (
 )
 from .prompt import build_prompt, normalize_path_separators
 from .registry import ToolDef, load_registry, retrieve_tools
-from .scratch import RunScratch
+from .result_set import Result, leaves_line, result_set, same_for_line
+from .scratch import RunScratch, display, wants_everything_kept
 from .skill import Skill
 
 _TERMINAL_TOOLS = frozenset({"done", "clarify", "reject"})
@@ -73,6 +83,8 @@ def _step_failed(result: Any) -> bool:
     """
     if not isinstance(result, dict):
         return False
+    if result.get("status") == "failed":
+        return True
     rc = result.get("returncode")
     if rc is not None and rc != 0:
         return True
@@ -82,6 +94,105 @@ def _step_failed(result: Any) -> bool:
             if out_rc is not None and out_rc != 0:
                 return True
     return False
+
+
+def _failure_reason(result: Any) -> str:
+    """Why a failed step failed, for the batch report: its error, else the last line a failed
+    command wrote (where ffmpeg puts the cause)."""
+    if not isinstance(result, dict):
+        return ""
+    if result.get("error"):
+        return str(result["error"])
+    tails = [str(result.get("stderr") or "")]
+    tails += [
+        str(o.get("stderr_tail") or o.get("stderr") or "")
+        for o in result.get("outputs") or []
+        if isinstance(o, dict) and o.get("returncode") not in (None, 0)
+    ]
+    for tail in tails:
+        lines = [ln.strip() for ln in tail.splitlines() if ln.strip()]
+        if lines:
+            return lines[-1]
+    return ""
+
+
+def _size_left(results: list[dict[str, Any]], base: Path, scratch: Path) -> int:
+    """Bytes of the files the run's steps report writing (``output``, ``outputs``, ``files``)
+    that are still there after it, outside the run scratch, each counted once. The fs toolkit's
+    ``resolve_inputs`` reports what a step reads under ``files``: those are inputs, not left."""
+    paths: set[Path] = set()
+    for r in results:
+        res = r.get("result")
+        if not isinstance(res, dict) or r.get("tool") == "resolve_inputs":
+            continue
+        named: list[Any] = [res.get("output"), *(res.get("files") or [])]
+        for o in res.get("outputs") or []:
+            named.append(o.get("output") if isinstance(o, dict) else o)
+        for value in named:
+            if isinstance(value, str) and value:
+                p = Path(value) if Path(value).is_absolute() else base / value
+                paths.add(p.resolve())
+    work = scratch.resolve()
+    return sum(p.stat().st_size for p in paths if p.is_file() and not p.is_relative_to(work))
+
+
+def _without_folder(text: str, base: Path) -> str:
+    """*text* with the folder the run works in left out of every path in it: a reason names
+    ``clip.mov``, never the user's folders."""
+    for folder in {str(base), str(base.resolve())}:
+        for spelling in {folder, folder.replace("\\", "/")}:
+            text = text.replace(spelling + "\\", "").replace(spelling + "/", "")
+            text = text.replace(spelling, ".")
+    return text
+
+
+class _FileTally:
+    """How each file of a step over many files ended (``ctx.file_finished``), intent by intent.
+
+    An intent's reports are held until it has reported a second file: one file is no batch, and
+    its failure takes the usual error path. From then on each failure line goes to *emit* as
+    it comes. Names are shown relative to *base* when inside it, else as the bare file name.
+    """
+
+    def __init__(self, emit: Callable[[str], None] | None, base: Path) -> None:
+        self.emit = emit
+        self.base = base
+        self.entries: list[tuple[str, str | None]] = []
+        self._intent: list[tuple[str, str | None]] = []
+
+    def start_intent(self) -> None:
+        self._intent = []
+
+    def record(self, file: str, failure: str | None) -> None:
+        reason = (
+            None if failure is None else first_line(_without_folder(display(failure), self.base))
+        )
+        entry = (self._name(file), reason)
+        self._intent.append(entry)
+        if len(self._intent) == 2:
+            for held in self._intent:
+                self._keep(*held)
+        elif len(self._intent) > 2:
+            self._keep(*entry)
+
+    def partial(self) -> bool:
+        """This intent is a batch in which at least one file is done: a failed command among
+        them does not stop the run."""
+        return len(self._intent) >= 2 and any(r is None for _, r in self._intent)
+
+    def _keep(self, name: str, reason: str | None) -> None:
+        self.entries.append((name, reason))
+        if reason is not None and self.emit is not None:
+            self.emit(failure_line(name, reason or ""))
+
+    def _name(self, file: str) -> str:
+        p = Path(file)
+        if not p.is_absolute():
+            return file.replace("\\", "/")
+        try:
+            return p.resolve().relative_to(self.base.resolve()).as_posix()
+        except ValueError:
+            return p.name
 
 
 def _iter_string_values(args: dict[str, Any]) -> Iterator[str]:
@@ -104,6 +215,149 @@ def _extension(value: str) -> str:
     name = _basename(value)
     dot = name.rfind(".")
     return name[dot + 1 :].lower() if dot > 0 else ""
+
+
+def _names_output(args: Mapping[str, Any]) -> bool:
+    """True when a step's *args* name the file it writes (a non-empty ``output``)."""
+    out = args.get("output")
+    return isinstance(out, str) and bool(out.strip())
+
+
+def _written_kind(
+    step: Mapping[str, Any],
+    file_kinds: Mapping[str, str],
+    produces: Mapping[str, Any],
+) -> str | None:
+    """The kind of file *step* writes: its tool's ``produces:``, else its explicit output's.
+
+    The declaration is the skill's word and the output extension is the model's, so the
+    declaration decides when both exist (owner, 2026-10-15): ``extract_audio`` writing
+    ``clip_audio.mp4`` still writes audio, and the wrong extension cannot delete a second
+    result. A ``{"arg": name}`` declaration reads that argument; without a usable value, and
+    for a tool declaring nothing, the output's extension decides.
+    """
+    args = step.get("args") or {}
+    declared = produces.get(str(step.get("tool")))
+    if isinstance(declared, str):
+        return declared
+    if isinstance(declared, Mapping):
+        value = args.get(str(declared.get("arg")))
+        if isinstance(value, str) and value.strip():
+            kind = file_kinds.get(value.lower().lstrip("."))
+            if kind is not None:
+                return kind
+    out = args.get("output")
+    if isinstance(out, str) and _extension(out):
+        return file_kinds.get(_extension(out))
+    return None
+
+
+def _written_extension(step: Mapping[str, Any], produces: Mapping[str, Any]) -> str | None:
+    """The extension *step* writes, for the request signal: its explicit output's, else the value
+    of its ``produces: {arg}`` argument; None when unknown."""
+    args = step.get("args") or {}
+    out = args.get("output")
+    if isinstance(out, str) and _extension(out):
+        return _extension(out)
+    declared = produces.get(str(step.get("tool")))
+    if isinstance(declared, Mapping):
+        value = args.get(str(declared.get("arg")))
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower().lstrip(".")
+    return None
+
+
+def _named_formats(utterance: str, file_kinds: Mapping[str, str]) -> set[str]:
+    """Extensions the request names as bare words: ``to mp4``, ``as .gif``, or Chinese without
+    spaces (``转换为mp4``); never the extension inside a filename (``clip.mp4``). Extensions
+    are ASCII in every language, so this needs no word lists. The boundaries are those of
+    :func:`_mention_count`; a leading dot counts when nothing name-like precedes it."""
+    return {ext.lower() for ext in file_kinds if _format_mentions(utterance, ext)}
+
+
+def _format_mentions(utterance: str, ext: str) -> int:
+    """How many times the request names the format *ext* as a word (:func:`_named_formats`)."""
+    u, e = utterance.lower(), re.escape(ext.lower())
+    after = r"(?![A-Za-z0-9_-]|\.[A-Za-z0-9_])"
+    bare = r"(?<![A-Za-z0-9_.-])" + e + after
+    dotted = r"(?<!\w)\." + e + after
+    return len(re.findall(bare, u)) + len(re.findall(dotted, u))
+
+
+def _asked_for(
+    intermediate: str,
+    producer: Mapping[str, Any],
+    later: list[dict[str, Any]],
+    target: str,
+    key: Callable[[str], str],
+    utterance: str,
+    file_kinds: Mapping[str, str] | None,
+    produces: Mapping[str, Any] | None,
+    derives: Collection[str] | None,
+    joining: Collection[str] = (),
+) -> bool:
+    """True when the user asked for *intermediate* although they never named the file.
+
+    The keep rule (owner, 2026-10-15): one rule, two deterministic signals, no tool named in core.
+
+    * **Tool signal:** every later step reading it makes a *new thing* from it: a file of
+      another kind (``file_kinds``; what a reader writes per :func:`_written_kind`), or a tool
+      declaring ``derives: true`` (a piece, a page range, a join). "Compress report.pdf and
+      extract pages 1-3" keeps the compressed whole. **Except** when every reader is a join
+      (*joining*): pieces made for a join are on the way (owner, 2026-10-20), so "compress all
+      PDFs here and merge them into one" leaves only the merged file.
+    * **Request signal:** the user named its format as a bare word (:func:`_named_formats`),
+      the format is not the producer's own input extension ("cut the mp4 … and make a gif"
+      names the source), and no reader writes that format again. "Convert clip.mov to mp4 and
+      make a gif preview" keeps the mp4; "convert to mp4 and make it smaller" does not.
+
+    Otherwise a reader refines it, and it goes to the scratch. Readers stop at a later step
+    that writes the same file again.
+    """
+    kinds, made = file_kinds or {}, produces or {}
+    deriving = set(derives or ())
+    own_ext = _extension(intermediate)
+    own_kind = kinds.get(own_ext)
+    readers: list[dict[str, Any]] = []
+    for step in later:
+        if step.get("tool") in _TERMINAL_TOOLS:
+            continue
+        args = step.get("args") or {}
+        reads = any(
+            isinstance(v, str) and v and key(v) == target
+            for k, raw in args.items()
+            if k != "output"
+            for v in (raw if isinstance(raw, list) else [raw])
+        )
+        if reads:
+            readers.append(step)
+        out = args.get("output")
+        if isinstance(out, str) and out and key(out) == target:
+            break  # a later step writing the same file again ends this file's readers
+    if not readers:
+        return False
+
+    def makes_new_thing(step: Mapping[str, Any]) -> bool:
+        if step.get("tool") in deriving:
+            return True
+        kind = _written_kind(step, kinds, made)
+        return own_kind is not None and kind is not None and kind != own_kind
+
+    only_joins = all(s.get("tool") in joining for s in readers)
+    if not only_joins and all(makes_new_thing(s) for s in readers):
+        return True
+    if own_ext and own_ext in _named_formats(utterance, kinds):
+        source_exts = {
+            _extension(v)
+            for v in _iter_string_values(
+                {k: v for k, v in (producer.get("args") or {}).items() if k != "output"}
+            )
+        }
+        if own_ext not in source_exts and all(
+            (w := _written_extension(s, made)) is not None and w != own_ext for s in readers
+        ):
+            return True
+    return False
 
 
 def _mention_count(utterance: str, name: str) -> int:
@@ -178,6 +432,7 @@ class CommandAgent:
         confirmer: Any | None = None,
         unsafe_phrases: tuple[str, ...] = (),
         file_kinds: dict[str, str] | None = None,
+        batch_kinds: list[str] | None = None,
         scratch_intermediates: bool = False,
         summarizers: dict[str, Any] | None = None,
         preflights: dict[str, Any] | None = None,
@@ -207,8 +462,22 @@ class CommandAgent:
         self.unsafe_phrases: tuple[str, ...] = unsafe_phrases
         # Extension -> kind, from the skill's `file_kinds:`; chain threading never crosses kinds.
         self.file_kinds: dict[str, str] = file_kinds or {}
+        # From the skill's `batch_kinds:`: a batch glob of these kinds covers the whole kind.
+        self.batch_kinds: list[str] = list(batch_kinds or [])
         # From the skill's `scratch_intermediates:`; see _route_intermediates_to_scratch.
         self.scratch_intermediates = scratch_intermediates
+        # `--keep-intermediates`: every step's output stays where the plan put it,
+        # nothing goes to the scratch. Request words ("keep the intermediate files") do the same
+        # (`knaif.scratch.wants_everything_kept`).
+        self.keep_intermediates: bool = False
+        # Called with each failure line of a batch chain as it happens (the CLI prints it on
+        # stderr); the run's BatchReport is `last_batch_report`, None when nothing was lifted.
+        self.batch_failed: Callable[[str], None] | None = None
+        self.last_batch_report: BatchReport | None = None
+        self._file_tally: _FileTally | None = None
+        self._isolated_failure: str | None = None
+        # What the last plan leaves (knaif.result_set), computed before it runs.
+        self.last_result_set: list[Result] = []
         # URL inputs (`url_inputs:` in skill.yaml, set by from_skill): None means the skill
         # works on local files only. Nothing is downloaded unless `allow_download` (the CLI's
         # --allow-download) or `download_confirmer(url, max_bytes)` says yes, once per URL.
@@ -240,6 +509,9 @@ class CommandAgent:
         self.plan_confirmer: Any | None = plan_confirmer
         self.intent_completed: Any | None = intent_completed
         self.prompt_examples: list[dict] = []
+        # `rules:` from prompt.yaml, each added to the header only when one of its tools is in
+        # the prompt, so a prompt without them is unchanged byte for byte.
+        self.prompt_rules: list[dict] = []
         self.last_thinking: str = ""
         self.last_plan_summary: str = ""
         self.last_parse_error: str | None = None
@@ -295,6 +567,7 @@ class CommandAgent:
             confirmer=confirmer,
             unsafe_phrases=skill.unsafe_phrases,
             file_kinds=skill.file_kinds,
+            batch_kinds=skill.batch_kinds,
             scratch_intermediates=skill.scratch_intermediates,
             summarizers=skill.summarizers,
             preflights=skill.preflights,
@@ -307,6 +580,7 @@ class CommandAgent:
             intent_completed=intent_completed,
         )
         agent.prompt_examples = skill.prompt_examples
+        agent.prompt_rules = skill.prompt_rules
         agent.url_inputs = skill.url_inputs
 
         if skill.tool_map is not None:
@@ -424,6 +698,7 @@ class CommandAgent:
 
         started = time.perf_counter()
         self.last_alert = False
+        self.last_batch_report = None
         self._work_started = False
         self._intent_declined = False
         results: list[dict[str, Any]] = []
@@ -517,6 +792,18 @@ class CommandAgent:
         apply_defaults(payload, self.registry)
         # The alert is a run option: it leaves the plan here, before any gate or step sees it.
         payload, self.last_alert = split_alert(payload)
+        # A glob in a folder the model made up for "here" reads as here, before the gates and
+        # known-folder resolution see it (`videos/*.mov` would become the user's Videos folder).
+        # Then "every video" written as `*.mp4` covers the other videos beside it too.
+        if utterance is not None and isinstance(payload.get("plan"), list):
+            from .batch_chain import drop_invented_folders, widen_kind_globs
+
+            here = Path(self.sandbox if self.sandbox is not None else self.root)
+            plan = drop_invented_folders(payload["plan"], utterance, here)
+            plan = widen_kind_globs(
+                plan, utterance, here, self.file_kinds, self.batch_kinds, self.route_kinds()[1]
+            )
+            payload = {**payload, "plan": plan}
 
         # Arg-shape clarify gates (before structural validation): when the model
         # omits a required arg the user must supply, or puts an arg on a known
@@ -634,15 +921,35 @@ class CommandAgent:
         if stopped is not None:
             return stopped
 
+        # A chain over many files ("convert all the .mov files to mp4 and make them smaller")
+        # runs once per file (knaif.batch_chain). Before routing, so the keep rule sees each
+        # file's chain as an ordinary one-file chain; a plan with no batch chain is unchanged.
+        intent_plan, batch, expand = self._lift_batch_chain(intent_plan, resolution_dir)
+
+        # One file into many (split_video, extract_frames, …): the skill says which files a step
+        # will write before anything runs, and the steps reading them are pointed at that set,
+        # so routing can move it and the lift below runs them once per file.
+        sets: dict[int, PlannedSet] = {}
+        if batch is None:
+            sets = self._planned_sets(intent_plan, scratch.path, dry_run, confirmed, skip_execution)
+            if sets:
+                intent_plan = link_set_readers(intent_plan, sets)
+
         # Chain intermediates go to the run scratch, so only deliverables reach the user's
-        # folder. Opt-in per skill while skills move onto scratch one at a time.
-        if self.scratch_intermediates:
+        # folder. Opt-in per skill while skills move onto scratch one at a time; skipped when
+        # the user asked to keep every step's output (the flag, or words in the request).
+        if (
+            self.scratch_intermediates
+            and not self.keep_intermediates
+            and not wants_everything_kept(utterance)
+        ):
             intent_plan = self._route_intermediates_to_scratch(
                 intent_plan,
                 scratch.path,
                 utterance,
                 resolution_dir,
                 {name for name, td in self.registry.items() if td.joins_inputs},
+                *self.route_kinds(),
             )
 
         # Give the skill a chance to rewrite outputs that would destroy a file, and to
@@ -657,42 +964,43 @@ class CommandAgent:
             if isinstance(rebound, list):
                 intent_plan = rebound
 
+        # Routing and the skill's collision naming rewrite args, never the number of steps;
+        # should one ever change it, a failed file stops the run as before.
+        if batch is not None and len(intent_plan) != len(batch.file_of):
+            batch = None
+
+        # The set's files as they will be written now (routing may have put them in the
+        # scratch), then the readers run once per file.
+        planned: dict[str, list[str]] = {}
+        planned_steps: dict[int, list[str]] = {}  # by producer; the lift keeps its place
+        if sets:
+            planned_now = self._planned_sets(
+                intent_plan, scratch.path, dry_run, confirmed, skip_execution
+            )
+            for i, ps in planned_now.items():
+                out = (intent_plan[i].get("args") or {}).get("output")
+                planned[out if isinstance(out, str) and out else ps.name] = list(ps.files)
+                planned_steps[i] = list(ps.files)
+            intent_plan, batch = self._lift_sets(intent_plan, planned, scratch.path)
+
+        # What the plan will leave (knaif.result_set); every preview ends with it.
+        self.last_result_set = result_set(
+            intent_plan,
+            scratch=scratch.path,
+            base=resolution_dir,
+            expand=expand,
+            readonly={name for name, td in self.registry.items() if td.readonly},
+            joining={name for name, td in self.registry.items() if td.joins_inputs},
+            produces=self.route_kinds()[1],
+            file_kinds=self.file_kinds,
+            sets=planned_steps,
+        )
+        leaves = leaves_line(self.last_result_set)
+
         # Expand each intent independently, preserving intent boundaries.
-        intent_blocks: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
-        for intent_step in intent_plan:
-            tool = intent_step.get("tool")
-            sub_plan: list[dict[str, Any]]
-
-            # OOP path: dispatch expansion via Intent.expand()
-            tool_obj = self.tool_map.get(tool) if (self.tool_map and tool) else None
-            if tool_obj is not None:
-                from .tool import Intent as _Intent
-
-                if isinstance(tool_obj, _Intent):
-                    sub_plan = tool_obj.expand(intent_step.get("args", {}))
-                    if not isinstance(sub_plan, list):
-                        raise ValueError(f"Expander for {tool!r} must return a list of steps.")
-                    output_var = intent_step.get("output")
-                    if output_var and sub_plan:
-                        last = dict(sub_plan[-1])
-                        last["output"] = output_var
-                        sub_plan = list(sub_plan[:-1]) + [last]
-                else:
-                    sub_plan = [intent_step]
-            else:
-                expander = self.expanders.get(tool) if tool else None
-                if expander is None:
-                    sub_plan = [intent_step]
-                else:
-                    sub_plan = expander(intent_step.get("args", {}))
-                    if not isinstance(sub_plan, list):
-                        raise ValueError(f"Expander for {tool!r} must return a list of steps.")
-                    output_var = intent_step.get("output")
-                    if output_var and sub_plan:
-                        last = dict(sub_plan[-1])
-                        last["output"] = output_var
-                        sub_plan = list(sub_plan[:-1]) + [last]
-            intent_blocks.append((intent_step, sub_plan))
+        intent_blocks: list[tuple[dict[str, Any], list[dict[str, Any]]]] = [
+            (intent_step, self._expand_intent(intent_step)) for intent_step in intent_plan
+        ]
 
         # Re-validate the union of expanded steps so structural errors surface
         # before any user-facing prompt. allow_internal=True: these steps came
@@ -722,7 +1030,7 @@ class CommandAgent:
             # Files that earlier intents will produce — don't fail preflight for them.
             planned_output_names: set[str] = set()
             preflight_errors: list[str] = []
-            for orig_intent, block in intent_blocks:
+            for k, (orig_intent, block) in enumerate(intent_blocks):
                 for step in block:
                     tool = step.get("tool", "")
                     if tool in _TERMINAL_TOOLS:
@@ -767,6 +1075,8 @@ class CommandAgent:
                 output_arg = orig_intent.get("args", {}).get("output")
                 if isinstance(output_arg, str) and not output_arg.startswith("$"):
                     planned_output_names.add(Path(output_arg).name)
+                # A step writing many files from one: every file it will write (knaif.batch_chain).
+                planned_output_names.update(Path(f).name for f in planned_steps.get(k, []))
             if preflight_errors:
                 kind = classify_preflight_errors(preflight_errors)
                 combined = "; ".join(preflight_errors)
@@ -810,15 +1120,61 @@ class CommandAgent:
             "Will " + ", then ".join(step_summaries) + "." if step_summaries else ""
         )
 
+        # Each non-terminal intent's clause, by its place in the plan. A batch previews its
+        # first file's clauses, then "the same for N more files", then what the plan leaves,
+        # and is approved once; any other plan ends its clauses with what it leaves (owner,
+        # 2026-10-20).
+        clause_of: dict[int, str] = {}
+        clauses = iter(step_summaries)
+        for k, (orig, _) in enumerate(intent_blocks):
+            if orig.get("tool") not in _TERMINAL_TOOLS:
+                clause_of[k] = next(clauses, "")
+        last_clause = max(clause_of, default=-1)
+        batch_shown = False
+
+        def show(line: str) -> None:
+            if not _show:
+                return
+            if self.plan_display is not None:
+                self.plan_display(line)
+            else:
+                print(line)
+
+        def approved(line: str) -> bool:
+            if not _approve:
+                return True
+            return bool(self.plan_confirmer(line)) if self.plan_confirmer else confirmed
+
         context: dict[str, Any] = {}
         results: list[dict[str, Any]] = []
-        summary_idx = 0
+        # A batch chain (knaif.batch_chain): a file whose step fails is out, with its reason,
+        # and its later steps are skipped; the other files go on (owner, 2026-10-13).
+        failed: dict[int, str] = {}
+        batch_started = time.perf_counter()
+        # A step over many files without a lift reports each file itself (ctx.file_finished).
+        self._file_tally = (
+            _FileTally(self.batch_failed, self._resolution_dir()) if batch is None else None
+        )
 
         # One scratch folder for the whole run, every intent included: a chain intermediate
         # written by one intent is read by the next. Removed on any exit (knaif.scratch).
         with scratch:
-            for orig_intent, sub_plan in intent_blocks:
+            for k, (orig_intent, sub_plan) in enumerate(intent_blocks):
                 is_terminal = orig_intent.get("tool") in _TERMINAL_TOOLS
+                file_idx = batch.file_of[k] if batch is not None else None
+                skip = file_idx is not None and file_idx in failed
+                if batch is not None and k in batch.join_files and failed and not skip:
+                    joined = self._join_without_failed(
+                        orig_intent, batch.join_files[k], failed, scratch.path
+                    )
+                    if joined is None:
+                        skip = True
+                    else:
+                        orig_intent, sub_plan = joined
+                if skip:
+                    continue
+                if self._file_tally is not None:
+                    self._file_tally.start_intent()
                 intent_tool_name = orig_intent.get("tool")
                 orig_tool_def = (
                     self.registry.get(intent_tool_name)
@@ -834,27 +1190,34 @@ class CommandAgent:
                     orig_tool_def and orig_tool_def.safety_category == "destructive"
                 )
 
-                if not is_terminal and (_show or _approve):
-                    clause = (
-                        step_summaries[summary_idx] if summary_idx < len(step_summaries) else ""
-                    )
-                    summary_idx += 1
-
-                    if _show:
-                        if self.plan_display is not None:
-                            self.plan_display(clause)
-                        else:
-                            print(clause)
-
-                    if _approve:
-                        if self.plan_confirmer is not None:
-                            ok = bool(self.plan_confirmer(clause))
-                        else:
-                            ok = confirmed
-                        if not ok:
+                if batch is not None and file_idx is not None:
+                    if not batch_shown and (_show or _approve):
+                        batch_shown = True
+                        lines = [
+                            clause_of[j]
+                            for j, f in enumerate(batch.file_of)
+                            if f == 0 and j in clause_of
+                        ]
+                        if len(batch.shown) > 1:
+                            lines.append(same_for_line(batch.shown[1:]))
+                        if leaves:
+                            lines.append(leaves)
+                        for line in lines:
+                            show(line)
+                        if not approved(lines[-1]):
                             self._intent_declined = True
-                            break  # decline this intent → stop, keep prior results
+                            break  # decline the batch → nothing of it runs
+                elif not is_terminal and (_show or _approve):
+                    clause = clause_of.get(k, "")
+                    show(clause)
+                    if k == last_clause and leaves and not batch_shown:
+                        show(leaves)
+                        clause = leaves
+                    if not approved(clause):
+                        self._intent_declined = True
+                        break  # decline this intent → stop, keep prior results
 
+                self._isolated_failure = None
                 sub_results, should_stop = self._execute_steps(
                     sub_plan,
                     context,
@@ -864,8 +1227,29 @@ class CommandAgent:
                     intent_tool=intent_tool_name,
                     intent_destructive=intent_destructive,
                     work_dir=scratch.path,
+                    isolate=file_idx is not None,
                 )
                 results.extend(sub_results)
+
+                if (
+                    batch is not None
+                    and file_idx is not None
+                    and should_stop
+                    and sub_results
+                    and _step_failed(sub_results[-1].get("result"))
+                ):
+                    reason = first_line(
+                        _without_folder(
+                            display(
+                                self._isolated_failure or _failure_reason(sub_results[-1]["result"])
+                            ),
+                            self._resolution_dir(),
+                        )
+                    )
+                    failed[file_idx] = reason
+                    if self.batch_failed is not None:
+                        self.batch_failed(failure_line(batch.shown[file_idx], reason))
+                    continue
 
                 # Fire the per-intent callback so callers can render output between
                 # intents. Terminal steps (reject/clarify/done) are reported via the
@@ -879,7 +1263,55 @@ class CommandAgent:
                 if should_stop:
                     break
 
+        tally, self._file_tally = self._file_tally, None
+        if batch is not None:
+            self.last_batch_report = BatchReport(
+                files=list(batch.shown),
+                failures=[(batch.shown[f], why) for f, why in failed.items()],
+                seconds=time.perf_counter() - batch_started,
+                size_bytes=_size_left(results, self._resolution_dir(), scratch.path),
+            )
+        elif tally is not None and tally.entries:
+            self.last_batch_report = BatchReport(
+                files=[name for name, _ in tally.entries],
+                failures=[(name, why) for name, why in tally.entries if why is not None],
+                seconds=time.perf_counter() - batch_started,
+                size_bytes=_size_left(results, self._resolution_dir(), scratch.path),
+            )
         return results
+
+    def _note_isolated_failure(self, file: str, failure: str | None) -> None:
+        """``ctx.file_finished`` inside one file's step of a lift: keep the step's reason."""
+        if failure is not None and self._isolated_failure is None:
+            self._isolated_failure = failure
+
+    def _expand_intent(self, intent_step: dict[str, Any]) -> list[dict[str, Any]]:
+        """The steps *intent_step* runs as: its ``Intent.expand()`` (or legacy expander), else
+        itself. An intent's ``output`` var lands on its last step."""
+        tool = intent_step.get("tool")
+        sub_plan: list[dict[str, Any]]
+
+        # OOP path: dispatch expansion via Intent.expand()
+        tool_obj = self.tool_map.get(tool) if (self.tool_map and tool) else None
+        if tool_obj is not None:
+            from .tool import Intent as _Intent
+
+            if not isinstance(tool_obj, _Intent):
+                return [intent_step]
+            sub_plan = tool_obj.expand(intent_step.get("args", {}))
+        else:
+            expander = self.expanders.get(tool) if tool else None
+            if expander is None:
+                return [intent_step]
+            sub_plan = expander(intent_step.get("args", {}))
+        if not isinstance(sub_plan, list):
+            raise ValueError(f"Expander for {tool!r} must return a list of steps.")
+        output_var = intent_step.get("output")
+        if output_var and sub_plan:
+            last = dict(sub_plan[-1])
+            last["output"] = output_var
+            sub_plan = list(sub_plan[:-1]) + [last]
+        return sub_plan
 
     def _execute_steps(
         self,
@@ -892,12 +1324,18 @@ class CommandAgent:
         intent_tool: str | None = None,
         intent_destructive: bool = False,
         work_dir: Path | None = None,
+        isolate: bool = False,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute *sub_plan* sequentially against the shared *context*.
 
         *intent_tool* / *intent_destructive* carry the originating intent's identity
         and safety_category through expansion, so a destructive intent that expands
         into safe leaves still requires confirmation (F2).
+
+        *isolate* (one file's step in a batch chain): a handler that raises becomes a failed
+        step (``{"status": "failed", "error": ...}``) instead of ending the run, so the batch
+        goes on with the other files. Only the handler's own error: a refused step (a
+        destructive one unconfirmed, an arg that fails validation) still raises.
 
         Returns ``(results, should_stop)`` where ``should_stop`` is True if a
         terminal/declined step was encountered, signalling that no further
@@ -961,14 +1399,34 @@ class CommandAgent:
                     )
                 raise ValueError(f"{tool!r} requires confirmed=True when dry_run=False.")
 
-            ctx = self._handler_context(dry_run, confirmed, skip_execution, work_dir, tool=tool)
+            # One file's step of a lift: the lift reports the file, with the reason the step
+            # gave (`_isolated_failure`); otherwise a step over many files reports each one.
+            tally = None if isolate else self._file_tally
+            reporter: Callable[[str, str | None], None] | None
+            if isolate:
+                reporter = self._note_isolated_failure
+            else:
+                reporter = tally.record if tally is not None else None
+            ctx = self._handler_context(
+                dry_run,
+                confirmed,
+                skip_execution,
+                work_dir,
+                tool=tool,
+                file_reporter=reporter,
+            )
             if tool not in _TERMINAL_TOOLS and tool != "wait_for_confirmation":
                 self._work_started = True
             _t0 = time.perf_counter()
-            if exec_tool_obj is not None:
-                result = exec_tool_obj.handle(args, ctx)
-            else:
-                result = self.handlers[tool](args, ctx)
+            try:
+                if exec_tool_obj is not None:
+                    result = exec_tool_obj.handle(args, ctx)
+                else:
+                    result = self.handlers[tool](args, ctx)
+            except Exception as exc:
+                if not isolate:
+                    raise
+                result = {"status": "failed", "error": str(exc)}
             _duration_ms = (time.perf_counter() - _t0) * 1000
 
             output_var = step.get("output")
@@ -985,7 +1443,9 @@ class CommandAgent:
                 }
             )
 
-            if _step_failed(result):
+            # In a step over many files, a failed command with other files done is the
+            # batch's business (reported and counted), not the end of the run.
+            if _step_failed(result) and not (tally is not None and tally.partial()):
                 should_stop = True
                 break
 
@@ -1142,6 +1602,7 @@ class CommandAgent:
         work_dir: Path | None,
         *,
         tool: str | None = None,
+        file_reporter: Callable[[str, str | None], None] | None = None,
     ) -> HandlerContext:
         """The context one step runs with; ``ctx.call_tool`` dispatches within the same run.
 
@@ -1163,6 +1624,7 @@ class CommandAgent:
             tool_caller=lambda name, args: self._call_tool(name, args, holder[0]),
             tool=tool,
             effects=frozenset(declared) if declared is not None else None,
+            file_reporter=file_reporter,
         )
         holder.append(ctx)
         return ctx
@@ -1240,15 +1702,30 @@ class CommandAgent:
             retrieved_tool_names = frozenset(
                 name for name, td in registry_override.items() if not td.internal
             )
-            filtered = select_examples(self.prompt_examples, retrieved_tool_names, user_utterance)
+            triggered = frozenset(n for n, td in self.registry.items() if td.triggers)
+            filtered = select_examples(
+                self.prompt_examples,
+                retrieved_tool_names,
+                user_utterance,
+                triggered=triggered | {"alert_when_done"},
+            )
             if filtered:
                 examples_block = render_examples_block(filtered)
+
+        # A rule about tools joins the header only when one of them is in this prompt; a
+        # `when: many` rule only when the request asks for many files (the clarify gate's test).
+        header = self.system_header
+        if header is not None and self.prompt_rules:
+            from .prompt import apply_prompt_rules
+
+            present = {name for name, td in registry.items() if not td.internal}
+            header = apply_prompt_rules(header, self.prompt_rules, present, user_utterance)
 
         return build_prompt(
             user_utterance,
             registry,
             history=history or [],
-            system_header=self.system_header,
+            system_header=header,
             examples_block=examples_block,
         )
 
@@ -1619,6 +2096,12 @@ class CommandAgent:
         source. Kinds come from the skill's ``file_kinds:`` (*file_kinds*, extension ->
         kind); an extension it does not list is unrestricted, and a minted intermediate
         keeps the source's extension. See docs/plans/2026-09-23-chain-source-threading.md.
+
+        **Sibling rule.** A later step that runs the *same tool* on the same source and names
+        its own ``output`` is a second result from that source, not the next link of a chain
+        ("cut 1-3 s of clip.mp4 as 1.mp4 and the rest as 2.mp4": both trims read clip.mp4).
+        It keeps the source even when the user named it once. The same tool again *without* an
+        output of its own is still threaded ("compress it again").
         """
         kinds = file_kinds or {}
         produced: set[str] = set()
@@ -1650,6 +2133,9 @@ class CommandAgent:
                 if later.get("tool") in _TERMINAL_TOOLS:
                     continue
                 largs = later.get("args") or {}
+                if later.get("tool") == step.get("tool") and _names_output(largs):
+                    continue  # the same operation again, into its own file: a second result
+
                 for key, value in largs.items():
                     if key == "output":
                         continue
@@ -1687,6 +2173,9 @@ class CommandAgent:
         utterance: str | None,
         resolution_dir: Path,
         joining_tools: Collection[str] = (),
+        file_kinds: Mapping[str, str] | None = None,
+        produces: Mapping[str, Any] | None = None,
+        derives: Collection[str] = (),
     ) -> list[dict[str, Any]]:
         """Move each chain intermediate into *work_dir*, with every later step that reads it.
 
@@ -1699,6 +2188,14 @@ class CommandAgent:
         * an output nothing reads later, which is a deliverable;
         * an output the user named in *utterance*, since a file the user named is one they
           asked for (owner, 2026-10-09);
+        * an output the user asked for without naming it (:func:`_asked_for`, the keep rule,
+          owner 2026-10-15): every later reader makes a **new thing** from it (another kind of
+          file per *file_kinds* and *produces*, or a tool in *derives*, the skill's
+          ``derives: true``; not when every reader is a join in *joining_tools*: pieces made
+          for a join are on the way), or the user named its **format** and no reader writes that
+          format again ("convert clip.mov to mp4 and make a gif preview" keeps the mp4). A reader that
+          refines it (same kind, same format: "convert to mp4 and make it smaller") sends it to
+          the scratch;
         * everything, when there is no utterance: then every name in the plan is the caller's.
 
         Returns a new plan; *plan* is not mutated. Run after the NL gates (which ground plan
@@ -1762,6 +2259,19 @@ class CommandAgent:
                     break
             if not readers:
                 continue
+            if _asked_for(
+                out,
+                step,
+                plan[idx + 1 :],
+                target,
+                key,
+                utterance,
+                file_kinds,
+                produces,
+                derives,
+                joining_tools,
+            ):
+                continue  # a result the user asked for: it stays where the plan put it
 
             # Same place relative to the user's folder, so a later step can put its own output
             # where this file would have been (`videos/x.mp4` -> `<work>/videos/x.mp4`).
@@ -1775,6 +2285,130 @@ class CommandAgent:
             for container, k in readers:
                 container[k] = str(moved)
         return plan
+
+    def route_kinds(self) -> tuple[dict[str, str], dict[str, Any], set[str]]:
+        """The skill's file kinds, each tool's ``produces:`` and the tools that ``derive``, for
+        the keep rule (:func:`_asked_for`)."""
+        return (
+            self.file_kinds,
+            {name: td.produces for name, td in self.registry.items() if td.produces is not None},
+            {name for name, td in self.registry.items() if td.derives},
+        )
+
+    def _batch_outputs(self) -> dict[str, str]:
+        """Each tool that saves its result only in a batch (`batch_output:`), to the extension."""
+        return {name: td.batch_output for name, td in self.registry.items() if td.batch_output}
+
+    def _lift_batch_chain(
+        self, plan: list[dict[str, Any]], base: Path
+    ) -> tuple[list[dict[str, Any]], BatchLift | None, dict[str, list[str]]]:
+        """*plan* with its batch chain run once per file, globs and folders expanded on disk;
+        the lift (which file each step works on), or None when nothing was lifted; and what
+        each glob or folder expanded to.
+
+        The lifted plan is validated again: every name it made must pass the same sandbox
+        checks as the model's own.
+        """
+        from .batch_chain import INPUT_KEYS, expand_inputs, lift_batch
+
+        entries: list[str] = []
+        for step in plan:
+            args = step.get("args") or {}
+            for key in INPUT_KEYS:
+                value = args.get(key)
+                entries.extend([value] if isinstance(value, str) else value or [])
+        expand = expand_inputs([e for e in entries if isinstance(e, str)], base, self.file_kinds)
+        joining = {name for name, td in self.registry.items() if td.joins_inputs}
+        lift = lift_batch(plan, expand, joining, batch_outputs=self._batch_outputs())
+        if not lift.lifted:
+            return lift.plan, None, expand
+        self.validate_plan({"plan": lift.plan})
+        return lift.plan, lift, expand
+
+    def _planned_sets(
+        self,
+        plan: list[dict[str, Any]],
+        work_dir: Path,
+        dry_run: bool,
+        confirmed: bool,
+        skip_execution: bool,
+    ) -> dict[int, PlannedSet]:
+        """Each step whose tool writes many files from one, with what it will write
+        (``Skill.planned_outputs``)."""
+        if self.skill_instance is None:
+            return {}
+        sets: dict[int, PlannedSet] = {}
+        for i, step in enumerate(plan):
+            tool = step.get("tool")
+            if not isinstance(tool, str) or tool in _TERMINAL_TOOLS:
+                continue
+            ctx = self._handler_context(dry_run, confirmed, skip_execution, work_dir, tool=tool)
+            got = self.skill_instance.planned_outputs(tool, dict(step.get("args") or {}), ctx)
+            if isinstance(got, PlannedSet) and got.files:
+                sets[i] = got
+        return sets
+
+    def _lift_sets(
+        self, plan: list[dict[str, Any]], planned: Mapping[str, list[str]], work_dir: Path
+    ) -> tuple[list[dict[str, Any]], BatchLift | None]:
+        """Run the steps reading a planned set once per file of it.
+
+        A file in the run scratch is shown, and names its results, by its place in the user's
+        folder. A join reading the set with no step before it reads every file.
+        """
+        home = {
+            f: Path(f).relative_to(work_dir).as_posix()
+            for files in planned.values()
+            for f in files
+            if Path(f).is_relative_to(work_dir)
+        }
+        joining = {name for name, td in self.registry.items() if td.joins_inputs}
+        lift = lift_batch(
+            plan, planned, joining, home=home, single=True, batch_outputs=self._batch_outputs()
+        )
+        if lift.lifted:
+            self.validate_plan({"plan": lift.plan}, scratch=work_dir)
+            return lift.plan, lift
+        joined = []
+        for step in plan:
+            args = dict(step.get("args") or {})
+            if step.get("tool") in joining:
+                for key in ("inputs", "input"):
+                    value = args.get(key)
+                    if isinstance(value, list):
+                        args[key] = [f for v in value for f in planned.get(v, [v])]
+                    elif isinstance(value, str) and value in planned:
+                        args[key] = list(planned[value])
+            joined.append({**step, "args": args})
+        return joined, None
+
+    def _join_without_failed(
+        self,
+        intent_step: dict[str, Any],
+        sources: dict[str, list[int | None]],
+        failed: Mapping[int, str],
+        scratch: Path,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+        """A join with the failed files' results left out, expanded again; None when no file
+        it was to join is left."""
+        args = dict(intent_step.get("args") or {})
+        kept_any = False
+        for key, came_from in sources.items():
+            value = args.get(key)
+            if not isinstance(value, list) or len(value) != len(came_from):
+                continue
+            kept = [
+                v for v, f in zip(value, came_from, strict=True) if f is None or f not in failed
+            ]
+            kept_any = kept_any or any(f is not None and f not in failed for f in came_from)
+            args[key] = kept
+        if not kept_any:
+            return None
+        step = {**intent_step, "args": args}
+        sub_plan = self._expand_intent(step)
+        if sub_plan != [step]:
+            self.validate_plan({"plan": sub_plan}, allow_internal=True, scratch=scratch)
+        return step, optimize_plan(sub_plan, self.registry)
 
     def _resolution_dir(self) -> Path:
         """The directory paths resolve against: the sandbox when configured, else root.

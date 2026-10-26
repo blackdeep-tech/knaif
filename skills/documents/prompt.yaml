@@ -35,7 +35,62 @@ system_header: |
   supported and names what this skill can do instead; it does not ask for more detail about
   work that will never happen.
 
+# A `tools` rule joins the header only when one of its tools is in the prompt, and a
+# `when: many` rule only when the request asks for many files (both via CommandAgent.build_prompt).
+rules:
+  - tools: [split_pdf_every]
+    text: |
+      A new file every N pages ("every 10 pages", "one file per page", "single pages") →
+      split_pdf_every with every: N (1 = one per page); split_pdf is for named page ranges. To
+      work on every piece after, give the split an "output" and use that same name as the next
+      step's input.
+  - when: many
+    text: |2
+        MANY FILES: "all / every / each PDF here / in this folder" is a valid target. Write the steps
+        as for ONE file with "input": "*.pdf" in the first step ("here" is the current folder, never
+        an invented folder), and let each later step read the previous step's "output" filename.
+        knaif runs the steps once for every matching PDF. Do not clarify only because no single file
+        was named.
+
 examples:
+  - request: "Rotate all PDFs here by 90 degrees and add a CONFIDENTIAL watermark."
+    when: many
+    output:
+      plan:
+        - tool: rotate_pages
+          args:
+            input: "*.pdf"
+            degrees: 90
+            output: "rotated.pdf"
+        - tool: watermark
+          args:
+            input: "rotated.pdf"
+            text: CONFIDENTIAL
+  - request: "Compress each pdf in this folder as small as possible and stamp SAMPLE on it."
+    when: many
+    output:
+      plan:
+        - tool: compress_pdf
+          args:
+            input: "*.pdf"
+            compress_quality: small
+            output: "small.pdf"
+        - tool: watermark
+          args:
+            input: "small.pdf"
+            text: SAMPLE
+  - request: "split report.pdf into one file per page and stamp DRAFT on each"
+    output:
+      plan:
+        - tool: split_pdf_every
+          args:
+            input: "report.pdf"
+            every: 1
+            output: "page.pdf"
+        - tool: watermark
+          args:
+            input: "page.pdf"
+            text: "DRAFT"
   - request: "inspect report.pdf"
     output:
       plan:

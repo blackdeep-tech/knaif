@@ -79,9 +79,22 @@ def triggered(text: str, triggers: tuple[str, ...]) -> bool:
     norm = " ".join(_normalize(text).replace("’", "'").split())
     for trigger in triggers:
         phrase = " ".join(_normalize(trigger).replace("’", "'").split())
-        if phrase and re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", norm):
+        if not phrase:
+            continue
+        # A `#` stands for a number ("every # pages"). Chinese, Japanese and Korean write no
+        # spaces between words, so a boundary never falls inside a sentence: a trigger in that
+        # script matches anywhere (contracts/parity/trigger_cases.json).
+        body = re.escape(phrase).replace(r"\#", r"\d+")
+        if not _CJK.search(phrase):
+            body = rf"(?<!\w){body}(?!\w)"
+        if re.search(body, norm):
             return True
     return False
+
+
+#: Chinese, Japanese and Korean scripts (kana, CJK ideographs and their extension A,
+#: compatibility ideographs, Hangul syllables). Rust: `knaif_core::registry::is_cjk`.
+_CJK = re.compile("[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]")
 
 
 @dataclass
@@ -105,6 +118,20 @@ class ToolDef:
     # Several inputs become ONE output (concat), not one output each (a batch). Read by chain
     # routing: a joining producer's output is a single routable intermediate.
     joins_inputs: bool = False
+    # The kind of file the tool writes when a step names no output (tools.yaml `produces:`): a
+    # kind from the skill's `file_kinds`, or {"arg": <name>} when the kind follows an argument
+    # that names an extension. None: the same kind as its input. Read by chain routing's keep
+    # rule (an intermediate every reader turns into another kind is a second result).
+    produces: str | dict[str, str] | None = None
+    # The tool's output is a NEW thing made from its input (a piece, a page range, a join), not
+    # the input improved (tools.yaml `derives: true`). Read by the keep rule: an intermediate
+    # every reader derives from stays, as a result the user asked for.
+    derives: bool = False
+    # The extension of the file the tool writes only when core repeats it over many files
+    # (tools.yaml `batch_output:`, e.g. extract_text's "txt"): a single-file step prints, a
+    # lifted one saves `<name>.<ext>` next to its file. Such a tool accepts `output`, which the
+    # prompt does not list (`batch_chain.lift_batch`).
+    batch_output: str | None = None
     # What the tool may do to the world (`knaif.effects`): None when tools.yaml declares nothing,
     # which a skill or toolkit bundle refuses; () for a tool with no effects.
     effects: tuple[str, ...] | None = None
@@ -115,6 +142,17 @@ class ToolDef:
     # Sibling-key aliases: model arg key → this tool's canonical key
     # (e.g. split_pdf {pages: ranges}). Applied in normalize_plan before validation.
     arg_aliases: dict[str, str] = field(default_factory=dict)
+
+
+def _parse_produces(name: str, value: Any) -> str | dict[str, str] | None:
+    """A tool's `produces:`: a kind name, or `{arg: <name>}`; anything else is a load error."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, dict) and set(value) == {"arg"} and isinstance(value["arg"], str):
+        return {"arg": value["arg"]}
+    raise ValueError(f"tool {name!r}: produces must be a kind or {{arg: <name>}}, got {value!r}")
 
 
 def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
@@ -164,6 +202,9 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             triggers=tuple(cfg.get("triggers") or []),
             readonly=bool(cfg.get("readonly", False)),
             joins_inputs=bool(cfg.get("joins_inputs", False)),
+            produces=_parse_produces(name, cfg.get("produces")),
+            derives=bool(cfg.get("derives", False)),
+            batch_output=str(cfg["batch_output"]).lstrip(".") if cfg.get("batch_output") else None,
             effects=parse_effects(name, cfg.get("effects")),
             mock_args=dict(cfg.get("mock_args") or {}),
             internal=bool(cfg.get("internal", False)),

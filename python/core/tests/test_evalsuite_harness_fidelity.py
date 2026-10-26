@@ -437,3 +437,30 @@ def test_cleanup_removes_the_row_scratch_too(tmp_path: Path) -> None:
         (d / "f.mp4").write_bytes(b"x")
     cleanup_row_dir(row_dir)
     assert not row_dir.exists() and not (tmp_path / "row.work").exists()
+
+
+def test_regen_creates_the_folder_of_a_fixture_in_a_subfolder(tmp_path: Path, monkeypatch) -> None:
+    """A folder row's fixtures live in a subfolder (`batch/a.mov`): regen creates the folder
+    before the generator writes into it, or ffmpeg fails with "No such file or directory"."""
+    import argparse
+    import subprocess
+
+    from knaif.evalsuite import cli
+
+    fixture_dir = tmp_path / "fixtures"
+    monkeypatch.setattr(
+        cli, "_load_skill_fixtures", lambda skill: ({"batch/a.mov": "ffmpeg {output}"}, {})
+    )
+    monkeypatch.setattr(cli, "_default_fixture_dir", lambda sandbox, skill: fixture_dir)
+    seen: list[bool] = []
+
+    class _Ok:
+        returncode, stderr = 0, ""
+
+    def run(cmd, *a, **k):
+        seen.append((fixture_dir / "batch").is_dir())
+        return _Ok()
+
+    monkeypatch.setattr(subprocess, "run", run)
+    cli.cmd_fixtures_regen(argparse.Namespace(skill="ffmpeg", sandbox=None, force=False))
+    assert seen == [True]

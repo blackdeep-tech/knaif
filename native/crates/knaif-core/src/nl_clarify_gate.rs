@@ -31,7 +31,7 @@ const INPUT_KEYS: [&str; 8] = [
 ];
 const OUTPUT_KEYS: [&str; 2] = ["output", "outputs"];
 /// Python `_BATCH_SIGNALS`.
-const BATCH_SIGNALS: [&str; 13] = [
+const BATCH_SIGNALS: [&str; 25] = [
     "all",
     "every",
     "each",
@@ -45,7 +45,80 @@ const BATCH_SIGNALS: [&str; 13] = [
     "lote",
     "stapel",
     "lot",
+    "jede",
+    "jeder",
+    "jedes",
+    "jeden",
+    "jedem",
+    "ordner",
+    "verzeichnis",
+    "cada",
+    "carpeta",
+    "chaque",
+    "dossier",
+    "tous",
 ];
+/// Python `_BATCH_SIGNALS_UNICODE`: whole Unicode words, so English keeps its `[a-z]+` runs.
+const BATCH_SIGNALS_UNICODE: [&str; 10] = [
+    "всички",
+    "всичките",
+    "всеки",
+    "всяко",
+    "всяка",
+    "пакетно",
+    "папка",
+    "папката",
+    "директория",
+    "директорията",
+];
+/// Python `_BATCH_SIGNALS_CJK`: substrings.
+const BATCH_SIGNALS_CJK: [&str; 7] = ["所有", "每个", "每個", "批量", "文件夹", "資料夾", "全部"];
+/// Python `_PLURAL_FILE_WORDS`: a request for many files without a batch word lets a glob
+/// through, and nothing else.
+const PLURAL_FILE_WORDS: [&str; 25] = [
+    "videos",
+    "clips",
+    "files",
+    "movies",
+    "recordings",
+    "songs",
+    "tracks",
+    "images",
+    "photos",
+    "pictures",
+    "documents",
+    "pdfs",
+    "mp4s",
+    "movs",
+    "mkvs",
+    "mp3s",
+    "wavs",
+    "gifs",
+    "jpgs",
+    "pngs",
+    "dateien",
+    "bilder",
+    "dokumente",
+    "archivos",
+    "fichiers",
+];
+/// Python `_PLURAL_FILE_WORDS_UNICODE`.
+const PLURAL_FILE_WORDS_UNICODE: [&str; 12] = [
+    "vídeos",
+    "vidéos",
+    "видеа",
+    "видеата",
+    "файлове",
+    "файловете",
+    "клипове",
+    "клиповете",
+    "снимки",
+    "снимките",
+    "документи",
+    "документите",
+];
+/// Python `_PLURAL_FILE_WORDS_CJK`.
+const PLURAL_FILE_WORDS_CJK: [&str; 2] = ["这些", "這些"];
 /// Python `input_refs.GLOB_CHARS`.
 const GLOB_CHARS: [char; 3] = ['*', '?', '['];
 
@@ -154,7 +227,11 @@ fn question_for(steps: &[Value], utterance: &str, registry: &Registry) -> Option
             };
             for token in strings(value) {
                 if token.contains(GLOB_CHARS) {
-                    continue; // a glob is exempt on its own
+                    // A glob is many files: fine when the request asks for many, else ask.
+                    if asks_for_many(utterance, token) {
+                        continue;
+                    }
+                    return Some(glob_question(token));
                 }
                 if token.contains('/') || token.contains('\\') {
                     continue; // a path, not a media-file reference
@@ -194,12 +271,84 @@ fn is_value_grounded(value: &Value, utterance: &str) -> bool {
     !s.is_empty() && utterance.to_lowercase().contains(&s.to_lowercase())
 }
 
-/// Python `_is_batch_utterance`: any `[a-z]+` word of the lowercased utterance is a signal.
+/// Python `_is_batch_utterance`: an ASCII signal as a `[a-z]+` run of the lowercased
+/// utterance, a non-ASCII one as a whole Unicode word, a Chinese one as a substring.
 fn is_batch_utterance(utterance: &str) -> bool {
-    utterance
-        .to_lowercase()
-        .split(|c: char| !c.is_ascii_lowercase())
+    let low = utterance.to_lowercase();
+    low.split(|c: char| !c.is_ascii_lowercase())
         .any(|w| BATCH_SIGNALS.contains(&w))
+        || unicode_words(&low).any(|w| BATCH_SIGNALS_UNICODE.contains(&w))
+        || BATCH_SIGNALS_CJK.iter().any(|w| low.contains(w))
+}
+
+/// Python `re.findall(r"\w+", text)`: runs of letters, digits and `_`.
+fn unicode_words(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|w| !w.is_empty())
+}
+
+/// Python `_asks_for_many`: a plural file word, or the glob written in the request itself.
+fn asks_for_many(utterance: &str, glob: &str) -> bool {
+    let low = utterance.to_lowercase();
+    low.contains(&glob.to_lowercase())
+        || low
+            .split(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit()))
+            .any(|w| PLURAL_FILE_WORDS.contains(&w))
+        || unicode_words(&low).any(|w| PLURAL_FILE_WORDS_UNICODE.contains(&w))
+        || PLURAL_FILE_WORDS_CJK.iter().any(|w| low.contains(w))
+}
+
+fn url_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)https?://\S+").unwrap())
+}
+
+fn named_file_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    // No `\b` around it: a CJK character is a word character, so "把report.pdf拆分" has none.
+    RE.get_or_init(|| Regex::new(r"(?i)[\w-]+\.([a-z0-9]{2,5})(?:[^a-z0-9]|$)").unwrap())
+}
+
+/// A name with an extension holding a letter (`clip.mp4`, `x.3gp`); a codec or a number
+/// (`H.264`, `1.25`) names no file. Python `knaif.nl_clarify_gate._names_a_file`.
+fn names_a_file(text: &str) -> bool {
+    named_file_re()
+        .captures_iter(text)
+        .any(|c| c[1].chars().any(|ch| ch.is_ascii_alphabetic()))
+}
+
+/// Whether `utterance` asks for many files: a batch word, a plural file word, or a glob written
+/// in it. The clarify gate's own test, shared with the prompt: the per-file batch rule and its
+/// examples join only such a prompt. What names a place is left out first: a URL, and, when the
+/// request names a file, a known folder after in/into/to/on/onto/from (where that file goes);
+/// with no file named the folder may be the batch. A request that names a file is about that
+/// file, so a batch word alone ("every page of sample.pdf") is not enough there; a glob or a
+/// plural file word still is. Python `knaif.nl_clarify_gate.asks_for_many_files`;
+/// `contracts/parity/many_files_cases.json`.
+pub fn asks_for_many_files(utterance: &str) -> bool {
+    let text = url_re().replace_all(utterance, " ").into_owned();
+    // A URL names a file too.
+    if names_a_file(utterance) {
+        return asks_for_many(&crate::known_folders::without_folder_places(&text), "*");
+    }
+    is_batch_utterance(&text) || asks_for_many(&text, "*")
+}
+
+/// Python `_glob_question`: what to ask about a glob the request never asked for.
+fn glob_question(glob: &str) -> String {
+    let normalized = glob.replace('\\', "/");
+    let name = normalized.rsplit('/').next().unwrap_or("");
+    // Python `PurePath.suffix`: from the last dot, unless the name starts or ends with it.
+    let ext = match name.rfind('.') {
+        Some(i) if i > 0 && i + 1 < name.len() => &name[i..],
+        _ => "",
+    };
+    let what = if !ext.is_empty() && !ext.contains(GLOB_CHARS) {
+        format!("{} files", ext.to_lowercase())
+    } else {
+        "files".to_string()
+    };
+    format!("Did you mean all the {what} here? Name the file, or say \"all\" to use every one.")
 }
 
 /// Python `input_refs.parse_inline_filenames`.

@@ -100,6 +100,7 @@ def select_examples(
     retrieved_tool_names: frozenset[str],
     query: str,
     max_tool_examples: int = 3,
+    triggered: frozenset[str] = _TRIGGERED_TOOLS,
 ) -> list[dict]:
     """Select the most relevant examples for *query* given the retrieved tool set.
 
@@ -109,15 +110,20 @@ def select_examples(
       2. Jaccard overlap between query tokens and example request tokens (tiebreaker)
     An example whose request carries an http(s) URL is eligible only when *query* carries one
     too, and then ranks first at equal tool overlap, so adding one changes no other prompt.
-    An example whose plan uses a tool retrieved only by its triggers (``alert_when_done``) is
-    eligible only when that tool was retrieved, and one whose request names a known folder as a
-    destination ("save it in Downloads") only when *query* names one, for the same reason.
+    An example whose plan uses a tool retrieved only by its triggers (*triggered*: the core
+    ``alert_when_done`` and any skill tool with ``triggers:``) is eligible only when that tool
+    was retrieved, and one whose request names a known folder as a
+    destination ("save it in Downloads") only when *query* names one, for the same reason, and
+    one marked ``when: many`` (the per-file batch examples) only when *query* asks for many
+    files (:func:`knaif.nl_clarify_gate.asks_for_many_files`).
     Examples are returned in their original order from *structured_examples*.
     """
     from .known_folders import names_known_folder
+    from .nl_clarify_gate import asks_for_many_files
 
     query_url = _carries_url(query)
     query_folder = names_known_folder(query)
+    query_many = asks_for_many_files(query)
     clarify_exs = [e for e in structured_examples if _is_clarify_example(e)]
     reject_exs = [e for e in structured_examples if _is_reject_example(e)]
     domain_exs = [
@@ -125,8 +131,9 @@ def select_examples(
         for e in structured_examples
         if _example_tool_set(e)
         and (query_url or not _carries_url(e.get("request", "")))
-        and (_example_tool_set(e) & _TRIGGERED_TOOLS) <= retrieved_tool_names
+        and (_example_tool_set(e) & triggered) <= retrieved_tool_names
         and (query_folder or not names_known_folder(e.get("request", "")))
+        and (query_many or e.get("when") != "many")
     ]
 
     fixed: list[dict] = []
@@ -157,6 +164,22 @@ def select_examples(
             fixed_ids.discard(eid)
             selected_ids.discard(eid)
     return result
+
+
+def apply_prompt_rules(header: str, rules: list[dict], present: set[str], utterance: str) -> str:
+    """*header* with each of the skill's prompt rules that applies here joined at its end.
+
+    A rule about tools joins when one of them is in this prompt (*present*); a ``when: many``
+    rule when the request asks for many files (the clarify gate's test). Rust mirror:
+    ``knaif_core::prompt::apply_prompt_rules``; contracts/parity/prompt_rule_cases.json.
+    """
+    from .nl_clarify_gate import asks_for_many_files
+
+    many = asks_for_many_files(utterance)
+    for rule in rules:
+        if (rule.get("when") == "many" and many) or present & set(rule.get("tools") or []):
+            header = header.rstrip("\n") + "\n" + rule["text"]
+    return header
 
 
 def render_examples_block(examples: list[dict]) -> str:

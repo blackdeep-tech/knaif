@@ -9,7 +9,8 @@ resolve_inputs:
     Resolve a list of input paths (files, folders, globs) inside the sandbox.
     Returns {count, files}; consumers accept either a bare list or this dict.
   required_args: [paths]
-  optional_args: [extensions, recursive]
+  # exclude: paths a glob's or folder's matches leave out (a join's own output).
+  optional_args: [extensions, recursive, exclude]
   safety_category: safe
   readonly: true
   internal: true

@@ -62,11 +62,12 @@ def test_documents_expansion_matches_the_contract(doc: dict, agent) -> None:
 
 
 def test_every_step_produces_an_output(doc: dict, agent) -> None:
-    """One artefact per plan step — the dropped-step regression, for this skill."""
+    """One artefact per plan step — the dropped-step regression, for this skill. A step that
+    writes many files (a split) says how many its case makes (`output_count`)."""
     for case in doc["cases"]:
         steps = case["plan"]["plan"]
         got = _outputs(agent, case["plan"])
-        assert len(got) == len(steps), (
+        assert len(got) == case.get("output_count", len(steps)), (
             f"{case['name']}: {len(steps)} plan steps produced {len(got)} outputs — a step was "
             f"dropped or duplicated"
         )

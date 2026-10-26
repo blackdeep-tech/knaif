@@ -1,0 +1,209 @@
+{
+  "_comment": "The result set (owner, 2026-10-15 and 2026-10-20): after linking, the per-file lift and scratch routing, core computes what a plan will leave, and every preview ends with it. A step's files: its explicit output (one per input file it runs over, or one for a join; a name only when it runs over one file and the output is no pattern), else what its tool's `produces:` names (an {arg} value is an extension, a kind is shown as a kind), else each input's own extension. Outputs in the run scratch (`scratch`) and steps of readonly or control tools leave nothing. Up to 3 files, all named: by name; otherwise counts by type in first-seen order. A named file whose extension disagrees with its tool's declaration is flagged. Nothing left: an empty line (no preview line). `same_for` is the batch preview's line after the first file's steps (owner: first file in full, then the rest). Python `knaif.result_set`, Rust `knaif_core::result_set`.",
+  "tables": {
+    "ffmpeg": {
+      "file_kinds": {"mp4": "video", "mov": "video", "mkv": "video", "gif": "video", "mp3": "audio", "wav": "audio", "jpg": "image", "png": "image"},
+      "produces": {"convert_video": {"arg": "container"}, "extract_audio": "audio", "create_thumbnail": "image"},
+      "readonly": [],
+      "joining": ["concat_video"]
+    },
+    "documents": {
+      "file_kinds": {"pdf": "document", "docx": "document", "txt": "text"},
+      "produces": {"extract_text": "text", "convert_document": {"arg": "to_format"}},
+      "readonly": ["inspect_document", "extract_text", "find_in_document"],
+      "joining": ["merge_pdfs"]
+    }
+  },
+  "leaves": [
+    {
+      "name": "a_refined_intermediate_is_not_left",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["beach.mov"], "container": "mp4", "output": "<work>/beach.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["<work>/beach.mp4"], "output": "beach_small.mp4"}}
+      ],
+      "line": "leaves beach_small.mp4"
+    },
+    {
+      "name": "two_results_by_name",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["clip1.mov"], "container": "mp4", "output": "clip1.mp4"}},
+        {"tool": "extract_audio", "args": {"inputs": ["clip1.mp4"], "audio_format": "mp3", "output": "clip1.mp3"}}
+      ],
+      "line": "leaves clip1.mp4 and clip1.mp3"
+    },
+    {
+      "name": "three_by_name",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["a.mov"], "container": "mp4", "output": "a.mp4"}},
+        {"tool": "extract_audio", "args": {"inputs": ["a.mp4"], "output": "b.mp3"}},
+        {"tool": "create_thumbnail", "args": {"inputs": ["a.mp4"], "output": "c.jpg"}}
+      ],
+      "line": "leaves a.mp4, b.mp3 and c.jpg"
+    },
+    {
+      "name": "an_unnamed_result_counts_by_its_declared_kind",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "extract_audio", "args": {"inputs": ["clip.mov"], "audio_format": "mp3"}}
+      ],
+      "line": "leaves 1 audio file"
+    },
+    {
+      "name": "a_lifted_batch_counts_by_type",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["beach.mov"], "container": "mp4", "output": "beach.mp4"}},
+        {"tool": "extract_audio", "args": {"inputs": ["beach.mp4"], "audio_format": "mp3"}},
+        {"tool": "convert_video", "args": {"inputs": ["city.mov"], "container": "mp4", "output": "city.mp4"}},
+        {"tool": "extract_audio", "args": {"inputs": ["city.mp4"], "audio_format": "mp3"}},
+        {"tool": "convert_video", "args": {"inputs": ["dog.mov"], "container": "mp4", "output": "dog.mp4"}},
+        {"tool": "extract_audio", "args": {"inputs": ["dog.mp4"], "audio_format": "mp3"}}
+      ],
+      "line": "leaves 3 mp4 and 3 audio files"
+    },
+    {
+      "name": "four_named_files_are_counted",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["a.mov"], "container": "mp4", "output": "a.mp4"}},
+        {"tool": "convert_video", "args": {"inputs": ["b.mov"], "container": "mp4", "output": "b.mp4"}},
+        {"tool": "convert_video", "args": {"inputs": ["c.mov"], "container": "mp4", "output": "c.mp4"}},
+        {"tool": "convert_video", "args": {"inputs": ["d.mov"], "container": "mp4", "output": "d.mp4"}}
+      ],
+      "line": "leaves 4 mp4"
+    },
+    {
+      "name": "a_name_against_a_fixed_kind_is_flagged",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "extract_audio", "args": {"inputs": ["clip.mov"], "output": "clip_audio.mp4"}}
+      ],
+      "line": "leaves clip_audio.mp4 (named .mp4, but extract_audio writes audio)"
+    },
+    {
+      "name": "a_name_against_its_format_argument_is_flagged",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "mp4", "output": "clip.mkv"}}
+      ],
+      "line": "leaves clip.mkv (named .mkv, but convert_video writes mp4)"
+    },
+    {
+      "name": "a_flag_in_counts_follows_the_counts",
+      "tables": "ffmpeg",
+      "expand": {"*.mov": ["a.mov", "b.mov"]},
+      "plan": [
+        {"tool": "compress_video", "args": {"inputs": ["*.mov"]}},
+        {"tool": "extract_audio", "args": {"inputs": ["a.mov"], "output": "a_audio.mp4"}},
+        {"tool": "create_thumbnail", "args": {"inputs": ["a.mov"], "output": "a.jpg"}}
+      ],
+      "line": "leaves 2 mov, 1 mp4 and 1 jpg; a_audio.mp4 is named .mp4, but extract_audio writes audio"
+    },
+    {
+      "name": "one_step_over_a_glob_leaves_one_file_per_match_in_its_own_type",
+      "tables": "ffmpeg",
+      "expand": {"*": ["beach.mov", "city.mov", "garden.mkv"]},
+      "plan": [
+        {"tool": "compress_video", "args": {"inputs": ["*"]}}
+      ],
+      "line": "leaves 2 mov and 1 mkv"
+    },
+    {
+      "name": "an_output_pattern_over_a_glob_is_counted",
+      "tables": "ffmpeg",
+      "expand": {"*.mov": ["beach.mov", "city.mov"]},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["*.mov"], "container": "mp4", "output": "mp4/*.mp4"}}
+      ],
+      "line": "leaves 2 mp4"
+    },
+    {
+      "name": "a_plain_name_over_a_glob_is_one_file_per_match",
+      "tables": "ffmpeg",
+      "expand": {"*.mov": ["beach.mov", "city.mov"]},
+      "plan": [
+        {"tool": "convert_video", "args": {"inputs": ["*.mov"], "container": "mp4", "output": "out.mp4"}}
+      ],
+      "line": "leaves 2 mp4"
+    },
+    {
+      "name": "a_join_leaves_one_file",
+      "tables": "ffmpeg",
+      "expand": {"*.mp4": ["a.mp4", "b.mp4"]},
+      "plan": [
+        {"tool": "concat_video", "args": {"inputs": ["*.mp4"], "output": "all.mp4"}}
+      ],
+      "line": "leaves all.mp4"
+    },
+    {
+      "name": "control_steps_leave_nothing",
+      "tables": "ffmpeg",
+      "expand": {},
+      "plan": [
+        {"tool": "trim_video", "args": {"input": "clip.mp4", "end": "00:00:05", "output": "short.mp4"}},
+        {"tool": "done", "args": {"summary": "ok"}}
+      ],
+      "line": "leaves short.mp4"
+    },
+    {
+      "name": "a_readonly_plan_leaves_no_line",
+      "tables": "documents",
+      "expand": {},
+      "plan": [
+        {"tool": "extract_text", "args": {"input": "report.pdf"}}
+      ],
+      "line": ""
+    },
+    {
+      "name": "documents_per_file_chain_counts_the_unnamed_pdfs",
+      "tables": "documents",
+      "expand": {},
+      "plan": [
+        {"tool": "rotate_pages", "args": {"input": "contract.pdf", "degrees": 90, "output": "<work>/contract_rotated.pdf"}},
+        {"tool": "watermark", "args": {"input": "<work>/contract_rotated.pdf", "text": "DRAFT"}},
+        {"tool": "rotate_pages", "args": {"input": "invoice.pdf", "degrees": 90, "output": "<work>/invoice_rotated.pdf"}},
+        {"tool": "watermark", "args": {"input": "<work>/invoice_rotated.pdf", "text": "DRAFT"}}
+      ],
+      "line": "leaves 2 pdf"
+    },
+    {
+      "name": "a_merge_after_a_batch",
+      "tables": "documents",
+      "expand": {},
+      "plan": [
+        {"tool": "compress_pdf", "args": {"input": "contract.pdf", "output": "contract_small.pdf"}},
+        {"tool": "compress_pdf", "args": {"input": "invoice.pdf", "output": "invoice_small.pdf"}},
+        {"tool": "merge_pdfs", "args": {"inputs": ["contract_small.pdf", "invoice_small.pdf"], "output": "all.pdf"}}
+      ],
+      "line": "leaves contract_small.pdf, invoice_small.pdf and all.pdf"
+    },
+    {
+      "name": "a_conversion_counts_by_its_target_format",
+      "tables": "documents",
+      "expand": {},
+      "plan": [
+        {"tool": "convert_document", "args": {"input": "notes.docx", "to_format": "pdf"}},
+        {"tool": "convert_document", "args": {"input": "memo.docx", "to_format": "pdf"}}
+      ],
+      "line": "leaves 2 pdf"
+    }
+  ],
+  "same_for": [
+    {"files": ["city.mov"], "line": "the same for 1 more file: city.mov"},
+    {"files": ["city.mov", "dog.mov", "garden.mov", "silent.mov"], "line": "the same for 4 more files: city.mov, dog.mov, garden.mov, silent.mov"},
+    {"files": ["a.mov", "b.mov", "c.mov", "d.mov", "e.mov"], "line": "the same for 5 more files: a.mov, b.mov, c.mov, d.mov, e.mov"},
+    {"files": ["a.mov", "b.mov", "c.mov", "d.mov", "e.mov", "f.mov"], "line": "the same for 6 more files: a.mov, b.mov, c.mov, …"},
+    {"files": ["videos\\a.mov", "videos/b.mov"], "line": "the same for 2 more files: videos/a.mov, videos/b.mov"}
+  ]
+}

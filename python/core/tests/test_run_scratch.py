@@ -218,3 +218,14 @@ def test_display_shows_a_scratch_path_as_work(scratch_root) -> None:
     text = f"ffmpeg -y -i clip.mp4 {run / 'videos' / 'silent.mp4'}"
     assert display(text) == "ffmpeg -y -i clip.mp4 <work>/videos/silent.mp4"
     assert display("ffmpeg -i clip.mp4 out.mp4") == "ffmpeg -i clip.mp4 out.mp4"
+
+
+def test_a_relative_scratch_root_is_made_absolute(tmp_path, monkeypatch):
+    """A relative `KNAIF_SCRATCH_ROOT` once lost a refined chain's results: `user_side_path`
+    resolved the relative scratch path against the sandbox, never matched the run scratch, and
+    the final file was written beside a phantom copy of it (2026-10-20)."""
+    from knaif.scratch import scratch_root
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", "rel/scratch")
+    assert scratch_root() == tmp_path / "rel" / "scratch"

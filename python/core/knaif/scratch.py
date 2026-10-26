@@ -39,9 +39,14 @@ STALE_AFTER_S = 24 * 3600
 
 
 def scratch_root() -> Path:
-    """``$KNAIF_SCRATCH_ROOT``, else ``<OS temp>/knaif``."""
+    """``$KNAIF_SCRATCH_ROOT``, else ``<OS temp>/knaif``; always absolute.
+
+    A relative root is joined to the working folder. Left relative, a run scratch path never
+    matched itself once a tool resolved it against the sandbox (``user_side_path``), and a
+    refined chain's results went with the scratch (2026-10-20).
+    """
     env = os.environ.get("KNAIF_SCRATCH_ROOT")
-    return Path(env) if env else Path(tempfile.gettempdir()) / "knaif"
+    return Path(env).absolute() if env else Path(tempfile.gettempdir()) / "knaif"
 
 
 def _run_folder_pattern(root: Path) -> re.Pattern[str]:
@@ -63,6 +68,54 @@ def display(text: str, root: Path | None = None) -> str:
     """
     pattern = _run_folder_pattern(root if root is not None else scratch_root())
     return pattern.sub(lambda m: "<work>" + m.group("rest").replace("\\", "/"), text)
+
+
+# ── keep every step's output (`--keep-intermediates` and its request words) ──────────────────
+#
+# The flag on `knaif run` in both CLIs, and request words turn it on too (owner, 2026-10-14).
+# A keep verb next to a scope: intermediate files, everything, all the files, every step.
+# English allows only determiners between them, so "keep the audio, convert everything" does not
+# match; languages that put the verb last match in either order within a word or two. `save` and
+# its translations are never keep verbs: they name outputs ("save all the files as mp3"). Rust
+# mirror: `knaif_core::scratch::wants_everything_kept`; both read
+# contracts/parity/keep_request_cases.json in their tests. No lookaround (the Rust regex crate
+# has none), so one pattern set serves both runtimes.
+_KEEP_NEGATION = re.compile(r"\b(?:don['’]?t|do\s+not|never|no\s+need\s+to)\s+(?:keep|leave)\b")
+_KEEP_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p)
+    for p in (
+        # en
+        r"\b(?:keep|leave)\s+(?:(?:all|of|the|my|these|those|any)\s+)*"
+        r"(?:intermediate\w*|in-between\s+files?|everything)\b",
+        r"\b(?:keep|leave)\s+(?:all\s+(?:of\s+)?(?:the\s+)?|every\s+|each\s+)"
+        r"(?:files?|outputs?|results?|versions?|steps?)\b",
+        r"\b(?:keep|leave)\s+(?:them|these|those)\s+all\b",
+        # de: either order
+        r"\b(?:behalt\w*|behält|beibehalten|aufbewahren|aufheben)\s+(?:\S+\s+){0,1}?"
+        r"(?:zwischen\w*|alles|alle\s+dateien)\b",
+        r"\b(?:zwischen\w*|alles|alle\s+dateien)\s+(?:\S+\s+){0,1}?"
+        r"(?:behalt\w*|behält|beibehalten|aufbewahren|aufheben)\b",
+        # es, fr
+        r"\b(?:conserv\w*|manten\w*|mantén|deja\w*|gard\w*)\s+(?:\S+\s+){0,2}?"
+        r"(?:intermedi\w*|interm[ée]diaires?|todo|tout|todos\s+los\s+archivos|"
+        r"tous\s+les\s+fichiers)\b",
+        # bg
+        r"\b(?:запаз\w*|остав\w*)\s+(?:\S+\s+){0,1}?(?:междинн\w*|всичко)\b",
+        # zh: written without spaces
+        r"保留.{0,2}?(?:中间|所有|全部)",
+        r"(?:全部|都|所有)保留",
+    )
+)
+
+
+def wants_everything_kept(utterance: str | None) -> bool:
+    """True when the request asks to keep every step's output ("keep the intermediate files",
+    "keep everything", "保留中间文件"): the same as ``--keep-intermediates``. A negated English
+    request ("don't keep the intermediate files") keeps the default."""
+    if not utterance:
+        return False
+    text = _KEEP_NEGATION.sub(" ", utterance.lower())
+    return any(p.search(text) for p in _KEEP_PATTERNS)
 
 
 def debug_keep() -> bool:

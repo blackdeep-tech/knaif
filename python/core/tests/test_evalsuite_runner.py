@@ -13,6 +13,7 @@ from knaif.evalsuite.runner import (
     AgentOutput,
     _extract_artifact,
     _extract_artifacts,
+    _replay_commands,
     run_corpus,
 )
 
@@ -129,6 +130,56 @@ def test_extract_artifacts_single_intent_returns_one():
         }
     ]
     assert _extract_artifacts(results) == ["ffmpeg -i a.mov a.mp4"]
+
+
+def _split_then_trim_results() -> list:
+    """A split writing three pieces in one batch step, then a trim of each piece."""
+    pieces = [f"clip_part_00{n}.mp4" for n in (1, 2, 3)]
+    return [
+        {
+            "tool": "run_batch",
+            "result": {
+                "mode": "dry_run",
+                "outputs": [{"command": ["ffmpeg", "-i", "clip.mp4", p]} for p in pieces],
+            },
+        },
+        *(
+            {
+                "tool": "run_batch",
+                "result": {"outputs": [{"command": ["ffmpeg", "-i", p, p[:-4] + "_t.mp4"]}]},
+            }
+            for p in pieces
+        ),
+    ]
+
+
+def test_the_replay_runs_every_command_of_a_batch_step():
+    """A split's pieces 2 and 3 must exist before their trims run (ffmpeg_302#1):
+    the replay used to run only each step's first command."""
+    commands, graded = _replay_commands(_split_then_trim_results())
+    assert commands == [
+        "ffmpeg -i clip.mp4 clip_part_001.mp4",
+        "ffmpeg -i clip.mp4 clip_part_002.mp4",
+        "ffmpeg -i clip.mp4 clip_part_003.mp4",
+        "ffmpeg -i clip_part_001.mp4 clip_part_001_t.mp4",
+        "ffmpeg -i clip_part_002.mp4 clip_part_002_t.mp4",
+        "ffmpeg -i clip_part_003.mp4 clip_part_003_t.mp4",
+    ]
+    # Grading keeps one output per step, its first command's, as before.
+    assert graded == [0, 3, 4, 5]
+
+
+def test_the_replay_of_one_command_per_step_is_unchanged():
+    commands, graded = _replay_commands(_two_intent_results())
+    assert commands == _extract_artifacts(_two_intent_results())
+    assert graded == [0, 1]
+
+
+def test_the_replay_falls_back_like_the_artifacts():
+    results = [
+        {"tool": "run_preview", "result": {"command": ["ffmpeg", "-i", "in.mp4", "prev.mp4"]}}
+    ]
+    assert _replay_commands(results) == (["ffmpeg -i in.mp4 prev.mp4"], [0])
 
 
 def test_extract_artifacts_falls_back_to_preview_when_no_batch():

@@ -83,6 +83,14 @@ PARAMETERS:
     "high" / "best" / "great" → quality: high_quality
     "visually lossless" → quality: best_possible
     "lossless" → quality: lossless
+  - ONE FILE INTO MANY — supported, whatever TOOL SCOPE says: "split / chop / cut into
+    N-second parts" or "into N equal pieces" → split_video (every: "10s" or parts: N);
+    "a frame / still every N seconds", "every Nth frame", "N stills spread across" →
+    extract_frames (every / every_nth / count); stills at several given times → ONE
+    create_thumbnail with at_time as a list; a time like 1:10 is one minute ten,
+    "00:01:10". Ranges the user names ("seconds 0-2 into part1.mp4, 4-7 into part2.mp4")
+    are one trim_video each, not a split. To work on every piece after, give the split
+    an "output" and use that same name as the next step's input.
 Available tools:
   - prepare_for_platform: Convert one or more videos so they are suitable for a target platform (WhatsApp, YouTube, etc.).
     args: inputs (required), platform (required), quality (optional), preview (optional)
@@ -98,6 +106,10 @@ Available tools:
     args: inputs (required), audio_format (optional), format (optional), container (optional), bitrate (optional), quality (optional), start (optional), end (optional), output (optional)
   - create_thumbnail: Create a still-image thumbnail or frame grab from a single video at a given timestamp.
     args: input (required), at_time (optional), image_format (optional), scale (optional), output (optional)
+  - split_video: Split one video into several pieces, one every N seconds (every) or N equal parts (parts); writes one numbered file per piece.
+    args: input (required), every (optional), parts (optional), output (optional)
+  - extract_frames: Save many still images from one video, one every N seconds (every), every Nth frame (every_nth) or N spread evenly (count); writes one numbered image per frame.
+    args: input (required), every (optional), every_nth (optional), count (optional), image_format (optional), scale (optional), output (optional)
   - reverse_video: Reverse a video (and optionally its audio) so it plays backwards. Re-encodes the full file and buffers it in RAM — keep clips short.
     args: inputs (required), include_audio (optional), quality (optional), output (optional)
   - strip_audio: Remove the audio track from one or more videos, producing a silent video file.
@@ -113,6 +125,12 @@ Available tools:
   - alert_when_done: Alert the user (a desktop notification and a beep) when the task has finished.
     args:
 Examples:
+  request: "split clip.mp4 into 10-second parts and compress each one"
+  output:  {"plan": [{"tool": "split_video", "args": {"input": "clip.mp4", "every": "10s", "output": "clip_part.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["clip_part.mp4"]}}]}
+
+  request: "save a still every 5 seconds from clip.mp4"
+  output:  {"plan": [{"tool": "extract_frames", "args": {"input": "clip.mp4", "every": "5s"}}]}
+
   request: "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything."
   output:  {"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip1.mp4", "clip2.mp4"], "platform": "whatsapp", "quality": "visually_good", "preview": true}}]}
 
@@ -169,6 +187,15 @@ Examples:
 
   request: "Convert all mp4 files in this folder to mkv."
   output:  {"plan": [{"tool": "convert_video", "args": {"inputs": ["*.mp4"], "container": "mkv"}}]}
+
+  request: "Rotate every mkv in this folder 90 degrees and make them 1080p."
+  output:  {"plan": [{"tool": "rotate_video", "args": {"inputs": ["*.mkv"], "angle": 90, "output": "rotated.mkv"}}, {"tool": "resize_video", "args": {"inputs": ["rotated.mkv"], "height": 1080}}]}
+
+  request: "Speed up all the mp4 files here 2x and strip their audio."
+  output:  {"plan": [{"tool": "adjust_speed", "args": {"inputs": ["*.mp4"], "speed": 2.0, "output": "fast.mp4"}}, {"tool": "strip_audio", "args": {"inputs": ["fast.mp4"]}}]}
+
+  request: "Give me a poster image and the audio of every mkv here."
+  output:  {"plan": [{"tool": "create_thumbnail", "args": {"input": "*.mkv"}}, {"tool": "extract_audio", "args": {"inputs": ["*.mkv"], "audio_format": "mp3"}}]}
 
   request: "Re-encode clip.mp4 with libx264 at crf 18."
   output:  {"plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "video_codec": "h264", "quality": "high_quality"}}]}

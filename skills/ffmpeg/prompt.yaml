@@ -85,7 +85,52 @@ system_header: |
       "visually lossless" → quality: best_possible
       "lossless" → quality: lossless
 
+# A `tools` rule joins the header only when one of its tools is in the prompt, and a
+# `when: many` rule only when the request asks for many files (both via CommandAgent.build_prompt): the
+# one-file-into-many tools join prompts by their triggers, so every other prompt is unchanged.
+rules:
+  - tools: [split_video, extract_frames]
+    text: |2
+        - ONE FILE INTO MANY — supported, whatever TOOL SCOPE says: "split / chop / cut into
+          N-second parts" or "into N equal pieces" → split_video (every: "10s" or parts: N);
+          "a frame / still every N seconds", "every Nth frame", "N stills spread across" →
+          extract_frames (every / every_nth / count); stills at several given times → ONE
+          create_thumbnail with at_time as a list; a time like 1:10 is one minute ten,
+          "00:01:10". Ranges the user names ("seconds 0-2 into part1.mp4, 4-7 into part2.mp4")
+          are one trim_video each, not a split. To work on every piece after, give the split
+          an "output" and use that same name as the next step's input.
+  - when: many
+    text: |2
+        - MANY FILES, SEVERAL STEPS: when every file of a batch goes through two or more steps,
+          write the steps as for ONE file: the first step's input is the batch as the user meant it
+          ("here" / "this folder" is the current folder, never an invented folder such as
+          "videos/"; "every / all / each video, clip or file" is "*", knaif keeps the files this
+          skill reads; a type the user names is that type: "every .mov" is "*.mov"), and each
+          later step reads the previous step's "output" filename, as in any chain. knaif runs the
+          whole chain once for every matching file. Two results from each file (a thumbnail and
+          the audio) are two steps that each read the batch. "A short gif" is trim_video to the
+          first 5 seconds, then convert_video to gif. A final step that joins them all
+          (concat_video) reads that same output filename.
+
 examples:
+  - request: "split clip.mp4 into 10-second parts and compress each one"
+    output:
+      plan:
+        - tool: split_video
+          args:
+            input: "clip.mp4"
+            every: "10s"
+            output: "clip_part.mp4"
+        - tool: compress_video
+          args:
+            inputs: ["clip_part.mp4"]
+  - request: "save a still every 5 seconds from clip.mp4"
+    output:
+      plan:
+        - tool: extract_frames
+          args:
+            input: "clip.mp4"
+            every: "5s"
   - request: "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything."
     output:
       plan:
@@ -265,6 +310,45 @@ examples:
           args:
             inputs: ["*.mp4"]
             container: mkv
+
+  - request: "Rotate every mkv in this folder 90 degrees and make them 1080p."
+    when: many
+    output:
+      plan:
+        - tool: rotate_video
+          args:
+            inputs: ["*.mkv"]
+            angle: 90
+            output: "rotated.mkv"
+        - tool: resize_video
+          args:
+            inputs: ["rotated.mkv"]
+            height: 1080
+
+  - request: "Speed up all the mp4 files here 2x and strip their audio."
+    when: many
+    output:
+      plan:
+        - tool: adjust_speed
+          args:
+            inputs: ["*.mp4"]
+            speed: 2.0
+            output: "fast.mp4"
+        - tool: strip_audio
+          args:
+            inputs: ["fast.mp4"]
+
+  - request: "Give me a poster image and the audio of every mkv here."
+    when: many
+    output:
+      plan:
+        - tool: create_thumbnail
+          args:
+            input: "*.mkv"
+        - tool: extract_audio
+          args:
+            inputs: ["*.mkv"]
+            audio_format: mp3
 
   - request: "Re-encode clip.mp4 with libx264 at crf 18."
     output:

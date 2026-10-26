@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,8 @@ from ._engine import (
     _trim_past_end,
     disambiguate_outputs,
 )
+from ._pieces import plan_pieces
+from ._reporting import ffmpeg_failure
 
 
 def require_streams(output: str | Path | None, ctx: HandlerContext) -> None:
@@ -48,6 +51,27 @@ def require_streams(output: str | Path | None, ctx: HandlerContext) -> None:
             f"ffmpeg finished but {Path(output).name} has no audio or video in it — "
             "the step produced nothing to work with."
         )
+
+
+_FFMPEG_CONTEXT = re.compile(r"^\[[^\]]* @ (?:0x)?[0-9a-fA-F]+\]\s*")
+
+
+def _probe_reason(error: str, path: Path) -> str:
+    """ffprobe's first line of complaint, without the path (it names the user's folders) or
+    ffmpeg's ``[demuxer @ address]`` prefix: ``moov atom not found``."""
+    text = error.removeprefix(f"ffprobe failed for {path}: ")
+    for line in text.splitlines():
+        line = _FFMPEG_CONTEXT.sub("", line.strip()).removeprefix(f"{path}: ")
+        if line:
+            return line
+    return error
+
+
+def _finished(ctx: Any, file: str, failure: str | None) -> None:
+    """Tell core how one file of a batch ended (``ctx.file_finished``), when it is listening."""
+    report = getattr(ctx, "file_finished", None)
+    if report is not None:
+        report(file, failure)
 
 
 def run_and_commit(command: list[str], output: str | None, ctx: HandlerContext) -> dict[str, Any]:
@@ -124,6 +148,10 @@ class InspectMediaStep(Handler):
                     errors.append({"file": str(path), "error": str(exc)})
                 continue
             probes.append(_summarise_probe(path, raw))
+        # A file that cannot be read is one failed file of the batch; core counts it, and
+        # ignores the report when it is the only file (its error then takes the usual path).
+        for e in errors:
+            _finished(ctx, e["file"], _probe_reason(e["error"], Path(e["file"])))
         return {"count": len(probes), "probes": probes, "errors": errors}
 
 
@@ -159,6 +187,38 @@ class LoadQualityProfileStep(Handler):
         return _load_yaml(path)
 
 
+def _piece_recipes(
+    probes: list[dict[str, Any]],
+    quality_profile: dict[str, Any] | None,
+    options: dict[str, Any],
+    ctx: HandlerContext,
+) -> dict[str, Any]:
+    """One recipe per piece of a tool that writes many files from one (`_pieces`): the same
+    pieces `FFmpegSkill.planned_outputs` promised core before the run."""
+    base = Path(ctx.sandbox if ctx.sandbox is not None else ctx.root)
+    recipes = []
+    for probe in probes:
+        pieces = plan_pieces(
+            options["tool"], options["args"], float(probe.get("duration") or 0.0), probe.get("fps")
+        )
+        for out, piece in (pieces.items if pieces else []):
+            piece = dict(piece)
+            path = Path(out)
+            piece["output_path"] = str(path if path.is_absolute() else base / path)
+            recipes.append(
+                _build_one_recipe(
+                    probe,
+                    None,
+                    quality_profile,
+                    piece,
+                    sandbox=ctx.sandbox,
+                    work_dir=getattr(ctx, "work_dir", None),
+                    home=ctx.sandbox if ctx.sandbox is not None else getattr(ctx, "root", None),
+                )
+            )
+    return {"count": len(recipes), "recipes": recipes}
+
+
 class BuildRecipesStep(Handler):
     name = "build_recipes"
 
@@ -181,6 +241,9 @@ class BuildRecipesStep(Handler):
         # `strip_audio` both succeed on a real silent file (ffmpeg treats them as no-ops), so
         # skipping there would drop work that currently completes.
         skipped: list[str] = []
+        if options.get("mode") == "pieces":
+            return _piece_recipes(probes, quality_profile, options, ctx)
+
         if options.get("mode") == "extract_audio":
             kept = []
             for p in probes:
@@ -188,7 +251,10 @@ class BuildRecipesStep(Handler):
                     skipped.append(str(p.get("file", "")))
                 else:
                     kept.append(p)
-            if not kept:
+            if kept:
+                for f in skipped:
+                    _finished(ctx, f, "has no audio track to extract")
+            else:
                 names = ", ".join(Path(f).name for f in skipped) or "the input"
                 raise ValueError(
                     f"No audio to extract: {names} has no audio track."
@@ -385,9 +451,26 @@ class RunBatchStep(Handler):
                 )
             return {"mode": "dry_run", "count": len(outputs), "outputs": outputs}
 
+        # Over many files, one that fails does not stop the others: each file's end goes to
+        # core (`ctx.file_finished`), which prints a failure as it happens and counts the batch
+        # One command alone keeps its error, as before.
+        many = len(commands) > 1
         for c in commands:
             out = c.get("output")
-            res = run_and_commit(c["command"], out, ctx)
+            try:
+                res = run_and_commit(c["command"], out, ctx)
+                failure = (
+                    None
+                    if res["returncode"] == 0
+                    else ffmpeg_failure(res["returncode"], res["stderr"])
+                )
+            except _deps.FFmpegNotAvailable:
+                raise
+            except Exception as exc:  # noqa: BLE001 - one file's failure, reported below
+                if not many:
+                    raise
+                res = {"returncode": 1, "stderr": str(exc)}
+                failure = str(exc)
             outputs.append(
                 {
                     "mode": "execute",
@@ -397,6 +480,7 @@ class RunBatchStep(Handler):
                     "stderr_tail": res["stderr"][-2000:] if res["stderr"] else "",
                 }
             )
+            _finished(ctx, str(c.get("input") or out or ""), failure)
         return {"mode": "execute", "count": len(outputs), "outputs": outputs}
 
 

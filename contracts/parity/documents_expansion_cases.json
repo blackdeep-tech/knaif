@@ -1,5 +1,5 @@
 {
-  "_comment": "Golden parity fixtures for the documents skill's expansion layer — the analogue of expansion_cases.json, where the rendered artefact is the set of OUTPUT PATHS a plan produces rather than an ffmpeg argv (documents' preview returns paths). Fixed plans in, output basenames out, no model involved. Consumed by python/core/tests/test_documents_expansion_parity.py. WHY: `run` dispatches documents steps through the same loop as ffmpeg, which until 2026-08-10 executed only the first step of a plan (steps.first()). The corpus has seven multi-step documents rows, so the skill was exposed to exactly the same defect; the multi-step cases here are the regression. `rejected_cases` are plans both runtimes must refuse in a dry run, with an error containing `expected_error`, before producing any output: a dry run must not promise an output that execution would refuse (documents_105, 2026-10-03: native's dry run accepted a reorder_pages order that its execution rejected).",
+  "_comment": "Golden parity fixtures for the documents skill's expansion layer — the analogue of expansion_cases.json, where the rendered artefact is the set of OUTPUT PATHS a plan produces rather than an ffmpeg argv (documents' preview returns paths). Fixed plans in, output basenames out, no model involved. Consumed by python/core/tests/test_documents_expansion_parity.py. WHY: `run` dispatches documents steps through the same loop as ffmpeg, which until 2026-08-10 executed only the first step of a plan (steps.first()). The corpus has seven multi-step documents rows, so the skill was exposed to exactly the same defect; the multi-step cases here are the regression. `rejected_cases` are plans both runtimes must refuse in a dry run, with an error containing `expected_error`, before producing any output: a dry run must not promise an output that execution would refuse (documents_105, 2026-10-03: native's dry run accepted a reorder_pages order that its execution rejected). A step that writes many files (a split) gives the number its case makes in `output_count`; every other case makes one output per step.",
   "sandbox": "contracts/parity/fixtures/documents",
   "cases": [
     {
@@ -114,6 +114,65 @@
       "expected_outputs": [
         "sample-reordered.pdf"
       ]
+    },
+    {
+      "name": "split_every_page",
+      "plan": {
+        "plan": [
+          {
+            "tool": "split_pdf_every",
+            "args": {
+              "input": "sample.pdf",
+              "every": 1
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample-pages-1.pdf",
+        "sample-pages-2.pdf",
+        "sample-pages-3.pdf"
+      ],
+      "output_count": 3
+    },
+    {
+      "name": "split_every_two_pages",
+      "plan": {
+        "plan": [
+          {
+            "tool": "split_pdf_every",
+            "args": {
+              "input": "sample.pdf",
+              "every": 2
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample-pages-1_2.pdf",
+        "sample-pages-3.pdf"
+      ],
+      "output_count": 2
+    },
+    {
+      "name": "split_named_by_a_pattern",
+      "plan": {
+        "plan": [
+          {
+            "tool": "split_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "ranges": "1,2",
+              "output": "part_%s.pdf"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "part_1.pdf",
+        "part_2.pdf"
+      ],
+      "output_count": 2
     }
   ],
   "rejected_cases": [

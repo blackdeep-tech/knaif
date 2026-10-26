@@ -16,8 +16,10 @@ Package layout (see SPEC.md):
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
+from knaif.batch_chain import PlannedSet
 from knaif.skill_base import Skill
 
 from . import _deps
@@ -69,6 +71,7 @@ from ._engine import (
     _valid_platforms,
     _WxH_RE,
 )
+from ._pieces import plan_pieces
 from ._reporting import (
     _fmt_files,
     _format_results,
@@ -119,6 +122,34 @@ from .steps import (
 class FFmpegSkill(Skill):
     def preflight(self, tool: str, args: dict[str, Any], **kw: Any) -> list[str]:
         return _preflight_trim_frames(args) + _preflight_inputs(args, **kw)
+
+    def planned_outputs(self, tool: str, args: dict[str, Any], ctx: Any) -> PlannedSet | None:
+        """The pieces a split, a frame grab or thumbnails at several times will write, from
+        the input's probe (a missing input probes as in a preview), before anything runs."""
+        if tool not in ("split_video", "extract_frames", "create_thumbnail"):
+            return None
+        if tool == "create_thumbnail" and plan_pieces(tool, args, 0.0, None) is None:
+            return None
+        source = args.get("input")
+        if isinstance(source, list):
+            source = source[0] if source else None
+        if not isinstance(source, str) or not source:
+            return None
+        path = Path(source)
+        if not path.is_absolute():
+            path = Path(ctx.sandbox if ctx.sandbox is not None else ctx.root) / path
+        probe = _dummy_probe(path)
+        if path.is_file():
+            try:
+                probe = _summarise_probe(path, _deps.run_ffprobe(path, ctx))
+            except _deps.FFmpegNotAvailable:
+                raise
+            except Exception:  # noqa: BLE001 - unreadable: the step itself reports it
+                return None
+        pieces = plan_pieces(tool, args, float(probe.get("duration") or 0.0), probe.get("fps"))
+        if pieces is None:
+            return None
+        return PlannedSet(pieces.name, [out for out, _ in pieces.items])
 
     def format_results(
         self, results: list[dict[str, Any]], *, dry_run: bool

@@ -1,4 +1,4 @@
-//! Golden parity: run `contracts/parity/planner_cases.json` through the Rust deterministic
+//! Golden parity: run `contracts/parity/planner_cases.json`. through the Rust deterministic
 //! pipeline (parse → normalize → apply_defaults → validate) and assert the recorded
 //! valid/invalid outcome + error substring. The Python side runs the identical fixtures
 //! (python/core/tests/test_planner_parity.py); both must agree.
@@ -197,11 +197,14 @@ fn example_selection_parity_cases() {
             .map(|v| v.as_str().unwrap().to_string())
             .collect();
 
+        let alert: std::collections::HashSet<String> =
+            std::iter::once("alert_when_done".to_string()).collect();
         let selected = knaif_core::select_examples(
             &examples,
             &retrieved,
             case["query"].as_str().unwrap(),
             max_tool_examples,
+            &alert,
         );
         let got: Vec<&str> = selected.iter().map(|e| e.request.as_str()).collect();
         let want: Vec<&str> = case["expected_requests"]
@@ -269,6 +272,7 @@ fn example_selection_matches_the_shipped_bundles() {
             &set,
             utterance,
             knaif_core::MAX_TOOL_EXAMPLES,
+            &knaif_core::triggered_tools(&registry),
         );
         let got: Vec<&str> = selected.iter().map(|e| e.request.as_str()).collect();
         let want: Vec<&str> = row["expected_requests"]

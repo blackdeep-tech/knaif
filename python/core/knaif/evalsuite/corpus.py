@@ -42,6 +42,18 @@ class CorpusRow:
     expected_alert: bool = False
     # The known folder the plan must write into (`knaif.known_folders`), e.g. "downloads".
     expected_folder: str | None = None
+    # Folder rows (`fixture` ends in "/"): after the run, the row's folder holds files matching
+    # each entry's `name` glob (exactly `count` when given, else at least one), each passing its
+    # `criteria`; every `expect_gone` glob matches nothing; `expected_failures` files of the
+    # batch fail (a broken input) while the rest finish.
+    expect_files: list[dict[str, Any]] | None = None
+    expect_gone: list[str] | None = None
+    expected_failures: int | None = None
+
+    @property
+    def is_folder_row(self) -> bool:
+        """True when the fixture is a folder (`batch/`), copied whole into the row's folder."""
+        return isinstance(self.fixture, str) and self.fixture.endswith("/")
 
     def __post_init__(self) -> None:
         if self.expected_outcome not in _VALID_OUTCOMES:
@@ -66,6 +78,7 @@ class CorpusRow:
                 )
         if not self.utterances:
             raise ValueError(f"utterances must be a non-empty list for row {self.id!r}")
+        self._check_folder_fields()
         if self.outputs is not None:
             if not self.outputs:
                 raise ValueError(f"outputs must be a non-empty list for row {self.id!r}")
@@ -79,6 +92,39 @@ class CorpusRow:
                     raise ValueError(
                         f"outputs[{i}] of row {self.id!r} must be a dict with a string 'command'"
                     )
+
+    def _check_folder_fields(self) -> None:
+        folder_fields = (self.expect_files, self.expect_gone, self.expected_failures)
+        if all(f is None for f in folder_fields):
+            return
+        if not self.is_folder_row:
+            raise ValueError(
+                f"row {self.id!r}: expect_files / expect_gone / expected_failures need a "
+                f"folder fixture (ending in '/'), got {self.fixture!r}"
+            )
+        if self.expected_outcome != "plan":
+            raise ValueError(f"row {self.id!r}: folder expectations need expected_outcome 'plan'")
+        for i, entry in enumerate(self.expect_files or []):
+            name = entry.get("name") if isinstance(entry, dict) else None
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"expect_files[{i}] of row {self.id!r} needs a 'name' glob")
+            count = entry.get("count")
+            if count is not None and (
+                isinstance(count, bool) or not isinstance(count, int) or count < 1
+            ):
+                raise ValueError(
+                    f"expect_files[{i}] of row {self.id!r}: count must be a positive integer"
+                )
+        for pattern in self.expect_gone or []:
+            if not isinstance(pattern, str) or not pattern:
+                raise ValueError(f"expect_gone of row {self.id!r} holds an empty pattern")
+        failures = self.expected_failures
+        if failures is not None and (
+            isinstance(failures, bool) or not isinstance(failures, int) or failures < 0
+        ):
+            raise ValueError(
+                f"row {self.id!r}: expected_failures must be a count, got {failures!r}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -105,6 +151,12 @@ class CorpusRow:
             d["expected_alert"] = True
         if self.expected_folder is not None:
             d["expected_folder"] = self.expected_folder
+        if self.expect_files is not None:
+            d["expect_files"] = self.expect_files
+        if self.expect_gone is not None:
+            d["expect_gone"] = self.expect_gone
+        if self.expected_failures is not None:
+            d["expected_failures"] = self.expected_failures
         return d
 
     @classmethod
@@ -127,6 +179,11 @@ class CorpusRow:
             grade=data.get("grade", "full"),
             expected_alert=data.get("expected_alert", False),
             expected_folder=data.get("expected_folder"),
+            expect_files=(
+                list(data["expect_files"]) if data.get("expect_files") is not None else None
+            ),
+            expect_gone=list(data["expect_gone"]) if data.get("expect_gone") is not None else None,
+            expected_failures=data.get("expected_failures"),
         )
 
 

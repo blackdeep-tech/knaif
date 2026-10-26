@@ -219,15 +219,28 @@ check-py: lint-py type-check-py test-py gen-skills-check
 # (`check-native` is fmt + clippy only) and so a failure names the layer rather than arriving as
 # an anonymous cargo test. `just test-native` remains the broader workspace run.
 check-contracts:
-    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_nl_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py python/core/tests/test_chain_linking_parity.py python/core/tests/test_expansion_parity.py python/core/tests/test_documents_expansion_parity.py python/core/tests/test_scratch_routing_parity.py python/core/tests/test_effects_parity.py python/core/tests/test_url_inputs_parity.py python/core/tests/test_alert_parity.py python/core/tests/test_known_folder_parity.py -q
+    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_nl_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py python/core/tests/test_chain_linking_parity.py python/core/tests/test_expansion_parity.py python/core/tests/test_documents_expansion_parity.py python/core/tests/test_scratch_routing_parity.py python/core/tests/test_effects_parity.py python/core/tests/test_url_inputs_parity.py python/core/tests/test_alert_parity.py python/core/tests/test_known_folder_parity.py python/core/tests/test_batch_chain_parity.py python/core/tests/test_batch_report_parity.py python/core/tests/test_result_set_parity.py python/core/tests/test_set_link_parity.py python/core/tests/test_trigger_parity.py python/core/tests/test_batch_cases_parity.py python/core/tests/test_many_files_parity.py python/core/tests/test_invented_folder_parity.py python/core/tests/test_kind_glob_parity.py python/core/tests/test_prompt_rule_parity.py python/core/tests/test_pieces_expansion_parity.py -q
     cargo test -p knaif-core --test parity
     cargo test -p knaif-core --test chain_linking_parity
     cargo test -p knaif-core --test scratch_routing_parity
+    cargo test -p knaif-core --test batch_chain_parity
+    cargo test -p knaif-core --test keep_request_parity
+    cargo test -p knaif-core --test trigger_parity
     cargo test -p knaif-core --test effects_parity
     cargo test -p knaif-core --test url_inputs_parity
     cargo test -p knaif-core --test alert_parity
     cargo test -p knaif-core --test known_folder_parity
+    cargo test -p knaif-core --test many_files_parity
+    cargo test -p knaif-core --test invented_folder_parity
+    cargo test -p knaif-core --test kind_glob_parity
+    cargo test -p knaif-core --test batch_report_parity
+    cargo test -p knaif-core --test set_link_parity
+    cargo test -p knaif-core --test expand_inputs
+    cargo test -p knaif-core --test prompt_rule_parity
+    cargo test -p knaif-core --test result_set_parity
+    cargo test -p knaif-toolkit-fs --test batch_cases_parity
     cargo test -p knaif-skill-ffmpeg --test expansion_parity
+    cargo test -p knaif-skill-ffmpeg --test pieces_expansion_parity
     cargo test -p knaif-skill-documents --test expansion_parity
     cargo test -p knaif-llm --test generation
     cargo test -p knaif-cli --test executor_semantics

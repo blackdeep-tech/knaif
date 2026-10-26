@@ -1,6 +1,6 @@
 """L2 parity: routing chain intermediates into the run scratch.
 
-Golden fixtures in ``contracts/parity/scratch_routing_cases.json`.`, shared with
+Golden fixtures in ``contracts/parity/scratch_routing_cases.json``, shared with
 ``native/crates/knaif-core/tests/scratch_routing_parity.rs``. Both runtimes must produce the
 identical routed plan, or the same utterance leaves different files in the user's folder.
 """
@@ -42,6 +42,13 @@ def test_routing_matches_the_contract(case: dict, tmp_path: Path) -> None:
     work, sandbox = tmp_path / "work", tmp_path / "sandbox"
     sandbox.mkdir()
     routed = CommandAgent._route_intermediates_to_scratch(
-        case["plan"], work, case["utterance"], sandbox, set(DOC["joining_tools"])
+        case["plan"],
+        work,
+        case["utterance"],
+        sandbox,
+        set(DOC["joining_tools"]),
+        file_kinds=DOC["file_kinds"],
+        produces=DOC["produces"],
+        derives=set(DOC["derives"]),
     )
     assert _placeholders(routed, work) == case["expected"]

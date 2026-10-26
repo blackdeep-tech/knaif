@@ -463,6 +463,14 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     "'Download <url>? [y/N]' and, without a terminal, stops. --yes does not cover it.",
 )
 @click.option(
+    "--keep-intermediates",
+    is_flag=True,
+    default=False,
+    help="Keep every step's output in your folder. Otherwise a file one step makes only for "
+    "the next goes to a temporary folder. Words in the request ('keep the intermediate files') "
+    "do the same.",
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -526,6 +534,7 @@ def run_cmd(
     confirm: bool,
     overwrite: bool,
     allow_download: bool,
+    keep_intermediates: bool,
     verbose: bool,
     silent: bool,
     backend: str,
@@ -635,6 +644,9 @@ def run_cmd(
         sys.exit(1)
 
     agent.intent_completed = _on_intent_completed
+    agent.keep_intermediates = keep_intermediates
+    # A batch chain's failures, as they happen: on stderr like any error, even with --silent.
+    agent.batch_failed = lambda line: click.echo(click.style(line, fg="red"), err=True)
     wire_downloads(
         agent,
         allow_download=allow_download,
@@ -769,6 +781,15 @@ def run_cmd(
                 ec = _render_items(items)
                 if ec != 0:
                     exit_code_holder[0] = ec
+
+    # A batch chain ends with its counts, time and size (stderr: stdout stays the result), and
+    # exits non-zero when any file failed (owner, 2026-10-13).
+    report = agent.last_batch_report
+    if report is not None:
+        if not silent:
+            click.echo(click.style(report.summary(), fg="bright_black"), err=True)
+        if report.failed:
+            exit_code_holder[0] = 1
 
     if exit_code_holder[0] != 0:
         sys.exit(exit_code_holder[0])

@@ -28,8 +28,16 @@ use crate::registry::{Registry, ToolDef};
 /// include `noop`, unlike [`is_system_tool`]'s prompt-listing filter.
 const TERMINAL_TOOLS: &[&str] = &["clarify", "reject", "done"];
 /// Core tools retrieved only by their triggers (`core_tools.yaml` `triggers:`). Port of Python
-/// `_TRIGGERED_TOOLS`: an example that uses one is eligible only when the tool was retrieved.
-const TRIGGERED_TOOLS: &[&str] = &["alert_when_done"];
+/// The tools that join a prompt only by their `triggers:` (the core `alert_when_done` and any
+/// skill tool declaring them): an example that uses one is eligible only when the tool was
+/// retrieved. Python passes the same set to `select_examples(triggered=…)`.
+pub fn triggered_tools(registry: &crate::registry::Registry) -> HashSet<String> {
+    registry
+        .iter()
+        .filter(|(_, td)| !td.triggers.is_empty())
+        .map(|(name, _)| name.clone())
+        .collect()
+}
 
 /// How many domain examples the per-utterance selection keeps, on top of the fixed clarify and
 /// reject slots. Mirrors Python `select_examples`'s `max_tool_examples` default.
@@ -84,6 +92,8 @@ pub struct PromptOverrides {
     pub system_header: Option<String>,
     pub examples_block: Option<String>,
     pub examples: Vec<PromptExample>,
+    /// `rules:`, in order: joined to the header by [`apply_prompt_rules`].
+    pub rules: Vec<PromptRule>,
 }
 
 #[derive(Deserialize)]
@@ -92,6 +102,40 @@ struct RawPrompt {
     system_header: Option<String>,
     #[serde(default)]
     examples: Vec<PromptExample>,
+    #[serde(default)]
+    rules: Vec<PromptRule>,
+}
+
+/// One `prompt.yaml` rule: `tools` joins a prompt that lists one of them; `when: many` a prompt
+/// whose request asks for many files. Mirrors Python `skill._load_prompt_rules`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PromptRule {
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub when: Option<String>,
+    pub text: String,
+}
+
+/// `header` with each rule that applies here joined at its end: a rule about tools when one of
+/// them is in this prompt (`present`), a `when: many` rule when the request asks for many files.
+/// Python `knaif.prompt.apply_prompt_rules`; contracts/parity/prompt_rule_cases.json.
+pub fn apply_prompt_rules(
+    header: &str,
+    rules: &[PromptRule],
+    present: &std::collections::HashSet<String>,
+    utterance: &str,
+) -> String {
+    let many = crate::nl_clarify_gate::asks_for_many_files(utterance);
+    let mut out = header.to_string();
+    for rule in rules {
+        let applies = (rule.when.as_deref() == Some("many") && many)
+            || rule.tools.iter().any(|t| present.contains(t));
+        if applies {
+            out = format!("{}\n{}", out.trim_end_matches('\n'), rule.text);
+        }
+    }
+    out
 }
 
 /// One `prompt.yaml` example: the request and the plan the reference answers it with.
@@ -101,6 +145,10 @@ pub struct PromptExample {
     pub request: String,
     #[serde(default)]
     pub output: Option<serde_json::Value>,
+    /// `when: many`: shown only to a request that asks for many files (the per-file batch
+    /// examples). Mirrors the Python example dict's `when` key.
+    #[serde(default)]
+    pub when: Option<String>,
 }
 
 /// Load a skill's `prompt.yaml`. Missing file / non-mapping → empty overrides (the defaults apply),
@@ -116,6 +164,7 @@ pub fn load_prompt_yaml(path: &Path) -> PromptOverrides {
         system_header: raw.system_header,
         examples_block: render_examples(&raw.examples),
         examples: raw.examples,
+        rules: raw.rules,
     }
 }
 
@@ -255,10 +304,12 @@ pub fn select_examples<'a>(
     retrieved_tool_names: &HashSet<String>,
     query: &str,
     max_tool_examples: usize,
+    triggered: &HashSet<String>,
 ) -> Vec<&'a PromptExample> {
     let query_tokens = word_set(query);
     let query_url = carries_url(query);
     let query_folder = crate::known_folders::names_known_folder(query);
+    let query_many = crate::nl_clarify_gate::asks_for_many_files(query);
 
     let mut keep: Vec<bool> = vec![false; examples.len()];
     for control in ["clarify", "reject"] {
@@ -280,10 +331,12 @@ pub fn select_examples<'a>(
         .filter(|(_, e)| {
             example_tool_set(e)
                 .iter()
-                .filter(|t| TRIGGERED_TOOLS.contains(*t))
+                .filter(|t| triggered.contains(**t))
                 .all(|t| retrieved_tool_names.contains(*t))
         })
         .filter(|(_, e)| query_folder || !crate::known_folders::names_known_folder(&e.request))
+        // A per-file batch example (`when: many`) reaches only a request that asks for many.
+        .filter(|(_, e)| query_many || e.when.as_deref() != Some("many"))
         .map(|(i, e)| {
             let tool_overlap = example_tool_set(e)
                 .iter()
@@ -473,6 +526,7 @@ run_batch:
             output: Some(
                 serde_json::json!({"plan": [{"tool": "compress_video", "args": {"inputs": ["a.mp4"]}}]}),
             ),
+            when: None,
         }];
         let block = render_examples(&examples).unwrap();
         assert!(block.starts_with("Examples:\n  request: \"compress a.mp4\"\n  output:  {"));

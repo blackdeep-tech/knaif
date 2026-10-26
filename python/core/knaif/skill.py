@@ -37,6 +37,8 @@ class Skill:
     runtimes: dict[str, Any]  # runtimes: metadata (which runtimes/crate implement the skill)
     # file_kinds: as extension -> kind; chain threading never crosses kinds (see parse_file_kinds)
     file_kinds: dict[str, str] = field(default_factory=dict)
+    # batch_kinds: kinds whose batch glob covers the whole kind (knaif.batch_chain.widen_kind_globs)
+    batch_kinds: list[str] = field(default_factory=list)
     # `scratch_intermediates:` route chain intermediates into the run scratch (both runtimes).
     scratch_intermediates: bool = False
     # `url_inputs:` the content types and size cap of http(s) URL inputs (needs `net`).
@@ -46,6 +48,9 @@ class Skill:
     # The skill's tools plus every declared toolkit's (core control tools are merged by the
     # agent). Toolkit tools are internal unless the skill lists them under `expose:`.
     registry: dict[str, Any] = field(default_factory=dict)
+    # `rules:` from prompt.yaml: each {tools, text}, added to the header only when one of its
+    # tools is in the prompt (CommandAgent.build_prompt).
+    prompt_rules: list[dict] = field(default_factory=list)
 
     @classmethod
     def load(
@@ -88,6 +93,7 @@ class Skill:
         tools_yaml_path = skill_dir / "tools.yaml"
 
         system_header, examples_block, prompt_examples = _load_prompt(skill_dir / "prompt.yaml")
+        prompt_rules = _load_prompt_rules(skill_dir / "prompt.yaml")
 
         raw_sets: dict[str, list[str]] = manifest.get("arg_value_sets") or {}
         arg_value_sets = {k: frozenset(v) for k, v in raw_sets.items()}
@@ -104,6 +110,7 @@ class Skill:
         external_tools = tuple(dependencies.get("external_tools") or [])
         runtimes = manifest.get("runtimes") or {}
         file_kinds = parse_file_kinds(manifest.get("file_kinds"))
+        batch_kinds = parse_batch_kinds(manifest.get("batch_kinds"), file_kinds)
         scratch_intermediates = manifest.get("scratch_intermediates", False)
         if not isinstance(scratch_intermediates, bool):
             raise ValueError(
@@ -148,6 +155,7 @@ class Skill:
             system_header=system_header,
             examples_block=examples_block,
             prompt_examples=prompt_examples,
+            prompt_rules=prompt_rules,
             arg_value_sets=arg_value_sets,
             unsafe_phrases=unsafe_phrases,
             recommended_model=recommended_model,
@@ -156,6 +164,7 @@ class Skill:
             external_tools=external_tools,
             runtimes=runtimes,
             file_kinds=file_kinds,
+            batch_kinds=batch_kinds,
             scratch_intermediates=scratch_intermediates,
             url_inputs=url_inputs,
             tool_map=tool_map,
@@ -188,6 +197,21 @@ def parse_file_kinds(raw: Any) -> dict[str, str]:
                 raise ValueError(f"file_kinds lists {key!r} under both {kinds[key]!r} and {kind!r}")
             kinds[key] = str(kind)
     return kinds
+
+
+def parse_batch_kinds(raw: Any, file_kinds: dict[str, str]) -> list[str]:
+    """``batch_kinds:``, the kinds whose batch glob covers the whole kind: "every video" read
+    as every video, not only the ``*.mp4`` the model wrote (``knaif.batch_chain.widen_kind_globs``).
+    Each must be a kind ``file_kinds:`` declares. Absent means none."""
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"batch_kinds must be a list of kinds, got {raw!r}")
+    declared = set(file_kinds.values())
+    for kind in raw:
+        if kind not in declared:
+            raise ValueError(f"batch_kinds lists {kind!r}, which file_kinds does not declare")
+    return [str(k) for k in raw]
 
 
 def _deep_merge_manifest(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -563,6 +587,32 @@ def _load_prompt(prompt_path: Path) -> tuple[str | None, str | None, list[dict]]
     raw_examples: list[dict] = [e for e in (data.get("examples") or []) if isinstance(e, dict)]
     examples_block: str | None = _render_examples(raw_examples)
     return system_header, examples_block, raw_examples
+
+
+def _load_prompt_rules(prompt_path: Path) -> list[dict]:
+    """``rules:`` from prompt.yaml, in order: ``{"tools": [...], "text": "..."}`` joins a prompt
+    that lists one of its tools; ``{"when": "many", "text": "..."}`` one whose request asks for
+    many files (the per-file batch rule)."""
+    if not prompt_path.exists():
+        return []
+    with prompt_path.open(encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    rules = data.get("rules") if isinstance(data, dict) else None
+    out: list[dict] = []
+    for rule in rules or []:
+        if not isinstance(rule, dict) or not isinstance(rule.get("text"), str):
+            raise ValueError(f"{prompt_path}: each rule needs `tools` and `text`")
+        when = rule.get("when")
+        if when is not None and when != "many":
+            raise ValueError(f"{prompt_path}: a rule's `when` can only be `many`, not {when!r}")
+        out.append(
+            {
+                "tools": [str(t) for t in rule.get("tools") or []],
+                "when": when,
+                "text": rule["text"],
+            }
+        )
+    return out
 
 
 def _parse_pipeline_inject(pipeline: list) -> list[str]:

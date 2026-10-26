@@ -176,6 +176,18 @@
       "description": "Local document toolkit for inspecting, extracting, finding, converting, combining, and compressing files.",
       "examples": [
         {
+          "request": "Rotate all PDFs here by 90 degrees and add a CONFIDENTIAL watermark.",
+          "tool": "rotate_pages"
+        },
+        {
+          "request": "Compress each pdf in this folder as small as possible and stamp SAMPLE on it.",
+          "tool": "compress_pdf"
+        },
+        {
+          "request": "split report.pdf into one file per page and stamp DRAFT on each",
+          "tool": "split_pdf_every"
+        },
+        {
           "request": "inspect report.pdf",
           "tool": "inspect_document"
         },
@@ -598,6 +610,36 @@
         },
         {
           "arg_schemas": {
+            "every": {
+              "type": "integer"
+            },
+            "input": {
+              "path_role": "input",
+              "type": "string"
+            },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
+            "output_dir": {
+              "path_role": "output",
+              "type": "string"
+            }
+          },
+          "description": "Split one PDF into a new file every N pages (every: 1 = one PDF per page), leaving the original intact.",
+          "name": "split_pdf_every",
+          "optional_args": [
+            "output",
+            "output_dir"
+          ],
+          "required_args": [
+            "input",
+            "every"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
             "input": {
               "path_role": "input",
               "type": "string"
@@ -681,6 +723,14 @@
       "description": "FFmpeg-powered media workflow assistant — convert, compress, resize, extract, and prepare video/audio for platforms.",
       "examples": [
         {
+          "request": "split clip.mp4 into 10-second parts and compress each one",
+          "tool": "split_video"
+        },
+        {
+          "request": "save a still every 5 seconds from clip.mp4",
+          "tool": "extract_frames"
+        },
+        {
           "request": "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.",
           "tool": "prepare_for_platform"
         },
@@ -755,6 +805,18 @@
         {
           "request": "Convert all mp4 files in this folder to mkv.",
           "tool": "convert_video"
+        },
+        {
+          "request": "Rotate every mkv in this folder 90 degrees and make them 1080p.",
+          "tool": "rotate_video"
+        },
+        {
+          "request": "Speed up all the mp4 files here 2x and strip their audio.",
+          "tool": "adjust_speed"
+        },
+        {
+          "request": "Give me a poster image and the audio of every mkv here.",
+          "tool": "create_thumbnail"
         },
         {
           "request": "Re-encode clip.mp4 with libx264 at crf 18.",
@@ -1010,6 +1072,36 @@
         },
         {
           "arg_schemas": {
+            "count": {
+              "type": "integer"
+            },
+            "every": {
+              "type": "string"
+            },
+            "every_nth": {
+              "type": "integer"
+            },
+            "scale": {
+              "type": "string"
+            }
+          },
+          "description": "Save many still images from one video, one every N seconds (every), every Nth frame (every_nth) or N spread evenly (count); writes one numbered image per frame.",
+          "name": "extract_frames",
+          "optional_args": [
+            "every",
+            "every_nth",
+            "count",
+            "image_format",
+            "scale",
+            "output"
+          ],
+          "required_args": [
+            "input"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
             "quality": {
               "enum": [
                 "small_file",
@@ -1116,6 +1208,27 @@
           ],
           "required_args": [
             "inputs"
+          ],
+          "safety_category": "destructive"
+        },
+        {
+          "arg_schemas": {
+            "every": {
+              "type": "string"
+            },
+            "parts": {
+              "type": "integer"
+            }
+          },
+          "description": "Split one video into several pieces, one every N seconds (every) or N equal parts (parts); writes one numbered file per piece.",
+          "name": "split_video",
+          "optional_args": [
+            "every",
+            "parts",
+            "output"
+          ],
+          "required_args": [
+            "input"
           ],
           "safety_category": "destructive"
         },

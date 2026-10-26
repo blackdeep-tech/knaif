@@ -267,9 +267,15 @@ def progress_line(rid: str, idx: int, plan: Any, ms: float, utterance: str) -> s
     return f"  [{rid}#{idx}]  OK    {tool}   {ms:.0f}ms  {utterance}"
 
 
+def native_corpus(args: argparse.Namespace) -> Path:
+    """The corpus `native` plans: `--corpus` when given, else the skill's eval.jsonl."""
+    if args.corpus:
+        return Path(args.corpus)
+    return REPO_ROOT / "skills" / args.skill / "data" / "eval.jsonl"
+
+
 def _native(args: argparse.Namespace) -> int:
-    corpus = REPO_ROOT / "skills" / args.skill / "data" / "eval.jsonl"
-    utts = corpus_utterances(corpus)
+    utts = corpus_utterances(native_corpus(args))
     if args.limit:
         utts = utts[: args.limit]
     fd, name = tempfile.mkstemp(suffix=".txt", prefix="flip_utts_")
@@ -377,7 +383,7 @@ def _compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -389,13 +395,18 @@ def main(argv: list[str] | None = None) -> int:
     n.add_argument("--out", required=True)
     n.add_argument("--limit", type=int, help="first N utterances only (smoke test)")
     n.add_argument("--stderr-log", help="keep the binary's stderr (device trace) here")
+    n.add_argument("--corpus", help="another corpus to plan (default: the skill's eval.jsonl)")
     c = sub.add_parser("compare", help="flip counts between two runs")
     c.add_argument("a", type=Path)
     c.add_argument("b", type=Path)
     c.add_argument("--label")
     c.add_argument("--list", action="store_true", help="list every decision flip")
     c.add_argument("--json", help="also write the report here")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = main_parser().parse_args(argv)
     return _native(args) if args.cmd == "native" else _compare(args)
 
 

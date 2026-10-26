@@ -81,6 +81,7 @@ compress_video:
     inputs: ["{utterance_after:compress}"]
 
 convert_video:
+  produces: {arg: container}   # the format asked for, when the step names no output
   effects: []
   description: "Convert one or more videos to a different container and/or codec."
   keywords: [convert, container, codec, mp4, mkv, webm, mov, transcode, gif, animate, encode, re-encode, recode, crf, lossless, format, batch, all, every, bulk, convertir, konvertieren, umwandeln, verlustfrei, безгубно, копие, конвертировать, конвертирай, lote, stapel, lot, пакет, партиден, 转换, 批量, 无损, 格式]
@@ -105,6 +106,7 @@ resize_video:
     inputs: ["{utterance_after:resize}"]
 
 trim_video:
+  derives: true   # a piece is a new thing: its source stays (the keep rule)
   effects: []
   description: "Trim a single video to a time range, or grab a fixed number of frames."
   keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切, frames]
@@ -133,6 +135,7 @@ trim_video:
 
 extract_audio:
   effects: []
+  produces: audio   # the keep rule: a video whose audio is extracted stays (another kind)
   description: "Extract the audio track from one or more videos into a chosen audio format."
   keywords: [extract, audio, mp3, aac, flac, opus, wav, soundtrack, extraer, extrahieren, extraire, извлечь, rip, извлечи, 提取, 音频]
   required_args: [inputs]
@@ -144,7 +147,8 @@ extract_audio:
     inputs: ["{utterance_after:from}"]
 
 create_thumbnail:
-  effects: []
+  effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
+  produces: image
   description: "Create a still-image thumbnail or frame grab from a single video at a given timestamp."
   keywords: [thumbnail, screenshot, still, poster, frame, miniatura, vorschaubild, vignette, миниатюра, cover, 缩略图, grab, snapshot, capture, framegrab, standbild, einzelbild, bild, fotograma, кадър, снимок, плакат, 截图, 海报, 图片]
   required_args: [input]
@@ -156,6 +160,52 @@ create_thumbnail:
     # engine, instead of crashing it with `'int' object has no attribute 'strip'`.
     # Deliberately no `help:` — that text renders into every prompt, and the ffmpeg prompt is
     # held under a size ceiling (test_prompt_audit); the type alone is what fixes the crash.
+    scale:
+      type: string
+  mock_args:
+    input: "{utterance_after:from}"
+
+split_video:
+  effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
+  derives: true   # each piece is a new thing: a whole converted on the way to the split stays
+  description: "Split one video into several pieces, one every N seconds (every) or N equal parts (parts); writes one numbered file per piece."
+  # Triggered, not ranked: ranking a new tool reshuffles the top tools of most
+  # requests, so it joins a prompt only when the request carries one of these words.
+  triggers: [split, splits, splitting, piece, pieces, parts, chunks, chop, chopped, segments,
+             teile, teilen, aufteilen, zerlege, stücke, dividir, divide, partes, trozos, découpe,
+             découper, morceaux, раздели, разделя, разделете, части, парчета, 分割, 分成, 切成,
+             切分, 每段]
+  required_args: [input]
+  optional_args: [every, parts, output]
+  safety_category: destructive
+  arg_schemas:
+    every:
+      type: string
+    parts:
+      type: integer
+  mock_args:
+    input: "{utterance_after:split}"
+
+extract_frames:
+  effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
+  produces: image
+  derives: true
+  description: "Save many still images from one video, one every N seconds (every), every Nth frame (every_nth) or N spread evenly (count); writes one numbered image per frame."
+  triggers: [frames, stills, thumbnails, screenshots, snapshots, "frame every", "picture every",
+             "pictures every", "still every", "image every", "images every", "photo every",
+             "every # seconds", "every second",
+             standbilder, einzelbilder, "sekunden ein bild", fotogramas, кадри, кадъра,
+             "снимка на всеки", снимки, 静帧, 张图片, 画面, 每帧]
+  required_args: [input]
+  optional_args: [every, every_nth, count, image_format, scale, output]
+  safety_category: destructive
+  arg_schemas:
+    every:
+      type: string
+    every_nth:
+      type: integer
+    count:
+      type: integer
     scale:
       type: string
   mock_args:
@@ -227,6 +277,7 @@ rotate_video:
     inputs: ["{utterance_after:rotate}"]
 
 concat_video:
+  derives: true   # a join is a new thing: the joined pieces stay
   effects: []
   description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input."
   keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并]

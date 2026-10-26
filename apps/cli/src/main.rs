@@ -211,6 +211,11 @@ struct RunArgs {
     /// not cover network access.
     #[arg(long)]
     allow_download: bool,
+    /// Keep every step's output in your folder. Otherwise a file one step makes only for the next
+    /// goes to a temporary folder. Words in the request ("keep the intermediate files") do the
+    /// same.
+    #[arg(long)]
+    keep_intermediates: bool,
     /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
@@ -262,6 +267,7 @@ fn hold_app_mutex() {
 #[cfg(not(windows))]
 fn hold_app_mutex() {}
 
+mod batch;
 mod daemon;
 mod ui;
 
@@ -325,7 +331,13 @@ fn main() -> anyhow::Result<()> {
             let dry_run = args.dry_run;
             let result = cmd_run(args);
             run_facts::alert_at_end(&result);
-            finish_run(result, dry_run)
+            let finished = finish_run(result, dry_run);
+            // A batch with a failed file ends with its summary on stderr, then exits 1.
+            if finished.is_ok() && run_facts::batch_failed() {
+                end_view(Ok(()))?;
+                std::process::exit(1);
+            }
+            finished
         }
     };
     end_view(result)
@@ -358,6 +370,8 @@ mod run_facts {
 
     static WORK_STARTED: AtomicBool = AtomicBool::new(false);
     static DECLINED: AtomicBool = AtomicBool::new(false);
+    /// A file of a batch failed: the run exits 1 after its summary (as Python's CLI does).
+    static BATCH_FAILED: AtomicBool = AtomicBool::new(false);
     /// The request and when its run started, once the plan asked for an alert (never in a dry run).
     static ALERT: Mutex<Option<(String, Instant)>> = Mutex::new(None);
 
@@ -372,6 +386,14 @@ mod run_facts {
 
     pub fn declined() {
         DECLINED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn batch_file_failed() {
+        BATCH_FAILED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn batch_failed() -> bool {
+        BATCH_FAILED.load(Ordering::SeqCst)
     }
 
     /// Fire the alert the plan asked for, once the run has ended: on success, on failure and when
@@ -1364,10 +1386,58 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     if !fetch_url_inputs(&mut steps, &bundle, &mut scratch, &args)? {
         return Ok(());
     }
+    // A chain over many files ("convert all the .mov files to mp4 and make them smaller") runs
+    // once per file (`batch`). Before routing, so the keep rule sees each file's
+    // chain as an ordinary one-file chain; the lifted plan is validated again, since every name
+    // the lift made must pass the same sandbox checks as the model's own.
+    let mut lifted = {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        let kinds =
+            knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+        let lift = batch::lift(&steps, &registry, &base, &kinds);
+        if let Some(lift) = &lift {
+            let mut full = registry;
+            if let Some(core) = resolve_repo_file("contracts/runtime/core_tools.yaml") {
+                full.extend(knaif_core::load_registry(&core)?);
+            }
+            knaif_core::validate_plan(
+                &serde_json::json!({"plan": lift.plan}),
+                &full,
+                &base,
+                sandbox,
+            )?;
+            steps = lift.plan.clone();
+        }
+        lift
+    };
+    // One file into many (split_video, extract_frames, split_pdf_every, …): the skill says which
+    // files a step will write before anything runs, and the steps reading them are pointed at
+    // that set, so routing can move it and the lift below runs them once per file.
+    let ffmpeg_data = if args.skill == "ffmpeg" {
+        Some(knaif_skill_ffmpeg::FfmpegData::load(&bundle)?)
+    } else {
+        None
+    };
+    let plan_one =
+        |tool: &str, step_args: &serde_json::Map<String, serde_json::Value>| match &ffmpeg_data {
+            Some(data) => knaif_skill_ffmpeg::run::planned_set(tool, step_args, data, sandbox),
+            None => Ok(knaif_skill_documents::run::planned_set(
+                tool, step_args, &base, sandbox,
+            )),
+        };
+    let mut sets = std::collections::BTreeMap::new();
+    if lifted.is_none() {
+        sets = batch::planned_sets(&steps, &plan_one)?;
+        if !sets.is_empty() {
+            steps = knaif_core::batch_chain::link_set_readers(&steps, &sets);
+        }
+    }
     // Chain intermediates go to the scratch, so only the outputs the user asked for reach their
     // folder. Before the naming repairs below, as Python routes before its collision hook: the
-    // repairs must not see a chain's final name on its own intermediate.
-    if knaif_core::scratch::load_scratch_intermediates(&bundle.join("skill.yaml"))? {
+    // repairs must not see a chain's final name on its own intermediate. Skipped when the user
+    // asked to keep every step's output (`--keep-intermediates`, or words in the request).
+    let keep_all = args.keep_intermediates || knaif_core::scratch::wants_everything_kept(&request);
+    if !keep_all && knaif_core::scratch::load_scratch_intermediates(&bundle.join("skill.yaml"))? {
         let registry = knaif_core::load_skill_registry(&bundle)?;
         steps = knaif_core::scratch::route_intermediates_to_scratch(
             &steps,
@@ -1375,6 +1445,9 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             Some(&normalize_path_separators(&request)),
             &base,
             &knaif_core::scratch::joining_tools(&registry),
+            &knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?,
+            &knaif_core::scratch::produced_kinds(&registry),
+            &knaif_core::scratch::deriving_tools(&registry),
         );
     }
     // Two plan-level naming repairs, in one pass and in this order: a name the filesystem would
@@ -1401,6 +1474,25 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             ));
         }
     }
+    // Routing and the naming repairs rewrite args, never the number of steps; should one ever
+    // change it, a failed file stops the run as before.
+    if lifted
+        .as_ref()
+        .is_some_and(|l| l.file_of.len() != steps.len())
+    {
+        lifted = None;
+    }
+    // The sets' files as they will be written now (routing may have put them in the scratch),
+    // then the readers run once per file.
+    let mut set_files = std::collections::BTreeMap::new();
+    if !sets.is_empty() {
+        let now = batch::planned_sets(&steps, &plan_one)?;
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        let (plan, lift, files) = batch::lift_sets(&steps, &now, &registry, scratch.path());
+        steps = plan;
+        set_files = files;
+        lifted = lift;
+    }
     let total = match decide_steps(&steps) {
         StepDecision::Empty => {
             if model.is_none() {
@@ -1420,15 +1512,41 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         StepDecision::Run { total } => total,
     };
 
+    if lifted.is_some() && plan_dump_enabled() {
+        eprintln!(
+            "{RUN_PLAN_DUMP_MARKER}{}",
+            serde_json::json!({ "plan": steps })
+        );
+    }
+    // What the plan will leave (`knaif_core::result_set`): every preview ends with it, and a
+    // batch shows its first file's steps, then the same for the rest.
+    let leaves = {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        let kinds =
+            knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+        batch::leaves(&steps, &registry, &base, scratch.path(), &kinds, &set_files)
+    };
+    let (preview_steps, notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
     if let Some(style) = ui::view() {
         // A control step ends the plan by itself, so there is no plan to summarize.
         if !steps.iter().any(is_control_step) {
-            let shown: Vec<serde_json::Value> = steps
+            let shown: Vec<serde_json::Value> = preview_steps
                 .iter()
                 .map(|s| display_value(s, Some(scratch.path())))
                 .collect();
-            println!("{}", ui::render_plan(&style, &plan_rows(&shown)));
+            println!("{}", ui::render_plan(&style, &plan_rows(&shown), &notes));
         }
+    }
+    let mut yes = approves_without_asking(args.yes, args.confirm);
+    // A batch is approved once, before any of it runs: its steps then go on without asking
+    // (Python asks on the batch preview's last line).
+    if lifted.is_some() && !yes && !args.dry_run {
+        if !confirm_action(false, &notes, "batch")? {
+            print_declined();
+            run_facts::declined();
+            return Ok(());
+        }
+        yes = true;
     }
     scratch.enter()?;
     let ctx = StepContext {
@@ -1437,11 +1555,39 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         base: &base,
         sandbox,
         dry_run: args.dry_run,
-        yes: approves_without_asking(args.yes, args.confirm),
+        yes,
         overwrite: args.overwrite,
         work_dir: Some(scratch.path()),
     };
-    execute_plan(&steps, total, &ctx)
+    let Some(lift) = &lifted else {
+        let result = execute_plan(&steps, total, &ctx);
+        // A step over many files with no chain ends the run with its summary too.
+        if let Some(report) = batch::take_tally_report() {
+            eprintln!(
+                "{}",
+                report.summary(&ui::written_paths(), Some(scratch.path()))
+            );
+            if report.failed() > 0 {
+                run_facts::batch_file_failed();
+            }
+        }
+        return result;
+    };
+    let work = scratch.path().to_path_buf();
+    let report = batch::execute(
+        &steps,
+        lift,
+        total,
+        |text| batch::without_folders(text, &base, Some(&work)),
+        |line| eprintln!("{line}"),
+        |step| run_step(step, &ctx),
+    )?;
+    // Counts, time and the size of what the run left, on stderr: stdout stays the result.
+    eprintln!("{}", report.summary(&ui::written_paths(), Some(&work)));
+    if report.failed() > 0 {
+        run_facts::batch_file_failed();
+    }
+    Ok(())
 }
 
 /// URL inputs (port of Python `CommandAgent._fetch_url_inputs`): replace every http(s) URL input
@@ -1751,21 +1897,7 @@ fn execute_steps(
     mut run: impl FnMut(&serde_json::Value) -> anyhow::Result<StepOutcome>,
 ) -> anyhow::Result<()> {
     for (idx, step) in steps.iter().enumerate() {
-        let ordinal = idx + 1;
-        // Announce the position only for a real chain: a one-step plan reads better without a
-        // "step 1 of 1" preamble, and every existing single-step test asserts that output.
-        match ui::view() {
-            Some(style) if !is_control_step(step) => {
-                let tool = step
-                    .get("tool")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("?");
-                println!("{}", ui::render_step_head(&style, ordinal, total, tool));
-            }
-            Some(_) => {}
-            None if total > 1 => println!("step {ordinal} of {total}:"),
-            None => {}
-        }
+        announce_step(step, idx + 1, total);
         let outcome = run(step);
         // A step that ran, or failed while running, is work the alert reports on; a control
         // step or a declined confirmation is not (Python `CommandAgent._work_started`).
@@ -1776,21 +1908,43 @@ fn execute_steps(
             StepOutcome::Continue => {}
             StepOutcome::ShortCircuit => return Ok(()),
             StepOutcome::Declined => {
-                run_facts::declined();
-                match ui::view() {
-                    // The closing line says where the run stopped, which covers the steps after.
-                    Some(_) => ui::mark_declined(ordinal, total),
-                    None => {
-                        if let Some(text) = declined_note(idx, total) {
-                            println!("{text}");
-                        }
-                    }
-                }
+                declined_step(idx, total);
                 return Ok(());
             }
         }
     }
     Ok(())
+}
+
+/// Announce a step's position. Only for a real chain: a one-step plan reads better without a
+/// "step 1 of 1" preamble, and every existing single-step test asserts that output.
+fn announce_step(step: &serde_json::Value, ordinal: usize, total: usize) {
+    match ui::view() {
+        Some(style) if !is_control_step(step) => {
+            let tool = step
+                .get("tool")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?");
+            println!("{}", ui::render_step_head(&style, ordinal, total, tool));
+        }
+        Some(_) => {}
+        None if total > 1 => println!("step {ordinal} of {total}:"),
+        None => {}
+    }
+}
+
+/// A declined step ends the run: recorded for the alert, and said where it stopped.
+fn declined_step(idx: usize, total: usize) {
+    run_facts::declined();
+    match ui::view() {
+        // The closing line says where the run stopped, which covers the steps after.
+        Some(_) => ui::mark_declined(idx + 1, total),
+        None => {
+            if let Some(text) = declined_note(idx, total) {
+                println!("{text}");
+            }
+        }
+    }
 }
 
 /// What a declined step means for the rest of a chain. `None` for the last (or only) step: there
@@ -2057,6 +2211,18 @@ fn run_ffmpeg_step(
         }
     }
 
+    // A step over many files reports each one (`batch::tally_record`): the files that failed
+    // before any command ran (unreadable, or silent for extract_audio), then each command's.
+    batch::tally_start_step();
+    for (file, why) in knaif_skill_ffmpeg::run::take_file_failures() {
+        batch::tally_record(&file, Some(&why), ctx.base, ctx.work_dir);
+    }
+    let input_of = |cmd: &[String]| {
+        cmd.windows(2)
+            .find(|w| w[0] == "-i")
+            .map(|w| PathBuf::from(&w[1]))
+            .unwrap_or_default()
+    };
     let mut failures = 0;
     for cmd in &commands {
         let output = cmd.last().cloned().unwrap_or_default();
@@ -2103,6 +2269,8 @@ fn run_ffmpeg_step(
                 knaif_toolkit_fs::commit_output(staged, Path::new(&output), sandbox, work)?;
             }
             ui::note_written(1);
+            ui::note_written_paths(&[PathBuf::from(&output)]);
+            batch::tally_record(&input_of(cmd), None, ctx.base, ctx.work_dir);
             match ui::view() {
                 Some(style) => {
                     println!("{}", ui::render_ok(&style, &shown, Some(started.elapsed())))
@@ -2121,6 +2289,8 @@ fn run_ffmpeg_step(
                         .map(|l| l.trim().to_string())
                 })
                 .unwrap_or_else(|| format!("ffmpeg exited {}", result.status));
+            batch::note_failure_cause(&cause);
+            batch::tally_record(&input_of(cmd), Some(&cause), ctx.base, ctx.work_dir);
             println!("{}", ui::render_fail(&style, &shown, Some(&cause)));
             if ui::verbose() {
                 println!(
@@ -2145,13 +2315,25 @@ fn run_ffmpeg_step(
                 .join("\n");
             // The cause first, in a sentence: the tail alone can end on a generic "Conversion
             // failed!" with the line that explains it cut off above.
-            let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
+            let reason = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code());
+            let why = reason.as_deref().unwrap_or_else(|| {
+                stderr
+                    .lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .map_or("ffmpeg failed", str::trim)
+            });
+            batch::note_failure_cause(why);
+            batch::tally_record(&input_of(cmd), Some(why), ctx.base, ctx.work_dir);
+            let cause = reason
                 .map(|c| format!("\n  cause: {c}"))
                 .unwrap_or_default();
             println!("✗ {shown} (ffmpeg exited {}){cause}\n{tail}", result.status);
         }
     }
-    if failures > 0 {
+    // A failed command among done files of a batch does not stop the run: the end summary counts
+    // it and the run exits 1 (Python's `_FileTally.partial`).
+    if failures > 0 && !batch::tally_partial() {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
     Ok(StepOutcome::Continue)
@@ -2378,6 +2560,7 @@ fn run_documents_step(
             let started = std::time::Instant::now();
             let written = commit_in(tool, step_args, base, sandbox, bundle, work_dir)?;
             ui::note_written(written.len());
+            ui::note_written_paths(&written);
             for w in &written {
                 match ui::view() {
                     Some(style) => println!(
@@ -2711,6 +2894,8 @@ struct PlanSession {
     output_capable: std::collections::HashSet<String>,
     /// The skill's `file_kinds:` — chain threading never crosses kinds.
     file_kinds: knaif_core::FileKinds,
+    /// The skill's `batch_kinds:` — a batch glob of these kinds covers the whole kind.
+    batch_kinds: Vec<String>,
     backend: Box<dyn knaif_llm::LlmBackend>,
     /// Repair only for a real model — the mock repeats its canned response, so a retry is pointless.
     repair: bool,
@@ -2736,6 +2921,8 @@ impl PlanSession {
         let output_capable = knaif_core::output_capable_tools(&registry);
         let file_kinds =
             knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+        let batch_kinds = knaif_core::load_batch_kinds(&bundle.join("skill.yaml"), &file_kinds)
+            .map_err(anyhow::Error::msg)?;
         let loading = std::time::Instant::now();
         // A running daemon that holds this very model stands in for the load; anything else
         // (none running, another model or build, a generation setting overridden here) loads the
@@ -2752,6 +2939,7 @@ impl PlanSession {
             overrides,
             output_capable,
             file_kinds,
+            batch_kinds,
             backend,
             // Replay serves a recorded repair reply as it was served live (the result store).
             repair: model.is_some() || knaif_llm::replay_selected(),
@@ -2779,14 +2967,22 @@ impl PlanSession {
             &names,
             utterance,
             knaif_core::MAX_TOOL_EXAMPLES,
+            &knaif_core::triggered_tools(&self.registry),
         );
         let block = (!selected.is_empty())
             .then(|| knaif_core::render_examples_block(&selected))
             .or_else(|| self.overrides.examples_block.clone());
+        // A rule about tools joins the header only when one of them is in this prompt; a
+        // `when: many` rule only when the request asks for many files.
+        let header =
+            self.overrides.system_header.as_deref().map(|h| {
+                knaif_core::apply_prompt_rules(h, &self.overrides.rules, &names, utterance)
+            });
         knaif_core::PromptOverrides {
-            system_header: self.overrides.system_header.clone(),
+            system_header: header,
             examples_block: block,
             examples: Vec::new(),
+            rules: Vec::new(),
         }
     }
 
@@ -2862,6 +3058,31 @@ impl PlanSession {
         Ok(gated)
     }
 
+    /// The model's plan with its batch globs repaired: an invented folder for "here" reads as
+    /// here (`drop_invented_folders`), and a glob for "every video" covers the whole kind
+    /// (`widen_kind_globs`, the skill's `batch_kinds:`). Python runs both in `execute_plan`.
+    fn repair_batch_globs(
+        &self,
+        mut payload: serde_json::Value,
+        utterance: &str,
+        here: &Path,
+    ) -> serde_json::Value {
+        let utterance = normalize_path_separators(utterance);
+        if let Some(steps) = payload.get("plan").and_then(serde_json::Value::as_array) {
+            let steps = knaif_core::batch_chain::drop_invented_folders(steps, &utterance, here);
+            let steps = knaif_core::batch_chain::widen_kind_globs(
+                &steps,
+                &utterance,
+                here,
+                &self.file_kinds,
+                &self.batch_kinds,
+                &knaif_core::scratch::produced_kinds(&self.registry),
+            );
+            payload["plan"] = serde_json::Value::Array(steps);
+        }
+        payload
+    }
+
     /// [`Self::plan`], then the NL clarify gate: the plan `run` executes. Python runs that gate
     /// in `execute_plan` right after `resolve_stems`, so it asks when the user never named an
     /// input the plan uses ("reverse the mov file" -> inputs ["mov"]) or when a grounded arg such
@@ -2880,6 +3101,11 @@ impl PlanSession {
         sandbox: Option<&Path>,
     ) -> anyhow::Result<serde_json::Value> {
         let planned = self.plan(utterance, base, sandbox)?;
+        // A glob in a folder the model made up for "here" reads as here, then "every video"
+        // written as `*.mp4` covers the other videos beside it too. Before the
+        // gate, as Python runs them first in `execute_plan`; the `plan` command, like Python's,
+        // keeps the model's plan.
+        let planned = self.repair_batch_globs(planned, utterance, sandbox.unwrap_or(base));
         // The text the model was shown, as in Python (`agent.py` normalizes before the gate). A
         // grounded value the model copied from it (`a/b`) is only found in that spelling: against
         // the raw request a password written `a\b` was always "invented" and asked for again.
@@ -3006,6 +3232,11 @@ fn debug_dump(enabled: bool, raw: &str, extracted: &str) -> Option<String> {
 /// catastrophe. An env gate on the shared `PlanSession::plan` costs nothing when unset and covers
 /// `run`, `plan` and `plan --batch` alike — same reasoning as [`PROMPT_DUMP_MARKER`].
 const PLAN_DUMP_MARKER: &str = "===KNAIF-PLAN===";
+
+/// Marker for the plan a run executes when a batch was lifted: one step per file,
+/// which the `step N of M:` headers count. Gated with the plan dump; the eval's native replay
+/// reads it to attribute each file a step wrote (`exact_files.RUN_PLAN_DUMP_MARKER`).
+const RUN_PLAN_DUMP_MARKER: &str = "===KNAIF-RUN-PLAN===";
 
 fn plan_dump_enabled() -> bool {
     std::env::var("KNAIF_DUMP_PLAN")
@@ -4017,6 +4248,17 @@ mod tests {
     }
 
     #[test]
+    fn run_accepts_keep_intermediates() {
+        use clap::Parser;
+        let cli =
+            Cli::try_parse_from(["knaif", "run", "ffmpeg", "--keep-intermediates", "x"]).unwrap();
+        match cli.command {
+            Command::Run(a) => assert!(a.keep_intermediates),
+            _ => panic!("expected run"),
+        }
+    }
+
+    #[test]
     fn human_size_reads_at_the_manifest_scale() {
         assert_eq!(human_size(2_497_280_960), "2.5 GB"); // knaif-qwen3-4b-v1's manifest size_bytes
         assert_eq!(human_size(1_417_754_976), "1.4 GB");
@@ -4613,6 +4855,7 @@ mod tests {
                 // L1a pins the *rendering* of a given block; the per-utterance selection that
                 // chooses which examples go into it is L1e's contract.
                 examples: Vec::new(),
+                rules: Vec::new(),
             };
 
             let utterance = normalize_path_separators(case["utterance"].as_str().unwrap());

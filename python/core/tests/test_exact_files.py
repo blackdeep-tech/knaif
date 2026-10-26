@@ -229,6 +229,31 @@ def test_native_documents_output_becomes_the_same_results_shape(tmp_path: Path) 
     assert got == {final.resolve()}
 
 
+def test_a_lifted_native_documents_plan_is_read_from_the_run_plan(tmp_path: Path) -> None:
+    """A batch runs the model's one step once per file: the step headers count
+    the lifted steps, which the binary dumps as the run plan (`===KNAIF-RUN-PLAN===`) after the
+    model's plan. Every file a lifted step wrote is delivered, not only the first's."""
+    import json
+
+    from knaif.evalsuite.exact_files import deliverables, native_results
+
+    model = {"plan": [{"tool": "add_page_numbers", "args": {"input": "*.pdf"}}]}
+    run = {
+        "plan": [
+            {"tool": "add_page_numbers", "args": {"input": "a.pdf"}},
+            {"tool": "add_page_numbers", "args": {"input": "b.pdf"}},
+        ]
+    }
+    stderr = f"===KNAIF-PLAN==={json.dumps(model)}\n===KNAIF-RUN-PLAN==={json.dumps(run)}\n"
+    a, b = tmp_path / "a-numbered.pdf", tmp_path / "b-numbered.pdf"
+    stdout = f"step 1 of 2:\n✓ wrote {a}\nstep 2 of 2:\n✓ wrote {b}\n"
+    results = native_results(stdout, stderr, tmp_path)
+    assert deliverables(results, "number every pdf here", root=tmp_path) == {
+        a.resolve(),
+        b.resolve(),
+    }
+
+
 def test_a_single_native_documents_step_has_no_step_header(tmp_path: Path) -> None:
     import json
 
@@ -294,3 +319,74 @@ def test_only_a_url_row_passes_allow_download_to_the_binary():
     object.__setattr__(lane, "model_path", Path("m.gguf"))
     assert "--allow-download" not in build_argv(lane, "ffmpeg", "convert clip.mp4 to mkv")
     assert "--allow-download" in build_argv(lane, "ffmpeg", "convert https://h.test/a.mov to mp4")
+
+
+def test_a_native_error_excerpt_leaves_out_the_dumps() -> None:
+    """The plan and argv dumps carry absolute run-scratch paths (a home folder) and are not the
+    error: the excerpt is the binary's own last lines (an L3 run)."""
+    from knaif.evalsuite.exact_files import native_error_excerpt
+
+    stderr = (
+        '===KNAIF-PLAN==={"plan": []}\n'
+        '===KNAIF-RUN-PLAN==={"plan": [{"args": {"input": "C:/Users/someone/x.pdf"}}]}\n'
+        '===KNAIF-ARGV==="ffmpeg"\n'
+        "✗ scan.pdf: The step produced an empty file for scan.txt; nothing was written.\n"
+        "3 done, 1 failed in 1.0s, 11.0 KB\n"
+    )
+    got = native_error_excerpt(1, stderr, "")
+    assert got == (
+        "exit 1: ✗ scan.pdf: The step produced an empty file for scan.txt; nothing was "
+        "written.\n3 done, 1 failed in 1.0s, 11.0 KB"
+    )
+
+
+def test_with_routing_an_intermediate_left_in_the_folder_was_kept(tmp_path: Path) -> None:
+    """A run that routes intermediates (`scratch_intermediates:`) moves every one it does not keep
+    to its scratch, so one the results place in the folder is kept on purpose: the agent's keep
+    rule (owner, 2026-10-15; a full eval run flagged 22 such rows, 2026-10-22)."""
+    a, t, m = (str(tmp_path / x) for x in ("clip.mp4", "clip_trimmed.mp4", "clip_trimmed.mp3"))
+    results = [_batch((a, t, 0)), _batch((t, m, 0))]
+    utterance = "trim clip.mp4 and extract the audio"
+    assert deliverables(results, utterance, root=tmp_path, routed=True) == {Path(t), Path(m)}
+    assert deliverables(results, utterance, root=tmp_path) == {Path(m)}
+
+
+def test_with_routing_an_intermediate_in_the_scratch_is_not_delivered(tmp_path: Path) -> None:
+    row, work = tmp_path / "row", tmp_path / "work"
+    a, t, s = str(row / "clip.mp4"), str(work / "clip_trimmed.mp4"), str(row / "clip_small.mp4")
+    results = [_batch((a, t, 0)), _batch((t, s, 0))]
+    got = deliverables(results, "trim clip.mp4 and compress it", root=row, routed=True)
+    assert got == {Path(s)}
+
+
+def test_a_documents_replay_leaves_what_the_keep_rule_keeps(tmp_path: Path) -> None:
+    """documents_hard2_005: "merge … then keep only pages 1-2 of the merged file". A page range
+    is derived from the merged whole, so the keep rule keeps it beside the range."""
+    import pytest
+
+    pikepdf = pytest.importorskip("pikepdf")
+    from knaif import create_agent
+    from knaif.evalsuite.exact_files import replay_row
+
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    for name, pages in (("a.pdf", 1), ("b.pdf", 2)):
+        pdf = pikepdf.Pdf.new()
+        for _ in range(pages):
+            pdf.add_blank_page()
+        pdf.save(fixtures / name)
+    plan = {
+        "plan": [
+            {"tool": "merge_pdfs", "args": {"inputs": ["a.pdf", "b.pdf"], "output": "merged.pdf"}},
+            {"tool": "split_pdf", "args": {"input": "merged.pdf", "ranges": "1-2"}},
+        ]
+    }
+    report = replay_row(
+        lambda folder: create_agent("documents", root=folder),
+        plan,
+        "merge a.pdf and b.pdf, then keep only pages 1-2 of the merged file",
+        fixtures,
+        tmp_path / "row",
+    )
+    assert report["error"] is None
+    assert report["leftovers"] == []

@@ -136,7 +136,11 @@ def print_scoreboard(
 
 
 def print_row_detail(row: dict[str, Any], *, file: Any = None) -> None:
-    """Print a single scored row in detail."""
+    """Print a single scored row in detail, its paths redacted like the saved scoreboard (a
+    chain intermediate renders in the run scratch, under the home folder on Windows)."""
+    from .redact import redact_local_paths
+
+    row = redact_local_paths(row)
     if file is None:
         file = sys.stdout
     correct_mark = "OK" if row["outcome_correct"] else "FAIL"

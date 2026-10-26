@@ -1,7 +1,7 @@
 {
   "_comment": "Golden parity fixtures for the deterministic planner pipeline (parse -> normalize -> apply_defaults -> validate). Consumed by BOTH the Python (python/core/tests/test_planner_parity.py) and Rust (knaif-core planner parity test) validators; both must produce the same valid/invalid outcome + error substring. Registries are inline tools.yaml text so parity is on an identical registry, independent of skill content.",
   "registries": {
-    "demo": "find:\n  description: Find files\n  required_args: [path]\n  optional_args: [file_type]\ncompress:\n  description: Compress\n  required_args: [input]\n  optional_args: [quality, output, tries, at]\n  defaults: {output: out.mp4}\n  arg_schemas:\n    quality: {type: enum, enum: [low, high], aliases: {maximum: high}}\n    tries: {type: integer, min: 1, max: 5}\n    at: {type: string}\ncombine:\n  description: Combine\n  optional_args: [inputs]\nreport:\n  description: Report\n  any_of_args: [a, b]\n  optional_args: [a, b]\nsecret_op:\n  description: Internal only\n  internal: true\n  required_args: [payload]\nstamp:\n  description: Stamp a file\n  required_args: [input]\n  arg_schemas:\n    output: {type: string}\n"
+    "demo": "find:\n  description: Find files\n  required_args: [path]\n  optional_args: [file_type]\ncompress:\n  description: Compress\n  required_args: [input]\n  optional_args: [quality, output, tries, at]\n  defaults: {output: out.mp4}\n  arg_schemas:\n    quality: {type: enum, enum: [low, high], aliases: {maximum: high}}\n    tries: {type: integer, min: 1, max: 5}\n    at: {type: string}\ncombine:\n  description: Combine\n  optional_args: [inputs]\nreport:\n  description: Report\n  any_of_args: [a, b]\n  optional_args: [a, b]\nsecret_op:\n  description: Internal only\n  internal: true\n  required_args: [payload]\nstamp:\n  description: Stamp a file\n  required_args: [input]\n  arg_schemas:\n    output: {type: string}\ncut:\n  description: Cut one file\n  required_args: [input]\n  optional_args: [end]\n  arg_schemas:\n    input: {type: string}\nread_text:\n  description: Read a file's text\n  required_args: [input]\n  batch_output: .txt\n"
   },
   "cases": [
     {
@@ -371,6 +371,116 @@
         ]
       },
       "valid": true
+    },
+    {
+      "name": "several_globs_for_one_input_are_one_batch",
+      "registry": "demo",
+      "why": "A one-path input given several globs is a batch the per-file lift runs once per file (owner, 2026-10-21); normalize moves them to `input`, and validation accepts the list, even where `input` is typed string.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "cut",
+            "args": {
+              "inputs": [
+                "*.mp4",
+                "*.mov"
+              ],
+              "end": "5"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "several_globs_already_in_one_input_are_one_batch",
+      "registry": "demo",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress",
+            "args": {
+              "input": [
+                "*.mp4",
+                "videos/*.mkv"
+              ]
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "several_files_for_one_input_are_still_refused",
+      "registry": "demo",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress",
+            "args": {
+              "inputs": [
+                "a.mp4",
+                "b.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "valid": false,
+      "error_contains": "missing required args"
+    },
+    {
+      "name": "a_file_among_globs_in_one_input_is_refused",
+      "registry": "demo",
+      "plan": {
+        "plan": [
+          {
+            "tool": "cut",
+            "args": {
+              "input": [
+                "a.mp4",
+                "*.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "valid": false,
+      "error_contains": "must be a string"
+    },
+    {
+      "name": "a_batch_output_tool_takes_an_output_it_does_not_list",
+      "registry": "demo",
+      "why": "`batch_output:` (extract_text's txt) is where a batch saves each file's result; the lift gives each lifted step its `output`, which the prompt never lists, so validation accepts it.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "read_text",
+            "args": {
+              "input": "a.pdf",
+              "output": "a.txt"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "a_tool_without_batch_output_still_refuses_an_output",
+      "registry": "demo",
+      "plan": {
+        "plan": [
+          {
+            "tool": "cut",
+            "args": {
+              "input": "a.mp4",
+              "output": "b.mp4"
+            }
+          }
+        ]
+      },
+      "valid": false,
+      "error_contains": "unsupported args"
     }
   ]
 }

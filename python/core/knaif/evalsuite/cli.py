@@ -3052,6 +3052,8 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
         return agent
 
     reports: list[dict[str, Any]] = []
+    # The skill's own `scratch_intermediates:`, read once: the binary routes as Python does.
+    routed = create_agent(args.skill).scratch_intermediates is True
     for row in rows:
         row_dir = work / f"{row['id']}__{row.get('utterance_idx') or 0}"
         if args.runtime == "native":
@@ -3063,6 +3065,7 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
                 fixture_dir,
                 row_dir,
                 alert=bool(row.get("alert")),
+                routed=routed,
             )
             report["alert_problem"] = alert_problem(report, planned=bool(row.get("alert")))
         else:
@@ -3144,6 +3147,8 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
             continue
 
         print(f"  [regen] {name}", flush=True)
+        # A folder row's fixtures sit in a subfolder (`batch/a.mov`).
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             result = subprocess.run(
                 full_cmd.split(),

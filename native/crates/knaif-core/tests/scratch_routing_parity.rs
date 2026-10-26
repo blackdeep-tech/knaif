@@ -1,4 +1,4 @@
-//! Golden parity: run `contracts/parity/scratch_routing_cases.json`. through the Rust router and
+//! Golden parity: run `contracts/parity/scratch_routing_cases.json` through the Rust router and
 //! assert the recorded routed plan. The Python side runs the identical fixtures
 //! (python/core/tests/test_scratch_routing_parity.py); both must agree.
 //!
@@ -50,6 +50,16 @@ fn scratch_routing_matches_the_contract() {
         .iter()
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
+    let file_kinds: knaif_core::FileKinds =
+        serde_json::from_value(doc["file_kinds"].clone()).expect("file_kinds map");
+    let produces: std::collections::HashMap<String, knaif_core::registry::Produces> =
+        serde_json::from_value(doc["produces"].clone()).expect("produces map");
+    let derives: std::collections::HashSet<String> = doc["derives"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
 
     for case in cases {
         let name = case["name"].as_str().unwrap();
@@ -60,6 +70,9 @@ fn scratch_routing_matches_the_contract() {
             case["utterance"].as_str(),
             &sandbox,
             &joining,
+            &file_kinds,
+            &produces,
+            &derives,
         );
         let got = placeholders(&Value::Array(routed), &work.to_string_lossy());
         assert_eq!(got, case["expected"], "{name}");

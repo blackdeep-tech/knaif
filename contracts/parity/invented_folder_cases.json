@@ -1,0 +1,495 @@
+{
+  "_comment": "(owner, 2026-10-21): an invented batch folder reads as here. A path with a glob in it (an input or an output) whose folder does not exist where the plan runs, in a request that does not name that folder, reads as the current folder: `videos/*.mov` for \"the .mov videos here\" becomes `*.mov`, before known-folder resolution would point `videos/` at the user's Videos folder. The request names a folder when it writes it with a slash, after in/into/to/from/on/onto/inside (optionally my/the), or next to the word folder (`Videos folder`, `folder videos`); a nested folder only when the request names its whole path, and a resolution or size (`720p`, `1080p`, `4k`, `1920x1080`) is never a folder name, except written with a slash. Paths without a glob, absolute paths, `~` paths, URLs and `$var` references are never changed. `dirs` exist under the folder the plan runs in. Python `knaif.batch_chain.drop_invented_folders`, Rust `knaif_core::batch_chain::drop_invented_folders`.",
+  "cases": [
+    {
+      "name": "an invented folder on a chain reads as here",
+      "utterance": "convert the .mov videos here to mp4, then shrink them",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "videos/*.mov"
+            ],
+            "container": "mp4",
+            "output": "videos/*.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "videos/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "*.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a request with no English folder word",
+      "utterance": "把这个文件夹里的所有视频合并成一个",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "videos/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a one-input tool's glob too",
+      "utterance": "add page numbers to every pdf in this folder",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "pdfs/*.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "*.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an output pattern into an invented folder",
+      "utterance": "convert all the .mov files here to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "mp4s/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a folder that exists stays",
+      "utterance": "convert the .mov videos here to mp4",
+      "dirs": [
+        "videos"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "videos/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "videos/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a folder named after in stays",
+      "utterance": "convert the clips in my Videos folder to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "Videos/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "Videos/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a folder written with a slash stays",
+      "utterance": "convert raw/*.mov to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "raw/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "raw/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a folder named next to the word folder stays",
+      "utterance": "convert every mov in the archive folder to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "archive/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "archive/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a path without a glob is never changed",
+      "utterance": "convert clip.mov to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "out/clip.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "out/clip.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "home, absolute and variable paths are never changed",
+      "utterance": "convert every mov to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "~/clips/*.mov"
+            ],
+            "container": "mp4",
+            "output": "$out"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "/data/clips/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "~/clips/*.mov"
+            ],
+            "container": "mp4",
+            "output": "$out"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "/data/clips/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a nested invented folder reads as here",
+      "utterance": "compress every video here",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "media/videos/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a resolution after to is no folder",
+      "utterance": "resize every video here to 720p and convert them to webm",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "videos/*.mp4"
+            ],
+            "height": 720,
+            "output": "videos/720p/*.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "videos/720p/*.mp4"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 720,
+            "output": "*.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "webm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a one-level resolution folder too",
+      "utterance": "scale the clips here to 1080p",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 1080,
+            "output": "1080p/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 1080,
+            "output": "*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a resolution folder written with a slash stays",
+      "utterance": "scale the clips here to 1080p and put them in 1080p/",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 1080,
+            "output": "1080p/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 1080,
+            "output": "1080p/*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a nested folder named in full stays",
+      "utterance": "convert the clips in projects/day1 to mp4",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "projects/day1/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "projects/day1/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a nested folder named only by its last part reads as here",
+      "utterance": "convert every mov to mp4 in day1",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "videos/day1/*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    }
+  ]
+}

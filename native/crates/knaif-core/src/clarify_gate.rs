@@ -349,6 +349,37 @@ pub fn load_file_kinds(skill_yaml: &Path) -> Result<FileKinds, String> {
     file_kinds_from_groups(groups)
 }
 
+/// Read `batch_kinds:` from a bundle's `skill.yaml`: the kinds whose batch glob covers the whole
+/// kind ("every video" read as every video, `crate::batch_chain::widen_kind_globs`). Each must be
+/// a kind `file_kinds` declares. A missing file or section means none. Python
+/// `knaif.skill.parse_batch_kinds`.
+pub fn load_batch_kinds(skill_yaml: &Path, file_kinds: &FileKinds) -> Result<Vec<String>, String> {
+    let Ok(text) = std::fs::read_to_string(skill_yaml) else {
+        return Ok(Vec::new());
+    };
+    let doc: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", skill_yaml.display()))?;
+    let Some(raw) = doc.get("batch_kinds").filter(|v| !v.is_null()) else {
+        return Ok(Vec::new());
+    };
+    let list = raw
+        .as_sequence()
+        .ok_or("batch_kinds must be a list of kinds")?;
+    let mut kinds = Vec::new();
+    for kind in list {
+        let kind = kind
+            .as_str()
+            .ok_or("batch_kinds: a kind must be a string")?;
+        if !file_kinds.values().any(|k| k == kind) {
+            return Err(format!(
+                "batch_kinds lists '{kind}', which file_kinds does not declare"
+            ));
+        }
+        kinds.push(kind.to_string());
+    }
+    Ok(kinds)
+}
+
 /// Basename of a path-ish string, lower-cased for comparison.
 fn basename_lower(value: &str) -> String {
     value
@@ -453,7 +484,10 @@ fn intermediate_name(src: &str, taken: &HashSet<String>) -> String {
 /// - **the user named the source more than once** — a repeated name is their choice, and a
 ///   fan-out (several steps reading one file) must run as written;
 /// - **the producer's declared output is a different kind of file** from its source, per the
-///   skill's `file_kinds` (a thumbnail of a video). An unlisted extension is unrestricted.
+///   skill's `file_kinds` (a thumbnail of a video). An unlisted extension is unrestricted;
+/// - **the later step runs the same tool and names its own output**: a second result from the
+///   source ("cut 1-3 s of clip.mp4 as 1.mp4 and the rest as 2.mp4"), not the next link. The
+///   same tool again without an output of its own is still threaded.
 ///
 /// See docs/plans/2026-09-23-chain-source-threading.md.
 fn forward_thread_reused_sources(
@@ -504,6 +538,14 @@ fn forward_thread_reused_sources(
             let Some(map) = later.get("args").and_then(Value::as_object) else {
                 continue;
             };
+            // The same operation again, into its own file: a second result, not the next link.
+            let names_output = map
+                .get("output")
+                .and_then(Value::as_str)
+                .is_some_and(|o| !o.trim().is_empty());
+            if ltool == tool && names_output {
+                continue;
+            }
             for (key, value) in map {
                 if key == "output" {
                     continue;
@@ -891,6 +933,27 @@ mod tests {
         assert!(load_file_kinds(Path::new("/no/such/skill.yaml"))
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn batch_kinds_load_and_must_be_declared_kinds() {
+        let skills = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../skills");
+        let ffmpeg_yaml = skills.join("ffmpeg/skill.yaml");
+        let kinds = load_file_kinds(&ffmpeg_yaml).unwrap();
+        assert_eq!(
+            load_batch_kinds(&ffmpeg_yaml, &kinds).unwrap(),
+            vec!["video"]
+        );
+        let docs_yaml = skills.join("documents/skill.yaml");
+        let doc_kinds = load_file_kinds(&docs_yaml).unwrap();
+        assert!(load_batch_kinds(&docs_yaml, &doc_kinds).unwrap().is_empty());
+        let dir = std::env::temp_dir().join(format!("knaif-batch-kinds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("skill.yaml");
+        std::fs::write(&bad, "file_kinds:\n  video: [mp4]\nbatch_kinds: [audio]\n").unwrap();
+        let err = load_batch_kinds(&bad, &load_file_kinds(&bad).unwrap()).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(err.contains("does not declare"), "{err}");
     }
 
     #[test]

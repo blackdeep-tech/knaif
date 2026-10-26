@@ -14,23 +14,38 @@
 //!
 //! `KNAIF_SCRATCH_ROOT` overrides the root.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
+use regex::Regex;
 use serde_json::Value;
 
-use crate::clarify_gate::{looks_like_filename, mention_count, TERMINAL_TOOLS};
+use crate::clarify_gate::{looks_like_filename, mention_count, FileKinds, TERMINAL_TOOLS};
+use crate::registry::Produces;
 use crate::sandbox::resolve_real;
 
 /// How old a `run-*` folder must be before a new run may assume its owner is gone.
 pub const STALE_AFTER_SECS: u64 = 24 * 3600;
 
-/// `$KNAIF_SCRATCH_ROOT`, else `<temp>/knaif`.
+/// `$KNAIF_SCRATCH_ROOT`, else `<temp>/knaif`; always absolute (Python `scratch_root`).
 pub fn scratch_root() -> PathBuf {
-    match std::env::var_os("KNAIF_SCRATCH_ROOT").filter(|v| !v.is_empty()) {
-        Some(root) => PathBuf::from(root),
+    let cwd = std::env::current_dir().unwrap_or_default();
+    scratch_root_from(
+        std::env::var_os("KNAIF_SCRATCH_ROOT").filter(|v| !v.is_empty()),
+        &cwd,
+    )
+}
+
+/// [`scratch_root`] for a given setting: a relative root is joined to `cwd`. Left relative, a
+/// run scratch path stops matching itself once a tool resolves it against the sandbox, and a
+/// refined chain's results go with the scratch (2026-10-20).
+fn scratch_root_from(value: Option<std::ffi::OsString>, cwd: &Path) -> PathBuf {
+    match value {
+        Some(root) if Path::new(&root).is_absolute() => PathBuf::from(root),
+        Some(root) => cwd.join(root),
         None => std::env::temp_dir().join("knaif"),
     }
 }
@@ -40,6 +55,66 @@ pub fn keep_scratch() -> bool {
     ["KNAIF_DEBUG", "KNAIF_KEEP_SCRATCH"]
         .iter()
         .any(|k| std::env::var_os(k).is_some_and(|v| !v.is_empty()))
+}
+
+// ── keep every step's output (`--keep-intermediates` and its request words) ──────────────────
+
+/// Python `knaif.scratch._KEEP_NEGATION`.
+const KEEP_NEGATION: &str = r"\b(?:don['’]?t|do\s+not|never|no\s+need\s+to)\s+(?:keep|leave)\b";
+
+/// Python `knaif.scratch._KEEP_PATTERNS`, the same patterns: a keep verb next to a scope
+/// (intermediate files, everything, all the files, every step). `save` is never a keep verb.
+const KEEP_PATTERNS: [&str; 9] = [
+    // en
+    concat!(
+        r"\b(?:keep|leave)\s+(?:(?:all|of|the|my|these|those|any)\s+)*",
+        r"(?:intermediate\w*|in-between\s+files?|everything)\b"
+    ),
+    concat!(
+        r"\b(?:keep|leave)\s+(?:all\s+(?:of\s+)?(?:the\s+)?|every\s+|each\s+)",
+        r"(?:files?|outputs?|results?|versions?|steps?)\b"
+    ),
+    r"\b(?:keep|leave)\s+(?:them|these|those)\s+all\b",
+    // de: either order
+    concat!(
+        r"\b(?:behalt\w*|behält|beibehalten|aufbewahren|aufheben)\s+(?:\S+\s+){0,1}?",
+        r"(?:zwischen\w*|alles|alle\s+dateien)\b"
+    ),
+    concat!(
+        r"\b(?:zwischen\w*|alles|alle\s+dateien)\s+(?:\S+\s+){0,1}?",
+        r"(?:behalt\w*|behält|beibehalten|aufbewahren|aufheben)\b"
+    ),
+    // es, fr
+    concat!(
+        r"\b(?:conserv\w*|manten\w*|mantén|deja\w*|gard\w*)\s+(?:\S+\s+){0,2}?",
+        r"(?:intermedi\w*|interm[ée]diaires?|todo|tout|todos\s+los\s+archivos|",
+        r"tous\s+les\s+fichiers)\b"
+    ),
+    // bg
+    r"\b(?:запаз\w*|остав\w*)\s+(?:\S+\s+){0,1}?(?:междинн\w*|всичко)\b",
+    // zh: written without spaces
+    r"保留.{0,2}?(?:中间|所有|全部)",
+    r"(?:全部|都|所有)保留",
+];
+
+/// True when the request asks to keep every step's output ("keep the intermediate files",
+/// "keep everything", "保留中间文件"): the same as `--keep-intermediates`. A negated
+/// English request keeps the default. Port of Python `knaif.scratch.wants_everything_kept`;
+/// contract: `contracts/parity/keep_request_cases.json`.
+pub fn wants_everything_kept(utterance: &str) -> bool {
+    static RES: OnceLock<(Regex, Vec<Regex>)> = OnceLock::new();
+    let (negation, patterns) = RES.get_or_init(|| {
+        (
+            Regex::new(KEEP_NEGATION).expect("keep negation pattern"),
+            KEEP_PATTERNS
+                .iter()
+                .map(|p| Regex::new(p).expect("keep pattern"))
+                .collect(),
+        )
+    });
+    let lower = utterance.to_lowercase();
+    let text = negation.replace_all(&lower, " ");
+    patterns.iter().any(|p| p.is_match(&text))
 }
 
 /// Remove `run-*` folders under `root` last modified before `now - STALE_AFTER_SECS`.
@@ -155,6 +230,224 @@ fn path_key(p: &Path) -> String {
 }
 
 /// The tools whose several inputs become ONE output (`joins_inputs: true` in `tools.yaml`).
+/// Each tool's declared `produces:`, for the keep rule. Mirrors Python
+/// `CommandAgent.route_kinds`.
+pub fn produced_kinds(registry: &crate::registry::Registry) -> HashMap<String, Produces> {
+    registry
+        .iter()
+        .filter_map(|(name, td)| td.produces.clone().map(|p| (name.clone(), p)))
+        .collect()
+}
+
+fn extension_of(path: &str) -> String {
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    match name.rfind('.') {
+        Some(dot) if dot > 0 => name[dot + 1..].to_lowercase(),
+        _ => String::new(),
+    }
+}
+
+/// The kind of file *step* writes: its tool's `produces:`, else its explicit output's.
+/// Port of Python `knaif.agent._written_kind`.
+///
+/// The declaration is the skill's word and the output extension is the model's, so the
+/// declaration decides when both exist (owner, 2026-10-15): `extract_audio` writing
+/// `clip_audio.mp4` still writes audio. A `{arg: name}` declaration reads that argument;
+/// without a usable value, and for a tool declaring nothing, the output's extension decides.
+fn written_kind(
+    step: &Value,
+    file_kinds: &FileKinds,
+    produces: &HashMap<String, Produces>,
+) -> Option<String> {
+    let args = step.get("args");
+    let declared = step
+        .get("tool")
+        .and_then(Value::as_str)
+        .and_then(|tool| produces.get(tool));
+    match declared {
+        Some(Produces::Kind(kind)) => return Some(kind.clone()),
+        Some(Produces::Arg { arg }) => {
+            let value = args
+                .and_then(|a| a.get(arg))
+                .and_then(Value::as_str)
+                .map(|v| v.trim_start_matches('.').to_lowercase())
+                .filter(|v| !v.trim().is_empty());
+            if let Some(kind) = value.and_then(|v| file_kinds.get(v.as_str())) {
+                return Some(kind.clone());
+            }
+        }
+        None => {}
+    }
+    let out = args.and_then(|a| a.get("output")).and_then(Value::as_str)?;
+    let ext = extension_of(out);
+    if ext.is_empty() {
+        return None;
+    }
+    file_kinds.get(&ext).cloned()
+}
+
+/// The extension *step* writes, for the request signal: its explicit output's, else the value
+/// of its `produces: {arg}` argument; `None` when unknown. Port of Python
+/// `knaif.agent._written_extension`.
+fn written_extension(step: &Value, produces: &HashMap<String, Produces>) -> Option<String> {
+    let args = step.get("args");
+    if let Some(out) = args.and_then(|a| a.get("output")).and_then(Value::as_str) {
+        let ext = extension_of(out);
+        if !ext.is_empty() {
+            return Some(ext);
+        }
+    }
+    let tool = step.get("tool").and_then(Value::as_str)?;
+    match produces.get(tool)? {
+        Produces::Arg { arg } => args?
+            .get(arg)?
+            .as_str()
+            .map(|v| v.trim().trim_start_matches('.').to_lowercase())
+            .filter(|v| !v.is_empty()),
+        Produces::Kind(_) => None,
+    }
+}
+
+/// Extensions the request names as bare words: `to mp4`, `as .gif`, or Chinese without spaces
+/// (`转换为mp4`); never the extension inside a filename (`clip.mp4`). Extensions are ASCII in
+/// every language, so this needs no word lists. Port of Python `knaif.agent._named_formats`,
+/// with the boundaries of [`mention_count`]; a leading dot counts when nothing name-like
+/// (a letter, digit or `_` in any script) precedes it.
+pub fn named_formats(utterance: &str, file_kinds: &FileKinds) -> HashSet<String> {
+    file_kinds
+        .keys()
+        .map(|ext| ext.to_lowercase())
+        .filter(|ext| format_mentions(utterance, ext) > 0)
+        .collect()
+}
+
+/// How many times the request names the format `ext` as a word ([`named_formats`]). Port of
+/// Python `knaif.agent._format_mentions`.
+pub fn format_mentions(utterance: &str, ext: &str) -> usize {
+    let u = utterance.to_lowercase();
+    let e = ext.to_lowercase();
+    if e.is_empty() {
+        return 0;
+    }
+    let mut count = 0;
+    let mut i = 0;
+    while i < u.len() {
+        if u[i..].starts_with(&e) {
+            let prev = u[..i].chars().next_back();
+            let bare_ok = prev.is_none_or(|c| !(is_word(c) || c == '.' || c == '-'));
+            let dotted_ok = prev == Some('.')
+                && u[..i - 1]
+                    .chars()
+                    .next_back()
+                    .is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+            let mut after = u[i + e.len()..].chars();
+            let after_ok = match after.next() {
+                Some(c) if is_word(c) || c == '-' => false,
+                Some('.') => !after.next().is_some_and(is_word),
+                _ => true,
+            };
+            if (bare_ok || dotted_ok) && after_ok {
+                count += 1;
+            }
+        }
+        i += u[i..].chars().next().map_or(1, char::len_utf8);
+    }
+    count
+}
+
+fn is_word(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// True when the user asked for *intermediate* although they never named the file. The keep
+/// rule (owner, 2026-10-15): one rule, two deterministic signals, no tool named in core. Port of
+/// Python `knaif.agent._asked_for`.
+///
+/// * **Tool signal:** every reader makes a *new thing* from it: a file of another kind
+///   (`file_kinds`, what a reader writes per [`written_kind`]), or a tool in `derives`
+///   (`tools.yaml` `derives: true`: a piece, a page range, a join). Not when every reader is
+///   in `joining`: pieces made for a join are on the way (owner, 2026-10-20).
+/// * **Request signal:** the user named its format as a bare word ([`named_formats`]), the
+///   format is not the producer's own input extension, and no reader writes that format again.
+///
+/// Otherwise a reader refines it, and it goes to the scratch.
+#[allow(clippy::too_many_arguments)]
+fn asked_for(
+    intermediate: &str,
+    producer: &Value,
+    readers: &[&Value],
+    utterance: &str,
+    file_kinds: &FileKinds,
+    produces: &HashMap<String, Produces>,
+    derives: &HashSet<String>,
+    joining: &HashSet<String>,
+) -> bool {
+    let own_ext = extension_of(intermediate);
+    let own_kind = file_kinds.get(&own_ext);
+    let mut seen = HashSet::new();
+    let readers: Vec<&Value> = readers
+        .iter()
+        .copied()
+        .filter(|s| seen.insert(*s as *const Value)) // a step reading through two args counts once
+        .collect();
+    if readers.is_empty() {
+        return false;
+    }
+    let makes_new_thing = |step: &Value| -> bool {
+        if step
+            .get("tool")
+            .and_then(Value::as_str)
+            .is_some_and(|t| derives.contains(t))
+        {
+            return true;
+        }
+        match (own_kind, written_kind(step, file_kinds, produces)) {
+            (Some(own), Some(kind)) => &kind != own,
+            _ => false,
+        }
+    };
+    let only_joins = readers.iter().all(|s| {
+        s.get("tool")
+            .and_then(Value::as_str)
+            .is_some_and(|t| joining.contains(t))
+    });
+    if !only_joins && readers.iter().all(|s| makes_new_thing(s)) {
+        return true;
+    }
+    if own_ext.is_empty() || !named_formats(utterance, file_kinds).contains(&own_ext) {
+        return false;
+    }
+    let names_the_source = producer
+        .get("args")
+        .and_then(Value::as_object)
+        .is_some_and(|args| {
+            args.iter()
+                .filter(|(k, _)| *k != "output")
+                .any(|(_, v)| match v {
+                    Value::String(s) => extension_of(s) == own_ext,
+                    Value::Array(items) => items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .any(|s| extension_of(s) == own_ext),
+                    _ => false,
+                })
+        });
+    if names_the_source {
+        return false;
+    }
+    readers
+        .iter()
+        .all(|s| written_extension(s, produces).is_some_and(|w| w != own_ext))
+}
+
+pub fn deriving_tools(registry: &crate::registry::Registry) -> HashSet<String> {
+    registry
+        .iter()
+        .filter(|(_, td)| td.derives)
+        .map(|(name, _)| name.clone())
+        .collect()
+}
+
 pub fn joining_tools(registry: &crate::registry::Registry) -> HashSet<String> {
     registry
         .iter()
@@ -205,15 +498,20 @@ fn is_ref(value: &str) -> bool {
 /// An intermediate is a step's `output` that a later step reads. It keeps its name and its place
 /// relative to the user's folder (`videos/x.mp4` -> `work_dir/videos/x.mp4`), so every rendered
 /// argv still compares equal by basename across runtimes. Left where the plan put them: an output
-/// nothing reads later (a deliverable); an output the user named in `utterance`; everything,
-/// when there is no utterance. Returns a new plan. Contract:
+/// nothing reads later (a deliverable); an output the user named in `utterance`; an output the
+/// user asked for without naming it ([`asked_for`], the keep rule); everything, when there is no
+/// utterance. Returns a new plan. Contract:
 /// `contracts/parity/scratch_routing_cases.json`.
+#[allow(clippy::too_many_arguments)]
 pub fn route_intermediates_to_scratch(
     plan: &[Value],
     work_dir: &Path,
     utterance: Option<&str>,
     resolution_dir: &Path,
     joining_tools: &HashSet<String>,
+    file_kinds: &FileKinds,
+    produces: &HashMap<String, Produces>,
+    derives: &HashSet<String>,
 ) -> Vec<Value> {
     let mut plan = plan.to_vec();
     let Some(utterance) = utterance else {
@@ -293,6 +591,21 @@ pub fn route_intermediates_to_scratch(
         if readers.is_empty() {
             continue;
         }
+        // The keep rule: an intermediate the user asked for (every reader makes a new thing
+        // from it, or the user named its format) stays where the plan put it.
+        let reader_steps: Vec<&Value> = readers.iter().map(|(i, _, _)| &plan[*i]).collect();
+        if asked_for(
+            &out,
+            &plan[idx],
+            &reader_steps,
+            utterance,
+            file_kinds,
+            produces,
+            derives,
+            joining_tools,
+        ) {
+            continue;
+        }
 
         let resolved = resolve_real(Path::new(&out), resolution_dir);
         let moved = match resolved.strip_prefix(&base) {
@@ -320,6 +633,23 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    /// A relative `KNAIF_SCRATCH_ROOT` once lost a refined chain's results (Python side,
+    /// in a run-order A/B, 2026-10-20): the root is made absolute against the working folder.
+    #[test]
+    fn a_relative_scratch_root_is_made_absolute() {
+        let cwd = Path::new("/work/here");
+        assert_eq!(
+            scratch_root_from(Some("rel/scratch".into()), cwd),
+            cwd.join("rel/scratch")
+        );
+        let abs = std::env::temp_dir().join("abs");
+        assert_eq!(scratch_root_from(Some(abs.clone().into()), cwd), abs);
+        assert_eq!(
+            scratch_root_from(None, cwd),
+            std::env::temp_dir().join("knaif")
+        );
     }
 
     #[test]
@@ -375,6 +705,33 @@ mod tests {
         std::fs::create_dir_all(root.join("run-fresh")).unwrap();
         assert!(sweep_stale(&root, SystemTime::now()).is_empty());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn named_formats_match_python_boundaries() {
+        let kinds: FileKinds = [
+            ("mp4", "video"),
+            ("gif", "video"),
+            ("mov", "video"),
+            ("mp3", "audio"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let f = |u: &str| {
+            let mut v: Vec<String> = named_formats(u, &kinds).into_iter().collect();
+            v.sort();
+            v
+        };
+        assert_eq!(
+            f("convert clip.mov to mp4 and make a gif preview"),
+            ["gif", "mp4"]
+        );
+        assert!(f("trim clip.mp4 to 5 seconds").is_empty());
+        assert_eq!(f("save it as .gif"), ["gif"]);
+        assert_eq!(f("将clip.mov转换为mp4并制作gif预览"), ["gif", "mp4"]);
+        assert_eq!(f("конвертирай видео.mov в MP4"), ["mp4"]);
+        assert!(f("an mp4-like file and a mp3_x").is_empty());
     }
 
     #[test]

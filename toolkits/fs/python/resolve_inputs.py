@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from knaif.batch_chain import natural_key
 from knaif.handler_api import HandlerContext
 from knaif.tool import Handler
 
@@ -36,12 +37,23 @@ def _in_run_scratch(p: Path, ctx: HandlerContext) -> bool:
     return p.resolve().is_relative_to(Path(work).resolve())
 
 
+def _absolute(raw: str, base: Path) -> Path:
+    p = Path(raw)
+    return p if p.is_absolute() else (base / p).resolve()
+
+
 class ResolveInputs(Handler):
     """Resolve a list of input paths (files, dirs, globs) inside the sandbox.
 
     Returns ``{"count": N, "files": [...]}``. Consumers that receive the result
     via a ``$var`` reference accept either a bare list or this dict form
     (checked with ``isinstance(v, dict) and "files" in v``).
+
+    A folder or a glob comes back in natural order (``clip1``, ``clip2``, ``clip10``), the order
+    a batch runs its files in, so a merge and a batch agree; the entries keep their own order
+    (``contracts/parity/batch_cases.json`.`). ``exclude`` drops a folder's or a glob's match that
+    is one of the given paths: a join passes its own output, which a second run of "merge all the
+    PDFs here" would otherwise read back. A path named on its own is kept.
     """
 
     name = "resolve_inputs"
@@ -55,18 +67,20 @@ class ResolveInputs(Handler):
         # so keeping only media also descended into every nested directory; nothing passed
         # `extensions` while that held, so the coupling was never exercised.
         recursive = bool(args.get("recursive"))
+        base = ctx.sandbox if ctx.sandbox is not None else ctx.root
+        excluded = {_absolute(e, base).resolve() for e in args.get("exclude") or []}
         resolved: list[str] = []
         for raw in raw_paths:
-            p = Path(raw)
-            if not p.is_absolute():
-                base = ctx.sandbox if ctx.sandbox is not None else ctx.root
-                p = (base / p).resolve()
+            p = _absolute(raw, base)
             if not _in_run_scratch(p, ctx):
                 _assert_in_sandbox(p, ctx.sandbox)
             if p.is_dir():
-                iterable = p.rglob("*") if recursive else p.glob("*")
+                iterable = sorted(
+                    p.rglob("*") if recursive else p.glob("*"),
+                    key=lambda c, top=p: natural_key(c.relative_to(top).as_posix()),
+                )
                 for child in iterable:
-                    if child.is_file():
+                    if child.is_file() and child.resolve() not in excluded:
                         if extensions and child.suffix.lstrip(".").lower() not in [
                             e.lower().lstrip(".") for e in extensions
                         ]:
@@ -77,9 +91,9 @@ class ResolveInputs(Handler):
             elif any(c in str(p) for c in ("*", "?", "[")):
                 parent = p.parent
                 if parent.is_dir():
-                    matched = sorted(parent.glob(p.name))
+                    matched = sorted(parent.glob(p.name), key=lambda c: natural_key(c.name))
                     for child in matched:
-                        if child.is_file():
+                        if child.is_file() and child.resolve() not in excluded:
                             if extensions and child.suffix.lstrip(".").lower() not in [
                                 e.lower().lstrip(".") for e in extensions
                             ]:

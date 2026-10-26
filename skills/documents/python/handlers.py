@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from knaif.batch_chain import PlannedSet
 from knaif.known_folders import named_folder
 from knaif.skill_base import Skill
 
@@ -34,6 +35,7 @@ from ._engine import (
     _extract_office_text,
     _extract_text_records,
     _format_for,
+    _free_name,
     _ghostscript_compress,
     _input_path,
     _input_paths,
@@ -82,6 +84,8 @@ from .steps import (
     UnlockPdfStep,
     VerifyOutputStep,
     WatermarkStep,
+    _piece_label,
+    split_specs,
 )
 
 
@@ -116,6 +120,42 @@ def _read_answer(tool: Any, result: dict[str, Any]) -> str | None:
 
 
 class DocumentsSkill(Skill):
+    def planned_outputs(self, tool: str, args: dict[str, Any], ctx: Any) -> Any:
+        """The page files a split will write, when it writes more than one, before it runs.
+
+        Their names are the step's own (`<stem>-pages-<range>.pdf` next to the input, a free name
+        when one is taken, or the `%s` set name core gave it), relative to where paths resolve.
+        An input that cannot be read is no set: the step itself reports it.
+        """
+        if tool not in ("split_pdf", "split_pdf_every"):
+            return None
+        try:
+            input_path = _input_path(args, ctx)
+            specs = split_specs(args, _pdf_page_count(input_path))
+        except Exception:  # noqa: BLE001 - missing, locked or no pages: the step reports it
+            return None
+        if len(specs) < 2:
+            return None
+        base = Path(ctx.sandbox if ctx.sandbox is not None else ctx.root).resolve()
+        source = str(args.get("input") or "").replace("\\", "/")
+        folder = source.rsplit("/", 1)[0] + "/" if "/" in source else ""
+        output = args.get("output")
+        if isinstance(output, str) and "%s" in output:
+            name = output
+            files = [output % _piece_label(label) for label, _ in specs]
+        else:
+            name = f"{folder}{input_path.stem}-pages-%s.pdf"
+            files = []
+            for label, _ in specs:
+                free = _free_name(
+                    input_path.parent / (name.rsplit("/", 1)[-1] % _piece_label(label)), ctx
+                )
+                try:
+                    files.append(free.resolve().relative_to(base).as_posix())
+                except ValueError:
+                    files.append(str(free))
+        return PlannedSet(name, files)
+
     def format_results(
         self, results: list[dict[str, Any]], *, dry_run: bool
     ) -> list[dict[str, str]]:

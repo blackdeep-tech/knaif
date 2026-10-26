@@ -13,6 +13,10 @@ use std::path::{Path, PathBuf};
 
 use knaif_core::sandbox::{assert_in_sandbox, resolve_real};
 
+/// The order a folder or a glob expands in (`clip1`, `clip2`, `clip10`), for a skill that lists
+/// files itself. `knaif_core::batch_chain::natural_key`.
+pub use knaif_core::batch_chain::natural_key;
+
 fn cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_default()
 }
@@ -187,4 +191,104 @@ pub fn user_side_path(path: &Path, work_dir: Option<&Path>, home: Option<&Path>)
         Ok(rel) => home.join(rel),
         Err(_) => path.to_path_buf(),
     }
+}
+
+/// Resolve input paths (files, folders, globs) inside the sandbox: the fs toolkit's
+/// `resolve_inputs`, port of `toolkits/fs/python/resolve_inputs.py`.
+///
+/// A folder or a glob comes back in natural order (`clip1`, `clip2`, `clip10`), the order a batch
+/// runs its files in, so a merge and a batch agree; the entries keep their own order
+/// (`contracts/parity/batch_cases.json`.). `extensions` keeps only those files; `recursive`
+/// descends into a folder's subfolders. `exclude` drops a folder's or a glob's match that is one
+/// of the given paths (a join's own output); a path named on its own is kept, and a path that
+/// does not exist is returned as it is, for the probe to report. Relative paths resolve against
+/// `base`; each must stay inside `sandbox` unless it is in the run scratch (`work_dir`).
+pub fn resolve_inputs(
+    paths: &[String],
+    base: &Path,
+    sandbox: Option<&Path>,
+    work_dir: Option<&Path>,
+    extensions: &[String],
+    recursive: bool,
+    exclude: &[String],
+) -> anyhow::Result<Vec<PathBuf>> {
+    let wanted: Vec<String> = extensions
+        .iter()
+        .map(|e| e.trim_start_matches('.').to_lowercase())
+        .collect();
+    let keep = |p: &Path| {
+        wanted.is_empty()
+            || p.extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| wanted.contains(&x.to_lowercase()))
+    };
+    let excluded: Vec<PathBuf> = exclude
+        .iter()
+        .map(|e| resolve_real(Path::new(e), base))
+        .collect();
+    let fold = |s: &str| {
+        if cfg!(windows) {
+            s.to_lowercase()
+        } else {
+            s.to_string()
+        }
+    };
+    let mut resolved = Vec::new();
+    for raw in paths {
+        let p = resolve_real(Path::new(raw), base);
+        if let (Some(sandbox), false) = (sandbox, within(&p, work_dir)) {
+            assert_in_sandbox(&p, sandbox)?;
+        }
+        if p.is_dir() {
+            let mut children: Vec<(String, PathBuf)> = Vec::new();
+            let mut pending = vec![p.clone()];
+            while let Some(dir) = pending.pop() {
+                for entry in std::fs::read_dir(&dir)?.flatten() {
+                    let child = entry.path();
+                    if child.is_dir() {
+                        if recursive {
+                            pending.push(child);
+                        }
+                        continue;
+                    }
+                    let rel = child
+                        .strip_prefix(&p)
+                        .unwrap_or(&child)
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    children.push((rel, child));
+                }
+            }
+            children.sort_by_key(|(rel, _)| knaif_core::batch_chain::natural_key(rel));
+            for (_, child) in children {
+                if child.is_file() && !excluded.contains(&child) && keep(&child) {
+                    resolved.push(child);
+                }
+            }
+        } else if p.exists() {
+            resolved.push(p);
+        } else if raw.chars().any(|c| matches!(c, '*' | '?' | '[')) {
+            let (Some(parent), Some(pattern)) = (p.parent(), p.file_name()) else {
+                continue;
+            };
+            let pattern = fold(&pattern.to_string_lossy());
+            if !parent.is_dir() {
+                continue;
+            }
+            let mut matched: Vec<(String, PathBuf)> = std::fs::read_dir(parent)?
+                .flatten()
+                .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+                .filter(|(name, _)| knaif_core::batch_chain::fnmatch(&pattern, &fold(name)))
+                .collect();
+            matched.sort_by_key(|(name, _)| knaif_core::batch_chain::natural_key(name));
+            for (_, child) in matched {
+                if child.is_file() && !excluded.contains(&child) && keep(&child) {
+                    resolved.push(child);
+                }
+            }
+        } else {
+            resolved.push(p); // left to the probe to report missing
+        }
+    }
+    Ok(resolved)
 }

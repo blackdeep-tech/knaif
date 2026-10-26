@@ -37,6 +37,18 @@ class HandlerContext:
     effects: frozenset[str] | None = None
     """What the step's tool declares (``knaif.effects``). ``exec`` and ``call_tool`` refuse
     anything outside it; ``None`` (a context built outside the agent) is not restricted."""
+    file_reporter: Callable[[str, str | None], None] | None = None
+    """Where :meth:`file_finished` reports; ``None`` outside the agent, or where the run already
+    reports per file (a step of a chain core runs once per file)."""
+
+    def file_finished(self, file: str, failure: str | None = None) -> None:
+        """Say how one file of a step over many files ended: done (*failure* None) or failed,
+        and why. Core prints a failure as it happens, lets the step's other files count as done,
+        and ends the run with the batch summary. A step over one file is no
+        batch: its report is ignored and its failure takes the usual path. No-op outside the
+        agent."""
+        if self.file_reporter is not None:
+            self.file_reporter(file, failure)
 
     def exec(self, program: str, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
         """Run the external *program* (``argv[0]`` may be its full path): ``subprocess.run``,

@@ -29,6 +29,16 @@ _CONTROL_TOOLS = frozenset(
 )
 
 
+def is_glob_batch(value: Any) -> bool:
+    """Whether *value* is several globs given to a one-path ``input``: one batch, which the
+    per-file lift runs once per file (owner, 2026-10-21)."""
+    return (
+        isinstance(value, list)
+        and len(value) > 1
+        and all(isinstance(v, str) and any(c in v for c in _GLOB_CHARS) for v in value)
+    )
+
+
 def _validate_url_args(tool_name: str, tool_def: ToolDef, args: dict[str, Any]) -> None:
     """A URL may only be an input file, and must be one knaif will download."""
     from .urls import check_url, is_url
@@ -319,10 +329,10 @@ def normalize_plan(
         if wants_scalar and "inputs" in args and "input" not in args:
             raw = args["inputs"]
             if isinstance(raw, list):
-                if len(raw) == 1:
-                    args["input"] = raw[0]
+                if len(raw) == 1 or is_glob_batch(raw):
+                    args["input"] = raw[0] if len(raw) == 1 else raw
                     del args["inputs"]
-                # ≥2 elements: leave for validation to reject
+                # ≥2 files: leave for validation to reject
             elif isinstance(raw, str):
                 args["input"] = raw
                 del args["inputs"]
@@ -494,6 +504,8 @@ def validate_step(
             "it is only reachable through an intent's expansion."
         )
     allowed = set(tool_def.required_args) | set(tool_def.optional_args)
+    if tool_def.batch_output:
+        allowed.add("output")  # where a batch saves it; not listed in the prompt
 
     missing = [k for k in tool_def.required_args if k not in args]
     if missing:
@@ -510,6 +522,8 @@ def validate_step(
 
     for arg_name, value in args.items():
         schema = tool_def.arg_schemas.get(arg_name)
+        if arg_name == "input" and is_glob_batch(value):
+            continue  # a batch of globs: each lifted step gets one file
         if schema is not None:
             try:
                 validate_arg_by_schema(arg_name, value, schema)

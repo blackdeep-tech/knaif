@@ -29,6 +29,19 @@ class Skill:
     def run_artifact(self, cmd: Any, fixture: Any, out_dir: Any) -> Any:
         return None
 
+    def planned_outputs(self, tool: str, args: dict[str, Any], ctx: Any) -> Any:
+        """The files one step will write when its tool writes many from one, else None.
+
+        Returns a :class:`knaif.batch_chain.PlannedSet`: the set's name (what the step's
+        ``output`` becomes once a later step reads the set, e.g. ``clip_%03d.mp4``) and its
+        files, in order, as the step will write them for these *args* (an ``output`` already
+        in the run scratch puts them there). Called before anything runs, with the step's
+        :class:`~knaif.handler_api.HandlerContext` (probe the input through it); asked again
+        after scratch routing. Core runs a later step once per file of the set.
+        Default: no tool writes a set.
+        """
+        return None
+
     def resolve_output_collisions(
         self, plan: list[dict[str, Any]], *, sandbox: Any = None
     ) -> list[dict[str, Any]]:

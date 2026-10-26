@@ -13,7 +13,11 @@ inspect_document:
       path_role: input
 
 extract_text:
-  effects: [exec:tesseract, fs.read]
+  effects: [exec:tesseract, fs.read, fs.write]
+  produces: text   # a PDF it reads is not refined by it, so it stays
+  # Over many files, each file's text is saved as <name>.txt next to it (core gives each lifted
+  # step its `output`); one file's text is printed. The `output` arg is not shown to the model.
+  batch_output: txt
   description: "Read out the text content of a document as per-page records plus joined text. Creates no new file. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf."
   keywords: [extract, extrae, extraer, texto, extrahieren, extraire, texte, извлечь, извлечи, 提取]
   required_args: [input]
@@ -56,6 +60,7 @@ find_in_document:
       type: boolean
 
 merge_pdfs:
+  derives: true   # a join is a new thing; pieces made only for it go to the scratch (keep rule)
   effects: [fs.read, fs.write]
   description: "Merge multiple PDFs into one output PDF."
   keywords: [merge, join, combine, together, stitch, append, combina, combinar, une, unir, fusiona, zusammenführen, verbinde, kombiniere, fusionne, fusionner, combiner, объедини, объединить, обедини, слей, 合并]
@@ -64,6 +69,10 @@ merge_pdfs:
   # run scratch when a later step reads it (contracts/parity/scratch_routing_cases.json).
   joins_inputs: true
   safety_category: destructive
+  # The model often leaves the merged file's name out ("merge them into one"); like
+  # concat_video's combined.mp4. Filled before the missing-arg check, never shown in the prompt.
+  defaults:
+    output: merged.pdf
   mock_args:
     inputs: ["{sandbox}/a.pdf", "{sandbox}/b.pdf"]
     output: "{sandbox}/merged.pdf"
@@ -77,6 +86,7 @@ merge_pdfs:
       path_role: output
 
 split_pdf:
+  derives: true   # a page range is a new thing: its source stays (the keep rule)
   effects: [fs.read, fs.write]
   description: "Copy a subset of pages into a new PDF, leaving the original intact. Use whenever the user wants to keep, extract, pull out, split off, or save specific pages — name the pages they WANT. Do not convert this into a removal of the other pages."
   keywords: [split, divide, dividir, teile, aufteilen, divise, diviser, раздели, разделить, 拆分]
@@ -95,6 +105,35 @@ split_pdf:
       path_role: input
     ranges:
       type: string
+    output:
+      type: string
+      path_role: output
+    output_dir:
+      type: string
+      path_role: output
+
+split_pdf_every:
+  derives: true   # each piece is a new thing: its source stays (the keep rule)
+  effects: [fs.read, fs.write]
+  description: "Split one PDF into a new file every N pages (every: 1 = one PDF per page), leaving the original intact."
+  # Triggered, not ranked: split_pdf is in nearly every documents prompt, so the
+  # many-files split is a tool of its own that joins a prompt only on these words.
+  triggers: [per page, "pdf for every page", "file for every page", "pdf for each page",
+             "file for each page", "single pages", "pdf per page", "file per page", "every # pages", "chunks of # pages", "#-page parts", "#-page chunks",
+             "# pages each", "pro seite", "je # seiten", "jede seite", "за всяка страница",
+             "всяка страница", "по # страници", 每页, "每#页", 逐页]
+  required_args: [input, every]
+  optional_args: [output, output_dir]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    every: 1
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    every:
+      type: integer
     output:
       type: string
       path_role: output
@@ -271,6 +310,7 @@ unlock_pdf:
 
 convert_document:
   effects: [exec:soffice, fs.read, fs.write]
+  produces: {arg: to_format}   # the kind of the format asked for (txt -> text, pdf -> document)
   description: "Convert or save a document as a different format (e.g. txt→md, docx→pdf)."
   keywords: [convert, export, markdown, transform, pdf, docx, "as a pdf", "save as", office]
   required_args: [input, to_format]

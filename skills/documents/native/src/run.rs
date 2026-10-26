@@ -40,6 +40,7 @@ pub fn is_supported(tool: &str) -> bool {
             | "find_in_document"
             | "merge_pdfs"
             | "split_pdf"
+            | "split_pdf_every"
             | "rotate_pages"
             | "remove_pages"
             | "reorder_pages"
@@ -105,14 +106,31 @@ pub fn preview_in(
         }
         "extract_text" => {
             let input = input_path(args, &p)?;
-            let records = text::extract_text(&input, str_arg(args, "pages").as_deref())?;
+            // `output` comes only from core, when it repeats this step over many files
+            // (tools.yaml `batch_output: txt`): the text is saved, not printed.
+            if let Some(out) = out_arg(args, &p, "output")? {
+                p.check(&out)?;
+                return Ok(Preview::Write {
+                    outputs: vec![out],
+                    summary: "save the text".into(),
+                });
+            }
+            let records = text::extract_text_with(
+                &input,
+                str_arg(args, "pages").as_deref(),
+                bool_arg(args, "ocr").unwrap_or(false),
+            )?;
             Ok(Preview::Read(ReadResult::Text(records)))
         }
         "find_in_document" => {
             let input = input_path(args, &p)?;
             let query = str_arg(args, "query")
                 .ok_or_else(|| anyhow::anyhow!("find_in_document requires 'query'"))?;
-            let records = text::extract_text(&input, str_arg(args, "pages").as_deref())?;
+            let records = text::extract_text_with(
+                &input,
+                str_arg(args, "pages").as_deref(),
+                bool_arg(args, "ocr").unwrap_or(false),
+            )?;
             let matches = text::find(
                 &records,
                 &query,
@@ -182,10 +200,24 @@ pub fn commit_in(
         work: work_dir,
     };
     match tool {
+        "extract_text" => {
+            let input = input_path(args, &p)?;
+            let output = out_arg(args, &p, "output")?
+                .ok_or_else(|| anyhow::anyhow!("extract_text writes a file only with 'output'"))?;
+            let records = text::extract_text_with(
+                &input,
+                str_arg(args, "pages").as_deref(),
+                bool_arg(args, "ocr").unwrap_or(false),
+            )?;
+            let joined: Vec<&str> = records.iter().map(|r| r.text.as_str()).collect();
+            let text = joined.join("\n");
+            write_with(&p, &output, |target| Ok(std::fs::write(target, &text)?))?;
+            Ok(vec![output])
+        }
         "merge_pdfs" => {
-            let inputs = input_paths(args, &p)?;
             let output = out_arg(args, &p, "output")?
                 .ok_or_else(|| anyhow::anyhow!("merge_pdfs requires 'output'"))?;
+            let inputs = merge_inputs(args, &p, &output)?;
             let docs = inputs
                 .iter()
                 .map(|p| pdf::load_unlocked(p))
@@ -226,11 +258,11 @@ pub fn commit_in(
             write(&p, &mut doc, &out)?;
             Ok(vec![out])
         }
-        "split_pdf" => {
+        "split_pdf" | "split_pdf_every" => {
             let input = input_path(args, &p)?;
             let doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
-            let specs = pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)?;
+            let specs = split_specs(args, total)?;
             let outputs = split_outputs(&p, &input, args, &specs)?;
             let mut parts = pdf::split(&doc, &specs)?;
             for (part, out) in parts.iter_mut().zip(&outputs) {
@@ -337,9 +369,9 @@ fn write_outputs(
 ) -> anyhow::Result<(Vec<PathBuf>, String)> {
     match tool {
         "merge_pdfs" => {
-            let inputs = input_paths(args, p)?;
             let output = out_arg(args, p, "output")?
                 .ok_or_else(|| anyhow::anyhow!("merge_pdfs requires 'output'"))?;
+            let inputs = merge_inputs(args, p, &output)?;
             Ok((vec![output], format!("merge {} file(s)", inputs.len())))
         }
         "rotate_pages" => {
@@ -378,11 +410,16 @@ fn write_outputs(
             p.check(&out)?;
             Ok((vec![out], "reorder pages".into()))
         }
-        "split_pdf" => {
+        "split_pdf" | "split_pdf_every" => {
             let input = input_path(args, p)?;
+            // A chain's input that an earlier step has yet to write has no pages to count, so
+            // the split is checked when run, as remove_pages and reorder_pages are.
+            if !input.exists() {
+                return Ok((Vec::new(), "split".into()));
+            }
             let doc = pdf::load_unlocked(&input)?;
             let total = pdf::page_count(&doc) as i64;
-            let specs = pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)?;
+            let specs = split_specs(args, total)?;
             let outputs = split_outputs(p, &input, args, &specs)?;
             Ok((outputs, format!("split into {} file(s)", specs.len())))
         }
@@ -461,12 +498,107 @@ fn reorder_sequence(raw: &str, total: i64) -> anyhow::Result<Vec<i64>> {
 
 /// Compute split output paths (port of `SplitPdfStep`): a single explicit `output` only when one
 /// spec; else `<stem>-pages-<label>.pdf` in `output_dir` (default: the input's directory).
+/// The page files a split will write, when it writes more than one, before it runs: the set's
+/// name and its files, relative to where paths resolve (`base`). Their names are the step's own
+/// (`<stem>-pages-<range>.pdf` next to the input, a free name when one is taken, or the `%s` set
+/// name core gave it). An input that cannot be read is no set: the step itself reports it. Port
+/// of Python `DocumentsSkill.planned_outputs`.
+pub fn planned_set(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    base: &Path,
+    sandbox: Option<&Path>,
+) -> Option<(String, Vec<String>)> {
+    if !matches!(tool, "split_pdf" | "split_pdf_every") {
+        return None;
+    }
+    let p = Paths {
+        base,
+        sandbox,
+        work: None,
+    };
+    let input = input_path(args, &p).ok()?;
+    let doc = pdf::load_unlocked(&input).ok()?;
+    let specs = split_specs(args, pdf::page_count(&doc) as i64).ok()?;
+    if specs.len() < 2 {
+        return None;
+    }
+    let source = str_arg(args, "input")
+        .unwrap_or_default()
+        .replace('\\', "/");
+    let folder = source
+        .rsplit_once('/')
+        .map(|(f, _)| format!("{f}/"))
+        .unwrap_or_default();
+    let label = |l: &str| l.replace('-', "_");
+    if let Some(pattern) = str_arg(args, "output").filter(|o| o.contains("%s")) {
+        let files = specs
+            .iter()
+            .map(|(l, _)| pattern.replacen("%s", &label(l), 1))
+            .collect();
+        return Some((pattern, files));
+    }
+    let stem = input.file_stem()?.to_string_lossy().into_owned();
+    let name = format!("{folder}{stem}-pages-%s.pdf");
+    let root = std::fs::canonicalize(base).unwrap_or_else(|_| base.to_path_buf());
+    let parent = input.parent().unwrap_or(Path::new("."));
+    let files = specs
+        .iter()
+        .map(|(l, _)| {
+            let free = free_name(&parent.join(format!("{stem}-pages-{}.pdf", label(l))));
+            let real = std::fs::canonicalize(free.parent().unwrap_or(Path::new(".")))
+                .map(|d| d.join(free.file_name().unwrap_or_default()))
+                .unwrap_or_else(|_| free.clone());
+            match real.strip_prefix(&root) {
+                Ok(rel) => rel.to_string_lossy().replace('\\', "/"),
+                Err(_) => free.to_string_lossy().into_owned(),
+            }
+        })
+        .collect();
+    Some((name, files))
+}
+
+/// The page ranges a split writes: `ranges` as given, or one every `every` pages
+/// (`split_pdf_every`). Port of Python `split_specs`.
+fn split_specs(
+    args: &serde_json::Map<String, Value>,
+    total: i64,
+) -> anyhow::Result<Vec<(String, Vec<i64>)>> {
+    if let Some(n) = int_arg(args, "every").filter(|n| *n != 0) {
+        if n < 1 {
+            anyhow::bail!("`every` must be at least 1 page.");
+        }
+        let raw: Vec<String> = (1..=total)
+            .step_by(n as usize)
+            .map(|a| {
+                let b = (a + n - 1).min(total);
+                if b > a {
+                    format!("{a}-{b}")
+                } else {
+                    format!("{a}")
+                }
+            })
+            .collect();
+        return pdf::parse_page_range_specs(&raw.join(","), total);
+    }
+    pdf::parse_page_range_specs(&require_str(args, "ranges")?, total)
+}
+
 fn split_outputs(
     p: &Paths,
     input: &Path,
     args: &serde_json::Map<String, Value>,
     specs: &[(String, Vec<i64>)],
 ) -> anyhow::Result<Vec<PathBuf>> {
+    // An output with `%s` names every piece (the set name core gives a split a later step reads):
+    // `part_%s.pdf` -> `part_1.pdf`, `part_2_3.pdf`.
+    if let Some(pattern) = str_arg(args, "output").filter(|o| o.contains("%s")) {
+        let outputs = specs
+            .iter()
+            .map(|(label, _)| p.resolve(&pattern.replacen("%s", &label.replace('-', "_"), 1)))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        return Ok(outputs);
+    }
     let outputs = if specs.len() == 1 {
         if let Some(out) = out_arg(args, p, "output")? {
             vec![out]
@@ -590,6 +722,44 @@ fn input_paths(args: &serde_json::Map<String, Value>, p: &Paths) -> anyhow::Resu
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("each of 'inputs' must be a string"))?;
         out.push(p.resolve(raw)?);
+    }
+    Ok(out)
+}
+
+/// The PDFs a merge reads, in order: a named file as given, a glob or a folder expanded by the fs
+/// toolkit's `resolve_inputs` (natural order, PDFs only), like `concat_video`. A pattern never
+/// matches the output itself: "merge all the PDFs here" run twice would read its own earlier
+/// result. Port of Python `_merge_inputs`.
+fn merge_inputs(
+    args: &serde_json::Map<String, Value>,
+    p: &Paths,
+    output: &Path,
+) -> anyhow::Result<Vec<PathBuf>> {
+    let raws: Vec<String> = args
+        .get("inputs")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for (raw, path) in raws.iter().zip(input_paths(args, p)?) {
+        if path.is_dir() || raw.chars().any(|c| matches!(c, '*' | '?' | '[')) {
+            out.extend(knaif_toolkit_fs::resolve_inputs(
+                &[path.to_string_lossy().into_owned()],
+                p.base,
+                p.sandbox,
+                p.work,
+                &["pdf".to_string()],
+                false,
+                &[output.to_string_lossy().into_owned()],
+            )?);
+        } else {
+            out.push(path);
+        }
     }
     Ok(out)
 }
@@ -774,6 +944,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // Like remove_pages and reorder_pages: a split of a file an earlier step has yet to write
+    // ("merge a.pdf and b.pdf, then keep pages 1-2", documents_hard2_005) has no pages to count
+    // in the preview, so it is checked when it runs. Python: test_dry_run_chain.py.
+    #[test]
+    fn split_preview_waits_for_a_file_an_earlier_step_creates() {
+        let dir = tmpdir();
+        for (tool, extra) in [
+            ("split_pdf", serde_json::json!({"ranges": "1-2"})),
+            ("split_pdf_every", serde_json::json!({"every": 1})),
+        ] {
+            let mut a = args(serde_json::json!({"input": "merged.pdf"}));
+            a.extend(extra.as_object().unwrap().clone());
+            match preview(tool, &a, &dir, Some(&dir), &docs_bundle()).unwrap() {
+                Preview::Write { outputs, .. } => assert!(outputs.is_empty(), "{tool}"),
+                Preview::Read(_) => panic!("{tool} is a write op"),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // Port of skills/documents/python/tests/test_output_never_overwrites.py. The 2026-09-24 L4 run
     // found both runtimes writing a default output name over a file that already existed.
     #[test]
@@ -912,6 +1102,75 @@ mod tests {
             Preview::Read(ReadResult::Inspection(i)) => assert_eq!(i.pages, 3),
             _ => panic!("inspect should be a read"),
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_merge_expands_a_pattern_or_folder_in_natural_order() {
+        // "merge all the PDFs here into one", a second time: PDFs only, part1/part2/part10, and
+        // the first run's all.pdf is not read back (Python `_merge_inputs`).
+        let dir = tmpdir();
+        std::fs::create_dir_all(dir.join("pdfs")).unwrap();
+        for name in [
+            "part10.pdf",
+            "part2.pdf",
+            "part1.pdf",
+            "all.pdf",
+            "pdfs/b.pdf",
+            "pdfs/a.pdf",
+        ] {
+            std::fs::write(dir.join(name), make_pdf(1)).unwrap();
+        }
+        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+        let p = Paths {
+            base: &dir,
+            sandbox: Some(&dir),
+            work: None,
+        };
+        let names = |a: serde_json::Value| -> Vec<String> {
+            let a = args(a);
+            let output = out_arg(&a, &p, "output").unwrap().unwrap();
+            merge_inputs(&a, &p, &output)
+                .unwrap()
+                .iter()
+                .map(|f| f.file_name().unwrap().to_string_lossy().into_owned())
+                .collect()
+        };
+        assert_eq!(
+            names(serde_json::json!({"inputs": ["*"], "output": "all.pdf"})),
+            ["part1.pdf", "part2.pdf", "part10.pdf"]
+        );
+        assert_eq!(
+            names(serde_json::json!({"inputs": ["cover.pdf", "pdfs/"], "output": "all.pdf"})),
+            ["cover.pdf", "a.pdf", "b.pdf"],
+            "a named file stays as given, a folder expands"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn extract_text_with_an_output_saves_the_text() {
+        // A batch saves each file's text (`batch_output: txt`): core gives the lifted step its
+        // `output`, the step writes the pages' text joined by newlines, as Python does.
+        let dir = tmpdir();
+        std::fs::write(
+            dir.join("a.pdf"),
+            crate::pdf::test_support::make_text_pdf(&["Alpha", "Beta"]),
+        )
+        .unwrap();
+        let a = args(serde_json::json!({"input": "a.pdf", "output": "a.txt"}));
+        match preview("extract_text", &a, &dir, Some(&dir), &docs_bundle()).unwrap() {
+            Preview::Write { outputs, .. } => assert_eq!(outputs, vec![dir.join("a.txt")]),
+            _ => panic!("extract_text with an output is a write"),
+        }
+        let written = commit("extract_text", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
+        assert_eq!(written, vec![dir.join("a.txt")]);
+        let records = text::extract_text(&dir.join("a.pdf"), None).unwrap();
+        let joined: Vec<&str> = records.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(
+            std::fs::read_to_string(dir.join("a.txt")).unwrap(),
+            joined.join("\n")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

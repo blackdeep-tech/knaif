@@ -1,0 +1,589 @@
+{
+  "_comment": "One file into many, rendered. A fixed plan of split_video, extract_frames or create_thumbnail at several times, the ffmpeg argv out, one command per piece; recorded from Python (dry run, the fixture folder holds no files, so both runtimes plan from the placeholder probe: 60 s at 30 fps). Same canonicalization as expansion_cases.json. Consumed by python/core/tests/test_pieces_expansion_parity.py and skills/ffmpeg/native/tests/pieces_expansion_parity.rs.",
+  "sandbox": "contracts/parity/fixtures/ffmpeg",
+  "cases": [
+    {
+      "name": "split_every_20_seconds",
+      "plan": {
+        "plan": [
+          {
+            "tool": "split_video",
+            "args": {
+              "input": "clip.mp4",
+              "every": "20s"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "0",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "20",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_001.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "20",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "20",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_002.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "40",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "20",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "clip_003.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "split_into_parts_with_a_plain_output",
+      "plan": {
+        "plan": [
+          {
+            "tool": "split_video",
+            "args": {
+              "input": "clip.mp4",
+              "parts": 4,
+              "output": "part.mp4"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "0",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "15",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "part_001.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "15",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "15",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "part_002.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "30",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "15",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "part_003.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "45",
+          "-i",
+          "clip.mp4",
+          "-t",
+          "15",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          "part_004.mp4"
+        ]
+      ]
+    },
+    {
+      "name": "split_with_a_sequence_pattern",
+      "plan": {
+        "plan": [
+          {
+            "tool": "split_video",
+            "args": {
+              "input": "clip.mov",
+              "every": "25",
+              "output": "piece_%02d.mov"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "0",
+          "-i",
+          "clip.mov",
+          "-t",
+          "25",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "piece_01.mov"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "25",
+          "-i",
+          "clip.mov",
+          "-t",
+          "25",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "piece_02.mov"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-ss",
+          "50",
+          "-i",
+          "clip.mov",
+          "-t",
+          "10",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "23",
+          "-preset",
+          "medium",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "piece_03.mov"
+        ]
+      ]
+    },
+    {
+      "name": "frames_every_15_seconds",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_frames",
+            "args": {
+              "input": "clip.mp4",
+              "every": "15s"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "0",
+          "-vframes",
+          "1",
+          "clip_frame_001.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "15",
+          "-vframes",
+          "1",
+          "clip_frame_002.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "30",
+          "-vframes",
+          "1",
+          "clip_frame_003.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "45",
+          "-vframes",
+          "1",
+          "clip_frame_004.jpg"
+        ]
+      ]
+    },
+    {
+      "name": "frames_spread_across",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_frames",
+            "args": {
+              "input": "clip.mp4",
+              "count": 3
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "10",
+          "-vframes",
+          "1",
+          "clip_frame_001.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "30",
+          "-vframes",
+          "1",
+          "clip_frame_002.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "50",
+          "-vframes",
+          "1",
+          "clip_frame_003.jpg"
+        ]
+      ]
+    },
+    {
+      "name": "every_nth_frame",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_frames",
+            "args": {
+              "input": "clip.mp4",
+              "every_nth": 450,
+              "image_format": "png"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "0",
+          "-vframes",
+          "1",
+          "clip_frame_001.png"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "15",
+          "-vframes",
+          "1",
+          "clip_frame_002.png"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "30",
+          "-vframes",
+          "1",
+          "clip_frame_003.png"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "45",
+          "-vframes",
+          "1",
+          "clip_frame_004.png"
+        ]
+      ]
+    },
+    {
+      "name": "thumbnails_at_several_times",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "clip.mp4",
+              "at_time": [
+                "00:00:05",
+                "00:00:30",
+                "00:01:10"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:05",
+          "-vframes",
+          "1",
+          "clip_thumb_001.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:30",
+          "-vframes",
+          "1",
+          "clip_thumb_002.jpg"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:01:10",
+          "-vframes",
+          "1",
+          "clip_thumb_003.jpg"
+        ]
+      ]
+    },
+    {
+      "name": "thumbnails_at_times_in_one_string",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "clip.mp4",
+              "at_time": "00:00:05, 00:00:20",
+              "output": "still.png"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:05",
+          "-vframes",
+          "1",
+          "still_001.png"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:20",
+          "-vframes",
+          "1",
+          "still_002.png"
+        ]
+      ]
+    },
+    {
+      "name": "one_thumbnail_is_one_command",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "clip.mp4",
+              "at_time": "00:00:05"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "clip.mp4",
+          "-ss",
+          "00:00:05",
+          "-vframes",
+          "1",
+          "clip_thumb.jpg"
+        ]
+      ]
+    }
+  ]
+}

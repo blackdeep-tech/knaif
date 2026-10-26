@@ -26,12 +26,14 @@ See `docs/plans/2026-09-10-skill-quality-lifecycle.md` (L4d).
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
 from knaif.evaluator import compute_metrics
 
 from .corpus import CorpusRow
+from .folder_rows import grade_folder
 from .outcomes import POLICY_VERSION, is_capability_gap
 from .protocols import Verifier, VerifyResult
 from .runner import AgentOutput
@@ -199,6 +201,34 @@ def _intent_result(output: AgentOutput, row: CorpusRow) -> dict[str, Any]:
     }
 
 
+def _grade_folder_row(
+    output: AgentOutput, row: CorpusRow, verifier: Verifier, sandbox_dir: Path
+) -> VerifyResult:
+    """Grade a folder row on its folder, each produced file through the skill's *verifier*.
+
+    The verifier sees the real output with only its artifact swapped for one file, so a check
+    that reads the plan or the execution results still finds them.
+    """
+
+    def check(path: Path, criteria: dict[str, Any]) -> VerifyResult:
+        one = dataclasses.replace(
+            output, artifact=None, artifact_path=path, artifact_paths=[path], artifact_commands=[]
+        )
+        return verifier(one, criteria, sandbox_dir)  # type: ignore[call-arg, arg-type]
+
+    assert output.folder_dir is not None and output.fixture_path is not None
+    try:
+        return grade_folder(
+            row,
+            output.folder_dir,
+            output.fixture_path,
+            check,
+            failures=getattr(output, "batch_failures", None),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return VerifyResult(score=0.0, failed=[str(exc)], verifier_kind="folder")
+
+
 def score_corpus(
     outputs: list[AgentOutput],
     corpus: list[CorpusRow],
@@ -235,8 +265,16 @@ def score_corpus(
         knaif_result: VerifyResult | None = None
         row_outputs = getattr(row, "outputs", None)
         grade_outputs = verifiers.get("grade_outputs")
+        folder_dir = getattr(output, "folder_dir", None)
         if output.outcome == "plan":
-            if row_outputs and grade_outputs and verifier_name in _EXECUTING_VERIFIERS:
+            if (
+                folder_dir is not None
+                and row.is_folder_row
+                and verifier is not None
+                and verifier_name in _EXECUTING_VERIFIERS
+            ):
+                knaif_result = _grade_folder_row(output, row, verifier, sandbox_dir)
+            elif row_outputs and grade_outputs and verifier_name in _EXECUTING_VERIFIERS:
                 try:
                     knaif_result = grade_outputs(output.artifact_paths, row_outputs, sandbox_dir)  # type: ignore[call-arg, arg-type]
                 except Exception as exc:  # noqa: BLE001
@@ -268,6 +306,7 @@ def score_corpus(
                 "error": output.error,
                 "artifact": output.artifact,
                 "plan": output.plan,
+                "model_plan": getattr(output, "model_plan", None),
                 "alert": bool(getattr(output, "alert", False)),
                 "expected_alert": row.expected_alert,
                 "knaif_score": knaif_result.score if knaif_result else None,
@@ -426,6 +465,7 @@ def score_corpus_output_diff(
                 "artifact": output.artifact,
                 "artifact_path": str(output.artifact_path) if output.artifact_path else None,
                 "plan": output.plan,
+                "model_plan": getattr(output, "model_plan", None),
                 "alert": bool(getattr(output, "alert", False)),
                 "expected_alert": row.expected_alert,
                 "knaif_score": knaif_result.score if knaif_result else None,

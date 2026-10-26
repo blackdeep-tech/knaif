@@ -88,6 +88,11 @@ file_kinds:
   image: [jpg, jpeg, png, bmp, webp, tif, tiff]
   subtitle: [srt, vtt, ass]
 
+# Kinds whose batch glob covers the whole kind: in a request for many files that names no
+# extension, "every video here" written as `*.mp4` also reads the .mov and .mkv files beside it
+# (owner, 2026-10-21; knaif.batch_chain.widen_kind_globs).
+batch_kinds: [video]
+
 arg_value_sets:
   platform:
     [whatsapp, email, web, youtube, instagram_reels, tiktok, archive]

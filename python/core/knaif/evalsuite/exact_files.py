@@ -57,13 +57,22 @@ def _norm(path: str | Path, root: Path | None = None) -> Path:
 
 
 def deliverables(
-    results: list[dict[str, Any]], utterance: str, root: Path | None = None
+    results: list[dict[str, Any]],
+    utterance: str,
+    root: Path | None = None,
+    *,
+    routed: bool = False,
 ) -> set[Path]:
     """The outputs a run delivered: produced successfully and not consumed later, or named.
 
     Reads the handler results' ``outputs`` lists (``{input, output, returncode}`` per item, the
     shape every file-producing ffmpeg step returns). A ``preview_output`` is never a
     deliverable. A relative path resolves against *root*, the folder the run worked in.
+
+    *routed*: the skill routes intermediates (``scratch_intermediates:``), so the run moved every
+    one it did not keep to its scratch, and a consumed output the results place under *root* is
+    one the agent kept on purpose (its keep rule, owner 2026-10-15). One it meant for the scratch
+    that still lands in the folder stays a leftover.
     """
     produced: list[tuple[int, Path]] = []
     consumed: list[tuple[int, Path]] = []
@@ -94,10 +103,12 @@ def deliverables(
                 for raw_out in [*_paths(result.get("output")), *_paths(result.get("outputs"))]:
                     produced.append((idx, _norm(raw_out, root)))
 
+    here = _norm(root) if routed and root is not None else None
     delivered: set[Path] = set()
     for idx, out in produced:
         used_later = any(c_idx > idx and c == out for c_idx, c in consumed)
-        if not used_later or _mentioned(out.name, utterance):
+        kept = here is not None and out.is_relative_to(here)
+        if not used_later or kept or _mentioned(out.name, utterance):
             delivered.add(out)
     return delivered
 
@@ -237,7 +248,10 @@ def replay_row(
         said = first.get("args") or {}
         reason = said.get("question") or said.get("reason") or said.get("prompt") or first
         error = f"the replay stopped before running: {reason}"
-    return _report(deliverables(results, utterance, root=row_dir), row_dir, inputs, error)
+    routed = getattr(agent, "scratch_intermediates", False) is True
+    return _report(
+        deliverables(results, utterance, root=row_dir, routed=routed), row_dir, inputs, error
+    )
 
 
 def _report(
@@ -316,6 +330,9 @@ def native_results(stdout: str, stderr: str, row_dir: Path) -> list[dict[str, An
 
 #: Line prefix of the plan the binary dumps under `KNAIF_DUMP_PLAN` (planned, before routing).
 PLAN_DUMP_MARKER = "===KNAIF-PLAN==="
+#: Line prefix of the plan the binary runs when a batch was lifted: one step per
+#: file, which the `step N of M:` headers count. Read in place of the model's plan.
+RUN_PLAN_DUMP_MARKER = "===KNAIF-RUN-PLAN==="
 
 
 def _native_documents_results(stdout: str, stderr: str) -> list[dict[str, Any]]:
@@ -327,10 +344,16 @@ def _native_documents_results(stdout: str, stderr: str) -> list[dict[str, Any]]:
     import re
 
     steps: list[dict[str, Any]] = []
+    lifted = False
     for line in stderr.splitlines():
-        if line.startswith(PLAN_DUMP_MARKER):
-            payload = json.loads(line[len(PLAN_DUMP_MARKER) :])
-            steps = [s for s in payload.get("plan") or [] if isinstance(s, dict)]
+        marker = next(
+            (m for m in (RUN_PLAN_DUMP_MARKER, PLAN_DUMP_MARKER) if line.startswith(m)), None
+        )
+        if marker is None or (lifted and marker == PLAN_DUMP_MARKER):
+            continue
+        payload = json.loads(line[len(marker) :])
+        steps = [s for s in payload.get("plan") or [] if isinstance(s, dict)]
+        lifted = lifted or marker == RUN_PLAN_DUMP_MARKER
     if not steps:
         return []
     header = re.compile(r"^step (\d+) of \d+:$")
@@ -354,6 +377,16 @@ def _native_documents_results(stdout: str, stderr: str) -> list[dict[str, Any]]:
     ]
 
 
+def native_error_excerpt(returncode: int, stderr: str, stdout: str) -> str:
+    """``exit N: <the binary's last lines>``, its plan and argv dumps left out: they carry
+    absolute run-scratch paths (a home folder) and are not the error."""
+    markers = (PLAN_DUMP_MARKER, RUN_PLAN_DUMP_MARKER, ARGV_DUMP_MARKER)
+    text = "\n".join(
+        line for line in (stderr or stdout).splitlines() if not line.startswith(markers)
+    )
+    return f"exit {returncode}: {text.strip()[-300:]}"
+
+
 def replay_row_native(
     binary: Path,
     skill: str,
@@ -364,13 +397,15 @@ def replay_row_native(
     *,
     timeout: int = 600,
     alert: bool = False,
+    routed: bool = False,
 ) -> dict[str, Any]:
     """:func:`replay_row` for the native runtime: the real binary, no model.
 
     The mock backend returns `$KNAIF_LLM_MOCK_RESPONSE` verbatim, so the recorded plan goes in
     as the "model output" and the binary runs everything after inference for real, exactly as
     the eval lane invokes it (`run <skill> --yes --overwrite -- <utterance>`, cwd = the row).
-    *alert*, the known folders and the sink are as in :func:`replay_row`.
+    *alert*, the known folders and the sink are as in :func:`replay_row`; *routed* is the
+    skill's ``scratch_intermediates:`` (:func:`deliverables`).
     """
     import json
     import os
@@ -411,8 +446,10 @@ def replay_row_native(
         )
         stdout, stderr = proc.stdout, proc.stderr
         if proc.returncode != 0:
-            error = f"exit {proc.returncode}: {(stderr or stdout).strip()[-300:]}"
+            error = native_error_excerpt(proc.returncode, stderr, stdout)
     except subprocess.TimeoutExpired:
         stdout, stderr, error = "", "", f"timeout after {timeout}s"
-    delivered = deliverables(native_results(stdout, stderr, row_dir), utterance, root=row_dir)
+    delivered = deliverables(
+        native_results(stdout, stderr, row_dir), utterance, root=row_dir, routed=routed
+    )
     return _report(delivered, row_dir, inputs, error)

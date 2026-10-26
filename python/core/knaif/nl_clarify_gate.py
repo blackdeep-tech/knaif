@@ -47,8 +47,91 @@ _BATCH_SIGNALS = frozenset(
         "lote",
         "stapel",
         "lot",
+        # The corpora's languages (de, es, fr), each and folder
+        "jede",
+        "jeder",
+        "jedes",
+        "jeden",
+        "jedem",
+        "ordner",
+        "verzeichnis",
+        "cada",
+        "carpeta",
+        "chaque",
+        "dossier",
+        "tous",
     }
 )
+
+#: Batch words outside ASCII, matched as whole Unicode words (bg: all, each, in a batch, folder).
+#: Kept apart from `_BATCH_SIGNALS` so English matching stays the `[a-z]+` runs it always was.
+_BATCH_SIGNALS_UNICODE = frozenset(
+    {
+        "всички",
+        "всичките",
+        "всеки",
+        "всяко",
+        "всяка",
+        "пакетно",
+        "папка",
+        "папката",
+        "директория",
+        "директорията",
+    }
+)
+
+#: Chinese batch words, matched as substrings (no spaces between words): all, each, in a batch,
+#: folder, the whole lot.
+_BATCH_SIGNALS_CJK = ("所有", "每个", "每個", "批量", "文件夹", "資料夾", "全部")
+
+#: Plural file words: a request for many files without a batch word ("convert the .mov videos
+#: here"). They let a glob through, and nothing else: an invented name still asks.
+_PLURAL_FILE_WORDS = frozenset(
+    {
+        "videos",
+        "clips",
+        "files",
+        "movies",
+        "recordings",
+        "songs",
+        "tracks",
+        "images",
+        "photos",
+        "pictures",
+        "documents",
+        "pdfs",
+        "mp4s",
+        "movs",
+        "mkvs",
+        "mp3s",
+        "wavs",
+        "gifs",
+        "jpgs",
+        "pngs",
+        "dateien",
+        "bilder",
+        "dokumente",
+        "archivos",
+        "fichiers",
+    }
+)
+_PLURAL_FILE_WORDS_UNICODE = frozenset(
+    {
+        "vídeos",
+        "vidéos",
+        "видеа",
+        "видеата",
+        "файлове",
+        "файловете",
+        "клипове",
+        "клиповете",
+        "снимки",
+        "снимките",
+        "документи",
+        "документите",
+    }
+)
+_PLURAL_FILE_WORDS_CJK = ("这些", "這些")
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,8 +153,62 @@ def _has_qualifier_words(token: str) -> bool:
 
 
 def _is_batch_utterance(utterance: str) -> bool:
-    words = set(re.findall(r"[a-z]+", utterance.lower()))
-    return bool(words & _BATCH_SIGNALS)
+    low = utterance.lower()
+    return (
+        bool(set(re.findall(r"[a-z]+", low)) & _BATCH_SIGNALS)
+        or bool(set(re.findall(r"\w+", low)) & _BATCH_SIGNALS_UNICODE)
+        or any(w in low for w in _BATCH_SIGNALS_CJK)
+    )
+
+
+def _asks_for_many(utterance: str, glob: str) -> bool:
+    """Whether a request without a batch word still asks for many files: a plural file word,
+    or the glob written in the request itself (``convert *.mov to mp4``)."""
+    low = utterance.lower()
+    return (
+        glob.lower() in low
+        or bool(set(re.findall(r"[a-z0-9]+", low)) & _PLURAL_FILE_WORDS)
+        or bool(set(re.findall(r"\w+", low)) & _PLURAL_FILE_WORDS_UNICODE)
+        or any(w in low for w in _PLURAL_FILE_WORDS_CJK)
+    )
+
+
+_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+# No `\b` around it: a CJK character is a word character, so "把report.pdf拆分" has none.
+_NAMED_FILE_RE = re.compile(r"[\w-]+\.([a-z0-9]{2,5})(?:[^a-z0-9]|$)", re.IGNORECASE)
+_LETTER_RE = re.compile(r"[a-z]", re.IGNORECASE)
+
+
+def _names_a_file(text: str) -> bool:
+    """A name with an extension holding a letter (``clip.mp4``, ``x.3gp``); a codec or a number
+    (``H.264``, ``1.25``) names no file."""
+    return any(_LETTER_RE.search(m.group(1)) for m in _NAMED_FILE_RE.finditer(text))
+
+
+def asks_for_many_files(utterance: str) -> bool:
+    """Whether *utterance* asks for many files: a batch word, a plural file word, or a glob
+    written in it. The clarify gate's own test, shared with the prompt: the per-file batch rule
+    and its examples join only such a prompt (owner, 2026-10-20). What names a place
+    is left out first: a URL (its host can read ``files.``), and, when the request names a file,
+    a known folder after in/into/to/on/onto/from, which is then where that file goes ("put
+    clip.mov in my Downloads folder"); with no file named the folder may be the batch
+    ("everything in my Videos folder"). A request that names a file is about that file, so a
+    batch word alone ("every page of sample.pdf", "at all") is not enough there; a glob or a
+    plural file word still is. Rust mirror: ``knaif_core::nl_clarify_gate::asks_for_many_files``;
+    contracts/parity/many_files_cases.json."""
+    from .known_folders import without_folder_places
+
+    text = _URL_RE.sub(" ", utterance)
+    if _names_a_file(utterance):  # a URL names a file too
+        return _asks_for_many(without_folder_places(text), "*")
+    return _is_batch_utterance(text) or _asks_for_many(text, "*")
+
+
+def _glob_question(glob: str) -> str:
+    """``Did you mean all the .mp3 files here? …``: a glob the request never asked for."""
+    ext = Path(glob.replace("\\", "/")).suffix
+    what = f"{ext.lower()} files" if ext and not any(c in ext for c in GLOB_CHARS) else "files"
+    return f'Did you mean all the {what} here? Name the file, or say "all" to use every one.'
 
 
 _OUTPUT_ARG_KEYS = frozenset({"output", "outputs"})
@@ -360,7 +497,11 @@ def nl_clarify_gate(
         tokens = _input_tokens(step)
         for token in tokens:
             if any(c in token for c in GLOB_CHARS):
-                continue  # glob token: exempt individually
+                # A glob is many files: fine when the request asks for many, else ask. Without
+                # this, "MP3 nach WAV konvertieren" ran over every mp3 here.
+                if _asks_for_many(utterance, token):
+                    continue
+                return [{"tool": "clarify", "args": {"question": _glob_question(token)}}]
             if "/" in token or "\\" in token:
                 continue  # directory/absolute path — not a media file reference
             if token in plan_outputs:

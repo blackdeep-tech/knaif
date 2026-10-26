@@ -218,6 +218,26 @@ def _preflight_inputs(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def ffmpeg_failure(returncode: Any, stderr: str) -> str:
+    """``ffmpeg failed (exit 1): <the stderr line that names the real error>``.
+
+    Skips the generic "Conversion failed!" sign-off and ffmpeg's progress lines.
+    """
+    msg = f"ffmpeg failed (exit {returncode})"
+    skip = {"conversion failed!", "error while", ""}
+    diag = next(
+        (
+            ln.strip()
+            for ln in reversed((stderr or "").strip().splitlines())
+            if ln.strip().lower() not in skip
+            and not ln.strip().startswith("frame=")
+            and not ln.strip().startswith("size=")
+        ),
+        None,
+    )
+    return f"{msg}: {diag}" if diag else msg
+
+
 def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dict[str, str]]:
     """Convert a list of execution results into structured items for the CLI.
 
@@ -230,11 +250,20 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
     items: list[dict[str, str]] = []
     inspect_errors: list[str] = []
     batch_outputs: list[dict[str, Any]] = []
+    # Files this step went over: a batch's failures are core's batch report (printed as they
+    # happen, counted at the end), so they are not repeated here.
+    inspected = 0
+    built = 0
 
     for step in results:
         tool = step["tool"]
         res = step.get("result") or {}
+        if tool == "build_recipes":
+            built += len(res.get("skipped") or [])
+        if tool == "run_batch":
+            built += len(res.get("outputs") or [])
         if tool == "inspect_media":
+            inspected += len(res.get("probes") or []) + len(res.get("errors") or [])
             for e in res.get("errors") or []:
                 msg = e.get("error") if isinstance(e, dict) else str(e)
                 if msg:
@@ -242,10 +271,12 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
         elif tool in ("run_batch", "run_concat"):
             batch_outputs.extend(res.get("outputs") or [])
 
-    for err in inspect_errors:
-        items.append({"kind": "error", "message": err})
-    if inspect_errors:
-        return items  # Bail out on errors, matches old behavior.
+    files_seen = max(inspected, built)
+    if files_seen < 2:
+        for err in inspect_errors:
+            items.append({"kind": "error", "message": err})
+        if inspect_errors:
+            return items  # Bail out on errors, matches old behavior.
 
     if dry_run:
         if batch_outputs:
@@ -263,25 +294,9 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
         produced = []
         for out in batch_outputs:
             if out.get("returncode", 0) != 0:
-                stderr = (out.get("stderr_tail") or "").strip()
-                msg = f"ffmpeg failed (exit {out['returncode']})"
-                if stderr:
-                    # Skip the generic "Conversion failed!" sign-off and ffmpeg
-                    # progress lines to surface the line that names the real error.
-                    skip = {"conversion failed!", "error while", ""}
-                    diag = next(
-                        (
-                            ln.strip()
-                            for ln in reversed(stderr.splitlines())
-                            if ln.strip().lower() not in skip
-                            and not ln.strip().startswith("frame=")
-                            and not ln.strip().startswith("size=")
-                        ),
-                        None,
-                    )
-                    if diag:
-                        msg = f"{msg}: {diag}"
-                items.append({"kind": "error", "message": msg})
+                if files_seen < 2:
+                    msg = ffmpeg_failure(out["returncode"], out.get("stderr_tail") or "")
+                    items.append({"kind": "error", "message": msg})
             elif out.get("output"):
                 produced.append(out["output"])
         if produced:

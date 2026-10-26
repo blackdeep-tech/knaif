@@ -157,6 +157,16 @@ _PUT = re.compile(
 )
 
 
+_PLACE = re.compile(rf"\b(?:in|into|to|on|onto|from)\s+{_FOLDER}(?:\s+folder\b)?", re.IGNORECASE)
+
+
+def without_folder_places(text: str) -> str:
+    """*text* with every known folder named as a place left out ("in my Downloads folder",
+    "to Documents"): a folder there says where, not how many, so "put clip.mp4 in my Downloads
+    folder" is no batch (``nl_clarify_gate.asks_for_many_files``)."""
+    return _PLACE.sub(" ", text)
+
+
 def names_known_folder(text: str) -> bool:
     """True when *text* names a known folder as where something goes ("save it in Downloads").
 
