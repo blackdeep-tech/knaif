@@ -45,11 +45,25 @@ class WaitForConfirmationHandler(Handler):
         return {"status": "confirmed" if ok else "declined", "prompt": prompt}
 
 
+class AlertWhenDoneHandler(Handler):
+    """A run option, not a step: ``planner.split_alert`` removes it before execution.
+
+    Kept as a class so the tool map and core_tools.yaml stay 1:1. Reaching it means a caller
+    executed a plan without splitting the alert off first, which is a bug in that caller.
+    """
+
+    name = "alert_when_done"
+
+    def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
+        raise RuntimeError("alert_when_done is a run option; split_alert() removes it first")
+
+
 CORE_TOOLS: list[type[Handler]] = [
     ClarifyHandler,
     RejectHandler,
     DoneHandler,
     WaitForConfirmationHandler,
+    AlertWhenDoneHandler,
 ]
 
 CORE_TOOL_MAP: dict[str, Handler] = {cls.name: cls() for cls in CORE_TOOLS}

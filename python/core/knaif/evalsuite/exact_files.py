@@ -13,6 +13,13 @@ no model, so it can run over every row of a saved scoreboard.
 step consumed, or one the user named in the request (a file the user named is one they asked
 for, even when a later step reads it). Everything else in the folder that is not an input is a
 **leftover**: a chain intermediate, a preview clip, or a failed step's partial output.
+
+**Known folders and alerts.** The replay points the known folders at ``<row>.known`` and the
+alert recorder (``KNAIF_OS_SINK``) at ``<row>.alerts.jsonl``, both beside the row folder, so a
+"save it in Downloads, beep when done" plan touches neither the user's Downloads nor their
+desktop. A delivery there is reported as ``~/Downloads/clip.mp4``, a leftover there too, and the
+recorded alerts as ``alerts``. A scoreboard stores the plan with its alert split off, so the
+caller says whether the model asked for one (``alert=``) and the replay puts it back.
 """
 
 from __future__ import annotations
@@ -21,7 +28,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from .provisioning import _media_files, provision_row_dir
+from .provisioning import _media_files, provision_row_dir, row_alert_sink, row_known_dir
 
 
 def _mentioned(name: str, utterance: str) -> bool:
@@ -146,31 +153,80 @@ def select_rows(
     return out
 
 
+#: The alert tool a scoreboard's plan had split off (``planner.split_alert``).
+_ALERT_TOOL = "alert_when_done"
+
+
+def read_alerts(sink: Path) -> list[dict[str, Any]]:
+    """The alerts recorded in *sink* (``KNAIF_OS_SINK``), one JSON object per line."""
+    import json
+
+    if not sink.is_file():
+        return []
+    return [json.loads(line) for line in sink.read_text(encoding="utf-8").splitlines() if line]
+
+
+def alert_problem(report: dict[str, Any], *, planned: bool) -> str | None:
+    """What is wrong with a replay's alerts, or None.
+
+    A plan that asked for an alert records exactly one, ``failed`` when the replay failed and
+    ``done`` otherwise; a plan that did not ask records none.
+    """
+    alerts = report.get("alerts") or []
+    if not planned:
+        return f"an alert that was not asked for: {alerts[0].get('outcome')}" if alerts else None
+    if not alerts:
+        return "no alert"
+    if len(alerts) > 1:
+        return f"{len(alerts)} alerts, not one"
+    want = "failed" if report.get("error") else "done"
+    got = alerts[0].get("outcome")
+    return None if got == want else f"the alert said {got}, the run {want}"
+
+
+def _known_view(paths: Iterable[str]) -> list[str]:
+    # As the user sees it: the known folders' root is their home.
+    return [f"~/{p}" for p in paths]
+
+
 def replay_row(
     make_agent: Callable[[Path], Any],
     plan: dict[str, Any],
     utterance: str,
     fixture_dir: Path,
     row_dir: Path,
+    *,
+    alert: bool = False,
 ) -> dict[str, Any]:
     """Execute *plan* for real in a fresh copy of the fixtures and report what it left behind.
 
-    *make_agent* builds an agent whose sandbox is the given folder. Returns
-    ``{delivered, leftovers, error}``; a plan that raises is reported, not re-raised, because
-    a failure is exactly when a partial file is most likely to be left.
+    *make_agent* builds an agent rooted at the given folder. Returns
+    ``{delivered, leftovers, alerts, error}``; a plan that raises is reported, not re-raised,
+    because a failure is exactly when a partial file is most likely to be left. *alert* puts
+    the plan's alert back before the replay (see the module docstring).
     """
     import copy
+
+    from knaif.alert import SINK_ENV
+    from knaif.known_folders import ROOT_ENV
+
+    from .runner import _env
 
     fixture_dir = Path(fixture_dir)
     provision_row_dir(fixture_dir, row_dir, fresh=True)
     inputs = {p.relative_to(fixture_dir).as_posix() for p in _media_files(fixture_dir)}
+    known, sink = row_known_dir(row_dir), row_alert_sink(row_dir)
+    payload = copy.deepcopy(plan)
+    if alert:
+        payload["plan"] = [*(payload.get("plan") or []), {"tool": _ALERT_TOOL, "args": {}}]
     agent = make_agent(row_dir)
     error: str | None = None
     results: list[dict[str, Any]] = []
     try:
-        results = agent.execute_plan(
-            copy.deepcopy(plan), utterance=utterance, dry_run=False, confirmed=True
-        )
+        with _env(ROOT_ENV, str(known)), _env(SINK_ENV, str(sink)):
+            results = agent.execute_plan(
+                payload, utterance=utterance, dry_run=False, confirmed=True
+            )
     except Exception as exc:  # noqa: BLE001 — reported, see docstring
         error = f"{type(exc).__name__}: {exc}"
     # A replay that stops before running (a clarify, a reject, a declined approval) ran
@@ -181,14 +237,32 @@ def replay_row(
         said = first.get("args") or {}
         reason = said.get("question") or said.get("reason") or said.get("prompt") or first
         error = f"the replay stopped before running: {reason}"
-    delivered = deliverables(results, utterance, root=row_dir)
+    return _report(deliverables(results, utterance, root=row_dir), row_dir, inputs, error)
+
+
+def _report(
+    delivered: set[Path], row_dir: Path, inputs: set[str], error: str | None
+) -> dict[str, Any]:
+    """A replay's report: deliveries and leftovers in the row folder and in its known folders
+    (as ``~/…``), and the alerts recorded in its sink."""
+    known, sink = row_known_dir(row_dir), row_alert_sink(row_dir)
+    in_known = sorted(
+        p.relative_to(known.resolve()).as_posix() for p in delivered if known.resolve() in p.parents
+    )
     return {
         "delivered": sorted(
             p.relative_to(row_dir.resolve()).as_posix()
             for p in delivered
             if row_dir.resolve() in p.parents
+        )
+        + _known_view(in_known),
+        "leftovers": leftovers(row_dir, inputs=inputs, delivered=delivered)
+        + (
+            _known_view(leftovers(known, inputs=set(), delivered=delivered))
+            if known.is_dir()
+            else []
         ),
-        "leftovers": leftovers(row_dir, inputs=inputs, delivered=delivered),
+        "alerts": read_alerts(sink),
         "error": error,
     }
 
@@ -289,26 +363,37 @@ def replay_row_native(
     row_dir: Path,
     *,
     timeout: int = 600,
+    alert: bool = False,
 ) -> dict[str, Any]:
     """:func:`replay_row` for the native runtime: the real binary, no model.
 
     The mock backend returns `$KNAIF_LLM_MOCK_RESPONSE` verbatim, so the recorded plan goes in
     as the "model output" and the binary runs everything after inference for real, exactly as
     the eval lane invokes it (`run <skill> --yes --overwrite -- <utterance>`, cwd = the row).
+    *alert*, the known folders and the sink are as in :func:`replay_row`.
     """
     import json
     import os
     import subprocess
 
+    from knaif.alert import SINK_ENV
+    from knaif.known_folders import ROOT_ENV
+
     fixture_dir = Path(fixture_dir)
     provision_row_dir(fixture_dir, row_dir, fresh=True)
     inputs = {p.relative_to(fixture_dir).as_posix() for p in _media_files(fixture_dir)}
+    payload = dict(plan)
+    if alert:
+        payload["plan"] = [*(plan.get("plan") or []), {"tool": _ALERT_TOOL, "args": {}}]
     env = {k: v for k, v in os.environ.items() if k != "KNAIF_PDFIUM_PATH"}
     env.update(
         KNAIF_LLM_BACKEND="mock",
-        KNAIF_LLM_MOCK_RESPONSE=json.dumps(plan),
+        KNAIF_LLM_MOCK_RESPONSE=json.dumps(payload),
         KNAIF_DUMP_PLAN="1",
     )
+    # Absolute: the binary runs in the row folder, and the CLI hands a relative one.
+    env[ROOT_ENV] = str(row_known_dir(row_dir).resolve())
+    env[SINK_ENV] = str(row_alert_sink(row_dir).resolve())
     # `--allow-download` only for a URL row: a binary older than URL inputs rejects the flag.
     url = ["--allow-download"] if "://" in utterance else []
     argv = [str(binary), "run", skill, "--yes", "--overwrite", *url, "--", *utterance.split()]
@@ -330,12 +415,4 @@ def replay_row_native(
     except subprocess.TimeoutExpired:
         stdout, stderr, error = "", "", f"timeout after {timeout}s"
     delivered = deliverables(native_results(stdout, stderr, row_dir), utterance, root=row_dir)
-    return {
-        "delivered": sorted(
-            p.relative_to(row_dir.resolve()).as_posix()
-            for p in delivered
-            if row_dir.resolve() in p.parents
-        ),
-        "leftovers": leftovers(row_dir, inputs=inputs, delivered=delivered),
-        "error": error,
-    }
+    return _report(delivered, row_dir, inputs, error)

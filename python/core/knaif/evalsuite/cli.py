@@ -8,7 +8,6 @@ import functools
 import hashlib
 import importlib.util
 import json
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -3007,11 +3006,13 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
 
     No model: each selected row's recorded plan is executed with `dry_run=False` in a fresh
     copy of the fixtures (see `exact_files.py` for why the scored run cannot see this).
-    Exits 1 when any row left a file that is neither an input nor a deliverable.
+    Exits 1 when any row left a file that is neither an input nor a deliverable, or when a
+    replay's alerts are not what its plan asked for (`exact_files.alert_problem`).
     """
     from knaif import create_agent
 
-    from .exact_files import replay_row, replay_row_native, select_rows
+    from .exact_files import alert_problem, replay_row, replay_row_native, select_rows
+    from .provisioning import cleanup_row_dir
 
     board = json.loads(Path(args.board).read_text(encoding="utf-8"))
     sandbox = Path(args.sandbox) if args.sandbox else Path("sandbox")
@@ -3036,7 +3037,9 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
     start_for_corpus(_corpus_path(args.skill).parent, fixture_dir, [r["utterance"] for r in rows])
 
     def _python_agent(folder: Path) -> Any:
-        agent = create_agent(args.skill, sandbox=folder)
+        # Rooted at the row with no sandbox, as the CLI runs (root = cwd): a sandbox would refuse
+        # the row's known folders, which sit beside it (`row_known_dir`).
+        agent = create_agent(args.skill, root=folder)
         agent.allow_download = True
         return agent
 
@@ -3045,8 +3048,15 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
         row_dir = work / f"{row['id']}__{row.get('utterance_idx') or 0}"
         if args.runtime == "native":
             report = replay_row_native(
-                Path(args.binary), args.skill, row["plan"], row["utterance"], fixture_dir, row_dir
+                Path(args.binary),
+                args.skill,
+                row["plan"],
+                row["utterance"],
+                fixture_dir,
+                row_dir,
+                alert=bool(row.get("alert")),
             )
+            report["alert_problem"] = alert_problem(report, planned=bool(row.get("alert")))
         else:
             report = replay_row(
                 _python_agent,
@@ -3054,33 +3064,43 @@ def cmd_exact_files(args: argparse.Namespace) -> None:
                 row["utterance"],
                 fixture_dir,
                 row_dir,
+                alert=bool(row.get("alert")),
             )
+            report["alert_problem"] = alert_problem(report, planned=bool(row.get("alert")))
         report.update(
             id=row["id"], utterance_idx=row.get("utterance_idx") or 0, utterance=row["utterance"]
         )
         reports.append(report)
         status = "LEFT " + ", ".join(report["leftovers"]) if report["leftovers"] else "clean"
+        if report.get("alerts") or report.get("alert_problem"):
+            status += "  alert: " + (
+                report.get("alert_problem") or report["alerts"][0].get("outcome", "?")
+            )
         if report.get("error"):
             status += f"  (ERROR: {report['error'][:160]})"
         print(f"  [{row['id']}#{report['utterance_idx']}]  {status}", flush=True)
-        if not (args.keep and report["leftovers"]):
-            shutil.rmtree(row_dir, ignore_errors=True)
+        if not (args.keep and (report["leftovers"] or report.get("alert_problem"))):
+            cleanup_row_dir(row_dir)
 
     dirty = [r for r in reports if r["leftovers"]]
+    alerts_wrong = [r for r in reports if r.get("alert_problem")]
     print(f"\n{len(dirty)} of {len(reports)} row(s) left files behind", flush=True)
+    if any("alert_problem" in r for r in reports):
+        print(f"{len(alerts_wrong)} of {len(reports)} row(s) alerted wrongly", flush=True)
     if args.save:
         out = {
             "skill": args.skill,
             "board": args.board,
             "rows": len(reports),
             "dirty": len(dirty),
+            "alerts_wrong": len(alerts_wrong),
             "reports": reports,
         }
         Path(args.save).write_text(
             json.dumps(redact_local_paths(out), indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-    sys.exit(1 if dirty else 0)
+    sys.exit(1 if dirty or alerts_wrong else 0)
 
 
 def cmd_fixtures_regen(args: argparse.Namespace) -> None:

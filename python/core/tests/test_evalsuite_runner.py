@@ -301,7 +301,12 @@ def test_preview_confirmation_does_not_truncate_executing_eval(tmp_path, monkeyp
         assert len(out.artifact_commands) == 2
         assert "scale=" in out.artifact_commands[0]
         assert out.artifact_commands[1].endswith(".mp3")
-        chain.assert_called_once_with(out.artifact_commands, fixtures, tmp_path / "outputs/r001__0")
+        chain.assert_called_once()
+        assert chain.call_args.args == (
+            out.artifact_commands,
+            fixtures,
+            tmp_path / "outputs/r001__0",
+        )
     else:
         assert confirmations[0]["result"]["status"] == "declined"
         chain.assert_not_called()

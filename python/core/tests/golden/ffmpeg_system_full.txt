@@ -109,7 +109,9 @@ Available tools:
   - rotate_video: Rotate or flip one or more videos by a fixed angle or axis.
     args: inputs (required), angle (optional), flip (optional), quality (optional), output (optional), preview (optional)
   - concat_video: Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input.
-    args: , inputs (optional), base (optional), append (optional), output (optional), target_resolution (optional), target_fps (optional)Examples:
+    args: , inputs (optional), base (optional), append (optional), output (optional), target_resolution (optional), target_fps (optional)
+  - alert_when_done: Alert the user (a desktop notification and a beep) when the task has finished.
+    args: Examples:
   request: "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything."
   output:  {"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip1.mp4", "clip2.mp4"], "platform": "whatsapp", "quality": "visually_good", "preview": true}}]}
 
@@ -190,6 +192,12 @@ Available tools:
 
   request: "Convert https://example.com/media/interview.mov to mp4."
   output:  {"plan": [{"tool": "convert_video", "args": {"inputs": ["https://example.com/media/interview.mov"], "container": "mp4"}}]}
+
+  request: "Speed up interview.mp4 2x and let me know when it's done."
+  output:  {"plan": [{"tool": "adjust_speed", "args": {"inputs": ["interview.mp4"], "speed": 2.0}}, {"tool": "alert_when_done", "args": {}}]}
+
+  request: "Resize interview.mp4 to 720p and save it in my Videos folder."
+  output:  {"plan": [{"tool": "resize_video", "args": {"inputs": ["interview.mp4"], "height": 720, "output": "Videos/interview_720p.mp4"}}]}
 
   request: "Extract audio in lossless format."
   output:  {"plan": [{"tool": "clarify", "args": {"question": "Which file should I extract the audio from?"}}]}

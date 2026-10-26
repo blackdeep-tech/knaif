@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..known_folders import ROOT_ENV as KNOWN_FOLDERS_ENV
+from ..planner import split_alert
 from .chain import run_command_chain
 from .corpus import CorpusRow
-from .provisioning import row_scratch_dir
+from .provisioning import row_known_dir, row_scratch_dir
 
 if TYPE_CHECKING:
     from knaif.agent import CommandAgent
@@ -39,6 +44,44 @@ class AgentOutput:
     # filter is applied in an EARLIER step of a chain, e.g. rotate → compress.
     artifact_commands: list[str] = field(default_factory=list)
     utterance_idx: int = 0
+    # Whether the plan asked for an alert (`alert_when_done`), split off before anything ran.
+    alert: bool = False
+    # The row's redirected known folders (`<row>.known`) when the plan was executed, else None.
+    known_dir: Path | None = None
+    # The row's fixture, when the plan was executed: the untouched original of its input.
+    fixture_path: Path | None = None
+
+
+@contextmanager
+def _env(name: str, value: str) -> Iterator[None]:
+    """*name* set to *value* inside the block, and as it was after it."""
+    before = os.environ.get(name)
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = before
+
+
+def plan_known_folders(agent: Any, sandbox: Path | None = None) -> Path:
+    """Where an eval run's plans put the known folders: a placeholder inside the agent's sandbox.
+
+    The eval agent plans in a sandbox (the fixtures), which refuses a known folder outside it,
+    and planning must never name the user's real Downloads. The run plans dry, so nothing is
+    written here; a replay maps it to the row's own ``<row>.known`` (``chain.resolve_command``).
+    """
+    base = next(
+        (
+            b
+            for b in (getattr(agent, "sandbox", None), getattr(agent, "root", None), sandbox)
+            if isinstance(b, (str, Path))
+        ),
+        Path.cwd(),
+    )
+    return Path(base).resolve() / ".known-folders"
 
 
 def _extract_artifact(results: list[dict[str, Any]]) -> str | None:
@@ -188,6 +231,36 @@ def run_corpus(
     apply_retrieval=False (or --no-retrieval on the CLI) to measure the full
     unfiltered prompt for diagnostic comparisons.
     """
+    with _env(KNOWN_FOLDERS_ENV, str(plan_known_folders(agent, sandbox))):
+        return _run_corpus(
+            agent,
+            corpus,
+            limit=limit,
+            use_mock=use_mock,
+            verbose=verbose,
+            execute=execute,
+            sandbox=sandbox,
+            fixture_dir=fixture_dir,
+            apply_retrieval=apply_retrieval,
+            top_k=top_k,
+        )
+
+
+def _run_corpus(
+    agent: CommandAgent,
+    corpus: list[CorpusRow],
+    *,
+    limit: int | None,
+    use_mock: bool,
+    verbose: bool,
+    execute: bool,
+    sandbox: Path | None,
+    fixture_dir: Path | None,
+    apply_retrieval: bool,
+    top_k: int | None,
+) -> list[AgentOutput]:
+    """:func:`run_corpus`, with the known folders already pointing at the plan-time placeholder."""
+    known_root = Path(os.environ[KNOWN_FOLDERS_ENV])
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
     if execute:
@@ -211,6 +284,9 @@ def run_corpus(
             outcome = "error"
             artifact: str | None = None
             error: str | None = None
+            alert = False
+            known_dir: Path | None = None
+            fixture_path: Path | None = None
 
             registry_override = (
                 _build_registry_override(agent, utterance, top_k) if apply_retrieval else None
@@ -227,6 +303,10 @@ def run_corpus(
                 # where the attribute is a MagicMock rather than a real string.
                 _raw_pe = getattr(agent, "last_parse_error", None)
                 parse_error = _raw_pe if isinstance(_raw_pe, str) and _raw_pe else None
+                # The pipeline takes the alert out before it looks at the plan; so does the
+                # eval, so an alert step in front never hides the first real tool.
+                if isinstance(plan_payload, dict):
+                    plan_payload, alert = split_alert(plan_payload)
                 steps = (plan_payload or {}).get("plan") or []
                 first_tool = steps[0]["tool"] if steps else None
 
@@ -281,6 +361,7 @@ def run_corpus(
                 _fp = fixture_dir / row.fixture
                 if _fp.exists():
                     row_dir = sandbox / f"{row.id}__{utt_idx}"
+                    known_dir, fixture_path = row_known_dir(row_dir), _fp
                     # Provision by COPY into a per-row directory and run the plan's commands
                     # there exactly as rendered — the same shape the native lane already
                     # uses. One execution path for every command-based row, single-command
@@ -300,6 +381,7 @@ def run_corpus(
                             artifact_commands,
                             fixture_dir,
                             row_dir,
+                            known_root=known_root,
                             **({"prepare": prepare} if prepare is not None else {}),
                         )
                         artifact_paths = [
@@ -326,7 +408,10 @@ def run_corpus(
                         shutil.rmtree(row_scratch_dir(row_dir), ignore_errors=True)
                         row_dir.mkdir(parents=True, exist_ok=True)
                         try:
-                            artifact_path = agent.artifact_runner(artifact, _fp, row_dir)
+                            # The replay plans again, through the agent: its known folders are
+                            # the row's own, beside the row folder.
+                            with _env(KNOWN_FOLDERS_ENV, str(known_dir)):
+                                artifact_path = agent.artifact_runner(artifact, _fp, row_dir)
                         except Exception:  # noqa: BLE001
                             artifact_path = None
                         if artifact_path is not None:
@@ -346,6 +431,9 @@ def run_corpus(
                 artifact_paths=artifact_paths,
                 artifact_commands=artifact_commands or ([artifact] if artifact else []),
                 utterance_idx=utt_idx,
+                alert=alert,
+                known_dir=known_dir,
+                fixture_path=fixture_path,
             )
             outputs.append(output)
 

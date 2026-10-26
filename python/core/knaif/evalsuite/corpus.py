@@ -37,6 +37,11 @@ class CorpusRow:
     # "routing" grades on outcome only (for glob/batch rows that can't materialize
     # a single artifact in the success eval — their routing is what we verify).
     grade: str = "full"
+    # Whether the plan must ask for an alert (`alert_when_done`). False: it must not, so an
+    # alert on such a row is a false alert and a wrong outcome.
+    expected_alert: bool = False
+    # The known folder the plan must write into (`knaif.known_folders`), e.g. "downloads".
+    expected_folder: str | None = None
 
     def __post_init__(self) -> None:
         if self.expected_outcome not in _VALID_OUTCOMES:
@@ -46,6 +51,19 @@ class CorpusRow:
             )
         if self.grade not in _VALID_GRADES:
             raise ValueError(f"grade must be one of {sorted(_VALID_GRADES)!r}, got {self.grade!r}")
+        if not isinstance(self.expected_alert, bool):
+            raise ValueError(
+                f"expected_alert must be true or false, got {self.expected_alert!r} "
+                f"in row {self.id!r}"
+            )
+        if self.expected_folder is not None:
+            from knaif.known_folders import KNOWN_FOLDERS
+
+            if self.expected_folder not in KNOWN_FOLDERS:
+                raise ValueError(
+                    f"expected_folder must be one of {list(KNOWN_FOLDERS)!r}, "
+                    f"got {self.expected_folder!r} in row {self.id!r}"
+                )
         if not self.utterances:
             raise ValueError(f"utterances must be a non-empty list for row {self.id!r}")
         if self.outputs is not None:
@@ -83,6 +101,10 @@ class CorpusRow:
             d["expected_tools"] = self.expected_tools
         if self.grade != "full":
             d["grade"] = self.grade
+        if self.expected_alert:
+            d["expected_alert"] = True
+        if self.expected_folder is not None:
+            d["expected_folder"] = self.expected_folder
         return d
 
     @classmethod
@@ -103,6 +125,8 @@ class CorpusRow:
                 list(data["expected_tools"]) if data.get("expected_tools") is not None else None
             ),
             grade=data.get("grade", "full"),
+            expected_alert=data.get("expected_alert", False),
+            expected_folder=data.get("expected_folder"),
         )
 
 

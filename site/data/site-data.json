@@ -196,6 +196,18 @@
           "tool": "extract_text"
         },
         {
+          "request": "pull the words out of invoice.pdf, ping me when it's ready",
+          "tool": "extract_text"
+        },
+        {
+          "request": "rotate report.pdf 90 degrees and save it to my Desktop",
+          "tool": "rotate_pages"
+        },
+        {
+          "request": "number the pages of report.pdf, save it in my Documents folder and let me know when it's done",
+          "tool": "add_page_numbers"
+        },
+        {
           "request": "do something with a file",
           "tool": "clarify"
         }
@@ -775,6 +787,14 @@
         {
           "request": "Convert https://example.com/media/interview.mov to mp4.",
           "tool": "convert_video"
+        },
+        {
+          "request": "Speed up interview.mp4 2x and let me know when it's done.",
+          "tool": "adjust_speed"
+        },
+        {
+          "request": "Resize interview.mp4 to 720p and save it in my Videos folder.",
+          "tool": "resize_video"
         },
         {
           "request": "Extract audio in lossless format.",

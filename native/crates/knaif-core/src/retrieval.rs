@@ -88,7 +88,7 @@ fn query_tokens(text: &str) -> HashSet<String> {
 /// it silently discards the ranking this function exists to compute. The model reads the tool
 /// listing in the order it is given, and the fine-tune's prompts were relevance-ordered, so the
 /// order is part of the output, not presentation. The L1b contract
-/// (`contracts/parity/retrieval_cases.json`) pins it against the reference runtime.
+/// (`contracts/parity/retrieval_cases.json`.) pins it against the reference runtime.
 pub type RetrievedTools<'a> = Vec<(String, &'a ToolDef)>;
 
 pub fn retrieve_tools<'a>(
@@ -113,7 +113,8 @@ pub fn retrieve_tools<'a>(
     let always: HashSet<&str> = ALWAYS_INCLUDE.iter().copied().collect();
     let mut scores: Vec<(f64, String)> = Vec::new();
     for (name, tool) in registry {
-        if always.contains(name.as_str()) || tool.internal {
+        // A tool with triggers is never ranked (see below).
+        if always.contains(name.as_str()) || tool.internal || !tool.triggers.is_empty() {
             continue;
         }
         let tool_kw: HashSet<String> = tool.keywords.iter().map(|k| normalize(k)).collect();
@@ -155,6 +156,18 @@ pub fn retrieve_tools<'a>(
             }
         }
     }
+    // A tool with triggers follows the ranked tools when one of them is in the query, and is
+    // absent otherwise, so a request without one sees exactly the tools it did before the tool
+    // existed. Python adds them in registry order; both registries iterate by name.
+    for (name, tool) in registry {
+        if !tool.triggers.is_empty()
+            && !tool.internal
+            && crate::registry::triggered(query, &tool.triggers)
+            && !selected.iter().any(|(n, _)| n == name)
+        {
+            selected.push((name.clone(), tool));
+        }
+    }
     for name in ALWAYS_INCLUDE {
         if let Some(t) = registry.get(*name) {
             selected.push(((*name).to_string(), t));
@@ -176,7 +189,7 @@ mod tests {
     #[test]
     fn retrieval_returns_relevance_order_not_alphabetical() {
         // The reason the return type is a Vec: a map would sort these by name and throw the
-        // ranking away. `contracts/parity/retrieval_cases.json` pins the exact order against
+        // ranking away. `contracts/parity/retrieval_cases.json`. pins the exact order against
         // the reference; this is the local guard that the type still carries one.
         let r = ffmpeg_with_core();
         let got = names(&retrieve_tools("compress this video", &r, 3, 0.0));

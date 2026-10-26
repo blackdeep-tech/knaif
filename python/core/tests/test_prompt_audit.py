@@ -106,11 +106,19 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     it) and one URL example (to 15,537 on 2026-10-12, the rule tightened to pay for the
     no-link clause rather than raising this again). The example is shown only to a request that
     carries a URL (``select_examples``), so every other retrieved prompt grows by the rule alone.
+
+    Raised 15,600 → 16,100 on 2026-10-12 for completion alerts and known folders: the
+    `alert_when_done` core tool's two listing lines, one alert example and one known-folder
+    example (to 16,079). None of them reaches a retrieved prompt that does not ask for it: the
+    tool is retrieved only by its triggers ("beep", "let me know", …; ``retrieve_tools``), the
+    alert example only with the tool, and the folder example only when the request names a known
+    folder as a destination (``select_examples``). Every other retrieved prompt is unchanged,
+    byte for byte.
     """
     system, _ = ffmpeg_agent.build_prompt("compress a video")
     assert (
-        len(system) < 15_600
-    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,600 ceiling"
+        len(system) < 16_100
+    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 16,100 ceiling"
 
 
 def test_ffmpeg_retrieved_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> None:

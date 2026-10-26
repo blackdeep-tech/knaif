@@ -8,6 +8,7 @@ from knaif.core_tools import (
     CORE_TOOL_DEFS,
     CORE_TOOL_MAP,
     CORE_TOOLS,
+    AlertWhenDoneHandler,
     ClarifyHandler,
     DoneHandler,
     RejectHandler,
@@ -28,10 +29,14 @@ def test_core_step_names():
     assert RejectHandler.name == "reject"
     assert DoneHandler.name == "done"
     assert WaitForConfirmationHandler.name == "wait_for_confirmation"
+    assert AlertWhenDoneHandler.name == "alert_when_done"
+
+
+_CORE_NAMES = {"clarify", "reject", "done", "wait_for_confirmation", "alert_when_done"}
 
 
 def test_core_step_map_keys():
-    assert set(CORE_TOOL_MAP) == {"clarify", "reject", "done", "wait_for_confirmation"}
+    assert set(CORE_TOOL_MAP) == _CORE_NAMES
 
 
 def test_core_step_map_values_are_instances():
@@ -46,7 +51,7 @@ def test_core_tool_defs_loaded_from_yaml():
     """CORE_TOOL_DEFS is parsed from core_tools.yaml via the registry loader."""
     from knaif.registry import ToolDef
 
-    assert set(CORE_TOOL_DEFS) == {"clarify", "reject", "done", "wait_for_confirmation"}
+    assert set(CORE_TOOL_DEFS) == _CORE_NAMES
     assert all(isinstance(td, ToolDef) for td in CORE_TOOL_DEFS.values())
 
 

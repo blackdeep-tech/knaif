@@ -87,6 +87,12 @@ pub struct ToolDef {
     pub safety_category: String,
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// Whole words or phrases that bring this tool into a prompt. A tool with triggers is never
+    /// ranked: retrieval adds it only when one is in the request (`retrieve_tools`), so a request
+    /// without one gets the same tools as if the tool did not exist (core's `alert_when_done`).
+    /// Mirrors Python `ToolDef.triggers`.
+    #[serde(default)]
+    pub triggers: Vec<String>,
     #[serde(default)]
     pub readonly: bool,
     /// Several inputs become ONE output (concat), not one output each (a batch). Read by chain
@@ -113,6 +119,31 @@ pub struct ToolDef {
 
 /// A `name → ToolDef` registry.
 pub type Registry = BTreeMap<String, ToolDef>;
+
+/// True when one of `triggers` is in `text` as a whole word or phrase, ignoring case and accents:
+/// "beep" matches "Beep when done" and not "beeper.mp4". A typographic apostrophe counts as a
+/// plain one, so "when it’s done" matches "when it's done". Mirrors Python `triggered`
+/// (`(?<!\w)phrase(?!\w)` over the normalized, whitespace-collapsed text).
+pub fn triggered(text: &str, triggers: &[String]) -> bool {
+    fn squash(s: &str) -> String {
+        crate::retrieval::normalize(s)
+            .replace('’', "'")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    fn word(c: Option<char>) -> bool {
+        c.is_some_and(|c| c.is_alphanumeric() || c == '_')
+    }
+    let norm = squash(text);
+    triggers.iter().any(|trigger| {
+        let phrase = squash(trigger);
+        !phrase.is_empty()
+            && norm.match_indices(phrase.as_str()).any(|(at, m)| {
+                !word(norm[..at].chars().next_back()) && !word(norm[at + m.len()..].chars().next())
+            })
+    })
+}
 
 /// Load tool definitions from a YAML file into a `name → ToolDef` map.
 pub fn load_registry(path: &Path) -> anyhow::Result<Registry> {

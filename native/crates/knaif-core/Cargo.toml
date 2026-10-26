@@ -15,3 +15,7 @@ anyhow = { workspace = true }
 unicode-normalization = { workspace = true }
 unicode-properties = { workspace = true }
 regex = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# SHGetKnownFolderPath (known_folders.rs) and MessageBeep (alert.rs).
+windows-sys = { workspace = true }

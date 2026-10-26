@@ -118,8 +118,56 @@ def _mark_warmup(rows: list[dict[str, Any]]) -> None:
         rows[0]["is_warmup"] = True
 
 
+# Arg keys that name what a step reads. A known folder counts only where the plan writes.
+_INPUT_ARG_KEYS = frozenset({"inputs", "input", "files", "base", "append", "src", "path"})
+
+
+def plan_names_folder(plan: dict[str, Any], folder: str) -> bool:
+    """True when a step of *plan* writes into the known *folder* (``knaif.known_folders``):
+    an output arg such as ``Downloads``, ``Downloads/clip.mp4`` or ``~/Downloads/clip.mp4``."""
+    from knaif.known_folders import named_folder
+
+    for step in plan.get("plan") or []:
+        if not isinstance(step, dict):
+            continue
+        for key, value in (step.get("args") or {}).items():
+            if key in _INPUT_ARG_KEYS:
+                continue
+            for item in value if isinstance(value, list) else [value]:
+                if isinstance(item, str) and named_folder(item) == folder:
+                    return True
+    return False
+
+
 def _outcome_correct(output: AgentOutput, row: CorpusRow) -> bool:
-    return output.outcome == row.expected_outcome
+    """The outcome, and on rows that name them, the alert and the known folder.
+
+    A row without ``expected_alert`` expects no alert: an alert there is a false alert. A row
+    and an output that carry neither score exactly as before.
+    """
+    if output.outcome != row.expected_outcome:
+        return False
+    if bool(getattr(output, "alert", False)) != row.expected_alert:
+        return False
+    if row.expected_folder and output.outcome == "plan":
+        if not plan_names_folder(output.plan or {}, row.expected_folder):
+            return False
+        known_dir = getattr(output, "known_dir", None)
+        if known_dir is not None:
+            return _delivered_into(output, row.expected_folder, Path(known_dir))
+    return True
+
+
+def _delivered_into(output: AgentOutput, folder: str, known_dir: Path) -> bool:
+    """True when an executed row's graded file is in *folder*, as the row's replay redirected
+    it (``<row>.known/Downloads``): named by the plan is not enough once the plan ran."""
+    from knaif.known_folders import ROOT_ENV, resolve
+
+    target = resolve(folder, env={ROOT_ENV: str(known_dir)}).resolve()
+    paths = list(getattr(output, "artifact_paths", None) or [])
+    if not paths and getattr(output, "artifact_path", None) is not None:
+        paths = [output.artifact_path]
+    return any(target in Path(p).resolve().parents for p in paths)
 
 
 def _intent_result(output: AgentOutput, row: CorpusRow) -> dict[str, Any]:
@@ -220,6 +268,8 @@ def score_corpus(
                 "error": output.error,
                 "artifact": output.artifact,
                 "plan": output.plan,
+                "alert": bool(getattr(output, "alert", False)),
+                "expected_alert": row.expected_alert,
                 "knaif_score": knaif_result.score if knaif_result else None,
                 "knaif_matched": knaif_result.matched if knaif_result else [],
                 "knaif_failed": knaif_result.failed if knaif_result else [],
@@ -293,7 +343,7 @@ def aggregate_scored_rows(
 
     run_coverage, unattempted = _coverage_aggregate(scored_rows)
 
-    return {
+    board: dict[str, Any] = {
         "verifier": verifier_name,
         "scoring_policy": POLICY_VERSION,
         "total": n,
@@ -309,6 +359,24 @@ def aggregate_scored_rows(
         "intent_metrics": compute_metrics(intent_rows) if intent_rows else {},
         "by_tag": tag_summary,
         "rows": scored_rows,
+    }
+    alerts = _alert_counts(scored_rows)
+    if alerts is not None:
+        board["alerts"] = alerts
+    return board
+
+
+def _alert_counts(rows: list[dict[str, Any]]) -> dict[str, int] | None:
+    """How the alerts went, or None for a run where no row expected or got one (so a
+    scoreboard from before the alert existed keeps its exact shape)."""
+    if not any(r.get("expected_alert") or r.get("alert") for r in rows):
+        return None
+    expected = [r for r in rows if r.get("expected_alert")]
+    return {
+        "expected": len(expected),
+        "correct": sum(1 for r in expected if r.get("alert")),
+        "missed": sum(1 for r in expected if not r.get("alert")),
+        "false": sum(1 for r in rows if r.get("alert") and not r.get("expected_alert")),
     }
 
 
@@ -358,6 +426,8 @@ def score_corpus_output_diff(
                 "artifact": output.artifact,
                 "artifact_path": str(output.artifact_path) if output.artifact_path else None,
                 "plan": output.plan,
+                "alert": bool(getattr(output, "alert", False)),
+                "expected_alert": row.expected_alert,
                 "knaif_score": knaif_result.score if knaif_result else None,
                 "knaif_matched": knaif_result.matched if knaif_result else [],
                 "knaif_failed": knaif_result.failed if knaif_result else [],

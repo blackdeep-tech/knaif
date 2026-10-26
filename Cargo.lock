@@ -1287,6 +1287,7 @@ dependencies = [
  "serde_yaml",
  "unicode-normalization",
  "unicode-properties",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

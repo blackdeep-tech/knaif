@@ -24,7 +24,9 @@ _PATH_ARG_KEYS = frozenset({"inputs", "input", "files", "src", "dst", "path", "b
 # Arg keys that name files a step reads: the only places a URL may stand (contracts/parity/
 # url_inputs_cases.json). An arg whose schema says `path_role: input` counts too.
 _URL_INPUT_KEYS = frozenset({"inputs", "input", "files", "base", "append"})
-_CONTROL_TOOLS = frozenset({"clarify", "reject", "done", "wait_for_confirmation"})
+_CONTROL_TOOLS = frozenset(
+    {"clarify", "reject", "done", "wait_for_confirmation", "alert_when_done"}
+)
 
 
 def _validate_url_args(tool_name: str, tool_def: ToolDef, args: dict[str, Any]) -> None:
@@ -582,6 +584,55 @@ def apply_defaults(payload: dict[str, Any], registry: dict[str, Any]) -> None:
         for key, value in tool_def.defaults.items():
             if key not in args:
                 args[key] = value
+
+
+ALERT_TOOL = "alert_when_done"
+# Asked for with nothing to do ("beep"): the alert needs a task to finish.
+NO_WORK_TO_ALERT = (
+    "I can alert you when a task finishes, but there is no task in this request. "
+    "What should I do first?"
+)
+
+
+def _is_alert(step: Any) -> bool:
+    return isinstance(step, dict) and step.get("tool") == ALERT_TOOL
+
+
+def split_alert(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Return *payload* without its ``alert_when_done`` steps, and whether the run alerts.
+
+    The alert is a run option, not a step (``contracts/parity/alert_cases.json`.`):
+    - it may stand anywhere in the plan, and any args the model gives it are ignored;
+    - two alerts are one;
+    - a plan that only clarifies or rejects gets no alert: nothing ran, and the user is reading
+      the answer already;
+    - an alert with no work beside it (only ``done``, or nothing) becomes a clarify.
+
+    *payload* itself is left unchanged.
+    """
+    plan = payload.get("plan")
+    if not isinstance(plan, list) or not any(_is_alert(s) for s in plan):
+        return payload, False
+    rest = [s for s in plan if not _is_alert(s)]
+    work = [s for s in rest if isinstance(s, dict) and s.get("tool") != "done"]
+    if not work:
+        clarify = {"tool": "clarify", "args": {"question": NO_WORK_TO_ALERT}}
+        return {**payload, "plan": [clarify]}, False
+    if all(s.get("tool") in ("clarify", "reject") for s in work):
+        return {**payload, "plan": rest}, False
+    return {**payload, "plan": rest}, True
+
+
+def alert_last(payload: dict[str, Any]) -> None:
+    """Move ``alert_when_done`` steps to the end of the plan, in place, keeping every other
+    step's order: chain linking joins a step's output to the next step's input."""
+    plan = payload.get("plan")
+    if not isinstance(plan, list):
+        return
+    alerts = [s for s in plan if _is_alert(s)]
+    if alerts:
+        plan[:] = [s for s in plan if not _is_alert(s)]
+        plan.extend(alerts)
 
 
 def classify_preflight_errors(errors: list[str]) -> str:

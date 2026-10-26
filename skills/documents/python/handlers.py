@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from knaif.known_folders import named_folder
 from knaif.skill_base import Skill
 
 from . import _deps, _engine
@@ -166,7 +167,13 @@ class DocumentsSkill(Skill):
                 if src.exists() and not dest.exists():
                     shutil.copy2(src, dest)
             output = args.get("output")
-            if isinstance(output, str) and not Path(output).is_absolute():
+            # "Documents/merged.pdf" names the user's Documents folder: left to the pipeline's
+            # known-folder rewrite, which the eval points beside the row (`<row>.known`).
+            if (
+                isinstance(output, str)
+                and not Path(output).is_absolute()
+                and named_folder(output) is None
+            ):
                 args["output"] = str(output_dir / output)
 
         from knaif.agent import CommandAgent

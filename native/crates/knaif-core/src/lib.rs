@@ -5,10 +5,12 @@
 //! optimizer, and the shared step library. This Phase 4 skeleton implements only skill
 //! discovery/metadata (`skills` module); the rest is ported in Phase 6.
 
+pub mod alert;
 pub mod clarify_gate;
 pub mod deps;
 pub mod effects;
 pub mod extract;
+pub mod known_folders;
 pub mod nl_clarify_gate;
 pub mod planner;
 pub mod prompt;

@@ -331,6 +331,25 @@ examples:
             inputs: ["https://example.com/media/interview.mov"]
             container: mp4
 
+  - request: "Speed up interview.mp4 2x and let me know when it's done."
+    output:
+      plan:
+        - tool: adjust_speed
+          args:
+            inputs: ["interview.mp4"]
+            speed: 2.0
+        - tool: alert_when_done
+          args: {}
+
+  - request: "Resize interview.mp4 to 720p and save it in my Videos folder."
+    output:
+      plan:
+        - tool: resize_video
+          args:
+            inputs: ["interview.mp4"]
+            height: 720
+            output: "Videos/interview_720p.mp4"
+
   - request: "Extract audio in lossless format."
     output:
       plan:

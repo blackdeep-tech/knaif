@@ -60,6 +60,9 @@ def restore_grounded_spelling(value: str, raw_utterance: str) -> str:
 # ── example selection helpers ─────────────────────────────────────────────────
 
 _TERMINAL_TOOLS = frozenset({"clarify", "reject", "done"})
+# Core tools retrieved only by their triggers (core_tools.yaml `triggers:`). An example that uses
+# one must not reach a prompt that does not list the tool.
+_TRIGGERED_TOOLS = frozenset({"alert_when_done"})
 
 
 def _example_tool_set(example: dict) -> frozenset[str]:
@@ -106,15 +109,24 @@ def select_examples(
       2. Jaccard overlap between query tokens and example request tokens (tiebreaker)
     An example whose request carries an http(s) URL is eligible only when *query* carries one
     too, and then ranks first at equal tool overlap, so adding one changes no other prompt.
+    An example whose plan uses a tool retrieved only by its triggers (``alert_when_done``) is
+    eligible only when that tool was retrieved, and one whose request names a known folder as a
+    destination ("save it in Downloads") only when *query* names one, for the same reason.
     Examples are returned in their original order from *structured_examples*.
     """
+    from .known_folders import names_known_folder
+
     query_url = _carries_url(query)
+    query_folder = names_known_folder(query)
     clarify_exs = [e for e in structured_examples if _is_clarify_example(e)]
     reject_exs = [e for e in structured_examples if _is_reject_example(e)]
     domain_exs = [
         e
         for e in structured_examples
-        if _example_tool_set(e) and (query_url or not _carries_url(e.get("request", "")))
+        if _example_tool_set(e)
+        and (query_url or not _carries_url(e.get("request", "")))
+        and (_example_tool_set(e) & _TRIGGERED_TOOLS) <= retrieved_tool_names
+        and (query_folder or not names_known_folder(e.get("request", "")))
     ]
 
     fixed: list[dict] = []

@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from knaif.agent import CommandAgent
+from knaif.core_tools import CORE_TOOL_DEFS
 
 DOCUMENTS_SKILL_DIR = Path(__file__).parents[2]
 
@@ -161,7 +162,7 @@ def test_the_supported_list_matches_the_registry(scope_block: str) -> None:
     the day a redaction or signing tool lands — both are on the unsupported list today.
     """
     agent = CommandAgent.from_skill(DOCUMENTS_SKILL_DIR, sandbox="sandbox")
-    core = {"clarify", "reject", "done", "wait_for_confirmation"}
+    core = set(CORE_TOOL_DEFS)
     real = {n for n, td in agent.registry.items() if not td.internal and n not in core}
     listed = {n for n in real if n in scope_block}
     assert listed == real, f"TOOL SCOPE omits {sorted(real - listed)}"

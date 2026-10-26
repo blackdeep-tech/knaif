@@ -27,6 +27,9 @@ use crate::registry::{Registry, ToolDef};
 /// control example, not a domain one. Port of Python `_TERMINAL_TOOLS` — note it does **not**
 /// include `noop`, unlike [`is_system_tool`]'s prompt-listing filter.
 const TERMINAL_TOOLS: &[&str] = &["clarify", "reject", "done"];
+/// Core tools retrieved only by their triggers (`core_tools.yaml` `triggers:`). Port of Python
+/// `_TRIGGERED_TOOLS`: an example that uses one is eligible only when the tool was retrieved.
+const TRIGGERED_TOOLS: &[&str] = &["alert_when_done"];
 
 /// How many domain examples the per-utterance selection keeps, on top of the fixed clarify and
 /// reject slots. Mirrors Python `select_examples`'s `max_tool_examples` default.
@@ -255,6 +258,7 @@ pub fn select_examples<'a>(
 ) -> Vec<&'a PromptExample> {
     let query_tokens = word_set(query);
     let query_url = carries_url(query);
+    let query_folder = crate::known_folders::names_known_folder(query);
 
     let mut keep: Vec<bool> = vec![false; examples.len()];
     for control in ["clarify", "reject"] {
@@ -270,6 +274,16 @@ pub fn select_examples<'a>(
         .enumerate()
         .filter(|(_, e)| !example_tool_set(e).is_empty())
         .filter(|(_, e)| query_url || !carries_url(&e.request))
+        // A tool retrieved only by its triggers must not reach a prompt through an example, and
+        // an example that writes into a known folder only reaches a request that names one as a
+        // destination, so a request without either sees the examples it saw before.
+        .filter(|(_, e)| {
+            example_tool_set(e)
+                .iter()
+                .filter(|t| TRIGGERED_TOOLS.contains(*t))
+                .all(|t| retrieved_tool_names.contains(*t))
+        })
+        .filter(|(_, e)| query_folder || !crate::known_folders::names_known_folder(&e.request))
         .map(|(i, e)| {
             let tool_overlap = example_tool_set(e)
                 .iter()

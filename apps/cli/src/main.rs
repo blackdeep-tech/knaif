@@ -323,7 +323,9 @@ fn main() -> anyhow::Result<()> {
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
             let dry_run = args.dry_run;
-            finish_run(cmd_run(args), dry_run)
+            let result = cmd_run(args);
+            run_facts::alert_at_end(&result);
+            finish_run(result, dry_run)
         }
     };
     end_view(result)
@@ -344,6 +346,62 @@ fn end_view(result: anyhow::Result<()>) -> anyhow::Result<()> {
     }
     println!();
     Ok(())
+}
+
+/// What a `run` did, for the completion alert (`knaif_core::alert`): whether the plan asked for
+/// one, whether work started (a step ran, or a file was downloaded) and whether a confirmation
+/// was declined. Recorded in both views; read once, in `main`, after the run has ended.
+mod run_facts {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    static WORK_STARTED: AtomicBool = AtomicBool::new(false);
+    static DECLINED: AtomicBool = AtomicBool::new(false);
+    /// The request and when its run started, once the plan asked for an alert (never in a dry run).
+    static ALERT: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+
+    pub fn ask_for_alert(request: &str) {
+        *ALERT.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some((request.to_string(), Instant::now()));
+    }
+
+    pub fn work_started() {
+        WORK_STARTED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn declined() {
+        DECLINED.store(true, Ordering::SeqCst);
+    }
+
+    /// Fire the alert the plan asked for, once the run has ended: on success, on failure and when
+    /// a confirmation was declined mid-run; never when nothing ran. It never fails the run and
+    /// never writes to stdout.
+    pub fn alert_at_end(result: &anyhow::Result<()>) {
+        let Some((request, started)) = ALERT.lock().unwrap_or_else(|e| e.into_inner()).take()
+        else {
+            return;
+        };
+        let Some(outcome) = knaif_core::alert::run_outcome(
+            result.is_err(),
+            DECLINED.load(Ordering::SeqCst),
+            WORK_STARTED.load(Ordering::SeqCst),
+        ) else {
+            return;
+        };
+        let reason = result.as_ref().err().map(|e| {
+            let text = e.root_cause().to_string();
+            let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            text.chars().take(80).collect::<String>()
+        });
+        let alert = knaif_core::alert::alert_for(
+            outcome,
+            Some(&request),
+            started.elapsed().as_secs_f64(),
+            reason.as_deref(),
+        );
+        knaif_core::alert::fire(&alert);
+    }
 }
 
 /// Close a `run` in the terminal view: the last line of the tree, with the total time (prompt
@@ -1270,12 +1328,33 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         println!("{}", ui::render_planning(style, load, infer));
     }
     let payload = built?;
+    // The alert is a run option: it leaves the plan here, before any later stage sees it, and
+    // fires in `main` once the run has ended (Python `_execute_plan` / `execute_plan`).
+    let (payload, alert) = knaif_core::alert::split_alert(&payload);
+    if alert && !args.dry_run {
+        run_facts::ask_for_alert(&request);
+    }
 
     let mut steps = payload
         .get("plan")
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
+    // "save it in Downloads": an output that names a known folder goes into the user's real
+    // folder, resolved here and never by the model; a folder of that name next to the input
+    // makes it a question instead, and `--sandbox` refuses one outside it (knaif_core::
+    // known_folders). Before the downloads, as Python rewrites right after validation.
+    {
+        use knaif_core::known_folders::{process_env, rewrite_outputs, Rewrite};
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        match rewrite_outputs(&steps, &registry, &base, sandbox, &process_env()) {
+            Rewrite::Plan(rewritten) => steps = rewritten,
+            Rewrite::Ask(question) => {
+                steps = vec![serde_json::json!({"tool": "clarify", "args": {"question": question}})]
+            }
+            Rewrite::Refused(reason) => anyhow::bail!(reason),
+        }
+    }
     // This run's scratch folder (knaif_core::scratch). The path is fixed now so the plan can name
     // it; the folder is created only when execution starts, never in a dry run, and removed when
     // `scratch` drops at the end of this function, on success and on failure.
@@ -1471,6 +1550,8 @@ fn fetch_url_inputs(
         for url in &urls {
             let got = knaif_toolkit_net::download_file(url, scratch.path(), &policy)
                 .map_err(|e| anyhow::anyhow!(e))?;
+            // A downloaded file is work done, which a later failure's alert reports on.
+            run_facts::work_started();
             let shown = display_path(&got.path.to_string_lossy(), Some(scratch.path()));
             note(&format!("downloaded {url} ({} bytes) → {shown}", got.bytes));
             local.push((url.clone(), got.path.to_string_lossy().into_owned()));
@@ -1685,10 +1766,17 @@ fn execute_steps(
             None if total > 1 => println!("step {ordinal} of {total}:"),
             None => {}
         }
-        match run(step).with_context(|| chain_failure_context(idx, total))? {
+        let outcome = run(step);
+        // A step that ran, or failed while running, is work the alert reports on; a control
+        // step or a declined confirmation is not (Python `CommandAgent._work_started`).
+        if !is_control_step(step) && !matches!(outcome, Ok(StepOutcome::Declined)) {
+            run_facts::work_started();
+        }
+        match outcome.with_context(|| chain_failure_context(idx, total))? {
             StepOutcome::Continue => {}
             StepOutcome::ShortCircuit => return Ok(()),
             StepOutcome::Declined => {
+                run_facts::declined();
                 match ui::view() {
                     // The closing line says where the run stopped, which covers the steps after.
                     Some(_) => ui::mark_declined(ordinal, total),
@@ -2746,6 +2834,10 @@ impl PlanSession {
         // same directory stem resolution uses two lines down — `sandbox` when configured, else
         // the cwd — so the guard cannot admit a name the resolver would then refuse.
         let known_files = listed_filenames(sandbox.unwrap_or(base));
+        // The alert goes last, keeping every other step's order, so chain linking never sees it
+        // between two steps (Python `alert_last`, at the same point of `infer`).
+        let mut payload = payload;
+        knaif_core::alert::alert_last(&mut payload);
         let gated = knaif_core::apply_clarify_gate(
             payload,
             &utterance,
@@ -3168,10 +3260,13 @@ fn try_build_payload(
     let mut payload = knaif_core::parse_plan(&extracted.json)?;
     knaif_core::normalize_plan(&mut payload, Some(registry));
     knaif_core::apply_defaults(&mut payload, registry);
-    if let Some(clarify) = knaif_core::required_args_clarify(&payload, registry) {
+    // The plan the pipeline will run: the alert is a run option and not checked as a step, so an
+    // arg the model gives it never sends the model back (Python `_try_build_payload`).
+    let (probe, _) = knaif_core::alert::split_alert(&payload);
+    if let Some(clarify) = knaif_core::required_args_clarify(&probe, registry) {
         return Ok(clarify);
     }
-    knaif_core::validate_plan(&payload, registry, base, sandbox)?;
+    knaif_core::validate_plan(&probe, registry, base, sandbox)?;
     Ok(payload)
 }
 

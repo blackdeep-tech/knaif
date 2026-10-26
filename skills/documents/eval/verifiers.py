@@ -87,6 +87,7 @@ def _artifact_checks(
     sandbox: Path,
     matched: list[str],
     failed: list[str],
+    fixture_dir: Path | None = None,
 ) -> None:
     """Grade the transformation on the real artifact. Every requested check fails when there is
     no artifact to open — a missing file cannot have rotated its pages."""
@@ -99,12 +100,14 @@ def _artifact_checks(
 
     if "no_larger_than" in criteria:
         # Beside the artifact first: the eval runs each row in its own directory, where the
-        # row's fixture was copied, so `sandbox` is not necessarily where the input lives.
+        # row's fixture was copied, so `sandbox` is not necessarily where the input lives. An
+        # artifact in a known folder (`<row>.known/Desktop`) or made from a download has no copy
+        # beside it: the row's fixture folder holds the original.
         name = criteria["no_larger_than"]
-        source = next(
-            (p for p in (final.parent / name, Path(sandbox) / name) if p.exists()),
-            final.parent / name,
-        )
+        places = [final.parent / name, Path(sandbox) / name]
+        if fixture_dir is not None:
+            places.append(Path(fixture_dir) / name)
+        source = next((p for p in places if p.exists()), final.parent / name)
         if source.exists() and final.stat().st_size <= source.stat().st_size:
             matched.append(f"no_larger_than:{source.name}")
         else:
@@ -406,7 +409,15 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
             failed.append("artifact_missing")
 
     # What the transformation did, read off the final artifact (release plan R3a).
-    _artifact_checks(_final_artifact(output), criteria, sandbox, matched, failed)
+    fixture = getattr(output, "fixture_path", None)
+    _artifact_checks(
+        _final_artifact(output),
+        criteria,
+        sandbox,
+        matched,
+        failed,
+        fixture_dir=Path(fixture).parent if fixture is not None else None,
+    )
 
     return _score(matched, failed, kind="output")
 

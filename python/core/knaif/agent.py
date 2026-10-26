@@ -27,6 +27,7 @@ from .planner import (
     StemNotFoundError,
     _is_stem_candidate,
     _resolve_path,
+    alert_last,
     apply_defaults,
     classify_preflight_errors,
     normalize_plan,
@@ -34,6 +35,7 @@ from .planner import (
     parse_plan,
     resolve_args,
     resolve_stems,
+    split_alert,
     summarize_plan_steps,
     validate_arg_by_schema,
     validate_plan,
@@ -246,6 +248,13 @@ class CommandAgent:
         # The plan as the model emitted it (parsed), before `infer` links chain intermediates
         # and threads reused sources in place. None when no model plan exists for the last call.
         self.last_model_plan: dict[str, Any] | None = None
+        # Whether the last executed plan asked for an alert (`alert_when_done`), taken out of the
+        # plan before execution.
+        self.last_alert: bool = False
+        # Set when a step other than a control tool ran in the current execute_plan: an alert
+        # reports on work, never on a request answered before anything ran.
+        self._work_started: bool = False
+        self._intent_declined: bool = False
         # One corrective re-prompt on a parse/validation failure (validator-
         # feedback retry). Toggle off to measure the without-retry baseline.
         self.repair_invalid_plans: bool = True
@@ -406,21 +415,60 @@ class CommandAgent:
 
         A stage that needs the run scratch before execution (URL downloads, which must land
         before preflight) enters it on *early*; closing the stack removes it on every exit.
+
+        When the plan asked for an alert (``alert_when_done``), it fires once the run has
+        ended, on success or failure (``knaif.alert``); never in a dry run, never when nothing
+        ran, and not when the run is interrupted (Ctrl+C: the user is there).
         """
         from contextlib import ExitStack
 
-        with ExitStack() as early:
-            return self._execute_plan(
-                payload,
-                utterance=utterance,
-                injected_files=injected_files,
-                dry_run=dry_run,
-                confirmed=confirmed,
-                show_plan=show_plan,
-                require_approval=require_approval,
-                skip_execution=skip_execution,
-                early=early,
-            )
+        started = time.perf_counter()
+        self.last_alert = False
+        self._work_started = False
+        self._intent_declined = False
+        results: list[dict[str, Any]] = []
+        error: Exception | None = None
+        ended = False
+        try:
+            with ExitStack() as early:
+                results = self._execute_plan(
+                    payload,
+                    utterance=utterance,
+                    injected_files=injected_files,
+                    dry_run=dry_run,
+                    confirmed=confirmed,
+                    show_plan=show_plan,
+                    require_approval=require_approval,
+                    skip_execution=skip_execution,
+                    early=early,
+                )
+            ended = True
+            return results
+        except Exception as exc:
+            error = exc
+            ended = True
+            raise
+        finally:
+            if ended and self.last_alert and not (dry_run or skip_execution):
+                self._alert_at_end(results, error, utterance, time.perf_counter() - started)
+
+    def _alert_at_end(
+        self,
+        results: list[dict[str, Any]],
+        error: Exception | None,
+        utterance: str | None,
+        seconds: float,
+    ) -> None:
+        from .alert import alert_for, fire, run_outcome
+
+        downloaded = any(not d.get("dry_run") for d in getattr(self, "last_downloads", []) or [])
+        outcome = run_outcome(results, error, self._work_started or downloaded)
+        if outcome is None:
+            return
+        if outcome == "done" and self._intent_declined:
+            outcome = "stopped"
+        reason = " ".join(str(error).split())[:80] if error is not None else None
+        fire(alert_for(outcome, request=utterance, seconds=seconds, reason=reason))
 
     def _execute_plan(
         self,
@@ -467,6 +515,8 @@ class CommandAgent:
 
         normalize_plan(payload, self.registry)
         apply_defaults(payload, self.registry)
+        # The alert is a run option: it leaves the plan here, before any gate or step sees it.
+        payload, self.last_alert = split_alert(payload)
 
         # Arg-shape clarify gates (before structural validation): when the model
         # omits a required arg the user must supply, or puts an arg on a known
@@ -492,6 +542,30 @@ class CommandAgent:
                 ]
 
         self.validate_plan(payload)
+
+        # "save it in Downloads": an output that names a known folder goes into the user's real
+        # folder, resolved here and never by the model; a folder of that name next to the input
+        # makes it a question instead (knaif.known_folders).
+        from .known_folders import SameNameFolder, rewrite_outputs
+
+        try:
+            payload = {
+                **payload,
+                "plan": rewrite_outputs(
+                    payload["plan"], self.registry, cwd=Path(self.root), sandbox=self.sandbox
+                ),
+            }
+        except SameNameFolder as ask:
+            question = str(ask)
+            return [
+                {
+                    "tool": "clarify",
+                    "args": {"question": question},
+                    "result": {"status": "clarification_needed", "question": question},
+                    "output": None,
+                    "duration_ms": 0.0,
+                }
+            ]
 
         intent_plan = payload["plan"]
         # This run's scratch folder. The path is fixed now so the plan can name it; the folder
@@ -778,6 +852,7 @@ class CommandAgent:
                         else:
                             ok = confirmed
                         if not ok:
+                            self._intent_declined = True
                             break  # decline this intent → stop, keep prior results
 
                 sub_results, should_stop = self._execute_steps(
@@ -887,6 +962,8 @@ class CommandAgent:
                 raise ValueError(f"{tool!r} requires confirmed=True when dry_run=False.")
 
             ctx = self._handler_context(dry_run, confirmed, skip_execution, work_dir, tool=tool)
+            if tool not in _TERMINAL_TOOLS and tool != "wait_for_confirmation":
+                self._work_started = True
             _t0 = time.perf_counter()
             if exec_tool_obj is not None:
                 result = exec_tool_obj.handle(args, ctx)
@@ -1361,6 +1438,7 @@ class CommandAgent:
         # Kept before the rewrites below, which mutate `payload` in place: without it nothing
         # downstream can tell a model error from a correct plan that core changed.
         self.last_model_plan = copy.deepcopy(payload)
+        alert_last(payload)
         self._link_chain_intermediates(
             payload.get("plan") or [], user_utterance, self._output_capable, self.file_kinds
         )
@@ -1402,7 +1480,9 @@ class CommandAgent:
         except ValueError as exc:
             return None, "parse", str(exc)
 
-        probe = copy.deepcopy(payload)
+        # The plan the pipeline will run: the alert is a run option and not checked as a step,
+        # so an arg the model gives it never sends the model back.
+        probe, _ = split_alert(copy.deepcopy(payload))
         try:
             normalize_plan(probe, self.registry)
             apply_defaults(probe, self.registry)

@@ -72,6 +72,18 @@ def _query_tokens(text: str) -> set[str]:
     return tokens
 
 
+def triggered(text: str, triggers: tuple[str, ...]) -> bool:
+    """True when one of *triggers* is in *text* as a whole word or phrase, ignoring case and
+    accents: "beep" matches "Beep when done" and not "beeper.mp4". A typographic apostrophe
+    counts as a plain one, so "when it’s done" matches "when it's done"."""
+    norm = " ".join(_normalize(text).replace("’", "'").split())
+    for trigger in triggers:
+        phrase = " ".join(_normalize(trigger).replace("’", "'").split())
+        if phrase and re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", norm):
+            return True
+    return False
+
+
 @dataclass
 class ToolDef:
     name: str
@@ -85,6 +97,10 @@ class ToolDef:
     grounded_args: tuple[str, ...] = field(default_factory=tuple)
     safety_category: str = "safe"
     keywords: tuple[str, ...] = field(default_factory=tuple)
+    # Whole words or phrases that bring this tool into a prompt. A tool with triggers is never
+    # ranked: it is retrieved only when one is in the request (`retrieve_tools`), so a request
+    # without one gets the same tools as if the tool did not exist (core's `alert_when_done`).
+    triggers: tuple[str, ...] = field(default_factory=tuple)
     readonly: bool = False
     # Several inputs become ONE output (concat), not one output each (a batch). Read by chain
     # routing: a joining producer's output is a single routable intermediate.
@@ -145,6 +161,7 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             grounded_args=tuple(cfg.get("grounded_args") or []),
             safety_category=cfg.get("safety_category", "safe"),
             keywords=tuple(cfg.get("keywords") or []),
+            triggers=tuple(cfg.get("triggers") or []),
             readonly=bool(cfg.get("readonly", False)),
             joins_inputs=bool(cfg.get("joins_inputs", False)),
             effects=parse_effects(name, cfg.get("effects")),
@@ -192,6 +209,8 @@ def retrieve_tools(
     Tools in _ALWAYS_INCLUDE are returned unconditionally.
     Internal tools are never surfaced to the model.
     Only tools with score >= min_score are included in the ranked selection.
+    A tool with ``triggers`` is not ranked: it follows the ranked tools when one of its triggers
+    is in *query*, and is absent otherwise.
     """
     tokens = _query_tokens(query)
 
@@ -208,7 +227,7 @@ def retrieve_tools(
 
     scores: list[tuple[float, str]] = []
     for name, tool in registry.items():
-        if name in _ALWAYS_INCLUDE or tool.internal:
+        if name in _ALWAYS_INCLUDE or tool.internal or tool.triggers:
             continue
         matched = tokens & {_normalize(kw) for kw in tool.keywords}
         kw_score = 3.0 * sum(1.0 / df[k] for k in matched)
@@ -223,6 +242,9 @@ def retrieve_tools(
     selected: dict[str, ToolDef] = {
         name: registry[name] for score, name in scores[:top_k] if score >= min_score
     }
+    for name, tool in registry.items():
+        if tool.triggers and not tool.internal and triggered(query, tool.triggers):
+            selected[name] = tool
     for name in _ALWAYS_INCLUDE:
         if name in registry:
             selected[name] = registry[name]

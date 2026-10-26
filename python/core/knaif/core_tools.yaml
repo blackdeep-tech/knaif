@@ -2,9 +2,9 @@
 #
 # Behavior lives in the Step classes in core_tools.py; this file holds their
 # model-facing metadata, loaded through the same registry loader as a skill's
-# tools.yaml so both render identically in the prompt. These four tools ship
+# tools.yaml so both render identically in the prompt. These tools ship
 # with core in every language implementation, so they live here (not in a
-# skill dir). Keep the entries in sync with CORE_STEP_MAP by `name`.
+# skill dir). Keep the entries in sync with CORE_TOOL_MAP by `name`.
 #
 # `reject` and `clarify` divide one question between them: was the request
 # refused because it breaks the active skill's safety policy (`reject`), or
@@ -32,6 +32,20 @@ done:
   description: "Signal that the task is complete."
   keywords: [done, complete, finished, end, stop]
   required_args: []
+  safety_category: safe
+
+# A run option, not a step: the pipeline removes it from the plan before anything executes and
+# alerts when the run ends (success, failure, or a confirmation declined mid-run): a desktop
+# notification and a beep. It takes no args; any the model writes are ignored. Retrieved only
+# when one of its `triggers` is in the request (a whole word or phrase), never by rank, so a
+# request without one gets the same tools and examples as before.
+alert_when_done:
+  description: "Alert the user (a desktop notification and a beep) when the task has finished."
+  required_args: []
+  triggers: [beep, beeps, beeping, notify, notification, notified, alert, chime, "ping me",
+             "let me know", "tell me when", "when it's done", "when it is done", "when done",
+             "when finished", "when it's finished", "when it finishes", "once done",
+             "once it's done", "when it's ready", "when ready"]
   safety_category: safe
 
 wait_for_confirmation:

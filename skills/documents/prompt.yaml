@@ -69,6 +69,31 @@ examples:
         - tool: extract_text
           args:
             input: "https://example.com/files/minutes.pdf"
+  - request: "pull the words out of invoice.pdf, ping me when it's ready"
+    output:
+      plan:
+        - tool: extract_text
+          args:
+            input: invoice.pdf
+        - tool: alert_when_done
+          args: {}
+  - request: "rotate report.pdf 90 degrees and save it to my Desktop"
+    output:
+      plan:
+        - tool: rotate_pages
+          args:
+            input: report.pdf
+            degrees: 90
+            output: "Desktop/report.pdf"
+  - request: "number the pages of report.pdf, save it in my Documents folder and let me know when it's done"
+    output:
+      plan:
+        - tool: add_page_numbers
+          args:
+            input: report.pdf
+            output: "Documents/report.pdf"
+        - tool: alert_when_done
+          args: {}
   - request: "do something with a file"
     output:
       plan:

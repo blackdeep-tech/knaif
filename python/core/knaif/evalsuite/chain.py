@@ -39,7 +39,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .provisioning import provision_row_dir, row_scratch_dir
+from .provisioning import provision_row_dir, row_known_dir, row_scratch_dir
 
 #: Tokens whose following argument is a path the command reads.
 _INPUT_FLAGS = {"-i"}
@@ -88,7 +88,11 @@ def _scratch_part(token: str) -> Path | None:
 
 
 def resolve_command(
-    command: str, row_dir: Path | str, anchors: list[Path] | None = None
+    command: str,
+    row_dir: Path | str,
+    anchors: list[Path] | None = None,
+    *,
+    known_root: Path | str | None = None,
 ) -> tuple[str, list[str]]:
     """``(resolved command, collapsed tokens)`` — every path token re-rooted at *row_dir*.
 
@@ -100,9 +104,13 @@ def resolve_command(
     *collapsed* lists any absolute token that matched no anchor and was therefore reduced to
     its basename. It is empty on every path this harness is expected to take; a non-empty list
     means the command reached outside the eval tree and the re-rooting lost a directory.
+
+    *known_root* is where the plan's known folders pointed (``runner.plan_known_folders``); a
+    path under it goes to the row's own known folders beside the row (``row_known_dir``).
     """
     row_dir = Path(row_dir)
     anchors = [Path(a).resolve() for a in (anchors or [])]
+    known = Path(known_root).resolve() if known_root is not None else None
     toks = command.split()
     if not toks:
         return command, []
@@ -115,6 +123,12 @@ def resolve_command(
         scratch = _scratch_part(tok)
         if scratch is not None:
             return str(row_scratch_dir(row_dir) / scratch)
+        # Checked before the anchors: the plan-time known folders sit inside the fixtures.
+        if known is not None and Path(tok).is_absolute():
+            try:
+                return str(row_known_dir(row_dir) / Path(tok).resolve().relative_to(known))
+            except ValueError:
+                pass
         part, lost = _relative_part(tok, anchors)
         if lost:
             collapsed.append(tok)
@@ -135,6 +149,7 @@ def run_command_chain(
     timeout: int = 120,
     fixture_file: Path | str | None = None,
     prepare: Any = None,
+    known_root: Path | str | None = None,
 ) -> list[dict[str, Any]]:
     """Provision ``fixture_dir`` into ``out_dir``, then run ``commands`` there in sequence.
 
@@ -152,6 +167,8 @@ def run_command_chain(
     *prepare* (``prepare(out_dir)``) runs after provisioning and before the first command: the
     runner downloads a row's URL inputs into its scratch there, since provisioning empties it.
     A failure stops the chain as a failed step named ``download``.
+
+    *known_root*: see :func:`resolve_command`.
     """
     fixture_dir = Path(fixture_dir)
     out_dir = Path(out_dir)
@@ -179,7 +196,7 @@ def run_command_chain(
     results: list[dict[str, Any]] = []
 
     for command in commands:
-        resolved, collapsed = resolve_command(command, out_dir, anchors)
+        resolved, collapsed = resolve_command(command, out_dir, anchors, known_root=known_root)
         toks = resolved.split()
         output = Path(toks[-1]) if toks else out_dir
         output.parent.mkdir(parents=True, exist_ok=True)
