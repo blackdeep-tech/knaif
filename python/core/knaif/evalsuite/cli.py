@@ -2015,6 +2015,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
     if not backends_cfg:
         sys.exit(f"No backends to compare. Add one to {config_path} or pass --backends.")
 
+    boards: dict[str, dict[str, Any]] = {}
     for backend_name, backend_cfg in backends_cfg.items():
         print(f"\nRunning backend: {backend_name}", flush=True)
         backend_sandbox = sandbox / backend_name
@@ -2031,6 +2032,13 @@ def cmd_compare(args: argparse.Namespace) -> None:
         )
         scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
         print_scoreboard(scoreboard, backend=backend_name, verbose=args.verbose)
+        boards[backend_name] = scoreboard
+
+    if len(boards) > 1:
+        from .stats import format_paired
+
+        # Same rows, two models: only the flips carry evidence, and McNemar weighs them.
+        print("\n" + format_paired(boards))
 
 
 def cmd_safety(args: argparse.Namespace) -> dict[str, Any]:
@@ -3204,12 +3212,51 @@ def cmd_retrieval(args: argparse.Namespace) -> None:
         summary = {
             "top_k": results["top_k"],
             "skills": {
-                s: {k: v for k, v in r.items() if k != "misses"}
+                s: {k: v for k, v in r.items() if k not in ("misses", "chain_misses")}
                 for s, r in results["skills"].items()
             },
         }
         Path(args.save).write_text(json.dumps(summary, indent=2), encoding="utf-8")
         print(f"\nSaved baseline -> {args.save}")
+
+
+def cmd_error_split(args: argparse.Namespace) -> None:
+    """Bucket a saved scoreboard's rows by where they went wrong (retriever, model, gate)."""
+    from .error_split import capture_shown, format_report, load_corpus_rows, split
+
+    corpus_file = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    if not corpus_file.exists():
+        sys.exit(f"Corpus not found: {corpus_file}")
+    if args.capture:
+        shown = capture_shown(args.skill, corpus_file)
+        Path(args.capture).write_text(
+            json.dumps(shown, indent=1, ensure_ascii=False), encoding="utf-8"
+        )
+        print(f"Shown tools for {len(shown)} utterances -> {args.capture}")
+        return
+    if not args.scoreboard:
+        sys.exit("error-split needs --scoreboard (or --capture FILE)")
+
+    def load(p: str | None) -> Any:
+        return json.loads(Path(p).read_text(encoding="utf-8")) if p else None
+
+    result = split(
+        load(args.scoreboard),
+        load_corpus_rows(corpus_file),
+        load(args.shown),
+        shown_now=load(args.shown_now),
+        compare=load(args.compare),
+    )
+    report = format_report(result, title=args.title or f"{args.skill} {Path(args.scoreboard).name}")
+    print(report)
+    if args.save:
+        out = Path(args.save)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "split.json").write_text(
+            json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8"
+        )
+        (out / "report.md").write_text(report, encoding="utf-8")
+        print(f"Saved split.json and report.md -> {out}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -3745,6 +3792,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--tol", type=float, default=0.02, help="Recall regression tolerance (default 0.02)"
     )
 
+    # error-split
+    p_es = sub.add_parser(
+        "error-split",
+        help="Bucket a saved scoreboard's rows by where they went wrong (retriever, model, gate)",
+    )
+    p_es.add_argument("--skill", required=True)
+    p_es.add_argument(
+        "--corpus", default=None, help="Corpus file (default: the skill's eval.jsonl)"
+    )
+    p_es.add_argument(
+        "--capture",
+        default=None,
+        metavar="FILE",
+        help="Write the tools each utterance's prompt shows (this checkout's retrieval) and exit",
+    )
+    p_es.add_argument("--scoreboard", default=None, help="Saved scoreboard JSON to split")
+    p_es.add_argument("--shown", default=None, help="Shown tools as served (from --capture)")
+    p_es.add_argument("--shown-now", default=None, dest="shown_now", help="Shown tools today")
+    p_es.add_argument("--compare", default=None, help="Another model's scoreboard, same corpus")
+    p_es.add_argument("--title", default=None)
+    p_es.add_argument("--save", default=None, metavar="DIR", help="Write split.json + report.md")
+
     # show-baseline
     p_sb = sub.add_parser("show-baseline", help="Show baseline command for a corpus row")
     p_sb.add_argument("--skill", required=True)
@@ -3891,6 +3960,7 @@ def main() -> None:
         "waive": cmd_waive,
         "equivalence": cmd_equivalence,
         "exact-files": cmd_exact_files,
+        "error-split": cmd_error_split,
     }
     dispatch[args.command](args)
 

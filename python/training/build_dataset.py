@@ -23,10 +23,24 @@ ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = ROOT.parent
 
 from knaif import CommandAgent  # noqa: E402
+from knaif.orchestrator import with_no_think  # noqa: E402
 from knaif.registry import retrieve_tools  # noqa: E402
 
 SKILLS = ["ffmpeg", "documents"]
 OUT = ROOT / "training" / "union_chat.jsonl"
+
+
+def chat_row(skill: str, system_msg: str, user_msg: str, plan: dict) -> dict:
+    """One training row: the system turn exactly as served (with `/no_think`, which inference
+    appends while thinking is off), the user turn, and the plan as the assistant's answer."""
+    return {
+        "skill": skill,
+        "messages": [
+            {"role": "system", "content": with_no_think(system_msg)},
+            {"role": "user", "content": user_msg},
+            {"role": "assistant", "content": json.dumps(plan, ensure_ascii=False)},
+        ],
+    }
 
 
 def parse_weight_map(spec: str) -> dict[str, int]:
@@ -138,14 +152,7 @@ def main() -> None:
                 # Sanity: the plan must still validate (the train.jsonl is pre-validated,
                 # but re-checking guards against a stale file).
                 agent.validate_plan(plan)
-                row = {
-                    "skill": skill,
-                    "messages": [
-                        {"role": "system", "content": system_msg},
-                        {"role": "user", "content": user_msg},
-                        {"role": "assistant", "content": json.dumps(plan, ensure_ascii=False)},
-                    ],
-                }
+                row = chat_row(skill, system_msg, user_msg, plan)
                 reps = repetition_count(skill, tags, skill_weights, tag_weights)
                 rows.extend(row for _ in range(reps))
                 n += 1

@@ -25,6 +25,40 @@ def test_evaluate_skill_structure():
     assert isinstance(r["misses"], list)
 
 
+def test_chain_rows_are_scored_on_every_tool_in_their_own_block():
+    """A chain row needs every one of its tools shown. Its first tool already counts in
+    `overall` (expected_tool = expected_tools[0]), so the chain score sits in its own block
+    and the locked `overall` baseline means what it always did."""
+    import json
+    from pathlib import Path
+
+    rows = [
+        json.loads(line)
+        for line in Path("skills/ffmpeg/data/eval.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    chain_utts = sum(len(r["utterances"]) for r in rows if r.get("expected_tools"))
+    r = evaluate_skill("ffmpeg", top_k=5)
+    assert r["chains"]["n"] == chain_utts > 0
+    assert 0.0 <= r["chains"]["recall_at_k"] <= 1.0
+    # A chain is only as shown as its least-shown tool: never above the first-tool recall.
+    assert all(m["tools"] for m in r["chain_misses"])
+
+
+def test_chain_hit_needs_every_non_core_tool_in_the_top_k():
+    from knaif.evalsuite.retrieval import chain_hit
+
+    ranked = ["trim_video", "convert_video", "extract_audio"]
+    assert chain_hit(["trim_video", "extract_audio"], ranked, top_k=3)
+    assert not chain_hit(["trim_video", "extract_audio"], ranked, top_k=2)
+    assert chain_hit(["trim_video", "done"], ranked, top_k=1)  # core tools are always there
+
+
+def test_format_report_shows_the_chain_block():
+    out = format_report({"top_k": 5, "skills": {"ffmpeg": evaluate_skill("ffmpeg")}})
+    assert "chains" in out
+
+
 def test_cjk_recall_recovered_by_ngram_fix():
     """Phase-1 CJK n-gram tokenization must keep CJK recall well above the old
     whitespace-tokenizer floor (~0.43). Regression guard for the fix."""

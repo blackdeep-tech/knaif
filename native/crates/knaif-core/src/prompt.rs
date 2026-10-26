@@ -354,25 +354,21 @@ pub fn build_prompt_ordered(
                 .unwrap_or_default();
             format!("{arg} ({suffix}{hint})")
         };
-        let req = def
+        // One list, so a tool with only optional args does not start with ", ".
+        let labels = def
             .required_args
             .iter()
             .map(|a| arg_label(a, "required"))
+            .chain(def.optional_args.iter().map(|a| arg_label(a, "optional")))
             .collect::<Vec<_>>()
             .join(", ");
-        let opt = if def.optional_args.is_empty() {
-            String::new()
-        } else {
-            let opts = def
-                .optional_args
-                .iter()
-                .map(|a| arg_label(a, "optional"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(", {opts}")
-        };
         tool_lines.push(format!("  - {name}: {}", def.description));
-        tool_lines.push(format!("    args: {req}{opt}"));
+        // No trailing space when there are none: it is noise in what the model reads.
+        tool_lines.push(if labels.is_empty() {
+            "    args:".to_string()
+        } else {
+            format!("    args: {labels}")
+        });
     }
 
     let header = overrides
@@ -383,7 +379,13 @@ pub fn build_prompt_ordered(
         .examples_block
         .as_deref()
         .unwrap_or(DEFAULT_EXAMPLES);
-    let system_msg = format!("{header}{}{examples}", tool_lines.join("\n"));
+    // A rendered block starts with "Examples:"; without this it ran on from the last tool line.
+    let sep = if !examples.is_empty() && !examples.starts_with('\n') {
+        "\n"
+    } else {
+        ""
+    };
+    let system_msg = format!("{header}{}{sep}{examples}", tool_lines.join("\n"));
     (system_msg, utterance.to_string())
 }
 

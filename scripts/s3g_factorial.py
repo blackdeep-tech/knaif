@@ -32,12 +32,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from knaif.evalsuite.stats import mcnemar_p
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "python" / "core"))
@@ -111,20 +112,11 @@ def paired(a_rows: list[dict], b_rows: list[dict]) -> tuple[int, int, int]:
     return a_only, b_only, len(shared)
 
 
-def mcnemar_exact(a_only: int, b_only: int) -> float:
-    """Two-sided exact binomial p for the discordant pairs.
-
-    Under the null the two configurations are equally likely to win a pair, so the
-    discordant count is Binomial(n, 0.5). Exact rather than chi-square because the
-    discordant counts here are small — often single digits — where the approximation is
-    not trustworthy.
-    """
-    n = a_only + b_only
-    if n == 0:
-        return 1.0
-    k = min(a_only, b_only)
-    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2**n)
-    return min(1.0, 2 * tail)
+# Two-sided exact binomial p for the discordant pairs: under the null the two configurations
+# are equally likely to win a pair, so the discordant count is Binomial(n, 0.5). Exact rather
+# than chi-square because the discordant counts here are small, often single digits. Shared with
+# `evalsuite compare` and the error split.
+mcnemar_exact = mcnemar_p
 
 
 # -- reporting ----------------------------------------------------------------

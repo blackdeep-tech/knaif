@@ -279,17 +279,18 @@ def build_prompt(
         if tool_name in _SYSTEM_TOOLS or tool_def.internal:
             continue
         schemas = tool_def.arg_schemas
-        req = ", ".join(_arg_label(a, schemas, "required") for a in tool_def.required_args)
-        opt = (
-            ", " + ", ".join(_arg_label(a, schemas, "optional") for a in tool_def.optional_args)
-            if tool_def.optional_args
-            else ""
-        )
+        # One list, so a tool with only optional args does not start with ", ".
+        labels = [_arg_label(a, schemas, "required") for a in tool_def.required_args] + [
+            _arg_label(a, schemas, "optional") for a in tool_def.optional_args
+        ]
         tool_lines.append(f"  - {tool_name}: {tool_def.description}")
-        tool_lines.append(f"    args: {req}{opt}")
+        tool_lines.append(f"    args: {', '.join(labels)}" if labels else "    args:")
 
     header = system_header if system_header is not None else _SYSTEM_HEADER
     examples = examples_block if examples_block is not None else _EXAMPLES
+    # A rendered block starts with "Examples:"; without this it ran on from the last tool line.
+    if examples and not examples.startswith("\n"):
+        examples = "\n" + examples
     history_block = _format_history(history) if history else ""
     system_msg = header + "\n".join(tool_lines) + examples + history_block
     return system_msg, user_utterance

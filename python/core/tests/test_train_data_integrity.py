@@ -202,6 +202,8 @@ _INVARIANT_MARKERS = (
     "shred",
     "rm -rf",
     "overwrite",
+    # Writing the result back to the input's own name overwrites it (owner, 2026-10-19).
+    "same filename",
     "format the drive",
     "format my",
     "forge",

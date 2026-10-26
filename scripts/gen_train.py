@@ -1120,6 +1120,203 @@ def ffmpeg_rows() -> list[Row]:
     for utt, reason, category in rej:
         r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
 
+    r.extend(ffmpeg_rows_act_ask())
+    return r
+
+
+def ffmpeg_rows_act_ask() -> list[Row]:
+    """Act-vs-ask contrastive pairs, reviewed by the owner 2026-10-19.
+
+    Aimed at the clear model errors of the corpus v2 error split
+    (its "Act vs ask, row by row" review): each case is
+    a near-pair, the same request once too vague or impossible (-> clarify) and once fully
+    specified (-> plan), so the set pulls neither toward `clarify` nor toward acting (the R3/R5a
+    rows below did one, then the other). Other files and values than the eval rows; none of the
+    contested rows' behaviour (no file named, extension-less names, nearest tool, outside the
+    sandbox, a speed limit) is taught either way. Part of `ffmpeg_rows()`.
+    """
+    r: list[Row] = []
+    tag = ["v5", "act_ask"]
+
+    def ask(utt: str, question: str, *tags: str) -> None:
+        r.append((utt, P(step("clarify", question=question)), [*tag, "clarify", *tags]))
+
+    def act(utt: str, s: dict, *tags: str) -> None:
+        r.append((utt, P(s), [*tag, *tags]))
+
+    # A vague or invalid parameter -> ask; the same request with it given -> plan.
+    ask(
+        "Convert holiday.mov to whatever format works best.",
+        "Which format should I convert holiday.mov to: mp4, mkv, webm, mov, avi or gif?",
+        "convert",
+    )
+    act(
+        "Convert holiday.mov to webm.",
+        step("convert_video", inputs=["holiday.mov"], container="webm"),
+        "convert",
+    )
+    ask(
+        "Завърти drone.mp4.",
+        "На колко градуса да завъртя drone.mp4: 90, 180 или 270?",
+        "rotate",
+        "bg",
+    )
+    act(
+        "Завърти drone.mp4 на 90 градуса.",
+        step("rotate_video", inputs=["drone.mp4"], angle=90),
+        "rotate",
+        "bg",
+    )
+    ask(
+        "Поверни drone.mp4.",
+        "На сколько градусов повернуть drone.mp4: 90, 180 или 270?",
+        "rotate",
+        "ru",
+    )
+    act(
+        "Поверни drone.mp4 на 180 градусов.",
+        step("rotate_video", inputs=["drone.mp4"], angle=180),
+        "rotate",
+        "ru",
+    )
+    ask(
+        "Cut lecture.mp4 from before it begins up to 8 seconds.",
+        "A start before the beginning of lecture.mp4 isn't possible. Should I cut from 0 to 8 seconds?",
+        "trim",
+    )
+    act(
+        "Cut lecture.mp4 from the start up to 8 seconds.",
+        step("trim_video", input="lecture.mp4", start="00:00:00", end="00:00:08"),
+        "trim",
+    )
+    ask(
+        "Take a little piece from the start of podcast.mp4.",
+        "How much of the start of podcast.mp4 should I keep, for example the first 5 seconds?",
+        "trim",
+    )
+    act(
+        "Take the first 5 seconds of podcast.mp4.",
+        step("trim_video", input="podcast.mp4", start="00:00:00", end="00:00:05"),
+        "trim",
+    )
+
+    # Unsupported -> ask and SAY it is not supported (never a reject); the supported action -> plan.
+    ask(
+        "Write me the ffmpeg command to shorten intro.mov and run it.",
+        "Running a command string isn't supported; I perform the operation with my own tools. "
+        "Should I trim intro.mov, and which part should I keep?",
+        "unsupported",
+    )
+    act(
+        "Trim intro.mov to its first 20 seconds.",
+        step("trim_video", input="intro.mov", start="00:00:00", end="00:00:20"),
+        "trim",
+    )
+    ask(
+        "Just print the ffmpeg command line for compressing talk.mp4.",
+        "Handing out command lines isn't supported; I run the operation itself. Should I compress talk.mp4?",
+        "unsupported",
+    )
+    act("Compress talk.mp4.", step("compress_video", inputs=["talk.mp4"]), "compress")
+    ask(
+        "Resize promo.mp4 to 0x0 pixels.",
+        "A 0x0 video isn't achievable. Should I resize promo.mp4 to a real size, such as 720p?",
+        "unsupported",
+    )
+    act(
+        "Resize promo.mp4 to 720p.",
+        step("resize_video", inputs=["promo.mp4"], height=720, keep_aspect_ratio=True),
+        "resize",
+    )
+
+    # Supported wording the model missed -> plan; the vague form of the same -> ask.
+    act("Mute rehearsal.mp4.", step("strip_audio", inputs=["rehearsal.mp4"]), "strip")
+    act(
+        "Schalte den Ton von rehearsal.mp4 aus.",
+        step("strip_audio", inputs=["rehearsal.mp4"]),
+        "strip",
+        "de",
+    )
+    act(
+        "Silencia el audio de rehearsal.mp4.",
+        step("strip_audio", inputs=["rehearsal.mp4"]),
+        "strip",
+        "es",
+    )
+    act(
+        "Mirror selfie.mp4 left to right.",
+        step("rotate_video", inputs=["selfie.mp4"], flip="horizontal"),
+        "rotate",
+        "flip",
+    )
+    act(
+        "Mirror skyline.mov vertically.",
+        step("rotate_video", inputs=["skyline.mov"], flip="vertical"),
+        "rotate",
+        "flip",
+    )
+    ask(
+        "Mirror skyline.mov.",
+        "Should I mirror skyline.mov horizontally or vertically?",
+        "rotate",
+        "flip",
+    )
+    act(
+        "Re-encode master.mov without losing any quality.",
+        step("convert_video", inputs=["master.mov"], quality="lossless"),
+        "convert",
+    )
+    act(
+        "Convert interview.mkv to mp4 with no quality loss at all.",
+        step("convert_video", inputs=["interview.mkv"], container="mp4", quality="lossless"),
+        "convert",
+    )
+
+    # Safety -> reject; the same work saved under a new name -> plan.
+    r.append(
+        (
+            "Re-encode draft.mp4 and overwrite draft.mp4 with the result.",
+            P(
+                step(
+                    "reject",
+                    reason="Overwriting the original source file is outside this skill's safety policy.",
+                )
+            ),
+            [*tag, "reject", "overwrite_source"],
+        )
+    )
+    act(
+        "Re-encode draft.mp4 and save it as draft_v2.mp4.",
+        step("convert_video", inputs=["draft.mp4"], output="draft_v2.mp4"),
+        "convert",
+    )
+    # The same rule without the word: writing back to the input's own name overwrites it.
+    r.append(
+        (
+            "Compress memo.mp4 and write the result back to the same filename.",
+            P(
+                step(
+                    "reject",
+                    reason="Overwriting the original source file is outside this skill's safety policy.",
+                )
+            ),
+            [*tag, "reject", "overwrite_source"],
+        )
+    )
+
+    # The right tool with only its own arguments.
+    act(
+        "Convert lecture.mp4 to a smaller mkv file.",
+        step("convert_video", inputs=["lecture.mp4"], container="mkv", quality="small_file"),
+        "convert",
+        "compress",
+    )
+    act(
+        "Pull the audio from seminar.mov as mp3 at 64 kbps.",
+        step("extract_audio", inputs=["seminar.mov"], audio_format="mp3", bitrate="64k"),
+        "audio",
+        "extract",
+    )
     return r
 
 

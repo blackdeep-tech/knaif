@@ -33,6 +33,12 @@ def language_slice(utterance: str) -> str:
     return "latin"
 
 
+def chain_hit(expected_tools: list[str], ranked: list[str], top_k: int) -> bool:
+    """True when every non-core tool of a chain is in the top-k (core tools are always shown)."""
+    shown = set(ranked[:top_k])
+    return all(t in shown for t in expected_tools if t not in _CORE)
+
+
 def _skill_paths(skill: str) -> tuple[Path, Path]:
     base = Path("skills") / skill
     return base / "tools.yaml", base / "data" / "eval.jsonl"
@@ -48,6 +54,10 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
     hits: dict[str, list[int]] = {}
     rr: dict[str, list[float]] = {}
     misses: list[dict[str, Any]] = []
+    # Chain rows count in `overall` by their first tool (expected_tool = expected_tools[0]);
+    # here they are scored on every tool, kept apart so the locked `overall` is unchanged.
+    chain_hits: list[int] = []
+    chain_misses: list[dict[str, Any]] = []
 
     for row in load_corpus(eval_path):
         expected = row.expected_tool
@@ -57,6 +67,18 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
             sl = language_slice(utt)
             # Full ranked order (min_score=0 returns every scored tool, ranked).
             ranked = list(retrieve_tools(utt, registry, top_k=n_tools + 8))
+            if row.expected_tools:
+                chain_ok = chain_hit(row.expected_tools, ranked, top_k)
+                chain_hits.append(int(chain_ok))
+                if not chain_ok:
+                    chain_misses.append(
+                        {
+                            "id": row.id,
+                            "tools": [t for t in row.expected_tools if t not in ranked[:top_k]],
+                            "slice": sl,
+                            "utterance": utt,
+                        }
+                    )
             rank = ranked.index(expected) + 1 if expected in ranked else None
             hit = 1 if (rank is not None and rank <= top_k) else 0
             hits.setdefault(sl, []).append(hit)
@@ -80,6 +102,11 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
         "overall": agg(all_h, all_r),
         "by_slice": {sl: agg(hits.get(sl, []), rr.get(sl, [])) for sl in ("ascii", "latin", "cjk")},
         "misses": misses,
+        "chains": {
+            "n": len(chain_hits),
+            "recall_at_k": round(sum(chain_hits) / len(chain_hits), 4) if chain_hits else None,
+        },
+        "chain_misses": chain_misses,
     }
 
 
@@ -127,4 +154,10 @@ def format_report(results: dict[str, Any]) -> str:
                 lines.append(
                     f"{'':12s} {sl:8s} {s['n']:>4}  {str(s['recall_at_k']):>7}  {str(s['mrr']):>6}"
                 )
+        c = r.get("chains") or {}
+        if c.get("n"):
+            # Every tool of the chain in the top-k; no MRR for a set of tools.
+            lines.append(
+                f"{'':12s} {'chains':8s} {c['n']:>4}  {str(c['recall_at_k']):>7}  {'-':>6}"
+            )
     return "\n".join(lines)

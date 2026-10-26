@@ -158,6 +158,15 @@ def perf_timings(
     }
 
 
+def with_no_think(system: str) -> str:
+    """The system turn with Qwen3's `/no_think` suffix, as served when thinking is off.
+
+    The training set is built with this too (`python/training/build_dataset.py`), so the model
+    is tuned on the system turn it is served; native appends the same suffix (`llama.rs`).
+    """
+    return f"{system}\n\n/no_think" if system else "/no_think"
+
+
 class InferenceOrchestrator:
     """
     Orchestrates model inference for command planning.
@@ -437,7 +446,7 @@ class InferenceOrchestrator:
         # <think> block. No-op on other model families. llama.cpp has no native
         # thinking toggle in chat completions, unlike Ollama 0.5+.
         if not self.thinking_enabled:
-            return f"{system}\n\n/no_think" if system else "/no_think"
+            return with_no_think(system)
         return system
 
     def infer(
