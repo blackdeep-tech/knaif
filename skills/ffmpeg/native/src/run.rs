@@ -251,11 +251,33 @@ fn recipes(
     // Globs become one input per matching file BEFORE the render loop, so each match gets its own
     // command and its own derived output name (N1).
     let inputs = expand_input_globs(&resolved.inputs, sandbox, &data.vocab.media_extensions, &[])?;
+    // Every input a pattern and none matched: nothing to work on, so ask, in Python's preflight
+    // words (`_preflight_inputs`); an empty run used to report "Done".
+    let patterns: Vec<&String> = resolved
+        .inputs
+        .iter()
+        .filter(|p| !p.starts_with('$') && has_glob_magic(p))
+        .collect();
+    if inputs.is_empty() && !patterns.is_empty() && patterns.len() == resolved.inputs.len() {
+        let location = if sandbox.is_some() {
+            "sandbox"
+        } else {
+            "working directory"
+        };
+        let listed: Vec<String> = patterns.iter().map(|p| format!("'{p}'")).collect();
+        return Ok(Err(format!(
+            "no files match {} in the {location}",
+            listed.join(", ")
+        )));
+    }
     // Build every recipe first: only the batch can see two inputs landing on one output
     // path, and every rendered command carries -y, so an unresolved clash is a silent
     // overwrite rather than an error.
     let mut recipes = Vec::with_capacity(inputs.len());
-    let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::with_capacity(inputs.len());
+    let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf, bool)> =
+        Vec::with_capacity(inputs.len());
+    // More than one file: a literal output name names none of them.
+    resolved.options.per_file_name = inputs.len() > 1;
     let mut skipped: Vec<String> = Vec::new();
     let mut skipped_paths: Vec<std::path::PathBuf> = Vec::new();
     let mut unreadable: Vec<(std::path::PathBuf, String)> = Vec::new();
@@ -314,7 +336,11 @@ fn recipes(
             &data.vocab,
             sandbox,
         )?;
-        outs.push((input_path.clone(), std::path::PathBuf::from(&recipe.output)));
+        outs.push((
+            input_path.clone(),
+            std::path::PathBuf::from(&recipe.output),
+            recipe.default_name,
+        ));
         recipes.push(recipe);
     }
     // Skipping every input is not success with zero results: an empty command list executes
@@ -345,7 +371,7 @@ fn recipes(
     }
     crate::engine::disambiguate_outputs(&mut outs);
     let mut rendered = Vec::with_capacity(recipes.len());
-    for (mut recipe, (_, out)) in recipes.into_iter().zip(outs) {
+    for (mut recipe, (_, out, _)) in recipes.into_iter().zip(outs) {
         recipe.output = out.to_string_lossy().into_owned();
         let (pre, post) = build_flags(&recipe, &data.vocab)?;
         rendered.push((recipe, pre, post));
@@ -1370,6 +1396,24 @@ mod tests {
     // Ground truth captured from the Python engine (skills/ffmpeg/python/_engine.py) for the same
     // intent args — the native path must render byte-identical argv.
 
+    /// "convert all the avi files to mp4" with no avi here ran nothing and said "Done"; Python's
+    /// preflight asks. The same words both sides (`skills/ffmpeg/python/_reporting.py`,
+    /// `_preflight_inputs`).
+    #[test]
+    fn a_glob_that_matches_nothing_asks() {
+        let dir = std::env::temp_dir().join(format!("knaif-no-match-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("clip.mp4"), b"").unwrap();
+        let a = args(serde_json::json!({"inputs": ["*.avi"], "container": "mp4"}));
+        let got = expand_dry_run("convert_video", &a, &data(), Some(&dir)).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        match got {
+            Expansion::Clarify(q) => assert_eq!(q, "no files match '*.avi' in the sandbox"),
+            Expansion::Commands(c) => panic!("expected a question, got commands {c:?}"),
+        }
+    }
+
     #[test]
     fn prepare_for_platform_youtube() {
         assert_eq!(
@@ -1460,7 +1504,7 @@ mod tests {
                 "libopus",
                 "-b:a",
                 "128k",
-                "a_converted.webm"
+                "a.webm"
             ]
         );
     }
@@ -1476,15 +1520,7 @@ mod tests {
                 "convert_video",
                 serde_json::json!({"inputs": "a.mov", "container": "mkv"})
             ),
-            vec![
-                "ffmpeg",
-                "-y",
-                "-i",
-                "a.mov",
-                "-c",
-                "copy",
-                "a_converted.mkv"
-            ]
+            vec!["ffmpeg", "-y", "-i", "a.mov", "-c", "copy", "a.mkv"]
         );
     }
 

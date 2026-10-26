@@ -45,7 +45,7 @@ def test_run_mock_dry_run_succeeds(runner):
             "--backend",
             "mock",
             "--dry-run",
-            "--auto-approve",
+            "--yes",
         ],
     )
     assert result.exit_code == 0
@@ -100,7 +100,7 @@ def test_backend_mismatch_is_rejected():
 
 
 def test_backend_ollama_with_model_path_is_rejected():
-    with pytest.raises(RuntimeError, match="model-path"):
+    with pytest.raises(RuntimeError, match="GGUF file"):
         build_orchestrator(model_path="model.gguf", backend="ollama")
 
 
@@ -138,7 +138,7 @@ def test_the_cli_shows_the_model_the_retrieved_tools(runner, monkeypatch, comman
     utterance = "encode clip.mp4 at crf 22"
     args = [command, "ffmpeg", *utterance.split(), "--backend", "mock"]
     if command == "run":
-        args += ["--dry-run", "--auto-approve"]
+        args += ["--dry-run", "--yes"]
 
     result = runner.invoke(cli, args)
 
@@ -239,15 +239,6 @@ def test_a_gate_without_a_clip_just_asks(tmp_path):
 # ── 1.3.0: act without asking; ask before replacing a file ─────────────────────
 
 
-def test_a_run_asks_only_when_confirm_is_opted_into():
-    from knaif.app import approval_required
-
-    assert approval_required(auto_approve=None, confirm=False) is False  # the default acts
-    assert approval_required(auto_approve=None, confirm=True) is True
-    assert approval_required(auto_approve=True, confirm=True) is False  # -y skips the question
-    assert approval_required(auto_approve=False, confirm=False) is True  # -Y still asks
-
-
 def test_planned_outputs_are_read_from_a_preview(tmp_path):
     from knaif.app import planned_outputs
 
@@ -274,7 +265,7 @@ def test_overwrite_gate_asks_with_no_as_the_default():
 
     assert overwrite_gate([], False, ask) is True
     assert overwrite_gate(["out.mp4"], True, ask) is True
-    assert asked == [], "nothing to replace, or --overwrite: no question"
+    assert asked == [], "nothing to replace, or --allow overwrite: no question"
     assert overwrite_gate(["out.mp4"], False, ask) is True
     assert asked == [("Replace out.mp4?", False)]
     assert overwrite_gate(["a", "b"], False, lambda q, d: False) is False
@@ -283,15 +274,15 @@ def test_overwrite_gate_asks_with_no_as_the_default():
 def test_overwrite_gate_without_a_terminal_names_the_flag():
     from knaif.app import overwrite_gate
 
-    with pytest.raises(click.ClickException, match="--overwrite"):
+    with pytest.raises(click.ClickException, match="--allow overwrite"):
         overwrite_gate(["out.mp4"], False, lambda q, d: None)
 
 
-def test_run_accepts_confirm_and_overwrite(runner):
+def test_run_accepts_confirm_and_allow_overwrite(runner):
     result = runner.invoke(
         cli,
         ["run", "ffmpeg", "convert", "a.mov", "to", "mp4", "--backend", "mock"]
-        + ["--dry-run", "--confirm", "--overwrite"],
+        + ["--dry-run", "--confirm", "--allow", "overwrite"],
     )
     assert result.exit_code == 0, result.output
 

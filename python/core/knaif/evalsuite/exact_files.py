@@ -403,7 +403,7 @@ def replay_row_native(
 
     The mock backend returns `$KNAIF_LLM_MOCK_RESPONSE` verbatim, so the recorded plan goes in
     as the "model output" and the binary runs everything after inference for real, exactly as
-    the eval lane invokes it (`run <skill> --yes --overwrite -- <utterance>`, cwd = the row).
+    the eval lane invokes it (`run <skill> <permission flags> -- <utterance>`, cwd = the row).
     *alert*, the known folders and the sink are as in :func:`replay_row`; *routed* is the
     skill's ``scratch_intermediates:`` (:func:`deliverables`).
     """
@@ -429,9 +429,10 @@ def replay_row_native(
     # Absolute: the binary runs in the row folder, and the CLI hands a relative one.
     env[ROOT_ENV] = str(row_known_dir(row_dir).resolve())
     env[SINK_ENV] = str(row_alert_sink(row_dir).resolve())
-    # `--allow-download` only for a URL row: a binary older than URL inputs rejects the flag.
-    url = ["--allow-download"] if "://" in utterance else []
-    argv = [str(binary), "run", skill, "--yes", "--overwrite", *url, "--", *utterance.split()]
+    from knaif.evalsuite.native_lane import permission_flags
+
+    flags = permission_flags(binary, utterance)
+    argv = [str(binary), "run", skill, *flags, "--", *utterance.split()]
     error: str | None = None
     try:
         proc = subprocess.run(

@@ -53,12 +53,15 @@ def test_other_tools_still_refuse_one(make_registry) -> None:
         validate_plan(plan, make_registry(None), Path("."))
 
 
-def test_the_prompt_does_not_list_it() -> None:
+def test_extract_text_declares_output_since_it_always_saves() -> None:
+    """(owner, 2026-10-23): extract_text saves one file's text too, and the model
+    names that file once it knows; `output` is declared, so the prompt lists it, while a batch
+    still gets its per-file names from core (`batch_output`)."""
     agent = create_agent("documents")
     assert agent.registry["extract_text"].batch_output == "txt"
     system, _ = agent.build_prompt("extract the text from sample.pdf")
     line = system.split("  - extract_text:", 1)[1].splitlines()[1]
-    assert "output" not in line, line
+    assert "output (optional" in line, line
 
 
 def _pdf(path: Path, text: str) -> None:
@@ -85,7 +88,9 @@ def test_text_over_many_pdfs_is_saved_next_to_each(tmp_path: Path) -> None:
     assert "Beta text" in (tmp_path / "b.txt").read_text(encoding="utf-8")
 
 
-def test_one_pdf_still_prints(tmp_path: Path) -> None:
+def test_one_pdfs_text_is_saved_too(tmp_path: Path) -> None:
+    """Since 2026-10-23 (owner) one file's text is saved like a batch's; the result
+    still carries the text (the display previews it)."""
     pytest.importorskip("reportlab")
     _pdf(tmp_path / "a.pdf", "Alpha text")
     agent = create_agent("documents", sandbox=tmp_path)
@@ -94,7 +99,7 @@ def test_one_pdf_still_prints(tmp_path: Path) -> None:
     results = agent.execute_plan(
         plan, utterance="extract the text of a.pdf", dry_run=False, confirmed=True
     )
-    assert not list(tmp_path.glob("*.txt"))
+    assert "Alpha text" in (tmp_path / "a.txt").read_text(encoding="utf-8")
     assert "Alpha text" in str(results)
 
 

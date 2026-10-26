@@ -137,7 +137,7 @@ def _require_pypdf():
         import pypdf
     except ImportError as exc:  # pragma: no cover - covered when extra absent
         raise DocumentsDependencyError(
-            "Install the documents dep group (uv pip install --group documents) for PDF overlay operations."
+            "Install the documents dep group (uv pip install --group documents) to read PDFs."
         ) from exc
     return pypdf
 

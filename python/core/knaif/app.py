@@ -12,15 +12,17 @@ import os
 import re
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import click
 import yaml
 
-from . import create_agent, list_skills
+from . import create_agent, list_skills, ui
 from ._console import enable_utf8_console
+from .agent import is_unsafe_request
 from .models import build_orchestrator, load_models_registry
 
 # The model is shown the tools retrieval surfaces for the request, never the whole registry: the
@@ -28,6 +30,15 @@ from .models import build_orchestrator, load_models_registry
 # prompt nobody measured (L3 2026-09-27: 11.9% disagreement with native, where the lanes differ
 # by 1.97%).
 from .registry import retrieve_tools
+from .run_view import (
+    QuietPlanning,
+    RunView,
+    chain_failure_context,
+    choose_style,
+    downloaded_name,
+    shown,
+    shown_argv,
+)
 from .scratch import display
 
 #: Prefixes the plan dump under $KNAIF_DUMP_PLAN. The same string as native `run`
@@ -249,11 +260,59 @@ def cli() -> None:
 # ── run ───────────────────────────────────────────────────────────────────────
 
 
-def approval_required(*, auto_approve: bool | None, confirm: bool) -> bool:
-    """Whether `run` asks `Proceed?`: only when opted into (--confirm / -Y); -y always skips it."""
-    if auto_approve:
-        return False
-    return confirm or auto_approve is False
+def _model_or_path(model: str | None) -> tuple[str | None, str | None]:
+    """``--model`` as ``(name, path)``: a models.yaml entry or a GGUF file, as native's
+    ``--model NAME|PATH`` (``-M/--model-path`` folded into it). A file wins."""
+    if model and Path(model).is_file():
+        return None, model
+    return model, None
+
+
+#: The names ``--allow`` takes, in the order its error lists them.
+PERMISSIONS = ("download", "overwrite", "model", "all")
+
+
+@dataclass(frozen=True)
+class Allow:
+    """What a run may do without asking (owner, 2026-10-23): ``--allow download,
+    overwrite,model``, a comma list or a repeated flag; ``all``, or ``--yes``, is every
+    permission, now and later. ``contracts/parity/cli_flag_cases.json`.`, native ``Allow``."""
+
+    download: bool = False  # fetch an http(s) URL input
+    overwrite: bool = False  # replace a file that already exists
+    model: bool = False  # download the recommended model (native only: Python never does)
+    all: bool = False  # everything, including what a later release adds; also skips Proceed?
+
+    def asks_proceed(self, *, confirm: bool) -> bool:
+        """Whether each step asks ``Proceed? [Y/n]``: only under ``--confirm``, and never when
+        everything is allowed (``--confirm --yes`` is ``--yes``)."""
+        return confirm and not self.all
+
+
+def allowed(names: Sequence[str], *, yes: bool) -> Allow:
+    """The permissions ``--allow`` (already checked by :func:`_permissions`) and ``--yes`` give."""
+    every = yes or "all" in names
+    return Allow(
+        download=every or "download" in names,
+        overwrite=every or "overwrite" in names,
+        model=every or "model" in names,
+        all=every,
+    )
+
+
+def _permissions(_ctx: Any, _param: Any, values: tuple[str, ...]) -> tuple[str, ...]:
+    """``--allow``'s values as a flat tuple of known names: comma lists split, each trimmed and
+    without case; an unknown name is a usage error listing the valid ones."""
+    names: list[str] = []
+    for value in values:
+        for name in value.split(","):
+            name = name.strip().lower()
+            if name not in PERMISSIONS:
+                raise click.BadParameter(
+                    f"unknown permission '{name}': use download, overwrite, model or all"
+                )
+            names.append(name)
+    return tuple(names)
 
 
 _SEQUENCE_TOKEN = re.compile(r"%0?\d*d")
@@ -342,8 +401,11 @@ def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[
     """
     import copy
 
-    saved = agent.intent_completed
-    agent.intent_completed = None
+    # No display: the preview is not the run (the display hooks would draw the plan twice).
+    hooks = ("intent_completed", "plan_ready", "intent_started")
+    saved = {h: getattr(agent, h, None) for h in hooks}
+    for h in hooks:
+        setattr(agent, h, None)
     try:
         preview = agent.execute_plan(
             copy.deepcopy(payload),
@@ -356,13 +418,86 @@ def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[
     except Exception:  # noqa: BLE001 - any preview failure falls back, never fails open
         return list(dict.fromkeys(_named_outputs(payload.get("plan"))))
     finally:
-        agent.intent_completed = saved
+        for h, value in saved.items():
+            setattr(agent, h, value)
     return planned_outputs(preview)
+
+
+def _stop_unconfirmed(agent: Any, payload: dict[str, Any], prompt: str, view: Any) -> None:
+    """``--confirm`` with no terminal: native lists the first step's commands (or files) on
+    stderr and stops, ``N destructive <noun>(s) pending``. Previewed with the display off."""
+    import copy
+
+    first: list[list[dict[str, Any]]] = []
+    hooks = ("intent_completed", "plan_ready", "intent_started")
+    saved = {h: getattr(agent, h, None) for h in hooks}
+    for h in hooks:
+        setattr(agent, h, None)
+    agent.intent_completed = lambda results, dry_run: first.append(results)
+    try:
+        agent.execute_plan(
+            copy.deepcopy(payload),
+            utterance=prompt,
+            dry_run=True,
+            confirmed=True,
+            show_plan=False,
+            require_approval=False,
+        )
+    except Exception:  # noqa: BLE001 - the real run reports a plan that cannot run
+        pass
+    finally:
+        for h, value in saved.items():
+            setattr(agent, h, value)
+    formatter = agent.result_formatter
+    items = formatter(first[0], dry_run=True) if first and formatter else []
+    base = Path.cwd()
+    pending: list[str] = []
+    noun = "command"
+    for item in items:
+        if item.get("argv"):
+            pending.append(shown_argv(item["argv"], base))
+            noun = f"{Path(str(item['argv'][0])).stem} command"
+        elif item.get("kind") == "preview":
+            view.item({"kind": "text", "message": str(item.get("message", ""))}, dry_run=False)
+            pending.extend(shown(str(o), base) for o in item.get("outputs") or [])
+            noun = "output file"
+    for line in pending:
+        click.echo(f"  {line}", err=True)
+    steps = len(payload.get("plan") or []) or 1
+    view.stopped(
+        chain_failure_context(0, steps),
+        f"{len(pending)} destructive {noun}(s) pending. Re-run with --yes to proceed, or "
+        "--dry-run to preview.",
+    )
+    sys.exit(1)
+
+
+def _stdin_is_terminal() -> bool:
+    """Whether a person can answer on stdin. On Windows `isatty()` is True for the NUL device,
+    and the CLI then waited for a key nobody could press; a console handle is
+    what native's `IsTerminal` checks, so this asks Windows for its console mode."""
+    try:
+        if not sys.stdin.isatty():
+            return False
+    except (AttributeError, ValueError):
+        return False
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    try:
+        handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+    except (OSError, ValueError):
+        return False
+    mode = wintypes.DWORD()
+    return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
 
 
 def _ask_yes_no(question: str, default_yes: bool) -> bool | None:
     """`question [y/N]` on the terminal (Enter takes the default); None when there is no terminal."""
-    if not sys.stdin.isatty():
+    if not _stdin_is_terminal():
         return None
     click.echo(f"{question} {'[Y/n]' if default_yes else '[y/N]'} ", nl=False, err=True)
     try:
@@ -377,9 +512,9 @@ def _ask_yes_no(question: str, default_yes: bool) -> bool | None:
 
 
 def wire_downloads(agent: Any, *, allow_download: bool, interactive: bool, ask: Any) -> None:
-    """URL inputs: --allow-download approves every download up front; otherwise a person at a
-    terminal is asked once per URL (default No), and with nobody to ask the run stops, naming
-    the flag (``CommandAgent._fetch_url_inputs``). --yes never covers network access."""
+    """URL inputs: ``--allow download`` (or ``--yes``) approves every download up front;
+    otherwise a person at a terminal is asked once per URL (default No), and with nobody to ask
+    the run stops, naming the permission (``CommandAgent._fetch_url_inputs``)."""
     agent.allow_download = allow_download
     agent.download_confirmer = (
         (lambda url, cap: bool(ask(f"Download {url} (up to {cap // 1_000_000:,} MB)?", False)))
@@ -389,16 +524,15 @@ def wire_downloads(agent: Any, *, allow_download: bool, interactive: bool, ask: 
 
 
 def download_lines(downloads: list[dict[str, Any]]) -> list[str]:
-    """One line per URL input: what a dry run would fetch, or what a run fetched."""
-    from .scratch import display
-
+    """One line per URL input: what a dry run would fetch, or what a run fetched, the file named
+    as native names it (``<name> (downloaded)``)."""
     lines = []
     for d in downloads:
-        where = display(str(d.get("path", "")))
+        where = downloaded_name(str(d.get("path", "")))
         if d.get("dry_run"):
             lines.append(f"would download {d['url']} → {where}")
         else:
-            lines.append(f"downloaded {d['url']} ({d.get('bytes', 0):,} bytes) → {where}")
+            lines.append(f"downloaded {d['url']} ({d.get('bytes', 0)} bytes) → {where}")
     return lines
 
 
@@ -411,7 +545,7 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
         answer = ask(f"Replace {path}?", False)
         if answer is None:
             raise click.ClickException(
-                f"{path} already exists. Re-run with --overwrite to replace it, "
+                f"{path} already exists. Re-run with --allow overwrite to replace it, "
                 "or name a different output."
             )
         if not answer:
@@ -430,37 +564,34 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     help="Preview commands without executing side effects.",
 )
 @click.option(
-    "-p/-P",
-    "--show-plan/--no-show-plan",
-    default=True,
-    show_default=True,
-    help="Print a human-readable summary for each intent step before it runs.",
+    "-y",
+    "--yes",
+    is_flag=True,
+    default=False,
+    help="Allow everything a run could ask about, now and in later releases: --allow all.",
 )
 @click.option(
-    "-y/-Y",
-    "--auto-approve/--require-approval",
-    default=None,
-    help="-y: never ask Proceed? (the default). -Y: ask, like --confirm.",
+    "--allow",
+    multiple=True,
+    metavar="WHAT",
+    callback=_permissions,
+    help="Approve up front what a run would otherwise ask about, as a comma list or a "
+    "repeated flag: download (fetch a URL input), overwrite (replace an existing file), "
+    "model (download the recommended model), all. Without it each one asks (Enter is no), "
+    "and without a terminal the run stops, naming the permission.",
 )
 @click.option(
     "--confirm",
     is_flag=True,
     default=False,
-    help="Ask 'Proceed? [Y/n]' before each step instead of acting straight away.",
+    help="Ask 'Proceed? [Y/n]' before each step instead of acting straight away. --yes skips it.",
 )
 @click.option(
-    "--overwrite",
+    "--stdout",
     is_flag=True,
     default=False,
-    help="Replace files that already exist. Otherwise an existing output asks "
-    "'Replace <file>? [y/N]' (Enter keeps it) and, without a terminal, stops.",
-)
-@click.option(
-    "--allow-download",
-    is_flag=True,
-    default=False,
-    help="Download http(s) URL inputs without asking. Otherwise each URL asks "
-    "'Download <url>? [y/N]' and, without a terminal, stops. --yes does not cover it.",
+    help="Print the result's text alone on stdout, for a pipe, and save nothing; everything "
+    "else goes to stderr. For a step whose answer is text (extract_text); any other refuses it.",
 )
 @click.option(
     "--keep-intermediates",
@@ -491,17 +622,10 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     "-m",
     "--model",
     default=None,
-    metavar="NAME",
-    help="Model entry name in models.yaml (e.g. qwen3-4b). Falls back to the "
-    "skill's recommended_model and then to models.yaml's default.",
-)
-@click.option(
-    "-M",
-    "--model-path",
-    default=None,
-    type=click.Path(),
-    metavar="PATH",
-    help="Path to a GGUF model file. Bypasses models.yaml entirely (escape hatch).",
+    metavar="NAME|PATH",
+    help="A model entry name in models.yaml (e.g. qwen3-4b), or a GGUF file path, which "
+    "bypasses models.yaml. Without it: the skill's recommended_model, then models.yaml's "
+    "default.",
 )
 @click.option(
     "--ollama-url",
@@ -529,17 +653,15 @@ def run_cmd(
     skill: str,
     prompt: tuple[str, ...],
     dry_run: bool,
-    show_plan: bool,
-    auto_approve: bool | None,
+    yes: bool,
+    allow: tuple[str, ...],
     confirm: bool,
-    overwrite: bool,
-    allow_download: bool,
+    stdout: bool,
     keep_intermediates: bool,
     verbose: bool,
     silent: bool,
     backend: str,
     model: str | None,
-    model_path: str | None,
     ollama_url: str,
     max_tokens: int,
 ) -> None:
@@ -549,171 +671,234 @@ def run_cmd(
     Examples (unquoted):
       knaif-cli run ffmpeg trim video.mp4 to 10 seconds
       knaif-cli run ffmpeg compress video.mp4 --model qwen3-4b
-      knaif-cli run ffmpeg resize to 720p --auto-approve
-      knaif-cli run ffmpeg extract audio --model-path ./models/qwen.gguf
+      knaif-cli run ffmpeg resize to 720p --confirm
+      knaif-cli run ffmpeg extract audio --model ./models/qwen.gguf
+      knaif-cli run --allow download,overwrite ffmpeg compress https://example.com/a.mp4
       knaif-cli run ffmpeg compress video.mp4 --backend mock --dry-run
       knaif-cli run ffmpeg convert test1.mov to mp4 --verbose
     \b
     Quoted form still works:
       knaif-cli run ffmpeg "convert test1.mov to mp4"
     """
-    use_mock = backend == "mock"
+    # `$KNAIF_LLM_BACKEND=mock` picks the mock, as on native (with `$KNAIF_LLM_MOCK_RESPONSE` as
+    # the model's output, `CommandAgent._mock_response`).
+    use_mock = backend == "mock" or os.environ.get("KNAIF_LLM_BACKEND") == "mock"
     prompt_str = " ".join(prompt)
+    permitted = allowed(allow, yes=yes)
+    model, model_path = _model_or_path(model)
 
     # --silent suppresses all informational output and skips interactive prompts.
     # --dry-run makes no changes, so the approval gate would be pointless noise.
-    effective_show_plan = False if silent else show_plan
     effective_require_approval = (
-        False
-        if (silent or dry_run)
-        else approval_required(auto_approve=auto_approve, confirm=confirm)
+        False if (silent or dry_run) else permitted.asks_proceed(confirm=confirm)
     )
 
     from . import _DEFAULT_SKILLS_ROOT
 
     skill_dir = _DEFAULT_SKILLS_ROOT / skill
 
-    # ── orchestrator ──────────────────────────────────────────────────────────
-    orchestrator = None
-    if not use_mock:
-        orchestrator = _build_orchestrator(
-            backend, model, model_path, ollama_url, skill_dir, verbose
-        )
-        if orchestrator is None:
-            click.echo(
-                click.style(
-                    "No model resolved (empty models.yaml and no --model / "
-                    "--model-path). Falling back to mock inference.",
-                    fg="yellow",
-                ),
-                err=True,
-            )
-            use_mock = True
+    # `--stdout`: the result's text alone goes to stdout, so everything else this
+    # run prints goes to stderr; the text is written to the real stdout at the end.
+    text_out = sys.stdout
+    if stdout:
+        sys.stdout = sys.stderr
+
+    # What the user sees: native's tree in a terminal, its plain lines anywhere else
+    # (`knaif.run_view`).
+    view = RunView(skill, choose_style(), base=Path.cwd(), silent=silent)
+    view.text_to_stdout = stdout
 
     # ── plan display / approval / per-intent callbacks ───────────────────────
-    def _plan_display(summary: str) -> None:
-        click.echo("  " + click.style("•", fg="cyan") + f" {summary}")
-
     def _plan_confirmer(_: str) -> bool:
-        prompt = "    " + click.style("Proceed? [Y/n]: ", fg="yellow")
-        click.echo(prompt, nl=False)
+        # Native's question, on stderr: inside the tree, or a plain line.
+        prompt = " │   Proceed? [Y/n] " if view.style is not None else "Proceed? [Y/n] "
+        click.echo(prompt, nl=False, err=True)
+        asked = time.perf_counter()
         try:
             c = click.getchar()
         except (KeyboardInterrupt, EOFError):
-            click.echo()
+            click.echo(err=True)
             return False
+        finally:
+            view.waited(time.perf_counter() - asked)
         if c in ("\r", "\n", "y", "Y"):
-            click.echo("Y")
+            click.echo("Y", err=True)
             return True
-        click.echo("n")
+        click.echo("n", err=True)
         return False
 
     # Track exit code across per-intent render callbacks.
     exit_code_holder = [0]
 
     def _on_intent_completed(sub_results: list[dict[str, Any]], *, dry_run: bool) -> None:
-        """Render this intent's result items right after it finishes."""
-        if silent:
-            return
+        """This intent's result items, right after it finishes."""
         if verbose or agent.result_formatter is None:
             return
-        items = agent.result_formatter(sub_results, dry_run=dry_run)
-        total_ms = sum(r.get("duration_ms", 0) for r in sub_results)
-        total_s = total_ms / 1000
-        timing_label = "dry-run" if dry_run else f"{total_s:.1f}s"
-        for item in items:
-            if _echo_item(item, "    "):
+        for item in agent.result_formatter(sub_results, dry_run=dry_run):
+            if view.item(item, dry_run=dry_run):
                 exit_code_holder[0] = 1
-        click.echo("    " + click.style(timing_label, fg="bright_black"))
 
     # ── agent ─────────────────────────────────────────────────────────────────
+    # Made before any model, as native screens a request first: an unsafe phrase never costs a
+    # model load.
     try:
         agent = create_agent(
             skill,
-            orchestrator=orchestrator,
-            show_plan=effective_show_plan,
+            orchestrator=None,
+            show_plan=False,
             require_approval=effective_require_approval,
-            plan_display=_plan_display,
             plan_confirmer=_plan_confirmer,
             # Ask at a preview gate only when a person is answering; otherwise the gate
             # takes `confirmed`, as it always has.
             confirmer=make_preview_confirmer() if effective_require_approval else None,
         )
     except ValueError as exc:
-        click.echo(click.style(f"Error: {exc}", fg="red"), err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
+    view.file_kinds = agent.file_kinds
+    agent.to_stdout = stdout
     agent.intent_completed = _on_intent_completed
+    told: list[bool] = []
+
+    def _tell_downloads() -> None:
+        """The download lines, once, before the plan as native prints them."""
+        if told:
+            return
+        told.append(True)
+        for line in download_lines(agent.last_downloads):
+            view.item({"kind": "note", "message": line}, dry_run=dry_run)
+
+    def _plan_ready(steps: list[dict[str, Any]], notes: list[str]) -> None:
+        _tell_downloads()
+        view.downloads = {str(d.get("path")) for d in agent.last_downloads}
+        view.plan(steps, notes)
+
+    agent.plan_ready = _plan_ready
+    agent.intent_started = view.step
     agent.keep_intermediates = keep_intermediates
     # A batch chain's failures, as they happen: on stderr like any error, even with --silent.
-    agent.batch_failed = lambda line: click.echo(click.style(line, fg="red"), err=True)
+    agent.batch_failed = lambda line: click.echo(line, err=True)
     wire_downloads(
         agent,
-        allow_download=allow_download,
-        interactive=sys.stdin.isatty() and not dry_run,
+        allow_download=permitted.download,
+        interactive=_stdin_is_terminal() and not dry_run,
         ask=_ask_yes_no,
     )
 
-    # ── infer ─────────────────────────────────────────────────────────────────
-    _t_infer = time.perf_counter()
-    try:
-        payload = agent.infer(
-            prompt_str,
-            use_mock=use_mock,
-            ollama_model=model or "mistral",
-            max_tokens=max_tokens,
-            registry_override=retrieve_tools(prompt_str, agent.registry),
+    # An unsafe phrase never reaches the model, and is answered in native's words.
+    if is_unsafe_request(prompt_str, agent.unsafe_phrases):
+        reason = f"this request is blocked by the {skill} skill's safety policy."
+        view.control({"tool": "reject", "args": {"reason": reason}})
+        view.finish(dry_run=dry_run)
+        sys.exit(0)
+
+    # ── model and inference: the one silent stretch ───────────────────────────
+    quiet = not verbose and not any(
+        os.environ.get(v) for v in ("KNAIF_DEBUG", "KNAIF_DUMP_PLAN", "KNAIF_DUMP_PROMPT")
+    )
+    load_s: float | None = None
+    with QuietPlanning(view.style, active=quiet and not use_mock):
+        if not use_mock:
+            started = time.perf_counter()
+            agent.orchestrator = _build_orchestrator(
+                backend, model, model_path, ollama_url, skill_dir, verbose
+            )
+            load_s = time.perf_counter() - started
+            if agent.orchestrator is None:
+                use_mock, load_s = True, None
+        started = time.perf_counter()
+        try:
+            payload = agent.infer(
+                prompt_str,
+                use_mock=use_mock,
+                ollama_model=model or "mistral",
+                max_tokens=max_tokens,
+                registry_override=retrieve_tools(prompt_str, agent.registry),
+            )
+        except Exception as exc:  # noqa: BLE001
+            infer_error: Exception | None = exc
+        else:
+            infer_error = None
+        infer_s = time.perf_counter() - started
+    if not use_mock and agent.orchestrator is None:
+        click.echo(
+            "No model resolved (empty models.yaml and no --model). Falling back to mock inference.",
+            err=True,
         )
-    except Exception as exc:  # noqa: BLE001
-        click.echo(click.style(f"\nInference error: {exc}", fg="red"), err=True)
+    model_file = getattr(agent.orchestrator, "model_file", None)
+    label = (
+        ui.model_label(Path(model_file).stem) if model_file else (model if not use_mock else None)
+    )
+    view.header(label)
+    if infer_error is not None:
+        view.stopped(f"inference failed: {infer_error}")
         sys.exit(1)
-    _infer_ms = (time.perf_counter() - _t_infer) * 1000
+    if not use_mock:
+        view.planning(load_s, infer_s)
     # The same contract as native `run` under $KNAIF_DUMP_PLAN: the post-gate plan, one marker
     # line on stderr. L3 reads both sides' plans from it to tell a port bug (same plan,
     # different commands) from plan disagreement (release plan R0).
     if os.environ.get("KNAIF_DUMP_PLAN"):
         click.echo(PLAN_DUMP_MARKER + json.dumps(payload, ensure_ascii=False), err=True)
+    if not use_mock and verbose:
+        tag = model_path or model or _read_recommended_model(skill_dir) or backend
+        click.echo(f"backend: {backend}  model: {tag}  inference: {infer_s:.3f} s", err=True)
 
-    # ── header ────────────────────────────────────────────────────────────────
-    if not silent:
-        _infer_s = _infer_ms / 1000
-        click.echo(click.style(f"intent: {_infer_s:.1f}s", fg="bright_black"))
-        click.echo(
-            click.style(f"{skill}", fg="magenta", bold=True)
-            + click.style(f" › {prompt_str}", fg="white")
-        )
-        if not use_mock and verbose:
-            tag = model_path or model or _read_recommended_model(skill_dir) or backend
-            click.echo("  " + click.style(f"backend: {backend}  model: {tag}", fg="bright_black"))
-        if dry_run:
-            click.echo(
-                "  " + click.style("mode: dry-run (no files will be modified)", fg="bright_black")
-            )
-
-    # ── early-exit for clarify / reject ───────────────────────────────────────
+    # ── a question, a refusal or nothing to do ends the run ───────────────────
     plan_steps = payload.get("plan") or []
-    if plan_steps and plan_steps[0].get("tool") in ("clarify", "reject"):
-        tool = plan_steps[0]["tool"]
-        args = plan_steps[0].get("args") or {}
-        msg = args.get("question") or args.get("reason") or args.get("message") or repr(args)
-        if not silent:
-            icon = "❓" if tool == "clarify" else "🚫"
-            color = "yellow" if tool == "clarify" else "red"
-            click.echo(click.style(f"\n{icon} {tool.upper()}: {msg}", fg=color))
+    if plan_steps and plan_steps[0].get("tool") in ("clarify", "reject", "done"):
+        view.control(plan_steps[0])
+        view.finish(dry_run=dry_run)
         sys.exit(0)
+
+    # `--stdout` prints a text answer: a step with none (a video, a PDF) refuses it up front.
+    if stdout:
+        for step in plan_steps:
+            tool = str(step.get("tool"))
+            declared = agent.registry.get(tool)
+            if tool not in ("clarify", "reject", "done") and not (declared and declared.stdout):
+                view.stopped(
+                    f"--stdout prints a text answer, and {tool} has none: run it without --stdout."
+                )
+                sys.exit(1)
 
     # ── execute ───────────────────────────────────────────────────────────────
     # When running for real, the user's y/n via plan_confirmer authorises
     # destructive tools; pass confirmed=True so those tools don't double-block.
     confirmed = not dry_run
 
-    if not dry_run and not overwrite:
-        # Replacing a file is the one thing that always asks, whatever -y says: preview the
+    if effective_require_approval and not _stdin_is_terminal():
+        # `--confirm` with nobody to answer: list what the first step would do and stop, as
+        # native does.
+        _stop_unconfirmed(agent, payload, prompt_str, view)
+
+    if not dry_run and not permitted.overwrite:
+        # Replacing a file asks unless `--allow overwrite` (or `--yes`) approved it: preview the
         # plan (no side effects) to learn which outputs it would write, and ask before any
         # of them is replaced. Decline = the same "plan declined" as a declined Proceed?.
-        existing = _existing_outputs(agent, payload, prompt_str)
-        if not overwrite_gate(existing, overwrite, _ask_yes_no):
-            click.echo(click.style("\n  (plan declined — no steps executed)", fg="yellow"))
+        existing = [shown(e, Path.cwd()) for e in _existing_outputs(agent, payload, prompt_str)]
+        asked = time.perf_counter()
+        try:
+            replace = overwrite_gate(existing, permitted.overwrite, _ask_yes_no)
+        except click.ClickException as exc:
+            # Nobody to ask: stopped where native stops, at the step that writes the file.
+            steps = payload.get("plan") or []
+            taken = {Path(e).name for e in existing}
+            idx = next(
+                (
+                    i
+                    for i, s in enumerate(steps)
+                    if Path(str((s.get("args") or {}).get("output") or "")).name in taken
+                ),
+                0,
+            )
+            view.stopped(chain_failure_context(idx, len(steps) or 1), exc.message)
+            sys.exit(1)
+        view.waited(time.perf_counter() - asked)
+        if not replace:
+            view.declined()
+            view.finish(dry_run=dry_run)
             sys.exit(0)
 
     try:
@@ -724,14 +909,12 @@ def run_cmd(
             confirmed=confirmed,
         )
     except ValueError as exc:
-        click.echo(click.style(f"\n{exc}", fg="red"), err=True)
+        view.stopped(str(exc))
         sys.exit(1)
-    if not silent:
-        for line in download_lines(agent.last_downloads):
-            click.echo("  " + click.style(line, fg="bright_black"))
+    _tell_downloads()
     if results and (results[0].get("result") or {}).get("status") == "declined":
-        if not silent:
-            click.echo(click.style("\n  (download declined — nothing fetched)", fg="yellow"))
+        view.declined()
+        view.finish(dry_run=dry_run)
         sys.exit(0)
     if os.environ.get("KNAIF_DUMP_PLAN"):
         for argv in rendered_argvs(results):
@@ -740,26 +923,14 @@ def run_cmd(
     # The NL clarify gate (run inside execute_plan) can downgrade the plan to a
     # clarify/reject — e.g. an under-specified file or an ungrounded password
     # (grounded_args). Render it like the pre-execution early-exit.
-    if results and results[0].get("tool") in ("clarify", "reject"):
-        tool = results[0]["tool"]
-        args = results[0].get("args") or {}
-        res = results[0].get("result") or {}
-        msg = (
-            args.get("question")
-            or args.get("reason")
-            or res.get("question")
-            or res.get("reason")
-            or repr(args)
-        )
-        if not silent:
-            icon = "❓" if tool == "clarify" else "🚫"
-            color = "yellow" if tool == "clarify" else "red"
-            click.echo(click.style(f"\n{icon} {tool.upper()}: {msg}", fg=color))
+    if results and results[0].get("tool") in ("clarify", "reject", "done"):
+        view.control(results[0])
+        view.finish(dry_run=dry_run)
         sys.exit(0)
 
     if not results:
-        if not silent:
-            click.echo(click.style("\n  (plan declined — no steps executed)", fg="yellow"))
+        view.declined()
+        view.finish(dry_run=dry_run)
         sys.exit(0)
 
     # ── output ────────────────────────────────────────────────────────────────
@@ -773,24 +944,34 @@ def run_cmd(
             # Per-intent items already rendered via _on_intent_completed. Render a
             # generic fallback only when no result_formatter is configured.
             if agent.result_formatter is None:
-                items = [
-                    {"kind": "info", "message": f"{r['tool']} ({r.get('duration_ms', 0):.0f}ms)"}
-                    for r in results
-                ]
-                click.echo()
-                ec = _render_items(items)
-                if ec != 0:
-                    exit_code_holder[0] = ec
+                for r in results:
+                    item = {
+                        "kind": "info",
+                        "message": f"{r['tool']} ({r.get('duration_ms', 0):.0f}ms)",
+                    }
+                    view.item(item, dry_run=dry_run)
 
     # A batch chain ends with its counts, time and size (stderr: stdout stays the result), and
     # exits non-zero when any file failed (owner, 2026-10-13).
     report = agent.last_batch_report
     if report is not None:
         if not silent:
-            click.echo(click.style(report.summary(), fg="bright_black"), err=True)
+            click.echo(report.summary(), err=True)
         if report.failed:
             exit_code_holder[0] = 1
 
+    view.finish(dry_run=dry_run)
+    if stdout and not dry_run:
+        texts = []
+        for r in results:
+            declared = agent.registry.get(str(r.get("tool")))
+            field = declared.stdout if declared else None
+            value = (r.get("result") or {}).get(field) if field else None
+            if isinstance(value, str):
+                texts.append(value)
+        if texts:
+            text_out.write("\n".join(t.rstrip("\n") for t in texts) + "\n")
+            text_out.flush()
     if exit_code_holder[0] != 0:
         sys.exit(exit_code_holder[0])
 
@@ -808,8 +989,7 @@ def run_cmd(
     default="auto",
     show_default=True,
 )
-@click.option("-m", "--model", default=None, metavar="NAME")
-@click.option("-M", "--model-path", default=None, type=click.Path(), metavar="PATH")
+@click.option("-m", "--model", default=None, metavar="NAME|PATH")
 @click.option("--ollama-url", default="http://localhost:11434", metavar="URL")
 @click.option("-t", "--max-tokens", default=256, show_default=True, metavar="N")
 @click.option(
@@ -825,7 +1005,6 @@ def plan_cmd(
     prompt: tuple[str, ...],
     backend: str,
     model: str | None,
-    model_path: str | None,
     ollama_url: str,
     max_tokens: int,
     batch: str | None,
@@ -846,7 +1025,8 @@ def plan_cmd(
     skill_dir = _DEFAULT_SKILLS_ROOT / skill
     orchestrator = None
     if not use_mock:
-        orchestrator = _build_orchestrator(backend, model, model_path, ollama_url, skill_dir, False)
+        name, model_path = _model_or_path(model)
+        orchestrator = _build_orchestrator(backend, name, model_path, ollama_url, skill_dir, False)
         if orchestrator is None:
             use_mock = True
 

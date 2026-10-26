@@ -15,15 +15,20 @@ inspect_document:
 extract_text:
   effects: [exec:tesseract, fs.read, fs.write]
   produces: text   # a PDF it reads is not refined by it, so it stays
-  # Over many files, each file's text is saved as <name>.txt next to it (core gives each lifted
-  # step its `output`); one file's text is printed. The `output` arg is not shown to the model.
+  # The text is saved as <name>.txt beside its source, one file or many (owner,
+  # 2026-10-23; one file's text used to be printed and saved nowhere). Over many files core gives
+  # each lifted step its `output`; for one file `output` is a declared argument, since the model
+  # names the file once it knows the text is saved (a model check on the GPU: an undeclared
+  # `output` made Python ask). Not `readonly`: it writes a file, so the optimizer must never drop
+  # it before a later step.
   batch_output: txt
-  description: "Read out the text content of a document as per-page records plus joined text. Creates no new file. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf."
+  # `run --stdout` prints the text instead of saving it, for a pipe (owner, 2026-10-23).
+  stdout: text
+  description: "Read out the text content of a document and save it as <name>.txt beside it. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf."
   keywords: [extract, extrae, extraer, texto, extrahieren, extraire, texte, извлечь, извлечи, 提取]
   required_args: [input]
-  optional_args: [pages, ocr]
+  optional_args: [pages, ocr, output]
   safety_category: safe
-  readonly: true
   mock_args:
     input: "{utterance_after:extract}"
   arg_schemas:
@@ -34,6 +39,9 @@ extract_text:
       type: string
     ocr:
       type: boolean
+    output:
+      type: string
+      path_role: output
 
 find_in_document:
   effects: [exec:tesseract, fs.read]

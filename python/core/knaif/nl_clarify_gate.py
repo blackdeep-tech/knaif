@@ -13,6 +13,7 @@ host-supplied file listing; allow only when exactly one match.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -179,6 +180,20 @@ _NAMED_FILE_RE = re.compile(r"[\w-]+\.([a-z0-9]{2,5})(?:[^a-z0-9]|$)", re.IGNORE
 _LETTER_RE = re.compile(r"[a-z]", re.IGNORECASE)
 
 
+#: A name the request gives an output ("call it preview.gif", "save them as out.mp4", "als",
+#: "comme", "като", "保存为"): not a file the request is about (2026-10-23).
+_OUTPUT_NAME_RE = re.compile(
+    r"(?:\b(?:call(?:ed)?\s+(?:it|them)|name[ds]?\s+(?:it|them)|named|save(?:d)?\s+(?:it\s+|them\s+)?as"
+    r"|as|into|als|nach|namens|como|llamad[oa]s?|comme|vers|appel[ée]e?s?|като)"
+    r"|(?:命名为|保存为|另存为|存为))\s*[\w-]+\.[a-z0-9]{2,5}\b",
+    re.IGNORECASE,
+)
+
+
+def _without_output_names(text: str) -> str:
+    return _OUTPUT_NAME_RE.sub(" ", text)
+
+
 def _names_a_file(text: str) -> bool:
     """A name with an extension holding a letter (``clip.mp4``, ``x.3gp``); a codec or a number
     (``H.264``, ``1.25``) names no file."""
@@ -199,9 +214,129 @@ def asks_for_many_files(utterance: str) -> bool:
     from .known_folders import without_folder_places
 
     text = _URL_RE.sub(" ", utterance)
-    if _names_a_file(utterance):  # a URL names a file too
+    if _names_a_file(_without_output_names(utterance)):  # a URL names a file too
         return _asks_for_many(without_folder_places(text), "*")
     return _is_batch_utterance(text) or _asks_for_many(text, "*")
+
+
+#: Number words of the corpora's languages, for :func:`count_question`. "both" and
+#: its translations are two. German "ein" is left out: it is also the article.
+_COUNT_WORDS: dict[str, int] = {
+    **dict(
+        zip("one two three four five six seven eight nine ten".split(), range(1, 11), strict=True)
+    ),
+    "both": 2,
+    **dict(
+        zip("zwei drei vier fünf sechs sieben acht neun zehn".split(), range(2, 11), strict=True)
+    ),
+    "beide": 2,
+    "beiden": 2,
+    **dict(
+        zip("dos tres cuatro cinco seis siete ocho nueve diez".split(), range(2, 11), strict=True)
+    ),
+    "ambos": 2,
+    "ambas": 2,
+    **dict(zip("deux trois quatre cinq six sept huit neuf dix".split(), range(2, 11), strict=True)),
+    **dict(zip("три четири пет шест седем осем девет десет".split(), range(3, 11), strict=True)),
+    "два": 2,
+    "две": 2,
+    "двата": 2,
+    "двете": 2,
+    "трите": 3,
+}
+#: A count in Chinese sits right before the file word, without spaces ("两个视频"); a digit that
+#: follows a letter is part of a name ("mp4文件"), not a count.
+_CJK_COUNT_RE = re.compile(
+    r"([两兩二三四五六七八九十]|(?<![a-z0-9])\d+)\s*[个個部支份张張]?\s*"
+    r"(?:视频|視頻|影片|文件|檔案|档案|图片|圖片|片段|剪辑|剪輯)"
+)
+_CJK_NUMBERS = dict(zip("两兩二三四五六七八九十", (2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10), strict=True))
+#: How the count question names the files, by their kind.
+_KIND_NOUNS = {
+    "video": "videos",
+    "audio": "audio files",
+    "document": "documents",
+    "image": "images",
+    "text": "text files",
+}
+
+
+def _requested_count(utterance: str) -> int | None:
+    """The number of files *utterance* asks for: a digit or a number word at most two words
+    before a plural file word ("2 of the videos", "both mov files", "2 от клиповете"), or a
+    Chinese count before a file word ("两个视频"). None when there is none."""
+    low = _URL_RE.sub(" ", utterance.lower())
+    words = re.findall(r"\w+", low)
+    file_words = _PLURAL_FILE_WORDS | _PLURAL_FILE_WORDS_UNICODE
+    for i, word in enumerate(words):
+        n = int(word) if word.isascii() and word.isdigit() else _COUNT_WORDS.get(word)
+        if n is None:
+            continue
+        for later in words[i + 1 : i + 4]:
+            if later in file_words:
+                return n
+            if later.isdigit() or later in _COUNT_WORDS:
+                break
+    m = _CJK_COUNT_RE.search(low)
+    if m:
+        raw = m.group(1)
+        return int(raw) if raw.isdigit() else _CJK_NUMBERS[raw]
+    return None
+
+
+def count_question(
+    utterance: str,
+    plan: list[dict[str, Any]],
+    base: Path,
+    file_kinds: Mapping[str, str] | None,
+) -> str | None:
+    """The question to ask when *utterance* asks for a number of files the plan does not touch.
+
+    "конвертирай 2 от видеата в mp4" converted every video (owner, 2026-10-22). The
+    files touched are the plan's folder and glob inputs, listed as the per-file batch lists them
+    (:func:`knaif.batch_chain.expand_inputs`), plus any file named beside them; an earlier step's
+    output is not counted again. Only a plan with a folder or a glob is checked: files named one
+    by one are the request's own choice. None when there is nothing to ask. Rust mirror:
+    ``knaif_core::nl_clarify_gate::count_question``; contracts/parity/count_cases.json.
+    """
+    from .batch_chain import INPUT_KEYS, expand_inputs
+
+    wanted = _requested_count(utterance)
+    if wanted is None:
+        return None
+    touched: dict[str, str] = {}
+    outputs: set[str] = set()
+    listed = False
+    for step in plan:
+        args = step.get("args") or {}
+        for key in INPUT_KEYS:
+            value = args.get(key)
+            entries = [value] if isinstance(value, str) else value
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, str) or entry.startswith("$") or "://" in entry:
+                    continue
+                if entry.lower() in outputs:
+                    continue
+                found = expand_inputs([entry], base, file_kinds)
+                if entry in found:
+                    listed = True
+                    touched.update((f.lower(), f) for f in found[entry])
+                else:
+                    touched[entry.lower()] = entry
+        output = args.get("output")
+        if isinstance(output, str):
+            outputs.add(output.lower())
+    have = len(touched)
+    if not listed or have == wanted or have == 0:
+        return None
+    kinds = {(file_kinds or {}).get(Path(f).suffix.lstrip(".").lower()) for f in touched.values()}
+    kind = kinds.pop() if len(kinds) == 1 else None
+    noun = _KIND_NOUNS.get(kind, "files") if kind else "files"
+    if have > wanted:
+        return f"Which {wanted} of the {have} {noun}? Name them."
+    return f"I found {have} {noun} here, not {wanted}. Which ones do you mean?"
 
 
 def _glob_question(glob: str) -> str:

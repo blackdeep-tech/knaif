@@ -1,0 +1,69 @@
+{
+  "_comment": "The one folder listing (owner, 2026-10-23): the files a folder or a glob names, the same in both runtimes and for every caller (core's per-file batch, the fs toolkit's resolve_inputs). Files only (a folder is never listed), in natural order of each file's path below the folder (clip1, clip2, clip10; ties by the name as written), not into subfolders unless recursive, a glob matched against the file name. A folder that does not exist lists nothing. `files` are created under the test's base folder; `expected` are paths relative to `folder`. Python `knaif.batch_chain.list_files`, Rust `knaif_core::batch_chain::list_files`.",
+  "cases": [
+    {
+      "name": "a folder, natural order, files only",
+      "files": ["clip10.mp4", "clip2.mp4", "clip1.mp4", "sub/x.mp4"],
+      "folder": ".",
+      "pattern": "*",
+      "recursive": false,
+      "expected": ["clip1.mp4", "clip2.mp4", "clip10.mp4"]
+    },
+    {
+      "name": "recursive orders by the path below the folder",
+      "files": ["b/clip2.mp4", "a/clip10.mp4", "clip1.mp4", "b/clip10.mp4"],
+      "folder": ".",
+      "pattern": "*",
+      "recursive": true,
+      "expected": ["a/clip10.mp4", "b/clip2.mp4", "b/clip10.mp4", "clip1.mp4"]
+    },
+    {
+      "name": "a glob in a subfolder",
+      "files": ["videos/a.mov", "videos/b.mp4", "c.mov"],
+      "folder": "videos",
+      "pattern": "*.mov",
+      "recursive": false,
+      "expected": ["a.mov"]
+    },
+    {
+      "name": "a glob that matches nothing",
+      "files": ["a.mp4"],
+      "folder": ".",
+      "pattern": "*.avi",
+      "recursive": false,
+      "expected": []
+    },
+    {
+      "name": "a folder that does not exist",
+      "files": ["a.mp4"],
+      "folder": "nope",
+      "pattern": "*",
+      "recursive": false,
+      "expected": []
+    },
+    {
+      "name": "zero-padding ties fall back to the name",
+      "files": ["clip2.mp4", "clip02.mp4", "clip1.mp4"],
+      "folder": ".",
+      "pattern": "*",
+      "recursive": false,
+      "expected": ["clip1.mp4", "clip02.mp4", "clip2.mp4"]
+    },
+    {
+      "name": "a one-character glob",
+      "files": ["a1.mp4", "a10.mp4", "b1.mp4"],
+      "folder": ".",
+      "pattern": "a?.mp4",
+      "recursive": false,
+      "expected": ["a1.mp4"]
+    },
+    {
+      "name": "a recursive glob matches names at any depth",
+      "files": ["x/a.mov", "a.mov", "x/y/b.mov", "x/c.mp4"],
+      "folder": ".",
+      "pattern": "*.mov",
+      "recursive": true,
+      "expected": ["a.mov", "x/a.mov", "x/y/b.mov"]
+    }
+  ]
+}

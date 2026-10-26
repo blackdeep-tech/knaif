@@ -48,10 +48,11 @@ def test_download_lines_say_what_was_or_would_be_fetched(tmp_path):
             {"url": "https://h.test/b.pdf", "path": str(tmp_path / "b.pdf"), "bytes": 1200},
         ]
     )
-    assert lines[0].startswith("would download https://h.test/a.mp4")
-    assert lines[1].startswith("downloaded https://h.test/b.pdf (1,200 bytes)")
+    # Native's words: the file by its name, never the run scratch, bytes as native counts.
+    assert lines[0] == "would download https://h.test/a.mp4 → a.mp4 (downloaded)"
+    assert lines[1] == "downloaded https://h.test/b.pdf (1200 bytes) → b.pdf (downloaded)"
 
 
 def test_run_offers_the_flag():
     out = CliRunner().invoke(cli, ["run", "--help"]).output
-    assert "--allow-download" in out
+    assert "--allow WHAT" in out and "download (fetch a URL input)" in out

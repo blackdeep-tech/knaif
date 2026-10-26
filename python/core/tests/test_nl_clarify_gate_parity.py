@@ -33,7 +33,13 @@ def test_nl_clarify_gate_contract(case: dict, tmp_path: Path) -> None:
     registry = load_registry(reg_path)
     plan = copy.deepcopy(case["plan"]["plan"])
 
-    out = nl_clarify_gate(case["utterance"], plan, injected_files=None, registry=registry)
+    out = nl_clarify_gate(
+        case["utterance"],
+        plan,
+        injected_files=None,
+        registry=registry,
+        known_files=frozenset(case.get("sandbox_files", [])),
+    )
 
     assert {"plan": out} == case["expected_payload"]
 

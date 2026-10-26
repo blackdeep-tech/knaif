@@ -19,7 +19,7 @@
 //! > that was already on disk cannot be renamed at all, so the CONSUMER's output moves.
 //!
 //! `ffmpeg_175` ("convert clip.mp4 to mp4, lossless") is the second shape — nothing in the plan
-//! wrote `clip.mp4`, so writing the copy to `clip_converted.mp4` is the only move available. The
+//! wrote `clip.mp4`, so writing the copy to `clip_1.mp4` is the only move available. The
 //! first shape is `trim -> Test1.mov` feeding `convert Test1.mov -> Test1.mov`, where
 //! `trim_video` accepts neither `container` nor `quality` and the chain is therefore forced.
 //! There the name is the user's and belongs to the branch's last step; renaming the consumer
@@ -122,8 +122,10 @@ fn replace_exact(value: &mut Value, from: &str, to: &str) {
 /// wrong in both directions: a genuine collision survives, and a good destination gets renamed.
 const SANDBOX_OUTPUT_TOOLS: &[&str] = &["concat_video", "run_concat"];
 
-/// Suffix for the on-disk shape: the consumer's output moves out of the way.
-const COLLISION_SUFFIX: &str = "_converted";
+/// No suffix for the on-disk shape: the consumer's output moves to the first free number,
+/// `clip_1.mp4` (owner, 2026-10-23; `_converted` could itself be taken). Python
+/// `_engine._COLLISION_SUFFIX`.
+const COLLISION_SUFFIX: &str = "";
 
 /// Suffix for the other repair: renaming a chained intermediate so the name the user asked for
 /// stays on the step that actually produces what they described. Calling that file `_converted`
@@ -253,7 +255,8 @@ fn resolve_output(raw: &str, out_base: Option<&Path>) -> PathBuf {
     }
 }
 
-/// First free `<stem><suffix>[_N]<.ext>`. **Never returns `requested` itself.**
+/// First free `<stem><suffix><.ext>` then `<stem><suffix>_N<.ext>`; with no suffix, the first free
+/// `<stem>_N<.ext>` from 1. **Never returns `requested` itself.**
 ///
 /// Always advancing is the contract, not a detail. The caller only reaches here once a
 /// self-overwrite is established, and a chained intermediate that does not exist on disk yet
@@ -278,7 +281,11 @@ fn next_free_output(requested: &Path, taken: &HashSet<PathBuf>, suffix: &str) ->
     };
     let is_free = |c: &PathBuf| !taken.contains(c) && !c.exists();
 
-    let mut candidate = with_name(format!("{stem}{suffix}"));
+    let mut candidate = if suffix.is_empty() {
+        with_name(format!("{stem}_1"))
+    } else {
+        with_name(format!("{stem}{suffix}"))
+    };
     let mut n = 2;
     while !is_free(&candidate) {
         candidate = with_name(format!("{stem}{suffix}_{n}"));
@@ -673,10 +680,10 @@ mod tests {
         let renames = rebind_colliding_outputs(&mut steps, Some(&sb));
 
         assert_eq!(steps[0]["args"]["inputs"][0], "clip.mp4");
-        assert_eq!(steps[0]["args"]["output"], "clip_converted.mp4");
+        assert_eq!(steps[0]["args"]["output"], "clip_1.mp4");
         assert_eq!(
             renames.collisions,
-            vec![("clip.mp4".to_string(), "clip_converted.mp4".to_string())]
+            vec![("clip.mp4".to_string(), "clip_1.mp4".to_string())]
         );
     }
 
@@ -766,7 +773,7 @@ mod tests {
             "the self-overwrite must be seen"
         );
         // A bare reference stays bare — it is already inside `sub/` by resolution.
-        assert_eq!(steps[0]["args"]["output"], "clip_converted.mp4");
+        assert_eq!(steps[0]["args"]["output"], "clip_1.mp4");
     }
 
     #[test]
@@ -795,7 +802,7 @@ mod tests {
         assert_eq!(renames.collisions.len(), 1);
         let out = steps[0]["args"]["output"].as_str().unwrap();
         assert!(Path::new(out).is_absolute(), "{out} lost its directory");
-        assert_eq!(Path::new(out).file_name().unwrap(), "clip_converted.mp4");
+        assert_eq!(Path::new(out).file_name().unwrap(), "clip_1.mp4");
         assert_eq!(Path::new(out).parent(), Some(sb.as_path()));
     }
 
@@ -813,6 +820,6 @@ mod tests {
             1,
             "the self-overwrite must be seen"
         );
-        assert_eq!(steps[0]["args"]["output"], "sub/a_converted.mp4");
+        assert_eq!(steps[0]["args"]["output"], "sub/a_1.mp4");
     }
 }

@@ -245,6 +245,14 @@ Handlers derive new output paths instead of overwriting originals. Common suffix
 - `_thumb`
 - `_preview`
 
+### Where an output goes
+
+A name the handler makes up sits beside its input: `videos/clip.mp4` converted to mkv writes
+`videos/clip.mkv`. A relative name the plan gives, a pattern included, is relative to the working
+folder, as documents and `concat_video` read it: `out/clip.mkv`, `clip.mkv`, `*.mp4` and
+`small/*.mp4` for inputs in `videos/` write `./out/clip.mkv`, `./clip.mkv`, `./beach.mp4` and
+`./small/beach.mp4`. Both runtimes, contracts/parity/cli_output_cases.json.
+
 ### Which container an output gets
 
 When the request names no container:
@@ -344,6 +352,22 @@ silently overwriting and refusing outright are the wrong answers.
 
 Implemented in `python/_collisions.py`, reached through the `Skill.resolve_output_collisions`
 hook. **Python only today** — the native runtime still renders `-i clip.mp4 … clip.mp4`.
+
+### A batch convert skips a file already in that format
+
+In a `convert_video` step over **two or more files**, a file the step would only copy as it is
+(a stream copy into the same container) **into its own folder** is skipped, and one note names
+them: `note: skipped concert.mp4, dog.mp4 (already mp4)`. "Convert every video to mp4" in a
+folder that holds mp4s otherwise made a numbered twin of each (`concert_1.mp4`).
+
+- Into another folder (`out/*.mp4`) the copy is the work asked for, and it is made.
+- One file the user names (`convert clip.mp4 to mp4`) keeps its numbered copy, `clip_1.mp4`.
+- A codec, size or quality change is not a copy, and is never skipped.
+- When every file of the step would be skipped, the step fails with `Nothing to convert: …
+  already mp4.`
+
+Both runtimes: `BuildRecipesStep` (`python/steps.py`) and `recipes` (`native/src/run.rs`),
+held together by `contracts/parity/cli_output_cases.json`.
 
 ### Frame counts and zero-length trims
 

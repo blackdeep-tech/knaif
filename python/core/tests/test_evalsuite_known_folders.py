@@ -367,6 +367,10 @@ def test_the_native_replay_gets_the_same_folders_sink_and_alert(tmp_path: Path, 
         )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    # The binary's `run --help` is not this test's subject.
+    from knaif.evalsuite import native_lane
+
+    monkeypatch.setattr(native_lane, "_run_help", lambda binary: "")
     report = replay_row_native(
         Path("knaif.exe"),
         "ffmpeg",

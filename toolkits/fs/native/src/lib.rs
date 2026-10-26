@@ -226,66 +226,30 @@ pub fn resolve_inputs(
         .iter()
         .map(|e| resolve_real(Path::new(e), base))
         .collect();
-    let fold = |s: &str| {
-        if cfg!(windows) {
-            s.to_lowercase()
-        } else {
-            s.to_string()
-        }
-    };
     let mut resolved = Vec::new();
     for raw in paths {
         let p = resolve_real(Path::new(raw), base);
         if let (Some(sandbox), false) = (sandbox, within(&p, work_dir)) {
             assert_in_sandbox(&p, sandbox)?;
         }
-        if p.is_dir() {
-            let mut children: Vec<(String, PathBuf)> = Vec::new();
-            let mut pending = vec![p.clone()];
-            while let Some(dir) = pending.pop() {
-                for entry in std::fs::read_dir(&dir)?.flatten() {
-                    let child = entry.path();
-                    if child.is_dir() {
-                        if recursive {
-                            pending.push(child);
-                        }
-                        continue;
-                    }
-                    let rel = child
-                        .strip_prefix(&p)
-                        .unwrap_or(&child)
-                        .to_string_lossy()
-                        .replace('\\', "/");
-                    children.push((rel, child));
-                }
-            }
-            children.sort_by_key(|(rel, _)| knaif_core::batch_chain::natural_key(rel));
-            for (_, child) in children {
-                if child.is_file() && !excluded.contains(&child) && keep(&child) {
+        let globbed = !p.exists() && raw.chars().any(|c| matches!(c, '*' | '?' | '['));
+        if p.is_dir() || globbed {
+            // A folder, or a glob in one: the one listing core's batch uses too.
+            let listed = if p.is_dir() {
+                knaif_core::batch_chain::list_files(&p, "*", recursive)
+            } else {
+                let (Some(parent), Some(pattern)) = (p.parent(), p.file_name()) else {
+                    continue;
+                };
+                knaif_core::batch_chain::list_files(parent, &pattern.to_string_lossy(), false)
+            };
+            for (_, child) in listed {
+                if !excluded.contains(&child) && keep(&child) {
                     resolved.push(child);
                 }
             }
         } else if p.exists() {
             resolved.push(p);
-        } else if raw.chars().any(|c| matches!(c, '*' | '?' | '[')) {
-            let (Some(parent), Some(pattern)) = (p.parent(), p.file_name()) else {
-                continue;
-            };
-            let pattern = fold(&pattern.to_string_lossy());
-            if !parent.is_dir() {
-                continue;
-            }
-            let mut matched: Vec<(String, PathBuf)> = std::fs::read_dir(parent)?
-                .flatten()
-                .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
-                .filter(|(name, _)| knaif_core::batch_chain::fnmatch(&pattern, &fold(name)))
-                .collect();
-            matched.sort_by_key(|(name, _)| knaif_core::batch_chain::natural_key(name));
-            for (_, child) in matched {
-                if child.is_file() && !excluded.contains(&child) && keep(&child) {
-                    resolved.push(child);
-                }
-            }
         } else {
             resolved.push(p); // left to the probe to report missing
         }

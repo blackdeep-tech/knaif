@@ -106,21 +106,15 @@ pub fn preview_in(
         }
         "extract_text" => {
             let input = input_path(args, &p)?;
-            // `output` comes only from core, when it repeats this step over many files
-            // (tools.yaml `batch_output: txt`): the text is saved, not printed.
-            if let Some(out) = out_arg(args, &p, "output")? {
-                p.check(&out)?;
-                return Ok(Preview::Write {
-                    outputs: vec![out],
-                    summary: "save the text".into(),
-                });
-            }
-            let records = text::extract_text_with(
-                &input,
-                str_arg(args, "pages").as_deref(),
-                bool_arg(args, "ocr").unwrap_or(false),
-            )?;
-            Ok(Preview::Read(ReadResult::Text(records)))
+            // The text is saved as <name>.txt beside its source, one file or many (owner,
+            // 2026-10-23): `output` from core in a batch (`batch_output: txt`), else the
+            // free default name. Python `ExtractTextStep`.
+            let out = derive_output(&p, &input, out_arg(args, &p, "output")?, ".txt");
+            p.check(&out)?;
+            Ok(Preview::Write {
+                outputs: vec![out],
+                summary: "save the text".into(),
+            })
         }
         "find_in_document" => {
             let input = input_path(args, &p)?;
@@ -156,10 +150,9 @@ pub fn read_input_absent(
     sandbox: Option<&Path>,
     work_dir: Option<&Path>,
 ) -> anyhow::Result<Option<PathBuf>> {
-    if !matches!(
-        tool,
-        "inspect_document" | "extract_text" | "find_in_document"
-    ) {
+    // extract_text writes its text: its dry run only names the file, so it reads
+    // nothing and is not here.
+    if !matches!(tool, "inspect_document" | "find_in_document") {
         return Ok(None);
     }
     let p = Paths {
@@ -202,8 +195,7 @@ pub fn commit_in(
     match tool {
         "extract_text" => {
             let input = input_path(args, &p)?;
-            let output = out_arg(args, &p, "output")?
-                .ok_or_else(|| anyhow::anyhow!("extract_text writes a file only with 'output'"))?;
+            let output = derive_output(&p, &input, out_arg(args, &p, "output")?, ".txt");
             let records = text::extract_text_with(
                 &input,
                 str_arg(args, "pages").as_deref(),
@@ -710,6 +702,24 @@ fn input_path(args: &serde_json::Map<String, Value>, p: &Paths) -> anyhow::Resul
     p.resolve(&require_str(args, "input")?)
 }
 
+/// The `input` a step reads, resolved and sandbox-checked as its run would: for a caller that
+/// reads it itself (`run --stdout`'s extract_text in apps/cli).
+pub fn input_path_in(
+    args: &serde_json::Map<String, Value>,
+    base: &Path,
+    sandbox: Option<&Path>,
+    work_dir: Option<&Path>,
+) -> anyhow::Result<PathBuf> {
+    input_path(
+        args,
+        &Paths {
+            base,
+            sandbox,
+            work: work_dir,
+        },
+    )
+}
+
 /// Resolve + sandbox-check the `inputs` list arg.
 fn input_paths(args: &serde_json::Map<String, Value>, p: &Paths) -> anyhow::Result<Vec<PathBuf>> {
     let items = args
@@ -1184,9 +1194,11 @@ mod tests {
         let gone = args(serde_json::json!({"input": "b.pdf", "query": "x"}));
         let absent = |tool: &str, a| read_input_absent(tool, a, &dir, Some(&dir), None).unwrap();
         assert_eq!(absent("inspect_document", &here), None);
-        for tool in ["inspect_document", "extract_text", "find_in_document"] {
+        for tool in ["inspect_document", "find_in_document"] {
             assert_eq!(absent(tool, &gone), Some(dir.join("b.pdf")), "{tool}");
         }
+        // extract_text writes its text: its dry run names the file, reads nothing.
+        assert_eq!(absent("extract_text", &gone), None);
         assert_eq!(absent("rotate_pages", &gone), None);
         let _ = std::fs::remove_dir_all(&dir);
     }

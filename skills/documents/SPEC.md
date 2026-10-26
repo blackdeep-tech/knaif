@@ -75,7 +75,7 @@ Model-visible tools (declared in `skills/documents/tools.yaml`):
 
 ```text
 inspect_document     # safe — format, page count, size, encryption, text-layer status
-extract_text         # safe — per-page text records + joined text (creates no file)
+extract_text         # safe — saves <name>.txt beside it: pages one blank line apart, `\n` line ends
 find_in_document     # safe — keyword/regex search returning page snippets
 merge_pdfs           # combine multiple PDFs into one
 split_pdf            # copy a subset of pages into a new PDF (original intact)

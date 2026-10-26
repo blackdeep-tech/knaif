@@ -112,6 +112,17 @@ rules:
           first 5 seconds, then convert_video to gif. A final step that joins them all
           (concat_video) reads that same output filename.
 
+  # Owner, 2026-10-23: "the last 2 seconds" was cut at 4-6 s of a 10 s clip, the
+  # model guessing the length. Both engines already read a negative start (`-sseof`); this tells
+  # the model, and only a request about the end of a clip sees it, so every other prompt stays
+  # byte-identical.
+  - tools: [trim_video]
+    words: [last, final, end, ending, letzten, letzte, ende, ultimos, últimos, últimas, derniers,
+            dernières, fin, последните, последния, последната, края, 最后, 最後, 结尾, 末尾]
+    text: |2
+        - THE LAST N SECONDS: trim_video's start may be negative, counted back from the end of the
+          clip: "the last 2 seconds" is start "-2s" with no end. Never guess the clip's length.
+
 examples:
   - request: "split clip.mp4 into 10-second parts and compress each one"
     output:

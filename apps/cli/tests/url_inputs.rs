@@ -4,7 +4,7 @@
 //!
 //! No model: `KNAIF_LLM_BACKEND=mock` plus `KNAIF_LLM_MOCK_RESPONSE` feeds the runtime an exact
 //! plan. A local server answers the reserved `files.knaif.test` through `KNAIF_NET_TEST_HOST`.
-//! Stdin is null, so there is nobody to ask: without `--allow-download` the run must stop.
+//! Stdin is null, so there is nobody to ask: without `--allow download` the run must stop.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -116,7 +116,7 @@ fn an_approved_url_becomes_one_result_in_the_users_folder() {
         &base,
         &convert_plan(),
         &format!("convert {URL} to markdown"),
-        &["--allow-download"],
+        &["--allow", "download"],
     );
     assert_eq!(sb.names(), vec!["notes.md".to_string()], "{out}");
     assert!(std::fs::read_to_string(sb.0.join("notes.md"))
@@ -137,13 +137,14 @@ fn without_approval_and_without_a_terminal_nothing_is_requested() {
         &format!("convert {URL} to markdown"),
         &[],
     );
-    assert!(out.contains("--allow-download"), "{out}");
+    assert!(out.contains("--allow download"), "{out}");
     assert_eq!(hits.load(Ordering::SeqCst), 0);
     assert!(sb.names().is_empty(), "{out}");
 }
 
+/// `--yes` is `--allow all` (owner, 2026-10-23); before, it never covered this.
 #[test]
-fn yes_does_not_approve_a_download() {
+fn yes_approves_a_download() {
     let (base, hits) = serve(NOTES, "text/plain");
     let sb = Dir::new("yes");
     let out = run(
@@ -154,8 +155,8 @@ fn yes_does_not_approve_a_download() {
         &format!("convert {URL} to markdown"),
         &["--yes"],
     );
-    assert!(out.contains("--allow-download"), "{out}");
-    assert_eq!(hits.load(Ordering::SeqCst), 0);
+    assert_eq!(sb.names(), vec!["notes.md".to_string()], "{out}");
+    assert_eq!(hits.load(Ordering::SeqCst), 1, "{out}");
 }
 
 #[test]
@@ -168,7 +169,7 @@ fn a_dry_run_requests_nothing_and_says_what_it_would_fetch() {
         &base,
         &convert_plan(),
         &format!("convert {URL} to markdown"),
-        &["--dry-run", "--allow-download"],
+        &["--dry-run", "--allow", "download"],
     );
     assert!(out.contains(&format!("would download {URL}")), "{out}");
     assert_eq!(hits.load(Ordering::SeqCst), 0);
@@ -191,7 +192,7 @@ fn a_dry_run_read_of_a_url_does_not_read_the_file_it_has_not_downloaded() {
             &base,
             &format!(r#"{{"plan": [{{{args}}}]}}"#),
             &format!("read {URL}"),
-            &["--dry-run", "--allow-download"],
+            &["--dry-run", "--allow", "download"],
         );
         assert!(out.contains(&format!("would download {URL}")), "{out}");
         assert!(!out.contains("Error"), "{args}\n{out}");
@@ -209,7 +210,7 @@ fn a_refused_download_stops_the_run_by_name() {
         &base,
         &convert_plan(),
         &format!("convert {URL} to markdown"),
-        &["--allow-download"],
+        &["--allow", "download"],
     );
     assert!(out.contains("web page"), "{out}");
     assert!(sb.names().is_empty(), "{out}");
@@ -259,12 +260,8 @@ fn ffmpeg_converts_a_url_into_the_users_folder() {
         &base,
         &plan,
         &format!("convert {url} to mp4"),
-        &["--allow-download"],
+        &["--allow", "download"],
     );
-    assert_eq!(
-        sb.names(),
-        vec!["holiday_converted.mp4".to_string()],
-        "{out}"
-    );
+    assert_eq!(sb.names(), vec!["holiday.mp4".to_string()], "{out}");
     assert_eq!(hits.load(Ordering::SeqCst), 1, "{out}");
 }

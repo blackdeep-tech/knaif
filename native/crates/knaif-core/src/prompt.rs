@@ -114,7 +114,36 @@ pub struct PromptRule {
     pub tools: Vec<String>,
     #[serde(default)]
     pub when: Option<String>,
+    /// The rule also needs one of these words in the request.
+    #[serde(default)]
+    pub words: Vec<String>,
     pub text: String,
+}
+
+/// Whether `utterance` holds one of `words`: a whole word, any case; a CJK word as a substring.
+/// Python `knaif.prompt._says_any`.
+fn says_any(utterance: &str, words: &[String]) -> bool {
+    static LATIN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static WORD: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let latin_re = LATIN.get_or_init(|| regex::Regex::new(r"[a-z0-9]+").unwrap());
+    let word_re = WORD.get_or_init(|| regex::Regex::new(r"\w+").unwrap());
+    let low = utterance.to_lowercase();
+    let latin: std::collections::HashSet<&str> =
+        latin_re.find_iter(&low).map(|m| m.as_str()).collect();
+    let unicode: std::collections::HashSet<&str> =
+        word_re.find_iter(&low).map(|m| m.as_str()).collect();
+    words.iter().map(|w| w.to_lowercase()).any(|w| {
+        if w.chars()
+            .next()
+            .is_some_and(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+        {
+            low.contains(&w)
+        } else if w.is_ascii() {
+            latin.contains(w.as_str())
+        } else {
+            unicode.contains(w.as_str())
+        }
+    })
 }
 
 /// `header` with each rule that applies here joined at its end: a rule about tools when one of
@@ -129,8 +158,12 @@ pub fn apply_prompt_rules(
     let many = crate::nl_clarify_gate::asks_for_many_files(utterance);
     let mut out = header.to_string();
     for rule in rules {
-        let applies = (rule.when.as_deref() == Some("many") && many)
-            || rule.tools.iter().any(|t| present.contains(t));
+        let tool_present = rule.tools.iter().any(|t| present.contains(t));
+        let mut applies = (rule.when.as_deref() == Some("many") && many) || tool_present;
+        // A rule with `words` also needs one of them in the request.
+        if !rule.words.is_empty() {
+            applies = (rule.tools.is_empty() || tool_present) && says_any(utterance, &rule.words);
+        }
         if applies {
             out = format!("{}\n{}", out.trim_end_matches('\n'), rule.text);
         }

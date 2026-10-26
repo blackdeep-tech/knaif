@@ -187,6 +187,8 @@ class InferenceOrchestrator:
         self.ollama_url = ollama_url
         self.model_name = model_name
         self.model_config = model_config or {}
+        # The GGUF a llama.cpp backend loaded: the CLI names the model by it.
+        self.model_file: Path | None = None
         # Defaults to False: a JSON constraint demands valid JSON from the first token,
         # which a reasoning model cannot satisfy while emitting its preamble — the request
         # then hangs until it times out rather than failing fast. Opting in is a per-model
@@ -376,6 +378,7 @@ class InferenceOrchestrator:
             )
             return
 
+        self.model_file = full_path
         if verbose:
             print(f"Loading: {model_name}")
             print(f"   Path: {full_path}")

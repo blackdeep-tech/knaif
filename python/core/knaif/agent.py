@@ -7,7 +7,7 @@ import json
 import os
 import re
 import time
-from collections.abc import Callable, Collection, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +25,7 @@ from .evaluator import compute_metrics, run_eval
 from .executor import HANDLERS as _EXECUTOR_HANDLERS
 from .handler_api import HandlerContext
 from .nl_clarify_gate import (
+    count_question,
     nl_clarify_gate,
     required_args_clarify,
     restore_grounded_args,
@@ -399,6 +400,17 @@ if TYPE_CHECKING:
     from .orchestrator import InferenceOrchestrator
 
 
+def is_unsafe_request(utterance: str, phrases: Sequence[str]) -> bool:
+    """Whether every word of one of the skill's unsafe phrases is a word of *utterance*: such a
+    request never reaches the model. Native ``knaif_core::is_unsafe_request``; an empty phrase
+    matches nothing."""
+    tokens = set(utterance.lower().split())
+    return any(
+        words and all(word in tokens for word in words)
+        for words in (phrase.lower().split() for phrase in phrases)
+    )
+
+
 class CommandAgent:
     """
     Ties together the YAML-driven tool registry, plan validation, execution,
@@ -480,7 +492,7 @@ class CommandAgent:
         self.last_result_set: list[Result] = []
         # URL inputs (`url_inputs:` in skill.yaml, set by from_skill): None means the skill
         # works on local files only. Nothing is downloaded unless `allow_download` (the CLI's
-        # --allow-download) or `download_confirmer(url, max_bytes)` says yes, once per URL.
+        # `--allow download`) or `download_confirmer(url, max_bytes)` says yes, once per URL.
         self.url_inputs: Any | None = None
         self.allow_download: bool = False
         self.download_confirmer: Any | None = None
@@ -508,6 +520,15 @@ class CommandAgent:
         self.plan_display: Any | None = plan_display
         self.plan_confirmer: Any | None = plan_confirmer
         self.intent_completed: Any | None = intent_completed
+        # The run's shape for a CLI's display, as native's views draw it:
+        # `plan_ready(steps, notes)` once before anything runs (a batch's first file's steps;
+        # "the same for N more files" and what the plan leaves), then `intent_started(index,
+        # total, step)`, 1-based, before each step (`Step i/N · tool`, `step i of N:`).
+        self.plan_ready: Any | None = None
+        self.intent_started: Any | None = None
+        # `run --stdout`: handlers that declare `stdout:` return their text and
+        # save nothing (`HandlerContext.to_stdout`).
+        self.to_stdout: bool = False
         self.prompt_examples: list[dict] = []
         # `rules:` from prompt.yaml, each added to the header only when one of its tools is in
         # the prompt, so a prompt without them is unchanged byte for byte.
@@ -897,6 +918,12 @@ class CommandAgent:
             gated = nl_clarify_gate(
                 utterance, intent_plan, injected_files=injected_files, registry=self.registry
             )
+            if gated is intent_plan:
+                # A count of files ("2 of the videos") must match what the plan touches.
+                here = Path(self.sandbox if self.sandbox is not None else self.root)
+                asked = count_question(utterance, intent_plan, here, self.file_kinds)
+                if asked is not None:
+                    gated = [{"tool": "clarify", "args": {"question": asked}}]
             if gated is not intent_plan:
                 # Gate fired — return the clarify step immediately.
                 q = gated[0]["args"].get("question", "Which file did you mean?")
@@ -1132,6 +1159,22 @@ class CommandAgent:
         last_clause = max(clause_of, default=-1)
         batch_shown = False
 
+        # A plan with a question or a refusal in it is no plan to show (native skips it too).
+        if self.plan_ready is not None and not any(
+            s.get("tool") in _TERMINAL_TOOLS for s in intent_plan
+        ):
+            notes: list[str] = []
+            preview = list(intent_plan)
+            if batch is not None:
+                preview = [
+                    s for s, f in zip(intent_plan, batch.file_of, strict=False) if f in (None, 0)
+                ]
+                if len(batch.shown) > 1:
+                    notes.append(same_for_line(batch.shown[1:]))
+            if leaves:
+                notes.append(leaves)
+            self.plan_ready(preview, notes)
+
         def show(line: str) -> None:
             if not _show:
                 return
@@ -1217,6 +1260,8 @@ class CommandAgent:
                         self._intent_declined = True
                         break  # decline this intent → stop, keep prior results
 
+                if self.intent_started is not None and not is_terminal:
+                    self.intent_started(k + 1, len(intent_blocks), orig_intent)
                 self._isolated_failure = None
                 sub_results, should_stop = self._execute_steps(
                     sub_plan,
@@ -1537,7 +1582,7 @@ class CommandAgent:
                 if self.download_confirmer is None:
                     q = (
                         f"Downloading {url} needs your approval: run this in a terminal to be "
-                        "asked, or re-run with --allow-download."
+                        "asked, or re-run with --allow download."
                     )
                     return intent_plan, stop(
                         "clarify",
@@ -1623,6 +1668,7 @@ class CommandAgent:
             work_dir=work_dir,
             tool_caller=lambda name, args: self._call_tool(name, args, holder[0]),
             tool=tool,
+            to_stdout=self.to_stdout,
             effects=frozenset(declared) if declared is not None else None,
             file_reporter=file_reporter,
         )
@@ -1798,7 +1844,13 @@ class CommandAgent:
         return resolved
 
     def _mock_response(self, user_utterance: str, history: list[dict] | None = None) -> str:
-        """Return a mock JSON response driven by registry keywords and mock_args."""
+        """Return a mock JSON response driven by registry keywords and mock_args.
+
+        ``$KNAIF_LLM_MOCK_RESPONSE``, when set, is the model's output verbatim, as native's mock
+        backend takes it: one harness then drives both CLIs on the same plan."""
+        canned = os.environ.get("KNAIF_LLM_MOCK_RESPONSE")
+        if canned is not None:
+            return canned
         u = user_utterance.lower()
 
         if any(phrase in u for phrase in self.unsafe_phrases):
@@ -1849,11 +1901,7 @@ class CommandAgent:
         # hallucinated-filename guard and chain-intermediate linking below, and
         # those must compare against the paths the model was actually shown.
         user_utterance = normalize_path_separators(user_utterance)
-        u_tokens = set(user_utterance.lower().split())
-        if self.unsafe_phrases and any(
-            all(word in u_tokens for word in phrase.lower().split())
-            for phrase in self.unsafe_phrases
-        ):
+        if is_unsafe_request(user_utterance, self.unsafe_phrases):
             reject_args = self._resolve_mock_args(self.registry["reject"].mock_args, user_utterance)
             return {"plan": [{"tool": "reject", "args": reject_args}]}
 

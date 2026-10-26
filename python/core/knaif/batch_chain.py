@@ -52,6 +52,24 @@ def natural_key(name: str) -> tuple[str, str]:
     return padded.lower(), name
 
 
+def list_files(
+    folder: Path, pattern: str = "*", *, recursive: bool = False
+) -> list[tuple[str, Path]]:
+    """The files in *folder* matching *pattern*: ``(path below folder, path)``, natural order.
+
+    The one folder listing (owner, 2026-10-23): core's per-file batch and the fs
+    toolkit's ``resolve_inputs`` both list through it. Files only, ordered by their path below
+    *folder* (:func:`natural_key`); into subfolders only when *recursive*, the pattern matched
+    against the file name. A missing folder lists nothing. Rust mirror:
+    ``knaif_core::batch_chain::list_files``; contracts/parity/list_files_cases.json.
+    """
+    if not folder.is_dir():
+        return []
+    found = folder.rglob(pattern) if recursive else folder.glob(pattern)
+    files = [(c.relative_to(folder).as_posix(), c) for c in found if c.is_file()]
+    return sorted(files, key=lambda item: natural_key(item[0]))
+
+
 def expand_inputs(
     entries: Sequence[str], base: Path, file_kinds: Mapping[str, str] | None = None
 ) -> dict[str, list[str]]:
@@ -73,14 +91,7 @@ def expand_inputs(
             path = path.parent
         else:
             continue
-        names = (
-            sorted(
-                (c.name for c in path.glob(pattern) if c.is_file()),
-                key=natural_key,
-            )
-            if path.is_dir()
-            else []
-        )
+        names = [rel for rel, _path in list_files(path, pattern)]
         if file_kinds:
             names = [n for n in names if posixpath.splitext(n)[1].lstrip(".").lower() in file_kinds]
         found[entry] = [posixpath.join(folder, n) if folder else n for n in names]
@@ -200,12 +211,32 @@ def widen_kind_globs(
         return out
     formats = _named_formats(utterance, file_kinds)
     typed = _type_words(utterance, file_kinds)
+    excluded = _excluded_formats(utterance, file_kinds)
+    # The extensions each step's kind globs take, as written. Steps that share one read the same
+    # files ("a thumbnail and a gif of every video") and each widens fully; steps that share none
+    # split the kinds between them ("*.mp4 to mp4, *.mov to mov"), and the widening never adds to
+    # one what another takes or was given (garden.mkv was converted twice).
+    all_outputs = {_norm(o) for s in out for o in [(s.get("args") or {}).get("output")] if o}
+    taken: list[set[tuple[str, str]]] = [
+        {
+            ((m["folder"] or "").lower(), m["ext"].lower())
+            for entries in _input_lists(step)
+            for entry in entries
+            if (m := _KIND_GLOB_RE.match(entry.replace("\\", "/")))
+            and _norm(entry) not in all_outputs
+        }
+        for step in out
+    ]
+    own = [set(t) for t in taken]
     outputs: set[str] = set()
-    for step in out:
+    for i, step in enumerate(out):
         args = step.get("args")
         if not isinstance(args, dict):
             continue
-        named = formats | typed
+        claimed = set().union(
+            *(taken[j] for j in range(len(out)) if j != i and own[j] and not own[j] & own[i])
+        )
+        named = formats | typed | excluded
         target = _target_format(step, produces or {})
         if target in formats and target not in typed and _format_mentions(utterance, target) == 1:
             named = named - {target}
@@ -217,12 +248,14 @@ def widen_kind_globs(
             held = {_norm(e) for e in entries if isinstance(e, str)}
             widened: list[Any] = []
             for entry in entries:
-                widened.append(entry)
                 m = (
                     _KIND_GLOB_RE.match(entry.replace("\\", "/"))
                     if isinstance(entry, str)
                     else None
                 )
+                if m and m["ext"].lower() in excluded and _norm(entry) not in outputs:
+                    continue  # "except the mov files": the glob goes, the widening adds none
+                widened.append(entry)
                 if not m or _norm(entry) in outputs:
                     continue
                 ext, folder = m["ext"].lower(), m["folder"] or ""
@@ -236,15 +269,78 @@ def widen_kind_globs(
                 )
                 for other in sorted(found - named - {ext}):
                     glob = posixpath.join(folder, f"*.{other}") if folder else f"*.{other}"
+                    if (folder.lower(), other) in claimed:
+                        continue  # a step that splits the kinds with this one takes it
                     if file_kinds.get(other) == file_kinds[ext] and _norm(glob) not in held:
                         held.add(_norm(glob))
+                        taken[i].add((folder.lower(), other))
                         widened.append(glob)
-            if len(widened) > len(entries):
+            if widened != entries:
                 args[key] = widened
         output = args.get("output")
         if isinstance(output, str) and output:
             outputs.add(_norm(output))
-    return out
+    return _drop_emptied_steps(plan, out) if excluded else out
+
+
+#: "except the mov files": an exclusion word, then within three words an extension.
+#: "без звук" (without sound) names no extension and excludes nothing.
+_EXCLUSION_RE = re.compile(
+    r"(?:\b(?:except|excluding|exclude|other\s+than|apart\s+from|but\s+not|außer|ausser|"
+    r"ausgenommen|bis\s+auf|excepto|salvo|menos|sauf|hormis|освен|без)|除了)"
+    r"([^,;:!?，。；]*)",
+    re.IGNORECASE,
+)
+#: The words after an exclusion: Latin runs, read up to four, stopping at the first other run
+#: ("除了mov以外…为mp4" stops at "以外", "без mov файловете" at "файловете").
+_EXCLUDED_WORD_RE = re.compile(r"[a-z0-9]+|[^\sa-z0-9.]+")
+
+
+def _excluded_formats(utterance: str, file_kinds: Mapping[str, str]) -> set[str]:
+    """Extensions the request excludes ("every video except the mov files", "без mov файловете",
+    "除了mov以外"): an exclusion word, then an extension the skill knows within four words, read
+    up to the first word in another script."""
+    found: set[str] = set()
+    for m in _EXCLUSION_RE.finditer(utterance.lower()):
+        for word in _EXCLUDED_WORD_RE.findall(m.group(1))[:4]:
+            if not word.isascii():
+                break
+            for ext in (word, word[:-1] if word.endswith("s") else word):
+                if ext in file_kinds:
+                    found.add(ext)
+    return found
+
+
+def _input_lists(step: Mapping[str, Any]) -> list[list[str]]:
+    """Each input arg of *step* as a list of paths."""
+    args = step.get("args") or {}
+    lists = []
+    for key in INPUT_KEYS:
+        value = args.get(key)
+        if isinstance(value, str):
+            lists.append([value])
+        elif isinstance(value, list):
+            lists.append([v for v in value if isinstance(v, str)])
+    return lists
+
+
+def _drop_emptied_steps(
+    plan: Sequence[Mapping[str, Any]], out: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """*out* without the steps the exclusion left with no input; if a later step reads what such
+    a step writes (as the plan was written), the plan stays as written: dropping it would break
+    the chain."""
+    emptied = [
+        i
+        for i, (before, after) in enumerate(zip(plan, out, strict=True))
+        if any(_input_lists(before)) and not any(entries for entries in _input_lists(after))
+    ]
+    for i in emptied:
+        written = (plan[i].get("args") or {}).get("output")
+        later_reads = {_norm(e) for s in plan[i + 1 :] for es in _input_lists(s) for e in es}
+        if isinstance(written, str) and _norm(written) in later_reads:
+            return [copy.deepcopy(dict(s)) for s in plan]
+    return [s for i, s in enumerate(out) if i not in emptied]
 
 
 def _target_format(step: Mapping[str, Any], produces: Mapping[str, Any]) -> str | None:

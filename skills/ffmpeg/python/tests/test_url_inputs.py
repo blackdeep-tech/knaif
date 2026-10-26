@@ -45,7 +45,7 @@ def test_a_url_is_converted_into_the_users_folder(served, tmp_path):
     sandbox = tmp_path / "sb"
     sandbox.mkdir()
     agent, results = _convert(sandbox, dry_run=False)
-    assert sorted(p.name for p in sandbox.iterdir()) == ["holiday_converted.mp4"], results[-1]
+    assert sorted(p.name for p in sandbox.iterdir()) == ["holiday.mp4"], results[-1]
     assert len(served.requests) == 1
     assert agent.last_downloads[0]["content_type"] == "video/quicktime"
 
@@ -59,4 +59,4 @@ def test_a_dry_run_renders_the_command_without_a_request(served, tmp_path):
     commands = [c for r in results for c in (r.get("result") or {}).get("commands", [])]
     argv = commands[0]["command"]
     assert Path(argv[argv.index("-i") + 1]).name == "holiday.mov"
-    assert Path(argv[-1]) == sandbox / "holiday_converted.mp4"
+    assert Path(argv[-1]) == sandbox / "holiday.mp4"

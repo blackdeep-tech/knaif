@@ -156,6 +156,7 @@ User input
   -> validate expanded plan                                 (trusted; allow_internal=True)
   -> optimize_plan()
   -> preflight()                                            (skipped if dry_run)
+  -> rehearsal: the whole plan as a dry run, before any step runs   (real runs, 2+ steps or files)
   -> [optional] summarize_plan() → plan_display callback    (StepA, show_plan=True)
   -> [optional] plan_confirmer approval gate                (StepB, require_approval=True)
   -> resolve_args()

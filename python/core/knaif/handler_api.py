@@ -33,6 +33,9 @@ class HandlerContext:
     a dry run it is a path that does not exist, so steps can still render commands naming it."""
     tool_caller: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None
     tool: str | None = None
+    to_stdout: bool = False
+    """``run --stdout``: a tool that declares ``stdout:`` returns its text and saves nothing (the
+    CLI prints it)."""
     """The tool this step runs, for messages."""
     effects: frozenset[str] | None = None
     """What the step's tool declares (``knaif.effects``). ``exec`` and ``call_tool`` refuse

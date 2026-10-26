@@ -113,21 +113,27 @@ class ExtractTextStep(Handler):
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         path = _input_path(args, ctx)
-        # `output` comes only from core, when it repeats this step over many files
-        # (tools.yaml `batch_output: txt`): each file's text is saved next to it, not printed.
-        output = _resolve(args["output"], ctx) if args.get("output") else None
+        # `output` comes from core when it repeats this step over many files (tools.yaml
+        # `batch_output: txt`). One file's text is saved too, as <name>.txt beside it under the
+        # free-name rule (owner, 2026-10-23: printing it saved nothing); its result
+        # still carries the pages and the text, which the eval grades and the display previews.
+        single = not args.get("output")
+        output = _output_path(path, args, ctx, ".txt") if single else _resolve(args["output"], ctx)
         if ctx.dry_run and not path.exists():
-            empty = {"mode": "dry_run", "pages": [], "text": ""}
-            return {**empty, "output": str(output)} if output else empty
+            return {"mode": "dry_run", "pages": [], "text": "", "output": str(output)}
         records = _extract_text_records(path, args)
         text = "\n".join(record["text"] for record in records)
-        if output is None:
+        # The text comes back whoever named the file (the GPU re-check: a name from the plan
+        # took the batch shape and the grade's text check found nothing).
+        result = {"output": str(output), "pages": records if single else len(records), "text": text}
+        if ctx.to_stdout and not ctx.dry_run:
+            # `run --stdout`: the text goes to the pipe, nothing is saved.
             return {"pages": records, "text": text}
         if ctx.dry_run:
-            return {"mode": "dry_run", "output": str(output), "pages": len(records)}
+            return {"mode": "dry_run", **result}
         with _writing(output, ctx) as target:
             target.write_text(text, encoding="utf-8")
-        return {"output": str(output), "pages": len(records)}
+        return result
 
 
 class FindInDocumentStep(Handler):

@@ -32,6 +32,13 @@ from knaif.evalsuite.native_lane import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _old_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lane reads each binary's `run --help` through `subprocess.run`, which
+    these tests fake to count the rows' calls: the help is answered here instead."""
+    monkeypatch.setattr(native_lane, "_run_help", lambda binary: "")
+
+
 def _lane(tmp_path: Path) -> LaneConfig:
     return LaneConfig(
         name="t", binary=tmp_path / "knaif.exe", model_path=tmp_path / "m.gguf", timeout_s=5

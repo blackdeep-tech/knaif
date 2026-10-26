@@ -35,7 +35,7 @@ answer:
     file that was already on disk cannot be renamed at all, so the CONSUMER's output moves.
 
 ``ffmpeg_175`` is the second shape — nothing in the plan wrote ``clip.mp4``, so writing the
-copy to ``clip_converted.mp4`` is the only thing available. The first shape is ``trim ->
+copy to ``clip_1.mp4`` is the only thing available. The first shape is ``trim ->
 Test1.mov`` feeding ``convert Test1.mov -> Test1.mov``, where ``trim_video`` takes neither
 ``container`` nor ``quality`` and the chain is therefore forced. There the name is the user's
 and it belongs to the branch's last step, which is the file they described; the model's only

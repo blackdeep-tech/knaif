@@ -15,6 +15,7 @@ from typing import Any
 from knaif.batch_chain import PlannedSet
 from knaif.known_folders import named_folder
 from knaif.skill_base import Skill
+from knaif.ui import fmt_bytes
 
 from . import _deps, _engine
 from ._deps import (
@@ -88,6 +89,23 @@ from .steps import (
     split_specs,
 )
 
+#: How many lines of a saved text the terminal shows.
+PREVIEW_LINES = 5
+
+
+def text_preview(text: str) -> list[str]:
+    """The preview of a saved text: its first five non-empty lines, without trailing spaces, then
+    "… N more lines" when there are more; "(no text)" when there is none.
+    Rust mirror: ``knaif_skill_documents::text::text_preview``;
+    contracts/parity/text_preview_cases.json."""
+    lines = [line.rstrip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return ["(no text)"]
+    shown, rest = lines[:PREVIEW_LINES], len(lines) - PREVIEW_LINES
+    if rest > 0:
+        shown.append(f"… {rest} more line{'s' if rest > 1 else ''}")
+    return shown
+
 
 def _read_answer(tool: Any, result: dict[str, Any]) -> str | None:
     """What a read found, in the native CLI's formats; None for a write or a dry-run stub."""
@@ -96,7 +114,8 @@ def _read_answer(tool: Any, result: dict[str, Any]) -> str | None:
     if tool == "inspect_document":
         line = (
             f"{result['format']}: {result['pages']} page(s), {result['size_bytes']} bytes, "
-            f"encrypted={result['encrypted']}, text_layer={result['has_text_layer']}"
+            f"encrypted={str(result['encrypted']).lower()}, "
+            f"text_layer={str(result['has_text_layer']).lower()}"
         )
         if result["encrypted"]:
             # 0 pages reads as an empty file unless it says why.
@@ -106,9 +125,10 @@ def _read_answer(tool: Any, result: dict[str, Any]) -> str | None:
             )
         return line
     if tool == "extract_text":
-        return "\n".join(
-            f"--- page {r['page']} ---\n{str(r['text']).rstrip()}" for r in result["pages"]
-        )
+        # The text is saved; the terminal shows a preview of it, never all of it.
+        if "text" not in result:
+            return None
+        return "\n".join(text_preview(str(result["text"])))
     if tool == "find_in_document":
         matches = result["matches"]
         if not matches:
@@ -116,6 +136,66 @@ def _read_answer(tool: Any, result: dict[str, Any]) -> str | None:
         return "\n".join(
             f"p{m['page']} [{m['span'][0]}..{m['span'][1]}]: {m['snippet']}" for m in matches
         )
+    return None
+
+
+#: How each write is named before it runs, in native's words (`run::write_outputs`): the CLIs
+#: print `would <summary> →` and the files (one display for both CLIs).
+_WRITE_SUMMARIES = {
+    "rotate_pages": "rotate pages",
+    "remove_pages": "remove pages",
+    "reorder_pages": "reorder pages",
+    "protect_pdf": "password-protect",
+    "unlock_pdf": "unlock",
+    "watermark": "watermark",
+    "add_page_numbers": "add page numbers",
+    "ocr_document": "OCR → searchable PDF",
+    "extract_text": "save the text",
+}
+
+
+def write_summary(tool: Any, args: dict[str, Any], result: dict[str, Any]) -> str:
+    """What a write does, as native's documents runtime names it."""
+    if tool == "merge_pdfs":
+        return f"merge {len(result.get('inputs') or args.get('inputs') or [])} file(s)"
+    if tool in ("split_pdf", "split_pdf_every"):
+        outputs = result.get("outputs") or []
+        return f"split into {len(outputs)} file(s)" if outputs else "split"
+    if tool == "convert_document":
+        return f"convert to {args.get('to_format')}"
+    if tool == "compress_pdf":
+        method = {"rasterize-pillow": "rasterize"}.get(result.get("method"), result.get("method"))
+        if result.get("text_preserved") is False:
+            method = f"{method} — removes selectable text"
+        return f"compress ({method})"
+    return _WRITE_SUMMARIES.get(str(tool), str(tool))
+
+
+def _written(result: dict[str, Any]) -> list[str]:
+    """The files a write result names: its `outputs`, else its `output`."""
+    outputs = result.get("outputs")
+    if isinstance(outputs, list) and outputs:
+        return [str(o.get("output") if isinstance(o, dict) else o) for o in outputs]
+    return [str(result["output"])] if result.get("output") else []
+
+
+def _read_detail(tool: Any, result: dict[str, Any]) -> list[str] | None:
+    """A read's answer as native's terminal view words it (``print_read_result``): one line
+    per fact, under the step."""
+    if tool == "inspect_document":
+        kind = str(result["format"]).upper()
+        size = fmt_bytes(int(result["size_bytes"]))
+        if result["encrypted"]:
+            return [
+                f"{kind} · {size} · password-protected, so its pages cannot be counted. "
+                "Unlock it first."
+            ]
+        pages = "1 page" if result["pages"] == 1 else f"{result['pages']} pages"
+        text = "has a text layer" if result["has_text_layer"] else "no text layer"
+        return [f"{kind} · {pages} · {size} · {text}"]
+    if tool == "find_in_document":
+        matches = result["matches"]
+        return [f"page {m['page']}: {m['snippet']}" for m in matches] or ["No matches."]
     return None
 
 
@@ -165,10 +245,37 @@ class DocumentsSkill(Skill):
             answer = _read_answer(item.get("tool"), result)
             if "error" in result:
                 items.append({"kind": "error", "message": str(result["error"])})
+            elif dry_run and answer is None and _written(result):
+                # `would <summary> →` and the files, as native previews a write.
+                items.append(
+                    {
+                        "kind": "preview",
+                        "message": write_summary(item.get("tool"), item.get("args") or {}, result),
+                        "outputs": _written(result),
+                    }
+                )
+            elif not dry_run and _written(result):
+                # What it does, then each file it wrote, as native shows a write;
+                # extract_text's preview follows its file.
+                items.append(
+                    {
+                        "kind": "wrote",
+                        "message": write_summary(item.get("tool"), item.get("args") or {}, result),
+                        "outputs": _written(result),
+                        "seconds": float(item.get("duration_ms") or 0) / 1000,
+                    }
+                )
+                if answer is not None:
+                    items.append({"kind": "text", "message": answer})
             elif answer is not None:
-                items.append({"kind": "text", "message": answer})
-            elif "output" in result and result["output"]:
-                items.append({"kind": "output", "message": str(result["output"])})
+                # The tree words a read its own way (native `print_read_result`).
+                items.append(
+                    {
+                        "kind": "text",
+                        "message": answer,
+                        "detail": _read_detail(item.get("tool"), result),
+                    }
+                )
             else:
                 items.append({"kind": "info", "message": item.get("tool", "documents")})
             if result.get("warning"):

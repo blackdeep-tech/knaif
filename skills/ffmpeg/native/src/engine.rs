@@ -376,6 +376,9 @@ pub struct Audio {
 /// orchestrator (`_build_one_recipe`, ported next); tests construct it directly.
 #[derive(Debug, Clone, Default)]
 pub struct Recipe {
+    /// The output name is a default the skill chose, not one the user wrote: only such a name
+    /// moves off a file that already exists ([`disambiguate_outputs`]).
+    pub default_name: bool,
     pub mode: String,
     pub input: String,
     pub output: String,
@@ -1003,6 +1006,9 @@ pub struct Options {
     /// The folder the user sees (the sandbox, else cwd): where an output named after a scratch
     /// input lands, since everything in the scratch is deleted when the run ends.
     pub home: Option<std::path::PathBuf>,
+    /// Set by the batch when it builds recipes for more than one file: a literal output name
+    /// then names none of them. Python `_engine.PER_FILE_NAME`.
+    pub per_file_name: bool,
 }
 
 fn non_empty(s: &str) -> Option<String> {
@@ -1033,59 +1039,29 @@ fn destination_name(input: &Path, ext: &str) -> String {
     format!("{stem}.{ext}")
 }
 
-/// The parts of an input's name that can tell two colliding outputs apart, best first.
-/// Port of `_batch_suffixes`.
+/// Give every command in a batch its own output path: a taken name gets the first free number.
+/// Port of `disambiguate_outputs`.
 ///
-/// Two batch shapes collide, and they are distinguished by different things: one literal
-/// filename for many inputs (six videos into `audio.mp3` - the source STEMS differ) versus a
-/// destination directory (`clip.mp4` and `clip.mov` into `converted/` both take the output
-/// stem, so only the EXTENSION is left). Using the extension for both is what produced
-/// `audio_mp4_5.mp3`: five of six inputs were `.mp4`, so the suffix distinguished nothing and
-/// a counter did all the work.
-fn batch_suffixes(input: &Path, out_stem: &str) -> Vec<String> {
-    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    let ext = input
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let mut suffixes = Vec::new();
-    if !stem.is_empty() && stem != out_stem {
-        suffixes.push(stem.to_string());
-    }
-    if !ext.is_empty() {
-        suffixes.push(ext.clone());
-    }
-    // Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
-    // `audio.mp3` share a stem AND an extension with each other but not with the output.
-    if !stem.is_empty() && !ext.is_empty() && stem != out_stem {
-        suffixes.push(format!("{stem}_{ext}"));
-    }
-    suffixes
-}
-
-/// Give every command in a batch its own output path. Port of `disambiguate_outputs`.
-///
-/// A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
-/// render `converted/clip.mp4` - and every command carries `-y`, so the second conversion
-/// silently destroyed the first. Whatever part of the source name actually differs is what gets
-/// restored (see [`batch_suffixes`]); a counter is the fallback for a genuine repeat, and only a
-/// genuine repeat, because a counter tells the user nothing.
-///
-/// Only the batch can see the clash: a lone `clip.mp4` must stay `clip.mp4` rather than gain a
-/// suffix because some other input might have existed.
+/// Each entry is `(input, output, default)`. Taken means an input of the batch, another output of
+/// it, or, for a default name the skill chose, a file that already exists: `beach.mkv` ->
+/// `beach_1.mkv` -> `beach_2.mkv` (owner, 2026-10-23, replacing the source-name
+/// suffixes `beach_mp4.mkv` / `audio_city.mp3`). A name the user wrote is never moved off a file
+/// on disk: the CLIs ask before replacing it. Every command carries `-y`, so an unresolved clash is
+/// a silent overwrite.
 ///
 /// **Every input of the batch is taken too, before any output is placed.** A same-folder pattern
 /// sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the `-y`
 /// conversion replaced it (ffmpeg_229#4, run for real). Reserving inputs up front is what makes
 /// the order of the batch irrelevant.
-pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
-    let mut seen: std::collections::HashSet<String> =
-        outputs.iter().map(|(input, _)| path_key(input)).collect();
-    for (input, out) in outputs.iter_mut() {
-        if seen.insert(path_key(out)) {
-            continue;
-        }
+pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf, bool)]) {
+    let mut seen: std::collections::HashSet<String> = outputs
+        .iter()
+        .map(|(input, _, _)| path_key(input))
+        .collect();
+    for (_, out, default) in outputs.iter_mut() {
+        let taken = |c: &Path, seen: &std::collections::HashSet<String>| {
+            seen.contains(&path_key(c)) || (*default && c.exists())
+        };
         let stem = out
             .file_stem()
             .and_then(|s| s.to_str())
@@ -1096,38 +1072,17 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_string();
-        let build = |name: String| -> PathBuf {
-            let file = if ext.is_empty() {
-                name
+        let mut candidate = out.clone();
+        let mut n = 1;
+        while taken(&candidate, &seen) {
+            let name = if ext.is_empty() {
+                format!("{stem}_{n}")
             } else {
-                format!("{name}.{ext}")
+                format!("{stem}_{n}.{ext}")
             };
-            out.with_file_name(file)
-        };
-        let tried: Vec<PathBuf> = batch_suffixes(input, &stem)
-            .into_iter()
-            .map(|s| build(format!("{stem}_{s}")))
-            .collect();
-        let candidate = match tried.iter().find(|c| !seen.contains(&path_key(c))) {
-            Some(c) => c.clone(),
-            None => {
-                // Nothing in the source name is left to say. Count off the most specific
-                // candidate so the walk still terminates.
-                let base = tried.last().cloned().unwrap_or_else(|| out.clone());
-                let base_stem = base
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .to_string();
-                let mut n = 1;
-                let mut candidate = base;
-                while seen.contains(&path_key(&candidate)) {
-                    n += 1;
-                    candidate = build(format!("{base_stem}_{n}"));
-                }
-                candidate
-            }
-        };
+            candidate = out.with_file_name(name);
+            n += 1;
+        }
         seen.insert(path_key(&candidate));
         *out = candidate;
     }
@@ -1251,6 +1206,31 @@ pub fn resolve_output_target(
     }
 
     Ok(out)
+}
+
+/// A literal file name (`mov.mkv`, `out/x.mkv`): not a pattern, not a folder. Python
+/// `_engine._names_one_file`.
+fn names_one_file(raw: &str) -> bool {
+    let out = Path::new(raw);
+    let name = out.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    !raw.contains('*') && out.extension().is_some() && !name.starts_with('.')
+}
+
+/// The first free `<stem>_N<.ext>` from 1: not in `taken`, not on disk.
+fn first_free_number(path: &Path, taken: &[PathBuf]) -> PathBuf {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    (1..)
+        .map(|n| {
+            let name = if ext.is_empty() {
+                format!("{stem}_{n}")
+            } else {
+                format!("{stem}_{n}.{ext}")
+            };
+            path.with_file_name(name)
+        })
+        .find(|c| !c.exists() && !taken.iter().any(|t| same_file(t, c)))
+        .expect("an unbounded range always yields a free name")
 }
 
 /// `_derive_output_path` (suffix template from `output_suffix_by_mode`, `{platform}` substituted).
@@ -1436,24 +1416,67 @@ pub fn build_one_recipe(
         options.work_dir.as_deref(),
         options.home.as_deref(),
     );
-    let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
-        let out = resolve_output_target(raw, &input_path, &mode, options, &container)?;
-        let out = if out.is_absolute() {
+    let in_anchor_folder = |out: PathBuf| -> PathBuf {
+        if out.is_absolute() {
             out
         } else {
             anchor.parent().map(|p| p.join(&out)).unwrap_or(out)
-        };
-        // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
-        // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the derived
-        // name, as the plan-level collision handling does for a literal self-overwrite.
-        if same_file(&out, &input_path) {
-            derive_output_path(&anchor, &mode, vocab, options, &container)
-        } else {
-            out
         }
-    } else {
-        derive_output_path(&anchor, &mode, vocab, options, &container)
     };
+    // A default name is one the skill chose; only such a name moves off a file that exists
+    // (`disambiguate_outputs`).
+    let mut default_name = true;
+    let raw_output = options.output_path.as_deref().filter(|s| !s.is_empty());
+    let mut output_path = match raw_output {
+        Some(raw) if options.per_file_name && names_one_file(raw) => {
+            // One literal name over many files names none of them: each keeps its own name, in
+            // the literal's folder, with its extension (owner, 2026-10-23; `beach.mov`
+            // was written as `mov.mkv`, the rest as `mov_city.mkv`).
+            let literal = PathBuf::from(raw);
+            let ext = literal
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let mut named_opts = options.clone();
+            let mut named_container = container.clone();
+            match mode.as_str() {
+                "extract_audio" => named_opts.audio_format = Some(ext),
+                "thumbnail" => named_opts.image_format = Some(ext),
+                _ => named_container = ext,
+            }
+            let named = derive_output_path(&anchor, &mode, vocab, &named_opts, &named_container);
+            let file = named.file_name().map(PathBuf::from).unwrap_or_default();
+            let folder = literal.parent().map(Path::to_path_buf).unwrap_or_default();
+            in_anchor_folder(folder.join(file))
+        }
+        Some(raw) => {
+            let out = in_anchor_folder(resolve_output_target(
+                raw,
+                &input_path,
+                &mode,
+                options,
+                &container,
+            )?);
+            default_name = false;
+            // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
+            // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the
+            // derived name, as the plan-level collision handling does for a literal
+            // self-overwrite.
+            if same_file(&out, &input_path) {
+                default_name = true;
+                derive_output_path(&anchor, &mode, vocab, options, &container)
+            } else {
+                out
+            }
+        }
+        None => derive_output_path(&anchor, &mode, vocab, options, &container),
+    };
+    // A default name never writes over its own input (a same-format convert derives `clip.mp4`
+    // for `clip.mp4`): the first free number, here already, not only in the batch's repair.
+    if default_name && same_file(&output_path, &input_path) {
+        output_path = first_free_number(&output_path, std::slice::from_ref(&input_path));
+    }
     // A routed chain intermediate is in this run's scratch; everything else stays in the sandbox.
     if !within(&output_path, options.work_dir.as_deref()) {
         assert_in_sandbox(&output_path, sandbox)?;
@@ -1584,6 +1607,7 @@ pub fn build_one_recipe(
     }
 
     let mut recipe = Recipe {
+        default_name,
         mode: mode.clone(),
         input: input_path.to_string_lossy().into_owned(),
         output: output_path.to_string_lossy().into_owned(),
@@ -1716,23 +1740,24 @@ mod tests {
     #[test]
     fn a_batch_output_never_lands_on_another_input() {
         for order in [["clip.mp4", "clip.mov"], ["clip.mov", "clip.mp4"]] {
-            let mut outs: Vec<(PathBuf, PathBuf)> = order
+            let mut outs: Vec<(PathBuf, PathBuf, bool)> = order
                 .iter()
                 .map(|n| {
                     let input = PathBuf::from("/sb").join(n);
-                    // What the pattern gives each: the self-case already took the derived name.
+                    // What the pattern gives each: the self-case already took the first free
+                    // number.
                     let out = if *n == "clip.mp4" {
-                        PathBuf::from("/sb/clip_converted.mp4")
+                        PathBuf::from("/sb/clip_1.mp4")
                     } else {
                         PathBuf::from("/sb/clip.mp4")
                     };
-                    (input, out)
+                    (input, out, false)
                 })
                 .collect();
             disambiguate_outputs(&mut outs);
             let names: Vec<String> = outs
                 .iter()
-                .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+                .map(|(_, o, _)| o.file_name().unwrap().to_string_lossy().into_owned())
                 .collect();
             assert!(
                 !names.iter().any(|n| order.contains(&n.as_str())),
@@ -2912,19 +2937,19 @@ mod trim_frames_tests {
             (
                 PathBuf::from("/sb/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
             (
                 PathBuf::from("/sb/clip.mov"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
         ];
         disambiguate_outputs(&mut outs);
         assert_ne!(outs[0].1, outs[1].1, "both inputs render {:?}", outs[0].1);
-        assert!(
-            outs[1].1.to_string_lossy().contains("mov"),
-            "{:?}",
-            outs[1].1
-        );
+        // A taken name gets the first free number (owner, 2026-10-23), which
+        // replaced the source extension (`clip_mov.mp4`).
+        assert_eq!(outs[1].1, PathBuf::from("/sb/out/clip_1.mp4"));
     }
 
     #[test]
@@ -2932,6 +2957,7 @@ mod trim_frames_tests {
         let mut outs = vec![(
             PathBuf::from("/sb/clip.mp4"),
             PathBuf::from("/sb/out/clip.mkv"),
+            false,
         )];
         disambiguate_outputs(&mut outs);
         assert_eq!(
@@ -2990,20 +3016,27 @@ mod trim_frames_tests {
     }
 
     #[test]
-    fn a_batch_name_says_which_input_produced_it() {
-        // `audio_mp4_5.mp3` - observed in `2026-09-15_l4-ffmpeg-t8`. Six fixture videos into
-        // one literal `audio.mp3` suffixed with the SOURCE EXTENSION, which five of the six
-        // share, so it distinguished nothing and the counter did all the work.
-        let mut outs: Vec<(PathBuf, PathBuf)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
+    fn a_repeated_batch_name_takes_the_first_free_number() {
+        // Since 2026-10-23 (owner) one literal name over many files never reaches
+        // here: the recipe builder gives each file its own name
+        // (`contracts/parity/output_name_cases.json`.). A name the batch still repeats takes the
+        // first free number, which replaced the source-name suffixes (`audio_clip2.mp3`).
+        let mut outs: Vec<(PathBuf, PathBuf, bool)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
             .iter()
-            .map(|n| (PathBuf::from("/sb").join(n), PathBuf::from("/sb/audio.mp3")))
+            .map(|n| {
+                (
+                    PathBuf::from("/sb").join(n),
+                    PathBuf::from("/sb/audio.mp3"),
+                    false,
+                )
+            })
             .collect();
         disambiguate_outputs(&mut outs);
         let names: Vec<String> = outs
             .iter()
-            .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|(_, o, _)| o.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
-        assert_eq!(names, ["audio.mp3", "audio_clip2.mp3", "audio_clip_4k.mp3"]);
+        assert_eq!(names, ["audio.mp3", "audio_1.mp3", "audio_2.mp3"]);
     }
 
     #[test]
@@ -3012,18 +3045,21 @@ mod trim_frames_tests {
             (
                 PathBuf::from("/sb/a/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
             (
                 PathBuf::from("/sb/b/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
             (
                 PathBuf::from("/sb/c/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
         ];
         disambiguate_outputs(&mut outs);
-        let set: std::collections::HashSet<_> = outs.iter().map(|(_, o)| o.clone()).collect();
+        let set: std::collections::HashSet<_> = outs.iter().map(|(_, o, _)| o.clone()).collect();
         assert_eq!(set.len(), 3, "{outs:?}");
     }
 

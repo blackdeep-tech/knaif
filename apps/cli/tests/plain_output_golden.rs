@@ -278,3 +278,13 @@ fn view_plain_overrides_a_terminal_and_matches_a_pipe() {
         "ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n"
     );
 }
+
+/// A document's output is named as the user would write it, relative to the working folder; its
+/// absolute path named the user's home in a pipe (owner, 2026-10-23).
+#[test]
+fn a_document_dry_run_names_its_output_relative() {
+    let plan = r#"{"plan": [{"tool": "protect_pdf", "args": {"input": "sample.pdf", "password": "a/b"}}]}"#;
+    let (stdout, stderr, ok) = run("documents", plan, r"protect sample.pdf with password a\b");
+    assert!(ok, "{stderr}");
+    assert_eq!(stdout, "would password-protect →\n  sample-protected.pdf\n");
+}

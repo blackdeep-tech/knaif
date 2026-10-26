@@ -1013,20 +1013,25 @@ def test_format_results_prints_what_a_read_found():
     def fmt(tool: str, result: dict) -> list[dict]:
         return skill.result_formatter([{"tool": tool, "result": result}], dry_run=False)
 
+    # Plain, then the terminal view's words (`detail`), as native prints each.
     assert fmt("inspect_document", inspection) == [
         {
             "kind": "text",
-            "message": "pdf: 3 page(s), 1234 bytes, encrypted=False, text_layer=True",
+            "message": "pdf: 3 page(s), 1234 bytes, encrypted=false, text_layer=true",
+            "detail": ["PDF · 3 pages · 1.2 KB · has a text layer"],
         }
     ]
-    assert fmt("extract_text", {"pages": pages, "text": "Alpha\nBeta"}) == [
-        {"kind": "text", "message": "--- page 1 ---\nAlpha\n--- page 2 ---\nBeta"}
+    # The text is saved; the answer is the saved file and a preview of it, the
+    # write named in native's words.
+    assert fmt("extract_text", {"output": "a.txt", "pages": pages, "text": "Alpha\nBeta"}) == [
+        {"kind": "wrote", "message": "save the text", "outputs": ["a.txt"], "seconds": 0.0},
+        {"kind": "text", "message": "Alpha\nBeta"},
     ]
     assert fmt("find_in_document", {"matches": [match], "count": 1}) == [
-        {"kind": "text", "message": "p2 [0..4]: Beta"}
+        {"kind": "text", "message": "p2 [0..4]: Beta", "detail": ["page 2: Beta"]}
     ]
     assert fmt("find_in_document", {"matches": [], "count": 0}) == [
-        {"kind": "text", "message": "No matches."}
+        {"kind": "text", "message": "No matches.", "detail": ["No matches."]}
     ]
     locked = fmt("inspect_document", {**inspection, "encrypted": True, "pages": 0})
     assert "password-protected" in locked[0]["message"]
@@ -1187,7 +1192,12 @@ def test_merge_dry_run_tolerates_an_input_not_there_yet(tmp_path: Path):
 @pytest.mark.parametrize(
     ("step", "args", "empty"),
     [
-        ("ExtractTextStep", {"input": "not-yet-made.pdf"}, {"pages": [], "text": ""}),
+        # The dry run also names the file the text will be saved to.
+        (
+            "ExtractTextStep",
+            {"input": "not-yet-made.pdf"},
+            {"pages": [], "text": "", "output": "not-yet-made.txt"},
+        ),
         (
             "FindInDocumentStep",
             {"input": "not-yet-made.pdf", "query": "Alpha"},
@@ -1203,6 +1213,9 @@ def test_read_dry_run_tolerates_an_input_not_there_yet(
     handlers = _documents_handlers_module()
     ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
     result = getattr(handlers, step)().handle(args, ctx)
+    empty = dict(empty)
+    if "output" in empty:
+        assert Path(result.pop("output")).name == empty.pop("output")
     assert result == {"mode": "dry_run", **empty}
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from knaif.batch_chain import natural_key
+from knaif.batch_chain import list_files
 from knaif.handler_api import HandlerContext
 from knaif.tool import Handler
 
@@ -51,7 +51,7 @@ class ResolveInputs(Handler):
 
     A folder or a glob comes back in natural order (``clip1``, ``clip2``, ``clip10``), the order
     a batch runs its files in, so a merge and a batch agree; the entries keep their own order
-    (``contracts/parity/batch_cases.json`.`). ``exclude`` drops a folder's or a glob's match that
+    (``contracts/parity/batch_cases.json``). ``exclude`` drops a folder's or a glob's match that
     is one of the given paths: a join passes its own output, which a second run of "merge all the
     PDFs here" would otherwise read back. A path named on its own is kept.
     """
@@ -69,36 +69,27 @@ class ResolveInputs(Handler):
         recursive = bool(args.get("recursive"))
         base = ctx.sandbox if ctx.sandbox is not None else ctx.root
         excluded = {_absolute(e, base).resolve() for e in args.get("exclude") or []}
+        wanted = [e.lower().lstrip(".") for e in extensions or []]
         resolved: list[str] = []
         for raw in raw_paths:
             p = _absolute(raw, base)
             if not _in_run_scratch(p, ctx):
                 _assert_in_sandbox(p, ctx.sandbox)
-            if p.is_dir():
-                iterable = sorted(
-                    p.rglob("*") if recursive else p.glob("*"),
-                    key=lambda c, top=p: natural_key(c.relative_to(top).as_posix()),
+            if p.is_dir() or (not p.exists() and any(c in str(p) for c in ("*", "?", "["))):
+                # A folder, or a glob in one: the one listing core's batch uses too.
+                listed = (
+                    list_files(p, recursive=recursive)
+                    if p.is_dir()
+                    else list_files(p.parent, p.name)
                 )
-                for child in iterable:
-                    if child.is_file() and child.resolve() not in excluded:
-                        if extensions and child.suffix.lstrip(".").lower() not in [
-                            e.lower().lstrip(".") for e in extensions
-                        ]:
-                            continue
-                        resolved.append(str(child))
+                for _rel, child in listed:
+                    if child.resolve() in excluded or (
+                        wanted and child.suffix.lstrip(".").lower() not in wanted
+                    ):
+                        continue
+                    resolved.append(str(child))
             elif p.exists():
                 resolved.append(str(p))
-            elif any(c in str(p) for c in ("*", "?", "[")):
-                parent = p.parent
-                if parent.is_dir():
-                    matched = sorted(parent.glob(p.name), key=lambda c: natural_key(c.name))
-                    for child in matched:
-                        if child.is_file() and child.resolve() not in excluded:
-                            if extensions and child.suffix.lstrip(".").lower() not in [
-                                e.lower().lstrip(".") for e in extensions
-                            ]:
-                                continue
-                            resolved.append(str(child))
             else:
                 resolved.append(str(p))  # leave to inspect_media to report missing
         return {"count": len(resolved), "files": resolved}

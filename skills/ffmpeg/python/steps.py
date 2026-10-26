@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ from knaif.tool import Handler
 from . import _deps
 from ._engine import (
     _CRF_RE,
+    DEFAULT_NAME,
+    PER_FILE_NAME,
     _build_one_recipe,
     _crf_to_profile_name,
     _dummy_probe,
@@ -216,6 +219,8 @@ def _piece_recipes(
                     home=ctx.sandbox if ctx.sandbox is not None else getattr(ctx, "root", None),
                 )
             )
+            # A piece's name is the one core was promised before the run; it never moves.
+            recipes[-1].pop(DEFAULT_NAME, None)
     return {"count": len(recipes), "recipes": recipes}
 
 
@@ -279,12 +284,14 @@ class BuildRecipesStep(Handler):
             if reason:
                 raise ValueError(reason)
 
+        # More than one file: a literal output name names none of them.
+        per_file = {**options, PER_FILE_NAME: True} if len(probes) > 1 else options
         recipes = [
             _build_one_recipe(
                 p,
                 platform_profile,
                 quality_profile,
-                options,
+                per_file,
                 sandbox=ctx.sandbox,
                 work_dir=getattr(ctx, "work_dir", None),
                 home=ctx.sandbox if ctx.sandbox is not None else getattr(ctx, "root", None),
@@ -457,6 +464,7 @@ class RunBatchStep(Handler):
         many = len(commands) > 1
         for c in commands:
             out = c.get("output")
+            started = time.perf_counter()
             try:
                 res = run_and_commit(c["command"], out, ctx)
                 failure = (
@@ -478,6 +486,9 @@ class RunBatchStep(Handler):
                     "output": c.get("output"),
                     "returncode": res["returncode"],
                     "stderr_tail": res["stderr"][-2000:] if res["stderr"] else "",
+                    # What ran and how long: the CLI shows both, as native does.
+                    "command": c.get("command"),
+                    "seconds": time.perf_counter() - started,
                 }
             )
             _finished(ctx, str(c.get("input") or out or ""), failure)

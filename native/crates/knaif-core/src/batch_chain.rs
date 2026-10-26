@@ -560,9 +560,48 @@ pub fn widen_kind_globs(
     };
     let formats = crate::scratch::named_formats(utterance, file_kinds);
     let typed = type_words(utterance, file_kinds);
+    let excluded = excluded_formats(utterance, file_kinds);
+    // The extensions each step's kind globs take, as written. Steps that share one read the same
+    // files and each widens fully; steps that share none split the kinds between them, and the
+    // widening never adds to one what another takes or was given. Python mirror.
+    let all_outputs: HashSet<String> = out
+        .iter()
+        .filter_map(|s| {
+            s.get("args")
+                .and_then(|a| a.get("output"))
+                .and_then(Value::as_str)
+        })
+        .filter(|o| !o.is_empty())
+        .map(norm)
+        .collect();
+    let mut taken: Vec<HashSet<(String, String)>> = out
+        .iter()
+        .map(|step| {
+            input_lists(step)
+                .into_iter()
+                .flatten()
+                .filter(|e| !all_outputs.contains(&norm(e)))
+                .filter_map(|e| {
+                    let slashed = e.replace('\\', "/");
+                    glob_re.captures(&slashed).map(|m| {
+                        (
+                            m.name("folder").map_or("", |f| f.as_str()).to_lowercase(),
+                            m["ext"].to_lowercase(),
+                        )
+                    })
+                })
+                .collect()
+        })
+        .collect();
+    let own = taken.clone();
     let mut outputs: HashSet<String> = HashSet::new();
-    for step in &mut out {
+    for (i, step) in out.iter_mut().enumerate() {
+        let claimed: HashSet<(String, String)> = (0..own.len())
+            .filter(|&j| j != i && !own[j].is_empty() && own[j].is_disjoint(&own[i]))
+            .flat_map(|j| taken[j].iter().cloned())
+            .collect();
         let mut named: HashSet<String> = formats.union(&typed).cloned().collect();
+        named.extend(excluded.iter().cloned());
         if let Some(target) = target_format(step, produces) {
             if formats.contains(&target)
                 && !typed.contains(&target)
@@ -584,13 +623,21 @@ pub fn widen_kind_globs(
                 entries.iter().filter_map(Value::as_str).map(norm).collect();
             let mut widened: Vec<Value> = Vec::new();
             for entry in &entries {
-                widened.push(entry.clone());
-                let Some(text) = entry.as_str() else { continue };
-                let slashed = text.replace('\\', "/");
-                let Some(m) = glob_re.captures(&slashed) else {
+                let Some(text) = entry.as_str() else {
+                    widened.push(entry.clone());
                     continue;
                 };
-                if outputs.contains(&norm(text)) {
+                let slashed = text.replace('\\', "/");
+                let caps = glob_re.captures(&slashed);
+                let is_output = outputs.contains(&norm(text));
+                if let Some(m) = &caps {
+                    if !is_output && excluded.contains(&m["ext"].to_lowercase()) {
+                        continue; // "except the mov files": the glob goes, the widening adds none
+                    }
+                }
+                widened.push(entry.clone());
+                let Some(m) = caps else { continue };
+                if is_output {
                     continue;
                 }
                 let ext = m["ext"].to_lowercase();
@@ -623,17 +670,21 @@ pub fn widen_kind_globs(
                     {
                         continue;
                     }
+                    if claimed.contains(&(folder.to_lowercase(), other.clone())) {
+                        continue; // a step that splits the kinds with this one takes it
+                    }
                     let glob = if folder.is_empty() {
                         format!("*.{other}")
                     } else {
                         format!("{folder}/*.{other}")
                     };
                     if held.insert(norm(&glob)) {
+                        taken[i].insert((folder.to_lowercase(), other.clone()));
                         widened.push(Value::String(glob));
                     }
                 }
             }
-            if widened.len() > entries.len() {
+            if widened != entries {
                 args.insert(key.to_string(), Value::Array(widened));
             }
         }
@@ -645,7 +696,105 @@ pub fn widen_kind_globs(
             outputs.insert(norm(o));
         }
     }
-    out
+    if excluded.is_empty() {
+        out
+    } else {
+        drop_emptied_steps(plan, out)
+    }
+}
+
+/// "except the mov files": an exclusion word, then the words after it. Python
+/// `knaif.batch_chain._EXCLUSION_RE`.
+fn exclusion_re() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(concat!(
+            r"(?i)(?:\b(?:except|excluding|exclude|other\s+than|apart\s+from|but\s+not|außer|ausser|",
+            r"ausgenommen|bis\s+auf|excepto|salvo|menos|sauf|hormis|освен|без)|除了)",
+            r"([^,;:!?，。；]*)"
+        ))
+        .unwrap()
+    })
+}
+
+/// Extensions the request excludes: an extension the skill knows within four words after an
+/// exclusion word, read up to the first word in another script ("без звук" excludes nothing).
+/// Python `knaif.batch_chain._excluded_formats`.
+fn excluded_formats(
+    utterance: &str,
+    file_kinds: &crate::clarify_gate::FileKinds,
+) -> HashSet<String> {
+    static WORD: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let word_re = WORD.get_or_init(|| regex::Regex::new(r"[a-z0-9]+|[^\sa-z0-9.]+").unwrap());
+    let low = utterance.to_lowercase();
+    let mut found = HashSet::new();
+    for caps in exclusion_re().captures_iter(&low) {
+        for word in word_re.find_iter(&caps[1]).map(|m| m.as_str()).take(4) {
+            if !word.is_ascii() {
+                break;
+            }
+            let singular = word.strip_suffix('s').unwrap_or(word);
+            for ext in [word, singular] {
+                if file_kinds.contains_key(ext) {
+                    found.insert(ext.to_string());
+                }
+            }
+        }
+    }
+    found
+}
+
+/// Each input arg of `step` as a list of paths. Python `knaif.batch_chain._input_lists`.
+fn input_lists(step: &Value) -> Vec<Vec<String>> {
+    let Some(args) = step.get("args") else {
+        return Vec::new();
+    };
+    INPUT_KEYS
+        .iter()
+        .filter_map(|key| match args.get(*key) {
+            Some(Value::String(s)) => Some(vec![s.clone()]),
+            Some(Value::Array(items)) => Some(
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `out` without the steps the exclusion left with no input; if a later step reads what such a
+/// step writes (as the plan was written), the plan stays as written. Python
+/// `knaif.batch_chain._drop_emptied_steps`.
+fn drop_emptied_steps(plan: &[Value], out: Vec<Value>) -> Vec<Value> {
+    let emptied: Vec<usize> = (0..out.len())
+        .filter(|&i| {
+            input_lists(&plan[i]).iter().any(|l| !l.is_empty())
+                && input_lists(&out[i]).iter().all(Vec::is_empty)
+        })
+        .collect();
+    for &i in &emptied {
+        let written = plan[i]
+            .get("args")
+            .and_then(|a| a.get("output"))
+            .and_then(Value::as_str);
+        let later_reads: HashSet<String> = plan[i + 1..]
+            .iter()
+            .flat_map(input_lists)
+            .flatten()
+            .map(|e| norm(&e))
+            .collect();
+        if written.is_some_and(|w| later_reads.contains(&norm(w))) {
+            return plan.to_vec();
+        }
+    }
+    out.into_iter()
+        .enumerate()
+        .filter(|(i, _)| !emptied.contains(i))
+        .map(|(_, s)| s)
+        .collect()
 }
 
 /// The format `step` converts to: the value of its tool's `produces: {arg}` argument. Python
@@ -750,6 +899,55 @@ pub fn fnmatch(pattern: &str, name: &str) -> bool {
     go(&p, &n)
 }
 
+/// The files in `folder` matching `pattern`: `(path below folder, path)`, natural order. The one
+/// folder listing (owner, 2026-10-23): core's per-file batch and the fs toolkit's
+/// `resolve_inputs` both list through it. Files only, ordered by their path below `folder`
+/// ([`natural_key`]); into subfolders only when `recursive`, the pattern matched against the file
+/// name (without case on Windows, as Python's glob). A missing folder lists nothing. Python
+/// `knaif.batch_chain.list_files`; `contracts/parity/list_files_cases.json`.
+pub fn list_files(
+    folder: &std::path::Path,
+    pattern: &str,
+    recursive: bool,
+) -> Vec<(String, std::path::PathBuf)> {
+    let fold = |s: &str| {
+        if cfg!(windows) {
+            s.to_lowercase()
+        } else {
+            s.to_string()
+        }
+    };
+    let pattern = fold(pattern);
+    let mut files = Vec::new();
+    let mut pending = vec![folder.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if recursive {
+                    pending.push(path);
+                }
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !path.is_file() || !fnmatch(&pattern, &fold(&name)) {
+                continue;
+            }
+            let rel = path
+                .strip_prefix(folder)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            files.push((rel, path));
+        }
+    }
+    files.sort_by_key(|(rel, _)| natural_key(rel));
+    files
+}
+
 /// The files each glob or folder in `entries` names, for [`lift_batch`]. Python
 /// `knaif.batch_chain.expand_inputs`.
 ///
@@ -784,23 +982,10 @@ pub fn expand_inputs(
         } else {
             continue;
         };
-        let fold = |s: &str| {
-            if cfg!(windows) {
-                s.to_lowercase()
-            } else {
-                s.to_string()
-            }
-        };
-        let mut names: Vec<String> = std::fs::read_dir(&dir)
-            .map(|rd| {
-                rd.filter_map(Result::ok)
-                    .filter(|e| e.path().is_file())
-                    .filter_map(|e| e.file_name().to_str().map(str::to_string))
-                    .filter(|n| fnmatch(&fold(&pattern), &fold(n)))
-                    .collect()
-            })
-            .unwrap_or_default();
-        names.sort_by_key(|n| natural_key(n));
+        let mut names: Vec<String> = list_files(&dir, &pattern, false)
+            .into_iter()
+            .map(|(rel, _)| rel)
+            .collect();
         if !file_kinds.is_empty() {
             names.retain(|n| {
                 file_kinds.contains_key(&splitext(n).1.trim_start_matches('.').to_lowercase())

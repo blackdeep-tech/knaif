@@ -177,9 +177,33 @@ def apply_prompt_rules(header: str, rules: list[dict], present: set[str], uttera
 
     many = asks_for_many_files(utterance)
     for rule in rules:
-        if (rule.get("when") == "many" and many) or present & set(rule.get("tools") or []):
+        applies = bool(
+            (rule.get("when") == "many" and many) or present & set(rule.get("tools") or [])
+        )
+        # A rule with `words` also needs one of them in the request: the "last N
+        # seconds" hint reaches a request about the end of a clip, not every trim prompt.
+        if rule.get("words"):
+            applies = bool(not rule.get("tools") or present & set(rule["tools"])) and _says_any(
+                utterance, rule["words"]
+            )
+        if applies:
             header = header.rstrip("\n") + "\n" + rule["text"]
     return header
+
+
+def _says_any(utterance: str, words: list[str]) -> bool:
+    """Whether *utterance* holds one of *words*: a whole word, any case; a CJK word as a
+    substring (Chinese is written without spaces)."""
+    low = utterance.lower()
+    latin = set(re.findall(r"[a-z0-9]+", low))
+    unicode_words = set(re.findall(r"\w+", low))
+    for word in (w.lower() for w in words):
+        if re.match(r"[一-鿿]", word):
+            if word in low:
+                return True
+        elif word in (latin if word.isascii() else unicode_words):
+            return True
+    return False
 
 
 def render_examples_block(examples: list[dict]) -> str:

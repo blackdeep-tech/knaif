@@ -1,0 +1,567 @@
+{
+  "_comment": "One display for both CLIs, based on native (owner, 2026-10-23). The terminal view's pure renderers, byte for byte: native apps/cli/src/ui.rs is the reference (`ui_render_cases` in its tests records and checks these), Python knaif.ui follows (python/core/tests/test_ui_render_parity.py). `color` turns ANSI on; durations are milliseconds.",
+  "cases": [
+    {
+      "name": "seconds have three decimals",
+      "fn": "fmt_secs",
+      "color": false,
+      "args": {
+        "ms": 1842
+      },
+      "expected": "1.842 s"
+    },
+    {
+      "name": "zero seconds",
+      "fn": "fmt_secs",
+      "color": false,
+      "args": {
+        "ms": 0
+      },
+      "expected": "0.000 s"
+    },
+    {
+      "name": "a leader pads to one column",
+      "fn": "leader",
+      "color": false,
+      "args": {
+        "label": "Planning",
+        "value": "1.000 s"
+      },
+      "expected": "Planning ································ 1.000 s"
+    },
+    {
+      "name": "a long label still gets dots",
+      "fn": "leader",
+      "color": false,
+      "args": {
+        "label": "a label far longer than the forty columns of dots",
+        "value": "1.000 s"
+      },
+      "expected": "a label far longer than the forty columns of dots ·· 1.000 s"
+    },
+    {
+      "name": "a leader in color",
+      "fn": "leader",
+      "color": true,
+      "args": {
+        "label": "Planning",
+        "value": "1.000 s"
+      },
+      "expected": "Planning \u001b[90m································\u001b[0m 1.000 s"
+    },
+    {
+      "name": "a model without its quantization",
+      "fn": "model_label",
+      "color": false,
+      "args": {
+        "stem": "knaif-qwen3-4b-v2-q4_k_m"
+      },
+      "expected": "knaif-qwen3-4b-v2"
+    },
+    {
+      "name": "a model with a decimal size",
+      "fn": "model_label",
+      "color": false,
+      "args": {
+        "stem": "knaif-qwen3-1.7b-v2-q6_k"
+      },
+      "expected": "knaif-qwen3-1.7b-v2"
+    },
+    {
+      "name": "an upper-case quantization",
+      "fn": "model_label",
+      "color": false,
+      "args": {
+        "stem": "Qwen3-4B-Q4_K_M"
+      },
+      "expected": "Qwen3-4B"
+    },
+    {
+      "name": "an f16 model",
+      "fn": "model_label",
+      "color": false,
+      "args": {
+        "stem": "qwen3-1.7b-base-f16"
+      },
+      "expected": "qwen3-1.7b-base"
+    },
+    {
+      "name": "a name with no suffix",
+      "fn": "model_label",
+      "color": false,
+      "args": {
+        "stem": "custom"
+      },
+      "expected": "custom"
+    },
+    {
+      "name": "the header with a model",
+      "fn": "header",
+      "color": false,
+      "args": {
+        "skill": "ffmpeg",
+        "model": "knaif-qwen3-4b-v2"
+      },
+      "expected": " knaif · ffmpeg · knaif-qwen3-4b-v2\n │"
+    },
+    {
+      "name": "the header without a model",
+      "fn": "header",
+      "color": false,
+      "args": {
+        "skill": "documents",
+        "model": null
+      },
+      "expected": " knaif · documents\n │"
+    },
+    {
+      "name": "the header in color",
+      "fn": "header",
+      "color": true,
+      "args": {
+        "skill": "ffmpeg",
+        "model": "knaif-qwen3-4b-v2"
+      },
+      "expected": " \u001b[1mknaif\u001b[0m\u001b[90m · \u001b[0mffmpeg\u001b[90m · \u001b[0mknaif-qwen3-4b-v2\n \u001b[90m│\u001b[0m"
+    },
+    {
+      "name": "planning with load and inference",
+      "fn": "planning",
+      "color": false,
+      "args": {
+        "load_ms": 913,
+        "infer_ms": 929
+      },
+      "expected": " ├─ Planning ································ 1.842 s\n │    model load 0.913 s · inference 0.929 s\n │"
+    },
+    {
+      "name": "planning with nothing measured",
+      "fn": "planning",
+      "color": false,
+      "args": {
+        "load_ms": null,
+        "infer_ms": null
+      },
+      "expected": " ├─ Planning ································ 0.000 s\n │"
+    },
+    {
+      "name": "planning in color",
+      "fn": "planning",
+      "color": true,
+      "args": {
+        "load_ms": 913,
+        "infer_ms": 929
+      },
+      "expected": " \u001b[90m├─\u001b[0m Planning \u001b[90m································\u001b[0m 1.842 s\n \u001b[90m│\u001b[0m    \u001b[90mmodel load 0.913 s · inference 0.929 s\u001b[0m\n \u001b[90m│\u001b[0m"
+    },
+    {
+      "name": "a two-step plan",
+      "fn": "plan",
+      "color": false,
+      "args": {
+        "rows": [
+          [
+            "strip_audio",
+            "clip.mp4 → silent.mp4"
+          ],
+          [
+            "resize_video",
+            "silent.mp4 → small.mp4"
+          ]
+        ],
+        "notes": []
+      },
+      "expected": " ├─ Plan · 2 steps\n │   ├─ 1  strip_audio   clip.mp4 → silent.mp4\n │   └─ 2  resize_video  silent.mp4 → small.mp4\n │"
+    },
+    {
+      "name": "a one-step plan and what it leaves",
+      "fn": "plan",
+      "color": false,
+      "args": {
+        "rows": [
+          [
+            "convert_video",
+            "beach.mov → beach.mp4"
+          ]
+        ],
+        "notes": [
+          "the same for 2 more files: city.mov, silent.mov",
+          "leaves 3 mp4"
+        ]
+      },
+      "expected": " ├─ Plan · 1 step\n │   └─ 1  convert_video  beach.mov → beach.mp4\n │   the same for 2 more files: city.mov, silent.mov\n │   leaves 3 mp4\n │"
+    },
+    {
+      "name": "a plan in color",
+      "fn": "plan",
+      "color": true,
+      "args": {
+        "rows": [
+          [
+            "extract_text",
+            "report.pdf"
+          ]
+        ],
+        "notes": [
+          "leaves report.txt"
+        ]
+      },
+      "expected": " \u001b[90m├─\u001b[0m \u001b[1mPlan · 1 step\u001b[0m\n \u001b[90m│\u001b[0m   \u001b[90m└─\u001b[0m 1  extract_text  \u001b[90mreport.pdf\u001b[0m\n \u001b[90m│\u001b[0m   \u001b[90mleaves report.txt\u001b[0m\n \u001b[90m│\u001b[0m"
+    },
+    {
+      "name": "a step head",
+      "fn": "step_head",
+      "color": false,
+      "args": {
+        "idx": 1,
+        "total": 2,
+        "tool": "strip_audio"
+      },
+      "expected": " ├─ Step 1/2 · strip_audio"
+    },
+    {
+      "name": "a step head in color",
+      "fn": "step_head",
+      "color": true,
+      "args": {
+        "idx": 2,
+        "total": 2,
+        "tool": "resize_video"
+      },
+      "expected": " \u001b[90m├─\u001b[0m \u001b[1mStep 2/2 · resize_video\u001b[0m"
+    },
+    {
+      "name": "a detail line",
+      "fn": "detail",
+      "color": false,
+      "args": {
+        "text": "would download https://h.test/a.pdf → a.pdf"
+      },
+      "expected": " │   would download https://h.test/a.pdf → a.pdf"
+    },
+    {
+      "name": "a command",
+      "fn": "command",
+      "color": false,
+      "args": {
+        "command": "ffmpeg -y -i a.mp4 b.mp4"
+      },
+      "expected": " │   $ ffmpeg -y -i a.mp4 b.mp4"
+    },
+    {
+      "name": "a command in color",
+      "fn": "command",
+      "color": true,
+      "args": {
+        "command": "ffmpeg -y -i a.mp4 b.mp4"
+      },
+      "expected": " \u001b[90m│\u001b[0m   \u001b[90m$\u001b[0m ffmpeg -y -i a.mp4 b.mp4"
+    },
+    {
+      "name": "a result with its time",
+      "fn": "ok",
+      "color": false,
+      "args": {
+        "what": "b.mp4",
+        "ms": 412
+      },
+      "expected": " │   └─ ✓ b.mp4 ································· 0.412 s"
+    },
+    {
+      "name": "a result without a time",
+      "fn": "ok",
+      "color": false,
+      "args": {
+        "what": "b.mp4",
+        "ms": null
+      },
+      "expected": " │   └─ ✓ b.mp4"
+    },
+    {
+      "name": "a result in color",
+      "fn": "ok",
+      "color": true,
+      "args": {
+        "what": "out/b.mp4",
+        "ms": 5
+      },
+      "expected": " \u001b[90m│\u001b[0m   \u001b[90m└─\u001b[0m \u001b[32m✓\u001b[0m out/b.mp4 \u001b[90m·····························\u001b[0m 0.005 s"
+    },
+    {
+      "name": "a failure with its cause",
+      "fn": "fail",
+      "color": false,
+      "args": {
+        "what": "b.mp4",
+        "cause": "the output folder is read-only."
+      },
+      "expected": " │   └─ ✗ b.mp4\n │      the output folder is read-only."
+    },
+    {
+      "name": "a failure without a cause",
+      "fn": "fail",
+      "color": false,
+      "args": {
+        "what": "b.mp4",
+        "cause": null
+      },
+      "expected": " │   └─ ✗ b.mp4"
+    },
+    {
+      "name": "a failure in color",
+      "fn": "fail",
+      "color": true,
+      "args": {
+        "what": "b.mp4",
+        "cause": "no such file"
+      },
+      "expected": " \u001b[90m│\u001b[0m   \u001b[90m└─\u001b[0m \u001b[31m✗\u001b[0m b.mp4\n \u001b[90m│\u001b[0m      no such file"
+    },
+    {
+      "name": "a question closes the tree",
+      "fn": "closing",
+      "color": false,
+      "args": {
+        "kind": "clarify",
+        "message": "Which file?",
+        "ms": 2100
+      },
+      "expected": " └─ ? I need more detail: Which file?  (2.100 s)"
+    },
+    {
+      "name": "a refusal without a time",
+      "fn": "closing",
+      "color": false,
+      "args": {
+        "kind": "reject",
+        "message": "Not allowed.",
+        "ms": null
+      },
+      "expected": " └─ ⊘ I won't do that: Not allowed."
+    },
+    {
+      "name": "nothing to do",
+      "fn": "closing",
+      "color": false,
+      "args": {
+        "kind": "nothing",
+        "message": "",
+        "ms": null
+      },
+      "expected": " └─ ✓ Nothing to do."
+    },
+    {
+      "name": "a question in color",
+      "fn": "closing",
+      "color": true,
+      "args": {
+        "kind": "clarify",
+        "message": "Which file?",
+        "ms": 2100
+      },
+      "expected": " \u001b[90m└─\u001b[0m \u001b[33m?\u001b[0m I need more detail: Which file?  \u001b[90m(2.100 s)\u001b[0m"
+    },
+    {
+      "name": "a finished run",
+      "fn": "done",
+      "color": false,
+      "args": {
+        "summary": "2 files written",
+        "ms": 3360
+      },
+      "expected": " │\n └─ Done · 2 files written · total 3.360 s"
+    },
+    {
+      "name": "a finished run in color",
+      "fn": "done",
+      "color": true,
+      "args": {
+        "summary": "dry run, nothing executed",
+        "ms": 202
+      },
+      "expected": " \u001b[90m│\u001b[0m\n \u001b[90m└─\u001b[0m \u001b[32mDone\u001b[0m · dry run, nothing executed \u001b[90m· total 0.202 s\u001b[0m"
+    },
+    {
+      "name": "a declined step",
+      "fn": "declined",
+      "color": false,
+      "args": {},
+      "expected": " │   └─ ⊘ Declined · no changes made"
+    },
+    {
+      "name": "a declined step in color",
+      "fn": "declined",
+      "color": true,
+      "args": {},
+      "expected": " \u001b[90m│\u001b[0m   \u001b[90m└─\u001b[0m \u001b[33m⊘\u001b[0m Declined · no changes made"
+    },
+    {
+      "name": "a declined chain says where it stopped",
+      "fn": "declined_close",
+      "color": false,
+      "args": {
+        "step": 1,
+        "steps": 2,
+        "summary": "no files written",
+        "ms": 2134
+      },
+      "expected": " │\n └─ Stopped at step 1 of 2 · you declined · no files written · total 2.134 s"
+    },
+    {
+      "name": "a declined single step",
+      "fn": "declined_close",
+      "color": false,
+      "args": {
+        "step": 1,
+        "steps": 1,
+        "summary": "no files written",
+        "ms": 900
+      },
+      "expected": " │\n └─ Stopped · you declined · no files written · total 0.900 s"
+    },
+    {
+      "name": "a stopped run with detail",
+      "fn": "stopped",
+      "color": false,
+      "args": {
+        "message": "step 2 of 2 failed",
+        "detail": [
+          "the folder is read-only."
+        ],
+        "ms": 1731
+      },
+      "expected": " │\n └─ ✗ step 2 of 2 failed · total 1.731 s\n      the folder is read-only."
+    },
+    {
+      "name": "a stopped run in color",
+      "fn": "stopped",
+      "color": true,
+      "args": {
+        "message": "no such file",
+        "detail": [],
+        "ms": 10
+      },
+      "expected": " \u001b[90m│\u001b[0m\n \u001b[90m└─\u001b[0m \u001b[31m✗\u001b[0m no such file \u001b[90m· total 0.010 s\u001b[0m"
+    },
+    {
+      "name": "a warning box",
+      "fn": "box",
+      "color": false,
+      "args": {
+        "tone": "warn",
+        "title": "Heads up",
+        "text": "No GPU backend is active — running on CPU. Inference will be slow (the first request can take a minute or more)."
+      },
+      "expected": " ╭─ Heads up ───────────────────────────────────────────────────────────────╮\n │ No GPU backend is active — running on CPU. Inference will be slow (the   │\n │ first request can take a minute or more).                                │\n ╰──────────────────────────────────────────────────────────────────────────╯"
+    },
+    {
+      "name": "a tip box in color",
+      "fn": "box",
+      "color": true,
+      "args": {
+        "tone": "accent",
+        "title": "Tip",
+        "text": "A CUDA backend is available for this NVIDIA card."
+      },
+      "expected": " \u001b[36m╭─\u001b[0m \u001b[1mTip\u001b[0m \u001b[36m────────────────────────────────────────────────────────────────────╮\u001b[0m\n \u001b[36m│\u001b[0m A CUDA backend is available for this NVIDIA card.                        \u001b[36m│\u001b[0m\n \u001b[36m╰──────────────────────────────────────────────────────────────────────────╯\u001b[0m"
+    },
+    {
+      "name": "a clock under a minute",
+      "fn": "fmt_clock",
+      "color": false,
+      "args": {
+        "seconds": 5.0
+      },
+      "expected": "0:05"
+    },
+    {
+      "name": "a clock over an hour",
+      "fn": "fmt_clock",
+      "color": false,
+      "args": {
+        "seconds": 3723.0
+      },
+      "expected": "1:02:03"
+    },
+    {
+      "name": "a live line with a length",
+      "fn": "progress",
+      "color": false,
+      "args": {
+        "frame": 0,
+        "elapsed_ms": 1200,
+        "done": 15.0,
+        "total": 60.0,
+        "speed": 2.4
+      },
+      "expected": " │   └─ ⠋ 0:15 / 1:00  █████░░░░░░░░░░░░░░░  25% · 2.4x · 1.200 s"
+    },
+    {
+      "name": "a live line without a length",
+      "fn": "progress",
+      "color": false,
+      "args": {
+        "frame": 1,
+        "elapsed_ms": 3000,
+        "done": 7.0,
+        "total": null,
+        "speed": null
+      },
+      "expected": " │   └─ ⠙ 0:07 · 3.000 s"
+    },
+    {
+      "name": "bytes",
+      "fn": "fmt_bytes",
+      "color": false,
+      "args": {
+        "n": 812
+      },
+      "expected": "812 B"
+    },
+    {
+      "name": "kilobytes",
+      "fn": "fmt_bytes",
+      "color": false,
+      "args": {
+        "n": 3238
+      },
+      "expected": "3.2 KB"
+    },
+    {
+      "name": "megabytes",
+      "fn": "fmt_bytes",
+      "color": false,
+      "args": {
+        "n": 13107200
+      },
+      "expected": "12.5 MB"
+    },
+    {
+      "name": "no files written",
+      "fn": "files_written",
+      "color": false,
+      "args": {
+        "n": 0
+      },
+      "expected": "no files written"
+    },
+    {
+      "name": "one file written",
+      "fn": "files_written",
+      "color": false,
+      "args": {
+        "n": 1
+      },
+      "expected": "1 file written"
+    },
+    {
+      "name": "three files written",
+      "fn": "files_written",
+      "color": false,
+      "args": {
+        "n": 3
+      },
+      "expected": "3 files written"
+    }
+  ]
+}

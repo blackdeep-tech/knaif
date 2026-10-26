@@ -19,6 +19,8 @@ User request
   -> validate expanded plan
   -> optimize_plan()
   -> Handler/Intent.preflight() or Skill.preflight()       (skipped if dry_run)
+  -> rehearsal: every step run as a dry run, before any runs (real runs of a chain or of many
+     files; a step that would fail runs nothing: PlanWouldFail; a file that would fail is out)
   -> [optional] summarize_plan() → plan_display callback    (StepA)
   -> [optional] plan_confirmer approval gate                (StepB)
   -> run scratch created (work_dir; never in a dry run)

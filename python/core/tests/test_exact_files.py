@@ -310,17 +310,6 @@ def test_a_replay_that_stops_before_running_is_an_error_not_clean(tmp_path: Path
     assert report["error"] is not None and "needs your approval" in report["error"]
 
 
-def test_only_a_url_row_passes_allow_download_to_the_binary():
-    """An older binary rejects an unknown flag, which would fail every row before inference."""
-    from knaif.evalsuite.native_lane import LaneConfig, build_argv
-
-    lane = LaneConfig.__new__(LaneConfig)
-    object.__setattr__(lane, "binary", Path("knaif"))
-    object.__setattr__(lane, "model_path", Path("m.gguf"))
-    assert "--allow-download" not in build_argv(lane, "ffmpeg", "convert clip.mp4 to mkv")
-    assert "--allow-download" in build_argv(lane, "ffmpeg", "convert https://h.test/a.mov to mp4")
-
-
 def test_a_native_error_excerpt_leaves_out_the_dumps() -> None:
     """The plan and argv dumps carry absolute run-scratch paths (a home folder) and are not the
     error: the excerpt is the binary's own last lines (an L3 run)."""

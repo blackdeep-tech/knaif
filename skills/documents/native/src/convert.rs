@@ -26,11 +26,7 @@ pub fn convert(input: &Path, to_format: &str, output: &Path) -> anyhow::Result<(
     let from = suffix_of(input);
 
     if to == "txt" || to == "md" {
-        let joined = text::extract_text(input, None)?
-            .iter()
-            .map(|r| r.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let joined = text::document_text(&text::extract_text(input, None)?);
         std::fs::write(output, joined)
             .map_err(|e| anyhow::anyhow!("could not write {}: {e}", output.display()))?;
         return Ok(());

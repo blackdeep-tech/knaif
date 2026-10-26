@@ -32,7 +32,7 @@ Network access is new for knaif, so the policy lives in this one tool:
   only when complete, and only inside the run scratch.
 
 Asking the user is not this tool's job. The pipeline asks once per URL, or requires
-`--allow-download` when there is no terminal, before it calls `download_file`.
+`--allow download` when there is no terminal, before it calls `download_file`.
 
 The URL rules themselves (`knaif.urls`: the value class, the refusals, naming, content types)
 are pinned for both runtimes by `contracts/parity/url_inputs_cases.json`.

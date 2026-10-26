@@ -138,6 +138,11 @@ pub struct ToolDef {
     /// the prompt never lists. Mirrors Python `ToolDef.batch_output`.
     #[serde(default, deserialize_with = "batch_output_ext")]
     pub batch_output: Option<String>,
+    /// The result field `run --stdout` prints instead of saving a file (`tools.yaml` `stdout:`,
+    /// e.g. extract_text's `text`; owner, 2026-10-23). A plan with any other tool
+    /// refuses the flag. Mirrors Python `ToolDef.stdout`.
+    #[serde(default)]
+    pub stdout: Option<String>,
     /// What the tool may do to the world (`crate::effects`): `None` when `tools.yaml` declares
     /// nothing, which a skill bundle refuses; empty for a tool with none. Mirrors Python
     /// `ToolDef.effects`. Read by hand in [`load_registry_str`] so a malformed value gets the

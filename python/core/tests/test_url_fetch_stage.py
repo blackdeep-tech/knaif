@@ -74,7 +74,7 @@ def test_without_approval_nothing_is_requested(server, sandbox):
     results = _run(agent, f"{H}/notes.txt")
     assert server.requests == []
     assert list(sandbox.iterdir()) == []
-    assert "--allow-download" in str(results[-1]["result"])
+    assert "--allow download" in str(results[-1]["result"])
 
 
 def test_a_declined_url_is_not_requested(server, sandbox):

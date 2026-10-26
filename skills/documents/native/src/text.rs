@@ -158,6 +158,32 @@ fn ceil_char_boundary(s: &str, mut i: usize) -> usize {
     i
 }
 
+/// How many lines of a saved text the terminal shows.
+pub const PREVIEW_LINES: usize = 5;
+
+/// The preview of a saved text: its first five non-empty lines, without trailing spaces, then
+/// "… N more lines" when there are more; "(no text)" when there is none. Python
+/// `skills.documents.python.handlers.text_preview`; `contracts/parity/text_preview_cases.json`.
+pub fn text_preview(text: &str) -> Vec<String> {
+    let lines: Vec<String> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.trim_end().to_string())
+        .collect();
+    if lines.is_empty() {
+        return vec!["(no text)".to_string()];
+    }
+    let mut shown: Vec<String> = lines.iter().take(PREVIEW_LINES).cloned().collect();
+    let rest = lines.len().saturating_sub(PREVIEW_LINES);
+    if rest > 0 {
+        shown.push(format!(
+            "… {rest} more line{}",
+            if rest > 1 { "s" } else { "" }
+        ));
+    }
+    shown
+}
+
 /// Inspect a document: format, size, and (for PDFs) page count / encryption / text-layer presence.
 /// Port of `InspectDocumentStep` for the permissive formats; office page counts (pptx/xlsx) are
 /// approximated as 1 (their per-slide/sheet counting needs office libs — deferred).

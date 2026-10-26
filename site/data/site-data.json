@@ -370,15 +370,20 @@
             "ocr": {
               "type": "boolean"
             },
+            "output": {
+              "path_role": "output",
+              "type": "string"
+            },
             "pages": {
               "type": "string"
             }
           },
-          "description": "Read out the text content of a document as per-page records plus joined text. Creates no new file. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf.",
+          "description": "Read out the text content of a document and save it as <name>.txt beside it. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf.",
           "name": "extract_text",
           "optional_args": [
             "pages",
-            "ocr"
+            "ocr",
+            "output"
           ],
           "required_args": [
             "input"

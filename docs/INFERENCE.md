@@ -20,7 +20,7 @@ develop against the planner.
 
 Resolution precedence at runtime (highest first):
 
-1. `--model-path PATH` (raw GGUF, no tuning options applied)
+1. `--model PATH` naming a GGUF file (raw GGUF, no tuning options applied)
 2. `--model NAME` (looked up in `models.yaml`)
 3. The skill's `recommended_model` from `skill.yaml`
 4. `models.yaml`'s top-level `default:`

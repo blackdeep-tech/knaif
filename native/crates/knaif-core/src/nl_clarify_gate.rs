@@ -309,6 +309,21 @@ fn named_file_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"(?i)[\w-]+\.([a-z0-9]{2,5})(?:[^a-z0-9]|$)").unwrap())
 }
 
+/// A name the request gives an output ("call it preview.gif", "save them as out.mp4", "als",
+/// "comme", "като", "保存为"): not a file the request is about (2026-10-23).
+/// Python `knaif.nl_clarify_gate._OUTPUT_NAME_RE`.
+fn output_name_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(concat!(
+            r"(?i)(?:\b(?:call(?:ed)?\s+(?:it|them)|name[ds]?\s+(?:it|them)|named|save(?:d)?\s+(?:it\s+|them\s+)?as",
+            r"|as|into|als|nach|namens|como|llamad[oa]s?|comme|vers|appel[ée]e?s?|като)",
+            r"|(?:命名为|保存为|另存为|存为))\s*[\w-]+\.[a-z0-9]{2,5}\b"
+        ))
+        .unwrap()
+    })
+}
+
 /// A name with an extension holding a letter (`clip.mp4`, `x.3gp`); a codec or a number
 /// (`H.264`, `1.25`) names no file. Python `knaif.nl_clarify_gate._names_a_file`.
 fn names_a_file(text: &str) -> bool {
@@ -327,11 +342,176 @@ fn names_a_file(text: &str) -> bool {
 /// `contracts/parity/many_files_cases.json`.
 pub fn asks_for_many_files(utterance: &str) -> bool {
     let text = url_re().replace_all(utterance, " ").into_owned();
-    // A URL names a file too.
-    if names_a_file(utterance) {
+    // A URL names a file too; a name given to an output does not.
+    if names_a_file(&output_name_re().replace_all(utterance, " ")) {
         return asks_for_many(&crate::known_folders::without_folder_places(&text), "*");
     }
     is_batch_utterance(&text) || asks_for_many(&text, "*")
+}
+
+/// Number words of the corpora's languages (Python `_COUNT_WORDS`). "both" and its
+/// translations are two; German "ein" is left out, as it is also the article.
+fn count_word(word: &str) -> Option<usize> {
+    const LISTS: [(&str, usize); 5] = [
+        ("one two three four five six seven eight nine ten", 1),
+        ("zwei drei vier fünf sechs sieben acht neun zehn", 2),
+        ("dos tres cuatro cinco seis siete ocho nueve diez", 2),
+        ("deux trois quatre cinq six sept huit neuf dix", 2),
+        ("три четири пет шест седем осем девет десет", 3),
+    ];
+    for (list, first) in LISTS {
+        if let Some(i) = list.split(' ').position(|w| w == word) {
+            return Some(first + i);
+        }
+    }
+    match word {
+        "both" | "beide" | "beiden" | "ambos" | "ambas" | "два" | "две" | "двата" | "двете" => {
+            Some(2)
+        }
+        "трите" => Some(3),
+        _ => None,
+    }
+}
+
+/// A count in Chinese sits right before the file word, without spaces ("两个视频").
+fn cjk_count_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"([两兩二三四五六七八九十]|\d+)\s*[个個部支份张張]?\s*(?:视频|視頻|影片|文件|檔案|档案|图片|圖片|片段|剪辑|剪輯)",
+        )
+        .unwrap()
+    })
+}
+
+/// The number of files `utterance` asks for. Python `knaif.nl_clarify_gate._requested_count`.
+fn requested_count(utterance: &str) -> Option<usize> {
+    let low = url_re()
+        .replace_all(&utterance.to_lowercase(), " ")
+        .into_owned();
+    let words: Vec<&str> = word_re().find_iter(&low).map(|m| m.as_str()).collect();
+    let is_number = |w: &str| w.chars().all(|c| c.is_ascii_digit()) || count_word(w).is_some();
+    for (i, word) in words.iter().enumerate() {
+        let n = if word.chars().all(|c| c.is_ascii_digit()) {
+            word.parse().ok()
+        } else {
+            count_word(word)
+        };
+        let Some(n) = n else { continue };
+        for later in words.iter().skip(i + 1).take(3) {
+            if PLURAL_FILE_WORDS.contains(later) || PLURAL_FILE_WORDS_UNICODE.contains(later) {
+                return Some(n);
+            }
+            if is_number(later) {
+                break;
+            }
+        }
+    }
+    // A digit that follows a letter is part of a name ("mp4文件"), not a count; the regex crate
+    // has no look-behind, so the character before the match is checked here.
+    let caps = cjk_count_re().captures_iter(&low).find(|c| {
+        let start = c.get(1).map_or(0, |m| m.start());
+        !c[1].starts_with(|ch: char| ch.is_ascii_digit())
+            || !low[..start]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_ascii_alphanumeric())
+    })?;
+    let raw = &caps[1];
+    raw.parse().ok().or_else(|| {
+        "两兩二三四五六七八九十"
+            .chars()
+            .zip([2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            .find(|(c, _)| raw.starts_with(*c))
+            .map(|(_, n)| n)
+    })
+}
+
+fn word_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\w+").unwrap())
+}
+
+/// The question to ask when `utterance` asks for a number of files the plan does not touch:
+/// the plan's folder and glob inputs, listed as the per-file batch lists them, plus any
+/// file named beside them; an earlier step's output is not counted again. Only a plan with a
+/// folder or a glob is checked. Python `knaif.nl_clarify_gate.count_question`;
+/// `contracts/parity/count_cases.json`.
+pub fn count_question(
+    utterance: &str,
+    plan: &[Value],
+    base: &std::path::Path,
+    file_kinds: &crate::clarify_gate::FileKinds,
+) -> Option<String> {
+    let wanted = requested_count(utterance)?;
+    let mut touched: Vec<(String, String)> = Vec::new();
+    let mut outputs: HashSet<String> = HashSet::new();
+    let mut listed = false;
+    for step in plan {
+        let Some(args) = step.get("args").and_then(Value::as_object) else {
+            continue;
+        };
+        for key in crate::batch_chain::INPUT_KEYS {
+            let entries: Vec<&str> = match args.get(key) {
+                Some(Value::String(s)) => vec![s.as_str()],
+                Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).collect(),
+                _ => continue,
+            };
+            for entry in entries {
+                if entry.starts_with('$') || entry.contains("://") {
+                    continue;
+                }
+                if outputs.contains(&entry.to_lowercase()) {
+                    continue;
+                }
+                let found =
+                    crate::batch_chain::expand_inputs(&[entry.to_string()], base, file_kinds);
+                let files = match found.get(entry) {
+                    Some(files) => {
+                        listed = true;
+                        files.clone()
+                    }
+                    None => vec![entry.to_string()],
+                };
+                for f in files {
+                    let key = f.to_lowercase();
+                    if !touched.iter().any(|(k, _)| *k == key) {
+                        touched.push((key, f));
+                    }
+                }
+            }
+        }
+        if let Some(out) = args.get("output").and_then(Value::as_str) {
+            outputs.insert(out.to_lowercase());
+        }
+    }
+    let have = touched.len();
+    if !listed || have == wanted || have == 0 {
+        return None;
+    }
+    let kinds: HashSet<Option<&String>> = touched
+        .iter()
+        .map(|(_, f)| {
+            let ext = f.rsplit_once('.').map_or("", |(_, e)| e).to_lowercase();
+            file_kinds.get(&ext)
+        })
+        .collect();
+    let noun = match kinds.iter().next() {
+        Some(Some(kind)) if kinds.len() == 1 => match kind.as_str() {
+            "video" => "videos",
+            "audio" => "audio files",
+            "document" => "documents",
+            "image" => "images",
+            "text" => "text files",
+            _ => "files",
+        },
+        _ => "files",
+    };
+    Some(if have > wanted {
+        format!("Which {wanted} of the {have} {noun}? Name them.")
+    } else {
+        format!("I found {have} {noun} here, not {wanted}. Which ones do you mean?")
+    })
 }
 
 /// Python `_glob_question`: what to ask about a glob the request never asked for.

@@ -9,7 +9,7 @@ Network access is new for knaif, so the policy lives in one place:
 
 The bytes go to ``<dest_dir>/<name>.part`` and are renamed once complete, inside the run
 scratch; nothing here writes to the user's folder. Asking the user before a download is the
-caller's job (the pipeline asks once per URL, or requires ``--allow-download``).
+caller's job (the pipeline asks once per URL, or requires ``--allow download``).
 
 ``KNAIF_NET_TEST_HOST=<host>=<base>`` sends requests for that one host to ``<base>``: the eval
 harness's local server answers the reserved ``files.knaif.test`` (RFC 6761) this way. The

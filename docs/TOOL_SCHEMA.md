@@ -418,7 +418,7 @@ The installers mirror this block — the Windows installer's winget ids, command
 
 `recommended_model` is the skill's preferred entry in [models.yaml](../models.yaml) at the repo root. The CLI and `create_agent()` use this resolution order at runtime:
 
-1. `--model-path PATH` (raw GGUF, no model_config)
+1. `--model PATH` naming a GGUF file (raw GGUF, no model_config)
 2. `--model NAME` (explicit lookup in `models.yaml`)
 3. The active skill's `recommended_model`
 4. `models.yaml`'s `default:`
@@ -876,12 +876,17 @@ Intermediate files belong to knaif, not to the user. Every run that executes get
 
   A tool without `produces:` writes the same kind as its input. Core never names a tool: a new
   skill gets the rule by declaring its kinds and what its tools write.
-- **A result saved only in a batch.** A tool that prints its result for one file can declare
-  `batch_output: <ext>` (documents `extract_text: batch_output: txt`): when core repeats a step
-  of it over many files, each file's result is saved as `<name>.<ext>` next to that file, since
-  printing many files' text helps nobody. The tool then accepts `output`, which the prompt does
-  not list (an optional arg would join every prompt that lists the tool), and the preview's
-  "leaves" line counts the files.
+- **A result saved per file in a batch.** A tool can declare `batch_output: <ext>` (documents
+  `extract_text: batch_output: txt`): when core repeats a step of it over many files, each
+  file's result is saved as `<name>.<ext>` next to that file, the name core gives each lifted
+  step's `output`, and the preview's "leaves" line counts the files. (extract_text saves one
+  file's text too, and declares `output` as an ordinary argument.)
+- **A text answer for a pipe.** A tool whose result is text can declare `stdout: <result field>`
+  (documents `extract_text: stdout: text`). `knaif run --stdout` (both CLIs) then prints that
+  field alone on stdout and saves nothing, the handler told by `ctx.to_stdout`; the run's own
+  lines go to stderr. A plan with any tool that declares none refuses the flag before anything
+  runs. Contracts `cli_flag_cases.json` (the flag) and `cli_output_cases.json` (what each CLI
+  prints).
 - **Keeping everything.** `--keep-intermediates` on `knaif run` (both CLIs) keeps every step's
   output where the plan put it, and so do words in the request: "keep the intermediate files",
   "keep everything", "behalte alles", "保留中间文件". The phrases are a keep verb next to a scope,
@@ -911,9 +916,9 @@ url_inputs:
   expansion and preflight. It replaces every URL with a file at the top of the run scratch, so
   no later stage sees a URL, and outputs derived from it are named in the user's folder
   (`user_side_path`). The download itself never reaches the user's folder.
-- **Nothing is fetched without approval.** The CLI's `--allow-download` approves up front.
-  Otherwise each URL asks `Download <url>? [y/N]` (Enter is no), and with no terminal the run
-  stops, naming the flag. `--yes` does not cover network access. In the library, set
+- **Nothing is fetched without approval.** The CLI's `--allow download` (or `--yes`, which
+  allows everything) approves up front. Otherwise each URL asks `Download <url>? [y/N]` (Enter is
+  no), and with no terminal the run stops, naming the flag. In the library, set
   `agent.allow_download` or `agent.download_confirmer(url, max_bytes)`.
 - **A dry run requests nothing.** It names the scratch path the download would take
   (`agent.last_downloads`), so the rendered plan is complete. That file is not there yet, so a
@@ -922,8 +927,8 @@ url_inputs:
 - **The policy** (redirects, timeouts, size cap, content types, no cookies or credentials) lives in
   the net toolkit's `download_file`; see `toolkits/net/SPEC.md`.
 - **A skill without `url_inputs:`** clarifies: it works on local files.
-- **Both runtimes.** Python: `CommandAgent._fetch_url_inputs`, `knaif-cli run --allow-download`.
-  Native: `fetch_url_inputs` in `apps/cli` (`knaif run --allow-download`), with the
+- **Both runtimes.** Python: `CommandAgent._fetch_url_inputs`, `knaif-cli run --allow download`.
+  Native: `fetch_url_inputs` in `apps/cli` (`knaif run --allow download`), with the
   `knaif_core::urls` rules and the `knaif-toolkit-net` crate (ureq).
 
 ## Declared effects

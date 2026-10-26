@@ -132,6 +132,10 @@ class ToolDef:
     # lifted one saves `<name>.<ext>` next to its file. Such a tool accepts `output`, which the
     # prompt does not list (`batch_chain.lift_batch`).
     batch_output: str | None = None
+    # The result field `run --stdout` prints instead of saving a file (tools.yaml `stdout:`, e.g.
+    # extract_text's "text"; owner, 2026-10-23). A plan with any other tool refuses
+    # the flag.
+    stdout: str | None = None
     # What the tool may do to the world (`knaif.effects`): None when tools.yaml declares nothing,
     # which a skill or toolkit bundle refuses; () for a tool with no effects.
     effects: tuple[str, ...] | None = None
@@ -205,6 +209,7 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             produces=_parse_produces(name, cfg.get("produces")),
             derives=bool(cfg.get("derives", False)),
             batch_output=str(cfg["batch_output"]).lstrip(".") if cfg.get("batch_output") else None,
+            stdout=str(cfg["stdout"]) if cfg.get("stdout") else None,
             effects=parse_effects(name, cfg.get("effects")),
             mock_args=dict(cfg.get("mock_args") or {}),
             internal=bool(cfg.get("internal", False)),

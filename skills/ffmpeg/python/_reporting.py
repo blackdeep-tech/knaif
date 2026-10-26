@@ -282,15 +282,29 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
         if batch_outputs:
             for out in batch_outputs:
                 cmd = out.get("command") or []
+                # `argv` too: the CLI shows each path as native does (relative, `<work>/…`) and
+                # quotes as its `shell_join`.
                 items.append(
                     {
                         "kind": "command",
                         "message": " ".join(str(c) for c in cmd),
+                        "argv": [str(c) for c in cmd],
                     }
                 )
         else:
             items.append({"kind": "info", "message": "(nothing to execute)"})
     else:
+        # What ran, then what it wrote, as native shows a step: its commands, then a `✓` for
+        # each file with its folder and time (the name alone hid `out/`).
+        for out in batch_outputs:
+            if out.get("command"):
+                items.append(
+                    {
+                        "kind": "command",
+                        "message": " ".join(str(c) for c in out["command"]),
+                        "argv": [str(c) for c in out["command"]],
+                    }
+                )
         produced = []
         for out in batch_outputs:
             if out.get("returncode", 0) != 0:
@@ -298,10 +312,13 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
                     msg = ffmpeg_failure(out["returncode"], out.get("stderr_tail") or "")
                     items.append({"kind": "error", "message": msg})
             elif out.get("output"):
-                produced.append(out["output"])
+                produced.append(out)
         if produced:
-            for f in produced:
-                items.append({"kind": "output", "message": Path(f).name})
+            for out in produced:
+                item = {"kind": "output", "message": str(out["output"])}
+                if out.get("seconds") is not None:
+                    item["seconds"] = out["seconds"]
+                items.append(item)
         elif not any(i["kind"] == "error" for i in items):
             items.append({"kind": "info", "message": "(no output files produced)"})
 
