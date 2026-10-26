@@ -327,7 +327,7 @@ fn carries_url(text: &str) -> bool {
 /// URL is eligible only when the query carries one too, and then ranks first at equal tool
 /// overlap.
 ///
-/// Two things a re-derivation gets wrong, both pinned by `contracts/parity/example_cases.json`.:
+/// Two things a re-derivation gets wrong, both pinned by `contracts/parity/example_cases.json`:
 /// the cap is a **cap, not a relevance threshold** — three domain examples are kept even when
 /// every one of them scores zero — and the ranking sort must be **stable**, because Python's
 /// `sorted(..., reverse=True)` leaves equal-scoring examples in corpus order. Sorting ascending

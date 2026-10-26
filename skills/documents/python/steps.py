@@ -21,6 +21,7 @@ from ._engine import (
     OFFICE_SUFFIXES,
     PDF_SUFFIX,
     TEXT_SUFFIXES,
+    _document_text,
     _extract_office_text,
     _extract_text_records,
     _format_for,
@@ -29,6 +30,7 @@ from ._engine import (
     _input_path,
     _input_paths,
     _lossless_compress,
+    _open_pdf,
     _output_dir,
     _output_path,
     _parse_page_range_specs,
@@ -36,11 +38,13 @@ from ._engine import (
     _pdf_page_count,
     _profile,
     _rasterize_compress,
+    _read_pdf,
     _resolve,
     _snippet,
     _write_image_overlay_pdf,
     _write_ocr_image_pdf,
     _write_ocr_pdf,
+    _write_text,
     _write_text_overlay_pdf,
     _writing,
 )
@@ -81,13 +85,7 @@ class InspectDocumentStep(Handler):
             "pages": 1,
         }
         if suffix == PDF_SUFFIX:
-            try:
-                from pypdf import PdfReader
-            except ImportError as exc:  # pragma: no cover - covered when extra absent
-                raise DocumentsDependencyError(
-                    "Install the documents dep group (uv pip install --group documents) to inspect PDFs."
-                ) from exc
-            reader = PdfReader(str(path))
+            reader = _read_pdf(path)
             result["encrypted"] = bool(reader.is_encrypted)
             result["pages"] = len(reader.pages) if not reader.is_encrypted else 0
             result["has_text_layer"] = (
@@ -122,7 +120,7 @@ class ExtractTextStep(Handler):
         if ctx.dry_run and not path.exists():
             return {"mode": "dry_run", "pages": [], "text": "", "output": str(output)}
         records = _extract_text_records(path, args)
-        text = "\n".join(record["text"] for record in records)
+        text = _document_text(records)
         # The text comes back whoever named the file (the GPU re-check: a name from the plan
         # took the batch shape and the grade's text check found nothing).
         result = {"output": str(output), "pages": records if single else len(records), "text": text}
@@ -132,7 +130,7 @@ class ExtractTextStep(Handler):
         if ctx.dry_run:
             return {"mode": "dry_run", **result}
         with _writing(output, ctx) as target:
-            target.write_text(text, encoding="utf-8")
+            _write_text(target, text)
         return result
 
 
@@ -217,7 +215,7 @@ class MergePdfsStep(Handler):
 
         merged = pikepdf.Pdf.new()
         for path in inputs:
-            with pikepdf.Pdf.open(path) as source:
+            with _open_pdf(path) as source:
                 merged.pages.extend(source.pages)
         with _writing(output, ctx) as target:
             merged.save(target)
@@ -297,7 +295,7 @@ def _split(args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
             "count": len(outputs),
         }
 
-    with pikepdf.Pdf.open(input_path) as source:
+    with _open_pdf(input_path) as source:
         for output, (_label, pages) in zip(outputs, specs, strict=True):
             split = pikepdf.Pdf.new()
             for page_number in pages:
@@ -312,7 +310,6 @@ class RotatePagesStep(Handler):
     name = "rotate_pages"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
-        pikepdf = _require_pikepdf()
         input_path = _input_path(args, ctx)
         output = _output_path(input_path, args, ctx, "-rotated.pdf")
         if _pending(input_path, ctx):
@@ -324,7 +321,7 @@ class RotatePagesStep(Handler):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "rotated_pages": selected}
 
-        with pikepdf.Pdf.open(input_path) as pdf, _writing(output, ctx) as target:
+        with _open_pdf(input_path) as pdf, _writing(output, ctx) as target:
             for page_number in selected:
                 pdf.pages[page_number - 1].rotate(degrees, relative=True)
             pdf.save(target)
@@ -350,7 +347,7 @@ class RemovePagesStep(Handler):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "pages": len(keep)}
 
-        with pikepdf.Pdf.open(input_path) as source, _writing(output, ctx) as target:
+        with _open_pdf(input_path) as source, _writing(output, ctx) as target:
             result = pikepdf.Pdf.new()
             for page_number in keep:
                 result.pages.append(source.pages[page_number - 1])
@@ -387,7 +384,7 @@ class ReorderPagesStep(Handler):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "pages": len(order)}
 
-        with pikepdf.Pdf.open(input_path) as source, _writing(output, ctx) as target:
+        with _open_pdf(input_path) as source, _writing(output, ctx) as target:
             result = pikepdf.Pdf.new()
             for page_number in order:
                 result.pages.append(source.pages[page_number - 1])
@@ -467,7 +464,7 @@ class ProtectPdfStep(Handler):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output)}
 
-        with pikepdf.Pdf.open(input_path) as pdf, _writing(output, ctx) as target:
+        with _open_pdf(input_path) as pdf, _writing(output, ctx) as target:
             pdf.save(
                 target, encryption=pikepdf.Encryption(user=args["password"], owner=args["password"])
             )
@@ -510,9 +507,9 @@ class ConvertDocumentStep(Handler):
             }
 
         if to_format in {"txt", "md"}:
-            text = "\n".join(record["text"] for record in _extract_text_records(input_path))
+            text = _document_text(_extract_text_records(input_path))
             with _writing(output_path, ctx) as target:
-                target.write_text(text, encoding="utf-8")
+                _write_text(target, text)
             return {"output": str(output_path)}
 
         if input_path.suffix.lower() in IMAGE_SUFFIXES and to_format == "pdf":

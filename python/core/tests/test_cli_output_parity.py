@@ -1,6 +1,6 @@
 """One display for both CLIs (owner, 2026-10-23): what `run` prints, end to end.
 
-`contracts/parity/cli_output_cases.json`. holds a canned model output per case and what native's
+`contracts/parity/cli_output_cases.json` holds a canned model output per case and what native's
 `knaif run` printed for it (apps/cli/tests/cli_output_parity.rs records them); `knaif-cli run`
 must print the same, byte for byte, in the same empty folder with the output piped.
 """
@@ -38,6 +38,7 @@ def _masked(text: str) -> str:
 def test_cli_output(case: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     for name in case.get("files", []):
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / name).write_bytes(b"")
     fixtures = Path(__file__).parents[3] / "sandbox" / "fixtures" / case["skill"]
     for name in case.get("fixtures", []):
@@ -64,3 +65,5 @@ def test_cli_output(case: dict[str, Any], tmp_path: Path, monkeypatch: pytest.Mo
     assert (result.exit_code == 0) == case["ok"], result.output
     if "files_after" in case:
         assert sorted(f.name for f in tmp_path.iterdir()) == case["files_after"]
+    for name, text in case.get("file_bytes", {}).items():
+        assert (tmp_path / name).read_bytes() == text.encode("utf-8"), f"the bytes of {name}"

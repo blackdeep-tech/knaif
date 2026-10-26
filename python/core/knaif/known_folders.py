@@ -61,11 +61,10 @@ _WINDOWS_IDS = {
 
 # Arg keys that name where a step writes. A schema's `path_role: output` counts too.
 _OUTPUT_KEYS = frozenset({"output", "output_dir"})
-_INPUT_KEYS = ("inputs", "input", "files", "src", "path", "base", "append")
 
 
 class SameNameFolder(ValueError):
-    """A known folder named in the plan also exists, by name, next to the input: ask."""
+    """A known folder named in the plan also exists, by name, in the working folder: ask."""
 
 
 def _windows_known_folder(name: str) -> Path:
@@ -227,15 +226,23 @@ def _output_keys(tool_def: Any) -> set[str]:
     return keys
 
 
-def _input_dirs(args: Mapping[str, Any], cwd: Path) -> list[Path]:
-    dirs = [cwd]
-    for key in _INPUT_KEYS:
-        value = args.get(key)
-        for item in value if isinstance(value, list) else [value]:
-            if isinstance(item, str) and item and not item.startswith("$") and "://" not in item:
-                parent = Path(item).parent
-                dirs.append(parent if parent.is_absolute() else cwd / parent)
-    return dirs
+def _input_folders(plan: list[dict[str, Any]], registry: Mapping[str, Any]) -> set[str]:
+    """The first folder of every input path in *plan*, lowercased (`videos/*.mov` → `videos`)."""
+    found: set[str] = set()
+    for step in plan:
+        if not isinstance(step, dict) or not isinstance(step.get("args"), dict):
+            continue
+        outputs = _output_keys(registry.get(step.get("tool", "")))
+        for key, value in step["args"].items():
+            if key in outputs:
+                continue
+            for item in value if isinstance(value, list) else [value]:
+                if not isinstance(item, str) or item.startswith("$"):
+                    continue
+                parts = [p for p in _SEP.split(item.strip()) if p not in ("", ".")]
+                if len(parts) > 1:
+                    found.add(parts[0].lower())
+    return found
 
 
 def rewrite_outputs(
@@ -250,11 +257,12 @@ def rewrite_outputs(
 
     ``Downloads/clip.mp4`` becomes ``<the user's Downloads>/clip.mp4``; inputs, ``$var``
     references and paths that only contain the name further in (``out/Downloads/x``) stay.
-    Raises ``SameNameFolder`` when a folder of that name also exists in *cwd* or next to an
-    input (contracts/parity/known_folder_cases.json), and ``ValueError`` when *sandbox* is set
+    Raises ``SameNameFolder`` when a folder of that name also exists in *cwd*, unless the plan's
+    inputs are in it, which keeps the output there (contracts/parity/known_folder_cases.json), and ``ValueError`` when *sandbox* is set
     and the folder is outside it. *plan* itself is left unchanged.
     """
     out = copy.deepcopy(plan)
+    input_folders = _input_folders(out, registry)
     for step in out:
         if not isinstance(step, dict) or not isinstance(step.get("args"), dict):
             continue
@@ -271,15 +279,21 @@ def rewrite_outputs(
             explicit_home = value.strip().startswith("~")
             if folder != "home" and not explicit_home:
                 spelled = [p for p in _SEP.split(value.strip()) if p not in ("", ".")][0]
-                for d in _input_dirs(args, cwd):
-                    for name in {spelled, DISPLAY_NAMES[folder]}:
-                        local = d / name
-                        if local.is_dir() and not _within(local, base):
-                            raise SameNameFolder(
-                                f"There is a {name} folder at {local.as_posix()}, and your "
-                                f"{DISPLAY_NAMES[folder]} folder is {base.as_posix()}. "
-                                "Which one should I save into?"
-                            )
+                # The plan's inputs are in the local folder of that name: that is the one meant,
+                # so the output stays in it and nothing asks (owner, 2026-10-25).
+                if spelled.lower() in input_folders and (cwd / spelled).is_dir():
+                    continue
+                # Only the working folder: a relative output is written under it, never
+                # next to its input (owner, 2026-10-24). The plan's spelling first, as
+                # native: a set's order changed with the hash seed.
+                for name in dict.fromkeys((spelled, DISPLAY_NAMES[folder])):
+                    local = cwd / name
+                    if local.is_dir() and not _within(local, base):
+                        raise SameNameFolder(
+                            f"There is a {name} folder at {local.as_posix()}, and your "
+                            f"{DISPLAY_NAMES[folder]} folder is {base.as_posix()}. "
+                            "Which one should I save into?"
+                        )
             if sandbox is not None and not _within(target, Path(sandbox)):
                 raise ValueError(
                     f"Path '{target.as_posix()}' is outside the sandbox "

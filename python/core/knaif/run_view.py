@@ -3,7 +3,7 @@
 **Two views, one rule** (``apps/cli/src/ui.rs``). When stdout *and* stderr are terminals the run
 is drawn as a tree (:mod:`knaif.ui`'s renderers); anything else — a pipe, a redirect, the eval
 lane — gets native's plain lines. ``KNAIF_VIEW=rich|plain`` overrides the choice, ``NO_COLOR``
-drops the colors. Both CLIs are held to ``contracts/parity/cli_output_cases.json`.`.
+drops the colors. Both CLIs are held to ``contracts/parity/cli_output_cases.json``.
 
 Domain-agnostic: what a step did comes from the skill's ``format_results`` items; this module
 only places them.
@@ -27,22 +27,63 @@ from .scratch import display
 # ── which view ────────────────────────────────────────────────────────────────────────────────
 
 
+def _msys_pty_name(name: str) -> bool:
+    """Whether a pipe of this name is an MSYS or Cygwin pty (Git Bash, mintty): its file name
+    starts ``msys-`` or ``cygwin-`` and holds ``-pty``. Rust's `IsTerminal` (`msys_tty_on`)."""
+    base = name.rsplit("\\", 1)[-1]
+    return base.startswith(("msys-", "cygwin-")) and "-pty" in base
+
+
 def _is_terminal(stream: Any) -> bool:
-    """Whether *stream* is a terminal. On Windows a console, not just a character device: the
-    NUL device answers ``isatty()`` too."""
+    """Whether *stream* is a terminal, as native (Rust's `IsTerminal`) decides. On Windows a
+    console, not just a character device: the NUL device answers ``isatty()`` too;
+    or an MSYS pty, which is a named pipe: Git Bash's terminal (2026-10-24).
+    Through `knaif-cli`'s stderr guard (`app._console_safe_stderr`): the terminal is the stream
+    behind it."""
+    stream = getattr(stream, "knaif_real", stream)
     try:
         fd = stream.fileno()
     except (AttributeError, OSError, ValueError):
         return False
+    return _fd_is_terminal(fd)
+
+
+def _fd_is_terminal(fd: int) -> bool:
+    """Whether file descriptor *fd* is a terminal (see `_is_terminal`)."""
     if sys.platform != "win32":
         return os.isatty(fd)
     try:
         import ctypes
         import msvcrt
+        from ctypes import wintypes
 
-        handle = msvcrt.get_osfhandle(fd)
-        mode = ctypes.c_uint32()
-        return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetConsoleMode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        kernel32.GetConsoleMode.restype = wintypes.BOOL
+        handle = wintypes.HANDLE(msvcrt.get_osfhandle(fd))
+        if kernel32.GetConsoleMode(handle, ctypes.byref(wintypes.DWORD())):
+            return True
+        kernel32.GetFileType.argtypes = [wintypes.HANDLE]
+        kernel32.GetFileType.restype = wintypes.DWORD
+        if kernel32.GetFileType(handle) != 3:  # FILE_TYPE_PIPE
+            return False
+
+        class FileNameInfo(ctypes.Structure):
+            _fields_ = [("length", wintypes.DWORD), ("name", wintypes.WCHAR * 260)]
+
+        info = FileNameInfo()
+        kernel32.GetFileInformationByHandleEx.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+        ]
+        kernel32.GetFileInformationByHandleEx.restype = wintypes.BOOL
+        if not kernel32.GetFileInformationByHandleEx(
+            handle, 2, ctypes.byref(info), ctypes.sizeof(info)  # 2: FileNameInfo
+        ):
+            return False
+        return _msys_pty_name(info.name[: info.length // 2])
     except (OSError, AttributeError, ValueError):
         return False
 
@@ -83,14 +124,17 @@ def choose_style() -> ui.Style | None:
 
 
 class QuietPlanning:
-    """While the model loads and plans, in the tree: a ``⠋ Planning… 1.234 s`` line on a private
-    copy of stderr, and the process's stderr (fd 2) pointed at the null device, so llama.cpp
-    and the GPU libraries cannot write over the tree (native ``Spinner`` + ``StderrGuard``).
-    Off (a no-op) when *active* is false: the plain view, ``--verbose``, a debug dump."""
+    """While the model loads and plans: the process's stderr (fd 2) pointed at the null device,
+    so llama.cpp and the GPU libraries print nothing, in either view (native turns their log
+    off), and in the tree a ``⠋ Planning… 1.234 s`` line on a private copy of stderr (native
+    ``Spinner`` + ``StderrGuard``). Off (a no-op) when *active* is false: ``--verbose``, a debug
+    dump."""
 
     def __init__(self, style: ui.Style | None, *, active: bool) -> None:
         self.style = style
-        self.active = active and style is not None
+        # Quiet in the plain view too, without the spinner: native turns llama.cpp's log off in
+        # every view (`send_logs_to_tracing`), and the plain view let `llama_context: …` through.
+        self.active = active
         self._saved: int | None = None
         self._stop = False
         self._thread: Any = None
@@ -110,7 +154,8 @@ class QuietPlanning:
             self._saved = None
             return self
         style, out = self.style, self._saved
-        assert style is not None
+        if style is None:
+            return self
 
         def spin() -> None:
             started, frame = time.perf_counter(), 0
@@ -144,18 +189,20 @@ class QuietPlanning:
 
 def shown(path: str, base: Path) -> str:
     """A path as native prints it: a run scratch path is ``<work>/…``, one under *base* (the
-    working folder) relative to it, any other as given. Never the user's home through an
-    absolute path."""
+    working folder) relative to it, any other as given with ``/`` (a known folder's
+    output). Never the user's home through an absolute path."""
     text = display(path)
     if text.startswith("<work>"):
         return text
     p = Path(path)
     if not p.is_absolute():
-        return path
+        # `/`-separated, as native prints it: a path Python built (`out\\silent.mp4` on Windows)
+        # read with two separators.
+        return p.as_posix()
     try:
-        return str(p.resolve().relative_to(base.resolve()))
+        return p.resolve().relative_to(base.resolve()).as_posix()
     except ValueError:
-        return path
+        return p.as_posix()
 
 
 def shown_argv(argv: Sequence[str], base: Path) -> str:
@@ -287,6 +334,9 @@ class RunView:
         self.downloads: set[str] = set()
         #: ``run --stdout``: a result's text goes to stdout alone, so the view does not repeat it.
         self.text_to_stdout = False
+        #: A batch's failed count and size for the closing line (`` · 1 failed · 7.6 MB``): the
+        #: tree says them there, not on a summary line of their own (owner, 2026-10-25).
+        self.close_extra = ""
 
     # the clock: wall time, waits for the user left out
     def total(self) -> float:
@@ -400,6 +450,13 @@ class RunView:
             self._out(display(message), err=True)
         return 0
 
+    def exists(self, path: str) -> None:
+        """``⚠ <file> already exists`` under the step that would replace it, before the question
+        (the tree only, as native)."""
+        if self.style is not None:
+            warn = self.style.paint(ui.Tone.WARN, f"⚠ {path} already exists")
+            self._out(ui.render_detail(self.style, warn))
+
     def control(self, step: Mapping[str, Any]) -> None:
         """A question, a refusal or nothing to do: the run's last line."""
         kind, message = _control(step)
@@ -426,7 +483,11 @@ class RunView:
         if self.style is None:
             return
         if self._header and not self._closed:
-            summary = "dry run, nothing executed" if dry_run else ui.files_written(self._written)
+            summary = (
+                "dry run, nothing executed"
+                if dry_run
+                else ui.files_written(self._written) + self.close_extra
+            )
             if self._declined is not None:
                 step, steps = self._declined
                 last = ui.render_declined_close(self.style, step, steps, summary, self.total())

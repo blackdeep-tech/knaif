@@ -23,10 +23,52 @@ def test_planning_keeps_llama_off_the_tree_and_still_spins(capfd) -> None:
     assert err.endswith("after\n"), "fd 2 is restored"
 
 
-def test_an_inactive_window_changes_nothing(capfd) -> None:
+def test_planning_keeps_llama_quiet_in_the_plain_view_too(capfd) -> None:
+    """Native turns llama.cpp's log off in every view; the plain view let `llama_context: …`
+    through (2026-10-24). Quiet, and no spinner: the plain view draws nothing."""
     with QuietPlanning(None, active=True):
+        os.write(2, b"llama_context: noise\n")
+        time.sleep(0.15)
+    os.write(2, b"after\n")
+    assert capfd.readouterr().err == "after\n"
+
+
+def test_an_inactive_window_changes_nothing(capfd) -> None:
+    # `--verbose` and the debug dumps keep llama.cpp's lines.
+    with QuietPlanning(None, active=False):
         os.write(2, b"seen\n")
     assert capfd.readouterr().err == "seen\n"
+
+
+def test_the_view_sees_the_terminal_behind_the_cli_stderr_guard(monkeypatch) -> None:
+    """`knaif-cli`'s `main()` wraps a console stderr so click skips its Windows console writer;
+    the wrapper has no fileno, so the CLI printed the plain view in every terminal where native
+    draws the tree (owner, 2026-10-24, probed in a real Git Bash window). The
+    terminal check looks through the wrapper to the stream behind it."""
+    from knaif import app, run_view
+
+    class Console:
+        def fileno(self) -> int:
+            return 2
+
+        def write(self, s: str) -> int:
+            return len(s)
+
+    monkeypatch.setattr(run_view, "_fd_is_terminal", lambda fd: fd == 2)
+    guarded = app._console_safe_stderr(Console())
+    assert run_view._is_terminal(guarded)
+
+
+def test_an_msys_pty_is_a_terminal() -> None:
+    """Git Bash's terminal is an MSYS pty, a named pipe, not a console: native (Rust's
+    `IsTerminal`) reads it as a terminal by its name, so Python must too, or it prints the plain
+    view where native draws the tree (2026-10-24)."""
+    from knaif.run_view import _msys_pty_name
+
+    assert _msys_pty_name("\\msys-dd50a72ab4668b33-pty0-to-master")
+    assert _msys_pty_name("\\Device\\NamedPipe\\cygwin-1888ae32e00d56aa-pty1-from-master")
+    assert not _msys_pty_name("\\msys-dd50a72ab4668b33-pipe-0x1")
+    assert not _msys_pty_name("\\my-pty-notes")
 
 
 def test_the_view_follows_knaif_view(monkeypatch) -> None:
@@ -44,3 +86,17 @@ def test_a_plan_row_names_the_files_a_glob_finds(tmp_path: Path) -> None:
     assert step_detail({"inputs": ["*.mp4", "*.mov"]}, tmp_path, kinds) == "beach.mov (+1 more)"
     assert step_detail({"inputs": ["*.avi"]}, tmp_path, kinds) == "*.avi"
     assert step_detail({"input": "a.pdf", "output": "b.pdf"}, tmp_path, kinds) == "a.pdf → b.pdf"
+
+
+def test_a_path_outside_the_working_folder_is_printed_with_slashes(tmp_path: Path) -> None:
+    """(2026-10-24): a known folder's output (`~/Desktop/clip.mkv`)
+    printed as `C:\\…\\clip.mkv` on Windows, and its command as `"C:\\…"`; native prints
+    `C:/…` in both."""
+    from knaif.run_view import shown, shown_argv
+
+    work = tmp_path / "work"
+    work.mkdir()
+    out = tmp_path / "known" / "Desktop" / "clip.mkv"
+    assert shown(str(out), work) == out.as_posix()
+    argv = ["ffmpeg", "-i", "clip.mp4", str(out)]
+    assert shown_argv(argv, work) == f"ffmpeg -i clip.mp4 {out.as_posix()}"

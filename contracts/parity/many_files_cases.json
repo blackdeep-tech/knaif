@@ -1,5 +1,5 @@
 {
-  "_comment": "(owner, 2026-10-20): whether a request asks for many files, which decides if the per-file batch rule and its examples (`when: many` in prompt.yaml) join its prompt. The clarify gate's own test: a batch word, a plural file word or a glob in the request (its word lists are pinned by nl_clarify_gate_cases.json). What names a place is left out before testing: a URL (its host can read `files.`), and, when the request names a file (a URL names one too), a known folder after in/into/to/on/onto/from, which is then where that file goes (`put clip.mov in my Downloads folder`, `to Documents`); with no file named, the folder may be the batch (`everything in my Videos folder`). A file is named by a name with an extension holding a letter (`clip.mp4`, `x.3gp`); a codec or a number (`H.264`, `1.25`) names none (2026-10-22). A request that names a file is about that file: a batch word alone (`every page of sample.pdf`, `at all`, `every time`) does not make it ask for many; a glob or a plural file word still does. Python `knaif.nl_clarify_gate.asks_for_many_files`, Rust `knaif_core::nl_clarify_gate::asks_for_many_files`.",
+  "_comment": "Whether a request asks for many files (owner, 2026-10-20), which decides if the per-file batch rule and its examples (`when: many` in prompt.yaml) join its prompt. The clarify gate's own test: a batch word, a plural file word or a glob in the request (its word lists are pinned by nl_clarify_gate_cases.json). What names a place is left out before testing: a URL (its host can read `files.`), and, when the request names a file (a URL names one too), a known folder after in/into/to/on/onto/from, which is then where that file goes (`put clip.mov in my Downloads folder`, `to Documents`); with no file named, the folder may be the batch (`everything in my Videos folder`). A file is named by a name with an extension holding a letter (`clip.mp4`, `x.3gp`); a codec or a number (`H.264`, `1.25`) names none (2026-10-22). A name the request gives an output (\"call it preview.gif\", \"save them as out.mp4\", \"as audio.mp3\", \"into c.mp4\", \"als\", \"como\", \"comme\", \"като\", \"保存为\") is not a file it is about (2026-10-23). A request that names a file is about that file: a batch word alone (`every page of sample.pdf`, `at all`, `every time`) does not make it ask for many; a glob or a plural file word still does. Python `knaif.nl_clarify_gate.asks_for_many_files`, Rust `knaif_core::nl_clarify_gate::asks_for_many_files`.",
   "cases": [
     {
       "utterance": "convert all the .mov files here to mp4",
@@ -119,6 +119,34 @@
     },
     {
       "utterance": "speed up clip.mp4 by 1.25",
+      "many": false
+    },
+    {
+      "utterance": "make a gif of every video and call it preview.gif",
+      "many": true
+    },
+    {
+      "utterance": "extract the audio from all videos as audio.mp3",
+      "many": true
+    },
+    {
+      "utterance": "convert every video to mp4 and save them as out.mp4",
+      "many": true
+    },
+    {
+      "utterance": "konvertiere alle Videos in mp4 und speichere sie als out.mp4",
+      "many": true
+    },
+    {
+      "utterance": "把所有视频转换成gif并保存为preview.gif",
+      "many": true
+    },
+    {
+      "utterance": "convert clip.mov to mp4 and call it holiday.mp4",
+      "many": false
+    },
+    {
+      "utterance": "merge a.mp4 and b.mp4 into c.mp4",
       "many": false
     }
   ]

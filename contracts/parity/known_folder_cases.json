@@ -64,10 +64,31 @@
       "expected_clarify": "There is a Downloads folder at <work>/Downloads, and your Downloads folder is <known>/Downloads. Which one should I save into?"
     },
     {
-      "name": "a_same_named_folder_next_to_the_input_asks",
+      "name": "a_same_named_folder_next_to_the_input_does_not_ask",
+      "_comment": "A relative output is under the working folder, never the input's, so only a same-named folder there is a question (owner, 2026-10-24).",
       "folders": ["media/Desktop"],
       "plan": [{"tool": "convert_video", "args": {"inputs": ["media/clip.mov"], "output": "Desktop"}}],
-      "expected_clarify": "There is a Desktop folder at <work>/media/Desktop, and your Desktop folder is <known>/Desktop. Which one should I save into?"
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["media/clip.mov"], "output": "<known>/Desktop"}}]
+    },
+    {
+      "name": "the_question_names_the_folder_as_the_plan_spells_it",
+      "_comment": "The plan's spelling first, then the display name (2026-10-24). Python looped over the two as a set, so on a case-insensitive disk, where both are folders, the question named either.",
+      "folders": ["videos"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "videos/small"}}],
+      "expected_clarify": "There is a videos folder at <work>/videos, and your Videos folder is <known>/Videos. Which one should I save into?"
+    },
+    {
+      "name": "a_local_folder_that_holds_the_inputs_is_the_one_meant",
+      "_comment": "Owner, 2026-10-25:'convert the mov files in videos to mp4 into a folder called small' plans videos/*.mov -> videos/small. The inputs are in the local videos folder, so that is the folder meant: the output stays there, and nothing asks.",
+      "folders": ["videos"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["videos/*.mov"], "output": "videos/small"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["videos/*.mov"], "output": "videos/small"}}]
+    },
+    {
+      "name": "an_input_written_with_dot_slash_counts_too",
+      "folders": ["Music"],
+      "plan": [{"tool": "extract_audio", "args": {"input": "./Music/live.mp4", "output": "Music/live.mp3"}}],
+      "expected_plan": [{"tool": "extract_audio", "args": {"input": "./Music/live.mp4", "output": "Music/live.mp3"}}]
     },
     {
       "name": "an_explicit_home_path_does_not_ask",

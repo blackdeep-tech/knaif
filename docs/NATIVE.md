@@ -347,11 +347,21 @@ was going to work.
 `run` is usable without `--model`: when none is given, the manifest's `recommendations.cli`
 (else `default`) model is selected automatically. Precedence, in order:
 
-1. **`--model <name|path>`** — authoritative. Honored even in a build without the llama.cpp
-   backend, where it raises "rebuild with `--features llama`" rather than silently degrading.
-2. **`$KNAIF_LLM_BACKEND=mock`** — explicit opt-out; the mock wins over auto-select (offline/eval).
+1. **`$KNAIF_LLM_BACKEND=mock`** — explicit opt-out; the mock runs even when `--model` is given,
+   as in the Python CLI: a canned plan (`KNAIF_LLM_MOCK_RESPONSE`) is a test of everything after
+   planning, and must not be replaced by a real model's plan.
+2. **`--model <name|path>`** — otherwise authoritative. Honored even in a build without the
+   llama.cpp backend, where it raises "rebuild with `--features llama`" rather than silently
+   degrading.
 3. **Recommended model already installed** → used silently, no prompt.
 4. **Otherwise** → the download-consent flow below; declining falls back to the mock.
+
+Whichever manifest model is chosen, a one-line note follows when it was not trained for the
+prompt this knaif serves: its `trained_for` (manifest) against `generation` in
+`contracts/runtime/prompt_generation.yaml`, naming the model that was. An older model is noted
+only once the manifest has a model for this generation (until then it runs quietly); a model
+trained for a newer prompt is always noted. A GGUF path, or a missing file, prints nothing: the
+note never stops a run. The Python CLI prints the same line from `models.yaml`.
 
 **Consent / download.** `run` asks `Download recommended model <name> (~2.5 GB)? [y/N]` (size read
 from the manifest's `size_bytes`) and pulls it with a progress bar on `y`. `--allow model` (or

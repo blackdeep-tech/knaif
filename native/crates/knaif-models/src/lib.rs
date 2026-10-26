@@ -20,6 +20,8 @@ pub use backend_store::{
     backend_dir_state, BackendDirState, BackendEntry, BackendProgress, BackendState, BackendStore,
 };
 pub use fetcher::HttpFetcher;
-pub use manifest::{Manifest, ModelSpec, Recommendations};
+pub use manifest::{
+    prompt_generation_from_yaml, trained_for_note, Manifest, ModelSpec, Recommendations,
+};
 pub use nvidia::{cuda_offer, probe_nvidia, CudaOffer, NvidiaGpu};
 pub use store::{backends_dir, store_dir, Fetcher, ModelEntry, ModelStore, VerifyOutcome};

@@ -2,7 +2,7 @@
 
 `KNAIF_LLM_BACKEND=mock` picks the mock and `KNAIF_LLM_MOCK_RESPONSE` is returned verbatim as
 the model's output; everything after inference runs for real. One harness then drives both CLIs
-on the same plans (`contracts/parity/cli_output_cases.json`.).
+on the same plans (`contracts/parity/cli_output_cases.json`).
 """
 
 from __future__ import annotations
@@ -29,5 +29,16 @@ def test_the_cli_picks_the_mock_from_the_environment(monkeypatch, tmp_path) -> N
     result = CliRunner().invoke(
         cli, ["run", "ffmpeg", "--dry-run", "strip audio from clip.mp4"], env=env
     )
+    assert result.exit_code == 0, result.output
+    assert "ffmpeg -y -i clip.mp4 -an -c:v copy s.mp4" in result.output
+
+
+def test_the_mock_wins_over_an_explicit_model(monkeypatch, tmp_path) -> None:
+    """(owner, 2026-10-25): a canned run beats `--model` on both CLIs; native ran the real
+    model until then. A model that does not exist proves no model was looked up."""
+    monkeypatch.chdir(tmp_path)
+    env = {"KNAIF_LLM_BACKEND": "mock", "KNAIF_LLM_MOCK_RESPONSE": json.dumps(PLAN)}
+    argv = ["run", "ffmpeg", "--dry-run", "--model", "no-such-model", "strip audio from clip.mp4"]
+    result = CliRunner().invoke(cli, argv, env=env)
     assert result.exit_code == 0, result.output
     assert "ffmpeg -y -i clip.mp4 -an -c:v copy s.mp4" in result.output

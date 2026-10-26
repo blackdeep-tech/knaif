@@ -726,3 +726,26 @@ def test_the_cache_is_kept_by_default():
     orch.llm = mock_llm
     orch.infer("sys", "usr")
     mock_llm.reset.assert_not_called()
+
+
+def test_llama_log_is_dropped_as_native_drops_it(capfd) -> None:
+    """(owner, 2026-10-24): llama-cpp-python prints llama.cpp's log from a
+    Python callback, which printed `llama_context: ...` in a terminal and, called again while
+    Python shut down, "Exception ignored ... llama_log_callback". Native turns the log off
+    (`send_logs_to_tracing`, logs disabled); Python installs a callback that drops it."""
+    import ctypes
+
+    from knaif import orchestrator
+
+    installed = []
+
+    class FakeLlamaCpp:
+        llama_log_callback = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p)
+
+        @staticmethod
+        def llama_log_set(callback, user_data) -> None:
+            installed.append(callback)
+
+    orchestrator._quiet_llama_log(FakeLlamaCpp)
+    installed[-1](2, b"llama_context: n_ctx_seq (8192) < n_ctx_train\n", None)
+    assert capfd.readouterr().err == ""

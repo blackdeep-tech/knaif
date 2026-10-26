@@ -11,6 +11,11 @@ the Python package.
 - **`generation.yaml`** — the generation settings that decide what the model emits
   (`max_tokens`, `n_ctx`, `temperature`, `json_mode`, `thinking_enabled`) for the promoted
   models. Enforced by comparison, not by copying — see below.
+- **`prompt_generation.yaml`** — which served prompt a model was trained for: a `generation`
+  number, bumped when the prompt the model reads changes, and the `fingerprint` of everything
+  it can be served. `python/core/tests/test_prompt_generation.py` fails when the served prompt
+  no longer matches; models record `trained_for`; both CLIs say when a model predates the
+  prompt. **Synced** like `core_tools.yaml` (a copy ships in the wheel).
 
 ## Packaging note
 

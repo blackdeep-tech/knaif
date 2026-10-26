@@ -58,9 +58,27 @@ pub fn extract_pdf_text(doc: &Document, pages: &[i64]) -> anyhow::Result<Vec<Pag
     let mut out = Vec::with_capacity(pages.len());
     for &p in pages {
         let text = doc.extract_text(&[p as u32]).unwrap_or_default();
+        // Without the line breaks at the page's edges, so a match span counts from the page's
+        // first character on both runtimes (owner, 2026-10-24).
+        let text = text.trim_matches(['\r', '\n']).to_string();
         out.push(PageText { page: p, text });
     }
     Ok(out)
+}
+
+/// A document's text as one string: each page without the line breaks at its edges, pages one
+/// blank line apart, one `\n` at the end (owner, 2026-10-24). Python `_document_text`.
+pub fn document_text(records: &[PageText]) -> String {
+    let pages: Vec<&str> = records
+        .iter()
+        .map(|r| r.text.trim_matches(['\r', '\n']))
+        .collect();
+    let text = pages.join("\n\n");
+    if text.is_empty() {
+        text
+    } else {
+        text + "\n"
+    }
 }
 
 /// Extract text records from a document by path. PDF pages honor `pages` (a page spec); plain-text
@@ -261,6 +279,32 @@ mod tests {
         );
         assert!(records[1].text.contains("Beta"));
         assert!(records[2].text.contains("Gamma"));
+    }
+
+    #[test]
+    fn a_pdf_page_has_no_line_breaks_at_its_edges() {
+        // Owner, 2026-10-24: lopdf put a line break before each page's text, so every
+        // span was one higher than Python's.
+        let path = write_temp(
+            "edges.pdf",
+            &make_text_pdf(&["Alpha page one", "Beta page two"]),
+        );
+        let records = extract_text(&path, None).unwrap();
+        let texts: Vec<&str> = records.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(texts, ["Alpha page one", "Beta page two"]);
+        let hits = find(&records, "Beta", false, true).unwrap();
+        assert_eq!((hits[0].page, hits[0].span), (2, (0, 4)));
+    }
+
+    #[test]
+    fn document_text_puts_pages_one_blank_line_apart() {
+        let page = |page: i64, text: &str| PageText {
+            page,
+            text: text.into(),
+        };
+        let records = [page(1, "\nAlpha\n"), page(2, "Beta\r\n"), page(3, "Gamma")];
+        assert_eq!(document_text(&records), "Alpha\n\nBeta\n\nGamma\n");
+        assert_eq!(document_text(&[]), "");
     }
 
     #[test]

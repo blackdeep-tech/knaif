@@ -1,4 +1,4 @@
-//! Golden parity: run `contracts/parity/planner_cases.json`. through the Rust deterministic
+//! Golden parity: run `contracts/parity/planner_cases.json` through the Rust deterministic
 //! pipeline (parse → normalize → apply_defaults → validate) and assert the recorded
 //! valid/invalid outcome + error substring. The Python side runs the identical fixtures
 //! (python/core/tests/test_planner_parity.py); both must agree.
@@ -417,10 +417,22 @@ fn nl_clarify_gate_parity_cases() {
         let registry =
             load_registry_str(reg_yaml).unwrap_or_else(|e| panic!("{name}: registry {e}"));
 
+        // The plain-word rule needs the folder's listing; absent means an empty folder.
+        let known_files: std::collections::HashSet<String> = case
+            .get("sandbox_files")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(|s| s.to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
         let got = knaif_core::nl_clarify_gate(
             case["plan"].clone(),
             case["utterance"].as_str().unwrap(),
             &registry,
+            &known_files,
         );
         assert_eq!(
             got, case["expected_payload"],

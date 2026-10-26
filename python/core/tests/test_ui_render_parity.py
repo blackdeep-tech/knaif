@@ -1,6 +1,6 @@
 """One display for both CLIs (owner, 2026-10-23): the terminal view's renderers.
 
-`contracts/parity/ui_render_cases.json`. pins them byte for byte; native `apps/cli/src/ui.rs` is
+`contracts/parity/ui_render_cases.json` pins them byte for byte; native `apps/cli/src/ui.rs` is
 the reference (its `ui_render_cases` test records the cases), `knaif.ui` follows.
 """
 

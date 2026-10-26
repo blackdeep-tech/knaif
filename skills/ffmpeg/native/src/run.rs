@@ -343,6 +343,13 @@ fn recipes(
         ));
         recipes.push(recipe);
     }
+    if let Some(note) =
+        copies_of_themselves(resolved.options.mode.as_deref(), &mut recipes, &mut outs)?
+    {
+        if let Ok(mut all) = NOTES.lock() {
+            all.push(note);
+        }
+    }
     // Skipping every input is not success with zero results: an empty command list executes
     // cleanly and reports done, telling the user the work happened.
     if recipes.is_empty() && !skipped.is_empty() {
@@ -462,6 +469,77 @@ fn probe_reason(error: &str, path: &Path) -> String {
         }
     }
     error.to_string()
+}
+
+/// What the last expansions skipped and say once (a batch convert's files already in that
+/// format), for the caller to print as a note.
+static NOTES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Take the notes the last expansions recorded (see [`NOTES`]).
+pub fn take_notes() -> Vec<String> {
+    NOTES
+        .lock()
+        .map(|mut all| std::mem::take(&mut *all))
+        .unwrap_or_default()
+}
+
+/// Drop the files of a batch convert that would only be copied, as they are, beside
+/// themselves: an mp4 among "every video to mp4" became `concert_1.mp4` (owner, 2026-10-25).
+/// Into another folder the copy is work, and one file the user names keeps its numbered
+/// copy. The note to print, or an error when every file is one. Python
+/// `_without_copies_of_themselves`.
+fn copies_of_themselves(
+    mode: Option<&str>,
+    recipes: &mut Vec<crate::engine::Recipe>,
+    outs: &mut Vec<(std::path::PathBuf, std::path::PathBuf, bool)>,
+) -> anyhow::Result<Option<String>> {
+    if mode != Some("convert") || recipes.len() < 2 {
+        return Ok(None);
+    }
+    let folder = |p: &Path| {
+        let parent = p.parent().unwrap_or(Path::new(""));
+        let abs = std::path::absolute(parent).unwrap_or_else(|_| parent.to_path_buf());
+        let text = abs.to_string_lossy().into_owned();
+        // A Windows path compares without case, as the folder does.
+        if cfg!(windows) {
+            text.to_lowercase()
+        } else {
+            text
+        }
+    };
+    let ext = |p: &Path| {
+        p.extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default()
+    };
+    let target = ext(Path::new(&recipes[0].output));
+    let mut skipped: Vec<String> = Vec::new();
+    let mut kept_recipes = Vec::with_capacity(recipes.len());
+    let mut kept_outs = Vec::with_capacity(outs.len());
+    for (recipe, out) in recipes.drain(..).zip(outs.drain(..)) {
+        let (src, dst) = (Path::new(&recipe.input), Path::new(&recipe.output));
+        if recipe.remux && ext(src) == ext(dst) && folder(src) == folder(dst) {
+            skipped.push(
+                src.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| recipe.input.clone()),
+            );
+        } else {
+            kept_recipes.push(recipe);
+            kept_outs.push(out);
+        }
+    }
+    *recipes = kept_recipes;
+    *outs = kept_outs;
+    if skipped.is_empty() {
+        return Ok(None);
+    }
+    let names = skipped.join(", ");
+    if recipes.is_empty() {
+        let verb = if skipped.len() == 1 { "is" } else { "are" };
+        anyhow::bail!("Nothing to convert: {names} {verb} already {target}.");
+    }
+    Ok(Some(format!("note: skipped {names} (already {target})")))
 }
 
 /// Take the failed files the last expansions recorded (see [`FILE_FAILURES`]).
@@ -775,7 +853,6 @@ fn expand_input_globs(
         // `videos/a.mp4` for `videos/*.mp4` — rather than the resolved directory joined to the
         // name. The render loop resolves every input against the sandbox anyway, so re-basing
         // here would resolve twice and leave a synthesized `.\` in the rendered command.
-        let as_written = as_path.parent().unwrap_or(Path::new(""));
         let mut matched: Vec<(String, String)> = entries
             .flatten()
             .filter(|e| e.path().is_file())
@@ -803,7 +880,12 @@ fn expand_input_globs(
             })
             .map(|e| {
                 let name = e.file_name().to_string_lossy().into_owned();
-                let shown = as_written.join(&name).to_string_lossy().into_owned();
+                // The pattern's own separator: `Path::join` printed `"videos\\a.mp4"` on Windows
+                // for `videos/*.mp4`.
+                let shown = match raw.rfind(['/', '\\']) {
+                    Some(i) => format!("{}{name}", &raw[..=i]),
+                    None => name.clone(),
+                };
                 (name, shown)
             })
             .collect();

@@ -107,9 +107,9 @@ _SIZE_RE = re.compile(r"^\d+(?:p|k|x\d+)$")
 
 
 def _names_folder(utterance: str, folder: str) -> bool:
-    """Whether *utterance* names *folder*: with a slash, after a place word, or next to the
-    word folder; a nested folder only by its whole path, and a resolution never but slashed
-    (contracts/parity/invented_folder_cases.json)."""
+    """Whether *utterance* names *folder*: with a slash, after a place word, next to the word
+    folder, or after "folder called/named"; a nested folder only by its whole path, and a
+    resolution never but slashed (contracts/parity/invented_folder_cases.json)."""
     low = utterance.lower().replace("\\", "/")
     name = folder.lower()
     if f"{name}/" in low:
@@ -120,6 +120,7 @@ def _names_folder(utterance: str, folder: str) -> bool:
     return bool(
         re.search(rf"\b(?:in|into|to|from|on|onto|inside)\s+(?:my\s+|the\s+)?{n}\b", low)
         or re.search(rf"\b{n}\s+folder\b|\bfolder\s+{n}\b", low)
+        or re.search(rf"\bfolder\s+(?:called|named)\s+[\"']?{n}\b", low)
     )
 
 
@@ -706,3 +707,9 @@ class BatchReport:
 
     def summary(self) -> str:
         return summary_line(self.done, self.failed, self.seconds, self.size_bytes)
+
+    def close_extra(self) -> str:
+        """What the terminal view's closing line adds for a batch: `` · 2 failed · 35.2 MB``
+        (no failed part when nothing failed; owner, 2026-10-25). Native ``Report::close_extra``."""
+        failed = f" · {self.failed} failed" if self.failed else ""
+        return f"{failed} · {format_size(self.size_bytes)}"

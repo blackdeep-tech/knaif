@@ -615,7 +615,7 @@ def _is_alert(step: Any) -> bool:
 def split_alert(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     """Return *payload* without its ``alert_when_done`` steps, and whether the run alerts.
 
-    The alert is a run option, not a step (``contracts/parity/alert_cases.json`.`):
+    The alert is a run option, not a step (``contracts/parity/alert_cases.json``):
     - it may stand anywhere in the plan, and any args the model gives it are ignored;
     - two alerts are one;
     - a plan that only clarifies or rejects gets no alert: nothing ran, and the user is reading

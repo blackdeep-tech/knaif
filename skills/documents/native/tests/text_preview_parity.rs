@@ -1,4 +1,4 @@
-//! Golden parity: the preview of a saved text, over `contracts/parity/text_preview_cases.json`.
+//! Golden parity: the preview of a saved text, over `contracts/parity/text_preview_cases.json`
 //! (owner, 2026-10-23). Python: `skills/documents/python/tests/test_text_preview_parity.py`.
 
 use std::path::Path;

@@ -1,51 +1,140 @@
 {
-  "_comment": "Prompt rules (`rules:` in a skill's prompt.yaml). A rule with `tools` joins the system header when one of its tools is in this prompt (`present`: the prompt's tools, internal ones left out); a `when: many` rule joins when the request asks for many files (knaif.nl_clarify_gate.asks_for_many_files). Rules join in their order, each after the header's last line: the header's trailing newlines are dropped, then a newline, then the rule's text as written. No rule applies: the header is unchanged. Python `knaif.prompt.apply_prompt_rules`, Rust `knaif_core::prompt::apply_prompt_rules`.",
+  "_comment": "Prompt rules (`rules:` in a skill's prompt.yaml). A rule with `tools` joins the system header when one of its tools is in this prompt (`present`: the prompt's tools, internal ones left out); a `when: many` rule joins when the request asks for many files (knaif.nl_clarify_gate.asks_for_many_files). Rules join in their order, each after the header's last line: the header's trailing newlines are dropped, then a newline, then the rule's text as written. No rule applies: the header is unchanged. Python `knaif.prompt.apply_prompt_rules`, Rust `knaif_core::prompt::apply_prompt_rules`. A rule with `words` (owner, 2026-10-23) joins only when the request also holds one of them: a whole word, any case, or for CJK a substring; with `tools`, both must hold.",
   "rules": [
-    {"tools": ["split_video", "extract_frames"], "text": "- ONE FILE INTO MANY: split_video.\n"},
-    {"when": "many", "text": "- MANY FILES: write the steps for one file.\n"}
+    {
+      "tools": [
+        "split_video",
+        "extract_frames"
+      ],
+      "text": "- ONE FILE INTO MANY: split_video.\n"
+    },
+    {
+      "when": "many",
+      "text": "- MANY FILES: write the steps for one file.\n"
+    },
+    {
+      "tools": [
+        "trim_video"
+      ],
+      "words": [
+        "last",
+        "end",
+        "letzten",
+        "последните",
+        "最后"
+      ],
+      "text": "- THE LAST N SECONDS: a negative start counts back from the end.\n"
+    }
   ],
   "cases": [
     {
       "name": "no rule applies",
       "header": "You plan.\n",
-      "present": ["convert_video"],
+      "present": [
+        "convert_video"
+      ],
       "utterance": "convert clip.mov to mp4",
       "expected": "You plan.\n"
     },
     {
       "name": "a rule joins with one of its tools",
       "header": "You plan.\n",
-      "present": ["convert_video", "extract_frames"],
+      "present": [
+        "convert_video",
+        "extract_frames"
+      ],
       "utterance": "save a still every 5 seconds from clip.mp4",
       "expected": "You plan.\n- ONE FILE INTO MANY: split_video.\n"
     },
     {
       "name": "a when-many rule joins a request for many files",
       "header": "You plan.\n",
-      "present": ["convert_video"],
+      "present": [
+        "convert_video"
+      ],
       "utterance": "convert all the .mov files here to mp4",
       "expected": "You plan.\n- MANY FILES: write the steps for one file.\n"
     },
     {
       "name": "both join in their order",
       "header": "You plan.\n\n\n",
-      "present": ["split_video"],
+      "present": [
+        "split_video"
+      ],
       "utterance": "split every video here into 10-second parts",
       "expected": "You plan.\n- ONE FILE INTO MANY: split_video.\n- MANY FILES: write the steps for one file.\n"
     },
     {
       "name": "a request naming one file with a batch word alone is not many",
       "header": "You plan.",
-      "present": ["extract_text"],
+      "present": [
+        "extract_text"
+      ],
       "utterance": "extract the text of every page of sample.pdf",
       "expected": "You plan."
     },
     {
       "name": "a header without a trailing newline",
       "header": "You plan.",
-      "present": ["convert_video"],
+      "present": [
+        "convert_video"
+      ],
       "utterance": "convert every mov here to mp4",
       "expected": "You plan.\n- MANY FILES: write the steps for one file.\n"
+    },
+    {
+      "name": "a words rule joins when the request has one of its words",
+      "header": "You plan.\n",
+      "present": [
+        "trim_video"
+      ],
+      "utterance": "take the last 2 seconds of clip.mp4",
+      "expected": "You plan.\n- THE LAST N SECONDS: a negative start counts back from the end.\n"
+    },
+    {
+      "name": "a words rule stays out without its words",
+      "header": "You plan.\n",
+      "present": [
+        "trim_video"
+      ],
+      "utterance": "trim clip.mp4 from 2 to 5 seconds",
+      "expected": "You plan.\n"
+    },
+    {
+      "name": "a words rule needs its tool in the prompt too",
+      "header": "You plan.\n",
+      "present": [
+        "convert_video"
+      ],
+      "utterance": "convert the last clip to mp4",
+      "expected": "You plan.\n"
+    },
+    {
+      "name": "a words rule matches whole words only",
+      "header": "You plan.\n",
+      "present": [
+        "trim_video"
+      ],
+      "utterance": "send the trimmed clip.mp4 from 2 to 5 seconds",
+      "expected": "You plan.\n"
+    },
+    {
+      "name": "a words rule in Bulgarian",
+      "header": "You plan.\n",
+      "present": [
+        "trim_video"
+      ],
+      "utterance": "изрежи последните 3 секунди от clip.mp4",
+      "expected": "You plan.\n- THE LAST N SECONDS: a negative start counts back from the end.\n"
+    },
+    {
+      "name": "a words rule in Chinese, without spaces",
+      "header": "You plan.\n",
+      "present": [
+        "trim_video"
+      ],
+      "utterance": "截取clip.mp4的最后3秒",
+      "expected": "You plan.\n- THE LAST N SECONDS: a negative start counts back from the end.\n"
     }
   ]
 }

@@ -1035,9 +1035,9 @@ def ffmpeg_rows() -> list[Row]:
             "prepare vlog.mp4 for YouTube instead?",
         ),
         (
+            # URL inputs: a link is fetched and worked on, so only the format is missing.
             "Download the video from https://example.com/clip.mp4 and convert it.",
-            "Downloading isn't supported - I work on files already on this machine. Which "
-            "local file should I convert?",
+            "I can fetch that link and convert it - to which format: mp4, mkv, webm or gif?",
         ),
         (
             "Send footage.mov to the server.",
@@ -1121,7 +1121,86 @@ def ffmpeg_rows() -> list[Row]:
         r.append((utt, P(step("reject", reason=reason)), ["reject", category]))
 
     r.extend(ffmpeg_rows_act_ask())
+    r.extend(ffmpeg_rows_named_output())
     return r
+
+
+def ffmpeg_rows_named_output() -> list[Row]:
+    """The output name the user gave is the output (2026-10-24).
+
+    "convert clip.mp4 to out.mkv" was planned as `clip.mkv` on both CLIs: the base rows taught a
+    user-given name twice. A model-quality fix, so base rows, not a feature file. Other files and
+    names than the reported case.
+    """
+    tag = ["named_output"]
+    rows: list[Row] = [
+        (
+            "Convert lecture.mp4 to talk.mkv.",
+            P(step("convert_video", inputs=["lecture.mp4"], container="mkv", output="talk.mkv")),
+            ["convert"],
+        ),
+        (
+            "convert footage.mov to edit.mp4",
+            P(step("convert_video", inputs=["footage.mov"], container="mp4", output="edit.mp4")),
+            ["convert"],
+        ),
+        (
+            "Convert stream.mkv into replay.webm.",
+            P(step("convert_video", inputs=["stream.mkv"], container="webm", output="replay.webm")),
+            ["convert"],
+        ),
+        (
+            "Make a gif of teaser.mp4 called loop.gif.",
+            P(step("convert_video", inputs=["teaser.mp4"], container="gif", output="loop.gif")),
+            ["convert"],
+        ),
+        (
+            "Compress raw.mov into small.mp4.",
+            P(step("compress_video", inputs=["raw.mov"], output="small.mp4")),
+            ["compress"],
+        ),
+        (
+            "Extract the audio of vlog.mp4 to voice.mp3.",
+            P(step("extract_audio", inputs=["vlog.mp4"], audio_format="mp3", output="voice.mp3")),
+            ["audio"],
+        ),
+        (
+            "Trim scene.mp4 to the first 5 seconds and save it as opening.mp4.",
+            P(
+                step(
+                    "trim_video",
+                    input="scene.mp4",
+                    start="00:00:00",
+                    end="00:00:05",
+                    output="opening.mp4",
+                )
+            ),
+            ["trim"],
+        ),
+        (
+            "Resize promo.mp4 to 720p as promo-small.mp4.",
+            P(step("resize_video", inputs=["promo.mp4"], height=720, output="promo-small.mp4")),
+            ["resize"],
+        ),
+        (
+            "Remove the sound from broll.mov and name it broll-mute.mov.",
+            P(step("strip_audio", inputs=["broll.mov"], output="broll-mute.mov")),
+            ["strip_audio"],
+        ),
+        (
+            "Konvertiere interview.mp4 in mkv und nenne die Datei gespraech.mkv.",
+            P(
+                step(
+                    "convert_video",
+                    inputs=["interview.mp4"],
+                    container="mkv",
+                    output="gespraech.mkv",
+                )
+            ),
+            ["convert", "de"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in rows]
 
 
 def ffmpeg_rows_act_ask() -> list[Row]:
@@ -2554,9 +2633,10 @@ def documents_rows() -> list[Row]:
             "a document operation I can help with instead?",
         ),
         (
+            # URL inputs: a link is fetched only to work on it, never just saved.
             "Download the pdf from https://example.com/doc.pdf.",
-            "Downloading isn't supported - I work on files already on this machine. Which "
-            "local document should I use?",
+            "Downloading a file on its own isn't supported - I fetch a link only to work on the "
+            "document. Should I extract its text, compress it or convert it?",
         ),
         (
             "Print invoice.pdf on the office printer.",
@@ -2755,12 +2835,1145 @@ def documents_rows() -> list[Row]:
     return r
 
 
+# ═════════════════════════ new features: one train file each ═════════════════════════
+# A new feature's rows live in skills/<skill>/data/train_<feature>.jsonl, beside its eval file,
+# and join train.jsonl only in the training run (build_dataset.py --extra-jsonl). Other files,
+# hosts and values than the feature's eval rows; every tool a row plans is retrieved for its
+# wording (test_train_feature_files.py).
+
+_FF_URL = "https://media.example.org"
+_FF_CDN = "https://cdn.example.net"
+
+
+def ffmpeg_rows_url() -> list[Row]:
+    """URL inputs: a link is a file to work on, fetched first."""
+    tag = ["url_input"]
+    a, b = _FF_URL, _FF_CDN
+    plans: list[Row] = [
+        (
+            f"Convert {a}/clips/sunset.mov to mp4.",
+            P(step("convert_video", inputs=[f"{a}/clips/sunset.mov"], container="mp4")),
+            ["convert"],
+        ),
+        (
+            f"turn {b}/v/launch.mkv into a webm",
+            P(step("convert_video", inputs=[f"{b}/v/launch.mkv"], container="webm")),
+            ["convert"],
+        ),
+        (
+            f"make a gif out of {a}/fun/cat.mp4",
+            P(step("convert_video", inputs=[f"{a}/fun/cat.mp4"], container="gif")),
+            ["convert"],
+        ),
+        (
+            f"Pull the audio out of {b}/talks/keynote.mp4 as wav.",
+            P(step("extract_audio", inputs=[f"{b}/talks/keynote.mp4"], audio_format="wav")),
+            ["audio"],
+        ),
+        (
+            f"I want an mp3 of the music in {a}/music/live.mp4",
+            P(step("extract_audio", inputs=[f"{a}/music/live.mp4"], audio_format="mp3")),
+            ["audio"],
+        ),
+        (
+            f"Compress {b}/raw/footage.mov.",
+            P(step("compress_video", inputs=[f"{b}/raw/footage.mov"])),
+            ["compress"],
+        ),
+        (
+            f"shrink the video at {a}/share/party.mp4 to a small file",
+            P(step("compress_video", inputs=[f"{a}/share/party.mp4"], quality="small_file")),
+            ["compress"],
+        ),
+        (
+            f"Resize {b}/promo/teaser.mp4 to 720p.",
+            P(step("resize_video", inputs=[f"{b}/promo/teaser.mp4"], height=720)),
+            ["resize"],
+        ),
+        (
+            f"Keep only the first 30 seconds of {a}/rec/meeting.mp4.",
+            P(step("trim_video", input=f"{a}/rec/meeting.mp4", start="00:00:00", end="00:00:30")),
+            ["trim"],
+        ),
+        (
+            f"cut {b}/game/round1.mp4 from 0:10 to 0:25",
+            P(step("trim_video", input=f"{b}/game/round1.mp4", start="00:00:10", end="00:00:25")),
+            ["trim"],
+        ),
+        (
+            f"Grab a thumbnail from {a}/vlog/day3.mp4 at 00:00:04.",
+            P(step("create_thumbnail", input=f"{a}/vlog/day3.mp4", at_time="00:00:04")),
+            ["thumbnail"],
+        ),
+        (
+            f"Remove the sound from {b}/broll/street.mov.",
+            P(step("strip_audio", inputs=[f"{b}/broll/street.mov"])),
+            ["strip_audio"],
+        ),
+        (
+            f"Speed up {a}/lapse/clouds.mp4 3x.",
+            P(step("adjust_speed", inputs=[f"{a}/lapse/clouds.mp4"], speed=3.0)),
+            ["speed"],
+        ),
+        (
+            f"Rotate {b}/phone/vertical.mp4 by 90 degrees.",
+            P(step("rotate_video", inputs=[f"{b}/phone/vertical.mp4"], angle=90)),
+            ["rotate"],
+        ),
+        (
+            f"Make {a}/edit/final.mp4 ready for YouTube.",
+            P(
+                step(
+                    "prepare_for_platform",
+                    inputs=[f"{a}/edit/final.mp4"],
+                    platform="youtube",
+                    preview=True,
+                )
+            ),
+            ["platform"],
+        ),
+        (
+            f"Play {b}/fx/splash.mp4 backwards.",
+            P(step("reverse_video", inputs=[f"{b}/fx/splash.mp4"])),
+            ["reverse"],
+        ),
+        (
+            f"Boost the volume of {a}/audio/quiet.mp4 by 4dB.",
+            P(step("adjust_volume", inputs=[f"{a}/audio/quiet.mp4"], level="4dB")),
+            ["volume"],
+        ),
+        (
+            f"Join intro.mp4 and {b}/parts/outro.mp4 into one video.",
+            P(step("concat_video", inputs=["intro.mp4", f"{b}/parts/outro.mp4"])),
+            ["concat", "mixed"],
+        ),
+        (
+            f"Convert {a}/a/one.mov and {a}/a/two.mov to mp4.",
+            P(step("convert_video", inputs=[f"{a}/a/one.mov", f"{a}/a/two.mov"], container="mp4")),
+            ["convert", "two_links"],
+        ),
+        (
+            f"Download the clip from {b}/files/match.mp4 and convert it to mkv.",
+            P(step("convert_video", inputs=[f"{b}/files/match.mp4"], container="mkv")),
+            ["convert", "download_then_work"],
+        ),
+        (
+            f"konvertiere {a}/clips/ski.mov in mp4",
+            P(step("convert_video", inputs=[f"{a}/clips/ski.mov"], container="mp4")),
+            ["convert", "de"],
+        ),
+        (
+            f"convierte {b}/v/boda.mov a mp4",
+            P(step("convert_video", inputs=[f"{b}/v/boda.mov"], container="mp4")),
+            ["convert", "es"],
+        ),
+        (
+            f"извлечи звука от {a}/talks/lecture.mp4 като mp3",
+            P(step("extract_audio", inputs=[f"{a}/talks/lecture.mp4"], audio_format="mp3")),
+            ["audio", "bg"],
+        ),
+        (
+            f"把 {b}/v/trip.mov 转换成mp4",
+            P(step("convert_video", inputs=[f"{b}/v/trip.mov"], container="mp4")),
+            ["convert", "zh"],
+        ),
+        (
+            f"compresser la vidéo {a}/share/demo.mp4",
+            P(step("compress_video", inputs=[f"{a}/share/demo.mp4"])),
+            ["compress", "fr"],
+        ),
+    ]
+    only_fetch = (
+        "Downloading a file on its own isn't supported - I fetch a link only to work on the "
+        "video. Should I convert, compress, trim or extract the audio of it?"
+    )
+    controls: list[Row] = [
+        (
+            f"Download {b}/files/movie.mp4.",
+            P(step("clarify", question=only_fetch)),
+            ["clarify", "unsupported", "download_only"],
+        ),
+        (
+            f"just save {a}/v/holiday-2.mov to my disk",
+            P(step("clarify", question=only_fetch)),
+            ["clarify", "unsupported", "download_only"],
+        ),
+        (
+            f"lade {b}/files/serie.mp4 herunter",
+            P(step("clarify", question=only_fetch)),
+            ["clarify", "unsupported", "download_only", "de"],
+        ),
+        (
+            f"Upload render.mp4 to {b}/upload.",
+            P(
+                step(
+                    "clarify",
+                    question="Uploading isn't supported - I only process media on this machine "
+                    "and can't send files anywhere. Should I compress or convert render.mp4?",
+                )
+            ),
+            ["clarify", "unsupported", "upload"],
+        ),
+        (
+            f"post teaser.mp4 to {a}/share",
+            P(
+                step(
+                    "clarify",
+                    question="Posting a file to a website isn't supported - I can't send files "
+                    "anywhere. I can prepare teaser.mp4 for a platform or compress it.",
+                )
+            ),
+            ["clarify", "unsupported", "upload"],
+        ),
+        (
+            "Convert the video at this link to mp4.",
+            P(step("clarify", question="Which link? Give me the video's http(s) address.")),
+            ["clarify", "no_link"],
+        ),
+        (
+            "download the trailer and make it smaller",
+            P(step("clarify", question="Which link should I fetch the trailer from?")),
+            ["clarify", "no_link"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in plans + controls]
+
+
+def ffmpeg_rows_alert() -> list[Row]:
+    """Completion alerts and known folders."""
+    tag = ["completion_alert"]
+    done = step("alert_when_done")
+    rows: list[Row] = [
+        (
+            "Convert broll.mov to mp4 and beep when it's done.",
+            P(step("convert_video", inputs=["broll.mov"], container="mp4"), done),
+            ["convert"],
+        ),
+        (
+            "Compress podcast.mp4, notify me when finished.",
+            P(step("compress_video", inputs=["podcast.mp4"]), done),
+            ["compress"],
+        ),
+        (
+            "Extract the audio from keynote.mp4 as mp3 and ping me when it's ready.",
+            P(step("extract_audio", inputs=["keynote.mp4"], audio_format="mp3"), done),
+            ["audio"],
+        ),
+        (
+            "Resize montage.mp4 to 480p, let me know when it is done.",
+            P(step("resize_video", inputs=["montage.mp4"], height=480), done),
+            ["resize"],
+        ),
+        (
+            "Reverse teaser.mp4 and tell me when it finishes.",
+            P(step("reverse_video", inputs=["teaser.mp4"]), done),
+            ["reverse"],
+        ),
+        (
+            "Strip the audio from dailies.mov, alert me once done.",
+            P(step("strip_audio", inputs=["dailies.mov"]), done),
+            ["strip_audio"],
+        ),
+        (
+            "Make episode.mp4 ready for TikTok and chime when finished.",
+            P(
+                step(
+                    "prepare_for_platform", inputs=["episode.mp4"], platform="tiktok", preview=True
+                ),
+                done,
+            ),
+            ["platform"],
+        ),
+        (
+            "Trim stream.mkv to the first 20 seconds; beep me when ready.",
+            P(step("trim_video", input="stream.mkv", start="00:00:00", end="00:00:20"), done),
+            ["trim"],
+        ),
+        (
+            "Join scene.mp4 and take2.mp4, and send me a notification when it's done.",
+            P(step("concat_video", inputs=["scene.mp4", "take2.mp4"]), done),
+            ["concat"],
+        ),
+        (
+            "Speed up screencast.mkv 1.5x and let me know when finished.",
+            P(step("adjust_speed", inputs=["screencast.mkv"], speed=1.5), done),
+            ["speed"],
+        ),
+        (
+            "Rotate proxy.mov 270 degrees, beeping when done.",
+            P(step("rotate_video", inputs=["proxy.mov"], angle=270), done),
+            ["rotate"],
+        ),
+        (
+            "Convert final.mp4 to webm and save it to Downloads.",
+            P(
+                step(
+                    "convert_video",
+                    inputs=["final.mp4"],
+                    container="webm",
+                    output="Downloads/final.webm",
+                )
+            ),
+            ["convert", "known_folder"],
+        ),
+        (
+            "Put a 720p copy of lecture.mp4 on my Desktop.",
+            P(
+                step(
+                    "resize_video",
+                    inputs=["lecture.mp4"],
+                    height=720,
+                    output="Desktop/lecture_720p.mp4",
+                )
+            ),
+            ["resize", "known_folder"],
+        ),
+        (
+            "Extract the audio of tutorial.mp4 as mp3 into my Music folder.",
+            P(
+                step(
+                    "extract_audio",
+                    inputs=["tutorial.mp4"],
+                    audio_format="mp3",
+                    output="Music/tutorial.mp3",
+                )
+            ),
+            ["audio", "known_folder"],
+        ),
+        (
+            "Save a thumbnail of vlog.mp4 at 00:00:06 to my Pictures folder.",
+            P(
+                step(
+                    "create_thumbnail",
+                    input="vlog.mp4",
+                    at_time="00:00:06",
+                    output="Pictures/vlog.jpg",
+                )
+            ),
+            ["thumbnail", "known_folder"],
+        ),
+        (
+            "Compress interview.mp4 and save the result in my Videos folder.",
+            P(
+                step(
+                    "compress_video", inputs=["interview.mp4"], output="Videos/interview_small.mp4"
+                )
+            ),
+            ["compress", "known_folder"],
+        ),
+        (
+            "Make a gif of highlight.mp4 on the Desktop and beep when it's finished.",
+            P(
+                step(
+                    "convert_video",
+                    inputs=["highlight.mp4"],
+                    container="gif",
+                    output="Desktop/highlight.gif",
+                ),
+                done,
+            ),
+            ["convert", "known_folder", "both"],
+        ),
+        (
+            "Convert render.mp4 to mkv, put it in Downloads and notify me when done.",
+            P(
+                step(
+                    "convert_video",
+                    inputs=["render.mp4"],
+                    container="mkv",
+                    output="Downloads/render.mkv",
+                ),
+                done,
+            ),
+            ["convert", "known_folder", "both"],
+        ),
+        (
+            f"Convert {_FF_URL}/clips/regatta.mov to mp4, save it to my Videos folder and "
+            "let me know when it's done.",
+            P(
+                step(
+                    "convert_video",
+                    inputs=[f"{_FF_URL}/clips/regatta.mov"],
+                    container="mp4",
+                    output="Videos/regatta.mp4",
+                ),
+                done,
+            ),
+            ["convert", "known_folder", "both", "url_input"],
+        ),
+        (
+            "Komprimiere podcast.mp4 und sag mir Bescheid, wenn es fertig ist.",
+            P(step("compress_video", inputs=["podcast.mp4"]), done),
+            ["compress", "de"],
+        ),
+        (
+            "Convierte broll.mov a mp4 y avísame cuando termine.",
+            P(step("convert_video", inputs=["broll.mov"], container="mp4"), done),
+            ["convert", "es"],
+        ),
+        (
+            "Extrais l'audio de keynote.mp4 en mp3 et préviens-moi quand c'est fini.",
+            P(step("extract_audio", inputs=["keynote.mp4"], audio_format="mp3"), done),
+            ["audio", "fr"],
+        ),
+        (
+            "Конвертирай render.mp4 в mkv и бипни, когато е готово.",
+            P(step("convert_video", inputs=["render.mp4"], container="mkv"), done),
+            ["convert", "bg"],
+        ),
+        (
+            "Сожми episode.mp4 и сообщи мне, когда будет готово.",
+            P(step("compress_video", inputs=["episode.mp4"]), done),
+            ["compress", "ru"],
+        ),
+        (
+            "把montage.mp4转换成webm，完成后提醒我",
+            P(step("convert_video", inputs=["montage.mp4"], container="webm"), done),
+            ["convert", "zh"],
+        ),
+        (
+            "Beep when finished.",
+            P(
+                step(
+                    "clarify",
+                    question="What should I do before I beep? Tell me the file and the job.",
+                )
+            ),
+            ["clarify", "no_work"],
+        ),
+        (
+            "Notify me when it's ready.",
+            P(step("clarify", question="Which file, and what should I do with it first?")),
+            ["clarify", "no_work"],
+        ),
+        (
+            "Ping me once done.",
+            P(step("clarify", question="What should I do, and to which file, before I ping you?")),
+            ["clarify", "no_work"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in rows]
+
+
+def ffmpeg_rows_batch() -> list[Row]:
+    """Many files, many outputs: globs, chains per file, one file into many."""
+    tag = ["batch"]
+    rows: list[Row] = [
+        # many files, several steps: written as for one file, later steps read the output name
+        (
+            "Convert every .avi here to mp4 and then compress them.",
+            P(
+                step("convert_video", inputs=["*.avi"], container="mp4", output="converted.mp4"),
+                step("compress_video", inputs=["converted.mp4"]),
+            ),
+            ["chain"],
+        ),
+        (
+            "Resize all the mkv files in this folder to 480p and strip their audio.",
+            P(
+                step("resize_video", inputs=["*.mkv"], height=480, output="small.mkv"),
+                step("strip_audio", inputs=["small.mkv"]),
+            ),
+            ["chain"],
+        ),
+        (
+            "Make each video here half speed and then reverse it.",
+            P(
+                step("adjust_speed", inputs=["*"], speed=0.5, output="slow.mp4"),
+                step("reverse_video", inputs=["slow.mp4"]),
+            ),
+            ["chain"],
+        ),
+        (
+            "Rotate every mov in this folder by 180 degrees and make them webm.",
+            P(
+                step("rotate_video", inputs=["*.mov"], angle=180, output="rotated.mov"),
+                step("convert_video", inputs=["rotated.mov"], container="webm"),
+            ),
+            ["chain"],
+        ),
+        (
+            "Turn the volume up 5dB on all mp4s here, then convert them to mkv.",
+            P(
+                step("adjust_volume", inputs=["*.mp4"], level="5dB", output="louder.mp4"),
+                step("convert_video", inputs=["louder.mp4"], container="mkv"),
+            ),
+            ["chain"],
+        ),
+        (
+            "Trim every clip in this folder to its first 8 seconds and strip the audio.",
+            P(
+                step("trim_video", input="*", start="00:00:00", end="00:00:08", output="short.mp4"),
+                step("strip_audio", inputs=["short.mp4"]),
+            ),
+            ["chain"],
+        ),
+        (
+            "Compress all the .mov videos here and scale them to 720p.",
+            P(
+                step("compress_video", inputs=["*.mov"], output="compressed.mov"),
+                step("resize_video", inputs=["compressed.mov"], height=720),
+            ),
+            ["chain"],
+        ),
+        (
+            "Skaliere alle Videos hier auf 720p und wandle sie in webm um.",
+            P(
+                step("resize_video", inputs=["*"], height=720, output="small.mp4"),
+                step("convert_video", inputs=["small.mp4"], container="webm"),
+            ),
+            ["chain", "de"],
+        ),
+        (
+            "Конвертирай всички mov файлове тук в mp4 и ги компресирай до малък размер.",
+            P(
+                step("convert_video", inputs=["*.mov"], container="mp4", output="converted.mp4"),
+                step("compress_video", inputs=["converted.mp4"]),
+            ),
+            ["chain", "bg"],
+        ),
+        # two results from each file: two steps that each read the batch
+        (
+            "Give me a thumbnail and an mp3 of each video in this folder.",
+            P(
+                step("create_thumbnail", input="*"),
+                step("extract_audio", inputs=["*"], audio_format="mp3"),
+            ),
+            ["two_results"],
+        ),
+        (
+            "Make a jpg thumbnail and a webm copy of every mkv here.",
+            P(
+                step("create_thumbnail", input="*.mkv", image_format="jpg"),
+                step("convert_video", inputs=["*.mkv"], container="webm"),
+            ),
+            ["two_results"],
+        ),
+        (
+            "Create a poster frame and a wav of the audio for all the mp4 files here.",
+            P(
+                step("create_thumbnail", input="*.mp4"),
+                step("extract_audio", inputs=["*.mp4"], audio_format="wav"),
+            ),
+            ["two_results"],
+        ),
+        (
+            "为这里的每个视频生成缩略图并提取音频为mp3",
+            P(
+                step("create_thumbnail", input="*"),
+                step("extract_audio", inputs=["*"], audio_format="mp3"),
+            ),
+            ["two_results", "zh"],
+        ),
+        # "a short gif": the first 5 seconds, then gif
+        (
+            "Make a short gif of every clip in this folder.",
+            P(
+                step("trim_video", input="*", start="00:00:00", end="00:00:05", output="short.mp4"),
+                step("convert_video", inputs=["short.mp4"], container="gif"),
+            ),
+            ["short_gif"],
+        ),
+        (
+            "Turn each mov here into a little gif preview.",
+            P(
+                step(
+                    "trim_video",
+                    input="*.mov",
+                    start="00:00:00",
+                    end="00:00:05",
+                    output="short.mov",
+                ),
+                step("convert_video", inputs=["short.mov"], container="gif"),
+            ),
+            ["short_gif"],
+        ),
+        # a final step that joins them all reads the same output name
+        (
+            "Trim every video here to its first 3 seconds and join them into one reel.",
+            P(
+                step("trim_video", input="*", start="00:00:00", end="00:00:03", output="intro.mp4"),
+                step("concat_video", inputs=["intro.mp4"]),
+            ),
+            ["join"],
+        ),
+        (
+            "Speed up all the mp4 clips here 2x and stitch them together.",
+            P(
+                step("adjust_speed", inputs=["*.mp4"], speed=2.0, output="fast.mp4"),
+                step("concat_video", inputs=["fast.mp4"]),
+            ),
+            ["join"],
+        ),
+        # one step over many files
+        (
+            "Extract the audio of every video in this folder as flac.",
+            P(step("extract_audio", inputs=["*"], audio_format="flac")),
+            ["single"],
+        ),
+        ("Compress every webm here.", P(step("compress_video", inputs=["*.webm"])), ["single"]),
+        (
+            "Strip the sound from all the clips in this folder.",
+            P(step("strip_audio", inputs=["*"])),
+            ["single"],
+        ),
+        (
+            "Resize every .mkv here to 1080p.",
+            P(step("resize_video", inputs=["*.mkv"], height=1080)),
+            ["single"],
+        ),
+        (
+            "Rotate every video in vertical/ by 90 degrees.",
+            P(step("rotate_video", inputs=["vertical/*"], angle=90)),
+            ["single", "named_folder"],
+        ),
+        (
+            "Convert everything in the footage folder to mkv.",
+            P(step("convert_video", inputs=["footage/*"], container="mkv")),
+            ["single", "named_folder"],
+        ),
+        (
+            "Convert all the avi videos to mp4 and put them in a folder called mp4s.",
+            P(step("convert_video", inputs=["*.avi"], container="mp4", output="mp4s/*.mp4")),
+            ["single", "output_folder"],
+        ),
+        (
+            "Turn every mov here into webm inside a folder named web.",
+            P(step("convert_video", inputs=["*.mov"], container="webm", output="web/*.webm")),
+            ["single", "output_folder"],
+        ),
+        (
+            "Wandle alle .avi-Dateien hier in mp4 um.",
+            P(step("convert_video", inputs=["*.avi"], container="mp4")),
+            ["single", "de"],
+        ),
+        (
+            "comprimir todos los vídeos de esta carpeta",
+            P(step("compress_video", inputs=["*"])),
+            ["single", "es"],
+        ),
+        (
+            "Извлечи аудиото от всички mp4 файлове тук като mp3.",
+            P(step("extract_audio", inputs=["*.mp4"], audio_format="mp3")),
+            ["single", "bg"],
+        ),
+        (
+            "把这个文件夹里所有的mkv转换成mp4",
+            P(step("convert_video", inputs=["*.mkv"], container="mp4")),
+            ["single", "zh"],
+        ),
+        # one file into many
+        (
+            "Split concert.mp4 into 30-second parts.",
+            P(step("split_video", input="concert.mp4", every="30s")),
+            ["one_to_many", "split"],
+        ),
+        (
+            "Chop podcast.mp4 into 4 equal pieces.",
+            P(step("split_video", input="podcast.mp4", parts=4)),
+            ["one_to_many", "split"],
+        ),
+        (
+            "Cut keynote.mp4 into 5-minute chunks.",
+            P(step("split_video", input="keynote.mp4", every="300s")),
+            ["one_to_many", "split"],
+        ),
+        (
+            "Split montage.mp4 into 10-second parts and convert each one to a gif.",
+            P(
+                step("split_video", input="montage.mp4", every="10s", output="part.mp4"),
+                step("convert_video", inputs=["part.mp4"], container="gif"),
+            ),
+            ["one_to_many", "split", "chain"],
+        ),
+        (
+            "Save a still every 10 seconds from lecture.mp4.",
+            P(step("extract_frames", input="lecture.mp4", every="10s")),
+            ["one_to_many", "frames"],
+        ),
+        (
+            "Grab 12 frames spread across trailer.mp4.",
+            P(step("extract_frames", input="trailer.mp4", count=12)),
+            ["one_to_many", "frames"],
+        ),
+        (
+            "Export frames from scene.mp4, every 30th frame, as png.",
+            P(step("extract_frames", input="scene.mp4", every_nth=30, image_format="png")),
+            ["one_to_many", "frames"],
+        ),
+        (
+            "Take screenshots of vlog.mp4 at 0:12, 0:45 and 2:05.",
+            P(
+                step(
+                    "create_thumbnail",
+                    input="vlog.mp4",
+                    at_time=["00:00:12", "00:00:45", "00:02:05"],
+                )
+            ),
+            ["one_to_many", "stills_at_times"],
+        ),
+        (
+            "Make stills of tutorial.mp4 at 1:00 and 3:30.",
+            P(step("create_thumbnail", input="tutorial.mp4", at_time=["00:01:00", "00:03:30"])),
+            ["one_to_many", "stills_at_times"],
+        ),
+        # ranges the user names: one trim_video each, with the names given
+        (
+            "Save seconds 0-4 of take2.mp4 as a.mp4 and 6-9 as b.mp4.",
+            P(
+                step(
+                    "trim_video",
+                    input="take2.mp4",
+                    start="00:00:00",
+                    end="00:00:04",
+                    output="a.mp4",
+                ),
+                step(
+                    "trim_video",
+                    input="take2.mp4",
+                    start="00:00:06",
+                    end="00:00:09",
+                    output="b.mp4",
+                ),
+            ),
+            ["one_to_many", "named_ranges"],
+        ),
+        (
+            "cut 1-3s from session.mp4 to x.mov and 8-9 as y.mov",
+            P(
+                step(
+                    "trim_video",
+                    input="session.mp4",
+                    start="00:00:01",
+                    end="00:00:03",
+                    output="x.mov",
+                ),
+                step(
+                    "trim_video",
+                    input="session.mp4",
+                    start="00:00:08",
+                    end="00:00:09",
+                    output="y.mov",
+                ),
+            ),
+            ["one_to_many", "named_ranges", "terse"],
+        ),
+        (
+            "Keep the first 4 seconds of episode.mp4 as intro.mp4 and the rest as main.mp4.",
+            P(
+                step(
+                    "trim_video",
+                    input="episode.mp4",
+                    start="00:00:00",
+                    end="00:00:04",
+                    output="intro.mp4",
+                ),
+                step("trim_video", input="episode.mp4", start="00:00:04", output="main.mp4"),
+            ),
+            ["one_to_many", "named_ranges"],
+        ),
+        # still a question
+        (
+            "Split this video into 3 equal parts.",
+            P(step("clarify", question="Which video should I split?")),
+            ["clarify", "no_file"],
+        ),
+        (
+            "Convert every video here.",
+            P(step("clarify", question="Convert them to which format - mp4, mkv, webm or gif?")),
+            ["clarify", "missing_param"],
+        ),
+        (
+            "Do the same thing to every file in this folder.",
+            P(step("clarify", question="What should I do to the files in this folder?")),
+            ["clarify", "no_operation"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in rows]
+
+
+_DOC_URL = "https://files.example.org"
+
+
+def documents_rows_url() -> list[Row]:
+    """URL inputs for documents."""
+    tag = ["url_input"]
+    a = _DOC_URL
+    rows: list[Row] = [
+        (
+            f"Extract the text from {a}/docs/annual.pdf.",
+            P(step("extract_text", input=f"{a}/docs/annual.pdf")),
+            ["extract"],
+        ),
+        (
+            f"compress {a}/share/brochure.pdf",
+            P(step("compress_pdf", input=f"{a}/share/brochure.pdf", compress_quality="balanced")),
+            ["compress"],
+        ),
+        (
+            f"Compress {a}/forms/application.pdf as small as possible.",
+            P(step("compress_pdf", input=f"{a}/forms/application.pdf", compress_quality="small")),
+            ["compress"],
+        ),
+        (
+            f"Merge cover.pdf and {a}/docs/chapter1.pdf into book.pdf.",
+            P(
+                step(
+                    "merge_pdfs", inputs=["cover.pdf", f"{a}/docs/chapter1.pdf"], output="book.pdf"
+                )
+            ),
+            ["merge", "mixed"],
+        ),
+        (
+            f"Convert {a}/notes/agenda.pdf to txt.",
+            P(step("convert_document", input=f"{a}/notes/agenda.pdf", to_format="txt")),
+            ["convert"],
+        ),
+        (
+            f"make the scanned file at {a}/scans/lease.pdf searchable",
+            P(step("ocr_document", input=f"{a}/scans/lease.pdf", language="eng")),
+            ["ocr"],
+        ),
+        (
+            f"Inspect {a}/docs/manual.pdf and tell me its page count.",
+            P(step("inspect_document", input=f"{a}/docs/manual.pdf")),
+            ["inspect"],
+        ),
+        (
+            f"Stamp DRAFT on {a}/drafts/proposal.pdf.",
+            P(step("watermark", input=f"{a}/drafts/proposal.pdf", text="DRAFT")),
+            ["watermark"],
+        ),
+        (
+            f"Add page numbers to {a}/docs/thesis.pdf.",
+            P(step("add_page_numbers", input=f"{a}/docs/thesis.pdf")),
+            ["page_numbers"],
+        ),
+        (
+            f"Rotate {a}/scans/plan.pdf by 90 degrees.",
+            P(step("rotate_pages", input=f"{a}/scans/plan.pdf", degrees=90)),
+            ["rotate"],
+        ),
+        (
+            f"Search {a}/docs/policy.pdf for the word refund.",
+            P(step("find_in_document", input=f"{a}/docs/policy.pdf", query="refund")),
+            ["find"],
+        ),
+        (
+            f"Pages 1-3 of {a}/docs/report-q3.pdf into a separate file.",
+            P(step("split_pdf", input=f"{a}/docs/report-q3.pdf", ranges="1-3")),
+            ["split"],
+        ),
+        (
+            f"extrahiere den Text aus {a}/docs/vertrag.pdf",
+            P(step("extract_text", input=f"{a}/docs/vertrag.pdf")),
+            ["extract", "de"],
+        ),
+        (
+            f"comprime {a}/docs/factura.pdf",
+            P(step("compress_pdf", input=f"{a}/docs/factura.pdf", compress_quality="balanced")),
+            ["compress", "es"],
+        ),
+        (
+            f"номерирай страниците на {a}/docs/doklad.pdf",
+            P(step("add_page_numbers", input=f"{a}/docs/doklad.pdf")),
+            ["page_numbers", "bg"],
+        ),
+    ]
+    only_fetch = (
+        "Downloading a file on its own isn't supported - I fetch a link only to work on the "
+        "document. Should I extract its text, compress it or convert it?"
+    )
+    rows += [
+        (
+            f"Download {a}/docs/terms.pdf.",
+            P(step("clarify", question=only_fetch)),
+            ["clarify", "unsupported", "download_only"],
+        ),
+        (
+            f"just grab {a}/docs/menu.pdf for me",
+            P(step("clarify", question=only_fetch)),
+            ["clarify", "unsupported", "download_only"],
+        ),
+        (
+            f"Upload invoice-12.pdf to {a}/inbox.",
+            P(
+                step(
+                    "clarify",
+                    question="Uploading isn't supported - I work on documents on this machine and "
+                    "can't send files anywhere. Should I compress or protect invoice-12.pdf?",
+                )
+            ),
+            ["clarify", "unsupported", "upload"],
+        ),
+        (
+            "Extract the text from the pdf at that link.",
+            P(step("clarify", question="Which link? Give me the document's http(s) address.")),
+            ["clarify", "no_link"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in rows]
+
+
+def documents_rows_alert() -> list[Row]:
+    """Completion alerts and known folders for documents."""
+    tag = ["completion_alert"]
+    done = step("alert_when_done")
+    rows: list[Row] = [
+        (
+            "OCR scan-04.pdf and beep when it's done.",
+            P(step("ocr_document", input="scan-04.pdf", language="eng"), done),
+            ["ocr"],
+        ),
+        (
+            "Merge part1.pdf and part2.pdf into full.pdf, notify me when finished.",
+            P(step("merge_pdfs", inputs=["part1.pdf", "part2.pdf"], output="full.pdf"), done),
+            ["merge"],
+        ),
+        (
+            "Compress catalog.pdf and let me know when it is done.",
+            P(step("compress_pdf", input="catalog.pdf", compress_quality="balanced"), done),
+            ["compress"],
+        ),
+        (
+            "Convert minutes.pdf to markdown, ping me when ready.",
+            P(step("convert_document", input="minutes.pdf", to_format="md"), done),
+            ["convert"],
+        ),
+        (
+            "Add page numbers to thesis.pdf and tell me when it finishes.",
+            P(step("add_page_numbers", input="thesis.pdf"), done),
+            ["page_numbers"],
+        ),
+        (
+            "Extract the text of contract-b.pdf; alert me once done.",
+            P(step("extract_text", input="contract-b.pdf"), done),
+            ["extract"],
+        ),
+        (
+            "Rotate floorplan.pdf 90 degrees and save it to my Desktop.",
+            P(
+                step(
+                    "rotate_pages",
+                    input="floorplan.pdf",
+                    degrees=90,
+                    output="Desktop/floorplan.pdf",
+                )
+            ),
+            ["rotate", "known_folder"],
+        ),
+        (
+            "Compress brochure.pdf and put it in Downloads.",
+            P(
+                step(
+                    "compress_pdf",
+                    input="brochure.pdf",
+                    compress_quality="balanced",
+                    output="Downloads/brochure.pdf",
+                )
+            ),
+            ["compress", "known_folder"],
+        ),
+        (
+            "Convert notes.pdf to txt into my Documents folder.",
+            P(
+                step(
+                    "convert_document",
+                    input="notes.pdf",
+                    to_format="txt",
+                    output="Documents/notes.txt",
+                )
+            ),
+            ["convert", "known_folder"],
+        ),
+        (
+            "Merge q1.pdf and q2.pdf into Documents and beep when finished.",
+            P(step("merge_pdfs", inputs=["q1.pdf", "q2.pdf"], output="Documents/q1-q2.pdf"), done),
+            ["merge", "known_folder", "both"],
+        ),
+        (
+            "Watermark offer.pdf with CONFIDENTIAL, save it on the Desktop and notify me when done.",
+            P(
+                step(
+                    "watermark", input="offer.pdf", text="CONFIDENTIAL", output="Desktop/offer.pdf"
+                ),
+                done,
+            ),
+            ["watermark", "known_folder", "both"],
+        ),
+        (
+            f"Extract the text from {_DOC_URL}/docs/bylaws.pdf into Downloads and let me know "
+            "when it's done.",
+            P(
+                step(
+                    "extract_text",
+                    input=f"{_DOC_URL}/docs/bylaws.pdf",
+                    output="Downloads/bylaws.txt",
+                ),
+                done,
+            ),
+            ["extract", "known_folder", "both", "url_input"],
+        ),
+        (
+            "Komprimiere katalog.pdf und gib mir Bescheid, wenn es fertig ist.",
+            P(step("compress_pdf", input="katalog.pdf", compress_quality="balanced"), done),
+            ["compress", "de"],
+        ),
+        (
+            "Компресирай каталог.pdf и бипни, когато е готово.",
+            P(step("compress_pdf", input="каталог.pdf", compress_quality="balanced"), done),
+            ["compress", "bg"],
+        ),
+        (
+            "压缩目录.pdf，完成后通知我",
+            P(step("compress_pdf", input="目录.pdf", compress_quality="balanced"), done),
+            ["compress", "zh"],
+        ),
+        (
+            "Beep once it's finished.",
+            P(step("clarify", question="Which document, and what should I do with it first?")),
+            ["clarify", "no_work"],
+        ),
+        (
+            "Notify me when done.",
+            P(
+                step(
+                    "clarify", question="What should I do, and to which file, before I notify you?"
+                )
+            ),
+            ["clarify", "no_work"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in rows]
+
+
+def documents_rows_batch() -> list[Row]:
+    """Many files, many outputs for documents."""
+    tag = ["batch"]
+    rows: list[Row] = [
+        (
+            "Compress every pdf in this folder.",
+            P(step("compress_pdf", input="*.pdf", compress_quality="balanced")),
+            ["single"],
+        ),
+        (
+            "Add page numbers to all the PDFs here.",
+            P(step("add_page_numbers", input="*.pdf")),
+            ["single"],
+        ),
+        (
+            "Stamp COPY on each pdf in this folder.",
+            P(step("watermark", input="*.pdf", text="COPY")),
+            ["single"],
+        ),
+        (
+            "Make all the scanned PDFs here searchable.",
+            P(step("ocr_document", input="*.pdf", language="eng")),
+            ["single"],
+        ),
+        (
+            "Extract the text from every pdf in this folder.",
+            P(step("extract_text", input="*.pdf")),
+            ["single"],
+        ),
+        (
+            "Protect every PDF here with the password tiger42.",
+            P(step("protect_pdf", input="*.pdf", password="tiger42")),
+            ["single"],
+        ),
+        (
+            "Convert all the pdfs in contracts/ to txt.",
+            P(step("convert_document", input="contracts/*.pdf", to_format="txt")),
+            ["single", "named_folder"],
+        ),
+        (
+            "Komprimiere alle PDFs in diesem Ordner.",
+            P(step("compress_pdf", input="*.pdf", compress_quality="balanced")),
+            ["single", "de"],
+        ),
+        (
+            "Номерирай страниците на всички pdf файлове тук.",
+            P(step("add_page_numbers", input="*.pdf")),
+            ["single", "bg"],
+        ),
+        (
+            "Compress each pdf here, then number the pages.",
+            P(
+                step(
+                    "compress_pdf", input="*.pdf", compress_quality="balanced", output="small.pdf"
+                ),
+                step("add_page_numbers", input="small.pdf"),
+            ),
+            ["chain"],
+        ),
+        (
+            "Rotate all PDFs in this folder 180 degrees and watermark them DRAFT.",
+            P(
+                step("rotate_pages", input="*.pdf", degrees=180, output="rotated.pdf"),
+                step("watermark", input="rotated.pdf", text="DRAFT"),
+            ),
+            ["chain"],
+        ),
+        (
+            "OCR every scanned pdf here and compress them as small as possible.",
+            P(
+                step("ocr_document", input="*.pdf", language="eng", output="searchable.pdf"),
+                step("compress_pdf", input="searchable.pdf", compress_quality="small"),
+            ),
+            ["chain"],
+        ),
+        (
+            "Add page numbers to each PDF here and protect them with the password lake7.",
+            P(
+                step("add_page_numbers", input="*.pdf", output="numbered.pdf"),
+                step("protect_pdf", input="numbered.pdf", password="lake7"),
+            ),
+            ["chain"],
+        ),
+        (
+            "Split handbook.pdf into one file per page.",
+            P(step("split_pdf_every", input="handbook.pdf", every=1)),
+            ["one_to_many"],
+        ),
+        (
+            "Make a pdf for every page of slides.pdf and stamp SAMPLE on each.",
+            P(
+                step("split_pdf_every", input="slides.pdf", every=1, output="page.pdf"),
+                step("watermark", input="page.pdf", text="SAMPLE"),
+            ),
+            ["one_to_many", "chain"],
+        ),
+        (
+            "Unlock all the PDFs in this folder and compress them.",
+            P(step("clarify", question="What is the password for the PDFs?")),
+            ["clarify", "missing_param"],
+        ),
+        (
+            "Do the same to every pdf here.",
+            P(step("clarify", question="What should I do to the PDFs in this folder?")),
+            ["clarify", "no_operation"],
+        ),
+    ]
+    return [(u, p, [*tag, *t]) for u, p, t in rows]
+
+
+#: feature -> (ffmpeg rows, documents rows); written to skills/<skill>/data/train_<feature>.jsonl.
+FEATURES = {
+    "url": (ffmpeg_rows_url, documents_rows_url),
+    "alert": (ffmpeg_rows_alert, documents_rows_alert),
+    "batch": (ffmpeg_rows_batch, documents_rows_batch),
+}
+
+
 def main() -> None:
-    targets = {
-        "ffmpeg": (ffmpeg_rows, ROOT / "skills/ffmpeg/data/train.jsonl"),
-        "documents": (documents_rows, ROOT / "skills/documents/data/train.jsonl"),
-    }
-    for skill, (fn, path) in targets.items():
+    targets = [
+        ("ffmpeg", ffmpeg_rows, ROOT / "skills/ffmpeg/data/train.jsonl"),
+        ("documents", documents_rows, ROOT / "skills/documents/data/train.jsonl"),
+    ]
+    for feature, fns in FEATURES.items():
+        for skill, fn in zip(("ffmpeg", "documents"), fns, strict=True):
+            targets.append((skill, fn, ROOT / f"skills/{skill}/data/train_{feature}.jsonl"))
+    for skill, fn, path in targets:
         agent = CommandAgent.from_skill(f"skills/{skill}", sandbox="./sandbox")
         rows = fn()
         good, bad, seen = [], [], set()
@@ -2780,7 +3993,7 @@ def main() -> None:
                 bad.append((utt, f"{type(exc).__name__}: {exc}"))
                 continue
             good.append({"utterance": utt, "plan": plan, "tags": tags})
-        print(f"\n=== {skill}: {len(good)} valid / {len(rows)} authored ===")
+        print(f"\n=== {skill} {path.name}: {len(good)} valid / {len(rows)} authored ===")
         for utt, why in bad[:40]:
             print(f"  INVALID: {utt[:55]!r} -> {why}")
         if not bad:

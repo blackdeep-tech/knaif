@@ -592,7 +592,7 @@ def _load_prompt(prompt_path: Path) -> tuple[str | None, str | None, list[dict]]
 def _load_prompt_rules(prompt_path: Path) -> list[dict]:
     """``rules:`` from prompt.yaml, in order: ``{"tools": [...], "text": "..."}`` joins a prompt
     that lists one of its tools; ``{"when": "many", "text": "..."}`` one whose request asks for
-    many files (the per-file batch rule)."""
+    many files (the per-file batch rule); ``words`` also needs one of them in the request."""
     if not prompt_path.exists():
         return []
     with prompt_path.open(encoding="utf-8") as fh:
@@ -609,6 +609,7 @@ def _load_prompt_rules(prompt_path: Path) -> list[dict]:
             {
                 "tools": [str(t) for t in rule.get("tools") or []],
                 "when": when,
+                "words": [str(w) for w in rule.get("words") or []],
                 "text": rule["text"],
             }
         )

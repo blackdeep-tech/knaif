@@ -198,7 +198,7 @@ pub fn user_side_path(path: &Path, work_dir: Option<&Path>, home: Option<&Path>)
 ///
 /// A folder or a glob comes back in natural order (`clip1`, `clip2`, `clip10`), the order a batch
 /// runs its files in, so a merge and a batch agree; the entries keep their own order
-/// (`contracts/parity/batch_cases.json`.). `extensions` keeps only those files; `recursive`
+/// (`contracts/parity/batch_cases.json`). `extensions` keeps only those files; `recursive`
 /// descends into a folder's subfolders. `exclude` drops a folder's or a glob's match that is one
 /// of the given paths (a join's own output); a path named on its own is kept, and a path that
 /// does not exist is returned as it is, for the probe to report. Relative paths resolve against

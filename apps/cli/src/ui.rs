@@ -644,6 +644,23 @@ pub fn written() -> usize {
     WRITTEN.load(Ordering::Relaxed)
 }
 
+/// A batch's failed count and size, for the closing line (` · 1 failed · 7.6 MB`): the terminal
+/// view says them there instead of a summary line of their own (owner, 2026-10-25).
+static CLOSE_EXTRA: Mutex<String> = Mutex::new(String::new());
+
+pub fn set_close_extra(text: String) {
+    if let Ok(mut extra) = CLOSE_EXTRA.lock() {
+        *extra = text;
+    }
+}
+
+pub fn close_extra() -> String {
+    CLOSE_EXTRA
+        .lock()
+        .map(|extra| extra.clone())
+        .unwrap_or_default()
+}
+
 /// Record the files a step wrote, for the batch summary's size of what the run left.
 pub fn note_written_paths(paths: &[std::path::PathBuf]) {
     if let Ok(mut all) = WRITTEN_PATHS.lock() {
@@ -983,7 +1000,7 @@ mod tests {
         Duration::from_millis(ms)
     }
 
-    /// One `ui_render_cases.json`. case through the renderer it names.
+    /// One `ui_render_cases.json` case through the renderer it names.
     fn render_case(name: &str, style: &Style, a: &serde_json::Value) -> String {
         let s = |k: &str| a[k].as_str().unwrap_or_default().to_string();
         let opt_s = |k: &str| a[k].as_str().map(str::to_string);
@@ -1060,7 +1077,7 @@ mod tests {
     }
 
     /// The renderers both CLIs share, pinned byte for byte
-    /// (`contracts/parity/ui_render_cases.json`., Python `knaif.ui`). Native is the reference:
+    /// (`contracts/parity/ui_render_cases.json`, Python `knaif.ui`). Native is the reference:
     /// `KNAIF_RECORD_CONTRACT=1` writes what it renders into the cases' `expected`.
     #[test]
     fn ui_render_cases() {

@@ -1,4 +1,4 @@
-"""The cases of `contracts/parity/cli_output_cases.json`. that run ffmpeg.
+"""The cases of `contracts/parity/cli_output_cases.json` that run ffmpeg.
 
 Core tests never start ffmpeg (python/core/tests/conftest.py), so the cases that execute an
 ffmpeg plan are checked here, beside the skill whose binary they need; the rest are in
@@ -63,6 +63,9 @@ def test_cli_output_executing(
         assert result.stderr.startswith(case["stderr_prefix"]), result.stderr
     else:
         assert _masked(result.stderr) == case["stderr"]
+    if "merged" in case:
+        # The two streams in the order written, as a person sees them.
+        assert _masked(result.output) == case["merged"]
     assert (result.exit_code == 0) == case["ok"], result.output
     if "files_after" in case:
         assert sorted(f.name for f in tmp_path.iterdir()) == case["files_after"]

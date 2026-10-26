@@ -1,6 +1,6 @@
 {
   "_comment": "L2 NL-clarify-gate contract. Python runs `nl_clarify_gate` after stem resolution (CommandAgent._execute_steps); until 2026-09-28 native had no port of it, and the R5c L3 run found the fork: for an input the user never wrote (\"reverse the mov file\" -> inputs [\"mov\"]) Python asks \"Which mov did you mean?\" while native ran and failed with \"input not found: mov\". Given (utterance, plan, registry) both runtimes must produce the same payload: the plan unchanged, or a single clarify step. Consumed by python/core/tests/test_nl_clarify_gate_parity.py and `nl_clarify_gate_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
-  "_stage": "The gate with no host-supplied file listing (injected_files=None), which is how both CLIs run it: (1) every tool's grounded_args must appear in the utterance (checked even for batch utterances); (2) unless the utterance is a batch request, every input token (keys inputs, input, files, src, dst, path, base, append, in that order) must be named concretely: written as a filename in the utterance, or its stem written as an identifier carrying _ - or a digit. $chain references, paths containing / or \\, and outputs of earlier steps are exempt. A glob is exempt only when the request asks for many files: a plural file word ('the videos', 'the movs', 'файловете'), or the glob written in the request itself; otherwise the gate asks (closing the hole where 'MP3 nach WAV konvertieren' became *.mp3). Batch words: ASCII words match as [a-z]+ runs (unchanged), Cyrillic and other non-ASCII words as whole Unicode words, Chinese as substrings.",
+  "_stage": "The gate with no host-supplied file listing (injected_files=None), which is how both CLIs run it: (1) every tool's grounded_args must appear in the utterance (checked even for batch utterances); (2) unless the utterance is a batch request, every input token (keys inputs, input, files, src, dst, path, base, append, in that order) must be named concretely: written as a filename in the utterance, or its stem written as an identifier carrying _ - or a digit, or (the same rule as clarify_gate_cases.json's plain-word cases) its whole stem said as a plain word when the file is in the folder (`sandbox_files`, the lowercased listing the CLI passes; none when absent) and the word is not one for a kind of file. $chain references, paths containing / or \\, and outputs of earlier steps are exempt. A glob is exempt only when the request asks for many files: a plural file word ('the videos', 'the movs', 'файловете'), or the glob written in the request itself; otherwise the gate asks (closing the hole where 'MP3 nach WAV konvertieren' became *.mp3). Batch words: ASCII words match as [a-z]+ runs (unchanged), Cyrillic and other non-ASCII words as whole Unicode words, Chinese as substrings.",
   "registries": {
     "demo": "resize_video:\n  description: \"Resize a video.\"\n  required_args: [inputs]\n  optional_args: [height, output]\nreverse_video:\n  description: \"Reverse a video.\"\n  required_args: [inputs]\n  optional_args: [output]\ncreate_thumbnail:\n  description: \"Grab a still.\"\n  required_args: [input]\n  optional_args: [at_time, output]\ntrim_video:\n  description: \"Cut a video.\"\n  required_args: [input]\n  optional_args: [start, end, output]\nconcat_video:\n  description: \"Join videos.\"\n  optional_args: [inputs, base, append, output]\nprotect_pdf:\n  description: \"Password-protect a PDF.\"\n  required_args: [input, password]\n  optional_args: [output]\n  grounded_args: [password]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\n"
   },
@@ -1181,6 +1181,141 @@
               "inputs": [
                 "*.mp4"
               ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_plain_word_names_a_file_that_is_there",
+      "why": "'convert beach and city from mov to mkv' passed the hallucinated-filename guard once a plain word could name a file, and then asked 'Which beach.mov did you mean?' here, where only a stem with _ - or a digit counted (2026-10-24).",
+      "registry": "demo",
+      "utterance": "resize beach and city from mov to 720p",
+      "sandbox_files": [
+        "beach.mov",
+        "city.mov",
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_plain_word_without_the_file_still_asks",
+      "why": "The listing is half of the rule: with no beach.mov in the folder the word names nothing.",
+      "registry": "demo",
+      "utterance": "resize beach to 720p",
+      "sandbox_files": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which beach.mov did you mean?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_word_for_a_kind_of_file_still_asks",
+      "why": "'the clip' means any clip, even with clip.mp4 there (GENERIC_FILE_WORDS).",
+      "registry": "demo",
+      "utterance": "resize the clip to 720p",
+      "sandbox_files": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which clip.mp4 did you mean?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_plain_word_inside_another_word_still_asks",
+      "why": "'the beaches' is not the word 'beach'.",
+      "registry": "demo",
+      "utterance": "resize the beaches to 720p",
+      "sandbox_files": [
+        "beach.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "height": 720
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which beach.mov did you mean?"
             }
           }
         ]

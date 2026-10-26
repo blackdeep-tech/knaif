@@ -2,7 +2,7 @@
 
 **One display for both CLIs** (owner, 2026-10-23). Native ``apps/cli/src/ui.rs`` is the
 reference; these are its pure renderers, ported line for line and pinned byte for byte by
-``contracts/parity/ui_render_cases.json`.`. Durations are seconds (``None`` when nothing was
+``contracts/parity/ui_render_cases.json``. Durations are seconds (``None`` when nothing was
 measured); a :class:`Style` decides only whether ANSI colors are added.
 """
 

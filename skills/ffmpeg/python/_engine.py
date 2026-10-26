@@ -92,6 +92,16 @@ def _user_side_path(path: Path, work_dir: Path | None, home: Path | None) -> Pat
     return Path(home) / Path(path).resolve().relative_to(Path(work_dir).resolve())  # type: ignore[arg-type]
 
 
+def _in_working_folder(out: Path, home: Path | None) -> Path:
+    """Where a relative output the plan names is written: the working folder (*home*), not the
+    input's folder, as documents and `concat_video` resolve it (owner, 2026-10-24). Only a
+    name the skill makes up itself stays beside its input (`_derive_output_path`).
+    """
+    if out.is_absolute() or home is None:
+        return out
+    return Path(home) / out
+
+
 def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
     """Raise ValueError if *p* (resolved) is not inside *sandbox* (resolved).
 
@@ -1015,15 +1025,12 @@ def _build_one_recipe(
         # written as `mov.mkv`, the rest as `mov_city.mkv`).
         literal = Path(_legal_output_path(raw_output))
         named = _derive_output_path(anchor, mode, _with_extension(output_options, mode, literal))
-        out = literal.parent / named.name
-        output_path = out if out.is_absolute() else anchor.parent / out
+        output_path = _in_working_folder(literal.parent / named.name, home)
     elif raw_output:
         out = _resolve_output_target(
             raw_output, input_path=input_path, mode=mode, options=output_options
         )
-        if not out.is_absolute():
-            out = anchor.parent / out
-        output_path = out
+        output_path = _in_working_folder(out, home)
         default_name = False
         # A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
         # refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the

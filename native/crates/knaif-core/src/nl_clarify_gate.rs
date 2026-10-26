@@ -184,17 +184,29 @@ fn stem_words(utterance: &str) -> Vec<String> {
 }
 
 /// The gate. Returns *payload* unchanged, or with its plan replaced by one clarify step.
-pub fn nl_clarify_gate(mut payload: Value, utterance: &str, registry: &Registry) -> Value {
+/// `known_files` is the working folder's listing, lowercased: a plain word names one of those
+/// files when it is its whole stem (the hallucinated-filename guard's rule).
+pub fn nl_clarify_gate(
+    mut payload: Value,
+    utterance: &str,
+    registry: &Registry,
+    known_files: &HashSet<String>,
+) -> Value {
     let Some(steps) = payload.get("plan").and_then(Value::as_array) else {
         return payload;
     };
-    if let Some(question) = question_for(steps, utterance, registry) {
+    if let Some(question) = question_for(steps, utterance, registry, known_files) {
         payload["plan"] = json!([{ "tool": "clarify", "args": { "question": question } }]);
     }
     payload
 }
 
-fn question_for(steps: &[Value], utterance: &str, registry: &Registry) -> Option<String> {
+fn question_for(
+    steps: &[Value],
+    utterance: &str,
+    registry: &Registry,
+    known_files: &HashSet<String>,
+) -> Option<String> {
     // 1. Grounded args, batch or not: a batch request still must not carry an invented password.
     for step in steps {
         let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
@@ -239,7 +251,7 @@ fn question_for(steps: &[Value], utterance: &str, registry: &Registry) -> Option
                 if plan_outputs.contains(token) {
                     continue; // produced by an earlier step
                 }
-                if !is_concretely_specified(token, utterance, &inline) {
+                if !is_concretely_specified(token, utterance, &inline, known_files) {
                     return Some(clarify_question(token, tool));
                 }
             }
@@ -545,7 +557,12 @@ fn inline_filenames(utterance: &str) -> HashSet<String> {
 }
 
 /// Python `_is_concretely_specified` with no injected listing.
-fn is_concretely_specified(token: &str, utterance: &str, inline: &HashSet<String>) -> bool {
+fn is_concretely_specified(
+    token: &str,
+    utterance: &str,
+    inline: &HashSet<String>,
+    known_files: &HashSet<String>,
+) -> bool {
     if token.starts_with('$') {
         return true; // a chain reference
     }
@@ -553,6 +570,8 @@ fn is_concretely_specified(token: &str, utterance: &str, inline: &HashSet<String
         return true; // the user wrote it out
     }
     has_matching_stem_in_utterance(token, utterance)
+        // a plain word for a file that is there, as the guard reads it
+        || crate::clarify_gate::named_by_stem(token, &utterance.to_lowercase(), known_files)
 }
 
 /// Python `_has_matching_stem_in_utterance`: an identifier in the utterance that carries a

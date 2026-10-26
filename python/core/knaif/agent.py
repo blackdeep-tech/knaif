@@ -8,7 +8,7 @@ import os
 import re
 import time
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .batch_chain import (
@@ -25,6 +25,7 @@ from .evaluator import compute_metrics, run_eval
 from .executor import HANDLERS as _EXECUTOR_HANDLERS
 from .handler_api import HandlerContext
 from .nl_clarify_gate import (
+    _named_by_stem,
     count_question,
     nl_clarify_gate,
     required_args_clarify,
@@ -35,7 +36,6 @@ from .planner import (
     _VALID_FILE_TYPES,
     StemAmbiguousError,
     StemNotFoundError,
-    _is_stem_candidate,
     _resolve_path,
     alert_last,
     apply_defaults,
@@ -58,22 +58,6 @@ from .skill import Skill
 
 _TERMINAL_TOOLS = frozenset({"done", "clarify", "reject"})
 _FILENAME_RE = re.compile(r"\.[a-z][a-z0-9]{1,4}$", re.IGNORECASE)
-
-
-def _named_by_stem(value: str, u_lower: str, known: set[str]) -> bool:
-    """Did the user name this file by its stem, and is the stem's file really there?
-
-    Both halves are required — see :meth:`CommandAgent._hallucinated_filename` for why
-    either alone admits a hallucination. ``_is_stem_candidate`` is reused rather than
-    re-derived so "what counts as a stem" has one definition in the codebase: the
-    resolver and the guard must agree, or the guard passes a name the resolver then
-    refuses.
-    """
-    name = PurePosixPath(value.replace("\\", "/")).name
-    stem = name.rsplit(".", 1)[0]
-    if not stem or not _is_stem_candidate(stem):
-        return False
-    return stem.lower() in u_lower and name.lower() in known
 
 
 def _step_failed(result: Any) -> bool:
@@ -145,6 +129,30 @@ def _without_folder(text: str, base: Path) -> str:
             text = text.replace(spelling + "\\", "").replace(spelling + "/", "")
             text = text.replace(spelling, ".")
     return text
+
+
+class PlanWouldFail(ValueError):
+    """The rehearsal before a real run found a step that fails, so nothing ran (owner,
+    2026-10-24). *where* says which step (native ``rehearsal_failure_context``), *cause*
+    why; the CLI prints them as native's error chain."""
+
+    def __init__(self, where: str, cause: str) -> None:
+        super().__init__(f"{where}: {cause}")
+        self.where = where
+        self.cause = cause
+
+
+def rehearsal_failure_context(idx: int, total: int) -> str:
+    """Which step the rehearsal stopped at; nothing had run. Native ``rehearsal_failure_context``."""
+    return f"step {idx + 1} of {total} would fail, so nothing ran"
+
+
+#: Set on an error raised while a step ran: `(index, steps)`, the step it stopped at. The
+#: CLI says where it stopped from it, as native's `chain_failure_context` does.
+STEP_ATTR = "knaif_step"
+
+#: When every file of a batch fails the rehearsal. Native `EVERY_FILE_WOULD_FAIL`.
+EVERY_FILE_WOULD_FAIL = "every file would fail, so nothing ran"
 
 
 class _FileTally:
@@ -526,6 +534,9 @@ class CommandAgent:
         # total, step)`, 1-based, before each step (`Step i/N · tool`, `step i of N:`).
         self.plan_ready: Any | None = None
         self.intent_started: Any | None = None
+        # `item_shown(item)`: a step's result line as it happens (`ctx.show`), e.g. each file of
+        # a batch as it is done, as native prints it. A step leaves those out of its report.
+        self.item_shown: Callable[[dict[str, Any]], None] | None = None
         # `run --stdout`: handlers that declare `stdout:` return their text and
         # save nothing (`HandlerContext.to_stdout`).
         self.to_stdout: bool = False
@@ -916,7 +927,11 @@ class CommandAgent:
         # available (e.g. direct execute_plan calls in tests).
         if utterance is not None:
             gated = nl_clarify_gate(
-                utterance, intent_plan, injected_files=injected_files, registry=self.registry
+                utterance,
+                intent_plan,
+                injected_files=injected_files,
+                registry=self.registry,
+                known_files=self._listed_filenames(),
             )
             if gated is intent_plan:
                 # A count of files ("2 of the videos") must match what the plan touches.
@@ -1202,6 +1217,15 @@ class CommandAgent:
         # One scratch folder for the whole run, every intent included: a chain intermediate
         # written by one intent is read by the next. Removed on any exit (knaif.scratch).
         with scratch:
+            # Every step is checked before any runs (owner, 2026-10-24): a file of a batch
+            # that would fail is out before the others run, a chain that would fail runs nothing.
+            if not dry_run and not skip_execution:
+                for out, reason in self._rehearse(
+                    intent_blocks, batch, scratch.path, confirmed
+                ).items():
+                    failed[out] = reason
+                    if self.batch_failed is not None and batch is not None:
+                        self.batch_failed(failure_line(batch.shown[out], reason))
             for k, (orig_intent, sub_plan) in enumerate(intent_blocks):
                 is_terminal = orig_intent.get("tool") in _TERMINAL_TOOLS
                 file_idx = batch.file_of[k] if batch is not None else None
@@ -1263,17 +1287,24 @@ class CommandAgent:
                 if self.intent_started is not None and not is_terminal:
                     self.intent_started(k + 1, len(intent_blocks), orig_intent)
                 self._isolated_failure = None
-                sub_results, should_stop = self._execute_steps(
-                    sub_plan,
-                    context,
-                    dry_run,
-                    confirmed,
-                    skip_execution,
-                    intent_tool=intent_tool_name,
-                    intent_destructive=intent_destructive,
-                    work_dir=scratch.path,
-                    isolate=file_idx is not None,
-                )
+                try:
+                    sub_results, should_stop = self._execute_steps(
+                        sub_plan,
+                        context,
+                        dry_run,
+                        confirmed,
+                        skip_execution,
+                        intent_tool=intent_tool_name,
+                        intent_destructive=intent_destructive,
+                        work_dir=scratch.path,
+                        isolate=file_idx is not None,
+                    )
+                except Exception as exc:
+                    # Which step it stopped at, for the CLI's error; the error itself is
+                    # unchanged for every other caller.
+                    if not hasattr(exc, STEP_ATTR):
+                        setattr(exc, STEP_ATTR, (k, len(intent_blocks)))
+                    raise
                 results.extend(sub_results)
 
                 if (
@@ -1358,6 +1389,68 @@ class CommandAgent:
             sub_plan = list(sub_plan[:-1]) + [last]
         return sub_plan
 
+    def _rehearse(
+        self,
+        intent_blocks: list[tuple[dict[str, Any], list[dict[str, Any]]]],
+        batch: Any,
+        work_dir: Path,
+        confirmed: bool,
+    ) -> dict[int, str]:
+        """Rehearse the plan as a dry run before it really runs (owner, 2026-10-24).
+
+        Returns the files of a batch that would fail, each with its reason. Raises
+        ``PlanWouldFail`` when a step of a plan without a batch would fail, or every file of a
+        batch would. A refused step (a destructive one unconfirmed, an arg that fails
+        validation) raises as it does when it runs. One step on one file is not rehearsed:
+        nothing can run before it fails.
+        """
+        runnable = [
+            k for k, (o, _) in enumerate(intent_blocks) if o.get("tool") not in _TERMINAL_TOOLS
+        ]
+        if batch is None and len(runnable) < 2:
+            return {}
+        saved = (self._file_tally, self._isolated_failure, self._work_started)
+        self._file_tally = None
+        failed: dict[int, str] = {}
+        context: dict[str, Any] = {}
+        try:
+            for k, (orig_intent, sub_plan) in enumerate(intent_blocks):
+                if orig_intent.get("tool") in _TERMINAL_TOOLS:
+                    continue
+                file_idx = batch.file_of[k] if batch is not None else None
+                if file_idx is not None and file_idx in failed:
+                    continue
+                self._isolated_failure = None
+                # Isolated: a handler's own error is a failed result, so what escapes is a refusal.
+                sub_results, _ = self._execute_steps(
+                    sub_plan,
+                    context,
+                    True,
+                    confirmed,
+                    False,
+                    intent_tool=orig_intent.get("tool"),
+                    intent_destructive=bool(
+                        (tool_def := self.registry.get(str(orig_intent.get("tool"))))
+                        and tool_def.safety_category == "destructive"
+                    ),
+                    work_dir=work_dir,
+                    isolate=True,
+                    rehearsal=True,
+                )
+                if not sub_results or not _step_failed(sub_results[-1].get("result")):
+                    continue
+                cause = display(
+                    self._isolated_failure or _failure_reason(sub_results[-1]["result"])
+                )
+                if file_idx is None:
+                    raise PlanWouldFail(rehearsal_failure_context(k, len(intent_blocks)), cause)
+                failed[file_idx] = first_line(_without_folder(cause, self._resolution_dir()))
+        finally:
+            self._file_tally, self._isolated_failure, self._work_started = saved
+        if batch is not None and failed and len(failed) == len(batch.shown):
+            raise PlanWouldFail(EVERY_FILE_WOULD_FAIL, next(iter(failed.values())))
+        return failed
+
     def _execute_steps(
         self,
         sub_plan: list[dict[str, Any]],
@@ -1370,8 +1463,12 @@ class CommandAgent:
         intent_destructive: bool = False,
         work_dir: Path | None = None,
         isolate: bool = False,
+        rehearsal: bool = False,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute *sub_plan* sequentially against the shared *context*.
+
+        *rehearsal* (with *dry_run*): the check before a real run (``_rehearse``). Handlers run
+        as a dry run, but a destructive step still needs *confirmed*, as it will when it runs.
 
         *intent_tool* / *intent_destructive* carry the originating intent's identity
         and safety_category through expansion, so a destructive intent that expands
@@ -1433,7 +1530,7 @@ class CommandAgent:
             if (
                 tool not in _TERMINAL_TOOLS
                 and (intent_destructive or step_destructive)
-                and not dry_run
+                and (not dry_run or rehearsal)
                 and not confirmed
             ):
                 if intent_destructive and not step_destructive:
@@ -1671,6 +1768,7 @@ class CommandAgent:
             to_stdout=self.to_stdout,
             effects=frozenset(declared) if declared is not None else None,
             file_reporter=file_reporter,
+            item_shower=self.item_shown,
         )
         holder.append(ctx)
         return ctx
@@ -2508,7 +2606,7 @@ class CommandAgent:
 
         Two conditions keep the relaxation honest, and both are load-bearing:
 
-        * **the value must name a file. that exists.** "join clip.mov and clip_4k
+        * **the value must name a file that exists.** "join clip.mov and clip_4k
           together" → `clip_4k.mov` keeps its clarify, because `clip_4k.mp4` is the
           file; naming a stem does not license guessing which file it is.
         * **the stem must look like a stem** — carrying ``_``, ``-`` or a digit, the
@@ -2519,7 +2617,7 @@ class CommandAgent:
 
         *known_files* is passed in rather than read here so the guard stays pure and
         the L2 parity contract can state it (`sandbox_files` in
-        `contracts/parity/clarify_gate_cases.json`.). Empty means nothing can be
+        `contracts/parity/clarify_gate_cases.json`). Empty means nothing can be
         confirmed, and the strict rule applies unchanged.
         """
         u_lower = utterance.lower()

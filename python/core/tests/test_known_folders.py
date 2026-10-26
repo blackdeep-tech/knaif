@@ -5,8 +5,8 @@
   `KNAIF_KNOWN_FOLDERS_ROOT=<dir>` maps every folder to <dir>/<Name>, for tests and evals.
 - `rewrite_outputs(plan, ...)` turns an output arg whose first segment names a known folder into
   a path inside it. Only output args move; inputs keep today's resolution.
-- A folder of the same name next to the input (or in the working folder) is a question, not a
-  guess: the rewrite returns a clarify naming both.
+- A folder of the same name in the working folder is a question, not a guess: the rewrite
+  returns a clarify naming both. One next to the input is not (outputs never go there).
 - With a sandbox, a known folder outside it is refused like any other path.
 """
 
@@ -198,12 +198,13 @@ def test_a_same_named_folder_in_the_working_folder_is_a_question(tmp_path):
     assert "Downloads" in q and (tmp_path / "known" / "Downloads").as_posix() in q
 
 
-def test_a_same_named_folder_next_to_the_input_is_a_question(tmp_path):
+def test_a_same_named_folder_next_to_the_input_is_no_question(tmp_path):
+    # (owner, 2026-10-24): a relative output is written under the working folder, never
+    # next to its input, so a `Desktop` folder there could not have received it.
     work = _work(tmp_path)
     (work / "media" / "Desktop").mkdir(parents=True)
     plan = [{"tool": "convert_video", "args": {"inputs": ["media/c.mov"], "output": "Desktop"}}]
-    with pytest.raises(SameNameFolder):
-        _rw(plan, tmp_path)
+    assert _rw(plan, tmp_path)[0]["args"]["output"].startswith((tmp_path / "known").as_posix())
 
 
 def test_a_same_named_file_is_no_question(tmp_path):
@@ -307,3 +308,39 @@ def test_a_relative_root_is_made_absolute_where_it_is_read(tmp_path: Path, monke
     got = resolve("downloads", env={ROOT_ENV: "lane/r.known"})
     assert got.is_absolute()
     assert got == tmp_path / "lane" / "r.known" / "Downloads"
+
+
+_SPELLED_FIRST = """
+import pathlib, sys
+from knaif.known_folders import SameNameFolder, rewrite_outputs
+
+work, known = pathlib.Path(sys.argv[1]), sys.argv[2]
+# Both spellings are folders here, as on a case-insensitive disk (Windows, macOS).
+pathlib.Path.is_dir = lambda self: self.parent == work and self.name.lower() == "videos"
+plan = [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "videos/small"}}]
+try:
+    rewrite_outputs(plan, {}, cwd=work, env={"KNAIF_KNOWN_FOLDERS_ROOT": known})
+except SameNameFolder as exc:
+    print(str(exc).split(" folder at ")[0])
+"""
+
+
+def test_the_question_names_the_folder_as_the_plan_spells_it(tmp_path: Path) -> None:
+    """(2026-10-24): `videos/small` asked about a "Videos" folder in
+    some runs and a "videos" folder in others: the two spellings were looped over as a set, whose
+    order changes with the process's hash seed. As native: the spelling the plan wrote, first."""
+    import os
+    import subprocess
+    import sys
+
+    got = set()
+    for seed in range(16):
+        out = subprocess.run(
+            [sys.executable, "-c", _SPELLED_FIRST, str(tmp_path), str(tmp_path / "known")],
+            env={**os.environ, "PYTHONHASHSEED": str(seed)},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        got.add(out.stdout.strip())
+    assert got == {"There is a videos"}

@@ -45,7 +45,15 @@ alert_when_done:
   triggers: [beep, beeps, beeping, notify, notification, notified, alert, chime, "ping me",
              "let me know", "tell me when", "when it's done", "when it is done", "when done",
              "when finished", "when it's finished", "when it finishes", "once done",
-             "once it's done", "when it's ready", "when ready"]
+             "once it's done", "when it's ready", "when ready",
+             # the corpus languages, as the one-file-into-many triggers have them
+             "sag mir bescheid", "gib mir bescheid", "benachrichtige mich", "piep", "piepe",
+             "wenn es fertig ist", "wenn du fertig bist",
+             "avísame", "notifícame", "cuando termine", "cuando esté listo",
+             "préviens-moi", "notifie-moi", "quand c'est fini", "quand c'est terminé",
+             "уведоми ме", "когато е готово", "когато свърши", "когато приключи", "бипни",
+             "сообщи мне", "уведоми меня", "когда будет готово", "когда закончится",
+             "完成后提醒我", "完成后通知我", "完成后告诉我", "提醒我", "通知我"]
   safety_category: safe
 
 wait_for_confirmation:

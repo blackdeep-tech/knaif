@@ -944,10 +944,10 @@
       "utterance": "make report.pdf smaller",
       "retrieved": [
         "clarify",
+        "compress_pdf",
         "done",
         "ocr_document",
         "reject",
-        "rotate_pages",
         "split_pdf",
         "unlock_pdf",
         "watermark"

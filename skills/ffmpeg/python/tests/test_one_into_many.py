@@ -73,6 +73,13 @@ def test_piece_names_follow_the_output_or_the_input(pieces):
     )
 
 
+def test_a_named_set_is_under_the_working_folder(pieces):
+    """Owner, 2026-10-24: a name the plan gives is not joined to the input's folder."""
+    args = {"input": "videos/clip.mov", "parts": 2}
+    assert _plan(pieces, "split_video", {**args, "output": "part.mp4"})[0] == "part_%03d.mp4"
+    assert _plan(pieces, "split_video", {**args, "output": "out/p.mp4"})[0] == "out/p_%03d.mp4"
+
+
 def test_a_split_needs_a_length_or_a_count(pieces):
     with pytest.raises(ValueError, match="how long"):
         pieces.plan_pieces("split_video", {"input": "clip.mp4"}, 10.0, 30.0)

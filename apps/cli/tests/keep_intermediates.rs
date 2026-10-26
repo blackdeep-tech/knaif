@@ -1,4 +1,4 @@
-//! (`--keep-intermediates`: every step's output stays in the user's folder. Without
+//! `--keep-intermediates`: every step's output stays in the user's folder. Without
 //! it, a chain's refined intermediate goes to the run scratch (the keep rule); with the flag, or
 //! with request words like "keep the intermediate files", nothing is routed.
 //!

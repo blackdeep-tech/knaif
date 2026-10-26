@@ -71,7 +71,7 @@ prepare_for_platform:
 compress_video:
   effects: []
   description: "Compress one or more videos to a smaller file size, optionally targeting a delivery channel (email)."
-  keywords: [compress, smaller, shrink, under, tiny, size, filesize, bitrate, kbps, kilobits, comprimir, komprimieren, verkleinern, compresser, réduire, сжать, squeeze, компресирай, намали, размер, 压缩, 减小, 大小, 文件]
+  keywords: [compress, smaller, shrink, under, tiny, size, filesize, bitrate, kbps, kilobits, comprimir, komprimieren, verkleinern, compresser, réduire, сжать, squeeze, компресирай, намали, размер, 压缩, 减小, 大小, 文件, kleiner, сожми]
   required_args: [inputs]
   optional_args: [target, target_size_mb, quality, crf, output, preview]
   safety_category: destructive
@@ -84,7 +84,7 @@ convert_video:
   produces: {arg: container}   # the format asked for, when the step names no output
   effects: []
   description: "Convert one or more videos to a different container and/or codec."
-  keywords: [convert, container, codec, mp4, mkv, webm, mov, transcode, gif, animate, encode, re-encode, recode, crf, lossless, format, batch, all, every, bulk, convertir, konvertieren, umwandeln, verlustfrei, безгубно, копие, конвертировать, конвертирай, lote, stapel, lot, пакет, партиден, 转换, 批量, 无损, 格式]
+  keywords: [convert, container, codec, mp4, mkv, webm, mov, transcode, gif, animate, encode, re-encode, recode, crf, lossless, format, batch, all, every, bulk, convertir, konvertieren, umwandeln, verlustfrei, безгубно, копие, конвертировать, конвертирай, lote, stapel, lot, пакет, партиден, 转换, 批量, 无损, 格式, convierte]
   required_args: [inputs]
   optional_args: [container, video_codec, audio_codec, quality, crf, output, preview]
   safety_category: destructive
@@ -137,7 +137,7 @@ extract_audio:
   effects: []
   produces: audio   # the keep rule: a video whose audio is extracted stays (another kind)
   description: "Extract the audio track from one or more videos into a chosen audio format."
-  keywords: [extract, audio, mp3, aac, flac, opus, wav, soundtrack, extraer, extrahieren, extraire, извлечь, rip, извлечи, 提取, 音频]
+  keywords: [extract, audio, mp3, aac, flac, opus, wav, soundtrack, extraer, extrahieren, extraire, извлечь, rip, извлечи, 提取, 音频, извади]
   required_args: [inputs]
   optional_args: [audio_format, format, container, bitrate, quality, start, end, output]
   safety_category: destructive
@@ -150,7 +150,7 @@ create_thumbnail:
   effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
   produces: image
   description: "Create a still-image thumbnail or frame grab from a single video at a given timestamp."
-  keywords: [thumbnail, screenshot, still, poster, frame, miniatura, vorschaubild, vignette, миниатюра, cover, 缩略图, grab, snapshot, capture, framegrab, standbild, einzelbild, bild, fotograma, кадър, снимок, плакат, 截图, 海报, 图片]
+  keywords: [thumbnail, screenshot, still, poster, frame, miniatura, vorschaubild, vignette, миниатюра, cover, 缩略图, grab, snapshot, capture, framegrab, standbild, einzelbild, bild, fotograma, кадър, снимок, плакат, 截图, 海报, 图片, снимка, снимки]
   required_args: [input]
   optional_args: [at_time, image_format, scale, output]
   safety_category: destructive
@@ -239,7 +239,7 @@ strip_audio:
 adjust_speed:
   effects: []
   description: "Change the playback speed of one or more videos by a given multiplier (e.g. 2.0 for double speed, 0.5 for half speed)."
-  keywords: [speed, fast, faster, slow, slower, accelerate, decelerate, tempo, timelapse, slowmotion, velocidad, geschwindigkeit, vitesse, скорость, slowdown, скорост, ускори, ускорь, забави, двойно, 速度, 加速, 减速, 倍]
+  keywords: [speed, fast, faster, slow, slower, accelerate, decelerate, tempo, timelapse, slowmotion, velocidad, geschwindigkeit, vitesse, скорость, slowdown, скорост, ускори, ускорь, забави, двойно, 速度, 加速, 减速, 倍, acelera, schnell]
   required_args: [inputs, speed]
   optional_args: [quality, output, preview]
   safety_category: destructive
@@ -280,7 +280,7 @@ concat_video:
   derives: true   # a join is a new thing: the joined pieces stay
   effects: []
   description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input."
-  keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并]
+  keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并, слей, zusammen]
   required_args: []
   optional_args: [inputs, base, append, output, target_resolution, target_fps]
   any_of_args: [inputs, base, append]

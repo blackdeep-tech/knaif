@@ -77,6 +77,12 @@ def _finished(ctx: Any, file: str, failure: str | None) -> None:
         report(file, failure)
 
 
+def _show(ctx: Any, item: dict[str, Any]) -> bool:
+    """Show a result line now (``ctx.show``), when the caller shows lines live."""
+    show = getattr(ctx, "show", None)
+    return bool(show(item)) if show is not None else False
+
+
 def run_and_commit(command: list[str], output: str | None, ctx: HandlerContext) -> dict[str, Any]:
     """Run one ffmpeg command so that only a verified output reaches the user's folder.
 
@@ -298,15 +304,51 @@ class BuildRecipesStep(Handler):
             )
             for p in probes
         ]
+        recipes, already = _without_copies_of_themselves(recipes, options)
         # Only the batch knows whether two inputs land on one output path, and every command
         # carries -y, so an unresolved clash is a silent overwrite rather than an error.
         recipes = disambiguate_outputs(recipes)
         out = {"count": len(recipes), "recipes": recipes}
+        if already:
+            # Shown when the step runs for real; a dry run (the rehearsal too) leaves it to the
+            # step's report, so it is said once.
+            live = not (ctx.dry_run or ctx.skip_execution)
+            if not (live and _show(ctx, {"kind": "note", "message": already})):
+                out["already"] = already
         # Returning fewer files than asked for without saying why reads as a tool that lost a
         # file. Only present when something was actually dropped.
         if skipped:
             out["skipped"] = skipped
         return out
+
+
+def _without_copies_of_themselves(
+    recipes: list[dict[str, Any]], options: dict[str, Any]
+) -> tuple[list[dict[str, Any]], str | None]:
+    """*recipes* without the files of a batch convert that would only be copied, as they are,
+    beside themselves: an mp4 among "every video to mp4" became `concert_1.mp4` (owner,
+    2026-10-25). Into another folder the copy is work, and one file the user names keeps
+    its numbered copy. With the note to print, or ``None``. Native `copies_of_themselves`.
+    """
+    if options.get("mode") != "convert" or len(recipes) < 2:
+        return recipes, None
+    kept, skipped = [], []
+    for r in recipes:
+        src, dst = Path(str(r.get("input", ""))), Path(str(r.get("output", "")))
+        # A Windows path compares without case, as the folder does.
+        same_place = src.parent.absolute() == dst.parent.absolute()
+        if r.get("remux") and src.suffix.lower() == dst.suffix.lower() and same_place:
+            skipped.append(src.name)
+        else:
+            kept.append(r)
+    if not skipped:
+        return recipes, None
+    ext = Path(str(recipes[0].get("output", ""))).suffix.lstrip(".").lower()
+    names = ", ".join(skipped)
+    if not kept:
+        verb = "is" if len(skipped) == 1 else "are"
+        raise ValueError(f"Nothing to convert: {names} {verb} already {ext}.")
+    return kept, f"note: skipped {names} (already {ext})"
 
 
 class RenderPreviewCommandStep(Handler):
@@ -464,6 +506,10 @@ class RunBatchStep(Handler):
         many = len(commands) > 1
         for c in commands:
             out = c.get("output")
+            # Each command as it starts and its file as it is done, as native prints them; the
+            # step's report then leaves out what was shown.
+            command = [str(t) for t in c.get("command") or []]
+            shown = _show(ctx, {"kind": "command", "message": " ".join(command), "argv": command})
             started = time.perf_counter()
             try:
                 res = run_and_commit(c["command"], out, ctx)
@@ -479,6 +525,9 @@ class RunBatchStep(Handler):
                     raise
                 res = {"returncode": 1, "stderr": str(exc)}
                 failure = str(exc)
+            seconds = time.perf_counter() - started
+            if shown and failure is None and out:
+                _show(ctx, {"kind": "output", "message": str(out), "seconds": seconds})
             outputs.append(
                 {
                     "mode": "execute",
@@ -488,7 +537,9 @@ class RunBatchStep(Handler):
                     "stderr_tail": res["stderr"][-2000:] if res["stderr"] else "",
                     # What ran and how long: the CLI shows both, as native does.
                     "command": c.get("command"),
-                    "seconds": time.perf_counter() - started,
+                    "seconds": seconds,
+                    # Already shown as it happened: the report leaves its lines out.
+                    "shown": shown,
                 }
             )
             _finished(ctx, str(c.get("input") or out or ""), failure)

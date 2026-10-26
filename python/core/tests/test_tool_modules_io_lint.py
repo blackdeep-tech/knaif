@@ -63,9 +63,8 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     (_DOC + "_engine.py", "_write_ocr_pdf", ".open(write)"): _TARGET,
     (_DOC + "_engine.py", "_write_text_overlay_pdf", ".open(write)"): _TARGET,
     (_DOC + "_engine.py", "_write_image_overlay_pdf", ".open(write)"): _TARGET,
-    (_DOC + "steps.py", "ConvertDocumentStep.handle", ".write_text"): _TARGET,
-    (_DOC + "steps.py", "ExtractTextStep.handle", ".write_text"): _TARGET
-    + " (a batch's text, saved per file: tools.yaml `batch_output: txt`)",
+    (_DOC + "_engine.py", "_write_text", ".write_bytes"): _TARGET
+    + " (extract_text's and convert_document's text, plain `\\n` on every OS)",
     (_DOC + "steps.py", "ConvertDocumentStep.handle", "shutil.move"): _TARGET
     + " (soffice's result, moved from its private folder)",
     (_DOC + "steps.py", "RunCompressStep.handle", "shutil.copyfile"): _TARGET

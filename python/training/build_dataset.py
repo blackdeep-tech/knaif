@@ -170,9 +170,31 @@ def main() -> None:
                 print(f"  extra {path}: {file_n} source rows -> {file_expanded} expanded rows")
         print(f"{skill}: {n} source rows -> {expanded} expanded rows")
 
+    # The prompt every row carries is the served one, and it has a generation: refuse to build on
+    # a prompt that changed without a bump (FINE_TUNING.md §4.11), and record the generation
+    # beside the dataset so the model's `trained_for` has a source.
+    from knaif.prompt_generation import declared, fingerprint
+
+    generation = declared()
+    now = fingerprint(skills)
+    if now != generation.fingerprint and set(skills) == set(SKILLS):
+        raise SystemExit(
+            f"the served prompt does not match prompt generation {generation.generation}: run "
+            "python/core/tests/test_prompt_generation.py for what to bump before building"
+        )
     out_path.write_text(
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8"
     )
+    meta = out_path.with_name(out_path.stem + ".meta.json")
+    meta.write_text(
+        json.dumps(
+            {"prompt_generation": generation.generation, "fingerprint": now, "skills": skills},
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(f"prompt generation {generation.generation} -> {meta}")
     print("\nsummary by skill:")
     for skill in skills:
         print(f"  {skill}: {source_by_skill[skill]} source -> {expanded_by_skill[skill]} expanded")

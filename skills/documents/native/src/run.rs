@@ -111,6 +111,13 @@ pub fn preview_in(
             // free default name. Python `ExtractTextStep`.
             let out = derive_output(&p, &input, out_arg(args, &p, "output")?, ".txt");
             p.check(&out)?;
+            // A PDF that cannot be read stops here, as Python's dry run stops, so the rehearsal
+            // before a real run refuses it first (`dry_run_depth_cases.json`).
+            if input.exists() && is_pdf(&input) && pdf::is_encrypted(&pdf::load(&input)?) {
+                anyhow::bail!(
+                    "Cannot extract text from encrypted PDF without a password. Unlock it first."
+                );
+            }
             Ok(Preview::Write {
                 outputs: vec![out],
                 summary: "save the text".into(),
@@ -138,6 +145,12 @@ pub fn preview_in(
             Ok(Preview::Write { outputs, summary })
         }
     }
+}
+
+fn is_pdf(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
 }
 
 /// A read tool's input when it is not there yet, which a dry run must not read: a URL input is
@@ -201,8 +214,7 @@ pub fn commit_in(
                 str_arg(args, "pages").as_deref(),
                 bool_arg(args, "ocr").unwrap_or(false),
             )?;
-            let joined: Vec<&str> = records.iter().map(|r| r.text.as_str()).collect();
-            let text = joined.join("\n");
+            let text = text::document_text(&records);
             write_with(&p, &output, |target| Ok(std::fs::write(target, &text)?))?;
             Ok(vec![output])
         }
@@ -368,6 +380,11 @@ fn write_outputs(
         }
         "rotate_pages" => {
             let input = input_path(args, p)?;
+            // Opened as Python's dry run opens it (`dry_run_depth_cases.json`); a chain's input
+            // not written yet is checked when run, as remove_pages does.
+            if input.exists() {
+                pdf::load_unlocked(&input)?;
+            }
             let out = derive_output(p, &input, out_arg(args, p, "output")?, "-rotated.pdf");
             p.check(&out)?;
             Ok((vec![out], "rotate pages".into()))
@@ -455,6 +472,11 @@ fn write_outputs(
         }
         "compress_pdf" => {
             let input = input_path(args, p)?;
+            // A broken PDF stops the dry run, as Python's inspection does; a protected one does
+            // not (`dry_run_depth_cases.json`).
+            if input.exists() {
+                pdf::load(&input)?;
+            }
             let quality = str_arg(args, "compress_quality").unwrap_or_else(|| "balanced".into());
             let (_profile, gs) = compress_setup(bundle, &quality)?;
             let method = crate::compress::compress_method_label(&quality, gs.is_some());
@@ -464,6 +486,10 @@ fn write_outputs(
         }
         "ocr_document" => {
             let input = input_path(args, p)?;
+            // As compress_pdf: a broken PDF stops the dry run, a protected one does not.
+            if input.exists() && is_pdf(&input) {
+                pdf::load(&input)?;
+            }
             let out = derive_output(p, &input, out_arg(args, p, "output")?, "-ocr.pdf");
             p.check(&out)?;
             Ok((vec![out], "OCR → searchable PDF".into()))
@@ -1161,7 +1187,7 @@ mod tests {
     #[test]
     fn extract_text_with_an_output_saves_the_text() {
         // A batch saves each file's text (`batch_output: txt`): core gives the lifted step its
-        // `output`, the step writes the pages' text joined by newlines, as Python does.
+        // `output`, the step writes the pages' text one blank line apart, as Python does.
         let dir = tmpdir();
         std::fs::write(
             dir.join("a.pdf"),
@@ -1175,11 +1201,9 @@ mod tests {
         }
         let written = commit("extract_text", &a, &dir, Some(&dir), &docs_bundle()).unwrap();
         assert_eq!(written, vec![dir.join("a.txt")]);
-        let records = text::extract_text(&dir.join("a.pdf"), None).unwrap();
-        let joined: Vec<&str> = records.iter().map(|r| r.text.as_str()).collect();
         assert_eq!(
             std::fs::read_to_string(dir.join("a.txt")).unwrap(),
-            joined.join("\n")
+            "Alpha\n\nBeta\n"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

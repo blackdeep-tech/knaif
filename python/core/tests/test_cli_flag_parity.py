@@ -1,6 +1,6 @@
 """One set of flags for both CLIs (owner, 2026-10-23).
 
-`contracts/parity/cli_flag_cases.json`. pins what each argv after `run` approves; the Rust half
+`contracts/parity/cli_flag_cases.json` pins what each argv after `run` approves; the Rust half
 is `cli_flag_cases` in apps/cli/src/main.rs.
 """
 
@@ -38,3 +38,15 @@ def test_cli_flags(case: dict) -> None:
     assert allow.asks_proceed(confirm=params["confirm"]) == case["asks_proceed"]
     if "stdout" in case:
         assert params["stdout"] == case["stdout"]
+
+
+def test_run_help_shows_no_default_for_dry_run() -> None:
+    """(2026-10-24): click prints a flag pair's default as the name of
+    its first off switch, so `--dry-run` read `[default: D]`. Native shows no default there."""
+    from click.testing import CliRunner
+
+    from knaif.app import cli
+
+    out = CliRunner().invoke(cli, ["run", "--help"]).output
+    dry_run = out[out.index("-d, --dry-run") : out.index("-y, --yes")]
+    assert "[default" not in dry_run, dry_run

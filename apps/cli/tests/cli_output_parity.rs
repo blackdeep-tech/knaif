@@ -85,6 +85,50 @@ fn without_progress(text: &str) -> String {
 }
 
 fn run(case: &serde_json::Value, dir: &std::path::Path) -> (String, String, bool) {
+    let out = command(case, dir).output().expect("run the knaif binary");
+    (
+        masked(&String::from_utf8_lossy(&out.stdout)),
+        masked(&String::from_utf8_lossy(&out.stderr)),
+        out.status.success(),
+    )
+}
+
+/// stdout and stderr through one pipe, in the order the binary wrote them: what a person sees
+/// (Python printed every `running:` line before the first `✓`, 2026-10-24).
+fn run_merged(case: &serde_json::Value, dir: &std::path::Path) -> String {
+    use std::io::Read;
+    let (mut reader, writer) = std::io::pipe().expect("a pipe");
+    let mut cmd = command(case, dir);
+    cmd.stdout(writer.try_clone().expect("a second writer"))
+        .stderr(writer);
+    let mut child = cmd.spawn().expect("run the knaif binary");
+    drop(cmd); // its copies of the writer, or the read below never ends
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes).expect("read the pipe");
+    child.wait().expect("wait for the knaif binary");
+    masked(&String::from_utf8_lossy(&bytes))
+}
+
+/// A fresh folder holding the case's empty files and fixtures; `false` when a fixture is missing.
+fn prepare(case: &serde_json::Value, dir: &std::path::Path) -> bool {
+    std::fs::create_dir_all(dir).unwrap();
+    for file in case["files"].as_array().into_iter().flatten() {
+        let path = dir.join(file.as_str().unwrap());
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"").unwrap();
+    }
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../sandbox/fixtures")
+        .join(case["skill"].as_str().unwrap());
+    let mut found = true;
+    for file in case["fixtures"].as_array().into_iter().flatten() {
+        let name = file.as_str().unwrap();
+        found &= std::fs::copy(fixtures.join(name), dir.join(name)).is_ok();
+    }
+    found
+}
+
+fn command(case: &serde_json::Value, dir: &std::path::Path) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_knaif"));
     if case["view"].as_str() == Some("rich") {
         cmd.env("KNAIF_VIEW", "rich").env("NO_COLOR", "1");
@@ -96,21 +140,14 @@ fn run(case: &serde_json::Value, dir: &std::path::Path) -> (String, String, bool
     if case["view"].as_str() != Some("rich") {
         cmd.env_remove("KNAIF_VIEW").env_remove("NO_COLOR");
     }
-    let out = cmd
-        .arg(case["utterance"].as_str().unwrap())
+    cmd.arg(case["utterance"].as_str().unwrap())
         .current_dir(dir)
         .stdin(Stdio::null())
         .env("KNAIF_LLM_BACKEND", "mock")
         .env("KNAIF_LLM_MOCK_RESPONSE", case["plan"].to_string())
         .env_remove("KNAIF_DUMP_PLAN")
-        .env_remove("KNAIF_DEBUG")
-        .output()
-        .expect("run the knaif binary");
-    (
-        masked(&String::from_utf8_lossy(&out.stdout)),
-        masked(&String::from_utf8_lossy(&out.stderr)),
-        out.status.success(),
-    )
+        .env_remove("KNAIF_DEBUG");
+    cmd
 }
 
 #[test]
@@ -124,18 +161,7 @@ fn cli_output_cases() {
         .join(format!("tmp_cli_output_{}", std::process::id()));
     for (i, case) in doc["cases"].as_array_mut().unwrap().iter_mut().enumerate() {
         let dir = root.join(i.to_string());
-        std::fs::create_dir_all(&dir).unwrap();
-        for file in case["files"].as_array().into_iter().flatten() {
-            std::fs::write(dir.join(file.as_str().unwrap()), b"").unwrap();
-        }
-        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../sandbox/fixtures")
-            .join(case["skill"].as_str().unwrap());
-        let mut missing = false;
-        for file in case["fixtures"].as_array().into_iter().flatten() {
-            let name = file.as_str().unwrap();
-            missing |= std::fs::copy(fixtures.join(name), dir.join(name)).is_err();
-        }
+        let missing = !prepare(case, &dir);
         let executes = !case["flags"]
             .as_array()
             .unwrap()
@@ -147,6 +173,12 @@ fn cli_output_cases() {
         }
         let (stdout, stderr, ok) = run(case, &dir);
         let name = case["name"].as_str().unwrap().to_string();
+        // The two streams in the order written, from a second run in a fresh folder.
+        let merged = case.get("merged").is_some().then(|| {
+            let again = root.join(format!("{i}-merged"));
+            prepare(case, &again);
+            run_merged(case, &again)
+        });
         if let Some(expected) = case["files_after"].as_array() {
             let mut left: Vec<String> = std::fs::read_dir(&dir)
                 .unwrap()
@@ -160,13 +192,34 @@ fn cli_output_cases() {
                 .collect();
             assert_eq!(left, expected, "{name}: the files left");
         }
+        // Written by hand, never recorded: a saved file's exact bytes, line ends included.
+        if let Some(expected) = case["file_bytes"].as_object() {
+            for (file, text) in expected {
+                let got = std::fs::read(dir.join(file)).unwrap_or_default();
+                assert_eq!(
+                    String::from_utf8_lossy(&got),
+                    text.as_str().unwrap(),
+                    "{name}: the bytes of {file}"
+                );
+            }
+        }
         if record {
             case["stdout"] = serde_json::Value::String(stdout);
             if case.get("stderr_prefix").is_none() {
                 case["stderr"] = serde_json::Value::String(stderr);
             }
             case["ok"] = serde_json::Value::Bool(ok);
+            if let Some(merged) = merged {
+                case["merged"] = serde_json::Value::String(merged);
+            }
             continue;
+        }
+        if let Some(merged) = &merged {
+            assert_eq!(
+                case["merged"].as_str(),
+                Some(merged.as_str()),
+                "{name}: merged"
+            );
         }
         assert_eq!(case["stdout"].as_str(), Some(stdout.as_str()), "{name}");
         match case["stderr_prefix"].as_str() {

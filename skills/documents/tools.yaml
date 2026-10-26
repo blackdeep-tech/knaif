@@ -46,7 +46,7 @@ extract_text:
 find_in_document:
   effects: [exec:tesseract, fs.read]
   description: "Find a keyword or regex within one document and return page snippets."
-  keywords: [within, find, search, busca, buscar, encuentra, finde, suche, trouve, cherche, найди, найти, намери, 查找]
+  keywords: [within, find, search, busca, buscar, encuentra, finde, suche, trouve, cherche, найди, найти, намери, 查找, mention, mentions, contain, contains]
   required_args: [input, query]
   optional_args: [regex, ignore_case]
   defaults:
@@ -71,7 +71,7 @@ merge_pdfs:
   derives: true   # a join is a new thing; pieces made only for it go to the scratch (keep rule)
   effects: [fs.read, fs.write]
   description: "Merge multiple PDFs into one output PDF."
-  keywords: [merge, join, combine, together, stitch, append, combina, combinar, une, unir, fusiona, zusammenführen, verbinde, kombiniere, fusionne, fusionner, combiner, объедини, объединить, обедини, слей, 合并]
+  keywords: [merge, join, combine, together, stitch, append, combina, combinar, une, unir, fusiona, zusammenführen, verbinde, kombiniere, fusionne, fusionner, combiner, объедини, объединить, обедини, слей, 合并, zusammen]
   required_args: [inputs, output]
   # Several inputs become ONE output file, not one each: a chain may route that file into the
   # run scratch when a later step reads it (contracts/parity/scratch_routing_cases.json).
@@ -152,7 +152,7 @@ split_pdf_every:
 rotate_pages:
   effects: [fs.read, fs.write]
   description: "Rotate selected PDF pages."
-  keywords: [rotate, orientation, sideways, drehe, drehen, rota, gira, girar, pivote, pivoter, tourne, tourner, поверни, разверни, завърти, 旋转]
+  keywords: [rotate, orientation, sideways, degrees, upside, drehe, drehen, grad, rota, gira, girar, grados, pivote, pivoter, tourne, tourner, degres, поверни, разверни, завърти, градуса, градусов, 旋转, 度]
   required_args: [input, degrees]
   optional_args: [pages, output]
   safety_category: destructive
@@ -246,7 +246,7 @@ watermark:
 add_page_numbers:
   effects: [fs.read, fs.write]
   description: "Add page numbers to a PDF."
-  keywords: [number, numera, numerar, nummeriere, seitenzahlen, numérote, numéroter, пронумеруй, нумерация, номерирай, 页码, 编号]
+  keywords: [number, numera, numerar, nummeriere, seitenzahlen, numérote, numéroter, пронумеруй, нумерация, номерирай, 页码, 编号, номера]
   required_args: [input]
   optional_args: [position, start_at, output]
   defaults:
@@ -342,7 +342,7 @@ convert_document:
 compress_pdf:
   effects: []
   description: "Compress a PDF using a deterministic inspect-compress-verify workflow."
-  keywords: [compress, comprimir, comprime, komprimiere, komprimieren, verkleinern, compresser, reducir, tamaño, size, сожми, сжать, компресирай, 压缩]
+  keywords: [compress, comprimir, comprime, komprimiere, komprimieren, verkleinern, compresser, reducir, tamaño, size, сожми, сжать, компресирай, 压缩, smaller, shrink, slim, réduire, намали, 减小]
   required_args: [input]
   optional_args: [compress_quality, output]
   defaults:
@@ -365,7 +365,7 @@ compress_pdf:
 ocr_document:
   effects: []
   description: "Make a scanned PDF or image searchable with local Tesseract OCR."
-  keywords: [ocr]
+  keywords: [ocr, searchable, recognition, scanned, durchsuchbar, texterkennung, разпознай, распознай, 识别]
   required_args: [input]
   optional_args: [output, language]
   defaults:

@@ -77,6 +77,26 @@ class OllamaModelNotFoundError(RuntimeError):
     """
 
 
+#: The C callback that drops llama.cpp's log, kept alive for the whole process: llama.cpp calls
+#: it until the model is freed, at exit too.
+_QUIET_LOG: Any = None
+
+
+def _drop_log(level: int, text: bytes, user_data: Any) -> None:
+    return None
+
+
+def _quiet_llama_log(llama_cpp: Any) -> None:
+    """Turn llama.cpp's log off (and ggml's: `llama_log_set` sets both), as native does
+    (`send_logs_to_tracing`, logs disabled). llama-cpp-python's own callback prints to
+    `sys.stderr`: `llama_context: …` in a terminal, and "Exception ignored … llama_log_callback"
+    when it is called again while Python shuts down (owner, 2026-10-24)."""
+    global _QUIET_LOG
+    if _QUIET_LOG is None:
+        _QUIET_LOG = llama_cpp.llama_log_callback(_drop_log)
+    llama_cpp.llama_log_set(_QUIET_LOG, ctypes.c_void_p(0))
+
+
 def _perf_reset(llm: Any) -> None:
     """Zero llama.cpp's counters so the next call is measured alone, not cumulatively."""
     try:
@@ -382,6 +402,10 @@ class InferenceOrchestrator:
         if verbose:
             print(f"Loading: {model_name}")
             print(f"   Path: {full_path}")
+        if not verbose:
+            import llama_cpp
+
+            _quiet_llama_log(llama_cpp)
         try:
             self.llm = Llama(
                 model_path=str(full_path),

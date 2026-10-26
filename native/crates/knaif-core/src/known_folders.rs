@@ -56,7 +56,6 @@ fn xdg_key(name: &str) -> Option<&'static str> {
 
 /// Arg keys that name where a step writes. A schema's `path_role: output` counts too.
 const OUTPUT_KEYS: &[&str] = &["output", "output_dir"];
-const INPUT_KEYS: &[&str] = &["inputs", "input", "files", "src", "path", "base", "append"];
 
 /// The process environment as a map, for [`resolve`] and [`rewrite_outputs`].
 pub fn process_env() -> HashMap<String, String> {
@@ -339,7 +338,7 @@ pub fn names_known_folder(text: &str) -> bool {
 pub enum Rewrite {
     /// The plan, with every known-folder output pointed into its folder.
     Plan(Vec<Value>),
-    /// A folder of that name also exists next to the input: the question to ask instead.
+    /// A folder of that name also exists in the working folder: the question to ask instead.
     Ask(String),
     /// The folder is outside `--sandbox`.
     Refused(String),
@@ -365,35 +364,45 @@ fn output_keys(registry: &Registry, tool: &str) -> Vec<String> {
     keys
 }
 
-fn input_dirs(args: &serde_json::Map<String, Value>, cwd: &Path) -> Vec<PathBuf> {
-    let mut dirs = vec![cwd.to_path_buf()];
-    for key in INPUT_KEYS {
-        let items: Vec<&Value> = match args.get(*key) {
-            Some(Value::Array(a)) => a.iter().collect(),
-            Some(v) => vec![v],
-            None => vec![],
+/// The first folder of every input path in `plan`, lowercased (`videos/*.mov` → `videos`).
+/// Python `_input_folders`.
+fn input_folders(plan: &[Value], registry: &Registry) -> HashSet<String> {
+    let mut found = HashSet::new();
+    for step in plan {
+        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
+        let Some(args) = step.get("args").and_then(Value::as_object) else {
+            continue;
         };
-        for item in items.into_iter().filter_map(Value::as_str) {
-            if item.is_empty() || item.starts_with('$') || item.contains("://") {
+        let outputs = output_keys(registry, tool);
+        for (key, value) in args {
+            if outputs.contains(key) {
                 continue;
             }
-            let parent = Path::new(item).parent().unwrap_or(Path::new(""));
-            dirs.push(if parent.is_absolute() {
-                parent.to_path_buf()
-            } else {
-                cwd.join(parent)
-            });
+            let items: Vec<&Value> = match value {
+                Value::Array(items) => items.iter().collect(),
+                other => vec![other],
+            };
+            for item in items.into_iter().filter_map(Value::as_str) {
+                if item.starts_with('$') {
+                    continue;
+                }
+                let parts = split_parts(item);
+                if parts.len() > 1 {
+                    found.insert(parts[0].to_lowercase());
+                }
+            }
         }
     }
-    dirs
+    found
 }
 
 /// `plan` with every output arg that names a known folder pointed into that folder.
 ///
 /// `Downloads/clip.mp4` becomes `<the user's Downloads>/clip.mp4`; inputs, `$var` references
 /// and paths that only contain the name further in (`out/Downloads/x`) stay. A folder of that
-/// name also in `cwd` or next to an input makes it a question ([`Rewrite::Ask`]); with a
-/// `sandbox`, a folder outside it is refused ([`Rewrite::Refused`]).
+/// name also in `cwd` makes it a question ([`Rewrite::Ask`]), unless the plan's inputs are in it,
+/// which keeps the output there; with a `sandbox`, a folder outside it is refused
+/// ([`Rewrite::Refused`]).
 pub fn rewrite_outputs(
     plan: &[Value],
     registry: &Registry,
@@ -402,6 +411,7 @@ pub fn rewrite_outputs(
     env: &HashMap<String, String>,
 ) -> Rewrite {
     let mut out: Vec<Value> = plan.to_vec();
+    let input_folders = input_folders(&out, registry);
     for step in out.iter_mut() {
         let tool = step
             .get("tool")
@@ -428,12 +438,19 @@ pub fn rewrite_outputs(
             let explicit_home = value.trim().starts_with('~');
             if folder != "home" && !explicit_home {
                 let spelled = split_parts(&value)[0].to_string();
+                // The plan's inputs are in the local folder of that name: that is the one
+                // meant, so the output stays in it and nothing asks (owner, 2026-10-25).
+                if input_folders.contains(&spelled.to_lowercase()) && cwd.join(&spelled).is_dir() {
+                    continue;
+                }
                 let mut names = vec![spelled.clone()];
                 if display_name(folder) != spelled {
                     names.push(display_name(folder).to_string());
                 }
                 let mut seen: HashSet<PathBuf> = HashSet::new();
-                for dir in input_dirs(args, cwd) {
+                // Only the working folder: a relative output is written under it, never next to
+                // its input (owner, 2026-10-24).
+                for dir in [cwd] {
                     for name in &names {
                         let local = dir.join(name);
                         if !seen.insert(local.clone()) {

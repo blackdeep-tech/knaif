@@ -271,6 +271,11 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
         elif tool in ("run_batch", "run_concat"):
             batch_outputs.extend(res.get("outputs") or [])
 
+    # The files a batch convert skipped as already in that format, when not shown live.
+    for step in results:
+        if step["tool"] == "build_recipes" and (step.get("result") or {}).get("already"):
+            items.append({"kind": "note", "message": step["result"]["already"]})
+
     files_seen = max(inspected, built)
     if files_seen < 2:
         for err in inspect_errors:
@@ -294,10 +299,14 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
         else:
             items.append({"kind": "info", "message": "(nothing to execute)"})
     else:
-        # What ran, then what it wrote, as native shows a step: its commands, then a `✓` for
-        # each file with its folder and time (the name alone hid `out/`).
+        # Each command, then what it wrote, as native shows a step: a `✓` for the file with its
+        # folder and time right after its command (the name alone hid `out/`; every command
+        # first, then every `✓`, was not native's order).
+        # A line already shown as it happened (`run_batch`'s `ctx.show`) is not repeated.
+        produced = 0
         for out in batch_outputs:
-            if out.get("command"):
+            shown = bool(out.get("shown"))
+            if out.get("command") and not shown:
                 items.append(
                     {
                         "kind": "command",
@@ -305,21 +314,19 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
                         "argv": [str(c) for c in out["command"]],
                     }
                 )
-        produced = []
-        for out in batch_outputs:
             if out.get("returncode", 0) != 0:
                 if files_seen < 2:
                     msg = ffmpeg_failure(out["returncode"], out.get("stderr_tail") or "")
                     items.append({"kind": "error", "message": msg})
             elif out.get("output"):
-                produced.append(out)
-        if produced:
-            for out in produced:
+                produced += 1
+                if shown:
+                    continue
                 item = {"kind": "output", "message": str(out["output"])}
                 if out.get("seconds") is not None:
                     item["seconds"] = out["seconds"]
                 items.append(item)
-        elif not any(i["kind"] == "error" for i in items):
+        if not produced and not any(i["kind"] == "error" for i in items):
             items.append({"kind": "info", "message": "(no output files produced)"})
 
     return items

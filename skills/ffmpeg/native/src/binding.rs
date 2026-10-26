@@ -116,12 +116,6 @@ fn replace_exact(value: &mut Value, from: &str, to: &str) {
     }
 }
 
-/// Tools whose handler resolves a relative output against the **sandbox** rather than against
-/// the first input's directory. `RunConcatStep` does exactly that, while every per-file mode
-/// goes through `build_one_recipe` and resolves against the input's parent. One rule for both is
-/// wrong in both directions: a genuine collision survives, and a good destination gets renamed.
-const SANDBOX_OUTPUT_TOOLS: &[&str] = &["concat_video", "run_concat"];
-
 /// No suffix for the on-disk shape: the consumer's output moves to the first free number,
 /// `clip_1.mp4` (owner, 2026-10-23; `_converted` could itself be taken). Python
 /// `_engine._COLLISION_SUFFIX`.
@@ -220,26 +214,14 @@ fn resolve_input(raw: &str, sandbox: Option<&Path>) -> PathBuf {
     }
 }
 
-/// Directory a relative *output* resolves against — which depends on the tool.
+/// Directory a relative *output* resolves against: the working folder, for every tool.
 ///
-/// **Inputs and outputs do not share a base.** `build_one_recipe` resolves an input to an
-/// absolute probe path and then resolves a relative output against the input's parent, so for
-/// `inputs=["a/clip.mp4"], output="a/clip.mp4"` the input is `<sandbox>/a/clip.mp4` and the
-/// output is `<sandbox>/a/a/clip.mp4`. Using one base for both moves every comparison into a
-/// directory that does not exist.
-///
-/// **And the base is not the same for every tool.** `concat_video` writes one output for many
-/// inputs, so its handler resolves it against the sandbox; "the first input's parent" is
-/// meaningless there and gets it wrong both ways.
-fn output_base(tool: &str, args: &Value, sandbox: Option<&Path>) -> Option<PathBuf> {
-    if SANDBOX_OUTPUT_TOOLS.contains(&tool) {
-        return sandbox.map(Path::to_path_buf);
-    }
-    for (key, index) in input_refs(args) {
-        if let Some(raw) = ref_str(args, &key, index) {
-            return resolve_input(&raw, sandbox).parent().map(Path::to_path_buf);
-        }
-    }
+/// Until 2026-10-24 (owner) a per-file mode resolved it against its input's folder while
+/// `concat_video` used the sandbox, and this had to follow both. Every tool now writes a
+/// relative output under the working folder (`engine::in_working_folder`), so
+/// `inputs=["a/clip.mp4"], output="a/clip.mp4"` is the input itself, and is renamed. Python
+/// `_collisions._output_base`.
+fn output_base(sandbox: Option<&Path>) -> Option<PathBuf> {
     sandbox.map(Path::to_path_buf)
 }
 
@@ -314,8 +296,7 @@ fn producer_of(
         let Some(args) = step.get("args") else {
             continue;
         };
-        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
-        let base = output_base(tool, args, sandbox);
+        let base = output_base(sandbox);
         for key in OUTPUT_KEYS {
             let Some(raw) = args
                 .get(key)
@@ -425,8 +406,7 @@ pub fn rebind_colliding_outputs(steps: &mut [Value], sandbox: Option<&Path>) -> 
         let Some(args) = step.get("args") else {
             continue;
         };
-        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
-        let base = output_base(tool, args, sandbox);
+        let base = output_base(sandbox);
         for (key, index) in input_refs(args) {
             if let Some(raw) = ref_str(args, &key, index) {
                 plan_paths.insert(resolve_input(&raw, sandbox));
@@ -450,12 +430,7 @@ pub fn rebind_colliding_outputs(steps: &mut [Value], sandbox: Option<&Path>) -> 
         let Some(args) = steps[idx].get("args") else {
             continue;
         };
-        let tool = steps[idx]
-            .get("tool")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        let base = output_base(&tool, args, sandbox);
+        let base = output_base(sandbox);
 
         let Some(out_key) = OUTPUT_KEYS
             .iter()
@@ -759,36 +734,31 @@ mod tests {
     }
 
     #[test]
-    fn an_output_resolves_against_the_input_parent_not_the_sandbox() {
-        // Inputs and outputs do NOT share a base. `build_one_recipe` resolves a relative output
-        // against the input's parent, so `inputs=["sub/clip.mp4"], output="clip.mp4"` is a real
-        // self-overwrite: both land on `<sandbox>/sub/clip.mp4`. Reading the output against the
-        // sandbox instead would miss it and let `-y` truncate the source.
+    fn a_bare_output_beside_a_folder_input_is_not_a_collision() {
+        // Owner, 2026-10-24: every relative output is under the working folder, so
+        // `sub/clip.mp4 -> clip.mp4` writes `<sandbox>/clip.mp4` and overwrites nothing.
         let sb = empty_sandbox();
         let mut steps = vec![convert("sub/clip.mp4", "clip.mp4")];
+        assert_eq!(
+            rebind_colliding_outputs(&mut steps, Some(&sb)),
+            PlanRenames::default()
+        );
+        assert_eq!(steps[0]["args"]["output"], "clip.mp4");
+    }
+
+    #[test]
+    fn an_output_naming_the_inputs_own_folder_is_a_self_overwrite() {
+        // `sub/clip.mp4 -> sub/clip.mp4` is the input itself now (it was `sub/sub/clip.mp4`
+        // before 2026-10-24), so `-y` would truncate the source: the output moves, keeping its folder.
+        let sb = empty_sandbox();
+        let mut steps = vec![convert("sub/clip.mp4", "sub/clip.mp4")];
         let renames = rebind_colliding_outputs(&mut steps, Some(&sb));
         assert_eq!(
             renames.collisions.len(),
             1,
             "the self-overwrite must be seen"
         );
-        // A bare reference stays bare — it is already inside `sub/` by resolution.
-        assert_eq!(steps[0]["args"]["output"], "clip_1.mp4");
-    }
-
-    #[test]
-    fn the_same_directory_on_both_sides_is_not_a_collision() {
-        // The flip side of the rule above, and counter-intuitive enough to pin: with the output
-        // resolved against the input's parent, `sub/clip.mp4 -> sub/clip.mp4` writes to
-        // `<sandbox>/sub/sub/clip.mp4` and overwrites nothing. Python does the same; asserted
-        // here so a future "fix" to one runtime has to explain itself to the other.
-        let sb = empty_sandbox();
-        let mut steps = vec![convert("sub/clip.mp4", "sub/clip.mp4")];
-        assert_eq!(
-            rebind_colliding_outputs(&mut steps, Some(&sb)),
-            PlanRenames::default()
-        );
-        assert_eq!(steps[0]["args"]["output"], "sub/clip.mp4");
+        assert_eq!(steps[0]["args"]["output"], "sub/clip_1.mp4");
     }
 
     #[test]

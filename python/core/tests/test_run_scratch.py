@@ -30,7 +30,9 @@ class Touch(Handler):
 
     def handle(self, args, ctx):
         wd = ctx.work_dir
-        SEEN.append({"work_dir": wd, "existed": wd is not None and Path(wd).is_dir()})
+        SEEN.append(
+            {"work_dir": wd, "existed": wd is not None and Path(wd).is_dir(), "dry": ctx.dry_run}
+        )
         if not (ctx.dry_run or ctx.skip_execution):
             (Path(wd) / "intermediate.bin").write_bytes(b"x")
         return {"ok": True}
@@ -40,7 +42,11 @@ class Boom(Handler):
     name = "boom"
 
     def handle(self, args, ctx):
-        raise RuntimeError("handler failed")
+        # Only when it runs: the rehearsal before a real run passes it, so the step fails
+        # after the run began, the case these tests are about.
+        if not ctx.dry_run:
+            raise RuntimeError("handler failed")
+        return {}
 
 
 class Caller(Handler):
@@ -129,7 +135,7 @@ def _plan(*tools: str) -> dict:
 
 def test_a_run_gets_a_fresh_work_dir_that_is_deleted_after(agent, scratch_root) -> None:
     agent.execute_plan(_plan("touch", "touch"), dry_run=False, confirmed=True)
-    seen = _seen(agent)
+    seen = [s for s in _seen(agent) if not s["dry"]]  # not the rehearsal's
     assert len(seen) == 2
     work_dir = Path(seen[0]["work_dir"])
     assert seen[0]["existed"] and seen[1]["existed"]

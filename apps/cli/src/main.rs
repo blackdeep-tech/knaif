@@ -192,25 +192,23 @@ struct RunArgs {
     /// Restrict input/output paths to this directory (open/CLI mode when omitted).
     #[arg(long)]
     sandbox: Option<PathBuf>,
-    /// Download the recommended model without prompting when none is given or installed.
-    /// Steps already run without asking (see `--confirm`), so this no longer changes them; it is
-    /// kept so existing scripts and `--yes` habits keep working. It never approves replacing a
-    /// file: that is `--overwrite`.
-    #[arg(long)]
+    /// Allow everything a run could ask about, now and in later releases: `--allow all`.
+    #[arg(short = 'y', long)]
     yes: bool,
+    /// Approve up front what a run would otherwise ask about, as a comma list or a repeated
+    /// flag: `download` (fetch a URL input), `overwrite` (replace an existing file), `model`
+    /// (download the recommended model), `all`. Without it each one asks (Enter is no), and
+    /// without a terminal the run stops, naming the permission.
+    #[arg(long, value_name = "WHAT", value_delimiter = ',', value_parser = permission)]
+    allow: Vec<String>,
     /// Ask `Proceed? [Y/n]` before each step instead of acting straight away (Enter approves).
-    /// Without a terminal there is nobody to ask, so combine it with `--yes` or leave it off.
+    /// `--yes` skips it. Without a terminal there is nobody to ask, so leave it off.
     #[arg(long)]
     confirm: bool,
-    /// Replace a file that already exists. Without it, a step whose output exists asks
-    /// `Replace <file>? [y/N]` (Enter keeps the file), and without a terminal it stops.
+    /// Print the result's text alone on stdout, for a pipe, and save nothing; everything else goes
+    /// to stderr. For a step whose answer is text (extract_text); any other refuses it.
     #[arg(long)]
-    overwrite: bool,
-    /// Download http(s) URL inputs without asking. Without it, each URL asks
-    /// `Download <url>? [y/N]` (Enter is no), and without a terminal the run stops. `--yes` does
-    /// not cover network access.
-    #[arg(long)]
-    allow_download: bool,
+    stdout: bool,
     /// Keep every step's output in your folder. Otherwise a file one step makes only for the next
     /// goes to a temporary folder. Words in the request ("keep the intermediate files") do the
     /// same.
@@ -315,6 +313,7 @@ fn main() -> anyhow::Result<()> {
     };
     let verbose = matches!(&cli.command, Command::Run(a) if a.verbose);
     ui::init(verbose);
+    let mut text_guard: Option<ui::StdoutToStderr> = None;
     let result = match cli.command {
         Command::Skills { action } => match action {
             SkillsAction::List { include_stale } => cmd_skills_list(include_stale),
@@ -329,7 +328,12 @@ fn main() -> anyhow::Result<()> {
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
             let dry_run = args.dry_run;
-            let result = cmd_run(args);
+            // `--stdout`: every line of the run, its closing ones included, goes to stderr until
+            // `main` returns; the result's text goes to the real stdout.
+            if args.stdout {
+                text_guard = ui::StdoutToStderr::begin();
+            }
+            let result = cmd_run(args).map_err(without_working_folder);
             run_facts::alert_at_end(&result);
             let finished = finish_run(result, dry_run);
             // A batch with a failed file ends with its summary on stderr, then exits 1.
@@ -340,7 +344,9 @@ fn main() -> anyhow::Result<()> {
             finished
         }
     };
-    end_view(result)
+    let ended = end_view(result);
+    drop(text_guard);
+    ended
 }
 
 /// End every command in the terminal view with one empty line, so the shell prompt does not sit
@@ -429,6 +435,36 @@ mod run_facts {
 /// Close a `run` in the terminal view: the last line of the tree, with the total time (prompt
 /// waits excluded). The plain view returns the result untouched, so a pipe sees exactly what
 /// 1.2.0 printed, including anyhow's `Error:` report on stderr.
+/// `e` with the working folder left out of every message in its chain: a path inside it
+/// reads relative, so an error never names the user's folders. Python `app.run_cmd`, through
+/// `agent._without_folder`.
+fn without_working_folder(e: anyhow::Error) -> anyhow::Error {
+    let Ok(base) = std::env::current_dir() else {
+        return e;
+    };
+    let chain: Vec<String> = e
+        .chain()
+        .map(|c| batch::without_folders(&c.to_string(), &base, None))
+        .collect();
+    let mut out = anyhow::anyhow!(chain.last().cloned().unwrap_or_default());
+    for message in chain.iter().rev().skip(1) {
+        out = out.context(message.clone());
+    }
+    out
+}
+
+/// A batch's counts, time and the size of what the run left. The plain view prints them on
+/// stderr (stdout stays the result); the terminal view puts the failed count and the size on its
+/// closing line instead, and a dry run there says nothing more (owner, 2026-10-25).
+fn batch_summary(report: &batch::Report, work: Option<&Path>, dry_run: bool) {
+    let written = ui::written_paths();
+    if ui::view().is_none() {
+        eprintln!("{}", report.summary(&written, work));
+    } else if !dry_run {
+        ui::set_close_extra(report.close_extra(&written, work));
+    }
+}
+
 fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
     let Some(style) = ui::view() else {
         return result;
@@ -443,7 +479,7 @@ fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
                 let summary = if dry_run {
                     "dry run, nothing executed".to_string()
                 } else {
-                    ui::files_written(ui::written())
+                    format!("{}{}", ui::files_written(ui::written()), ui::close_extra())
                 };
                 let last = match ui::declined() {
                     Some((step, steps)) => {
@@ -1246,7 +1282,8 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
 
     // Only now that the request has survived every cheap rejection may we resolve (and possibly
     // download) a model — see `select_model`.
-    let model = select_model(args.model.as_deref(), args.yes, DownloadPolicy::Prompt)?;
+    let allow = allowed(&args.allow, args.yes);
+    let model = select_model(args.model.as_deref(), allow.model, DownloadPolicy::Prompt)?;
     if args.daemon {
         match model.as_deref() {
             Some(m) => ensure_daemon(&daemon::state_dir(), m, daemon::DEFAULT_IDLE_MINUTES)?,
@@ -1383,7 +1420,8 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     let mut scratch = knaif_core::scratch::RunScratch::new(args.dry_run);
     // URL inputs: downloaded into the scratch (a dry run only names the path), so no later stage
     // sees a URL. Before routing and naming, as Python's fetch stage.
-    if !fetch_url_inputs(&mut steps, &bundle, &mut scratch, &args)? {
+    let mut downloads: Vec<String> = Vec::new();
+    if !fetch_url_inputs(&mut steps, &bundle, &mut scratch, &args, &mut downloads)? {
         return Ok(());
     }
     // A chain over many files ("convert all the .mov files to mp4 and make them smaller") runs
@@ -1493,6 +1531,21 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         set_files = files;
         lifted = lift;
     }
+    // `--stdout` prints a text answer: a step with none (a video, a PDF) refuses it up front.
+    if args.stdout {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        for step in steps.iter().filter(|s| !is_control_step(s)) {
+            let tool = step
+                .get("tool")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?");
+            if registry.get(tool).and_then(|t| t.stdout.as_ref()).is_none() {
+                anyhow::bail!(
+                    "--stdout prints a text answer, and {tool} has none: run it without --stdout."
+                );
+            }
+        }
+    }
     let total = match decide_steps(&steps) {
         StepDecision::Empty => {
             if model.is_none() {
@@ -1520,10 +1573,10 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
     }
     // What the plan will leave (`knaif_core::result_set`): every preview ends with it, and a
     // batch shows its first file's steps, then the same for the rest.
+    let kinds =
+        knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
     let leaves = {
         let registry = knaif_core::load_skill_registry(&bundle)?;
-        let kinds =
-            knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
         batch::leaves(&steps, &registry, &base, scratch.path(), &kinds, &set_files)
     };
     let (preview_steps, notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
@@ -1532,12 +1585,44 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         if !steps.iter().any(is_control_step) {
             let shown: Vec<serde_json::Value> = preview_steps
                 .iter()
-                .map(|s| display_value(s, Some(scratch.path())))
+                .map(|s| display_value(&mark_downloads(s, &downloads), Some(scratch.path())))
                 .collect();
-            println!("{}", ui::render_plan(&style, &plan_rows(&shown), &notes));
+            println!(
+                "{}",
+                ui::render_plan(&style, &plan_rows(&shown, &base, &kinds), &notes)
+            );
         }
     }
-    let mut yes = approves_without_asking(args.yes, args.confirm);
+    // Every step is checked before any runs (owner, 2026-10-24): a file of a batch that would
+    // fail is out before the others run, a plan that would fail runs nothing. Before any question.
+    let mut prefailed = std::collections::BTreeMap::new();
+    if !args.dry_run {
+        let rehearsal = StepContext {
+            skill: &args.skill,
+            bundle: &bundle,
+            base: &base,
+            sandbox,
+            dry_run: true,
+            yes: true,
+            overwrite: allow.overwrite,
+            stdout: false,
+            work_dir: Some(scratch.path()),
+        };
+        match &lifted {
+            None => rehearse_steps(&steps, total, &rehearsal)?,
+            Some(lift) => {
+                let work = scratch.path().to_path_buf();
+                prefailed = batch::rehearse(
+                    &steps,
+                    lift,
+                    total,
+                    |text| batch::without_folders(text, &base, Some(&work)),
+                    |step| rehearse_step(step, &rehearsal),
+                )?;
+            }
+        }
+    }
+    let mut yes = !allow.asks_proceed(args.confirm);
     // A batch is approved once, before any of it runs: its steps then go on without asking
     // (Python asks on the batch preview's last line).
     if lifted.is_some() && !yes && !args.dry_run {
@@ -1556,17 +1641,15 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         sandbox,
         dry_run: args.dry_run,
         yes,
-        overwrite: args.overwrite,
+        overwrite: allow.overwrite,
+        stdout: args.stdout,
         work_dir: Some(scratch.path()),
     };
     let Some(lift) = &lifted else {
         let result = execute_plan(&steps, total, &ctx);
         // A step over many files with no chain ends the run with its summary too.
         if let Some(report) = batch::take_tally_report() {
-            eprintln!(
-                "{}",
-                report.summary(&ui::written_paths(), Some(scratch.path()))
-            );
+            batch_summary(&report, Some(scratch.path()), args.dry_run);
             if report.failed() > 0 {
                 run_facts::batch_file_failed();
             }
@@ -1578,12 +1661,12 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         &steps,
         lift,
         total,
+        prefailed,
         |text| batch::without_folders(text, &base, Some(&work)),
         |line| eprintln!("{line}"),
         |step| run_step(step, &ctx),
     )?;
-    // Counts, time and the size of what the run left, on stderr: stdout stays the result.
-    eprintln!("{}", report.summary(&ui::written_paths(), Some(&work)));
+    batch_summary(&report, Some(&work), args.dry_run);
     if report.failed() > 0 {
         run_facts::batch_file_failed();
     }
@@ -1600,6 +1683,7 @@ fn fetch_url_inputs(
     bundle: &Path,
     scratch: &mut knaif_core::scratch::RunScratch,
     args: &RunArgs,
+    downloads: &mut Vec<String>,
 ) -> anyhow::Result<bool> {
     use knaif_core::urls::{is_url, CONTROL_TOOLS, URL_INPUT_KEYS};
     use serde_json::Value;
@@ -1666,13 +1750,15 @@ fn fetch_url_inputs(
                 path = scratch.path().join(format!("{stem}-{n}{ext}"));
             }
             taken.push(path.file_name().unwrap().to_string_lossy().to_lowercase());
-            let shown = display_path(&path.to_string_lossy(), Some(scratch.path()));
-            note(&format!("would download {url} → {shown}"));
+            note(&format!(
+                "would download {url} → {}",
+                downloaded_name(&path)
+            ));
             local.push((url.clone(), path.to_string_lossy().into_owned()));
         }
     } else {
         for url in &urls {
-            if args.allow_download {
+            if allowed(&args.allow, args.yes).download {
                 continue;
             }
             let question = format!("Download {url} (up to {} MB)?", cap / 1_000_000);
@@ -1685,7 +1771,7 @@ fn fetch_url_inputs(
                 None => {
                     *steps = clarify(format!(
                         "Downloading {url} needs your approval: run this in a terminal to be \
-                         asked, or re-run with --allow-download."
+                         asked, or re-run with --allow download."
                     ));
                     return Ok(true);
                 }
@@ -1698,11 +1784,15 @@ fn fetch_url_inputs(
                 .map_err(|e| anyhow::anyhow!(e))?;
             // A downloaded file is work done, which a later failure's alert reports on.
             run_facts::work_started();
-            let shown = display_path(&got.path.to_string_lossy(), Some(scratch.path()));
-            note(&format!("downloaded {url} ({} bytes) → {shown}", got.bytes));
+            note(&format!(
+                "downloaded {url} ({} bytes) → {}",
+                got.bytes,
+                downloaded_name(&got.path)
+            ));
             local.push((url.clone(), got.path.to_string_lossy().into_owned()));
         }
     }
+    downloads.extend(local.iter().map(|(_, path)| path.clone()));
     let swap = |v: &Value| -> Value {
         match v {
             Value::String(s) => local
@@ -1789,26 +1879,50 @@ fn is_control_step(step: &serde_json::Value) -> bool {
 }
 
 /// What a step works on, for the plan summary: `clip.mp4 → out.mp4`, from whichever of the
-/// common input/output args the step carries.
-fn step_detail(args: &serde_json::Map<String, serde_json::Value>) -> String {
-    fn first(v: &serde_json::Value) -> Option<String> {
+/// common input/output args the step carries. A glob or folder among the inputs is shown as the
+/// files it finds in `base` (of the skill's `kinds`, as the batch lists them), so the line never
+/// names a pattern that matched nothing; when none finds a file, the plan's own
+/// words stay and the run says so.
+fn step_detail(
+    args: &serde_json::Map<String, serde_json::Value>,
+    base: &std::path::Path,
+    kinds: &knaif_core::clarify_gate::FileKinds,
+) -> String {
+    fn names(v: &serde_json::Value) -> Vec<String> {
         match v {
-            serde_json::Value::String(s) => Some(s.clone()),
-            serde_json::Value::Array(items) => {
-                let names: Vec<String> = items.iter().filter_map(first).collect();
-                match names.len() {
-                    0 => None,
-                    1 => names.into_iter().next(),
-                    n => Some(format!("{} (+{} more)", names[0], n - 1)),
-                }
-            }
-            _ => None,
+            serde_json::Value::String(s) => vec![s.clone()],
+            serde_json::Value::Array(items) => items.iter().flat_map(names).collect(),
+            _ => vec![],
+        }
+    }
+    fn shown(names: Vec<String>) -> Option<String> {
+        match names.len() {
+            0 => None,
+            1 => names.into_iter().next(),
+            n => Some(format!("{} (+{} more)", names[0], n - 1)),
         }
     }
     let input = ["inputs", "input", "files", "pdf", "paths"]
         .iter()
-        .find_map(|k| args.get(*k).and_then(first));
-    let output = args.get("output").and_then(first);
+        .find_map(|k| args.get(*k).map(names).filter(|n| !n.is_empty()))
+        .and_then(|written| {
+            let expanded = knaif_core::batch_chain::expand_inputs(&written, base, kinds);
+            let mut found: Vec<String> = Vec::new();
+            for name in &written {
+                for file in expanded
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| vec![name.clone()])
+                {
+                    let file = file.strip_prefix("./").map(str::to_string).unwrap_or(file);
+                    if !found.contains(&file) {
+                        found.push(file);
+                    }
+                }
+            }
+            shown(if found.is_empty() { written } else { found })
+        });
+    let output = args.get("output").map(names).and_then(shown);
     match (input, output) {
         (Some(i), Some(o)) => format!("{i} → {o}"),
         (Some(i), None) => i,
@@ -1817,7 +1931,11 @@ fn step_detail(args: &serde_json::Map<String, serde_json::Value>) -> String {
     }
 }
 
-fn plan_rows(steps: &[serde_json::Value]) -> Vec<ui::PlanRow> {
+fn plan_rows(
+    steps: &[serde_json::Value],
+    base: &std::path::Path,
+    kinds: &knaif_core::clarify_gate::FileKinds,
+) -> Vec<ui::PlanRow> {
     steps
         .iter()
         .map(|step| {
@@ -1832,7 +1950,7 @@ fn plan_rows(steps: &[serde_json::Value]) -> Vec<ui::PlanRow> {
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("?")
                     .to_string(),
-                detail: step_detail(args),
+                detail: step_detail(args, base, kinds),
             }
         })
         .collect()
@@ -1879,6 +1997,88 @@ fn chain_failure_context(idx: usize, total: usize) -> String {
         _ => format!("steps {}-{total} were not run", ordinal + 1),
     };
     format!("step {ordinal} of {total} failed; {completed}, and {skipped}")
+}
+
+/// Which step the rehearsal stopped at; nothing had run (owner, 2026-10-24). Python
+/// `knaif.agent.rehearsal_failure_context`.
+fn rehearsal_failure_context(idx: usize, total: usize) -> String {
+    format!("step {} of {total} would fail, so nothing ran", idx + 1)
+}
+
+/// When every file of a batch fails the rehearsal. Python `EVERY_FILE_WOULD_FAIL`.
+const EVERY_FILE_WOULD_FAIL: &str = "every file would fail, so nothing ran";
+
+/// Rehearse a plan without a batch before it really runs (owner, 2026-10-24): every step
+/// is built as a dry run builds it, printing nothing, and the first that fails stops the run
+/// before anything ran. One step is not rehearsed: nothing can run before it fails. Python
+/// `CommandAgent._rehearse`.
+fn rehearse_steps(
+    steps: &[serde_json::Value],
+    total: usize,
+    ctx: &StepContext,
+) -> anyhow::Result<()> {
+    if steps.iter().filter(|s| !is_control_step(s)).count() < 2 {
+        return Ok(());
+    }
+    for (idx, step) in steps.iter().enumerate() {
+        match rehearse_step(step, ctx) {
+            Err(e) => return Err(e.context(rehearsal_failure_context(idx, total))),
+            Ok(StepOutcome::ShortCircuit) => break,
+            Ok(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// One step as the rehearsal sees it: its commands (ffmpeg) or its preview (documents), built
+/// as a dry run builds them, nothing printed. A control step ends the plan, as it does running.
+fn rehearse_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepOutcome> {
+    if is_control_step(step) {
+        return Ok(StepOutcome::ShortCircuit);
+    }
+    let tool = step
+        .get("tool")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let empty = serde_json::Map::new();
+    let args = step
+        .get("args")
+        .and_then(serde_json::Value::as_object)
+        .unwrap_or(&empty);
+    match ctx.skill {
+        "ffmpeg" => {
+            let data = knaif_skill_ffmpeg::FfmpegData::load(ctx.bundle)?;
+            let home = ctx.sandbox.unwrap_or(Path::new(""));
+            let scratch = ctx
+                .work_dir
+                .map(|work_dir| knaif_skill_ffmpeg::run::ScratchCtx { work_dir, home });
+            match knaif_skill_ffmpeg::run::expand_in(
+                tool,
+                args,
+                &data,
+                ctx.sandbox,
+                knaif_skill_ffmpeg::run::ProbeMode::DryRun,
+                scratch.as_ref(),
+            )? {
+                knaif_skill_ffmpeg::run::Expansion::Commands(_) => Ok(StepOutcome::Continue),
+                knaif_skill_ffmpeg::run::Expansion::Clarify(_) => Ok(StepOutcome::ShortCircuit),
+            }
+        }
+        "documents" => {
+            use knaif_skill_documents::run::{is_supported, preview_in, read_input_absent};
+            if !is_supported(tool) {
+                anyhow::bail!(not_implemented_message(&format!(
+                    "the documents tool {tool:?} is not built into the native runtime yet"
+                )));
+            }
+            let absent = read_input_absent(tool, args, ctx.base, ctx.sandbox, ctx.work_dir)?;
+            if absent.is_none() {
+                preview_in(tool, args, ctx.base, ctx.sandbox, ctx.bundle, ctx.work_dir)?;
+            }
+            Ok(StepOutcome::Continue)
+        }
+        _ => unreachable!("skill guarded above"),
+    }
 }
 
 fn execute_plan(
@@ -1973,6 +2173,8 @@ struct StepContext<'a> {
     yes: bool,
     /// `--overwrite`: replacing an existing file needs no question.
     overwrite: bool,
+    /// `--stdout`: a text answer goes to the real stdout, and nothing is saved.
+    stdout: bool,
     /// This run's scratch folder (`knaif_core::scratch`): routed intermediates, preview clips and
     /// outputs awaiting verification. A name only, in a dry run.
     work_dir: Option<&'a Path>,
@@ -2054,6 +2256,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.dry_run,
             ctx.yes,
             ctx.overwrite,
+            ctx.stdout,
             ctx.work_dir,
         ),
         _ => unreachable!("skill guarded above"),
@@ -2092,6 +2295,10 @@ fn run_ffmpeg_step(
         mode,
         scratch.as_ref(),
     )?;
+    // What the expansion skipped and says once (files already in that format).
+    for line in knaif_skill_ffmpeg::run::take_notes() {
+        note(&line);
+    }
     let commands = match expansion {
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
@@ -2134,28 +2341,6 @@ fn run_ffmpeg_step(
     let previews: Vec<String> = commands.iter().map(|c| show(c)).collect();
     // Python asks before reversing and says why; native used to list the command and nothing else.
     // Said only when a person is about to answer: `--yes` has already decided.
-    // Terminal view: the commands are the step's content, shown before the question. (The plain
-    // view lists them inside the confirmation and again as `running:` lines, as it always has.)
-    if let Some(style) = ui::view() {
-        for p in &previews {
-            println!("{}", ui::render_command(&style, p));
-        }
-        // Say it in the tree too, before the question below asks.
-        for cmd in &commands {
-            if let Some(out) = cmd
-                .last()
-                .filter(|o| !in_scratch(o, ctx.work_dir) && std::path::Path::new(o).exists())
-            {
-                println!(
-                    "{}",
-                    ui::render_detail(
-                        &style,
-                        &style.paint(ui::Tone::Warn, &format!("⚠ {out} already exists"))
-                    )
-                );
-            }
-        }
-    }
     // Every command carries `-y` (the rendered command is part of the parity contract), so a
     // file that is already there would be replaced without a word: ask first, whatever `--yes`
     // says. The chain's own intermediate files are not "existing" until an earlier step wrote
@@ -2166,11 +2351,28 @@ fn run_ffmpeg_step(
         .filter_map(|c| c.last().cloned())
         .filter(|o| !in_scratch(o, ctx.work_dir))
         .collect();
-    if !overwrite_gate(
-        &existing_outputs(&outputs),
-        overwrite,
-        &mut ask_yes_no_default,
-    )? {
+    let existing = existing_outputs(&outputs);
+    // Terminal view: before a question (a file to replace, `--confirm`) the step's commands are
+    // listed, with a warning for each file that is there, so the answer is given knowing them.
+    // Without one, each command is shown as it starts, its result under it, as the plain view
+    // orders them (owner, 2026-10-25). (The plain view lists them inside the confirmation and
+    // again as `running:` lines, as it always has.)
+    let listed = ui::view().is_some() && (!yes || (!overwrite && !existing.is_empty()));
+    if let (Some(style), true) = (ui::view(), listed) {
+        for p in &previews {
+            println!("{}", ui::render_command(&style, p));
+        }
+        for out in &existing {
+            println!(
+                "{}",
+                ui::render_detail(
+                    &style,
+                    &style.paint(ui::Tone::Warn, &format!("⚠ {out} already exists"))
+                )
+            );
+        }
+    }
+    if !overwrite_gate(&existing, overwrite, &mut ask_yes_no_default)? {
         print_declined();
         return Ok(StepOutcome::Declined);
     }
@@ -2253,8 +2455,10 @@ fn run_ffmpeg_step(
             }
         };
         let shown = display_path(&output, ctx.work_dir);
-        if ui::view().is_none() {
-            eprintln!("running: {}", show(cmd));
+        match ui::view() {
+            None => eprintln!("running: {}", show(cmd)),
+            Some(style) if !listed => println!("{}", ui::render_command(&style, &show(cmd))),
+            Some(_) => {}
         }
         let started = std::time::Instant::now();
         let result = match ui::view() {
@@ -2358,6 +2562,33 @@ fn display_path(path: &str, work_dir: Option<&Path>) -> String {
     }
 }
 
+/// A downloaded file as a person should read it: its name and where it came from, never the
+/// run scratch it sits in (owner, 2026-10-23). Python `knaif.run_view.downloaded_name`.
+fn downloaded_name(path: &Path) -> String {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    format!("{name} (downloaded)")
+}
+
+/// A plan step (any JSON) with each downloaded file named by [`downloaded_name`].
+fn mark_downloads(value: &serde_json::Value, downloads: &[String]) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) if downloads.contains(s) => Value::String(downloaded_name(Path::new(s))),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| mark_downloads(v, downloads)).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), mark_downloads(v, downloads)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 /// A plan step (any JSON) with every scratch path shown as `<work>/…`, for printing.
 fn display_value(value: &serde_json::Value, work_dir: Option<&Path>) -> serde_json::Value {
     use serde_json::Value;
@@ -2438,6 +2669,7 @@ fn run_documents_step(
     dry_run: bool,
     yes: bool,
     overwrite: bool,
+    stdout: bool,
     work_dir: Option<&Path>,
 ) -> anyhow::Result<StepOutcome> {
     use knaif_skill_documents::run::{
@@ -2467,6 +2699,22 @@ fn run_documents_step(
             println!("would read {}", shown(&input));
             return Ok(StepOutcome::Continue);
         }
+    }
+    // `--stdout`: `cmd_run` let only tools that declare `stdout:` through, and
+    // extract_text is the one: its text goes to the real stdout, and nothing is saved. Python's
+    // `ExtractTextStep` under `ctx.to_stdout`.
+    if stdout && !dry_run && tool == "extract_text" {
+        let input = knaif_skill_documents::run::input_path_in(step_args, base, sandbox, work_dir)?;
+        let records = knaif_skill_documents::text::extract_text_with(
+            &input,
+            step_args.get("pages").and_then(serde_json::Value::as_str),
+            step_args
+                .get("ocr")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        )?;
+        ui::write_text(&knaif_skill_documents::text::document_text(&records))?;
+        return Ok(StepOutcome::Continue);
     }
     match preview_in(tool, step_args, base, sandbox, bundle, work_dir)? {
         Preview::Read(result) => {
@@ -2528,7 +2776,7 @@ fn run_documents_step(
                 if ui::view().is_none() {
                     println!("would {summary} →");
                     for o in &outputs {
-                        println!("  {}", display_path(&o.to_string_lossy(), work_dir));
+                        println!("  {}", shown(o));
                     }
                 }
                 return Ok(StepOutcome::Continue);
@@ -2552,7 +2800,8 @@ fn run_documents_step(
                 print_declined();
                 return Ok(StepOutcome::Declined);
             }
-            let asked: Vec<String> = previews.iter().map(|o| display_path(o, work_dir)).collect();
+            // Named as the user would write them: an absolute path named their home.
+            let asked: Vec<String> = outputs.iter().map(|o| shown(o)).collect();
             if !confirm_action(yes, &asked, "output file")? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
@@ -2567,7 +2816,18 @@ fn run_documents_step(
                         "{}",
                         ui::render_ok(&style, &shown(w), Some(started.elapsed()))
                     ),
-                    None => println!("✓ wrote {}", display_path(&w.to_string_lossy(), work_dir)),
+                    None => println!("✓ wrote {}", shown(w)),
+                }
+                // The saved text's preview, never the whole text; the same lines
+                // as Python (`text_preview`, contracts/parity/text_preview_cases.json).
+                if tool == "extract_text" {
+                    let saved = std::fs::read_to_string(w).unwrap_or_default();
+                    for line in knaif_skill_documents::text::text_preview(&saved) {
+                        match ui::view() {
+                            Some(style) => println!("{}", ui::render_detail(&style, &line)),
+                            None => println!("{line}"),
+                        }
+                    }
                 }
             }
             Ok(StepOutcome::Continue)
@@ -2692,10 +2952,54 @@ fn answer_from_input(bytes_read: usize, line: &str, default_yes: bool) -> bool {
     bytes_read > 0 && answer_from_line(line, default_yes)
 }
 
-/// Whether a step may run without the `Proceed?` question: the default, unless `--confirm` asked
-/// for it. `--yes` always skips it, so `--confirm --yes` is `--yes`.
-fn approves_without_asking(yes: bool, confirm: bool) -> bool {
-    yes || !confirm
+/// What a run may do without asking (owner, 2026-10-23): `--allow download,overwrite,
+/// model`, a comma list or a repeated flag; `all`, or `--yes`, is every permission, now and later.
+/// `contracts/parity/cli_flag_cases.json`, Python `knaif.app.allowed`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Allow {
+    /// Fetch an http(s) URL input.
+    download: bool,
+    /// Replace a file that already exists.
+    overwrite: bool,
+    /// Download the recommended model.
+    model: bool,
+    /// Everything (`all`, `--yes`), including what a later release adds: also skips `Proceed?`.
+    all: bool,
+}
+
+impl Allow {
+    /// Whether each step asks `Proceed? [Y/n]`: only under `--confirm`, and never when everything
+    /// is allowed (`--confirm --yes` is `--yes`).
+    fn asks_proceed(self, confirm: bool) -> bool {
+        confirm && !self.all
+    }
+}
+
+/// The names `--allow` takes, in the order its error lists them.
+const PERMISSIONS: [&str; 4] = ["download", "overwrite", "model", "all"];
+
+/// The permissions `--allow` (already checked by [`permission`]) and `--yes` give.
+fn allowed(names: &[String], yes: bool) -> Allow {
+    let all = yes || names.iter().any(|n| n == "all");
+    let has = |name: &str| all || names.iter().any(|n| n == name);
+    Allow {
+        download: has("download"),
+        overwrite: has("overwrite"),
+        model: has("model"),
+        all,
+    }
+}
+
+/// One `--allow` name, checked as clap reads it: trimmed, without case.
+fn permission(name: &str) -> Result<String, String> {
+    let name = name.trim().to_lowercase();
+    if PERMISSIONS.contains(&name.as_str()) {
+        Ok(name)
+    } else {
+        Err(format!(
+            "unknown permission '{name}': use download, overwrite, model or all"
+        ))
+    }
 }
 
 /// The files an output path names that already exist on disk. A plain path names itself. An
@@ -2778,7 +3082,7 @@ fn overwrite_gate(
             Some(true) => {}
             Some(false) => return Ok(false),
             None => anyhow::bail!(
-                "{path} already exists. Re-run with --overwrite to replace it, or name a different output."
+                "{path} already exists. Re-run with --allow overwrite to replace it, or name a different output."
             ),
         }
     }
@@ -3110,8 +3414,39 @@ impl PlanSession {
         // grounded value the model copied from it (`a/b`) is only found in that spelling: against
         // the raw request a password written `a\b` was always "invented" and asked for again.
         let shown = normalize_path_separators(utterance);
-        let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry);
+        // The listing the guard used, read again: a plain word ("beach") names a file that is
+        // there in this gate too.
+        let known_files = listed_filenames(sandbox.unwrap_or(base));
+        let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry, &known_files);
+        let gated = self.ask_for_count(gated, &shown, sandbox.unwrap_or(base));
         Ok(restore_grounded_args(gated, utterance, &self.registry))
+    }
+
+    /// A count of files ("2 of the videos") must match what the plan touches,
+    /// checked when the gate let the plan through, as Python's `execute_plan` does.
+    fn ask_for_count(
+        &self,
+        mut payload: serde_json::Value,
+        utterance: &str,
+        here: &Path,
+    ) -> serde_json::Value {
+        let Some(steps) = payload.get("plan").and_then(serde_json::Value::as_array) else {
+            return payload;
+        };
+        let first = steps
+            .first()
+            .and_then(|s| s.get("tool"))
+            .and_then(|t| t.as_str());
+        if first == Some("clarify") {
+            return payload;
+        }
+        if let Some(question) =
+            knaif_core::nl_clarify_gate::count_question(utterance, steps, here, &self.file_kinds)
+        {
+            payload["plan"] =
+                serde_json::json!([{ "tool": "clarify", "args": { "question": question } }]);
+        }
+        payload
     }
 }
 
@@ -3563,8 +3898,8 @@ fn mock_forced() -> bool {
 /// Pick the model backing this invocation. `None` means "run the offline mock".
 ///
 /// Precedence (NATIVE.md §5.6):
-/// 1. an explicit `--model` name/path always wins;
-/// 2. `$KNAIF_LLM_BACKEND=mock` opts out of auto-select (offline/eval runs);
+/// 1. `$KNAIF_LLM_BACKEND=mock` runs the mock, even with `--model` (a canned run);
+/// 2. otherwise an explicit `--model` name/path wins, and `=replay` opts out of auto-select;
 /// 3. the manifest's recommended model, when already installed, is used silently;
 /// 4. otherwise `policy` decides whether to offer the download — a declined or impossible
 ///    download falls back to the mock, so a multi-GB pull never happens without consent.
@@ -3587,10 +3922,16 @@ fn select_model_with(
     policy: DownloadPolicy,
     llama_available: bool,
 ) -> anyhow::Result<Option<PathBuf>> {
+    if std::env::var("KNAIF_LLM_BACKEND").ok().as_deref() == Some("mock") {
+        // A canned run asked for by name beats `--model`, as in Python (owner, 2026-10-25).
+        return Ok(None);
+    }
     if let Some(name) = explicit {
         // Authoritative even in a mock-only build, where it earns a "rebuild with --features
         // llama" error — an explicit request must never be silently downgraded to the mock.
-        return Ok(Some(resolve_model_path(name)?));
+        let path = resolve_model_path(name)?;
+        note_trained_for(name);
+        return Ok(Some(path));
     }
     if !llama_available {
         // No llama.cpp backend compiled in: the mock is the only thing that can run, so
@@ -3605,14 +3946,47 @@ fn select_model_with(
         return Ok(None); // no manifest recommendation → generic first-run guidance
     };
     if installed {
-        return Ok(Some(resolve_model_path(&name)?));
+        let path = resolve_model_path(&name)?;
+        note_trained_for(&name);
+        return Ok(Some(path));
     }
     match policy {
         DownloadPolicy::Never => return Ok(None),
         DownloadPolicy::YesOnly if !yes => return Ok(None),
         _ => {}
     }
-    offer_recommended_download(&name, yes)
+    let chosen = offer_recommended_download(&name, yes)?;
+    if chosen.is_some() {
+        note_trained_for(&name);
+    }
+    Ok(chosen)
+}
+
+/// Say when the model about to run was not trained for the prompt this knaif serves (owner,
+/// 2026-10-26): the manifest's `trained_for` against `contracts/runtime/prompt_generation.yaml`.
+/// Silent for a model the manifest does not know (a GGUF path), and when either file is missing
+/// or unreadable: a note must never stop a run.
+fn note_trained_for(model: &str) {
+    let Some(note) = trained_for_note_for(model) else {
+        return;
+    };
+    eprintln!("{note}");
+}
+
+fn trained_for_note_for(model: &str) -> Option<String> {
+    let manifest = knaif_models::Manifest::load(&resolve_manifest_path().ok()?).ok()?;
+    let spec = manifest.get(model)?;
+    let text = std::fs::read_to_string(resolve_repo_file(
+        "contracts/runtime/prompt_generation.yaml",
+    )?)
+    .ok()?;
+    let generation = knaif_models::prompt_generation_from_yaml(&text).ok()?;
+    knaif_models::trained_for_note(
+        spec.trained_for,
+        generation,
+        model,
+        manifest.model_trained_for(generation),
+    )
 }
 
 /// Offer to download the recommended model, then pull it with a progress bar. `Ok(None)` when the
@@ -3946,6 +4320,88 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::VecDeque;
 
+    /// One set of flags for both CLIs (`contracts/parity/cli_flag_cases.json`).
+    #[test]
+    fn cli_flag_cases() {
+        use clap::Parser;
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/parity/cli_flag_cases.json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for case in doc["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let mut argv = vec!["knaif".to_string(), "run".to_string()];
+            argv.extend(
+                case["argv"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|a| a.as_str().unwrap().to_string()),
+            );
+            let parsed = Cli::try_parse_from(&argv);
+            if let Some(error) = case["error"].as_str() {
+                let err = parsed.err().unwrap_or_else(|| panic!("{name}: parsed"));
+                assert!(err.to_string().contains(error), "{name}: {err}");
+                continue;
+            }
+            let Command::Run(a) = parsed.unwrap_or_else(|e| panic!("{name}: {e}")).command else {
+                panic!("{name}: expected run");
+            };
+            let allow = allowed(&a.allow, a.yes);
+            let got = serde_json::json!({
+                "download": allow.download,
+                "overwrite": allow.overwrite,
+                "model": allow.model,
+            });
+            assert_eq!(got, case["allow"], "{name}");
+            assert_eq!(
+                allow.asks_proceed(a.confirm),
+                case["asks_proceed"].as_bool().unwrap(),
+                "{name}"
+            );
+            if let Some(stdout) = case["stdout"].as_bool() {
+                assert_eq!(a.stdout, stdout, "{name}");
+            }
+        }
+    }
+
+    /// The plan line names the files found, not a glob that matched nothing
+    /// (`*.mp4 (+2 more)` in a folder with no mp4 left).
+    #[test]
+    fn the_plan_line_names_the_files_found() {
+        let dir = std::env::temp_dir().join(format!("knaif_planline_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["city.mov", "beach.mov", "dog.webm", "notes.txt"] {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+        let kinds: knaif_core::clarify_gate::FileKinds = ["mov", "mp4", "webm"]
+            .iter()
+            .map(|e| (e.to_string(), "video".to_string()))
+            .collect();
+        let detail = |args: serde_json::Value| step_detail(args.as_object().unwrap(), &dir, &kinds);
+        let globs = serde_json::json!({"inputs": ["*.mp4", "*.mov", "*.webm"], "format": "mp4"});
+        assert_eq!(detail(globs), "beach.mov (+2 more)");
+        // A folder lists its files of a declared kind (notes.txt is not one).
+        assert_eq!(
+            detail(serde_json::json!({"input": "."})),
+            "beach.mov (+2 more)"
+        );
+        // One file found: its name alone.
+        assert_eq!(
+            detail(serde_json::json!({"input": "*.webm", "output": "dog.mp4"})),
+            "dog.webm → dog.mp4"
+        );
+        // Nothing found: the plan's own words stay (the run then says no files match).
+        assert_eq!(detail(serde_json::json!({"input": "*.avi"})), "*.avi");
+        // A literal name is shown as written, found or not.
+        assert_eq!(
+            detail(serde_json::json!({"inputs": ["a.mp4", "b.mp4"]})),
+            "a.mp4 (+1 more)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn tool_status(satisfied: bool, blocks: bool) -> knaif_core::ToolStatus {
         knaif_core::ToolStatus {
             name: "ffmpeg".into(),
@@ -4104,20 +4560,6 @@ mod tests {
     // --- 1.3.0: Yes by default, and an existing file always asks ---------------------------
 
     #[test]
-    fn a_step_asks_only_when_confirm_is_opted_into() {
-        assert!(approves_without_asking(false, false), "the default acts");
-        assert!(
-            !approves_without_asking(false, true),
-            "--confirm asks first"
-        );
-        assert!(
-            approves_without_asking(true, true),
-            "--yes still skips the question"
-        );
-        assert!(approves_without_asking(true, false));
-    }
-
-    #[test]
     fn enter_follows_the_default_and_anything_else_is_no() {
         assert!(answer_from_line("", true));
         assert!(answer_from_line("  \n", true));
@@ -4187,7 +4629,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains("out.mp4") && err.contains("--overwrite"),
+            err.contains("out.mp4") && err.contains("--allow overwrite"),
             "{err}"
         );
     }
@@ -4229,25 +4671,6 @@ mod tests {
     }
 
     #[test]
-    fn run_accepts_confirm_and_overwrite_and_keeps_yes() {
-        use clap::Parser;
-        let cli = Cli::try_parse_from([
-            "knaif",
-            "run",
-            "ffmpeg",
-            "--confirm",
-            "--overwrite",
-            "--yes",
-            "x",
-        ])
-        .unwrap();
-        match cli.command {
-            Command::Run(a) => assert!(a.confirm && a.overwrite && a.yes),
-            _ => panic!("expected run"),
-        }
-    }
-
-    #[test]
     fn run_accepts_keep_intermediates() {
         use clap::Parser;
         let cli =
@@ -4270,11 +4693,11 @@ mod tests {
     // exactly the non-interactive case, and it keeps every test off the network.
 
     #[test]
-    fn explicit_model_path_wins_over_everything() {
+    fn explicit_model_path_wins_over_auto_select() {
         let env = ModelEnv::new("explicit", "TODO");
         env.install();
-        // Even with the mock forced and a recommended model installed, `--model` is authoritative.
-        std::env::set_var("KNAIF_LLM_BACKEND", "mock");
+        // With a recommended model installed, `--model` is authoritative.
+        std::env::remove_var("KNAIF_LLM_BACKEND");
         let gguf = env.root.join("explicit.gguf");
         std::fs::write(&gguf, b"gguf").unwrap();
 
@@ -4287,6 +4710,27 @@ mod tests {
         .unwrap()
         .expect("explicit --model must be honored");
         assert_eq!(chosen, gguf);
+    }
+
+    #[test]
+    fn the_mock_env_wins_over_an_explicit_model() {
+        // `KNAIF_LLM_BACKEND=mock` is the deliberate signal of a canned run, so it beats
+        // `--model`, as in Python (owner, 2026-10-25). A `kmock … knaif run --model …` used to
+        // run the real model instead.
+        let env = ModelEnv::new("mockexplicit", "TODO");
+        env.install();
+        std::env::set_var("KNAIF_LLM_BACKEND", "mock");
+        let gguf = env.root.join("explicit.gguf");
+        std::fs::write(&gguf, b"gguf").unwrap();
+        let chosen = select_model_with(
+            Some(gguf.to_str().unwrap()),
+            false,
+            DownloadPolicy::Prompt,
+            true,
+        )
+        .unwrap();
+        std::env::remove_var("KNAIF_LLM_BACKEND");
+        assert_eq!(chosen, None);
     }
 
     #[test]

@@ -1,0 +1,298 @@
+{
+  "_comment": "Dry-run depth (owner, 2026-10-24): the rehearsal before a real run is a dry run, so a documents tool's dry run must stop on the same bad input on both runtimes, or one runtime rehearses a plan the other refuses. Per tool, on `x.pdf` as a password-protected PDF (sandbox/fixtures/documents/sample-protected.pdf) or as a broken one (the bytes `%PDF-1.4 not really`): whether its dry run passes. Recorded from Python (CommandAgent.execute_plan, dry_run=True: passes = no error and no failed result); native checks `knaif_skill_documents::run::preview_in`, the function its rehearsal calls. Consumed by python/core/tests/test_dry_run_depth_parity.py and skills/documents/native/tests/dry_run_depth_parity.rs.",
+  "broken_bytes": "%PDF-1.4 not really",
+  "cases": [
+    {
+      "name": "inspect_document_protected",
+      "tool": "inspect_document",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "inspect_document_broken",
+      "tool": "inspect_document",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "extract_text_protected",
+      "tool": "extract_text",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "extract_text_broken",
+      "tool": "extract_text",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "find_in_document_protected",
+      "tool": "find_in_document",
+      "args": {
+        "input": "x.pdf",
+        "query": "Alpha"
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "find_in_document_broken",
+      "tool": "find_in_document",
+      "args": {
+        "input": "x.pdf",
+        "query": "Alpha"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "split_pdf_protected",
+      "tool": "split_pdf",
+      "args": {
+        "input": "x.pdf",
+        "ranges": "1"
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "split_pdf_broken",
+      "tool": "split_pdf",
+      "args": {
+        "input": "x.pdf",
+        "ranges": "1"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "split_pdf_every_protected",
+      "tool": "split_pdf_every",
+      "args": {
+        "input": "x.pdf",
+        "every": 1
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "split_pdf_every_broken",
+      "tool": "split_pdf_every",
+      "args": {
+        "input": "x.pdf",
+        "every": 1
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "rotate_pages_protected",
+      "tool": "rotate_pages",
+      "args": {
+        "input": "x.pdf",
+        "degrees": 90,
+        "pages": "1"
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "rotate_pages_broken",
+      "tool": "rotate_pages",
+      "args": {
+        "input": "x.pdf",
+        "degrees": 90,
+        "pages": "1"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "remove_pages_protected",
+      "tool": "remove_pages",
+      "args": {
+        "input": "x.pdf",
+        "pages": "1"
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "remove_pages_broken",
+      "tool": "remove_pages",
+      "args": {
+        "input": "x.pdf",
+        "pages": "1"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "reorder_pages_protected",
+      "tool": "reorder_pages",
+      "args": {
+        "input": "x.pdf",
+        "order": "1"
+      },
+      "input": "protected",
+      "dry_run_passes": false
+    },
+    {
+      "name": "reorder_pages_broken",
+      "tool": "reorder_pages",
+      "args": {
+        "input": "x.pdf",
+        "order": "1"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "watermark_protected",
+      "tool": "watermark",
+      "args": {
+        "input": "x.pdf",
+        "text": "DRAFT"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "watermark_broken",
+      "tool": "watermark",
+      "args": {
+        "input": "x.pdf",
+        "text": "DRAFT"
+      },
+      "input": "broken",
+      "dry_run_passes": true
+    },
+    {
+      "name": "add_page_numbers_protected",
+      "tool": "add_page_numbers",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "add_page_numbers_broken",
+      "tool": "add_page_numbers",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "broken",
+      "dry_run_passes": true
+    },
+    {
+      "name": "protect_pdf_protected",
+      "tool": "protect_pdf",
+      "args": {
+        "input": "x.pdf",
+        "password": "pw"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "protect_pdf_broken",
+      "tool": "protect_pdf",
+      "args": {
+        "input": "x.pdf",
+        "password": "pw"
+      },
+      "input": "broken",
+      "dry_run_passes": true
+    },
+    {
+      "name": "unlock_pdf_protected",
+      "tool": "unlock_pdf",
+      "args": {
+        "input": "x.pdf",
+        "password": "wrong"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "unlock_pdf_broken",
+      "tool": "unlock_pdf",
+      "args": {
+        "input": "x.pdf",
+        "password": "wrong"
+      },
+      "input": "broken",
+      "dry_run_passes": true
+    },
+    {
+      "name": "convert_document_protected",
+      "tool": "convert_document",
+      "args": {
+        "input": "x.pdf",
+        "to_format": "txt"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "convert_document_broken",
+      "tool": "convert_document",
+      "args": {
+        "input": "x.pdf",
+        "to_format": "txt"
+      },
+      "input": "broken",
+      "dry_run_passes": true
+    },
+    {
+      "name": "compress_pdf_protected",
+      "tool": "compress_pdf",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "compress_pdf_broken",
+      "tool": "compress_pdf",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    },
+    {
+      "name": "ocr_document_protected",
+      "tool": "ocr_document",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "protected",
+      "dry_run_passes": true
+    },
+    {
+      "name": "ocr_document_broken",
+      "tool": "ocr_document",
+      "args": {
+        "input": "x.pdf"
+      },
+      "input": "broken",
+      "dry_run_passes": false
+    }
+  ]
+}

@@ -652,8 +652,32 @@ def _snapshot_files(work_dir: Path) -> dict[str, tuple[int, int]]:
     }
 
 
-def _produced_files(work_dir: Path, before: dict[str, tuple[int, int]]) -> list[Path]:
-    """Files the run created OR rewrote in *work_dir*, oldest first.
+#: Run-scratch subfolders that never hold a deliverable: outputs awaiting verification (a
+#: committed one has already moved out) and preview clips.
+_SCRATCH_NOT_PRODUCED = ("stage", "preview")
+
+
+def lane_scratch_env(work_dir: Path) -> dict[str, str]:
+    """Environment that keeps a row's run scratch, beside the row as ``<row>.work``.
+
+    The binary routes a chain's intermediate into its run scratch and deletes it when the run
+    ends, but chain rows grade their intermediates too (``outputs``): keeping it is what keeps
+    that grading possible. Beside the row folder, never inside it, because the row folder stands
+    for the user's folder.
+    """
+    from .provisioning import row_scratch_dir
+
+    return {
+        "KNAIF_SCRATCH_ROOT": str(row_scratch_dir(work_dir)),
+        "KNAIF_KEEP_SCRATCH": "1",
+    }
+
+
+def _produced_files(
+    work_dir: Path, before: dict[str, tuple[int, int]], *, scratch_root: Path | None = None
+) -> list[Path]:
+    """Files the run created OR rewrote in *work_dir*, plus routed intermediates kept in
+    *scratch_root*, oldest first.
 
     Rewritten counts: an explicit output onto an existing file is a request the tools honour,
     and counting only new files graded it `artifact_missing` (2026-09-24 documents L4).
@@ -665,6 +689,11 @@ def _produced_files(work_dir: Path, before: dict[str, tuple[int, int]]) -> list[
         st = p.stat()
         if before.get(p.name) != (st.st_mtime_ns, st.st_size):
             after.append(p)
+    if scratch_root is not None and scratch_root.is_dir():
+        for run in scratch_root.glob("run-*"):
+            for p in run.rglob("*"):
+                if p.is_file() and p.relative_to(run).parts[0] not in _SCRATCH_NOT_PRODUCED:
+                    after.append(p)
     return sorted(after, key=lambda p: p.stat().st_mtime)
 
 
@@ -715,6 +744,8 @@ def run_native_corpus(
             work_dir = sandbox / f"{row.id}__{utt_idx}"
             if work_dir.exists():
                 shutil.rmtree(work_dir)
+            scratch = lane_scratch_env(work_dir)
+            shutil.rmtree(scratch["KNAIF_SCRATCH_ROOT"], ignore_errors=True)
             work_dir.mkdir(parents=True)
             provision_fixtures(fixture_dir, work_dir)
             before = _snapshot_files(work_dir)
@@ -747,7 +778,9 @@ def run_native_corpus(
                         text=True,
                         encoding="utf-8",
                         errors="replace",
-                        env=env,
+                        # Each row's own scratch root, so routed intermediates are found and kept
+                        # apart from the user's folder.
+                        env={**env, **scratch},
                         timeout=lane.timeout_s,
                     )
                     if planned is None and expect_device is not None:
@@ -761,7 +794,9 @@ def run_native_corpus(
                     error = f"timed out after {lane.timeout_s:.0f}s"
             latency_ms = (time.perf_counter() - t0) * 1000
 
-            produced = _produced_files(work_dir, before)
+            produced = _produced_files(
+                work_dir, before, scratch_root=Path(scratch["KNAIF_SCRATCH_ROOT"])
+            )
             outputs.append(
                 AgentOutput(
                     id=row.id,

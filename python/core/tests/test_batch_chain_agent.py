@@ -80,7 +80,7 @@ class Convert(Handler):
     name = "convert"
 
     def handle(self, args, ctx):
-        SEEN.append(("convert", dict(args, work_dir=ctx.work_dir)))
+        SEEN.append(("convert", dict(args, work_dir=ctx.work_dir, dry_run=ctx.dry_run)))
         if any("broken" in i for i in args["inputs"]):
             raise ValueError(f"cannot read {Path(args['inputs'][0]).name}\\nmore detail")
         return _write(args, ctx)
@@ -90,7 +90,7 @@ class Shrink(Handler):
     name = "shrink"
 
     def handle(self, args, ctx):
-        SEEN.append(("shrink", dict(args, work_dir=ctx.work_dir)))
+        SEEN.append(("shrink", dict(args, work_dir=ctx.work_dir, dry_run=ctx.dry_run)))
         if any("bad" in i for i in args["inputs"]):
             return {"returncode": 1, "stderr": "frame=0\\nencoder said no\\n"}
         return _write(args, ctx)
@@ -100,7 +100,7 @@ class Join(Handler):
     name = "join"
 
     def handle(self, args, ctx):
-        SEEN.append(("join", dict(args, work_dir=ctx.work_dir)))
+        SEEN.append(("join", dict(args, work_dir=ctx.work_dir, dry_run=ctx.dry_run)))
         return _write(args, ctx)
 
 
@@ -109,7 +109,7 @@ class BatchConvert(Handler):
     name = "batchconvert"
 
     def handle(self, args, ctx):
-        SEEN.append(("batchconvert", dict(args, work_dir=ctx.work_dir)))
+        SEEN.append(("batchconvert", dict(args, work_dir=ctx.work_dir, dry_run=ctx.dry_run)))
         outputs = []
         for f in args["inputs"]:
             bad = "broken" in f
@@ -122,7 +122,7 @@ class Wipe(Handler):
     name = "wipe"
 
     def handle(self, args, ctx):
-        SEEN.append(("wipe", dict(args, work_dir=ctx.work_dir)))
+        SEEN.append(("wipe", dict(args, work_dir=ctx.work_dir, dry_run=ctx.dry_run)))
         return {}
 """
 
@@ -296,12 +296,83 @@ def test_a_failure_outside_a_batch_still_stops_the_run(tmp_path: Path) -> None:
 
 
 def test_a_destructive_step_still_needs_confirmation_in_a_batch(tmp_path: Path) -> None:
-    """Only a handler's own failure is the file's; a refused step stops the run as before."""
+    """Only a handler's own failure is the file's; a refused step refuses the whole plan, and
+    since the rehearsal before anything runs."""
     agent, seen, _ = _agent(tmp_path)
     plan = _plan(("convert", ["*.mov"], "c.mp4"), ("wipe", ["c.mp4"], None))
     with pytest.raises(ValueError, match="confirmed=True"):
         agent.execute_plan(plan, utterance="convert all the movs and wipe them", dry_run=False)
-    assert [t for t, _ in seen] == ["convert"]
+    assert _real(seen) == []
+
+
+# ── the rehearsal (owner, 2026-10-24) ───────────────────────────────────────────────────────
+#
+# Before a real run the whole plan is rehearsed as a dry run that writes nothing; it runs only
+# if every step passes. Over many files, a file that fails the rehearsal is reported and
+# skipped before anything runs, and the others run; when every file fails, nothing runs.
+
+
+def _real(seen: list) -> list:
+    """What really ran (and each failure line), without the rehearsal's dry calls."""
+    return [
+        (t, a if t == "failed" else a["inputs"])
+        for t, a in seen
+        if t == "failed" or not a.get("dry_run")
+    ]
+
+
+def test_a_chain_whose_later_step_would_fail_runs_nothing(tmp_path: Path) -> None:
+    from knaif.agent import PlanWouldFail
+
+    agent, seen, sandbox = _agent(tmp_path)
+    plan = _plan(("convert", ["clip1.mov"], "bad.mp4"), ("shrink", ["bad.mp4"], "s.mp4"))
+    with pytest.raises(PlanWouldFail) as err:
+        agent.execute_plan(
+            plan,
+            utterance="convert clip1.mov to bad.mp4 and shrink it",
+            dry_run=False,
+            confirmed=True,
+        )
+    assert err.value.where == "step 2 of 2 would fail, so nothing ran"
+    assert "encoder said no" in err.value.cause
+    assert _real(seen) == []
+    assert not (sandbox / "bad.mp4").exists()
+
+
+def test_a_file_that_would_fail_is_reported_first_and_the_others_run(tmp_path: Path) -> None:
+    agent, seen, _ = _failing(tmp_path, "clip3_broken.mov")
+    agent.execute_plan(copy.deepcopy(_CHAIN), utterance=_UTTERANCE, dry_run=False, confirmed=True)
+    ran = _real(seen)
+    assert ran[0] == ("failed", "✗ clip3_broken.mov: cannot read clip3_broken.mov")
+    assert [i for t, i in ran[1:] if t == "convert"] == [
+        ["clip1.mov"],
+        ["clip2.mov"],
+        ["clip10.mov"],
+    ]
+    assert all("broken" not in str(i) for _, i in ran[1:])
+
+
+def test_when_every_file_would_fail_nothing_runs(tmp_path: Path) -> None:
+    from knaif.agent import PlanWouldFail
+
+    agent, seen, sandbox = _agent(tmp_path)
+    for f in sandbox.glob("*.mov"):
+        f.unlink()
+    _touch(sandbox, "a_broken.mov", "b_broken.mov")
+    with pytest.raises(PlanWouldFail) as err:
+        agent.execute_plan(
+            copy.deepcopy(_CHAIN), utterance=_UTTERANCE, dry_run=False, confirmed=True
+        )
+    assert err.value.where == "every file would fail, so nothing ran"
+    assert _real(seen) == []
+
+
+def test_one_step_on_one_file_is_not_rehearsed(tmp_path: Path) -> None:
+    # Nothing can run before it fails, so a rehearsal would only do the work twice.
+    agent, seen, _ = _agent(tmp_path)
+    plan = _plan(("convert", ["clip1.mov"], "c.mp4"))
+    agent.execute_plan(plan, utterance="convert clip1.mov", dry_run=False, confirmed=True)
+    assert [a["dry_run"] for _, a in seen] == [False]
 
 
 def test_the_report_counts_time_and_the_size_left(tmp_path: Path) -> None:

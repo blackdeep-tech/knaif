@@ -222,6 +222,12 @@ uv run python -m knaif.evalsuite run --skill ffmpeg --verifier success \
    print('in sync' if built == {today} else 'SKEWED — rebuild the dataset')"
    ```
 
+   Since 2026-10-26 the served prompt has a **generation** (`contracts/runtime/prompt_generation.yaml`):
+   `test_prompt_generation.py` fails when the prompt changes without a bump, `build_dataset.py`
+   refuses to build on an undeclared prompt and writes the generation to `union_chat.meta.json`,
+   and a published model records it as `trained_for`. The check above still answers the narrower
+   question "was *this* dataset built on *today's* prompt".
+
 
 ## 5. What we already know — outcomes (don't re-litigate these)
 

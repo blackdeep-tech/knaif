@@ -25,6 +25,14 @@ _ALWAYS_INCLUDE = ("clarify", "reject", "done")
 # n-grams so keywords up to _CJK_MAX_NGRAM chars match by containment.
 _CJK_RUN = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]+")
 _CJK_MAX_NGRAM = 4
+# Leading and trailing non-word characters of a whitespace token.
+_EDGE_PUNCT = re.compile(r"^\W+|\W+$")
+# A request word matches a keyword it inflects: the keywords are mostly infinitives
+# ("comprimir", "komprimieren") and a command is an imperative ("comprime", "komprimiere").
+# Native: `keyword_matches` in knaif-core/retrieval.rs.
+_STEM_MIN = 6  # letters two words must share to be one stem
+_STEM_TAIL = 4  # letters the longer word may have after the shared stem
+_SUFFIX_MIN_KEYWORD = 5  # a keyword this long matches a word that only adds letters to it
 # A keyword may be shared by tools, but one claimed by more than this many is too
 # generic to discriminate and is rejected at load time as a curation mistake.
 _MAX_KEYWORD_TOOLS = 4
@@ -55,21 +63,56 @@ def _normalize(text: str) -> str:
     )
 
 
+def _words(norm: str) -> set[str]:
+    """The whitespace words of normalized text, each without edge punctuation."""
+    return {w for w in (_EDGE_PUNCT.sub("", w) for w in norm.replace("_", " ").split()) if w}
+
+
 def _query_tokens(text: str) -> set[str]:
     """Token set for keyword/description matching.
 
     Whitespace word tokens (ASCII + space-delimited scripts) **plus** character
     n-grams (length 1..``_CJK_MAX_NGRAM``) drawn from any CJK/kana/Hangul run, so a
-    CJK keyword matches by containment. For text with no CJK run this returns
-    exactly the old whitespace token set — pure-ASCII/Latin scoring is unchanged.
+    CJK keyword matches by containment.
     """
     norm = _normalize(text)
-    tokens = set(norm.replace("_", " ").split())
+    words = norm.replace("_", " ").split()
+    # Punctuation at a word's edge is not part of it: "1080p." and ".mkv" are "1080p" and
+    # "mkv". A dot inside a word stays, so "clip.mp4" is still one token.
+    tokens = _words(norm)
+    # A hyphenated word also counts as its parts: "compresse-le", "по-малки". The whole word
+    # stays, for keywords such as "re-encode".
+    tokens |= {
+        p for w in words if "-" in w for p in (_EDGE_PUNCT.sub("", x) for x in w.split("-")) if p
+    }
     for run in _CJK_RUN.findall(norm):
         for n in range(1, _CJK_MAX_NGRAM + 1):
             for i in range(len(run) - n + 1):
                 tokens.add(run[i : i + n])
     return tokens
+
+
+def _keyword_matches(word: str, keyword: str) -> bool:
+    """True when *word* (a normalized query token) is *keyword* or an inflection of it.
+
+    Exact always. Otherwise only for alphabetic words outside CJK (which match by n-gram):
+    - the word is the keyword plus up to `_STEM_TAIL` letters ("compresse" for "compress"),
+      the keyword at least `_SUFFIX_MIN_KEYWORD` letters ("poster" is not "post");
+    - or the two share a stem of at least `_STEM_MIN` letters and the longer one has at most
+      `_STEM_TAIL` letters after it ("comprime" and "comprimir"). "extra" is not "extract".
+    """
+    if word == keyword:
+        return True
+    if not (word.isalpha() and keyword.isalpha()) or _CJK.search(word) or _CJK.search(keyword):
+        return False
+    if len(keyword) >= _SUFFIX_MIN_KEYWORD and word.startswith(keyword):
+        return len(word) - len(keyword) <= _STEM_TAIL
+    shared = 0
+    for a, b in zip(word, keyword):  # noqa: B905 - a common prefix stops at the shorter one
+        if a != b:
+            break
+        shared += 1
+    return shared >= _STEM_MIN and max(len(word), len(keyword)) - shared <= _STEM_TAIL
 
 
 def triggered(text: str, triggers: tuple[str, ...]) -> bool:
@@ -275,7 +318,17 @@ def retrieve_tools(
     for name, tool in registry.items():
         if name in _ALWAYS_INCLUDE or tool.internal or tool.triggers:
             continue
-        matched = tokens & {_normalize(kw) for kw in tool.keywords}
+        # Each word counts once per tool: its own keyword when it is one, else the inflected
+        # keyword that weighs most (fewest tools claim it), ties on the keyword.
+        tool_kw = {_normalize(kw) for kw in tool.keywords}
+        matched: set[str] = set()
+        for t in tokens:
+            if t in tool_kw:
+                matched.add(t)
+                continue
+            stems = [k for k in tool_kw if _keyword_matches(t, k)]
+            if stems:
+                matched.add(min(stems, key=lambda k: (df[k], k)))
         kw_score = 3.0 * sum(1.0 / df[k] for k in matched)
         text = (
             f"{name.replace('_', ' ')} {tool.description} "

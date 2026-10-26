@@ -107,6 +107,8 @@ def _probe(name: str) -> dict:
 class _Ctx:
     sandbox = None
     dry_run = True
+    # The working folder, where a relative output the plan names is written: the inputs'.
+    root = Path("/sb")
 
 
 @pytest.mark.parametrize("names", [("clip.mp4", "clip.mov"), ("clip.mov", "clip.mp4")])

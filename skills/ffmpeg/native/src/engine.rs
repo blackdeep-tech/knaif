@@ -87,7 +87,8 @@ pub fn geometry_vf(
     if let Some(aspect) = aspect {
         if !has_both {
             let (aw, ah) = parse_ratio(aspect).ok_or_else(|| {
-                anyhow::anyhow!("Invalid aspect value {aspect:?}. Expected 'aw:ah'.")
+                // Quoted as Python's `{aspect!r}`, so the two runtimes print one message.
+                anyhow::anyhow!("Invalid aspect value '{aspect}'. Expected 'aw:ah'.")
             })?;
             // Rounded DOWN to even, because libx264 with `-pix_fmt yuv420p` refuses odd
             // dimensions: a 9:16 crop of a 1280x720 source computes min(1280, 720*9/16) = 405,
@@ -1194,15 +1195,22 @@ pub fn resolve_output_target(
             pattern.replace('*', stem),
             if pat_ext.is_empty() { ext } else { &pat_ext }
         );
-        return Ok(match out.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => parent.join(file),
-            _ => PathBuf::from(file),
-        });
+        return Ok(beside(&out, &file));
     }
 
     // `.mp4` is a dotfile - a concrete file name with no extension by the parser's reading.
     if out.extension().is_none() && !name.starts_with('.') {
-        return Ok(out.join(destination_name(input, ext)));
+        // In the folder as the plan spells it (`Path::join` added `\` on Windows).
+        let folder = cleaned.trim_end_matches(['/', '\\']);
+        let sep = if folder.contains('\\') && !folder.contains('/') {
+            '\\'
+        } else {
+            '/'
+        };
+        return Ok(PathBuf::from(format!(
+            "{folder}{sep}{}",
+            destination_name(input, ext)
+        )));
     }
 
     Ok(out)
@@ -1255,14 +1263,32 @@ pub fn derive_output_path(
         _ => container,
     };
     let name = format!("{stem}{suffix}.{ext}");
-    match input.parent() {
-        Some(p) => p.join(name),
+    beside(input, &name)
+}
+
+/// `name` in `input`'s folder, spelled with the separator the input itself uses: `videos/clip.mp4`
+/// gives `videos/clip.mkv`, where `Path::join` printed `"videos\\clip.mkv"` on Windows.
+fn beside(input: &Path, name: &str) -> PathBuf {
+    let raw = input.to_string_lossy();
+    match raw.rfind(['/', '\\']) {
+        Some(i) => PathBuf::from(format!("{}{name}", &raw[..=i])),
         None => PathBuf::from(name),
     }
 }
 
 // The scratch path rules live in the fs toolkit, shared with documents.
 pub use knaif_toolkit_fs::{user_side_path, within};
+
+/// Where a relative output the plan names is written: the working folder (`home`), not the
+/// input's folder, as documents and `concat_video` resolve it (owner, 2026-10-24). Only a
+/// name the skill makes up itself stays beside its input ([`derive_output_path`]). Python
+/// `_engine._in_working_folder`.
+pub fn in_working_folder(out: PathBuf, home: Option<&Path>) -> PathBuf {
+    match home {
+        Some(home) if !out.is_absolute() => home.join(out),
+        _ => out,
+    }
+}
 
 /// Raise if `p` is not inside `sandbox`. No-op when `sandbox` is `None` (open / CLI mode).
 /// Port of `_assert_in_sandbox`, delegating to the shared `knaif-skill-api` primitive
@@ -1416,13 +1442,7 @@ pub fn build_one_recipe(
         options.work_dir.as_deref(),
         options.home.as_deref(),
     );
-    let in_anchor_folder = |out: PathBuf| -> PathBuf {
-        if out.is_absolute() {
-            out
-        } else {
-            anchor.parent().map(|p| p.join(&out)).unwrap_or(out)
-        }
-    };
+    let in_anchor_folder = |out: PathBuf| in_working_folder(out, options.home.as_deref());
     // A default name is one the skill chose; only such a name moves off a file that exists
     // (`disambiguate_outputs`).
     let mut default_name = true;
@@ -3019,7 +3039,7 @@ mod trim_frames_tests {
     fn a_repeated_batch_name_takes_the_first_free_number() {
         // Since 2026-10-23 (owner) one literal name over many files never reaches
         // here: the recipe builder gives each file its own name
-        // (`contracts/parity/output_name_cases.json`.). A name the batch still repeats takes the
+        // (`contracts/parity/output_name_cases.json`). A name the batch still repeats takes the
         // first free number, which replaced the source-name suffixes (`audio_clip2.mp3`).
         let mut outs: Vec<(PathBuf, PathBuf, bool)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
             .iter()

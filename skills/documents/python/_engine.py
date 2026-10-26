@@ -125,9 +125,39 @@ def _profile(skill_dir: Path, quality: str) -> dict[str, Any]:
         return yaml.safe_load(fh) or {}
 
 
-def _pdf_page_count(path: Path) -> int:
+def _password_message(path: Path) -> str:
+    return (
+        f"{Path(path).name} is password-protected. Unlock it first (with the password), then "
+        "try again."
+    )
+
+
+def _open_pdf(path: Path) -> Any:
+    """pikepdf's `Pdf.open`, failing as native's `pdf::load_unlocked` does: a protected PDF
+    says so, a broken one is `could not open PDF <name>: …`, never the file's absolute path."""
     pikepdf = _require_pikepdf()
-    with pikepdf.Pdf.open(path) as pdf:
+    try:
+        return pikepdf.Pdf.open(path)
+    except pikepdf.PasswordError:
+        raise ValueError(_password_message(path)) from None
+    except pikepdf.PdfError as exc:
+        cause = str(exc)
+        for spelling in (str(path), str(Path(path).resolve())):
+            cause = cause.replace(f"{spelling}: ", "")
+        raise ValueError(f"could not open PDF {Path(path).name}: {cause}") from None
+
+
+def _read_pdf(path: Path) -> Any:
+    """pypdf's `PdfReader`, failing as `_open_pdf` does."""
+    pypdf = _require_pypdf()
+    try:
+        return pypdf.PdfReader(str(path))
+    except pypdf.errors.PyPdfError as exc:
+        raise ValueError(f"could not open PDF {Path(path).name}: {exc}") from None
+
+
+def _pdf_page_count(path: Path) -> int:
+    with _open_pdf(path) as pdf:
         return len(pdf.pages)
 
 
@@ -144,6 +174,19 @@ def _page_records_for_text(text: str) -> list[dict[str, Any]]:
     return [{"page": 1, "text": text}]
 
 
+def _document_text(records: list[dict[str, Any]]) -> str:
+    """A document's text as one string: each page without the line breaks at its edges, pages
+    one blank line apart, one `\\n` at the end (owner, 2026-10-24; native `document_text`).
+    """
+    text = "\n\n".join(str(record["text"]).strip("\r\n") for record in records)
+    return f"{text}\n" if text else ""
+
+
+def _write_text(target: Path, text: str) -> None:
+    """Save text with plain `\\n` line ends on every OS, as native writes it."""
+    target.write_bytes(text.encode("utf-8"))
+
+
 def _extract_text_records(path: Path, args: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     args = args or {}
     suffix = path.suffix.lower()
@@ -152,14 +195,7 @@ def _extract_text_records(path: Path, args: dict[str, Any] | None = None) -> lis
     if suffix in IMAGE_SUFFIXES:
         return _ocr_image_text_records(path, args.get("language", "eng"))
     if suffix == PDF_SUFFIX:
-        try:
-            from pypdf import PdfReader
-        except ImportError as exc:  # pragma: no cover - covered when extra absent
-            raise DocumentsDependencyError(
-                "Install the documents dep group (uv pip install --group documents) to extract PDF text."
-            ) from exc
-
-        reader = PdfReader(str(path))
+        reader = _read_pdf(path)
         if reader.is_encrypted:
             raise ValueError(
                 "Cannot extract text from encrypted PDF without a password. Unlock it first."
@@ -168,7 +204,10 @@ def _extract_text_records(path: Path, args: dict[str, Any] | None = None) -> lis
         records: list[dict[str, Any]] = []
         for page_number in selected_pages:
             page = reader.pages[page_number - 1]
-            records.append({"page": page_number, "text": page.extract_text() or ""})
+            # Without the line breaks at the page's edges, so a match span counts from the
+            # page's first character on both runtimes.
+            text = (page.extract_text() or "").strip("\r\n")
+            records.append({"page": page_number, "text": text})
         if args.get("ocr") or not any(record["text"].strip() for record in records):
             return _ocr_pdf_text_records(path, args, selected_pages)
         return records
@@ -473,7 +512,7 @@ def _write_text_overlay_pdf(
     font_size: int = 36,
 ) -> None:
     pypdf = _require_pypdf()
-    reader = pypdf.PdfReader(str(input_path))
+    reader = _read_pdf(input_path)
     writer = pypdf.PdfWriter()
     for index, page in enumerate(reader.pages, start=1):
         width = float(page.mediabox.width)
@@ -502,7 +541,7 @@ def _write_image_overlay_pdf(
     opacity: float = 1.0,
 ) -> None:
     pypdf = _require_pypdf()
-    reader = pypdf.PdfReader(str(input_path))
+    reader = _read_pdf(input_path)
     writer = pypdf.PdfWriter()
     for page in reader.pages:
         width = float(page.mediabox.width)
@@ -522,7 +561,7 @@ def _write_image_overlay_pdf(
 
 def _lossless_compress(input_path: Path, output_path: Path) -> None:
     pikepdf = _require_pikepdf()
-    with pikepdf.Pdf.open(input_path) as pdf:
+    with _open_pdf(input_path) as pdf:
         pdf.save(
             output_path,
             compress_streams=True,

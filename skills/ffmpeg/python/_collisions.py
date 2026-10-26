@@ -114,38 +114,15 @@ def _resolve_input(raw: str, sandbox: Path | None) -> Path:
     return (sandbox / p) if sandbox is not None else p.resolve()
 
 
-#: Tools whose handler resolves a relative output against the **sandbox** rather than against
-#: the first input's directory. `RunConcatStep` does exactly that (it resolves `output` against
-#: `ctx.sandbox`), while every per-file mode goes through `_build_one_recipe` and resolves
-#: against `input_path.parent`. One rule for both is wrong in both directions: a genuine
-#: collision survives, and a perfectly good destination gets renamed.
-_SANDBOX_OUTPUT_TOOLS = frozenset({"concat_video", "run_concat"})
-
-
 def _output_base(tool: str, args: dict[str, Any], sandbox: Path | None) -> Path | None:
-    """Directory a relative *output* resolves against — which depends on the tool.
+    """Directory a relative *output* resolves against: the working folder, for every tool.
 
-    **Inputs and outputs do not share a base**, and conflating them is a real bug rather
-    than a tidiness point. ``_build_one_recipe`` resolves an input to an absolute probe path
-    and then resolves a relative output against ``input_path.parent`` — so for
-    ``inputs=["a/clip.mp4"], output="a/clip.mp4"`` the input is ``<sandbox>/a/clip.mp4`` and
-    the output is ``<sandbox>/a/a/clip.mp4``. A first draft here used one base for both and
-    resolved the input twice, which moved every comparison into a directory that does not
-    exist: the disk check then found nothing and the fallback happily chose a name already
-    holding a file.
-
-    **And the base is not the same for every tool.** ``concat_video`` writes one output for
-    many inputs, so its handler resolves it against the sandbox; "the first input's parent"
-    is meaningless there and got it wrong both ways. Joining ``sub/a.mp4`` and ``sub/b.mp4``
-    into ``sub/a.mp4`` compared ``<sandbox>/sub/sub/a.mp4``, found no collision, and left the
-    plan to truncate its own input under ``-y``; asking for ``a.mp4`` at the sandbox root
-    resolved to ``<sandbox>/sub/a.mp4``, which *is* an input, and renamed a destination that
-    collided with nothing.
+    Until 2026-10-24 (owner) a per-file mode resolved it against its input's folder while
+    ``concat_video`` used the sandbox, and this had to follow both: one base for both was wrong
+    in both directions (a genuine collision survived, a good destination was renamed). Every
+    tool now writes a relative output under the working folder (`_engine._in_working_folder`),
+    so ``inputs=["a/clip.mp4"], output="a/clip.mp4"`` is the input itself, and is renamed.
     """
-    if tool in _SANDBOX_OUTPUT_TOOLS:
-        return sandbox
-    for container, key in _input_refs(args):
-        return _resolve_input(str(container[key]), sandbox).parent
     return sandbox
 
 

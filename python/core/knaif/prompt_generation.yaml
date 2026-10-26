@@ -1,0 +1,25 @@
+# prompt_generation.yaml — which served prompt a model was trained for.
+#
+# A model learns the prompt it is trained on: the system headers, the prompt rules, the examples
+# and the model-visible tool definitions (name, description, arguments and their help). When
+# those change, a model trained before works worse with the new knaif, and until now nothing
+# said so (owner, 2026-10-26).
+#
+# `generation` counts those changes: +1 whenever the served prompt changes in a way the model
+# reads. `fingerprint` is the sha256 of everything the model can be served, over every active
+# skill (knaif.prompt_generation.fingerprint); python/core/tests/test_prompt_generation.py fails
+# when the served prompt no longer matches it, and says what to do. Retrieval (keywords,
+# triggers, which rule or example joins a given request) is selection, not content, and is not
+# part of the fingerprint: a keyword fix does not make a model stale.
+#
+# Who reads it: every published model records the generation it was trained for (`trained_for`
+# in contracts/models/model-manifest.yaml and models.yaml; python/training/build_dataset.py
+# writes it beside the dataset), and both CLIs say when the model they run predates this
+# generation, once a model trained for it exists to pull (until then the shipped model runs
+# quietly; owner, 2026-10-26). The Rust runtime reads only `generation`; the fingerprint is the
+# reference runtime's, and the prompt parity contracts hold the two runtimes' prompts together.
+#
+# Synced: a byte-identical copy ships in the Python wheel (`just sync-runtime`). Models trained
+# before generations were counted (knaif-qwen3-*-v1, -v2) carry no `trained_for`.
+generation: 1
+fingerprint: "05179e00b977e53bd43e3c162b820a06cd5bd6e4c7969af3b75da63c76a6c3a7"

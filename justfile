@@ -160,11 +160,13 @@ test-skill skill:
 [windows]
 sync-runtime:
     Copy-Item contracts/runtime/core_tools.yaml python/core/knaif/core_tools.yaml -Force
-    Write-Host "Synced core_tools.yaml from contracts/runtime/."
+    Copy-Item contracts/runtime/prompt_generation.yaml python/core/knaif/prompt_generation.yaml -Force
+    Write-Host "Synced core_tools.yaml and prompt_generation.yaml from contracts/runtime/."
 [unix]
 sync-runtime:
     cp contracts/runtime/core_tools.yaml python/core/knaif/core_tools.yaml
-    @echo "Synced core_tools.yaml from contracts/runtime/."
+    cp contracts/runtime/prompt_generation.yaml python/core/knaif/prompt_generation.yaml
+    @echo "Synced core_tools.yaml and prompt_generation.yaml from contracts/runtime/."
 
 # Sync the packaged LICENSE/NOTICE copies from the repo-root originals. Apache-2.0 requires
 # both to travel with every distributed copy, and setuptools resolves `license-files`
@@ -219,7 +221,7 @@ check-py: lint-py type-check-py test-py gen-skills-check
 # (`check-native` is fmt + clippy only) and so a failure names the layer rather than arriving as
 # an anonymous cargo test. `just test-native` remains the broader workspace run.
 check-contracts:
-    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_nl_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py python/core/tests/test_chain_linking_parity.py python/core/tests/test_expansion_parity.py python/core/tests/test_documents_expansion_parity.py python/core/tests/test_scratch_routing_parity.py python/core/tests/test_effects_parity.py python/core/tests/test_url_inputs_parity.py python/core/tests/test_alert_parity.py python/core/tests/test_known_folder_parity.py python/core/tests/test_batch_chain_parity.py python/core/tests/test_batch_report_parity.py python/core/tests/test_result_set_parity.py python/core/tests/test_set_link_parity.py python/core/tests/test_trigger_parity.py python/core/tests/test_batch_cases_parity.py python/core/tests/test_many_files_parity.py python/core/tests/test_invented_folder_parity.py python/core/tests/test_kind_glob_parity.py python/core/tests/test_list_files_parity.py python/core/tests/test_count_parity.py skills/ffmpeg/python/tests/test_output_name_parity.py skills/documents/python/tests/test_text_preview_parity.py python/core/tests/test_cli_flag_parity.py python/core/tests/test_ui_render_parity.py python/core/tests/test_cli_output_parity.py skills/ffmpeg/python/tests/test_cli_output_executing.py python/core/tests/test_prompt_rule_parity.py python/core/tests/test_pieces_expansion_parity.py -q
+    uv run pytest python/core/tests/test_prompt_parity.py python/core/tests/test_retrieval_parity.py python/core/tests/test_settings_parity.py python/core/tests/test_planner_parity.py python/core/tests/test_clarify_gate_parity.py python/core/tests/test_nl_clarify_gate_parity.py python/core/tests/test_arg_gate_parity.py python/core/tests/test_native_tool_parity.py python/core/tests/test_example_selection_parity.py python/core/tests/test_generation_settings.py python/core/tests/test_scoring_contract.py python/core/tests/test_outcomes.py python/core/tests/test_chain_linking_parity.py python/core/tests/test_expansion_parity.py python/core/tests/test_documents_expansion_parity.py python/core/tests/test_scratch_routing_parity.py python/core/tests/test_effects_parity.py python/core/tests/test_url_inputs_parity.py python/core/tests/test_alert_parity.py python/core/tests/test_known_folder_parity.py python/core/tests/test_batch_chain_parity.py python/core/tests/test_batch_report_parity.py python/core/tests/test_result_set_parity.py python/core/tests/test_set_link_parity.py python/core/tests/test_trigger_parity.py python/core/tests/test_batch_cases_parity.py python/core/tests/test_many_files_parity.py python/core/tests/test_invented_folder_parity.py python/core/tests/test_kind_glob_parity.py python/core/tests/test_list_files_parity.py python/core/tests/test_count_parity.py skills/ffmpeg/python/tests/test_output_name_parity.py skills/documents/python/tests/test_text_preview_parity.py python/core/tests/test_dry_run_depth_parity.py python/core/tests/test_cli_flag_parity.py python/core/tests/test_ui_render_parity.py python/core/tests/test_cli_output_parity.py skills/ffmpeg/python/tests/test_cli_output_executing.py python/core/tests/test_prompt_rule_parity.py python/core/tests/test_pieces_expansion_parity.py -q
     cargo test -p knaif-core --test parity
     cargo test -p knaif-core --test chain_linking_parity
     cargo test -p knaif-core --test scratch_routing_parity
@@ -246,6 +248,7 @@ check-contracts:
     cargo test -p knaif-skill-ffmpeg --test output_name_parity
     cargo test -p knaif-skill-documents --test expansion_parity
     cargo test -p knaif-skill-documents --test text_preview_parity
+    cargo test -p knaif-skill-documents --test dry_run_depth_parity
     cargo test -p knaif-llm --test generation
     cargo test -p knaif-cli --test executor_semantics
     cargo test -p knaif-cli --bin knaif cli_flag_cases

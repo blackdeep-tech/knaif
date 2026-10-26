@@ -1,5 +1,5 @@
 {
-  "_comment": "(owner, 2026-10-21): \"every video\" is every video. In a request that asks for many files (knaif.nl_clarify_gate.asks_for_many_files), an input glob `*.<ext>` (in a plain folder or here) whose extension the request does not name, of a kind the skill lists under `batch_kinds:`, also covers the other extensions of that kind found in its folder: `*.mp4` for \"make all videos here 720p\" becomes `[\"*.mp4\", \"*.mkv\", \"*.mov\"]`. Added extensions follow the glob they widen, in alphabetical order; one the request names (\"the mp4s\", \"mp4-Dateien\", \".mov files\") is never added. A format the request names only as what the step converts to (the value of the tool's `produces: {arg}` argument, mentioned once: \"to mp4\", \"в mp4\", \"转换为mp4\") is not a name of the files (owner, 2026-10-22: \"every video\" is every video, those already in the target format included); a later step's input that is an earlier step's output is a link and stays. The value of a one-path `input` becomes a list too, which the per-file lift runs once per file. Outputs, other glob shapes (`clip*.mp4`, `**/*.mp4`), file names and other kinds are never changed. `files` exist under the folder the plan runs in. Python `knaif.batch_chain.widen_kind_globs`, Rust `knaif_core::batch_chain::widen_kind_globs`.",
+  "_comment": "\"Every video\" is every video (owner, 2026-10-21). In a request that asks for many files (knaif.nl_clarify_gate.asks_for_many_files), an input glob `*.<ext>` (in a plain folder or here) whose extension the request does not name, of a kind the skill lists under `batch_kinds:`, also covers the other extensions of that kind found in its folder: `*.mp4` for \"make all videos here 720p\" becomes `[\"*.mp4\", \"*.mkv\", \"*.mov\"]`. Added extensions follow the glob they widen, in alphabetical order; one the request names (\"the mp4s\", \"mp4-Dateien\", \".mov files\") is never added. A format the request names only as what the step converts to (the value of the tool's `produces: {arg}` argument, mentioned once: \"to mp4\", \"в mp4\", \"转换为mp4\") is not a name of the files (owner, 2026-10-22: \"every video\" is every video, those already in the target format included); a later step's input that is an earlier step's output is a link and stays. The value of a one-path `input` becomes a list too, which the per-file lift runs once per file. Outputs, other glob shapes (`clip*.mp4`, `**/*.mp4`), file names and other kinds are never changed. `files` exist under the folder the plan runs in. Python `knaif.batch_chain.widen_kind_globs`, Rust `knaif_core::batch_chain::widen_kind_globs`. Exclusions (owner, 2026-10-23):\"except / excluding / other than / außer / excepto / sauf / освен / без / 除了\" followed within three words by an extension the skill knows excludes that extension: it is never added by the widening, and its glob is removed from every step; a step left with no input is dropped unless a later step reads what it writes (then the plan stays as written). \"без звук\" (without sound) names no extension and excludes nothing. The widening never adds an extension another step's glob already takes.",
   "file_kinds": {
     "mp4": "video",
     "mov": "video",
@@ -704,6 +704,296 @@
               "*.mov"
             ],
             "end": "00:00:05"
+          }
+        }
+      ]
+    },
+    {
+      "name": "except a type removes it from every step",
+      "utterance": "convert every video to mp4 except the mov files",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mov"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "except a type is never added by the widening",
+      "utterance": "convert every video to gif except the mkv files",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "container": "gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bulgarian except names the type after it",
+      "utterance": "конвертирай всички видеа в mp4 без mov файловете",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bulgarian without sound excludes nothing",
+      "utterance": "конвертирай всички видеа в mp4 без звук",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chinese except",
+      "utterance": "把除了mov以外的所有视频转换为mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a kind another step takes is not widened into twice",
+      "utterance": "convert every video here to webm",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "webm"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "webm"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "webm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a dropped step another step reads keeps the plan as written",
+      "utterance": "convert every video except the mov files to mp4 into small/, then compress what is in small/",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "small/*.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "small/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "small/*.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "small/*.mp4"
+            ]
           }
         }
       ]

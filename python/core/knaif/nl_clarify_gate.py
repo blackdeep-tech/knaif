@@ -13,8 +13,8 @@ host-supplied file listing; allow only when exactly one match.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
-from pathlib import Path
+from collections.abc import Collection, Mapping
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .input_refs import (
@@ -26,9 +26,49 @@ from .input_refs import (
     parse_inline_filenames,
     resolve_input,
 )
-from .planner import _PATH_ARG_KEYS
+from .planner import _PATH_ARG_KEYS, _is_stem_candidate
 from .prompt import restore_grounded_spelling
 from .registry import ToolDef
+
+#: A plain stem: one ASCII word. Native `PLAIN_STEM`.
+_PLAIN_STEM_RE = re.compile(r"^[a-z]+$", re.IGNORECASE)
+
+#: Words for a kind of file: "the video", "the clip" mean any one, so they never name a file
+#: (contracts/parity/clarify_gate_cases.json). Native `GENERIC_FILE_WORDS`.
+GENERIC_FILE_WORDS = frozenset(
+    {
+        "video", "clip", "file", "movie", "film", "recording", "song", "track", "audio", "sound",
+        "music", "voice", "image", "photo", "picture", "pic", "thumbnail", "frame", "gif",
+        "document", "doc", "pdf", "page", "scan", "text", "report", "folder", "output", "input",
+        "result", "copy", "mp4", "mov", "mkv", "avi", "webm", "mp3", "wav", "jpg", "png",
+    }
+)  # fmt: skip
+
+
+def _named_by_stem(value: str, u_lower: str, known: Collection[str]) -> bool:
+    """Did the user name this file by its stem, and is the stem's file really there?
+
+    Both halves are required — see :meth:`CommandAgent._hallucinated_filename` for why
+    either alone admits a hallucination. ``_is_stem_candidate`` is reused rather than
+    re-derived so "what counts as a stem" has one definition in the codebase: the
+    resolver and the guard must agree, or the guard passes a name the resolver then
+    refuses. Both gates use it: the guard and :func:`nl_clarify_gate`.
+    """
+    name = PurePosixPath(value.replace("\\", "/")).name
+    stem = name.rsplit(".", 1)[0]
+    if not stem or name.lower() not in known:
+        return False
+    if _is_stem_candidate(stem):
+        return stem.lower() in u_lower
+    # A plain word names the file too when it is the whole stem, said as a word, and not a word
+    # for a kind of file (owner, 2026-10-24: "convert beach and city from mov to mkv").
+    low = stem.lower()
+    return (
+        bool(_PLAIN_STEM_RE.match(stem))
+        and low not in GENERIC_FILE_WORDS
+        and re.search(rf"(?<![a-z0-9_]){re.escape(low)}(?![a-z0-9_])", u_lower) is not None
+    )
+
 
 # ── batch detection ───────────────────────────────────────────────────────────
 
@@ -403,6 +443,7 @@ def _is_concretely_specified(
     utterance: str,
     inline_files: set[str],
     injected_files: set[str] | None,
+    known_files: Collection[str] = frozenset(),
 ) -> bool:
     available = inline_files | (injected_files or set())
     cls = classify_token(token, available)
@@ -413,6 +454,8 @@ def _is_concretely_specified(
         return True  # user wrote it out in the utterance
     if _has_matching_stem_in_utterance(token, utterance):
         return True  # stem form appears in utterance (resolver substituted extension)
+    if _named_by_stem(token, utterance.lower(), known_files):
+        return True  # a plain word for a file that is there, as the guard reads it
     if injected_files is not None and token in injected_files:
         return True  # injection ON: model was given this filename in the listing
     if cls == "descriptor" and injected_files is not None:
@@ -584,6 +627,7 @@ def nl_clarify_gate(
     *,
     injected_files: set[str] | None = None,
     registry: dict[str, ToolDef] | None = None,
+    known_files: Collection[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Return *intent_plan* unchanged, or a single clarify step.
 
@@ -605,6 +649,10 @@ def nl_clarify_gate(
     registry:
         Tool registry. When supplied, enforces each tool's ``grounded_args``;
         when None, grounding is not checked (backward-compatible).
+    known_files:
+        Lowercased names of the files in the working folder. A plain word names one of them
+        when it is its whole stem (the hallucinated-filename guard's rule); empty keeps
+        the strict rule.
     """
     # Grounded-arg check runs regardless of batch phrasing: a batch utterance
     # ("protect all PDFs") still must not carry an invented password.
@@ -641,7 +689,9 @@ def nl_clarify_gate(
                 continue  # directory/absolute path — not a media file reference
             if token in plan_outputs:
                 continue  # intermediate output produced by a previous step
-            if not _is_concretely_specified(token, utterance, inline_files, injected_files):
+            if not _is_concretely_specified(
+                token, utterance, inline_files, injected_files, known_files
+            ):
                 question = _clarify_question(token, tool)
                 return [{"tool": "clarify", "args": {"question": question}}]
         plan_outputs |= _output_tokens(step)

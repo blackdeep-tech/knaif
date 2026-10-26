@@ -147,17 +147,13 @@ fn join(folder: &str, name: &str) -> String {
     }
 }
 
-/// The sequence pattern of the set, relative to where paths resolve. A relative output is
-/// relative to the input's folder, as for every ffmpeg tool, so the input's folder leads it.
+/// The sequence pattern of the set, relative to where paths resolve. A name the plan gives is
+/// relative to the working folder, as for every ffmpeg tool (owner, 2026-10-24); only the
+/// name made up from the input sits in the input's folder. Python `_pieces._set_name`.
 fn set_name(output: Option<&str>, source: &str, suffix: &str, ext: &str) -> String {
     let (folder, base) = split(source);
     if let Some(output) = output.filter(|o| !o.is_empty()) {
-        let absolute = output.starts_with(['/', '\\']) || output.chars().take(3).any(|c| c == ':');
-        let output = if absolute {
-            output.to_string()
-        } else {
-            join(&folder, &output.replace('\\', "/"))
-        };
+        let output = output.replace('\\', "/");
         if output.contains('%') {
             return output;
         }
@@ -403,6 +399,21 @@ mod tests {
                 duration: "2".into()
             }
         );
+    }
+
+    #[test]
+    fn a_named_set_is_under_the_working_folder() {
+        // Owner, 2026-10-24: a name the plan gives is not joined to the input's folder.
+        let name = |output: &str| {
+            let args =
+                serde_json::json!({"input": "videos/clip.mov", "parts": 2, "output": output});
+            plan_pieces("split_video", args.as_object().unwrap(), 10.0, None, &[])
+                .unwrap()
+                .unwrap()
+                .name
+        };
+        assert_eq!(name("part.mp4"), "part_%03d.mp4");
+        assert_eq!(name("out/p.mp4"), "out/p_%03d.mp4");
     }
 
     #[test]

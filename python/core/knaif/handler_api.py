@@ -44,6 +44,18 @@ class HandlerContext:
     """Where :meth:`file_finished` reports; ``None`` outside the agent, or where the run already
     reports per file (a step of a chain core runs once per file)."""
 
+    item_shower: Callable[[dict[str, Any]], None] | None = None
+    """Where :meth:`show` sends a result line; ``None`` when nobody shows lines as they happen."""
+
+    def show(self, item: dict[str, Any]) -> bool:
+        """Show one result line now (a ``command`` before it runs, an ``output`` when its file is
+        done), as native does, instead of when the step ends. ``True`` when it was shown, so
+        the step's report leaves it out; ``False`` when nobody is showing lines live."""
+        if self.item_shower is None:
+            return False
+        self.item_shower(item)
+        return True
+
     def file_finished(self, file: str, failure: str | None = None) -> None:
         """Say how one file of a step over many files ended: done (*failure* None) or failed,
         and why. Core prints a failure as it happens, lets the step's other files count as done,

@@ -1,5 +1,5 @@
 {
-  "_comment": "(owner, 2026-10-21): an invented batch folder reads as here. A path with a glob in it (an input or an output) whose folder does not exist where the plan runs, in a request that does not name that folder, reads as the current folder: `videos/*.mov` for \"the .mov videos here\" becomes `*.mov`, before known-folder resolution would point `videos/` at the user's Videos folder. The request names a folder when it writes it with a slash, after in/into/to/from/on/onto/inside (optionally my/the), or next to the word folder (`Videos folder`, `folder videos`); a nested folder only when the request names its whole path, and a resolution or size (`720p`, `1080p`, `4k`, `1920x1080`) is never a folder name, except written with a slash. Paths without a glob, absolute paths, `~` paths, URLs and `$var` references are never changed. `dirs` exist under the folder the plan runs in. Python `knaif.batch_chain.drop_invented_folders`, Rust `knaif_core::batch_chain::drop_invented_folders`.",
+  "_comment": "An invented batch folder reads as here (owner, 2026-10-21). A path with a glob in it (an input or an output) whose folder does not exist where the plan runs, in a request that does not name that folder, reads as the current folder: `videos/*.mov` for \"the .mov videos here\" becomes `*.mov`, before known-folder resolution would point `videos/` at the user's Videos folder. The request names a folder when it writes it with a slash, after in/into/to/from/on/onto/inside (optionally my/the), next to the word folder (`Videos folder`, `folder videos`), or after `folder called` / `folder named`, quoted or not (2026-10-24:\"put them in a folder called out\" lost `out/`); a nested folder only when the request names its whole path, and a resolution or size (`720p`, `1080p`, `4k`, `1920x1080`) is never a folder name, except written with a slash. Paths without a glob, absolute paths, `~` paths, URLs and `$var` references are never changed. `dirs` exist under the folder the plan runs in. Python `knaif.batch_chain.drop_invented_folders`, Rust `knaif_core::batch_chain::drop_invented_folders`.",
   "cases": [
     {
       "name": "an invented folder on a chain reads as here",
@@ -487,6 +487,122 @@
               "*.mov"
             ],
             "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a folder called after the word folder stays",
+      "utterance": "convert every video to mp4 and put them in a folder called out",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "out/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "out/*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a folder named after the word folder stays",
+      "utterance": "convert the videos to mp4 into a new folder named Converted",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "converted/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "converted/*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a quoted folder name stays",
+      "utterance": "convert all the videos to mp4, in a folder called \"small\"",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "small/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "small/*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "called for something else is no folder",
+      "utterance": "convert every video to mp4 and call them out",
+      "dirs": [],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "out/*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "output": "*.mp4"
           }
         }
       ]

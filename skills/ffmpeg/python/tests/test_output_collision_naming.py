@@ -162,7 +162,7 @@ def test_a_consumer_in_a_different_directory_is_not_rebound(tmp_path: Path) -> N
     (tmp_path / "a" / "clip.mp4").write_bytes(b"")
     (tmp_path / "b" / "clip.mp4").write_bytes(b"")
     plan = [
-        _convert("a/clip.mp4", "clip.mp4"),
+        _convert("a/clip.mp4", "a/clip.mp4"),
         {"tool": "create_thumbnail", "args": {"inputs": ["b/clip.mp4"]}},
     ]
     plan, subs = rebind_colliding_outputs(plan, tmp_path)
@@ -174,7 +174,7 @@ def test_a_consumer_in_the_same_directory_is_rebound_and_keeps_it(tmp_path: Path
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "clip.mp4").write_bytes(b"")
     plan = [
-        _convert("a/clip.mp4", "clip.mp4"),
+        _convert("a/clip.mp4", "a/clip.mp4"),
         {"tool": "create_thumbnail", "args": {"inputs": ["a/clip.mp4"]}},
     ]
     plan, _ = rebind_colliding_outputs(plan, tmp_path)
@@ -189,22 +189,9 @@ def test_the_disk_check_runs_in_the_directory_the_file_lands_in(tmp_path: Path) 
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "clip.mp4").write_bytes(b"")
     (tmp_path / "a" / "clip_1.mp4").write_bytes(b"precious")
-    plan, _ = rebind_colliding_outputs([_convert("a/clip.mp4", "clip.mp4")], tmp_path)
-    assert plan[0]["args"]["output"] == "clip_2.mp4"
+    plan, _ = rebind_colliding_outputs([_convert("a/clip.mp4", "a/clip.mp4")], tmp_path)
+    assert plan[0]["args"]["output"] == "a/clip_2.mp4"
     assert (tmp_path / "a" / "clip_1.mp4").read_bytes() == b"precious"
-
-
-def test_an_output_that_lands_elsewhere_is_not_a_self_overwrite(tmp_path: Path) -> None:
-    """An output resolves against the INPUT'S PARENT, not the sandbox — so it can escape it.
-
-    `inputs=["a/clip.mp4"], output="a/clip.mp4"` renders to `<sandbox>/a/a/clip.mp4`, which
-    is not the input at all. Treating the two as one base would invent a collision here.
-    """
-    (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "clip.mp4").write_bytes(b"")
-    plan, subs = rebind_colliding_outputs([_convert("a/clip.mp4", "a/clip.mp4")], tmp_path)
-    assert subs == []
-    assert plan[0]["args"]["output"] == "a/clip.mp4"
 
 
 # ── the base an output resolves against is per-tool, not universal ───────────
@@ -251,15 +238,21 @@ def test_concat_output_that_collides_with_nothing_is_left_alone(tmp_path: Path) 
     assert _concat(tmp_path, inputs=["sub/a.mp4", "sub/b.mp4"], output="a.mp4") == "a.mp4"
 
 
-def test_a_per_file_mode_still_resolves_against_its_input(tmp_path: Path) -> None:
-    """The control: convert_video's output IS relative to its input's directory."""
+def test_a_per_file_mode_resolves_against_the_working_folder_too(tmp_path: Path) -> None:
+    """Every tool's relative output is relative to the working folder (owner, 2026-10-24):
+    `sub/a.mp4 -> a.mp4` writes `<sandbox>/a.mp4`, which is no input, so it keeps its name."""
     _two_inputs(tmp_path)
     plan = [{"tool": "convert_video", "args": {"inputs": ["sub/a.mp4"], "output": "a.mp4"}}]
-    out = rebind_colliding_outputs(plan, tmp_path)
-    steps = out[0] if isinstance(out, tuple) else out
-    assert (
-        steps[0]["args"]["output"] != "a.mp4"
-    ), "sub/a.mp4 -> a.mp4 resolves to the input itself for a per-file mode"
+    steps, _ = rebind_colliding_outputs(plan, tmp_path)
+    assert steps[0]["args"]["output"] == "a.mp4"
+
+
+def test_an_output_naming_the_inputs_own_folder_is_a_self_overwrite(tmp_path: Path) -> None:
+    """`sub/a.mp4 -> sub/a.mp4` is the input itself now; it was `sub/sub/a.mp4` before 2026-10-24."""
+    _two_inputs(tmp_path)
+    plan = [{"tool": "convert_video", "args": {"inputs": ["sub/a.mp4"], "output": "sub/a.mp4"}}]
+    steps, _ = rebind_colliding_outputs(plan, tmp_path)
+    assert steps[0]["args"]["output"] != "sub/a.mp4"
 
 
 # -- which name moves: the intermediate, or the destination --------------------

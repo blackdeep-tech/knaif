@@ -57,13 +57,13 @@ def _seconds(value: Any) -> float | None:
 def _set_name(output: Any, source: str, suffix: str, ext: str) -> str:
     """The sequence pattern of the set (module docstring), relative to where paths resolve.
 
-    A relative output is relative to the input's folder, as for every ffmpeg tool, so the
-    input's folder leads it: core compares these names with the plan's.
+    A name the plan gives is relative to the working folder, as for every ffmpeg tool (owner,
+    2026-10-24); only the name made up from the input sits in the input's folder. Core
+    compares these names with the plan's.
     """
     folder, base = posixpath.split(source)
     if isinstance(output, str) and output:
-        if not (output.startswith(("/", "\\")) or ":" in output[:3]):
-            output = posixpath.join(folder, output.replace("\\", "/"))
+        output = output.replace("\\", "/")
         if "%" in output:
             return output
         stem, out_ext = posixpath.splitext(output)

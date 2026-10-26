@@ -1,4 +1,4 @@
-//! Golden parity: run `contracts/parity/batch_chain_cases.json`. through the Rust batch chain lift
+//! Golden parity: run `contracts/parity/batch_chain_cases.json` through the Rust batch chain lift
 //! and assert the recorded lifted plan. The Python side runs the identical fixtures
 //! (python/core/tests/test_batch_chain_parity.py); both must agree.
 //!

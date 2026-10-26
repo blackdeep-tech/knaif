@@ -4,7 +4,7 @@
 the intermediate files", "keep everything") turn it on too. Without either, the keep rule
 decides (`_asked_for`); with either, nothing is routed into the run scratch.
 
-The request words are pinned by ``contracts/parity/keep_request_cases.json`.`, shared with
+The request words are pinned by ``contracts/parity/keep_request_cases.json``, shared with
 ``native/crates/knaif-core/tests/keep_request_parity.rs``.
 """
 
@@ -107,5 +107,6 @@ def test_the_python_cli_sets_the_agent(monkeypatch, tmp_path: Path) -> None:
         app.cli,
         ["run", "ffmpeg", "--backend", "mock", "--keep-intermediates", "trim", "clip.mp4"],
     )
-    assert isinstance(result.exception, Stop), result.output
+    # The CLI prints any error from the run instead of raising it, so `Stop` ends it there.
+    assert result.exit_code == 1 and "Error: Stop" in result.output, result.output
     assert seen["keep"] is True

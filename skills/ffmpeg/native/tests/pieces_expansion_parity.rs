@@ -1,5 +1,5 @@
 //! Golden parity: one file into many, rendered. Renders the fixed plans in
-//! `contracts/parity/pieces_expansion_cases.json`. and asserts one ffmpeg command per piece, as the
+//! `contracts/parity/pieces_expansion_cases.json` and asserts one ffmpeg command per piece, as the
 //! Python reference produces them (`python/core/tests/test_pieces_expansion_parity.py`).
 
 use knaif_skill_ffmpeg::run::{expand_dry_run, Expansion};

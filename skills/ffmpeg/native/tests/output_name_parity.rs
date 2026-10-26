@@ -1,5 +1,5 @@
 //! Golden parity: how an ffmpeg step names what it writes, over
-//! `contracts/parity/output_name_cases.json`. (owner, 2026-10-23). Python:
+//! `contracts/parity/output_name_cases.json` (owner, 2026-10-23). Python:
 //! `skills/ffmpeg/python/tests/test_output_name_parity.py`. Each plan is rendered as a dry run in a
 //! folder holding the case's (empty) files; the outputs are the last argument of each command.
 

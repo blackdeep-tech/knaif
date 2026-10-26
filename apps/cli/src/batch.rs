@@ -417,42 +417,65 @@ impl Report {
     /// `8 done, 2 failed in 12.4s, 35.2 MB`: the size of what the run's steps wrote and is still
     /// there outside the scratch.
     pub fn summary(&self, written: &[PathBuf], work: Option<&Path>) -> String {
-        let mut seen: Vec<PathBuf> = Vec::new();
-        let mut size = 0u64;
-        for path in written {
-            if work.is_some_and(|w| path.starts_with(w)) || seen.contains(path) {
-                continue;
-            }
-            if let Ok(meta) = std::fs::metadata(path) {
-                if meta.is_file() {
-                    size += meta.len();
-                }
-            }
-            seen.push(path.clone());
-        }
         let seconds = self.started.map_or(0.0, |s| s.elapsed().as_secs_f64());
         knaif_core::batch_chain::summary_line(
             self.files.len() - self.failed(),
             self.failed(),
             seconds,
-            size,
+            size_left(written, work),
         )
     }
+
+    /// What the terminal view's closing line adds for a batch: ` · 2 failed · 35.2 MB` (no failed
+    /// part when nothing failed). Python `BatchReport.close_extra`.
+    pub fn close_extra(&self, written: &[PathBuf], work: Option<&Path>) -> String {
+        let failed = match self.failed() {
+            0 => String::new(),
+            n => format!(" · {n} failed"),
+        };
+        let size = knaif_core::batch_chain::format_size(size_left(written, work));
+        format!("{failed} · {size}")
+    }
+}
+
+/// The size of what the run's steps wrote and is still there outside the scratch.
+fn size_left(written: &[PathBuf], work: Option<&Path>) -> u64 {
+    let mut seen: Vec<PathBuf> = Vec::new();
+    let mut size = 0u64;
+    for path in written {
+        if work.is_some_and(|w| path.starts_with(w)) || seen.contains(path) {
+            continue;
+        }
+        if let Ok(meta) = std::fs::metadata(path) {
+            if meta.is_file() {
+                size += meta.len();
+            }
+        }
+        seen.push(path.clone());
+    }
+    size
 }
 
 /// Run the lifted plan: a step of one file that fails puts that file out (its later steps are
 /// skipped, its failure line goes to `failed_line` at once) and the other files go on; a join
 /// leaves out the failed files' results and, with none left, does not run. A declined step or a
 /// control step ends the run as it does without a batch, and so does a failure outside the chain.
+///
+/// `prefailed` are the files the rehearsal ([`rehearse`]) found would fail: each is out before
+/// anything runs, its failure line first.
 pub fn execute(
     steps: &[Value],
     lift: &BatchLift,
     total: usize,
+    prefailed: BTreeMap<usize, String>,
     clean: impl Fn(&str) -> String,
     mut failed_line: impl FnMut(&str),
     mut run: impl FnMut(&Value) -> anyhow::Result<StepOutcome>,
 ) -> anyhow::Result<Report> {
-    let mut failed: BTreeMap<usize, String> = BTreeMap::new();
+    for (f, reason) in &prefailed {
+        failed_line(&failure_line(&lift.shown[*f], reason));
+    }
+    let mut failed = prefailed;
     let mut report = Report {
         files: lift.shown.clone(),
         started: Some(Instant::now()),
@@ -501,6 +524,41 @@ pub fn execute(
     Ok(report)
 }
 
+/// Rehearse the lifted plan before it really runs (owner, 2026-10-24): `run` builds each
+/// step as a dry run, printing nothing. Returns the files that would fail, each with its reason,
+/// for [`execute`] to leave out; errs when a step outside the chain would fail, or every file
+/// would. Python `CommandAgent._rehearse`.
+pub fn rehearse(
+    steps: &[Value],
+    lift: &BatchLift,
+    total: usize,
+    clean: impl Fn(&str) -> String,
+    mut run: impl FnMut(&Value) -> anyhow::Result<StepOutcome>,
+) -> anyhow::Result<BTreeMap<usize, String>> {
+    let mut failed: BTreeMap<usize, String> = BTreeMap::new();
+    for (idx, step) in steps.iter().enumerate() {
+        let file = lift.file_of.get(idx).copied().flatten();
+        if file.is_some_and(|f| failed.contains_key(&f)) {
+            continue;
+        }
+        match (run(step), file) {
+            (Err(e), Some(f)) => {
+                failed.insert(f, first_line(&clean(&e.to_string())).to_string());
+            }
+            (Err(e), None) => {
+                return Err(e.context(crate::rehearsal_failure_context(idx, total)));
+            }
+            (Ok(StepOutcome::ShortCircuit | StepOutcome::Declined), _) => break,
+            (Ok(StepOutcome::Continue), _) => {}
+        }
+    }
+    if !failed.is_empty() && failed.len() == lift.shown.len() {
+        let cause = failed.values().next().cloned().unwrap_or_default();
+        return Err(anyhow::anyhow!(cause).context(crate::EVERY_FILE_WOULD_FAIL));
+    }
+    Ok(failed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,6 +595,7 @@ mod tests {
             &steps,
             &lift,
             steps.len(),
+            BTreeMap::new(),
             |t| t.to_string(),
             |l| lines.push(l.to_string()),
             |step| {
@@ -572,6 +631,81 @@ mod tests {
         );
         assert_eq!(report.failed(), 1);
         assert_eq!(report.files, ["beach.mov", "silent.mov"]);
+    }
+
+    /// The step that fails on `silent`, as the failure test above.
+    fn fails_on_silent(step: &Value) -> anyhow::Result<StepOutcome> {
+        if step.to_string().contains("silent") && step["tool"] == "extract_audio" {
+            anyhow::bail!("No audio to extract: silent.mp4 has no audio track.\nmore")
+        }
+        Ok(StepOutcome::Continue)
+    }
+
+    #[test]
+    fn the_rehearsal_finds_the_file_that_would_fail() {
+        // The file is out before anything runs, the others go on (owner, 2026-10-24).
+        let (steps, lift) = two_file_chain();
+        let failed = rehearse(
+            &steps,
+            &lift,
+            steps.len(),
+            |t| t.to_string(),
+            fails_on_silent,
+        )
+        .unwrap();
+        assert_eq!(
+            failed,
+            BTreeMap::from([(
+                1,
+                "No audio to extract: silent.mp4 has no audio track.".to_string()
+            )])
+        );
+        let events = std::cell::RefCell::new(Vec::<String>::new());
+        execute(
+            &steps,
+            &lift,
+            steps.len(),
+            failed,
+            |t| t.to_string(),
+            |l| events.borrow_mut().push(l.to_string()),
+            |step| {
+                events
+                    .borrow_mut()
+                    .push(step["tool"].as_str().unwrap().to_string());
+                Ok(StepOutcome::Continue)
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            events.into_inner(),
+            [
+                "✗ silent.mov: No audio to extract: silent.mp4 has no audio track.",
+                "convert_video",
+                "extract_audio",
+                "concat_video"
+            ],
+            "reported before anything ran, the other file runs"
+        );
+    }
+
+    #[test]
+    fn the_rehearsal_refuses_when_every_file_would_fail() {
+        let (steps, lift) = two_file_chain();
+        let err = rehearse(
+            &steps,
+            &lift,
+            steps.len(),
+            |t| t.to_string(),
+            |step| {
+                if step["tool"] == "extract_audio" {
+                    anyhow::bail!("No audio to extract.")
+                }
+                Ok(StepOutcome::Continue)
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err.to_string(), crate::EVERY_FILE_WOULD_FAIL);
+        assert_eq!(err.root_cause().to_string(), "No audio to extract.");
     }
 
     #[test]
@@ -621,6 +755,7 @@ mod tests {
             &steps,
             &lift,
             steps.len(),
+            BTreeMap::new(),
             |t| t.to_string(),
             |_| {},
             |step| {
@@ -659,6 +794,7 @@ mod tests {
             &steps,
             &lift,
             steps.len(),
+            BTreeMap::new(),
             |t| t.to_string(),
             |_| {},
             |step| {

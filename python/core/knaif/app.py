@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -22,7 +23,7 @@ import yaml
 
 from . import create_agent, list_skills, ui
 from ._console import enable_utf8_console
-from .agent import is_unsafe_request
+from .agent import STEP_ATTR, PlanWouldFail, _without_folder, is_unsafe_request
 from .models import build_orchestrator, load_models_registry
 
 # The model is shown the tools retrieval surfaces for the request, never the whole registry: the
@@ -181,6 +182,49 @@ def _render_items(items: list[dict[str, Any]]) -> int:
     return exit_code
 
 
+def _trained_for_note(
+    model: str | None, skill_recommended: str | None, registry: dict[str, Any]
+) -> str | None:
+    """The line to print when the model about to run was not trained for the prompt this knaif
+    serves (owner, 2026-10-26): models.yaml's `trained_for` against the declared generation.
+    None for a model models.yaml does not know, or when the generation file is missing: a note
+    must never stop a run."""
+    from .models import resolve_model_name
+    from .prompt_generation import declared, note_for
+
+    resolved = resolve_model_name(model, skill_recommended, registry)
+    models = registry.get("models") or {}
+    entry = models.get(resolved) if resolved else None
+    if resolved is None or not isinstance(entry, dict):
+        return None
+    try:
+        generation = declared().generation
+    except (OSError, KeyError, ValueError):
+        return None
+    trained_for = entry.get("trained_for")
+    pull = next(
+        (
+            name
+            for name, e in models.items()
+            if isinstance(e, dict) and e.get("trained_for") == generation
+        ),
+        None,
+    )
+    return note_for(
+        trained_for if isinstance(trained_for, int) else None, generation, resolved, pull=pull
+    )
+
+
+def _say_trained_for(model: str | None, model_path: str | None, skill_dir: Path | None) -> None:
+    """Print the trained-for note, before planning goes quiet (a GGUF path says nothing)."""
+    if model_path:
+        return
+    recommended = _read_recommended_model(skill_dir) if skill_dir else None
+    note = _trained_for_note(model, recommended, load_models_registry())
+    if note:
+        click.echo(note, err=True)
+
+
 def _read_recommended_model(skill_dir: Path) -> str | None:
     """Read skill.yaml's recommended_model without exec'ing handlers.py."""
     manifest = skill_dir / "skill.yaml"
@@ -276,7 +320,7 @@ PERMISSIONS = ("download", "overwrite", "model", "all")
 class Allow:
     """What a run may do without asking (owner, 2026-10-23): ``--allow download,
     overwrite,model``, a comma list or a repeated flag; ``all``, or ``--yes``, is every
-    permission, now and later. ``contracts/parity/cli_flag_cases.json`.`, native ``Allow``."""
+    permission, now and later. ``contracts/parity/cli_flag_cases.json``, native ``Allow``."""
 
     download: bool = False  # fetch an http(s) URL input
     overwrite: bool = False  # replace a file that already exists
@@ -390,7 +434,9 @@ def _named_outputs(node: Any) -> list[str]:
     return found
 
 
-def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[str]:
+def _existing_outputs(
+    agent: Any, payload: dict[str, Any], prompt: str, seen: dict[str, Any] | None = None
+) -> list[str]:
     """Preview *payload* (no prompts, no per-intent rendering, nothing written) and return the
     outputs it would replace.
 
@@ -398,14 +444,25 @@ def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[
     lets the preview reach the intents after it; `dry_run=True` is what keeps it side-effect free.
     A chain that cannot be previewed (a later step reads a file an earlier step has not written)
     falls back to the outputs the plan names, and the real run reports the error in its own words.
+    *seen*, when given, keeps what the preview would have drawn: ``plan`` (steps, notes) and
+    ``steps``, one ``(head args, results)`` per step, so the CLI can draw the step that would
+    replace a file before it asks.
     """
     import copy
 
-    # No display: the preview is not the run (the display hooks would draw the plan twice).
-    hooks = ("intent_completed", "plan_ready", "intent_started")
+    # No display: the preview is not the run (the display hooks would draw the plan twice, and a
+    # file that fails in a dry run, which the rehearsal now finds first, was reported twice).
+    hooks = ("intent_completed", "plan_ready", "intent_started", "batch_failed", "item_shown")
     saved = {h: getattr(agent, h, None) for h in hooks}
     for h in hooks:
         setattr(agent, h, None)
+    if seen is not None:
+        seen["steps"] = []
+        agent.plan_ready = lambda steps, notes: seen.__setitem__("plan", (steps, notes))
+        agent.intent_started = lambda *head: seen["steps"].append([head, None])
+        agent.intent_completed = lambda results, dry_run: (
+            seen["steps"][-1].__setitem__(1, results) if seen["steps"] else None
+        )
     try:
         preview = agent.execute_plan(
             copy.deepcopy(payload),
@@ -421,6 +478,60 @@ def _existing_outputs(agent: Any, payload: dict[str, Any], prompt: str) -> list[
         for h, value in saved.items():
             setattr(agent, h, value)
     return planned_outputs(preview)
+
+
+def _draw_before_replace(
+    view: Any,
+    agent: Any,
+    seen: dict[str, Any],
+    existing: list[str],
+    plan_ready: Callable[[list[dict[str, Any]], list[str]], None],
+) -> int | None:
+    """Draw what native has drawn when it asks to replace a file: the plan, the step that
+    writes it, that step's commands and ``⚠ <file> already exists``. The step's 1-based
+    index, or ``None`` when the preview did not show which step it is."""
+    taken = {Path(e).name.lower() for e in existing}
+    for head, results in seen.get("steps") or []:
+        if results is None or agent.result_formatter is None:
+            continue
+        items = agent.result_formatter(results, dry_run=True)
+        commands = [i for i in items if i.get("kind") == "command" and i.get("argv")]
+        if not any(Path(str(i["argv"][-1])).name.lower() in taken for i in commands):
+            continue
+        if "plan" in seen:
+            plan_ready(*seen["plan"])
+        view.step(*head)
+        for item in commands:
+            view.item(item, dry_run=True)
+        for path in existing:
+            view.exists(path)
+        return int(head[0])
+    return None
+
+
+def _skip_drawn(agent: Any, view: Any, index: int) -> None:
+    """After a yes, the run goes on from the question: the plan, step *index*'s head and its
+    commands are already on screen."""
+    plan_ready, started, shown_item = agent.plan_ready, agent.intent_started, agent.item_shown
+    state: dict[str, Any] = {"plan": False, "step": None}
+
+    def _plan(steps: list[dict[str, Any]], notes: list[str]) -> None:
+        if state["plan"]:
+            plan_ready(steps, notes)
+        state["plan"] = True
+
+    def _started(i: int, total: int, step: dict[str, Any]) -> None:
+        state["step"] = i
+        if i != index:
+            started(i, total, step)
+
+    def _item(item: dict[str, Any]) -> None:
+        if not (state["step"] == index and item.get("kind") == "command"):
+            shown_item(item)
+
+    agent.plan_ready, agent.intent_started = _plan, _started
+    if shown_item is not None:
+        agent.item_shown = _item
 
 
 def _stop_unconfirmed(agent: Any, payload: dict[str, Any], prompt: str, view: Any) -> None:
@@ -560,7 +671,7 @@ def overwrite_gate(existing: list[str], overwrite: bool, ask: Any) -> bool:
     "-d/-D",
     "--dry-run/--no-dry-run",
     default=False,
-    show_default=True,
+    # click shows a flag pair's default as its first off switch, `[default: D]`.
     help="Preview commands without executing side effects.",
 )
 @click.option(
@@ -707,6 +818,12 @@ def run_cmd(
     # (`knaif.run_view`).
     view = RunView(skill, choose_style(), base=Path.cwd(), silent=silent)
     view.text_to_stdout = stdout
+    # A library's own warnings are not the run's to print: pypdf logged "invalid pdf header" and
+    # "EOF marker not found" into the tree, twice, where native prints none and the step's error
+    # says what went wrong (owner, 2026-10-24). `--verbose` keeps them.
+    if not verbose:
+        for name in _QUIET_LOGGERS:
+            logging.getLogger(name).setLevel(logging.ERROR)
 
     # ── plan display / approval / per-intent callbacks ───────────────────────
     def _plan_confirmer(_: str) -> bool:
@@ -759,6 +876,13 @@ def run_cmd(
     view.file_kinds = agent.file_kinds
     agent.to_stdout = stdout
     agent.intent_completed = _on_intent_completed
+    if not verbose and agent.result_formatter is not None:
+        # A step's lines as they happen (each file of a batch as it is done), as native.
+        def _on_item_shown(item: dict[str, Any]) -> None:
+            if view.item(item, dry_run=False):
+                exit_code_holder[0] = 1
+
+        agent.item_shown = _on_item_shown
     told: list[bool] = []
 
     def _tell_downloads() -> None:
@@ -798,6 +922,8 @@ def run_cmd(
         os.environ.get(v) for v in ("KNAIF_DEBUG", "KNAIF_DUMP_PLAN", "KNAIF_DUMP_PROMPT")
     )
     load_s: float | None = None
+    if not use_mock:
+        _say_trained_for(model, model_path, skill_dir)
     with QuietPlanning(view.style, active=quiet and not use_mock):
         if not use_mock:
             started = time.perf_counter()
@@ -877,7 +1003,17 @@ def run_cmd(
         # Replacing a file asks unless `--allow overwrite` (or `--yes`) approved it: preview the
         # plan (no side effects) to learn which outputs it would write, and ask before any
         # of them is replaced. Decline = the same "plan declined" as a declined Proceed?.
-        existing = [shown(e, Path.cwd()) for e in _existing_outputs(agent, payload, prompt_str)]
+        seen: dict[str, Any] = {}
+        existing = [
+            shown(e, Path.cwd()) for e in _existing_outputs(agent, payload, prompt_str, seen)
+        ]
+        if existing and view.style is not None:
+            # As native: the plan, the step that would replace the file, its commands and a
+            # warning, then the question (or the stop); a yes then goes on without drawing them
+            # again.
+            drawn = _draw_before_replace(view, agent, seen, existing, _plan_ready)
+            if drawn is not None:
+                _skip_drawn(agent, view, drawn)
         asked = time.perf_counter()
         try:
             replace = overwrite_gate(existing, permitted.overwrite, _ask_yes_no)
@@ -908,8 +1044,21 @@ def run_cmd(
             dry_run=dry_run,
             confirmed=confirmed,
         )
-    except ValueError as exc:
-        view.stopped(str(exc))
+    except PlanWouldFail as exc:
+        # The rehearsal found a step that fails, before anything ran.
+        view.stopped(exc.where, _without_folder(exc.cause, Path.cwd()))
+        sys.exit(1)
+    except Exception as exc:  # noqa: BLE001 - an error is printed as native does, never a traceback
+        if os.environ.get("KNAIF_DEBUG"):
+            raise
+        # What the step said, without the working folder (pikepdf named the file by its
+        # absolute path); where it stopped when a step raised it, as native's error chain.
+        cause = _without_folder(str(exc) or type(exc).__name__, Path.cwd())
+        step = getattr(exc, STEP_ATTR, None)
+        if step is None:
+            view.stopped(cause)
+        else:
+            view.stopped(chain_failure_context(*step), cause)
         sys.exit(1)
     _tell_downloads()
     if results and (results[0].get("result") or {}).get("status") == "declined":
@@ -955,8 +1104,13 @@ def run_cmd(
     # exits non-zero when any file failed (owner, 2026-10-13).
     report = agent.last_batch_report
     if report is not None:
-        if not silent:
-            click.echo(report.summary(), err=True)
+        # The plain view's summary line; the tree puts the failed count and the size on its
+        # closing line instead, and a dry run there says nothing more (owner, 2026-10-25).
+        if view.style is None:
+            if not silent:
+                click.echo(report.summary(), err=True)
+        elif not dry_run:
+            view.close_extra = report.close_extra()
         if report.failed:
             exit_code_holder[0] = 1
 
@@ -970,8 +1124,17 @@ def run_cmd(
             if isinstance(value, str):
                 texts.append(value)
         if texts:
-            text_out.write("\n".join(t.rstrip("\n") for t in texts) + "\n")
-            text_out.flush()
+            joined = "\n".join(t.rstrip("\n") for t in texts) + "\n"
+            # As bytes, so the pipe gets plain `\n` on every OS, as native writes it: a
+            # text stream turns each into `\r\n` on Windows.
+            buffer = getattr(text_out, "buffer", None)
+            if buffer is not None:
+                text_out.flush()
+                buffer.write(joined.encode("utf-8"))
+                buffer.flush()
+            else:
+                text_out.write(joined)
+                text_out.flush()
     if exit_code_holder[0] != 0:
         sys.exit(exit_code_holder[0])
 
@@ -1026,6 +1189,7 @@ def plan_cmd(
     orchestrator = None
     if not use_mock:
         name, model_path = _model_or_path(model)
+        _say_trained_for(name, model_path, skill_dir)
         orchestrator = _build_orchestrator(backend, name, model_path, ollama_url, skill_dir, False)
         if orchestrator is None:
             use_mock = True
@@ -1077,6 +1241,11 @@ def skills_cmd() -> None:
         click.echo(f"  • {name}")
 
 
+#: Libraries whose own warnings a run does not print unless `--verbose` (pypdf: "invalid pdf
+#: header", "EOF marker not found"). Native prints none.
+_QUIET_LOGGERS = ("pypdf",)
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 
@@ -1102,7 +1271,6 @@ def _fix_windows_stderr() -> None:
         return
     try:
         import ctypes
-        import io
         import msvcrt
 
         fileno = sys.stderr.fileno()
@@ -1112,34 +1280,41 @@ def _fix_windows_stderr() -> None:
             return  # stderr is already a pipe — click won't use _WindowsConsoleWriter
 
         # GetConsoleMode succeeded: click WILL try _WindowsConsoleWriter →
-        # WriteConsoleW, which may fail on this handle. Wrap stderr so that
-        # click's _is_console() (which calls f.fileno()) sees UnsupportedOperation
-        # and skips the Win32 console path. Writes are delegated to the original
-        # stream, which uses WriteFile and works correctly.
-        _orig = sys.stderr
-
-        class _Stderr:
-            encoding = getattr(_orig, "encoding", "utf-8")
-            errors = getattr(_orig, "errors", "replace")
-
-            def write(self, s: str) -> int:
-                return _orig.write(s)
-
-            def flush(self) -> None:
-                _orig.flush()
-
-            def fileno(self) -> int:
-                raise io.UnsupportedOperation("fileno")
-
-            def isatty(self) -> bool:
-                return False
-
-            def __getattr__(self, name: str):
-                return getattr(_orig, name)
-
-        sys.stderr = _Stderr()
+        # WriteConsoleW, which may fail on this handle.
+        sys.stderr = _console_safe_stderr(sys.stderr)
     except Exception:
         pass
+
+
+def _console_safe_stderr(orig: Any) -> Any:
+    """*orig* wrapped so that click's _is_console() (which calls f.fileno()) sees
+    UnsupportedOperation and skips the Win32 console path. Writes are delegated to the original
+    stream, which uses WriteFile and works correctly. `knaif_real` is that stream: the terminal
+    view looks through the wrapper to it (`run_view._is_terminal`), or the CLI printed the plain
+    view in every terminal (owner, 2026-10-24)."""
+    import io
+
+    class _Stderr:
+        encoding = getattr(orig, "encoding", "utf-8")
+        errors = getattr(orig, "errors", "replace")
+        knaif_real = orig
+
+        def write(self, s: str) -> int:
+            return int(orig.write(s))
+
+        def flush(self) -> None:
+            orig.flush()
+
+        def fileno(self) -> int:
+            raise io.UnsupportedOperation("fileno")
+
+        def isatty(self) -> bool:
+            return False
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(orig, name)
+
+    return _Stderr()
 
 
 def main() -> None:

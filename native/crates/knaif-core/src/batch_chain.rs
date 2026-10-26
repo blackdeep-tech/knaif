@@ -24,7 +24,7 @@
 //! A plan with no head comes back unchanged, and so does one whose head nothing reads when that
 //! head takes its files in `inputs`; a lone head on `input` (one path) is repeated per file.
 //! Pure: no disk, no registry; the caller expands the globs. Both runtimes read
-//! `contracts/parity/batch_chain_cases.json`. in their tests.
+//! `contracts/parity/batch_chain_cases.json` in their tests.
 
 use std::collections::{HashMap, HashSet};
 
@@ -418,8 +418,8 @@ pub fn lift_batch(
 /// The args a plan's paths sit in, for [`drop_invented_folders`].
 const PATH_KEYS: [&str; 5] = ["input", "inputs", "output", "base", "append"];
 
-/// Whether `utterance` names `folder`: with a slash, after a place word, or next to the word
-/// folder.
+/// Whether `utterance` names `folder`: with a slash, after a place word, next to the word
+/// folder, or after "folder called/named".
 fn names_folder(utterance: &str, folder: &str) -> bool {
     let low = utterance.to_lowercase().replace('\\', "/");
     let name = folder.to_lowercase();
@@ -436,6 +436,9 @@ fn names_folder(utterance: &str, folder: &str) -> bool {
     ))
     .is_ok_and(|re| re.is_match(&low))
         || regex::Regex::new(&format!(r"\b{n}\s+folder\b|\bfolder\s+{n}\b"))
+            .is_ok_and(|re| re.is_match(&low))
+        // "a folder called out"
+        || regex::Regex::new(&format!(r#"\bfolder\s+(?:called|named)\s+["']?{n}\b"#))
             .is_ok_and(|re| re.is_match(&low))
 }
 

@@ -32,17 +32,81 @@ use crate::registry::Registry;
 /// Both halves are load-bearing — see the module header. `known_files` is the sandbox
 /// listing, lowercased by the caller; it is passed in rather than read here so the gate stays
 /// pure and the L2 contract can state it (`sandbox_files` in
-/// `contracts/parity/clarify_gate_cases.json`.).
-fn named_by_stem(value: &str, u_lower: &str, known_files: &HashSet<String>) -> bool {
+/// `contracts/parity/clarify_gate_cases.json`). The NL clarify gate asks it too.
+pub(crate) fn named_by_stem(value: &str, u_lower: &str, known_files: &HashSet<String>) -> bool {
     let name = value.rsplit(['/', '\\']).next().unwrap_or(value);
     let stem = match name.rfind('.') {
         Some(i) => &name[..i],
         None => name,
     };
-    if stem.is_empty() || !is_stem_candidate(stem) {
+    if stem.is_empty() || !known_files.contains(&name.to_lowercase()) {
         return false;
     }
-    u_lower.contains(&stem.to_lowercase()) && known_files.contains(&name.to_lowercase())
+    let low = stem.to_lowercase();
+    if is_stem_candidate(stem) {
+        return u_lower.contains(&low);
+    }
+    // A plain word names the file too when it is the whole stem, said as a word, and not a word
+    // for a kind of file (owner, 2026-10-24: "convert beach and city from mov to mkv").
+    stem.chars().all(|c| c.is_ascii_alphabetic())
+        && !GENERIC_FILE_WORDS.contains(&low.as_str())
+        && said_as_a_word(u_lower, &low)
+}
+
+/// Words for a kind of file: "the video", "the clip" mean any one, so they never name a file.
+/// Python `nl_clarify_gate.GENERIC_FILE_WORDS`.
+const GENERIC_FILE_WORDS: [&str; 40] = [
+    "video",
+    "clip",
+    "file",
+    "movie",
+    "film",
+    "recording",
+    "song",
+    "track",
+    "audio",
+    "sound",
+    "music",
+    "voice",
+    "image",
+    "photo",
+    "picture",
+    "pic",
+    "thumbnail",
+    "frame",
+    "gif",
+    "document",
+    "doc",
+    "pdf",
+    "page",
+    "scan",
+    "text",
+    "report",
+    "folder",
+    "output",
+    "input",
+    "result",
+    "copy",
+    "mp4",
+    "mov",
+    "mkv",
+    "avi",
+    "webm",
+    "mp3",
+    "wav",
+    "jpg",
+    "png",
+];
+
+/// `word` in `text` with no letter, digit or `_` on either side. Python's
+/// `(?<![a-z0-9_])word(?![a-z0-9_])`.
+fn said_as_a_word(text: &str, word: &str) -> bool {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    text.match_indices(word).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + word.len()..].chars().next();
+        !before.is_some_and(is_word) && !after.is_some_and(is_word)
+    })
 }
 
 /// A stem is an extension-less identifier carrying a structural marker (`_`, `-` or a digit).

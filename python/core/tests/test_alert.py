@@ -301,12 +301,36 @@ def test_a_failure_after_work_started_fires_failed(tmp_path, monkeypatch):
             {"tool": "alert_when_done", "args": {}},
         ]
     }
+    # A step that fails while running: the rehearsal would find this one first.
+    monkeypatch.setattr(agent, "_rehearse", lambda *a, **k: {})
     try:
         agent.execute_plan(plan, dry_run=False, confirmed=True)
     except Exception:  # noqa: BLE001 - either way the alert must say "failed"
         pass
     [line] = sink.read_text(encoding="utf-8").splitlines()
     assert json.loads(line)["outcome"] == "failed"
+
+
+def test_a_plan_the_rehearsal_refuses_fires_nothing(tmp_path, monkeypatch):
+    # The rehearsal finds the broken file before anything runs, and nothing ran is no alert.
+    sink = tmp_path / "sink.jsonl"
+    monkeypatch.setenv("KNAIF_OS_SINK", str(sink))
+    agent = _agent(tmp_path)
+    pdf = _sample(tmp_path)
+    broken = tmp_path / "broken.pdf"
+    broken.write_bytes(b"%PDF-1.4 not really")
+    plan = {
+        "plan": [
+            {"tool": "inspect_document", "args": {"input": str(pdf)}},
+            {"tool": "inspect_document", "args": {"input": str(broken)}},
+            {"tool": "alert_when_done", "args": {}},
+        ]
+    }
+    from knaif.agent import PlanWouldFail
+
+    with pytest.raises(PlanWouldFail):
+        agent.execute_plan(plan, dry_run=False, confirmed=True)
+    assert not sink.exists() or not sink.read_text(encoding="utf-8").strip()
 
 
 def test_an_intent_declined_mid_run_fires_stopped(tmp_path, monkeypatch):
