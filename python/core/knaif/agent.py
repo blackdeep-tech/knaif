@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import time
 from collections.abc import Collection, Iterator, Mapping
@@ -39,6 +40,7 @@ from .planner import (
 )
 from .prompt import build_prompt, normalize_path_separators
 from .registry import ToolDef, load_registry, retrieve_tools
+from .scratch import RunScratch
 from .skill import Skill
 
 _TERMINAL_TOOLS = frozenset({"done", "clarify", "reject"})
@@ -174,6 +176,7 @@ class CommandAgent:
         confirmer: Any | None = None,
         unsafe_phrases: tuple[str, ...] = (),
         file_kinds: dict[str, str] | None = None,
+        scratch_intermediates: bool = False,
         summarizers: dict[str, Any] | None = None,
         preflights: dict[str, Any] | None = None,
         result_formatter: Any | None = None,
@@ -202,6 +205,8 @@ class CommandAgent:
         self.unsafe_phrases: tuple[str, ...] = unsafe_phrases
         # Extension -> kind, from the skill's `file_kinds:`; chain threading never crosses kinds.
         self.file_kinds: dict[str, str] = file_kinds or {}
+        # From the skill's `scratch_intermediates:`; see _route_intermediates_to_scratch.
+        self.scratch_intermediates = scratch_intermediates
         self.sandbox: Path | None = Path(sandbox).resolve() if sandbox else None
         self.root: Path = Path(root).resolve() if root else Path.cwd()
         self.orchestrator = orchestrator
@@ -233,7 +238,7 @@ class CommandAgent:
         # One corrective re-prompt on a parse/validation failure (validator-
         # feedback retry). Toggle off to measure the without-retry baseline.
         self.repair_invalid_plans: bool = True
-        # OOP path: populated by from_skill() when skill_class: is present
+        # Populated by from_skill(): the tool objects and the skill's hooks.
         self.tool_map: dict[str, Any] | None = None
         self.skill_instance: Any | None = None
 
@@ -257,7 +262,7 @@ class CommandAgent:
         skill = Skill.load(skill_dir)
         merged_handlers = {**CORE_HANDLERS, **skill.handlers}
         agent = cls(
-            tools_yaml_path=skill.tools_yaml_path,
+            _registry=skill.registry,
             sandbox=sandbox,
             root=root,
             orchestrator=orchestrator,
@@ -270,6 +275,7 @@ class CommandAgent:
             confirmer=confirmer,
             unsafe_phrases=skill.unsafe_phrases,
             file_kinds=skill.file_kinds,
+            scratch_intermediates=skill.scratch_intermediates,
             summarizers=skill.summarizers,
             preflights=skill.preflights,
             result_formatter=skill.result_formatter,
@@ -349,7 +355,13 @@ class CommandAgent:
         """Parse *json_text* and return a plan payload dict."""
         return parse_plan(json_text)
 
-    def validate_plan(self, payload: dict[str, Any], *, allow_internal: bool = False) -> None:
+    def validate_plan(
+        self,
+        payload: dict[str, Any],
+        *,
+        allow_internal: bool = False,
+        scratch: Path | None = None,
+    ) -> None:
         """Validate every step in *payload['plan']*; raises ValueError on failure.
 
         *allow_internal* must stay False for anything taken from the model or an
@@ -358,7 +370,12 @@ class CommandAgent:
         rtx5080.md, F1).
         """
         validate_plan(
-            payload, self.registry, self.root, self.sandbox, allow_internal=allow_internal
+            payload,
+            self.registry,
+            self.root,
+            self.sandbox,
+            allow_internal=allow_internal,
+            scratch=scratch,
         )
 
     def execute_plan(
@@ -432,6 +449,9 @@ class CommandAgent:
         self.validate_plan(payload)
 
         intent_plan = payload["plan"]
+        # This run's scratch folder. The path is fixed now so the plan can name it; the folder
+        # is created only when execution starts, and never in a dry run (knaif.scratch).
+        scratch = RunScratch(dry_run=dry_run or skip_execution)
 
         # Stem resolution on intent-level args, before expanders run.
         # Expanders receive the intent args and forward them to internal steps,
@@ -485,6 +505,17 @@ class CommandAgent:
                 ]
             # `raw_utterance` is set whenever `utterance` is (same branch above).
             intent_plan = restore_grounded_args(intent_plan, raw_utterance or "", self.registry)
+
+        # Chain intermediates go to the run scratch, so only deliverables reach the user's
+        # folder. Opt-in per skill while skills move onto scratch one at a time.
+        if self.scratch_intermediates:
+            intent_plan = self._route_intermediates_to_scratch(
+                intent_plan,
+                scratch.path,
+                utterance,
+                resolution_dir,
+                {name for name, td in self.registry.items() if td.joins_inputs},
+            )
 
         # Give the skill a chance to rewrite outputs that would destroy a file, and to
         # rebind the steps that referred to them. Here rather than deeper because a
@@ -541,7 +572,9 @@ class CommandAgent:
         any_expanded = any(block != [orig] for orig, block in intent_blocks)
         if any_expanded:
             self.validate_plan(
-                {"plan": [s for _, b in intent_blocks for s in b]}, allow_internal=True
+                {"plan": [s for _, b in intent_blocks for s in b]},
+                allow_internal=True,
+                scratch=scratch.path,
             )
 
         # Optimize each intent's sub-plan independently. Optimizing across
@@ -555,8 +588,8 @@ class CommandAgent:
         # caught by structural validate_plan. Skipped in dry_run because dry_run
         # is for testing the pipeline without real files.
         if (self.preflights or self.tool_map) and not dry_run:
+            from .tool import Handler as _Step
             from .tool import Intent as _Intent
-            from .tool import Step as _Step
 
             # Files that earlier intents will produce — don't fail preflight for them.
             planned_output_names: set[str] = set()
@@ -652,61 +685,69 @@ class CommandAgent:
         results: list[dict[str, Any]] = []
         summary_idx = 0
 
-        for orig_intent, sub_plan in intent_blocks:
-            is_terminal = orig_intent.get("tool") in _TERMINAL_TOOLS
-            intent_tool_name = orig_intent.get("tool")
-            orig_tool_def = (
-                self.registry.get(intent_tool_name) if isinstance(intent_tool_name, str) else None
-            )
-            # The destructive check below must key off the *originating intent's*
-            # safety_category, not just each expanded leaf's — a destructive intent
-            # (e.g. strip_audio) can expand entirely into `safe` leaves (its internal
-            # run/verify steps), and that must not erase the requirement to confirm.
-            # See docs/audits/2026-09-07-core-principles-and-rtx5080.md, F2.
-            intent_destructive = bool(
-                orig_tool_def and orig_tool_def.safety_category == "destructive"
-            )
+        # One scratch folder for the whole run, every intent included: a chain intermediate
+        # written by one intent is read by the next. Removed on any exit (knaif.scratch).
+        with scratch:
+            for orig_intent, sub_plan in intent_blocks:
+                is_terminal = orig_intent.get("tool") in _TERMINAL_TOOLS
+                intent_tool_name = orig_intent.get("tool")
+                orig_tool_def = (
+                    self.registry.get(intent_tool_name)
+                    if isinstance(intent_tool_name, str)
+                    else None
+                )
+                # The destructive check below must key off the *originating intent's*
+                # safety_category, not just each expanded leaf's — a destructive intent
+                # (e.g. strip_audio) can expand entirely into `safe` leaves (its internal
+                # run/verify steps), and that must not erase the requirement to confirm.
+                # See docs/audits/2026-09-07-core-principles-and-rtx5080.md, F2.
+                intent_destructive = bool(
+                    orig_tool_def and orig_tool_def.safety_category == "destructive"
+                )
 
-            if not is_terminal and (_show or _approve):
-                clause = step_summaries[summary_idx] if summary_idx < len(step_summaries) else ""
-                summary_idx += 1
+                if not is_terminal and (_show or _approve):
+                    clause = (
+                        step_summaries[summary_idx] if summary_idx < len(step_summaries) else ""
+                    )
+                    summary_idx += 1
 
-                if _show:
-                    if self.plan_display is not None:
-                        self.plan_display(clause)
-                    else:
-                        print(clause)
+                    if _show:
+                        if self.plan_display is not None:
+                            self.plan_display(clause)
+                        else:
+                            print(clause)
 
-                if _approve:
-                    if self.plan_confirmer is not None:
-                        ok = bool(self.plan_confirmer(clause))
-                    else:
-                        ok = confirmed
-                    if not ok:
-                        break  # decline this intent → stop, keep prior results
+                    if _approve:
+                        if self.plan_confirmer is not None:
+                            ok = bool(self.plan_confirmer(clause))
+                        else:
+                            ok = confirmed
+                        if not ok:
+                            break  # decline this intent → stop, keep prior results
 
-            sub_results, should_stop = self._execute_steps(
-                sub_plan,
-                context,
-                dry_run,
-                confirmed,
-                skip_execution,
-                intent_tool=intent_tool_name,
-                intent_destructive=intent_destructive,
-            )
-            results.extend(sub_results)
+                sub_results, should_stop = self._execute_steps(
+                    sub_plan,
+                    context,
+                    dry_run,
+                    confirmed,
+                    skip_execution,
+                    intent_tool=intent_tool_name,
+                    intent_destructive=intent_destructive,
+                    work_dir=scratch.path,
+                )
+                results.extend(sub_results)
 
-            # Fire the per-intent callback so callers can render output between
-            # intents. Terminal steps (reject/clarify/done) are reported via the
-            # normal results list but skip the callback.
-            if not is_terminal and self.intent_completed is not None and sub_results:
-                try:
-                    self.intent_completed(sub_results, dry_run=dry_run)
-                except Exception:  # noqa: BLE001
-                    pass
+                # Fire the per-intent callback so callers can render output between
+                # intents. Terminal steps (reject/clarify/done) are reported via the
+                # normal results list but skip the callback.
+                if not is_terminal and self.intent_completed is not None and sub_results:
+                    try:
+                        self.intent_completed(sub_results, dry_run=dry_run)
+                    except Exception:  # noqa: BLE001
+                        pass
 
-            if should_stop:
-                break
+                if should_stop:
+                    break
 
         return results
 
@@ -720,6 +761,7 @@ class CommandAgent:
         *,
         intent_tool: str | None = None,
         intent_destructive: bool = False,
+        work_dir: Path | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute *sub_plan* sequentially against the shared *context*.
 
@@ -742,7 +784,7 @@ class CommandAgent:
             if self.sandbox is not None:
                 for path_key in ("path", "src", "dst"):
                     if path_key in args and isinstance(args[path_key], str):
-                        _resolve_path(args[path_key], self.root, self.sandbox)
+                        _resolve_path(args[path_key], self.root, self.sandbox, work_dir)
             if "file_type" in args and isinstance(args["file_type"], str):
                 valid_types = self.arg_value_sets.get("file_type") or _VALID_FILE_TYPES
                 if args["file_type"] not in valid_types:
@@ -789,15 +831,7 @@ class CommandAgent:
                     )
                 raise ValueError(f"{tool!r} requires confirmed=True when dry_run=False.")
 
-            ctx = HandlerContext(
-                root=self.root,
-                dry_run=dry_run,
-                confirmed=confirmed,
-                skill_dir=self.skill_dir,
-                sandbox=self.sandbox,
-                confirmer=self.confirmer,
-                skip_execution=skip_execution,
-            )
+            ctx = self._handler_context(dry_run, confirmed, skip_execution, work_dir, tool=tool)
             _t0 = time.perf_counter()
             if exec_tool_obj is not None:
                 result = exec_tool_obj.handle(args, ctx)
@@ -835,6 +869,60 @@ class CommandAgent:
                 break
 
         return results, should_stop
+
+    def _handler_context(
+        self,
+        dry_run: bool,
+        confirmed: bool,
+        skip_execution: bool,
+        work_dir: Path | None,
+        *,
+        tool: str | None = None,
+    ) -> HandlerContext:
+        """The context one step runs with; ``ctx.call_tool`` dispatches within the same run.
+
+        It carries the effects *tool* declares (``knaif.effects``): ``ctx.exec`` and
+        ``ctx.call_tool`` refuse anything outside them.
+        """
+        tool_def = self.registry.get(tool) if tool else None
+        declared = getattr(tool_def, "effects", None)
+        holder: list[HandlerContext] = []
+        ctx = HandlerContext(
+            root=self.root,
+            dry_run=dry_run,
+            confirmed=confirmed,
+            skill_dir=self.skill_dir,
+            sandbox=self.sandbox,
+            confirmer=self.confirmer,
+            skip_execution=skip_execution,
+            work_dir=work_dir,
+            tool_caller=lambda name, args: self._call_tool(name, args, holder[0]),
+            tool=tool,
+            effects=frozenset(declared) if declared is not None else None,
+        )
+        holder.append(ctx)
+        return ctx
+
+    def _call_tool(self, name: str, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
+        """Run the Handler *name* for a handler that reuses it (``ctx.call_tool``).
+
+        Only a tool this skill has: its own, a declared toolkit's, or core. An Intent cannot be
+        called this way, since expanding is the planner's job, not a handler's.
+        """
+        from .tool import Handler as _Handler
+
+        tool_obj = self.tool_map.get(name) if self.tool_map else None
+        if tool_obj is None or name not in self.registry:
+            raise ValueError(f"call_tool: {name!r} is not a tool of this skill")
+        if not isinstance(tool_obj, _Handler):
+            raise ValueError(f"call_tool: {name!r} is an Intent; only a Handler can be called")
+        # A step may reuse a tool only for what it declares itself: writing through the fs
+        # toolkit needs `fs.write` (`knaif.effects`).
+        from .effects import require
+
+        callee = getattr(self.registry[name], "effects", None)
+        require(ctx.tool, ctx.effects, set(callee or ()), f"call {name}")
+        return tool_obj.handle(args, ctx)
 
     def _expand_plan(self, plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Replace each expandable step with its skill-provided workflow.
@@ -1325,6 +1413,102 @@ class CommandAgent:
             for container, key in targets:
                 container[key] = out
 
+    @staticmethod
+    def _route_intermediates_to_scratch(
+        plan: list[dict[str, Any]],
+        work_dir: Path,
+        utterance: str | None,
+        resolution_dir: Path,
+        joining_tools: Collection[str] = (),
+    ) -> list[dict[str, Any]]:
+        """Move each chain intermediate into *work_dir*, with every later step that reads it.
+
+        An intermediate is a step's ``output`` that a later step reads. It keeps its name and
+        its place relative to the user's folder (``videos/x.mp4`` -> ``work_dir/videos/x.mp4``),
+        so every rendered argv still compares equal by basename across runtimes, and a later
+        step can put its own output where the intermediate would have been. Left where the plan
+        put them:
+
+        * an output nothing reads later, which is a deliverable;
+        * an output the user named in *utterance*, since a file the user named is one they
+          asked for (owner, 2026-10-09);
+        * everything, when there is no utterance: then every name in the plan is the caller's.
+
+        Returns a new plan; *plan* is not mutated. Run after the NL gates (which ground plan
+        paths against the utterance) and before the skill's collision repair, so that repair
+        no longer sees a chain's final name on its own intermediate.
+        """
+        if utterance is None:
+            return plan
+        plan = copy.deepcopy(plan)
+
+        def key(value: str) -> str:
+            p = Path(value)
+            return os.path.normcase(str((p if p.is_absolute() else resolution_dir / p).resolve()))
+
+        def is_ref(value: Any) -> bool:
+            return isinstance(value, str) and bool(value) and not value.startswith("$")
+
+        for idx, step in enumerate(plan):
+            if step.get("tool") in _TERMINAL_TOOLS:
+                continue
+            args = step.get("args") or {}
+            out = args.get("output")
+            if not isinstance(out, str) or not is_ref(out) or not _FILENAME_RE.search(out):
+                continue
+            name = _basename(out)
+            if _mention_count(utterance, name) > 0:
+                continue
+            # A producer that fans out writes one file per input under this one name, and only
+            # one of them can be what a later step reads: the rest are deliverables (ffmpeg_134#2,
+            # ffmpeg_114#2). A glob always fans out; several input files do unless the tool joins
+            # them into one output (`joins_inputs:`, e.g. concat, ffmpeg_243#0).
+            prod_files = [
+                v
+                for v in _iter_string_values({k: v for k, v in args.items() if k != "output"})
+                if _FILENAME_RE.search(v) or any(c in v for c in "*?")
+            ]
+            if any(any(c in f for c in "*?") for f in prod_files):
+                continue
+            if len(prod_files) > 1 and step.get("tool") not in joining_tools:
+                continue
+            target = key(out)
+
+            readers: list[tuple[Any, Any]] = []
+            for later in plan[idx + 1 :]:
+                if later.get("tool") in _TERMINAL_TOOLS:
+                    continue
+                largs = later.get("args") or {}
+                for k, v in largs.items():
+                    if k == "output":
+                        continue
+                    if is_ref(v) and key(v) == target:
+                        readers.append((largs, k))
+                    elif isinstance(v, list):
+                        readers.extend(
+                            (v, i)
+                            for i, item in enumerate(v)
+                            if is_ref(item) and key(item) == target
+                        )
+                # A later step writing the same file again ends this intermediate's readers.
+                if is_ref(largs.get("output")) and key(largs["output"]) == target:
+                    break
+            if not readers:
+                continue
+
+            # Same place relative to the user's folder, so a later step can put its own output
+            # where this file would have been (`videos/x.mp4` -> `<work>/videos/x.mp4`).
+            spelled = Path(out)
+            resolved = (spelled if spelled.is_absolute() else resolution_dir / spelled).resolve()
+            try:
+                moved = work_dir / resolved.relative_to(resolution_dir.resolve())
+            except ValueError:
+                moved = work_dir / name
+            args["output"] = str(moved)
+            for container, k in readers:
+                container[k] = str(moved)
+        return plan
+
     def _resolution_dir(self) -> Path:
         """The directory paths resolve against: the sandbox when configured, else root.
 
@@ -1375,7 +1559,7 @@ class CommandAgent:
 
         Two conditions keep the relaxation honest, and both are load-bearing:
 
-        * **the value must name a file that exists.** "join clip.mov and clip_4k
+        * **the value must name a file. that exists.** "join clip.mov and clip_4k
           together" → `clip_4k.mov` keeps its clarify, because `clip_4k.mp4` is the
           file; naming a stem does not license guessing which file it is.
         * **the stem must look like a stem** — carrying ``_``, ``-`` or a digit, the
@@ -1386,7 +1570,7 @@ class CommandAgent:
 
         *known_files* is passed in rather than read here so the guard stays pure and
         the L2 parity contract can state it (`sandbox_files` in
-        `contracts/parity/clarify_gate_cases.json`). Empty means nothing can be
+        `contracts/parity/clarify_gate_cases.json`.). Empty means nothing can be
         confirmed, and the strict rule applies unchanged.
         """
         u_lower = utterance.lower()

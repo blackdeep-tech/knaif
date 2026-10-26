@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from .effects import parse_effects
+
 # A tuple, not a set: these are appended to the retrieval result in this order, and a set's
 # iteration order depends on PYTHONHASHSEED — the same query returned a different tool order
 # in different processes. Harmless inside Python (the prompt listing skips control tools) but
@@ -84,6 +86,12 @@ class ToolDef:
     safety_category: str = "safe"
     keywords: tuple[str, ...] = field(default_factory=tuple)
     readonly: bool = False
+    # Several inputs become ONE output (concat), not one output each (a batch). Read by chain
+    # routing: a joining producer's output is a single routable intermediate.
+    joins_inputs: bool = False
+    # What the tool may do to the world (`knaif.effects`): None when tools.yaml declares nothing,
+    # which a skill or toolkit bundle refuses; () for a tool with no effects.
+    effects: tuple[str, ...] | None = None
     mock_args: dict[str, Any] = field(default_factory=dict)
     internal: bool = False
     defaults: dict[str, Any] = field(default_factory=dict)
@@ -138,6 +146,8 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             safety_category=cfg.get("safety_category", "safe"),
             keywords=tuple(cfg.get("keywords") or []),
             readonly=bool(cfg.get("readonly", False)),
+            joins_inputs=bool(cfg.get("joins_inputs", False)),
+            effects=parse_effects(name, cfg.get("effects")),
             mock_args=dict(cfg.get("mock_args") or {}),
             internal=bool(cfg.get("internal", False)),
             defaults=dict(cfg.get("defaults") or {}),

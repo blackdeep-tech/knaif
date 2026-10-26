@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from .chain import run_command_chain
 from .corpus import CorpusRow
+from .provisioning import row_scratch_dir
 
 if TYPE_CHECKING:
     from knaif.agent import CommandAgent
@@ -149,6 +151,10 @@ def run_corpus(
     """
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
+    if verbose:
+        # The denominator for progress watchers (scripts/watch_run.sh), before the first row.
+        total = sum(len(row.utterances) if execute else 1 for row in rows)
+        print(f"  rows to run: {total}", flush=True)
 
     for row in rows:
         utterances = row.utterances if execute else [row.utterances[0]]
@@ -262,6 +268,11 @@ def run_corpus(
                                 f"{(failed.get('stderr') or '').strip()[-300:]}"
                             )
                     elif agent.artifact_runner is not None:
+                        # Start empty, like the command path (`provision_row_dir`): a kept or
+                        # never-graded folder from an earlier run made documents' free-name
+                        # rule number past a stale output (`sample-1.md`).
+                        shutil.rmtree(row_dir, ignore_errors=True)
+                        shutil.rmtree(row_scratch_dir(row_dir), ignore_errors=True)
                         row_dir.mkdir(parents=True, exist_ok=True)
                         try:
                             artifact_path = agent.artifact_runner(artifact, _fp, row_dir)

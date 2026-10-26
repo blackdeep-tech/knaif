@@ -1266,6 +1266,7 @@ dependencies = [
  "knaif-skill-api",
  "knaif-skill-documents",
  "knaif-skill-ffmpeg",
+ "knaif-toolkit-fs",
  "libc",
  "serde",
  "serde_json",
@@ -1327,6 +1328,7 @@ dependencies = [
  "calamine",
  "image",
  "knaif-skill-api",
+ "knaif-toolkit-fs",
  "lopdf",
  "pdfium-render",
  "quick-xml 0.37.5",
@@ -1344,9 +1346,18 @@ dependencies = [
  "anyhow",
  "glob",
  "knaif-skill-api",
+ "knaif-toolkit-fs",
  "serde",
  "serde_json",
  "serde_yaml",
+]
+
+[[package]]
+name = "knaif-toolkit-fs"
+version = "1.3.0"
+dependencies = [
+ "anyhow",
+ "knaif-core",
 ]
 
 [[package]]

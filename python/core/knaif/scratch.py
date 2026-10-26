@@ -1,0 +1,124 @@
+"""The per-run scratch folder: where intermediate files live, outside the user's folders.
+
+Every run that executes gets a fresh ``<OS temp>/knaif/run-<id>/``, handed to handlers as
+``ctx.work_dir``. A chain's intermediate, a preview clip, and an output being written before it
+is verified all go there, so the user's folder only ever receives the outputs they asked for.
+
+Lifetime rules:
+
+* **Deleted when the run ends, on success and on failure.** There is no persistent cache.
+* **Kept under ``KNAIF_DEBUG``** (any non-empty value), the developer debugging switch, or
+  ``KNAIF_KEEP_SCRATCH`` (the eval lane grades chain intermediates from the scratch).
+* **A dry run writes nothing.** ``work_dir`` is still a path, so steps can render commands
+  that name it, but the folder is never created. ``skip_execution`` (the planning pass with
+  real probes) counts as a dry run here.
+* **Stale folders are swept at start.** A run killed hard cannot delete its own folder, so the
+  next run removes ``run-*`` folders older than :data:`STALE_AFTER_S`. Age, not "every folder",
+  because another knaif process may be running right now; a day is far longer than any run.
+
+``KNAIF_SCRATCH_ROOT`` overrides the root (tests, and anyone whose temp is too small).
+
+Scratch paths name the temp directory, which names the user. They are never printed in normal
+output (a preview clip is the one deliberate exception) and are redacted to ``<work>`` in
+evidence (``evalsuite.redact``).
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import secrets
+import shutil
+import tempfile
+import time
+from pathlib import Path
+from types import TracebackType
+
+#: How old a ``run-*`` folder must be before a new run may assume its owner is gone.
+STALE_AFTER_S = 24 * 3600
+
+
+def scratch_root() -> Path:
+    """``$KNAIF_SCRATCH_ROOT``, else ``<OS temp>/knaif``."""
+    env = os.environ.get("KNAIF_SCRATCH_ROOT")
+    return Path(env) if env else Path(tempfile.gettempdir()) / "knaif"
+
+
+def _run_folder_pattern(root: Path) -> re.Pattern[str]:
+    """``<root>/run-<id>`` with either separator, case-insensitive on a Windows drive path."""
+    parts = [re.escape(p) for p in re.split(r"[/\\]+", str(root)) if p]
+    body = r"[/\\]+".join(parts)
+    if not re.match(r"^[A-Za-z]:", str(root)):
+        body = r"[/\\]+" + body
+    flags = re.IGNORECASE if re.match(r"^[A-Za-z]:", str(root)) else 0
+    return re.compile(body + r"[/\\]+run-[A-Za-z0-9_-]+(?P<rest>(?:[/\\][^\s\"']*)?)", flags)
+
+
+def display(text: str, root: Path | None = None) -> str:
+    """*text* as a person should read it: every run scratch path becomes ``<work>/…``.
+
+    The real path names the temp folder (and so the user), and nothing in it outlives the run.
+    Native prints the same spelling (``apps/cli`` ``display_path``). The one path shown for real
+    is a preview clip, which the user is meant to open.
+    """
+    pattern = _run_folder_pattern(root if root is not None else scratch_root())
+    return pattern.sub(lambda m: "<work>" + m.group("rest").replace("\\", "/"), text)
+
+
+def debug_keep() -> bool:
+    """True when the scratch is kept: ``KNAIF_DEBUG`` (debugging) or ``KNAIF_KEEP_SCRATCH``
+    (the eval lane, which grades chain intermediates from it). Same rule in the native runtime."""
+    return any(os.environ.get(k) for k in ("KNAIF_DEBUG", "KNAIF_KEEP_SCRATCH"))
+
+
+def sweep_stale(root: Path, *, now: float | None = None) -> list[Path]:
+    """Remove ``run-*`` folders under *root* older than :data:`STALE_AFTER_S`. Returns them."""
+    if not root.is_dir():
+        return []
+    cutoff = (time.time() if now is None else now) - STALE_AFTER_S
+    removed: list[Path] = []
+    for entry in root.glob("run-*"):
+        try:
+            if entry.is_dir() and entry.stat().st_mtime < cutoff:
+                shutil.rmtree(entry, ignore_errors=True)
+                removed.append(entry)
+        except OSError:
+            continue
+    return removed
+
+
+class RunScratch:
+    """One run's scratch folder. Use as a context manager around the run's execution.
+
+    The path is fixed at construction, so a plan can be rewritten to name it before anything
+    executes. The folder itself is created on ``__enter__`` (unless *dry_run*) and removed on
+    ``__exit__`` whatever happened (unless ``KNAIF_DEBUG``).
+    """
+
+    def __init__(self, *, dry_run: bool, root: Path | None = None) -> None:
+        self.dry_run = dry_run
+        self.root = root if root is not None else scratch_root()
+        self.path = self.root / f"run-{os.getpid()}-{secrets.token_hex(4)}"
+
+    def __enter__(self) -> RunScratch:
+        if not self.dry_run:
+            sweep_stale(self.root)
+            self.path.mkdir(parents=True, exist_ok=False)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if not self.dry_run and not debug_keep():
+            shutil.rmtree(self.path, ignore_errors=True)
+
+    def contains(self, path: str | Path) -> bool:
+        """True when *path* lies inside this run's folder (lexically, after resolving)."""
+        try:
+            Path(path).resolve().relative_to(self.path.resolve())
+        except ValueError:
+            return False
+        return True

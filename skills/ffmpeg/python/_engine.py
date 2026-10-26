@@ -73,6 +73,24 @@ def next_free_output(requested: Path, taken: set[Path], suffix: str = _COLLISION
     return candidate
 
 
+def _within(p: Path | str, folder: Path | None) -> bool:
+    """Is *p* inside *folder* (both resolved)? False when there is no folder."""
+    if folder is None:
+        return False
+    return Path(p).resolve().is_relative_to(Path(folder).resolve())
+
+
+def _user_side_path(path: Path, work_dir: Path | None, home: Path | None) -> Path:
+    """*path*, or where it would sit in the user's folder (*home*) if it is in the run scratch.
+
+    Routing keeps an intermediate's place relative to the user's folder (`videos/x.mp4` ->
+    `<work>/videos/x.mp4`), so the mapping back is exact.
+    """
+    if home is None or not _within(path, work_dir):
+        return path
+    return Path(home) / Path(path).resolve().relative_to(Path(work_dir).resolve())  # type: ignore[arg-type]
+
+
 def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
     """Raise ValueError if *p* (resolved) is not inside *sandbox* (resolved).
 
@@ -932,9 +950,15 @@ def _build_one_recipe(
     quality_profile: dict[str, Any] | None,
     options: dict[str, Any],
     sandbox: Path | None = None,
+    work_dir: Path | None = None,
+    home: Path | None = None,
 ) -> dict[str, Any]:
     mode = options.get("mode", "platform")
     input_path = Path(probe["file"])
+    # Where this input would sit in the user's folder. A chain intermediate lives in the run
+    # scratch (`work_dir`), and an output named after it, or relative to it, must still land in
+    # the user's folder: everything in the scratch is deleted when the run ends.
+    anchor = _user_side_path(input_path, work_dir, home)
 
     container = options.get("container") or (platform_profile or {}).get("container", "mp4")
     if mode in _EDIT_MODES and not options.get("container"):
@@ -998,20 +1022,21 @@ def _build_one_recipe(
             raw_output, input_path=input_path, mode=mode, options=output_options
         )
         if not out.is_absolute():
-            out = input_path.parent / out
+            out = anchor.parent / out
         output_path = out
         # A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
         # refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the
         # derived name, as the plan-level collision handling does for a literal self-overwrite.
         if _same_file(output_path, input_path):
-            output_path = _derive_output_path(input_path, mode, output_options)
+            output_path = _derive_output_path(anchor, mode, output_options)
     else:
-        output_path = _derive_output_path(input_path, mode, output_options)
+        output_path = _derive_output_path(anchor, mode, output_options)
 
     # Explicit/user-supplied output paths must stay inside the sandbox when one
     # is set. No-op in open/CLI mode (sandbox=None), where the user writes
-    # wherever they ask.
-    _assert_in_sandbox(output_path, sandbox)
+    # wherever they ask. A routed chain intermediate is in this run's scratch.
+    if not _within(output_path, work_dir):
+        _assert_in_sandbox(output_path, sandbox)
 
     operations: list[str] = []
     if mode in ("platform", "compress", "convert", "resize", "trim", "batch"):
@@ -1526,7 +1551,16 @@ def _audio_encoder_for(audio_format: str) -> str:
     return _AUDIO_FORMAT_ENCODER.get(audio_format, "copy")
 
 
-def _preview_output_for(recipe: dict[str, Any]) -> str:
+def _preview_output_for(recipe: dict[str, Any], work_dir: Path | None = None) -> str:
+    """Where the preview clip renders: the run scratch, so it never lands in the user's folder.
+
+    It is the one scratch path shown to the user (they are meant to watch it), and it is
+    deleted when the run ends, whatever they answer. Without a scratch (a bare caller) it falls
+    back to the old place beside the input.
+    """
     p = Path(recipe["input"])
     container = recipe.get("container", "mp4")
-    return str(p.with_name(f"{p.stem}_preview.{container}"))
+    name = f"{p.stem}_preview.{container}"
+    if work_dir is not None:
+        return str(Path(work_dir) / "preview" / name)
+    return str(p.with_name(name))

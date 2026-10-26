@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tool import Intent, Step
+from .tool import Handler, Intent
 
 
 class Skill:
@@ -14,7 +14,7 @@ class Skill:
     override ``preflight``, ``format_results``, and ``run_artifact``.
     """
 
-    tools: list[type[Step | Intent]] = []
+    tools: list[type[Handler | Intent]] = []
 
     #: Renames a skill's `resolve_output_collisions` applied to the current plan, as
     #: ``{"step", "requested", "used"}`` records. Rebound per plan, never accumulated.

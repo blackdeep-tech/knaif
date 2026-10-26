@@ -122,7 +122,7 @@ extraPaths = ["notebooks/shared", "skills/documents/notebooks", "skills/document
 # Paths are resolved from the repo root (cwd). Framework tests live under
 # python/core/tests; skill tests live inside each bundle at skills/<name>/python/tests/
 # (discovered recursively under skills/).
-testpaths = ["python/core/tests", "skills"]
+testpaths = ["python/core/tests", "skills", "toolkits"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["."]

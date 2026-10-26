@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from knaif.handler_api import HandlerContext
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 from . import _deps
 from ._engine import (
@@ -26,6 +26,7 @@ from ._engine import (
     _platform_clarify,
     _quality_from_crf,
     _summarise_probe,
+    _within,
 )
 from ._reporting import (
     _fmt_files,
@@ -34,7 +35,7 @@ from ._reporting import (
     _preflight_trim_frames,
     _zero_length_end,
 )
-from .steps import require_streams
+from .steps import run_and_commit
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent expanders.
@@ -754,6 +755,7 @@ def _concat_filter_args(
     inputs: list[str],
     dry_run: bool,
     *,
+    ctx: Any = None,
     probes: list[dict[str, Any]] | None = None,
     target_resolution: str | None = None,
     target_fps: str | None = None,
@@ -809,7 +811,7 @@ def _concat_filter_args(
                 )
             else:
                 try:
-                    probe = _deps.run_ffprobe(Path(inp))
+                    probe = _deps.run_ffprobe(Path(inp), ctx)
                     summary = _summarise_probe(Path(inp), probe)
                     infos.append(
                         {
@@ -947,7 +949,7 @@ def _concat_filter_args(
     return result
 
 
-class RunConcatStep(Step):
+class RunConcatStep(Handler):
     name = "run_concat"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -979,7 +981,8 @@ class RunConcatStep(Step):
         if not Path(output).is_absolute():
             base = ctx.sandbox if ctx.sandbox is not None else ctx.root
             output = str((base / output).resolve())
-        _assert_in_sandbox(Path(output), ctx.sandbox)
+        if not _within(output, getattr(ctx, "work_dir", None)):
+            _assert_in_sandbox(Path(output), ctx.sandbox)
 
         # Unwrap probes from inspect_media result dict or accept a bare list.
         probes_arg = args.get("probes")
@@ -995,6 +998,7 @@ class RunConcatStep(Step):
         cmd += _concat_filter_args(
             inputs,
             ctx.dry_run or ctx.skip_execution,
+            ctx=ctx,
             probes=probes,
             target_resolution=args.get("target_resolution"),
             target_fps=args.get("target_fps"),
@@ -1009,9 +1013,7 @@ class RunConcatStep(Step):
                 "command": cmd,
             }
 
-        result = _deps.run_ffmpeg(cmd)
-        if result["returncode"] == 0:
-            require_streams(output)
+        result = run_and_commit(cmd, output, ctx)
         return {
             "mode": "execute",
             "count": 1,

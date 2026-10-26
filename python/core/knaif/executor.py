@@ -7,7 +7,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-from .core_tools import CORE_STEP_MAP
+from .core_tools import CORE_TOOL_MAP
 from .handler_api import HandlerContext
 from .planner import _resolve_path
 
@@ -132,7 +132,7 @@ def cmd_move_files(args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
 # Core control tools are defined once, as Step classes in core_tools.py. The legacy
 # dict surface (still used as the bare-CommandAgent default and merged by from_skill)
 # is derived from those Steps so there is a single source of truth.
-CORE_HANDLERS: dict[str, Any] = {name: step.handle for name, step in CORE_STEP_MAP.items()}
+CORE_HANDLERS: dict[str, Any] = {name: step.handle for name, step in CORE_TOOL_MAP.items()}
 
 HANDLERS: dict[str, Any] = {
     "list_files": cmd_list_files,

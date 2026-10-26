@@ -145,7 +145,17 @@ planned but not built.
   `doc-pages-1_2.pdf`), the output moves to the first free `<name>-1<ext>`, `-2`, … and the result
   reports the name actually written. An explicit `output` is a request and is honoured even over
   an existing file — the same rule as ffmpeg. Found 2026-09-24: both runtimes silently replaced
-  the existing file. Python `_engine._next_free`, native `run.rs` `next_free`.
+  the existing file. The rule is the fs toolkit's (`plan_output_path` with documents' `-1`
+  numbering; native `knaif_toolkit_fs::free_output_path`).
+- **Only a good file reaches the user's folder.** Every output is written to a staged path in the
+  run scratch and moved into place only when it exists and is not empty (fs `stage_output` /
+  `commit_output`, both runtimes). A step that fails part-way leaves the folder as it was.
+- **Chain intermediates go to the run scratch** (`scratch_intermediates: true`): in
+  `remove the last page of sample.pdf, then add page numbers`, the model's `sample_trimmed.pdf`
+  is written and read in the scratch, and only `sample_trimmed-numbered.pdf` reaches the folder.
+  A file the user named stays. `merge_pdfs` declares `joins_inputs: true` (several PDFs, one
+  output), so a merge's unnamed result is routed too. A default output derived from a routed
+  input is named where that input would have been, in the user's folder.
 - Dry-run returns the planned operation and expected output path without writing files.
 - Document inputs are resolved and validated inside the sandbox.
 

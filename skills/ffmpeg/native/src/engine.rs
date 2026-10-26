@@ -997,6 +997,12 @@ pub struct Options {
     pub include_audio: Option<bool>,
     pub speed: Option<f64>,
     pub platform: Option<String>,
+    /// This run's scratch folder, when the run has one (`knaif_core::scratch`). An input in it is
+    /// a routed chain intermediate; an output in it is too.
+    pub work_dir: Option<std::path::PathBuf>,
+    /// The folder the user sees (the sandbox, else cwd): where an output named after a scratch
+    /// input lands, since everything in the scratch is deleted when the run ends.
+    pub home: Option<std::path::PathBuf>,
 }
 
 fn non_empty(s: &str) -> Option<String> {
@@ -1275,6 +1281,9 @@ pub fn derive_output_path(
     }
 }
 
+// The scratch path rules live in the fs toolkit, shared with documents.
+pub use knaif_toolkit_fs::{user_side_path, within};
+
 /// Raise if `p` is not inside `sandbox`. No-op when `sandbox` is `None` (open / CLI mode).
 /// Port of `_assert_in_sandbox`, delegating to the shared `knaif-skill-api` primitive
 /// (filesystem-real: existing ancestors are canonicalized, following symlinks/junctions,
@@ -1420,25 +1429,35 @@ pub fn build_one_recipe(
         faststart = false;
     }
 
+    // Where this input would sit in the user's folder: an output named after (or relative to) a
+    // routed chain intermediate must still land there, not in the scratch.
+    let anchor = user_side_path(
+        &input_path,
+        options.work_dir.as_deref(),
+        options.home.as_deref(),
+    );
     let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
         let out = resolve_output_target(raw, &input_path, &mode, options, &container)?;
         let out = if out.is_absolute() {
             out
         } else {
-            input_path.parent().map(|p| p.join(&out)).unwrap_or(out)
+            anchor.parent().map(|p| p.join(&out)).unwrap_or(out)
         };
         // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
         // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the derived
         // name, as the plan-level collision handling does for a literal self-overwrite.
         if same_file(&out, &input_path) {
-            derive_output_path(&input_path, &mode, vocab, options, &container)
+            derive_output_path(&anchor, &mode, vocab, options, &container)
         } else {
             out
         }
     } else {
-        derive_output_path(&input_path, &mode, vocab, options, &container)
+        derive_output_path(&anchor, &mode, vocab, options, &container)
     };
-    assert_in_sandbox(&output_path, sandbox)?;
+    // A routed chain intermediate is in this run's scratch; everything else stays in the sandbox.
+    if !within(&output_path, options.work_dir.as_deref()) {
+        assert_in_sandbox(&output_path, sandbox)?;
+    }
 
     let mut operations: Vec<String> = Vec::new();
     if matches!(

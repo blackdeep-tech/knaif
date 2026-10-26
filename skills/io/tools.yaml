@@ -1,4 +1,5 @@
 list_files:
+  effects: [fs.read]
   description: "List files in a folder, optionally filtered by type or pattern."
   keywords: [list, ls, show, contents, what, directory, folder]
   required_args: [path]
@@ -10,6 +11,7 @@ list_files:
     pattern: "*"
 
 find_files:
+  effects: [fs.read]
   description: "Recursively find files in a folder, optionally filtered by type or pattern."
   keywords: [find, search, locate, recursive, deep, everywhere, within, scan]
   required_args: [path]
@@ -21,6 +23,7 @@ find_files:
     pattern: "*.txt"
 
 delete_files:
+  effects: [fs.write]
   description: "Delete files in a folder, optionally filtered by type or pattern."
   keywords: [delete, remove, erase, clean, purge, wipe, trash]
   required_args: [path]
@@ -31,6 +34,7 @@ delete_files:
     pattern: "*.tmp"
 
 move_files:
+  effects: [fs.write]
   description: "Move or copy files from a source folder into a destination folder, optionally filtered by type or pattern."
   keywords: [move, copy, transfer, relocate, migrate, rename, into]
   required_args: [src, dst]

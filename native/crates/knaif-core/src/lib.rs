@@ -7,6 +7,7 @@
 
 pub mod clarify_gate;
 pub mod deps;
+pub mod effects;
 pub mod extract;
 pub mod nl_clarify_gate;
 pub mod planner;
@@ -15,6 +16,7 @@ pub mod registry;
 pub mod retrieval;
 pub mod safety;
 pub mod sandbox;
+pub mod scratch;
 pub mod skills;
 
 pub use clarify_gate::{
@@ -26,6 +28,7 @@ pub use deps::{
     parse_external_tools, resolve_declared_command, resolve_declared_tool, unmet_required,
     ExternalTool, InstallHints, MacosInstall, ToolStatus, WindowsInstall,
 };
+pub use effects::load_skill_registry;
 pub use extract::{extract_json, ExtractedJson};
 pub use nl_clarify_gate::nl_clarify_gate;
 pub use planner::{

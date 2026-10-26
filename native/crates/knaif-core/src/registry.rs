@@ -89,6 +89,16 @@ pub struct ToolDef {
     pub keywords: Vec<String>,
     #[serde(default)]
     pub readonly: bool,
+    /// Several inputs become ONE output (concat), not one output each (a batch). Read by chain
+    /// routing (`scratch::route_intermediates_to_scratch`). Mirrors Python `ToolDef.joins_inputs`.
+    #[serde(default)]
+    pub joins_inputs: bool,
+    /// What the tool may do to the world (`crate::effects`): `None` when `tools.yaml` declares
+    /// nothing, which a skill bundle refuses; empty for a tool with none. Mirrors Python
+    /// `ToolDef.effects`. Read by hand in [`load_registry_str`] so a malformed value gets the
+    /// contract's message.
+    #[serde(skip)]
+    pub effects: Option<Vec<String>>,
     #[serde(default)]
     pub mock_args: BTreeMap<String, Value>,
     #[serde(default)]
@@ -133,6 +143,7 @@ pub fn load_registry_str(text: &str) -> anyhow::Result<Registry> {
         let mut tool: ToolDef = serde_yaml::from_value(cfg.clone())
             .map_err(|e| anyhow::anyhow!("parsing tool {name:?}: {e}"))?;
         tool.name = name.to_string();
+        tool.effects = crate::effects::parse_effects(name, cfg_map.get(Value::from("effects")))?;
         tool.order = idx; // preserve tools.yaml order for the prompt (see ToolDef::order)
         registry.insert(name.to_string(), tool);
     }

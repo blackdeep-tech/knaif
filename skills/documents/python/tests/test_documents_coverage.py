@@ -41,14 +41,12 @@ def _documents_handlers_module():
     return sys.modules["_skill_oop_documents_handlers"]
 
 
-def _handler_context(root: Path) -> HandlerContext:
-    return HandlerContext(
-        root=root,
-        sandbox=root,
-        dry_run=False,
-        confirmed=True,
-        skill_dir=DOCUMENTS_SKILL_DIR,
-    )
+def _handler_context(
+    root: Path, *, dry_run: bool = False, confirmed: bool = True
+) -> HandlerContext:
+    """A step's context as the agent builds it: handlers reuse fs tools through `call_tool`."""
+    agent = CommandAgent.from_skill(DOCUMENTS_SKILL_DIR, sandbox=root, root=root)
+    return agent._handler_context(dry_run, confirmed, skip_execution=False, work_dir=None)
 
 
 def _execute(

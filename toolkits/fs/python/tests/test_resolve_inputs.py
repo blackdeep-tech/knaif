@@ -1,4 +1,4 @@
-"""Unit tests for knaif.steps.ResolveInputs.
+"""Unit tests for the fs toolkit's resolve_inputs tool.
 
 Tests are standalone (no skill dir, no ffmpeg). Behaviour must be
 case-for-case identical to ffmpeg's cmd_resolve_inputs.
@@ -11,8 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from knaif.steps import ResolveInputs
-from knaif.steps._resolve_inputs import _assert_in_sandbox
+from toolkits.fs.python.resolve_inputs import ResolveInputs, _assert_in_sandbox
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -192,3 +191,26 @@ def test_recursive_is_opt_in(tmp_path):
         {"paths": [str(tmp_path)], "extensions": ["mp4"], "recursive": True}, _ctx()
     )
     assert result["count"] == 2, result["files"]
+
+
+# ── the run scratch is a second root for inputs a step produced ───────────────────────────
+
+
+def test_an_input_in_this_runs_scratch_is_accepted(tmp_path):
+    sandbox, work = tmp_path / "sb", tmp_path / "work"
+    sandbox.mkdir()
+    work.mkdir()
+    (work / "clip_trimmed.mp4").write_bytes(b"x")
+    ctx = _ctx(sandbox=sandbox)
+    ctx.work_dir = work
+    out = _step().handle({"paths": [str(work / "clip_trimmed.mp4")]}, ctx)
+    assert out["files"] == [str((work / "clip_trimmed.mp4").resolve())]
+
+
+def test_a_path_outside_both_roots_is_still_refused(tmp_path):
+    sandbox, work = tmp_path / "sb", tmp_path / "work"
+    sandbox.mkdir()
+    ctx = _ctx(sandbox=sandbox)
+    ctx.work_dir = work
+    with pytest.raises(ValueError, match="outside the sandbox"):
+        _step().handle({"paths": [str(tmp_path / "elsewhere.mp4")]}, ctx)

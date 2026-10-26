@@ -19,6 +19,7 @@ python/training/       LoRA/DPO dataset builders + training scripts
 native/crates/         reusable Rust engine crates (knaif-core, -models, -llm, -skill-api)
 apps/cli/              the native `knaif` CLI binary
 skills/<name>/         self-contained skill bundles (YAML + python/ + native/ + data/ + eval/)
+toolkits/<name>/       shared tools used by skills (tools.yaml + python/), e.g. toolkits/fs
 contracts/             no-code, cross-language contracts (runtime/, models/, backends/, parity/)
 evals/                 all eval run history, baselines, retrieval + parity results
 models/                local GGUF files (gitignored)
@@ -158,7 +159,7 @@ User input
   -> [optional] summarize_plan() → plan_display callback    (StepA, show_plan=True)
   -> [optional] plan_confirmer approval gate                (StepB, require_approval=True)
   -> resolve_args()
-  -> Step.handle() with HandlerContext   (via tool_map)
+  -> Handler.handle() with HandlerContext   (via tool_map)
 ```
 
 Key modules (all under `python/core/knaif/`):
@@ -170,11 +171,10 @@ Key modules (all under `python/core/knaif/`):
 | `registry.py` | `ToolDef`, registry loading, retrieval |
 | `prompt.py` | model-facing prompt construction |
 | `orchestrator.py` | llama.cpp and Ollama backends |
-| `tool.py` | `Step` / `Intent` ABCs |
+| `tool.py` | `Handler` / `Intent` ABCs |
 | `skill_base.py` | `Skill` base class (authors subclass; `tools`, `preflight`, `format_results`, `run_artifact`) |
-| `core_tools.py` | built-in core control Steps (`clarify`/`reject`/`done`/`wait_for_confirmation`) |
-| `steps/` | shared Step library (`ResolveInputs`); `steps.yaml` metadata lives in `contracts/runtime/` |
-| `skill.py` | `Skill.load()` — instantiates the `skill_class:`, builds the `name → Tool` map |
+| `core_tools.py` | built-in core control tools (`clarify`/`reject`/`done`/`wait_for_confirmation`) |
+| `skill.py` | `Skill.load()` — discovers the tool classes, merges declared toolkits, builds the registry and `name → tool` map |
 | `handler_api.py` | `HandlerContext` |
 | `evaluator.py` | evaluation helpers |
 
@@ -192,8 +192,7 @@ Required files:
 
 - `skills/<name>/skill.yaml`        (bundle top)
 - `skills/<name>/tools.yaml`        (bundle top)
-- `skills/<name>/python/__init__.py`  (re-exports the `Skill` subclass)
-- `skills/<name>/python/handlers.py`
+- `skills/<name>/python/*.py`        (the tool classes; any module names)
 
 Recommended files:
 
@@ -201,6 +200,7 @@ Recommended files:
   behavior. Lead with a **System Requirements** section (external binaries,
   services, env vars). See `docs/TOOL_SCHEMA.md` for the expected sections.
 - `skills/<name>/prompt.yaml`
+- `skills/<name>/python/__init__.py` — makes `python/` a package so modules can use relative imports
 - `skills/<name>/data/*.jsonl` — eval / train / safety corpora (see *Skill Lifecycle* below)
 - `skills/<name>/eval/` — skill-owned fixtures and verifiers
 - `skills/<name>/native/` — Rust crate, if the skill ships in the native runtime
@@ -214,41 +214,66 @@ Recommended files:
 ```yaml
 name: my_skill
 description: "One-line description."
-tools: tools.yaml
-skill_class: handlers.MySkill
-prompt: prompt.yaml
+toolkits: [fs]        # optional: shared toolkits whose tools this skill's plans use
 ```
 
-Tool contract — every tool is a `Step` or `Intent` class, linked to its `tools.yaml`
-entry by `name`. The `Skill` subclass lists them in `tools` and is named by
-`skill_class:` in `skill.yaml`:
+The file names are fixed: `tools.yaml`, `prompt.yaml`, `python/`. Nothing names a class.
+
+### Vocabulary
+
+- **plan step**: one entry in a plan, `{"tool": …, "args": …}`. "Step" means only this.
+- **tool**: a named capability with a YAML contract in `tools.yaml`, either one the model sees or
+  an internal one (`internal: true`).
+- **`Handler`**: the class for a tool that executes (`handle()`).
+- **`Intent`**: the class for a tool that expands into more plan steps (`expand()`).
+- **toolkit**: `toolkits/<name>/`, a shared set of tools with the same `tools.yaml` + `python/`
+  layout as a skill, but no prompt or corpus. Its tools are internal unless the skill lists them
+  under `expose:`.
+
+### Tool contract
+
+Every tool is defined **once in YAML and once as a class**, and nothing else. The loader imports
+the bundle's `python/` modules and matches each `Handler`/`Intent` subclass to its `tools.yaml`
+entry by `name`, strictly 1:1:
+- a YAML entry without a class is an error;
+- a class without an entry is an error;
+- two classes with one name is an error.
+
+Every skill and toolkit tool also declares `effects:` (`fs.read`, `fs.write`, `net`,
+`exec:<program>`, or `[]`); a bundle with an undeclared tool does not load. A handler runs a
+program only through `ctx.exec(program, argv)` and writes only through the fs toolkit
+(`ctx.call_tool`), both refused for an undeclared effect; a lint bans direct I/O in tool modules.
+See *Declared effects* in `docs/TOOL_SCHEMA.md`.
 
 ```python
 from knaif.handler_api import HandlerContext
 from knaif.skill_base import Skill
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
-class MyToolStep(Step):
+class MyTool(Handler):
     name = "my_tool"
     def handle(self, args: dict, ctx: HandlerContext) -> dict:
         # ctx.root, ctx.sandbox, ctx.dry_run, ctx.confirmed, ctx.skill_dir
         # ctx.confirmer, ctx.confirm(prompt, preview=None)
+        # ctx.work_dir (run scratch), ctx.call_tool(name, args) (reuse a toolkit tool)
+        # ctx.exec(program, argv, **kw) (run a declared external program)
         return {"result": "..."}
 
-class MySkill(Skill):
-    tools = [MyToolStep]
+class MySkill(Skill):          # optional: only for hooks
+    def format_results(self, results, *, dry_run): ...
 ```
 
-The legacy `HANDLERS` / `EXPANDERS` dict form is no longer supported — every tool must be a
-`Step` or `Intent` class.
+- Use an `Intent` (override `expand`) when a model-visible intent tool should become a
+  deterministic multi-step workflow. Override `Intent.summarize(self, args, **kw)` for a
+  one-sentence preview shown when callers set `show_plan=True`.
+- Skill-level `preflight` / `format_results` / `run_artifact` / `resolve_output_collisions` are
+  methods of the **one optional** `Skill` subclass in `python/`. Without one, the defaults apply.
+- Shared tools come from toolkits (`toolkits: [fs]`), never from a copy in the skill's own
+  `tools.yaml`. A tool's name must be unique across the skill, its toolkits and core.
+- The core control tools (`clarify`/`reject`/`done`/`wait_for_confirmation`) are merged
+  automatically.
 
-Use an `Intent` (override `expand`) when a model-visible intent tool should become a
-deterministic multi-step workflow; override `Intent.summarize(self, args, **kw)` for a
-one-sentence preview shown when callers set `show_plan=True`. Skill-level
-`preflight` / `format_results` / `run_artifact` are `Skill` methods. Reuse shared steps
-from `knaif.steps` by adding the class to `tools`. The core control tools
-(`clarify`/`reject`/`done`/`wait_for_confirmation`) are merged automatically. See
-`docs/TOOL_SCHEMA.md` and `docs/ARCHITECTURE.md` for the full contract.
+See `docs/TOOL_SCHEMA.md` and `docs/ARCHITECTURE.md` for the full contract.
 
 ## Skill Lifecycle Beyond Authoring
 
@@ -330,7 +355,7 @@ Training code is in `python/training/`.
 
 `skills/<name>/native/` is a workspace member in the root `Cargo.toml`, consuming
 `knaif-skill-api` — which today provides the shared `sandbox` helpers only. The Rust
-`HandlerContext` / `Step` / `Intent` equivalents **do not exist yet**: native skills are
+`HandlerContext` / `Handler` / `Intent` equivalents **do not exist yet**: native skills are
 dispatched by per-domain branches in `apps/cli`, so porting a skill means wiring it there
 too, not implementing a generic trait (audit F11). `skill.yaml` declares which runtimes
 implement the skill:
@@ -442,6 +467,7 @@ eval runs committed absolute checkout paths into ~27 files; both went public unn
 | Task | Start here |
 |---|---|
 | Add or change a skill | `skills/<name>/` + `docs/TOOL_SCHEMA.md` |
+| Add or change a shared tool | `toolkits/<name>/` + `docs/TOOL_SCHEMA.md` |
 | Change plan validation | `python/core/knaif/planner.py` + `python/core/tests/test_planner.py` |
 | Change prompt format | `python/core/knaif/prompt.py` + `python/core/tests/test_prompt.py` |
 | Change execution flow | `python/core/knaif/agent.py` + `python/core/tests/test_agent.py` |

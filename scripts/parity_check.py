@@ -258,6 +258,8 @@ def _canon_argv(argv: list[str], cwd: str | None) -> tuple[str, ...]:
     while two different directories do not. See docs/audits/2026-09-07-core-principles-
     and-rtx5080.md, F7.
     """
+    from knaif.scratch import display
+
     out: list[str] = []
     last = len(argv) - 1
     for i, tok in enumerate(argv):
@@ -265,6 +267,10 @@ def _canon_argv(argv: list[str], cwd: str | None) -> tuple[str, ...]:
         path_position = prev == "-i" or (i == last and i > 0 and not tok.startswith("-"))
         if not path_position:
             out.append(tok)
+        elif (work := display(tok)) != tok:
+            # A run-scratch path: each process has its own `run-<pid>-<hex>`, so compare the
+            # part under it (`<work>/clip_fast.mp4`). Still unlike a file in the user's folder.
+            out.append(work)
         elif cwd is not None:
             out.append(_resolve_against(cwd, tok))
         else:

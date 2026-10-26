@@ -11,16 +11,17 @@ display:
   tagline: "Convert, compress, and resize video without remembering a single flag."
   category: media
 
-tools: tools.yaml
-skill_class: handlers.FFmpegSkill
-prompt: prompt.yaml
+toolkits: [fs]
+
+# Chain intermediates go to the run scratch (<OS temp>/knaif/run-<id>/), so only the outputs the
+# user asked for reach their folder. Read by both runtimes; a skill that sets it must accept paths
+# inside the run's scratch wherever it checks the sandbox. See docs/TOOL_SCHEMA.md, The run scratch.
+scratch_intermediates: true
 
 recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 
 # Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
 runtimes:
-  python:
-    handlers: handlers.FFmpegSkill   # resolved inside skills/ffmpeg/python/ (loaded by path)
   native:
     # STATUS IS EVIDENCE-BACKED, not an intention: `just check-gate` fails when this claims more
     # than evals/acceptance/<skill>.json supports (contracts/release/native_status.yaml defines

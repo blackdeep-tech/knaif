@@ -83,8 +83,8 @@ def test_build_registry_creates_tool_def():
     assert "name" in td.required_args
 
 
-def test_build_registry_creates_function_step():
-    from knaif.cli.function_step import FunctionStep
+def test_build_registry_creates_function_handler():
+    from knaif.cli.function_handler import FunctionHandler
 
     @nk.command(help="Do")
     def act(x: str) -> dict:
@@ -92,7 +92,7 @@ def test_build_registry_creates_function_step():
 
     _, tool_map = build_registry([act])
     assert "act" in tool_map
-    assert isinstance(tool_map["act"], FunctionStep)
+    assert isinstance(tool_map["act"], FunctionHandler)
 
 
 def test_build_registry_keywords_from_decorator():

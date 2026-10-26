@@ -131,9 +131,6 @@ impl OcrEngine for TesseractOcr {
 /// Produce a searchable PDF from `input` at `output`. A PDF that already has a text layer is copied
 /// unchanged; an image is OCR'd directly; a scanned PDF is rendered page-by-page then OCR'd + merged.
 pub fn ocr_document(input: &Path, output: &Path, language: &str) -> anyhow::Result<OcrMethod> {
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     let suffix = suffix_of(input);
     if suffix == "pdf" {
         if text::inspect(input)?.has_text_layer {

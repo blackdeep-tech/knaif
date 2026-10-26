@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -47,47 +48,75 @@ def _replace_fixture_placeholder(value: Any, fixture_path: Path) -> Any:
     return value
 
 
+def _resolve(raw: str, ctx: HandlerContext) -> Path:
+    """*raw* resolved inside the sandbox, or inside this run's scratch (a routed intermediate)."""
+    return _resolve_path(raw, ctx.root, ctx.sandbox, ctx.work_dir)
+
+
 def _input_path(args: dict[str, Any], ctx: HandlerContext) -> Path:
-    return _resolve_path(args["input"], ctx.root, ctx.sandbox)
+    return _resolve(args["input"], ctx)
 
 
 def _input_paths(args: dict[str, Any], ctx: HandlerContext) -> list[Path]:
-    return [_resolve_path(path, ctx.root, ctx.sandbox) for path in args["inputs"]]
+    return [_resolve(path, ctx) for path in args["inputs"]]
 
 
-def _next_free(path: Path) -> Path:
-    """`path` if nothing is there, else `<stem>-1<suffix>`, `-2`, ... — the first free one.
+def _user_side(path: Path, ctx: HandlerContext) -> Path:
+    """Where *path* sits in the user's folder: itself, unless it is a routed intermediate."""
+    return Path(ctx.call_tool("user_side_path", {"path": str(path)})["path"])
+
+
+def _free_name(path: Path, ctx: HandlerContext) -> Path:
+    """*path* if nothing is there, else `<stem>-1<suffix>`, `-2`, ... (fs `plan_output_path`).
 
     For a name the plan did not choose. A derived default that already exists is someone's
     file: `convert notes.txt to markdown` wrote `notes.md` over the user's own (2026-09-24 L4).
-    Mirrored in skills/documents/native/src/run.rs (`next_free`).
+    The same rule natively (skills/documents/native/src/run.rs, `knaif_toolkit_fs`).
     """
-    if not path.exists():
-        return path
-    n = 1
-    while True:
-        candidate = path.with_name(f"{path.stem}-{n}{path.suffix}")
-        if not candidate.exists():
-            return candidate
-        n += 1
+    rule = {"keep_requested": True, "separator": "-", "first_number": 1}
+    return Path(ctx.call_tool("plan_output_path", {"path": str(path), **rule})["path"])
 
 
 def _output_path(input_path: Path, args: dict[str, Any], ctx: HandlerContext, suffix: str) -> Path:
     raw = args.get("output")
     if raw:
         # An explicit output is a request, and honoured even over an existing file — the same
-        # rule as ffmpeg's collision pass. Only a name nobody asked for moves.
-        return _resolve_path(raw, ctx.root, ctx.sandbox)
+        # rule as ffmpeg's collision pass. Only a name nobody asked for moves. It may be in the
+        # scratch: a chain intermediate routed there.
+        return _resolve(raw, ctx)
+    # A default is named after the input, beside it in the user's folder; an input that is a
+    # routed intermediate counts as where it would have been, so nothing derived lands in scratch.
+    anchor = _user_side(input_path, ctx)
     if suffix.startswith("."):
-        return _next_free(input_path.with_suffix(suffix))
-    return _next_free(input_path.with_name(f"{input_path.stem}{suffix}"))
+        return _free_name(anchor.with_suffix(suffix), ctx)
+    return _free_name(anchor.with_name(f"{anchor.stem}{suffix}"), ctx)
 
 
 def _output_dir(args: dict[str, Any], ctx: HandlerContext, default: Path) -> Path:
     raw = args.get("output_dir")
     if raw:
-        return _resolve_path(raw, ctx.root, ctx.sandbox)
-    return default
+        return _resolve(raw, ctx)
+    return _user_side(default, ctx)
+
+
+@contextmanager
+def _writing(output: Path, ctx: HandlerContext) -> Iterator[Path]:
+    """Where to write *output*; on leaving the block, check it and move it into place.
+
+    The step writes to a staged path in the run scratch (fs `stage_output`), and only a good
+    file reaches the user's folder (fs `commit_output`: it exists and is not empty). A step that
+    raises, or writes nothing, leaves the folder as it was; the staged file goes with the scratch.
+    An output already in the scratch (a routed intermediate) is written in place. Without a
+    scratch (a bare caller) it is written directly, its folder made first (fs `ensure_parent`).
+    """
+    work = ctx.work_dir
+    if work is None or output.resolve().is_relative_to(Path(work).resolve()):
+        ctx.call_tool("ensure_parent", {"path": str(output)})
+        yield output
+        return
+    staged = Path(ctx.call_tool("stage_output", {"path": str(output)})["staged"])
+    yield staged
+    ctx.call_tool("commit_output", {"staged": str(staged), "path": str(output)})
 
 
 def _profile(skill_dir: Path, quality: str) -> dict[str, Any]:
@@ -242,7 +271,6 @@ def _write_ocr_image_pdf(input_path: Path, output_path: Path, language: str) -> 
     _require_tesseract()
     pytesseract = _require_pytesseract()
     Image = _require_pillow_image()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(input_path) as image:
         pdf_bytes = pytesseract.image_to_pdf_or_hocr(image, extension="pdf", lang=language)
     output_path.write_bytes(pdf_bytes)
@@ -256,7 +284,6 @@ def _write_ocr_pdf(input_path: Path, output_path: Path, language: str) -> int:
     pdfium = _require_pypdfium2()
     pdf = pdfium.PdfDocument(str(input_path))
     writer = pypdf.PdfWriter()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         for page_number in range(1, len(pdf) + 1):
             image = _render_pdf_page_image(pdf, page_number)
@@ -462,7 +489,6 @@ def _write_text_overlay_pdf(
         )
         writer.add_page(page)
         writer.pages[-1].merge_page(overlay)
-    output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as fh:
         writer.write(fh)
 
@@ -490,7 +516,6 @@ def _write_image_overlay_pdf(
         )
         writer.add_page(page)
         writer.pages[-1].merge_page(overlay)
-    output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as fh:
         writer.write(fh)
 
@@ -506,8 +531,11 @@ def _lossless_compress(input_path: Path, output_path: Path) -> None:
         )
 
 
-def _ghostscript_compress(input_path: Path, output_path: Path, gs: str, pdfsettings: str) -> None:
-    subprocess.run(
+def _ghostscript_compress(
+    input_path: Path, output_path: Path, gs: str, pdfsettings: str, ctx: HandlerContext
+) -> None:
+    ctx.exec(
+        "gs",
         [
             gs,
             "-sDEVICE=pdfwrite",

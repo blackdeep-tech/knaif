@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from knaif.core_tools import CORE_STEP_MAP
+from knaif.core_tools import CORE_TOOL_MAP
 from knaif.executor import CORE_HANDLERS
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 # ── core tools: Step.handle == CORE_HANDLERS fn ──────────────────────────────
 
@@ -24,16 +24,16 @@ def _ctx(confirmed: bool = True) -> MagicMock:
 
 def test_clarify_step_equivalent_to_core_handler():
     args = {"question": "What extension?"}
-    assert CORE_STEP_MAP["clarify"].handle(args, _ctx()) == CORE_HANDLERS["clarify"](args, _ctx())
+    assert CORE_TOOL_MAP["clarify"].handle(args, _ctx()) == CORE_HANDLERS["clarify"](args, _ctx())
 
 
 def test_reject_step_equivalent_to_core_handler():
     args = {"reason": "Too dangerous"}
-    assert CORE_STEP_MAP["reject"].handle(args, _ctx()) == CORE_HANDLERS["reject"](args, _ctx())
+    assert CORE_TOOL_MAP["reject"].handle(args, _ctx()) == CORE_HANDLERS["reject"](args, _ctx())
 
 
 def test_done_step_equivalent_to_core_handler():
-    assert CORE_STEP_MAP["done"].handle({}, _ctx()) == CORE_HANDLERS["done"]({}, _ctx())
+    assert CORE_TOOL_MAP["done"].handle({}, _ctx()) == CORE_HANDLERS["done"]({}, _ctx())
 
 
 def test_wait_for_confirmation_confirmed_equivalent():
@@ -42,7 +42,7 @@ def test_wait_for_confirmation_confirmed_equivalent():
     ctx_fn.confirm.return_value = True
     ctx_cls = _ctx(True)
     ctx_cls.confirm.return_value = True
-    assert CORE_STEP_MAP["wait_for_confirmation"].handle(args, ctx_cls) == CORE_HANDLERS[
+    assert CORE_TOOL_MAP["wait_for_confirmation"].handle(args, ctx_cls) == CORE_HANDLERS[
         "wait_for_confirmation"
     ](args, ctx_fn)
 
@@ -53,7 +53,7 @@ def test_wait_for_confirmation_declined_equivalent():
     ctx_fn.confirm.return_value = False
     ctx_cls = _ctx(False)
     ctx_cls.confirm.return_value = False
-    assert CORE_STEP_MAP["wait_for_confirmation"].handle(args, ctx_cls) == CORE_HANDLERS[
+    assert CORE_TOOL_MAP["wait_for_confirmation"].handle(args, ctx_cls) == CORE_HANDLERS[
         "wait_for_confirmation"
     ](args, ctx_fn)
 
@@ -79,7 +79,7 @@ def _make_legacy_trio():
 def _make_oop_trio():
     """Return (StepInstance, IntentInstance) with equivalent behavior."""
 
-    class EncodeStep(Step):
+    class EncodeStep(Handler):
         name = "encode"
 
         def handle(self, args, ctx):
@@ -122,7 +122,7 @@ def test_intent_summarize_matches_summarizer_function():
 
 
 def test_tool_preflight_takes_precedence_over_base():
-    class StepWithPreflight(Step):
+    class StepWithPreflight(Handler):
         name = "sp"
 
         def handle(self, args, ctx):
@@ -132,12 +132,12 @@ def test_tool_preflight_takes_precedence_over_base():
             return ["tool_level"]
 
     s = StepWithPreflight()
-    assert type(s).preflight is not Step.preflight
+    assert type(s).preflight is not Handler.preflight
     assert s.preflight({}) == ["tool_level"]
 
 
 def test_base_preflight_is_no_op():
-    class PlainStep(Step):
+    class PlainStep(Handler):
         name = "ps"
 
         def handle(self, args, ctx):
