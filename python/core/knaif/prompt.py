@@ -63,6 +63,10 @@ _TERMINAL_TOOLS = frozenset({"clarify", "reject", "done"})
 # Core tools retrieved only by their triggers (core_tools.yaml `triggers:`). An example that uses
 # one must not reach a prompt that does not list the tool.
 _TRIGGERED_TOOLS = frozenset({"alert_when_done"})
+# Reject examples every prompt shows, first in corpus order. Two, not one: the 4B shown only a
+# delete refusal answered "convert videos from the system root directory" with clarify (owner,
+# 2026-10-27). Rust mirror: `knaif_core::prompt::MAX_REJECT_EXAMPLES`.
+MAX_REJECT_EXAMPLES = 2
 
 
 def _example_tool_set(example: dict) -> frozenset[str]:
@@ -104,7 +108,8 @@ def select_examples(
 ) -> list[dict]:
     """Select the most relevant examples for *query* given the retrieved tool set.
 
-    Always includes one clarify example and one reject example (when available).
+    Always includes one clarify example and the first :data:`MAX_REJECT_EXAMPLES` reject
+    examples (when available).
     Fills up to *max_tool_examples* domain examples ranked by:
       1. number of retrieved tools that appear in the example's plan (primary)
       2. Jaccard overlap between query tokens and example request tokens (tiebreaker)
@@ -139,8 +144,7 @@ def select_examples(
     fixed: list[dict] = []
     if clarify_exs:
         fixed.append(clarify_exs[0])
-    if reject_exs:
-        fixed.append(reject_exs[0])
+    fixed.extend(reject_exs[:MAX_REJECT_EXAMPLES])
 
     query_tokens = set(query.lower().split())
 

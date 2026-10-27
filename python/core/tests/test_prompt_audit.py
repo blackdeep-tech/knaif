@@ -129,11 +129,17 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     the request asks for many files (``nl_clarify_gate.asks_for_many_files``,
     contracts/parity/many_files_cases.json). Measured over both corpora: 49 of 933 existing ffmpeg
     prompts and 3 of 212 documents prompts change, every one of them a request for many files.
+
+    Raised 18,600 → 19,100 on 2026-10-27 for ffmpeg's second reject example (to 18,624): every
+    prompt now shows two refusals (``knaif.prompt.MAX_REJECT_EXAMPLES``), the delete one and one
+    for files outside the sandbox, because the 4B answered "convert videos from the system root
+    directory" with clarify while only the first was shown. Every ffmpeg prompt carries it;
+    documents has no reject example, so its prompts are unchanged, byte for byte.
     """
     system, _ = ffmpeg_agent.build_prompt("compress a video")
     assert (
-        len(system) < 18_600
-    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 18,600 ceiling"
+        len(system) < 19_100
+    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 19,100 ceiling"
 
 
 def test_ffmpeg_retrieved_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> None:

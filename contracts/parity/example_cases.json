@@ -1,5 +1,5 @@
 {
-  "_comment": "L1 example-selection contract. Python filters the skill's examples per utterance (`select_examples`), keeping one clarify example, one reject example and up to three domain examples ranked by overlap with the retrieved tools; native shipped the whole block unfiltered. For ffmpeg that is 28 examples against the reference's 5. Given (examples, retrieved tool names, query) both runtimes must select the same examples, in the same order, and render the same block. Consumed by python/core/tests/test_example_selection_parity.py and `example_selection_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
+  "_comment": "L1 example-selection contract. Python filters the skill's examples per utterance (`select_examples`), keeping one clarify example, the first two reject examples and up to three domain examples ranked by overlap with the retrieved tools; native shipped the whole block unfiltered. For ffmpeg that is 28 examples against the reference's 5. Given (examples, retrieved tool names, query) both runtimes must select the same examples, in the same order, and render the same block. Consumed by python/core/tests/test_example_selection_parity.py and `example_selection_parity_cases` in native/crates/knaif-core/tests/parity.rs.",
   "_stage": "The stage is `select_examples -> render_examples_block`, the block that reaches the model — not the selection alone. Python composes it in CommandAgent.build_prompt, native in PlanSession::plan. Comparing the selection without the rendering would violate Rule 2.",
   "_expected_values": "Produced by the reference runtime (knaif.prompt.select_examples then render_examples_block). DO NOT regenerate to make a failing test pass. The `shipped` section is a golden over the real skill bundles: if a prompt.yaml changes, regenerating is correct — that is the drift signal working.",
   "_coverage": {
@@ -476,6 +476,90 @@
           ]
         }
       }
+    ],
+    "rejects": [
+      {
+        "request": "tidy up p.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "Tidy it how?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "wipe the drive",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Deleting is outside the policy."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "compress q.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "compress_video",
+              "args": {
+                "inputs": [
+                  "q.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert the clips at the drive root",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Outside the sandbox."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "run rm -rf on the folder",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Commands are outside the policy."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "rotate r.mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "rotate_video",
+              "args": {
+                "inputs": [
+                  "r.mp4"
+                ]
+              }
+            }
+          ]
+        }
+      }
     ]
   },
   "cases": [
@@ -867,6 +951,27 @@
         "nuke it"
       ],
       "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"rotate b.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"b.mp4\"], \"angle\": 90}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "name": "the_first_two_reject_examples_are_kept",
+      "why": "Two reject examples are fixed slots, not one: a small model shown only the delete refusal answered a request for files outside the sandbox with clarify (owner, 2026-10-27). The first two in corpus order are kept, the third is not, and the domain slots fill as before.",
+      "example_set": "rejects",
+      "retrieved": [
+        "compress_video",
+        "rotate_video",
+        "clarify",
+        "reject",
+        "done"
+      ],
+      "query": "compress q.mp4",
+      "expected_requests": [
+        "tidy up p.mp4",
+        "wipe the drive",
+        "compress q.mp4",
+        "convert the clips at the drive root",
+        "rotate r.mp4"
+      ],
+      "expected_block": "Examples:\n  request: \"tidy up p.mp4\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Tidy it how?\"}}]}\n\n  request: \"wipe the drive\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting is outside the policy.\"}}]}\n\n  request: \"compress q.mp4\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"q.mp4\"]}}]}\n\n  request: \"convert the clips at the drive root\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Outside the sandbox.\"}}]}\n\n  request: \"rotate r.mp4\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"r.mp4\"]}}]}\n"
     }
   ],
   "shipped": [
@@ -883,15 +988,16 @@
         "strip_audio",
         "trim_video"
       ],
-      "corpus_size": 36,
+      "corpus_size": 37,
       "expected_requests": [
         "Compress interview.mp4 for email under 20 MB.",
         "Make clip.mp4 better.",
         "Trim clip.mp4 to 5 seconds, then resize to 720p.",
         "Rotate clip.mp4 90 degrees clockwise.",
-        "Nuke my videos folder."
+        "Nuke my videos folder.",
+        "Convert the clips in the Windows system folder."
       ],
-      "expected_block": "Examples:\n  request: \"Compress interview.mp4 for email under 20 MB.\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"target\": \"email\", \"target_size_mb\": 20, \"quality\": \"best_possible\", \"preview\": true}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Rotate clip.mp4 90 degrees clockwise.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"angle\": 90}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+      "expected_block": "Examples:\n  request: \"Compress interview.mp4 for email under 20 MB.\"\n  output:  {\"plan\": [{\"tool\": \"compress_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"target\": \"email\", \"target_size_mb\": 20, \"quality\": \"best_possible\", \"preview\": true}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Rotate clip.mp4 90 degrees clockwise.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"angle\": 90}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n\n  request: \"Convert the clips in the Windows system folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Working on files outside the sandbox is outside this skill's safety policy.\"}}]}\n"
     },
     {
       "skill": "ffmpeg",
@@ -906,15 +1012,16 @@
         "reverse_video",
         "strip_audio"
       ],
-      "corpus_size": 36,
+      "corpus_size": 37,
       "expected_requests": [
         "Extract the audio from clip.mp4 as MP3.",
         "Extract the audio from clip.mp4 to audio.mp3.",
         "Make clip.mp4 better.",
         "Merge clip1.mp4 and clip2.mp4, then extract the audio.",
-        "Nuke my videos folder."
+        "Nuke my videos folder.",
+        "Convert the clips in the Windows system folder."
       ],
-      "expected_block": "Examples:\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Extract the audio from clip.mp4 to audio.mp3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\", \"output\": \"audio.mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Merge clip1.mp4 and clip2.mp4, then extract the audio.\"\n  output:  {\"plan\": [{\"tool\": \"concat_video\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"combined.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+      "expected_block": "Examples:\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Extract the audio from clip.mp4 to audio.mp3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\", \"output\": \"audio.mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Merge clip1.mp4 and clip2.mp4, then extract the audio.\"\n  output:  {\"plan\": [{\"tool\": \"concat_video\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"combined.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n\n  request: \"Convert the clips in the Windows system folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Working on files outside the sandbox is outside this skill's safety policy.\"}}]}\n"
     },
     {
       "skill": "ffmpeg",
@@ -929,15 +1036,16 @@
         "reverse_video",
         "rotate_video"
       ],
-      "corpus_size": 36,
+      "corpus_size": 37,
       "expected_requests": [
         "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.",
         "Extract the audio from clip.mp4 as MP3.",
         "Make clip.mp4 better.",
         "Rotate every mkv in this folder 90 degrees and make them 1080p.",
-        "Nuke my videos folder."
+        "Nuke my videos folder.",
+        "Convert the clips in the Windows system folder."
       ],
-      "expected_block": "Examples:\n  request: \"Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.\"\n  output:  {\"plan\": [{\"tool\": \"prepare_for_platform\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"platform\": \"whatsapp\", \"quality\": \"visually_good\", \"preview\": true}}]}\n\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+      "expected_block": "Examples:\n  request: \"Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.\"\n  output:  {\"plan\": [{\"tool\": \"prepare_for_platform\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"platform\": \"whatsapp\", \"quality\": \"visually_good\", \"preview\": true}}]}\n\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n\n  request: \"Convert the clips in the Windows system folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Working on files outside the sandbox is outside this skill's safety policy.\"}}]}\n"
     },
     {
       "skill": "documents",
@@ -997,15 +1105,16 @@
         "reverse_video",
         "trim_video"
       ],
-      "corpus_size": 36,
+      "corpus_size": 37,
       "expected_requests": [
         "Make clip.mp4 better.",
         "Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.",
         "Trim clip.mp4 to 5 seconds, then resize to 720p.",
         "Resize interview.mp4 to 720p and save it in my Videos folder.",
-        "Nuke my videos folder."
+        "Nuke my videos folder.",
+        "Convert the clips in the Windows system folder."
       ],
-      "expected_block": "Examples:\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"test1.mov\", \"start\": \"00:00:02\", \"end\": \"00:00:04\", \"output\": \"test1_trimmed.mov\"}}, {\"tool\": \"concat_video\", \"args\": {\"base\": \"test2.mov\", \"append\": [\"test1_trimmed.mov\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"combined.mp4\"], \"container\": \"mp4\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Resize interview.mp4 to 720p and save it in my Videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"height\": 720, \"output\": \"Videos/interview_720p.mp4\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+      "expected_block": "Examples:\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"test1.mov\", \"start\": \"00:00:02\", \"end\": \"00:00:04\", \"output\": \"test1_trimmed.mov\"}}, {\"tool\": \"concat_video\", \"args\": {\"base\": \"test2.mov\", \"append\": [\"test1_trimmed.mov\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"combined.mp4\"], \"container\": \"mp4\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Resize interview.mp4 to 720p and save it in my Videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"height\": 720, \"output\": \"Videos/interview_720p.mp4\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n\n  request: \"Convert the clips in the Windows system folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Working on files outside the sandbox is outside this skill's safety policy.\"}}]}\n"
     },
     {
       "skill": "ffmpeg",
@@ -1020,15 +1129,16 @@
         "reverse_video",
         "trim_video"
       ],
-      "corpus_size": 36,
+      "corpus_size": 37,
       "expected_requests": [
         "Make clip.mp4 better.",
         "Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.",
         "Trim clip.mp4 to 5 seconds, then resize to 720p.",
         "Resize interview.mp4 to 720p and save it in my Videos folder.",
-        "Nuke my videos folder."
+        "Nuke my videos folder.",
+        "Convert the clips in the Windows system folder."
       ],
-      "expected_block": "Examples:\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"test1.mov\", \"start\": \"00:00:02\", \"end\": \"00:00:04\", \"output\": \"test1_trimmed.mov\"}}, {\"tool\": \"concat_video\", \"args\": {\"base\": \"test2.mov\", \"append\": [\"test1_trimmed.mov\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"combined.mp4\"], \"container\": \"mp4\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Resize interview.mp4 to 720p and save it in my Videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"height\": 720, \"output\": \"Videos/interview_720p.mp4\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+      "expected_block": "Examples:\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"test1.mov\", \"start\": \"00:00:02\", \"end\": \"00:00:04\", \"output\": \"test1_trimmed.mov\"}}, {\"tool\": \"concat_video\", \"args\": {\"base\": \"test2.mov\", \"append\": [\"test1_trimmed.mov\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"combined.mp4\"], \"container\": \"mp4\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Resize interview.mp4 to 720p and save it in my Videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"height\": 720, \"output\": \"Videos/interview_720p.mp4\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n\n  request: \"Convert the clips in the Windows system folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Working on files outside the sandbox is outside this skill's safety policy.\"}}]}\n"
     },
     {
       "skill": "documents",

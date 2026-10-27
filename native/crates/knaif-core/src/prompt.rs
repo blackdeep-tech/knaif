@@ -296,8 +296,13 @@ fn plan_tools(example: &PromptExample) -> Vec<&str> {
         .unwrap_or_default()
 }
 
+/// Reject examples every prompt shows, first in corpus order. Two, not one: the 4B shown only a
+/// delete refusal answered "convert videos from the system root directory" with clarify (owner,
+/// 2026-10-27). Mirror of Python `knaif.prompt.MAX_REJECT_EXAMPLES`.
+pub const MAX_REJECT_EXAMPLES: usize = 2;
+
 /// An example whose plan is *only* a `control` step (`clarify` or `reject`) — the shapes that
-/// hold the two fixed slots. Port of `_is_clarify_example` / `_is_reject_example`.
+/// hold the fixed slots. Port of `_is_clarify_example` / `_is_reject_example`.
 fn is_control_example(example: &PromptExample, control: &str) -> bool {
     let tools = plan_tools(example);
     !tools.is_empty() && tools.contains(&control) && example_tool_set(example).is_empty()
@@ -320,8 +325,8 @@ fn carries_url(text: &str) -> bool {
 /// Select the examples most relevant to `query` given the retrieved tool set. Port of Python
 /// `select_examples`.
 ///
-/// Always includes the first clarify example and the first reject example, when the corpus has
-/// them, then fills up to `max_tool_examples` domain examples ranked by how many retrieved tools
+/// Always includes the first clarify example and the first [`MAX_REJECT_EXAMPLES`] reject
+/// examples, when the corpus has them, then fills up to `max_tool_examples` domain examples ranked by how many retrieved tools
 /// the example's plan uses (primary) and how many query words its request shares (tiebreaker),
 /// and re-emits the whole selection in corpus order. An example whose request carries an http(s)
 /// URL is eligible only when the query carries one too, and then ranks first at equal tool
@@ -345,8 +350,13 @@ pub fn select_examples<'a>(
     let query_many = crate::nl_clarify_gate::asks_for_many_files(query);
 
     let mut keep: Vec<bool> = vec![false; examples.len()];
-    for control in ["clarify", "reject"] {
-        if let Some(i) = examples.iter().position(|e| is_control_example(e, control)) {
+    for (control, slots) in [("clarify", 1), ("reject", MAX_REJECT_EXAMPLES)] {
+        for (i, _) in examples
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| is_control_example(e, control))
+            .take(slots)
+        {
             keep[i] = true;
         }
     }
