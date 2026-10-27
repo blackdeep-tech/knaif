@@ -9,6 +9,7 @@ literal name over many files), `_converted` on a format change that cannot clash
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,9 @@ DOC = json.loads(
 )
 
 
+# The skill checks for ffprobe even on a dry run. Where it is missing (CI's macOS runner) the
+# Rust half of this contract still runs; the Python half runs where ffmpeg is installed.
+@pytest.mark.skipif(shutil.which("ffprobe") is None, reason="ffprobe not on PATH")
 @pytest.mark.parametrize("case", DOC["cases"], ids=[c["name"] for c in DOC["cases"]])
 def test_output_names(case: dict, tmp_path: Path) -> None:
     for f in case["files"]:

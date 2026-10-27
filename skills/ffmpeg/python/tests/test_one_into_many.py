@@ -151,6 +151,8 @@ def _duration(path: Path) -> float:
 
 
 def _agent(tmp_path: Path) -> CommandAgent:
+    if not (FIXTURES / "clip.mp4").is_file():
+        pytest.skip("fixture clip.mp4 missing (regenerate the ffmpeg fixtures)")
     shutil.copy(FIXTURES / "clip.mp4", tmp_path / "clip.mp4")
     return CommandAgent.from_skill(SKILL_DIR, sandbox=tmp_path, root=tmp_path)
 
