@@ -123,6 +123,9 @@ def _bell(stderr: TextIO) -> str:
 
 
 def _windows_beep() -> None:
+    # The platform check is also what lets mypy on Linux accept `winsound` (its stub is win32-only).
+    if sys.platform != "win32":
+        return
     import winsound  # Windows-only stdlib
 
     winsound.MessageBeep()

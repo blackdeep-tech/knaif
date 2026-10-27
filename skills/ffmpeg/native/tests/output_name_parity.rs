@@ -30,6 +30,9 @@ fn output_names_match_the_contract() {
         }
         // Relative inputs and outputs resolve against the working folder, as `knaif run` has it.
         std::env::set_current_dir(&base).unwrap();
+        // The working folder reads back as its real path: macOS's temp dir `/var/folders/...` is
+        // `/private/var/folders/...` once resolved, so an output may carry either form.
+        let real_base = std::fs::canonicalize(&base).unwrap_or_else(|_| base.clone());
         let mut outputs: Vec<Value> = Vec::new();
         for step in case["plan"]["plan"].as_array().unwrap() {
             let tool = step["tool"].as_str().unwrap();
@@ -45,6 +48,7 @@ fn output_names_match_the_contract() {
                         };
                         let rel = out
                             .strip_prefix(&base)
+                            .or_else(|_| out.strip_prefix(&real_base))
                             .unwrap_or(&out)
                             .to_string_lossy()
                             .replace('\\', "/");

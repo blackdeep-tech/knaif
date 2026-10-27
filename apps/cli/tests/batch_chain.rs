@@ -124,8 +124,13 @@ fn a_chain_runs_once_per_file_and_a_failed_file_stops_only_itself() {
             .any(|l| l.starts_with("2 done, 1 failed in ")),
         "the summary counts the files\n{stderr}"
     );
+    // The reason is the failure line. The `running:` lines name full paths by design (on Windows
+    // quoted with doubled backslashes, which once hid them from a whole-stderr check).
     assert!(
-        !stderr.contains(&*folder.0.to_string_lossy()),
+        stderr
+            .lines()
+            .filter(|l| l.starts_with("✗ "))
+            .all(|l| !l.contains(&*folder.0.to_string_lossy())),
         "no folder in the reason\n{stderr}"
     );
     for name in ["beach.mp4", "city.mp4", "silent.mp4"] {
